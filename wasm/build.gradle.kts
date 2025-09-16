@@ -18,7 +18,11 @@ kotlin {
         val commonMain by getting
         val commonTest by getting
         val jvmMain by getting
-        val jvmTest by getting
+        val jvmTest by getting {
+            dependencies {
+                implementation(libs.kotlin.test)
+            }
+        }
         val jsMain by getting
         val jsTest by getting
         val wasmJsMain by getting
