@@ -1,6 +1,22 @@
 package org.jetbrains.hexana.wasm
 
 import org.jetbrains.hexana.CommonByteBuffer
+import org.jetbrains.hexana.wasm.sections.WasmSection
+import org.jetbrains.hexana.wasm.sections.WasmSectionCode
+import org.jetbrains.hexana.wasm.sections.WasmSectionCustom
+import org.jetbrains.hexana.wasm.sections.WasmSectionData
+import org.jetbrains.hexana.wasm.sections.WasmSectionDataCount
+import org.jetbrains.hexana.wasm.sections.WasmSectionElement
+import org.jetbrains.hexana.wasm.sections.WasmSectionException
+import org.jetbrains.hexana.wasm.sections.WasmSectionExport
+import org.jetbrains.hexana.wasm.sections.WasmSectionFunctions
+import org.jetbrains.hexana.wasm.sections.WasmSectionGlobal
+import org.jetbrains.hexana.wasm.sections.WasmSectionImport
+import org.jetbrains.hexana.wasm.sections.WasmSectionMemory
+import org.jetbrains.hexana.wasm.sections.WasmSectionStart
+import org.jetbrains.hexana.wasm.sections.WasmSectionTable
+import org.jetbrains.hexana.wasm.sections.WasmSectionTypes
+import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
 
 class WasmParser {
 
@@ -21,7 +37,10 @@ class WasmParser {
                 WasmSectionCustom.SECTION_ID -> WasmSectionCustom(unresolvedSection.size, unresolvedSection.offset)
                 WasmSectionTypes.SECTION_ID -> WasmSectionTypes(unresolvedSection.size, unresolvedSection.offset)
                 WasmSectionImport.SECTION_ID -> WasmSectionImport(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionFunctions.SECTION_ID -> WasmSectionFunctions(unresolvedSection.size, unresolvedSection.offset)
+                WasmSectionFunctions.SECTION_ID -> WasmSectionFunctions(
+                    unresolvedSection.size,
+                    unresolvedSection.offset
+                )
                 WasmSectionTable.SECTION_ID -> WasmSectionTable(unresolvedSection.size, unresolvedSection.offset)
                 WasmSectionMemory.SECTION_ID -> WasmSectionMemory(unresolvedSection.size, unresolvedSection.offset)
                 WasmSectionGlobal.SECTION_ID -> WasmSectionGlobal(unresolvedSection.size, unresolvedSection.offset)
@@ -30,8 +49,14 @@ class WasmParser {
                 WasmSectionElement.SECTION_ID -> WasmSectionElement(unresolvedSection.size, unresolvedSection.offset)
                 WasmSectionCode.SECTION_ID -> WasmSectionCode(unresolvedSection.size, unresolvedSection.offset)
                 WasmSectionData.SECTION_ID -> WasmSectionData(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionDataCount.SECTION_ID -> WasmSectionDataCount(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionException.SECTION_ID -> WasmSectionException(unresolvedSection.size, unresolvedSection.offset)
+                WasmSectionDataCount.SECTION_ID -> WasmSectionDataCount(
+                    unresolvedSection.size,
+                    unresolvedSection.offset
+                )
+                WasmSectionException.SECTION_ID -> WasmSectionException(
+                    unresolvedSection.size,
+                    unresolvedSection.offset
+                )
                 else -> null
             }
         }

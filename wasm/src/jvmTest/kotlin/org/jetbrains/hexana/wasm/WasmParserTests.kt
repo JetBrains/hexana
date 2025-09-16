@@ -1,9 +1,11 @@
 package org.jetbrains.hexana.wasm
 
 import org.jetbrains.hexana.CommonByteBuffer
+import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import java.nio.ByteBuffer
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
@@ -18,7 +20,8 @@ class WasmParserTests {
 
     @Test
     fun parseSkikoSections() {
-        val wasmModule = WasmParser().parse(CommonByteBuffer(getAsByteBuffer("skiko.wasm")))
+        val buffer = CommonByteBuffer(getAsByteBuffer("skiko.wasm"))
+        val wasmModule = WasmParser().parse(buffer)
 
         assertNotNull(wasmModule)
 
@@ -36,5 +39,52 @@ class WasmParserTests {
         assertEquals(1833784, wasmModule.dataSection?.size)
         assertNull( wasmModule.dataCountSection)
         assertEquals(49677,  wasmModule.exportSection?.size)
+        assertEquals(3,  wasmModule.exceptionSection?.size)
+
+    }
+
+    @Test
+    fun parseLongImports() {
+        val buffer = CommonByteBuffer(getAsByteBuffer("string.wasm"))
+        val wasmModule = WasmParser().parse(buffer)
+        assertNotNull(wasmModule)
+
+        with(wasmModule.importSection!!) {
+            val importRecords = buffer.getImportRecords()
+
+            assertEquals(4, importRecords.size)
+
+            assertEquals(
+                WasmImportRecord(
+                    "abcdefghijklmnopqrstuvwxyz0123456789_0_abcdefghijklmnopqrstuvwxyz0123456789_1_abcdefghijklmnopqrstuvwxyz0123456789_2_abcdefghijklmnopqrstuvwxyz0123456789_2_abcdefghijklmnopqrstuvwxyz0123456789_3_abcdefghijklmnopqrstuvwxyz0123456789_4_abcdefghijklmnopqrstuvwxyz0123456789_5_abcdefghijklmnopqrstuvwxyz0123456789_6_abcdefghijklmnopqrstuvwxyz0123456789_7_abcdefghijklmnopqrstuvwxyz0123456789_8_abcdefghijklmnopqrstuvwxyz0123456789_9_abcdefghijklmnopqrstuvwxyz0123456789_10_abcdefghijklmnopqrstuvwxyz0123456789_11_",
+                    "x",
+                    0
+                ), importRecords[0]
+            )
+
+            assertEquals(
+                WasmImportRecord(
+                    "string",
+                    "a",
+                    0
+                ), importRecords[1]
+            )
+
+            assertEquals(
+                WasmImportRecord(
+                    "a",
+                    "b",
+                    0
+                ), importRecords[2]
+            )
+
+            assertEquals(
+                WasmImportRecord(
+                    "env",
+                    "abort",
+                    0
+                ), importRecords[3]
+            )
+        }
     }
 }

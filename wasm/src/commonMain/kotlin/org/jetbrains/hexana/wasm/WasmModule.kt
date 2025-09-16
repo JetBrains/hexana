@@ -1,5 +1,21 @@
 package org.jetbrains.hexana.wasm
 
+import org.jetbrains.hexana.wasm.sections.WasmSection
+import org.jetbrains.hexana.wasm.sections.WasmSectionCode
+import org.jetbrains.hexana.wasm.sections.WasmSectionCustom
+import org.jetbrains.hexana.wasm.sections.WasmSectionData
+import org.jetbrains.hexana.wasm.sections.WasmSectionDataCount
+import org.jetbrains.hexana.wasm.sections.WasmSectionElement
+import org.jetbrains.hexana.wasm.sections.WasmSectionException
+import org.jetbrains.hexana.wasm.sections.WasmSectionExport
+import org.jetbrains.hexana.wasm.sections.WasmSectionFunctions
+import org.jetbrains.hexana.wasm.sections.WasmSectionGlobal
+import org.jetbrains.hexana.wasm.sections.WasmSectionImport
+import org.jetbrains.hexana.wasm.sections.WasmSectionMemory
+import org.jetbrains.hexana.wasm.sections.WasmSectionStart
+import org.jetbrains.hexana.wasm.sections.WasmSectionTable
+import org.jetbrains.hexana.wasm.sections.WasmSectionTypes
+
 class WasmModule(
     val customSection: WasmSectionCustom? = null,
     val typesSection: WasmSectionTypes? = null,
@@ -14,7 +30,7 @@ class WasmModule(
     val codeSection: WasmSectionCode? = null,
     val dataSection: WasmSectionData? = null,
     val dataCountSection: WasmSectionDataCount? = null,
-    val dataExceptionSection: WasmSectionException? = null
+    val exceptionSection: WasmSectionException? = null
 ) {
     companion object {
         fun fromSections(sections: List<WasmSection>): WasmModule {
@@ -31,7 +47,7 @@ class WasmModule(
             var codeSection: WasmSectionCode? = null
             var dataSection: WasmSectionData? = null
             var dataCountSection: WasmSectionDataCount? = null
-            var dataExceptionSection: WasmSectionException? = null
+            var exceptionSection: WasmSectionException? = null
 
             sections.forEach { section ->
                 when (section) {
@@ -48,7 +64,7 @@ class WasmModule(
                     is WasmSectionCode -> codeSection = section
                     is WasmSectionData -> dataSection = section
                     is WasmSectionDataCount -> dataCountSection = section
-                    is WasmSectionException -> dataExceptionSection = section
+                    is WasmSectionException -> exceptionSection = section
                     else -> {}
                 }
             }
@@ -67,7 +83,7 @@ class WasmModule(
                 codeSection,
                 dataSection,
                 dataCountSection,
-                dataExceptionSection
+                exceptionSection
             )
         }
     }
