@@ -18,3 +18,4 @@ rootProject.name = "hexana"
 include("app")
 include("core")
 include("wasm")
+include("encdec")

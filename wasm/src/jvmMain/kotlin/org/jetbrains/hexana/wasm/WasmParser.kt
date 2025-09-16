@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.wasm
 
+import org.jetbrains.hex.encdec.getULEB128
 import java.io.File
 import java.nio.ByteBuffer
 
@@ -9,23 +10,7 @@ class WasmParser {
         val WASM_MAGIC = byteArrayOf(0x00, 0x61, 0x73, 0x6D)
         val WASM_VERSION = byteArrayOf(0x01, 0x00, 0x00, 0x00)
 
-        private fun ByteBuffer.getUInt8(): UInt = get().toUInt()
 
-        private fun ByteBuffer.getULEB128(): Long {
-            var result = 0L
-            var shift = 0
-
-            while (true) {
-                val byte = getUInt8()
-                result = result or ((byte and 0x7f.toUInt()) shl shift).toLong()
-                if (byte and 0x80.toUInt() == 0.toUInt()) {
-                    break
-                }
-                shift +=7
-            }
-
-            return result
-        }
 
         fun ByteBuffer.scanSection(): WasmSectionUnresolved {
             val sectionId = get()

@@ -15,10 +15,18 @@ kotlin {
 
     jvmToolchain(17)
     sourceSets {
-        val commonMain by getting
+        commonMain {
+            dependencies {
+                implementation(project(":encdec"))
+            }
+        }
+
         val commonTest by getting
-        val jvmMain by getting
-        val jvmTest by getting {
+        jvmMain {
+
+        }
+
+        jvmTest {
             dependencies {
                 implementation(libs.kotlin.test)
             }

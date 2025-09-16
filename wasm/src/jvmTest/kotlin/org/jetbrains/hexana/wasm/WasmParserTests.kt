@@ -8,7 +8,7 @@ import kotlin.test.assertNull
 
 class WasmParserTests {
 
-    private fun getAsBytBuffer(resourceName: String): ByteBuffer {
+    private fun getAsByteBuffer(resourceName: String): ByteBuffer {
         val stream = WasmParserTests::class.java.classLoader.getResourceAsStream(resourceName)
         assertNotNull(stream, "Resource skiko.wasm should be available on the classpath")
         val bytes = stream.use { it.readBytes() }
@@ -17,7 +17,7 @@ class WasmParserTests {
 
     @Test
     fun parseSkikoSections() {
-        val wasmModule = WasmParser().parse(getAsBytBuffer("skiko.wasm"))
+        val wasmModule = WasmParser().parse(getAsByteBuffer("skiko.wasm"))
 
         assertNotNull(wasmModule)
 
