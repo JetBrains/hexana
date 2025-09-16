@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.wasm
 
+import org.jetbrains.hexana.CommonByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import java.nio.ByteBuffer
@@ -17,7 +18,7 @@ class WasmParserTests {
 
     @Test
     fun parseSkikoSections() {
-        val wasmModule = WasmParser().parse(getAsByteBuffer("skiko.wasm"))
+        val wasmModule = WasmParser().parse(CommonByteBuffer(getAsByteBuffer("skiko.wasm")))
 
         assertNotNull(wasmModule)
 

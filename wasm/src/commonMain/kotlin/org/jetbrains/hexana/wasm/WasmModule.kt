@@ -17,7 +17,7 @@ class WasmModule(
     val dataExceptionSection: WasmSectionException? = null
 ) {
     companion object {
-        fun fromSections(sections: List<WasmSection>): WasmModule? {
+        fun fromSections(sections: List<WasmSection>): WasmModule {
             var customSection: WasmSectionCustom? = null
             var typesSection: WasmSectionTypes? = null
             var importSection: WasmSectionImport? = null
