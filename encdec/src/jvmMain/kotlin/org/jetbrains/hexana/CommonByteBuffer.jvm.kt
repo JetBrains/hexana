@@ -10,8 +10,8 @@ actual class CommonByteBuffer(buffer: ByteBuffer) : BufferWrapper<ByteBuffer>(bu
 
         while (true) {
             val byte = get().toUInt()
-            result = result or ((byte and 0x7f.toUInt()) shl shift).toLong()
-            if (byte and 0x80.toUInt() == 0.toUInt()) {
+            result = result or ((byte and 0x7Fu) shl shift).toLong()
+            if (byte and 0x80u == 0u) {
                 break
             }
             shift +=7
@@ -26,9 +26,9 @@ actual class CommonByteBuffer(buffer: ByteBuffer) : BufferWrapper<ByteBuffer>(bu
 
         while (true) {
             val byte = get().toUInt()
-            result = result or ((byte and 0x7f.toUInt()) shl shift).toLong()
-            if (byte and 0x80.toUInt() == 0.toUInt()) {
-                if (shift < 32 && (byte and 0x40.toUInt()) != 0.toUInt()) {
+            result = result or ((byte and 0x7Fu) shl shift).toLong()
+            if (byte and 0x80u == 0u) {
+                if (shift < 32 && (byte and 0x40u) != 0u) {
                     result = result or ((-1L) shl shift)
                     break
                 }
