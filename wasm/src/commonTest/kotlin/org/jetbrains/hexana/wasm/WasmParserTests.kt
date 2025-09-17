@@ -1,26 +1,19 @@
 package org.jetbrains.hexana.wasm
 
-import org.jetbrains.hexana.CommonByteBuffer
+import org.jetbrains.hexana.tests.IgnoreWebTarget
+import org.jetbrains.hexana.tests.resourceAsByteBuffer
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 import kotlin.test.Test
-import kotlin.test.assertNotNull
-import java.nio.ByteBuffer
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class WasmParserTests {
 
-    private fun getAsByteBuffer(resourceName: String): ByteBuffer {
-        val stream = WasmParserTests::class.java.classLoader.getResourceAsStream(resourceName)
-        assertNotNull(stream, "Resource skiko.wasm should be available on the classpath")
-        val bytes = stream.use { it.readBytes() }
-        return ByteBuffer.wrap(bytes)
-    }
-
     @Test
+    @IgnoreWebTarget
     fun parseSkikoSections() {
-        val buffer = CommonByteBuffer(getAsByteBuffer("skiko.wasm"))
+        val buffer = resourceAsByteBuffer("skiko.wasm")
         val wasmModule = WasmParser().parse(buffer)
 
         assertNotNull(wasmModule)
@@ -44,8 +37,9 @@ class WasmParserTests {
     }
 
     @Test
+    @IgnoreWebTarget
     fun parseLongImports() {
-        val buffer = CommonByteBuffer(getAsByteBuffer("string.wasm"))
+        val buffer = resourceAsByteBuffer("string.wasm")
         val wasmModule = WasmParser().parse(buffer)
         assertNotNull(wasmModule)
 
