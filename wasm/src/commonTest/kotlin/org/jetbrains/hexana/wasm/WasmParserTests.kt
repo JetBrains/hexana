@@ -2,16 +2,19 @@ package org.jetbrains.hexana.wasm
 
 import org.jetbrains.hexana.tests.IgnoreWebTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
+import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
+@IgnoreWebTarget
 class WasmParserTests {
 
     @Test
-    @IgnoreWebTarget
     fun parseSkikoSections() {
         val buffer = resourceAsByteBuffer("skiko.wasm")
         val wasmModule = WasmParser().parse(buffer)
@@ -37,7 +40,6 @@ class WasmParserTests {
     }
 
     @Test
-    @IgnoreWebTarget
     fun parseLongImports() {
         val buffer = resourceAsByteBuffer("string.wasm")
         val wasmModule = WasmParser().parse(buffer)
@@ -79,6 +81,197 @@ class WasmParserTests {
                     0
                 ), importRecords[3]
             )
+        }
+    }
+
+    @Test
+    fun `code leftshift`() {
+        assertCodeRecords("snippets/leftshift.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.Local.Get(0),
+                    OpCodes.Local.Get(1),
+                    OpCodes.I32.Shl,
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code popcnt`() {
+        assertCodeRecords("snippets/popcnt.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.Local.Get(0),
+                    OpCodes.I32.Popcnt,
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code or`() {
+        assertCodeRecords("snippets/or.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.Local.Get(0),
+                    OpCodes.Local.Get(1),
+                    OpCodes.I32.Or,
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code xor`() {
+        assertCodeRecords("snippets/xor.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.Local.Get(0),
+                    OpCodes.Local.Get(1),
+                    OpCodes.I32.Xor,
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code and`() {
+        assertCodeRecords("snippets/and.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.Local.Get(0),
+                    OpCodes.Local.Get(1),
+                    OpCodes.I32.And,
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code leftrotate`() {
+        assertCodeRecords("snippets/leftrotate.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.Local.Get(0),
+                    OpCodes.Local.Get(1),
+                    OpCodes.I32.Rotl,
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code rightrotate`() {
+        assertCodeRecords("snippets/rightrotate.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.Local.Get(0),
+                    OpCodes.Local.Get(1),
+                    OpCodes.I32.Rotr,
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code call`() {
+        assertCodeRecords("snippets/call.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.Flow.Call(0),
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code unreachable`() {
+        assertCodeRecords("snippets/unreachable.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.Flow.Unreachable,
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code nop`() {
+        assertCodeRecords("snippets/nop.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.Flow.Nop,
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code clz`() {
+        assertCodeRecords("snippets/clz.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.Local.Get(0),
+                    OpCodes.I32.Clz
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code ctz`() {
+        assertCodeRecords("snippets/ctz.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.Local.Get(0),
+                    OpCodes.I32.Ctz
+                )
+            )
+        ))
+    }
+
+}
+
+
+private fun assertCodeRecord(actual: WasmCodeRecord, expected: WasmCodeRecord) {
+    assertContentEquals(expected = expected.locals, actual = actual.locals)
+    assertContentEquals(expected = expected.opCodes, actual = actual.opCodes)
+}
+
+private fun assertCodeRecords(resourcePath: String, expected: List<WasmCodeRecord>) {
+    val buffer = resourceAsByteBuffer(resourcePath)
+    val wasmModule = WasmParser().parse(buffer)
+
+    val codeSection = wasmModule?.codeSection!!
+    with (codeSection) {
+        val codeRecords = buffer.scan()
+        codeRecords.zip(expected).forEach { (codeRecord, expectedCodeRecord) ->
+            assertCodeRecord(codeRecord, expectedCodeRecord)
         }
     }
 }
