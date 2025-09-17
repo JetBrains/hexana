@@ -3,6 +3,7 @@ package org.jetbrains.hexana.wasm
 import org.jetbrains.hexana.tests.IgnoreWebTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 import kotlin.test.Test
@@ -250,6 +251,179 @@ class WasmParserTests {
                 listOf(
                     OpCodes.Local.Get(0),
                     OpCodes.I32.Ctz
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code const`() {
+        assertCodeRecords("snippets/const.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.I32.Const(10),
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code globalset`() {
+        assertCodeRecords("snippets/globalset.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.I32.Const(10),
+                    OpCodes.Global.Set(0),
+                    OpCodes.Global.Get(0),
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code equal`() {
+        assertCodeRecords("snippets/equal.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.I32.Const(10),
+                    OpCodes.I32.Const(2),
+                    OpCodes.I32.Eq,
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code return`() {
+        assertCodeRecords("snippets/return.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.I32.Const(10),
+                    OpCodes.I32.Const(90),
+                    OpCodes.Flow.Return
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code remainder`() {
+        assertCodeRecords("snippets/remainder.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.I32.Const(10),
+                    OpCodes.I32.Const(3),
+                    OpCodes.I32.RemU,
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code addition`() {
+        assertCodeRecords("snippets/addition.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.I32.Const(10),
+                    OpCodes.I32.Const(3),
+                    OpCodes.I32.Add,
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code multiplication`() {
+        assertCodeRecords("snippets/multiplication.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                emptyList(),
+                listOf(
+                    OpCodes.I32.Const(10),
+                    OpCodes.I32.Const(3),
+                    OpCodes.I32.Mul,
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code local`() {
+        assertCodeRecords("snippets/local.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                listOf(WasmCodeLocalRecord(1, 127)),
+                listOf(
+                    OpCodes.I32.Const(10),
+                    OpCodes.Local.Set(0),
+                    OpCodes.Local.Get(0),
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code ne`() {
+        assertCodeRecords("snippets/ne.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                listOf(),
+                listOf(
+                    OpCodes.I32.Const(10),
+                    OpCodes.I32.Const(2),
+                    OpCodes.I32.Ne,
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code drop`() {
+        assertCodeRecords("snippets/drop.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                listOf(),
+                listOf(
+                    OpCodes.I32.Const(10),
+                    OpCodes.I32.Const(20),
+                    OpCodes.Flow.Drop,
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code gt`() {
+        assertCodeRecords("snippets/gt.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                listOf(),
+                listOf(
+                    OpCodes.I32.Const(10),
+                    OpCodes.I32.Const(2),
+                    OpCodes.I32.GTU,
+                    OpCodes.Flow.Call(0)
                 )
             )
         ))

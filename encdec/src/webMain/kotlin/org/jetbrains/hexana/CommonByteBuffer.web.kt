@@ -28,4 +28,8 @@ actual class CommonByteBuffer : BufferWrapperInterface {
     actual fun hasRemaining(): Boolean {
         TODO("Not yet implemented")
     }
+
+    actual fun getSLEB128(): Long {
+        TODO("Not yet implemented")
+    }
 }

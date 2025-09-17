@@ -19,6 +19,26 @@ actual class CommonByteBuffer(buffer: ByteBuffer) : BufferWrapper<ByteBuffer>(bu
         return result
     }
 
+    actual fun getSLEB128(): Long {
+        var result = 0L
+        var shift = 0
+
+        while (true) {
+            val byte = get().toUInt()
+            result = result or ((byte and 0x7f.toUInt()) shl shift).toLong()
+            if (byte and 0x80.toUInt() == 0.toUInt()) {
+                if (shift < 32 && (byte and 0x40.toUInt()) != 0.toUInt()) {
+                    result = result or ((-1L) shl shift)
+                    break
+                }
+                break
+            }
+            shift +=7
+        }
+
+        return result
+    }
+
     actual fun position(): Int = buffer.position()
 
     actual fun position(index: Int): CommonByteBuffer = CommonByteBuffer(buffer.position(index))

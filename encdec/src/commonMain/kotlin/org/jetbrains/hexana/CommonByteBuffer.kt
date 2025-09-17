@@ -7,6 +7,7 @@ expect class CommonByteBuffer : BufferWrapperInterface {
     fun get(): Byte
     fun get(dst: ByteArray, offset: Int, size: Int): CommonByteBuffer
     fun getULEB128(): Long
+    fun getSLEB128(): Long
     fun position(): Int
     fun position(index: Int): CommonByteBuffer
     fun remaining(): Int
