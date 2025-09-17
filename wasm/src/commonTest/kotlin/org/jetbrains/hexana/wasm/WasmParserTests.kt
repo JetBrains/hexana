@@ -429,6 +429,82 @@ class WasmParserTests {
         ))
     }
 
+    @Test
+    fun `code nearest`() {
+        assertCodeRecords("snippets/nearest.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                listOf(),
+                listOf(
+                    OpCodes.F32.Const(2.700000047683716f),
+                    OpCodes.F32.Nearest,
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code floor`() {
+        assertCodeRecords("snippets/floor.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                listOf(),
+                listOf(
+                    OpCodes.F32.Const(-2.700000047683716f),
+                    OpCodes.F32.Floor,
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code ceil`() {
+        assertCodeRecords("snippets/ceil.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                listOf(),
+                listOf(
+                    OpCodes.F32.Const(2.700000047683716f),
+                    OpCodes.F32.Ceil,
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code truncf2f`() {
+        assertCodeRecords("snippets/truncf2f.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                listOf(),
+                listOf(
+                    OpCodes.F32.Const(-2.700000047683716f),
+                    OpCodes.F32.Trunc,
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
+    @Test
+    fun `code copy`() {
+        assertCodeRecords("snippets/copy.wasm", listOf(
+            WasmCodeRecord(
+                1,
+                listOf(),
+                listOf(
+                    OpCodes.F32.Const(10f),
+                    OpCodes.F32.Const(-2f),
+                    OpCodes.F32.CopySign,
+                    OpCodes.Flow.Call(0)
+                )
+            )
+        ))
+    }
+
 }
 
 

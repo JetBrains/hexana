@@ -32,4 +32,8 @@ actual class CommonByteBuffer : BufferWrapperInterface {
     actual fun getSLEB128(): Long {
         TODO("Not yet implemented")
     }
+
+    actual fun getFloatLE(): Float {
+        TODO("Not yet implemented")
+    }
 }

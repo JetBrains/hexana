@@ -12,5 +12,6 @@ expect class CommonByteBuffer : BufferWrapperInterface {
     fun position(index: Int): CommonByteBuffer
     fun remaining(): Int
     fun hasRemaining(): Boolean
+    fun getFloatLE(): Float
 }
 

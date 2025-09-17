@@ -1,6 +1,7 @@
 package org.jetbrains.hexana
 
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 actual class CommonByteBuffer(buffer: ByteBuffer) : BufferWrapper<ByteBuffer>(buffer) {
     actual fun getULEB128(): Long {
@@ -50,6 +51,10 @@ actual class CommonByteBuffer(buffer: ByteBuffer) : BufferWrapper<ByteBuffer>(bu
     actual fun get(): Byte = buffer.get()
 
     actual fun get(dst: ByteArray, offset: Int, size: Int) = CommonByteBuffer(buffer.get(dst, offset, size))
+
+    actual fun getFloatLE(): Float {
+        return buffer.order(ByteOrder.LITTLE_ENDIAN).getFloat()
+    }
 }
 
 

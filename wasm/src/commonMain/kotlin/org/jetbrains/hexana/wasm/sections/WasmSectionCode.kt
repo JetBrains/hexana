@@ -27,7 +27,7 @@ class WasmSectionCode(size: Int, offset: Int): WasmSection(size, offset) {
 
             val opCodes = mutableListOf<OpCode<*>>()
             while (true) {
-                val opCode = get()
+                val opCode = get().toUByte()
                 if (opCode == OpCodes.Flow.Terminal.code) {
                     break
                 }
