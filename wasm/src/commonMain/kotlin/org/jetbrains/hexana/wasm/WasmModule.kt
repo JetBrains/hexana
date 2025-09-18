@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.wasm
 
+import org.jetbrains.hexana.CommonByteBuffer
+import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmSectionCode
 import org.jetbrains.hexana.wasm.sections.WasmSectionCustom
@@ -15,6 +17,7 @@ import org.jetbrains.hexana.wasm.sections.WasmSectionMemory
 import org.jetbrains.hexana.wasm.sections.WasmSectionStart
 import org.jetbrains.hexana.wasm.sections.WasmSectionTable
 import org.jetbrains.hexana.wasm.sections.WasmSectionTypes
+import org.jetbrains.hexana.wasm.sections.WasmSectionTypesRecord
 
 class WasmModule(
     val customSection: WasmSectionCustom? = null,
@@ -87,4 +90,27 @@ class WasmModule(
             )
         }
     }
+
+    fun CommonByteBuffer.scanFunctions(): List<FunctionRecord> {
+        requireNotNull(typesSection)
+        requireNotNull(functionSection)
+        requireNotNull(codeSection)
+        val types = with (typesSection) {
+            parseTypes()
+        }
+
+        val functions = with(functionSection) {
+            parseFunctions()
+        }
+
+        val bodies = with(codeSection) {
+            scan()
+        }
+
+        return functions.map { types[it] }.zip(bodies).map { (signature, body) ->
+            FunctionRecord(signature, body)
+        }
+    }
 }
+
+data class FunctionRecord(val signature: WasmSectionTypesRecord, val body: WasmCodeRecord)
