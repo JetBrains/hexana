@@ -22,6 +22,12 @@
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
+        <fileType name="wasm"
+                  implementationClass="org.jetbrains.hexana.WasmFileType"
+                  fieldName="INSTANCE"
+                  extensions="wasm" />
+
+        <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
     </extensions>
 
     <actions>
