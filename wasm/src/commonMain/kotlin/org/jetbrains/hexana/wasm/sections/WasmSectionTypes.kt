@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.wasm.sections
 
-import org.jetbrains.hexana.CommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
 
 sealed class TypeId {
     companion object {

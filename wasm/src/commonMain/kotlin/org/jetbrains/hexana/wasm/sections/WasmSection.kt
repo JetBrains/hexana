@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.wasm.sections
 
-import org.jetbrains.hexana.CommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
 
 sealed class WasmSection(val size: Int, val offset: Int) {
     fun CommonByteBuffer.consumeArray(block: (Int) -> Unit) {

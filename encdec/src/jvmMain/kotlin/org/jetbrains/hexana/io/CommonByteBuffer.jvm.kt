@@ -1,4 +1,4 @@
-package org.jetbrains.hexana
+package org.jetbrains.hexana.io
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

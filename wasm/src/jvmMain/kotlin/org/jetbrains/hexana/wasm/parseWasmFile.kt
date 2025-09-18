@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.wasm
 
-import org.jetbrains.hexana.CommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
 import java.io.File
 import java.nio.ByteBuffer
 

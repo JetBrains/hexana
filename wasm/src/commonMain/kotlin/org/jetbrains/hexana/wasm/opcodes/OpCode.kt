@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.wasm.opcodes
 
-import org.jetbrains.hexana.CommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
 
 sealed class OpCode<T : Any>(initialValue: T? = null) {
     lateinit var value: T

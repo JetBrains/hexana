@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.wasm
 
-import org.jetbrains.hexana.CommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmSectionCode

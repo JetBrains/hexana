@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.wasm.sections
 
-import org.jetbrains.hexana.CommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
 
 class WasmSectionImport(size: Int, offset: Int): WasmSection(size, offset) {
     companion object {

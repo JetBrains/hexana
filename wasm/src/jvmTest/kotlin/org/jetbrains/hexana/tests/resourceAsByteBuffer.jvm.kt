@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.tests
 
-import org.jetbrains.hexana.CommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmParserTests
 import java.nio.ByteBuffer
 import kotlin.test.assertNotNull
