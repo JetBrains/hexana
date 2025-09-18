@@ -14,20 +14,12 @@ class WasmSectionImport(size: Int, offset: Int): WasmSection(size, offset) {
         val records = mutableListOf<WasmImportRecord>()
 
         repeat(vecCount) {
-            val prefixNameSize = getULEB128().toInt()
-            val prefixBytes = ByteArray(prefixNameSize)
-            get(prefixBytes, 0, prefixNameSize)
-            val nameSize = getULEB128().toInt()
-            val nameBytes = ByteArray(nameSize)
-            get(nameBytes, 0, nameSize)
+            val prefix = consumeString()
+            val name = consumeString()
             val type = get()
             position(position() + 1)
             records.add(
-                WasmImportRecord(
-                    prefixBytes.decodeToString(),
-                    nameBytes.decodeToString(),
-                    type
-                )
+                WasmImportRecord(prefix, name, type)
             )
         }
 
