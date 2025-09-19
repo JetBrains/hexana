@@ -1,39 +1,48 @@
 package org.jetbrains.hexana.io
 
-actual class CommonByteBuffer : BufferWrapperInterface {
-    fun get(): Byte {
-        TODO("Not yet implemented")
+import org.khronos.webgl.ArrayBuffer
+import org.khronos.webgl.DataView
+import org.khronos.webgl.Int8Array
+import org.khronos.webgl.get
+
+actual class CommonByteBuffer(buffer: ArrayBuffer) : BufferWrapper<ArrayBuffer>(buffer) {
+    private var cursorPosition = 0
+
+    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer
+    override fun get(): Byte {
+        val res = Int8Array(buffer)[position()]
+        cursorPosition++
+        return res
     }
 
-    fun get(dst: ByteArray, offset: Int, size: Int): CommonByteBuffer {
-        TODO("Not yet implemented")
+    override fun get(dst: ByteArray, offset: Int, size: Int) {
+        val slice = Int8Array(buffer.slice(cursorPosition, cursorPosition + size))
+        for (i in offset until offset + size) {
+            dst.set(i, slice.get(i - offset))
+        }
+        position(position() + size)
     }
 
-    fun getULEB128(): Long {
-        TODO("Not yet implemented")
+    override fun position(): Int {
+        return cursorPosition
     }
 
-    fun position(): Int {
-        TODO("Not yet implemented")
+    override fun position(index: Int): CommonByteBuffer {
+        cursorPosition = index
+        return this
     }
 
-    fun position(index: Int): CommonByteBuffer {
-        TODO("Not yet implemented")
+    override fun remaining(): Int {
+        return buffer.byteLength - cursorPosition
     }
 
-    fun remaining(): Int {
-        TODO("Not yet implemented")
+    override fun hasRemaining(): Boolean {
+        return cursorPosition < buffer.byteLength
     }
 
-    fun hasRemaining(): Boolean {
-        TODO("Not yet implemented")
-    }
-
-    fun getSLEB128(): Long {
-        TODO("Not yet implemented")
-    }
-
-    fun getFloatLE(): Float {
-        TODO("Not yet implemented")
+    override fun getFloatLE(): Float {
+        val res = DataView(buffer).getFloat32(cursorPosition, true)
+        position(cursorPosition + 4)
+        return res;
     }
 }

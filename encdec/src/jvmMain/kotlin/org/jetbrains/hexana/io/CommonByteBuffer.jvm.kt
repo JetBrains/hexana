@@ -14,7 +14,9 @@ actual class CommonByteBuffer(buffer: ByteBuffer) : BufferWrapper<ByteBuffer>(bu
 
     override fun get(): Byte = buffer.get()
 
-    override fun get(dst: ByteArray, offset: Int, size: Int) = CommonByteBuffer(buffer.get(dst, offset, size))
+    override fun get(dst: ByteArray, offset: Int, size: Int) {
+        buffer.get(dst, offset, size)
+    }
 
     override fun getFloatLE(): Float {
         return buffer.order(ByteOrder.LITTLE_ENDIAN).getFloat()

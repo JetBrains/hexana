@@ -4,7 +4,7 @@ interface BufferWrapperInterface
 
 abstract class BufferWrapper<T>(internal val buffer: T): BufferWrapperInterface {
     abstract fun get(): Byte
-    abstract fun get(dst: ByteArray, offset: Int, size: Int): CommonByteBuffer
+    abstract fun get(dst: ByteArray, offset: Int, size: Int)
     abstract fun position(): Int
     abstract fun position(index: Int): CommonByteBuffer
     abstract fun remaining(): Int

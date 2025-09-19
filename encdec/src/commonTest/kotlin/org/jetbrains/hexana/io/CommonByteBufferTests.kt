@@ -1,16 +1,11 @@
 package org.jetbrains.hexana.io
 
-import java.nio.ByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class CommonByteBufferTests {
-
-    private fun createByteBuffer(vararg bytes: Byte = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8, 9)): CommonByteBuffer {
-        return CommonByteBuffer(ByteBuffer.wrap(bytes))
-    }
 
     @Test
     fun `reading byte affects position`() {
@@ -80,8 +75,7 @@ class CommonByteBufferTests {
 
     @Test
     fun `getFloatLE reads little endian float and advances position`() {
-        val bytes = byteArrayOf(0x00, 0x00, 0x80.toByte(), 0x3F)
-        val buffer = CommonByteBuffer(ByteBuffer.wrap(bytes))
+        val buffer = createByteBuffer(0x00, 0x00, 0x80.toByte(), 0x3F)
         val value = buffer.getFloatLE()
         assertEquals(1.0f, value)
         assertEquals(4, buffer.position())
