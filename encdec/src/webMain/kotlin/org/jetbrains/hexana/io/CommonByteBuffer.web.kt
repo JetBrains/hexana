@@ -1,39 +1,39 @@
 package org.jetbrains.hexana.io
 
 actual class CommonByteBuffer : BufferWrapperInterface {
-    actual fun get(): Byte {
+    fun get(): Byte {
         TODO("Not yet implemented")
     }
 
-    actual fun get(dst: ByteArray, offset: Int, size: Int): CommonByteBuffer {
+    fun get(dst: ByteArray, offset: Int, size: Int): CommonByteBuffer {
         TODO("Not yet implemented")
     }
 
-    actual fun getULEB128(): Long {
+    fun getULEB128(): Long {
         TODO("Not yet implemented")
     }
 
-    actual fun position(): Int {
+    fun position(): Int {
         TODO("Not yet implemented")
     }
 
-    actual fun position(index: Int): CommonByteBuffer {
+    fun position(index: Int): CommonByteBuffer {
         TODO("Not yet implemented")
     }
 
-    actual fun remaining(): Int {
+    fun remaining(): Int {
         TODO("Not yet implemented")
     }
 
-    actual fun hasRemaining(): Boolean {
+    fun hasRemaining(): Boolean {
         TODO("Not yet implemented")
     }
 
-    actual fun getSLEB128(): Long {
+    fun getSLEB128(): Long {
         TODO("Not yet implemented")
     }
 
-    actual fun getFloatLE(): Float {
+    fun getFloatLE(): Float {
         TODO("Not yet implemented")
     }
 }
