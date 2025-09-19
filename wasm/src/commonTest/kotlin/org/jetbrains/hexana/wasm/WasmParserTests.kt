@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.wasm
 
-import org.jetbrains.hexana.tests.IgnoreWebTarget
+import kotlinx.coroutines.test.runTest
+import org.jetbrains.hexana.tests.IgnoreJsTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.TypeId
@@ -14,11 +15,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-@IgnoreWebTarget
 class WasmParserTests {
 
     @Test
-    fun parseSkikoSections() {
+    fun parseSkikoSections() = runTest {
         val buffer = resourceAsByteBuffer("skiko.wasm")
         val wasmModule = WasmParser().parse(buffer)
 
@@ -42,7 +42,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun parseLongImports() {
+    fun parseLongImports() = runTest {
         val buffer = resourceAsByteBuffer("string.wasm")
         val wasmModule = WasmParser().parse(buffer)
         assertNotNull(wasmModule)
@@ -87,7 +87,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code leftshift`() {
+    fun `code leftshift`() = runTest {
         assertFunctions(
             "snippets/leftshift.wasm", listOf(
                 FunctionRecord(
@@ -107,7 +107,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code popcnt`() {
+    fun `code popcnt`() = runTest {
         assertFunctions(
             "snippets/popcnt.wasm", listOf(
                 FunctionRecord(
@@ -126,7 +126,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code or`() {
+    fun `code or`() = runTest {
         assertFunctions(
             "snippets/or.wasm", listOf(
                 FunctionRecord(
@@ -146,7 +146,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code xor`() {
+    fun `code xor`() = runTest {
         assertFunctions(
             "snippets/xor.wasm", listOf(
                 FunctionRecord(
@@ -166,7 +166,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code and`() {
+    fun `code and`() = runTest {
         assertFunctions(
             "snippets/and.wasm", listOf(
                 FunctionRecord(
@@ -186,7 +186,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code leftrotate`() {
+    fun `code leftrotate`() = runTest {
         assertFunctions(
             "snippets/leftrotate.wasm", listOf(
                 FunctionRecord(
@@ -206,7 +206,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code rightrotate`() {
+    fun `code rightrotate`() = runTest {
         assertFunctions(
             "snippets/rightrotate.wasm", listOf(
                 FunctionRecord(
@@ -226,7 +226,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code call`() {
+    fun `code call`() = runTest {
         assertFunctions(
             "snippets/call.wasm", listOf(
                 FunctionRecord(
@@ -244,7 +244,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code unreachable`() {
+    fun `code unreachable`() = runTest {
         assertFunctions(
             "snippets/unreachable.wasm", listOf(
                 FunctionRecord(
@@ -262,7 +262,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code nop`() {
+    fun `code nop`() = runTest {
         assertFunctions(
             "snippets/nop.wasm", listOf(
                 FunctionRecord(
@@ -280,7 +280,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code clz`() {
+    fun `code clz`() = runTest {
         assertFunctions(
             "snippets/clz.wasm", listOf(
                 FunctionRecord(
@@ -300,7 +300,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code ctz`() {
+    fun `code ctz`() = runTest {
         assertFunctions(
             "snippets/ctz.wasm", listOf(
                 FunctionRecord(
@@ -319,7 +319,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code const`() {
+    fun `code const`() = runTest {
         assertFunctions(
             "snippets/const.wasm", listOf(
                 FunctionRecord(
@@ -338,7 +338,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code globalset`() {
+    fun `code globalset`() = runTest {
         assertFunctions(
             "snippets/globalset.wasm", listOf(
                 FunctionRecord(
@@ -359,7 +359,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code equal`() {
+    fun `code equal`() = runTest {
         assertFunctions(
             "snippets/equal.wasm", listOf(
                 FunctionRecord(
@@ -381,7 +381,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code return`() {
+    fun `code return`() = runTest {
         assertFunctions(
             "snippets/return.wasm", listOf(
                 FunctionRecord(
@@ -402,7 +402,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code remainder`() {
+    fun `code remainder`() = runTest {
         assertFunctions(
             "snippets/remainder.wasm", listOf(
                 FunctionRecord(
@@ -423,7 +423,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code addition`() {
+    fun `code addition`() = runTest {
         assertFunctions(
             "snippets/addition.wasm", listOf(
                 FunctionRecord(
@@ -444,7 +444,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code multiplication`() {
+    fun `code multiplication`() = runTest {
         assertFunctions(
             "snippets/multiplication.wasm", listOf(
                 FunctionRecord(
@@ -466,7 +466,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code local`() {
+    fun `code local`() = runTest {
         assertFunctions(
             "snippets/local.wasm", listOf(
                 FunctionRecord(
@@ -487,7 +487,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code ne`() {
+    fun `code ne`() = runTest {
 
         assertFunctions(
             "snippets/ne.wasm", listOf(
@@ -510,7 +510,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code drop`() {
+    fun `code drop`() = runTest {
         assertFunctions(
             "snippets/drop.wasm", listOf(
                 FunctionRecord(
@@ -531,7 +531,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code gt`() {
+    fun `code gt`() = runTest {
         FunctionRecord(
             signature = WasmSectionTypesRecord(listOf(), listOf()),
             body = WasmCodeRecord(
@@ -548,7 +548,8 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code nearest`() {
+    @IgnoreJsTarget
+    fun `code nearest`() = runTest {
         assertFunctions(
             "snippets/nearest.wasm", listOf(
                 FunctionRecord(
@@ -568,7 +569,8 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code floor`() {
+    @IgnoreJsTarget
+    fun `code floor`() = runTest {
         assertFunctions(
             "snippets/floor.wasm", listOf(
                 FunctionRecord(
@@ -588,7 +590,8 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code ceil`() {
+    @IgnoreJsTarget
+    fun `code ceil`() = runTest {
         assertFunctions(
             "snippets/ceil.wasm", listOf(
                 FunctionRecord(
@@ -608,7 +611,8 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code truncf2f`() {
+    @IgnoreJsTarget
+    fun `code truncf2f`() = runTest {
         assertFunctions(
             "snippets/truncf2f.wasm", listOf(
                 FunctionRecord(
@@ -628,7 +632,7 @@ class WasmParserTests {
     }
 
     @Test
-    fun `code copy`() {
+    fun `code copy`() = runTest {
         assertFunctions(
             "snippets/copy.wasm", listOf(
                 FunctionRecord(
@@ -657,7 +661,7 @@ private fun assertFunction(actual: FunctionRecord, expected: FunctionRecord) {
     assertContentEquals(expected = expected.body.opCodes, actual = actual.body.opCodes)
 }
 
-private fun assertFunctions(resourcePath: String, expected: List<FunctionRecord>) {
+private suspend fun assertFunctions(resourcePath: String, expected: List<FunctionRecord>) {
     val buffer = resourceAsByteBuffer(resourcePath)
     val wasmModule = WasmParser().parse(buffer)
 
