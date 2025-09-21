@@ -3,6 +3,7 @@ package org.jetbrains.hexana.wasm
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.hexana.tests.IgnoreJsTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
+import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.TypeId
 import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
@@ -117,7 +118,7 @@ class WasmParserTests {
                         emptyList(),
                         listOf(
                             OpCodes.Local.Get(0),
-                            OpCodes.I32.Popcnt,
+                            OpCodes.I32.PopCnt,
                         )
                     )
                 )
@@ -158,6 +159,26 @@ class WasmParserTests {
                             OpCodes.Local.Get(0),
                             OpCodes.Local.Get(1),
                             OpCodes.I32.Xor,
+                        )
+                    )
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `code extend`() = runTest {
+        assertFunctions(
+            "snippets/extend.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(), listOf()),
+                    body = WasmCodeRecord(
+                        1,
+                        emptyList(),
+                        listOf(
+                            OpCodes.I32.Const(10),
+                            OpCodes.I64.Extent_I32_S,
+                            OpCodes.Flow.Call(0),
                         )
                     )
                 )
@@ -272,6 +293,56 @@ class WasmParserTests {
                         emptyList(),
                         listOf(
                             OpCodes.Flow.Nop,
+                        )
+                    )
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `code br`() = runTest {
+        assertFunctions(
+            "snippets/br.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(), listOf()),
+                    body = WasmCodeRecord(
+                        1,
+                        emptyList(),
+                        listOf(
+                            OpCodes.Flow.Loop(listOf(
+                                OpCodes.Global.Get(0),
+                                OpCodes.I32.Const(1),
+                                OpCodes.I32.Add,
+                                OpCodes.Global.Set(0),
+                                OpCodes.Global.Get(0),
+                                OpCodes.Flow.Call(0),
+                                OpCodes.Global.Get(0),
+                                OpCodes.I32.Const(10),
+                                OpCodes.I32.LTS,
+                                OpCodes.Flow.BrIf(0)
+                            ))
+                        )
+                    )
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `code geu`() = runTest {
+        assertFunctions(
+            "snippets/geu.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(), listOf()),
+                    body = WasmCodeRecord(
+                        1,
+                        emptyList(),
+                        listOf(
+                            OpCodes.I32.Const(10),
+                            OpCodes.I32.Const(2),
+                            OpCodes.I32.GEU,
+                            OpCodes.Flow.Call(0)
                         )
                     )
                 )
@@ -421,6 +492,83 @@ class WasmParserTests {
             )
         )
     }
+
+    @Test
+    fun `code load`() = runTest {
+        assertFunctions(
+            "snippets/load.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32), listOf(TypeId.TYPE_I32)),
+                    body = WasmCodeRecord(
+                        1,
+                        emptyList(),
+                        listOf(
+                            OpCodes.I32.Const(0),
+                            OpCodes.I32.Load(MemArg(2, 0)),
+                        )
+                    )
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `code wrap`() = runTest {
+        assertFunctions(
+            "snippets/wrap.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(), listOf()),
+                    body = WasmCodeRecord(
+                        1,
+                        emptyList(),
+                        listOf(
+                            OpCodes.I64.Const(10L),
+                            OpCodes.I32.WrapI64,
+                            OpCodes.Flow.Call(0)
+                    ))
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `code promote`() = runTest {
+        assertFunctions(
+            "snippets/promote.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(), listOf()),
+                    body = WasmCodeRecord(
+                        1,
+                        emptyList(),
+                        listOf(
+                            OpCodes.F32.Const(10.5f),
+                            OpCodes.F64.PromoteF32,
+                            OpCodes.Flow.Call(0)
+                        ))
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `code sqrt`() = runTest {
+        assertFunctions(
+            "snippets/sqrt.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(), listOf()),
+                    body = WasmCodeRecord(
+                        1,
+                        emptyList(),
+                        listOf(
+                            OpCodes.F32.Const(2.0f),
+                            OpCodes.F32.Sqrt,
+                            OpCodes.Flow.Call(0)
+                        ))
+                )
+            )
+        )
+    }
+
 
     @Test
     fun `code addition`() = runTest {
