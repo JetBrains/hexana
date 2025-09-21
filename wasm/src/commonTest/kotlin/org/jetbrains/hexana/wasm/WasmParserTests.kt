@@ -855,6 +855,25 @@ class WasmParserTests {
         )
     }
 
+    @Test
+    fun `code demote`() = runTest {
+        assertFunctions(
+            "snippets/demote.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(), listOf()),
+                    body = WasmCodeRecord(
+                        1,
+                        emptyList(),
+                        listOf(
+                            OpCodes.F64.Const(10.5),
+                            OpCodes.F32.DemoteF64,
+                            OpCodes.Flow.Call(0)
+                        )
+                    )
+                )
+            )
+        )
+    }
 
     @Test
     fun `loop`() = runTest {

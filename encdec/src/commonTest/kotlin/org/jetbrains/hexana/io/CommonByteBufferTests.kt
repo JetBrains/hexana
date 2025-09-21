@@ -80,4 +80,21 @@ class CommonByteBufferTests {
         assertEquals(1.0f, value)
         assertEquals(4, buffer.position())
     }
+
+    @Test
+    fun `getDoubleLE reads little endian double and advances position`() {
+        val buffer = createByteBuffer(
+            0x1F,
+            0x85.toByte(),
+            0xEB.toByte(),
+            0x51,
+            0xB8.toByte(),
+            0x1E,
+            0x09,
+            0x40
+        )
+        val value = buffer.getDoubleLE()
+        assertEquals(3.14, value)
+        assertEquals(8, buffer.position())
+    }
 }

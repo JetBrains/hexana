@@ -10,6 +10,7 @@ abstract class BufferWrapper<T>(internal val buffer: T): BufferWrapperInterface 
     abstract fun remaining(): Int
     abstract fun hasRemaining(): Boolean
     abstract fun getFloatLE(): Float
+    abstract fun getDoubleLE(): Double
 
     fun getULEB128(): Long {
         var result = 0L

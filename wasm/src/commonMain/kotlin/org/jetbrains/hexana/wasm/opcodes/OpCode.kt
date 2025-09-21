@@ -61,6 +61,10 @@ open class OpCodeFloat(initValue: Float? = null) : OpCode<Float>(initValue) {
     override fun CommonByteBuffer.consume(): Float = getFloatLE()
 }
 
+open class OpCodeDouble(initValue: Double? = null) : OpCode<Double>(initValue) {
+    override fun CommonByteBuffer.consume(): Double = getDoubleLE()
+}
+
 open class OpCodeSignedInt(initValue: Int? = null) : OpCode<Int>(initValue) {
     override fun CommonByteBuffer.consume(): Int = getSLEB128().toInt()
 }
@@ -413,12 +417,24 @@ object OpCodes {
             const val code: UByte = 0x91u
             const val description: String = "f32.sqrt"
         }
+
+        object DemoteF64 : OpCodeUnit() {
+            const val code: UByte = 0xB6u
+            const val description: String = "f32.demote_f64"
+        }
     }
 
     object F64 {
         object PromoteF32 : OpCodeUnit() {
             const val code: UByte = 0xBBu
             const val description: String = "f64.promote_f32"
+        }
+
+        class Const(initValue: Double? = null) : OpCodeDouble(initValue) {
+            companion object {
+                const val code: UByte = 0x44u
+                const val description: String = "f64.const"
+            }
         }
     }
 
@@ -472,7 +488,9 @@ object OpCodes {
         F32.CopySign.code to { F32.CopySign },
         F32.Load.code to { F32.Load() },
         F32.Sqrt.code to { F32.Sqrt },
+        F32.DemoteF64.code to { F32.DemoteF64 },
         F64.PromoteF32.code to { F64.PromoteF32 },
+        F64.Const.code to { F64.Const() },
         Global.Set.code to { Global.Set() },
         Global.Get.code to { Global.Get() },
     )

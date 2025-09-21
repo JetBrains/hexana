@@ -45,4 +45,10 @@ actual class CommonByteBuffer(buffer: ArrayBuffer) : BufferWrapper<ArrayBuffer>(
         position(cursorPosition + 4)
         return res;
     }
+
+    override fun getDoubleLE(): Double {
+        val res = DataView(buffer).getFloat64(cursorPosition, true)
+        position(cursorPosition + 8)
+        return res
+    }
 }

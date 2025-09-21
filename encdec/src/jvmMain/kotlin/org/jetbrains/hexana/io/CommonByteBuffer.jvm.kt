@@ -21,6 +21,10 @@ actual class CommonByteBuffer(buffer: ByteBuffer) : BufferWrapper<ByteBuffer>(bu
     override fun getFloatLE(): Float {
         return buffer.order(ByteOrder.LITTLE_ENDIAN).getFloat()
     }
+
+    override fun getDoubleLE(): Double {
+        return buffer.order(ByteOrder.LITTLE_ENDIAN).getDouble()
+    }
 }
 
 
