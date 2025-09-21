@@ -739,6 +739,28 @@ class WasmParserTests {
 
     @Test
     @IgnoreJsTarget
+    fun `code reinterpret`() = runTest {
+        assertFunctions(
+            "snippets/reinterpret.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(), listOf()),
+                    body = WasmCodeRecord(
+                        1,
+                        listOf(),
+                        listOf(
+                            OpCodes.F32.Const(-0.0f),
+                            OpCodes.I32.ReinterpretF32,
+                            OpCodes.Flow.Call(0)
+                        )
+                    )
+                )
+            )
+        )
+    }
+
+
+    @Test
+    @IgnoreJsTarget
     fun `code ceil`() = runTest {
         assertFunctions(
             "snippets/ceil.wasm", listOf(

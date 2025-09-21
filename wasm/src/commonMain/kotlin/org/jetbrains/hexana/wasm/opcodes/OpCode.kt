@@ -347,6 +347,11 @@ object OpCodes {
             const val code: UByte = 0xA7u
             const val description: String = "i32.wrap_i64"
         }
+
+        object ReinterpretF32: OpCodeUnit()  {
+            const val code: UByte = 0xBCu
+            const val description: String = "i32.reinterpret_f32"
+        }
     }
 
     object I64 {
@@ -481,6 +486,7 @@ object OpCodes {
         I32.RemU.code to { I32.RemU },
         I32.Const.code to { I32.Const() },
         I32.WrapI64.code to { I32.WrapI64 },
+        I32.ReinterpretF32.code to { I32.ReinterpretF32 },
         I64.Const.code to { I64.Const() },
         I64.Store.code to { I64.Store },
         I64.DivS.code to { I64.DivS },
