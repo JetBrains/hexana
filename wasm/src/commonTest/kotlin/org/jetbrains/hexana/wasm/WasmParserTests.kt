@@ -876,6 +876,27 @@ class WasmParserTests {
     }
 
     @Test
+    fun `code negate`() = runTest {
+        assertFunctions(
+            "snippets/negate.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(), listOf()),
+                    body = WasmCodeRecord(
+                        1,
+                        emptyList(),
+                        listOf(
+                            OpCodes.F32.Const(10.0f),
+                            OpCodes.F32.Neg,
+                            OpCodes.Flow.Call(0)
+                        )
+                    )
+                )
+            )
+        )
+    }
+
+
+    @Test
     fun `loop`() = runTest {
         assertFunctions(
             "loop.wasm", listOf(
