@@ -161,7 +161,12 @@ object OpCodes {
                 const val description: String = "else"
             }
 
-            override fun CommonByteBuffer.consume(): List<OpCode<*>> = parseOpCodes()
+            override fun CommonByteBuffer.consume(): List<OpCode<*>> {
+                val opCodes = parseOpCodes()
+                // If and Else sections share terminal OpCode - that said, we just (sort of) give it back to parent If declaration
+                position(position() - 1)
+                return opCodes
+            }
         }
     }
 

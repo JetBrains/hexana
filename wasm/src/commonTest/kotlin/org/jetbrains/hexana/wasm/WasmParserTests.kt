@@ -682,6 +682,33 @@ class WasmParserTests {
     }
 
     @Test
+    fun `code ifelse`() = runTest {
+        assertFunctions(
+            "snippets/ifelse.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(), listOf()),
+                    body = WasmCodeRecord(
+                        1,
+                        listOf(),
+                        listOf(
+                            OpCodes.I32.Const(0),
+                            OpCodes.Flow.If(listOf(
+                                OpCodes.I32.Const(1),
+                                OpCodes.Flow.Call(0),
+                                OpCodes.Flow.Else(listOf(
+                                    OpCodes.I32.Const(0),
+                                    OpCodes.Flow.Call(0),
+                                ))
+                            )),
+                        )
+                    )
+                )
+            )
+        )
+    }
+
+
+    @Test
     fun `loop`() = runTest {
         assertFunctions(
             "loop.wasm", listOf(
