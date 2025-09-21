@@ -4,6 +4,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.opcodes.consumeOpCode
+import org.jetbrains.hexana.wasm.opcodes.parseOpCodes
 
 class WasmSectionCode(size: Int, offset: Int): WasmSection(size, offset) {
     companion object {
@@ -25,18 +26,7 @@ class WasmSectionCode(size: Int, offset: Int): WasmSection(size, offset) {
                 locals.add(WasmCodeLocalRecord(local, type))
             }
 
-            val opCodes = mutableListOf<OpCode<*>>()
-            while (true) {
-                val opCode = get().toUByte()
-                if (opCode == OpCodes.Flow.Terminal.code) {
-                    break
-                }
-
-                val op = consumeOpCode(opCode) ?: error("Unknown opcode $opCode")
-                opCodes.add(op)
-            }
-
-            wasmCodeRecords.add(WasmCodeRecord(funSize, locals, opCodes))
+            wasmCodeRecords.add(WasmCodeRecord(funSize, locals, parseOpCodes()))
         }
 
         return wasmCodeRecords

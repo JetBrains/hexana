@@ -652,13 +652,84 @@ class WasmParserTests {
         )
     }
 
+    @Test
+    fun `code block`() = runTest {
+        assertFunctions(
+            "snippets/block.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32), listOf()),
+                    body = WasmCodeRecord(
+                        1,
+                        listOf(),
+                        listOf(
+                            OpCodes.Flow.Block(
+                                listOf(
+                                    OpCodes.Local.Get(0),
+                                    OpCodes.I32.Const(100),
+                                    OpCodes.I32.Eq,
+                                    OpCodes.Flow.If(listOf(
+                                        OpCodes.Flow.Br(1)
+                                    )),
+                                    OpCodes.Local.Get(0),
+                                    OpCodes.Flow.Call(0)
+                                ),
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `loop`() = runTest {
+        assertFunctions(
+            "loop.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(
+                    listOf(TypeId.TYPE_I32),
+                    listOf(TypeId.TYPE_I32)
+                    ),
+                    body = WasmCodeRecord(
+                        1,
+                        listOf(WasmCodeLocalRecord(1, 127)),
+                        listOf(
+                            OpCodes.I32.Const(0),
+                            OpCodes.Local.Set(1),
+                            OpCodes.Flow.Block(listOf(
+                                OpCodes.Flow.Loop(listOf(
+                                    OpCodes.I32.Const(1),
+                                    OpCodes.Flow.If(listOf(
+                                        OpCodes.Local.Get(1),
+                                        OpCodes.Local.Get(0),
+                                        OpCodes.I32.Eq,
+                                        OpCodes.Flow.If(listOf(
+                                            OpCodes.Flow.Br(3)
+                                        )),
+                                        OpCodes.Local.Get(1),
+                                        OpCodes.I32.Const(1),
+                                        OpCodes.I32.Add,
+                                        OpCodes.Local.Set(1),
+                                        OpCodes.Flow.Br(1)
+                                    ))
+                                )
+                            ))),
+                            OpCodes.I32.Const(-1),
+                            OpCodes.Flow.Return,
+                        )
+                    )
+                )
+            )
+        )
+    }
+
 }
 
 
 private fun assertFunction(actual: FunctionRecord, expected: FunctionRecord) {
     assertEquals(expected.signature, actual.signature)
-    assertContentEquals(expected = expected.body.locals, actual = actual.body.locals)
-    assertContentEquals(expected = expected.body.opCodes, actual = actual.body.opCodes)
+    assertContentEquals(expected = expected.body.locals, actual = actual.body.locals, "locals don't match")
+    assertContentEquals(expected = expected.body.opCodes, actual = actual.body.opCodes, "opCodes don't match")
 }
 
 private suspend fun assertFunctions(resourcePath: String, expected: List<FunctionRecord>) {

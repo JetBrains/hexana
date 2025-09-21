@@ -30,9 +30,11 @@ sealed class OpCode<T : Any>(initialValue: T? = null) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false
-        other as OpCode<*>
         val thisInit = ::value.isInitialized
+
+        other as OpCode<*>
         val otherInit = other::value.isInitialized
+
         return when {
             thisInit && otherInit -> this.value == other.value
             !thisInit && !otherInit -> true
@@ -66,10 +68,18 @@ open class OpCodeUnit : OpCode<Unit>(Unit) {
     override fun CommonByteBuffer.consumeValue() { }
 }
 
+open class OpCodeBlock(initValue: List<OpCode<*>>? = null) : OpCode<List<OpCode<*>>>(initValue) {
+    override fun CommonByteBuffer.consume(): List<OpCode<*>> {
+        val blockType = get()
+        val blockOpCodes = parseOpCodes()
+        return blockOpCodes
+    }
+}
+
 object OpCodes {
     object Flow {
         object Terminal : OpCodeUnit() {
-            const val code: UByte = 0x0bu
+            const val code: UByte = 0x0Bu
             const val description: String = "terminal"
         }
 
@@ -108,6 +118,50 @@ object OpCodes {
                 const val code: UByte = 0x10u
                 const val description: String = "call"
             }
+        }
+
+        class Br(value: Int? = null) : OpCodeInt(value) {
+            companion object {
+                const val code: UByte = 0x0Cu
+                const val description: String = "br"
+            }
+        }
+
+        class BrIf(value: Int? = null) : OpCodeInt(value) {
+            companion object {
+                const val code: UByte = 0x0Du
+                const val description: String = "br_if"
+            }
+        }
+
+        class Block(value: List<OpCode<*>>? = null) : OpCodeBlock(value) {
+            companion object {
+                const val code: UByte = 0x02u
+                const val description: String = "block"
+            }
+        }
+
+        class Loop(value: List<OpCode<*>>? = null) : OpCodeBlock(value) {
+            companion object {
+                const val code: UByte = 0x03u
+                const val description: String = "loop"
+            }
+        }
+
+        class If(value: List<OpCode<*>>? = null) : OpCodeBlock(value) {
+            companion object {
+               const val code: UByte = 0x04u
+               const val description: String = "if"
+            }
+        }
+
+        class Else(value: List<OpCode<*>>? = null) : OpCode<List<OpCode<*>>>(value) {
+            companion object {
+                const val code: UByte = 0x05u
+                const val description: String = "else"
+            }
+
+            override fun CommonByteBuffer.consume(): List<OpCode<*>> = parseOpCodes()
         }
     }
 
@@ -274,8 +328,14 @@ object OpCodes {
         Flow.Call.code to { Flow.Call() },
         Flow.Unreachable.code to { Flow.Unreachable },
         Flow.Nop.code to { Flow.Nop },
+        Flow.Br.code to { Flow.Br() },
+        Flow.BrIf.code to { Flow.BrIf() },
         Flow.Return.code to { Flow.Return },
         Flow.Drop.code to { Flow.Drop },
+        Flow.Block.code to { Flow.Block() },
+        Flow.Loop.code to { Flow.Loop() },
+        Flow.If.code to { Flow.If() },
+        Flow.Else.code to { Flow.Else() },
         Local.Get.code to { Local.Get() },
         Local.Set.code to { Local.Set() },
         Local.Tee.code to { Local.Tee() },
@@ -306,7 +366,7 @@ object OpCodes {
     )
 
     fun resolveOpCode(code: UByte): OpCode<*> {
-        return UnaryOpcodes[code]?.invoke() ?: error("Unknown opcode $code")
+        return UnaryOpcodes[code]?.invoke() ?: error("Unknown opcode $code (0x${code.toString(16).uppercase()})")
     }
 }
 
@@ -316,4 +376,18 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         consumeValue()
     }
     return op
+}
+
+fun CommonByteBuffer.parseOpCodes(): List<OpCode<*>> {
+    val opCodes = mutableListOf<OpCode<*>>()
+    while (true) {
+        val opCode = get().toUByte()
+        if (opCode == OpCodes.Flow.Terminal.code) {
+            break
+        }
+
+        val op = consumeOpCode(opCode)
+        opCodes.add(op)
+    }
+    return opCodes
 }
