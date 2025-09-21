@@ -22,9 +22,11 @@ allprojects {
 
 subprojects {
     plugins.withId("org.jetbrains.kotlin.multiplatform") {
-        // expect actual are surprisingly still in beta - https://youtrack.jetbrains.com/issue/KT-61573
         extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension> {
             compilerOptions {
+                optIn.add("kotlin.js.ExperimentalWasmJsInterop")
+
+                // expect actual are surprisingly still in beta - https://youtrack.jetbrains.com/issue/KT-61573
                 freeCompilerArgs.add("-Xexpect-actual-classes")
             }
         }
