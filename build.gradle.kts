@@ -20,3 +20,14 @@ allprojects {
     }
 }
 
+subprojects {
+    plugins.withId("org.jetbrains.kotlin.multiplatform") {
+        // expect actual are surprisingly still in beta - https://youtrack.jetbrains.com/issue/KT-61573
+        extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension> {
+            compilerOptions {
+                freeCompilerArgs.add("-Xexpect-actual-classes")
+            }
+        }
+    }
+}
+
