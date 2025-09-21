@@ -917,6 +917,26 @@ class WasmParserTests {
         )
     }
 
+    @Test
+    fun `code convert`() = runTest {
+        assertFunctions(
+            "snippets/convert.wasm", listOf(
+                FunctionRecord(
+                    signature = WasmSectionTypesRecord(listOf(), listOf()),
+                    body = WasmCodeRecord(
+                        1,
+                        emptyList(),
+                        listOf(
+                            OpCodes.I32.Const(10),
+                            OpCodes.F32.ConvertI32S,
+                            OpCodes.Flow.Call(0)
+                        )
+                    )
+                )
+            )
+        )
+    }
+
 
     @Test
     fun `loop`() = runTest {

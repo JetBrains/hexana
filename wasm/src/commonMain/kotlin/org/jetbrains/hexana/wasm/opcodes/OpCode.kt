@@ -432,6 +432,11 @@ object OpCodes {
             const val code: UByte = 0x8Cu
             const val description: String = "f32.neg"
         }
+
+        object ConvertI32S : OpCodeUnit() {
+            val code: UByte = 0xB2u
+            const val description: String = "f32.convert_i32_s"
+        }
     }
 
     object F64 {
@@ -501,6 +506,7 @@ object OpCodes {
         F32.Sqrt.code to { F32.Sqrt },
         F32.Neg.code to { F32.Neg },
         F32.DemoteF64.code to { F32.DemoteF64 },
+        F32.ConvertI32S.code to { F32.ConvertI32S },
         F64.PromoteF32.code to { F64.PromoteF32 },
         F64.Const.code to { F64.Const() },
         Global.Set.code to { Global.Set() },
