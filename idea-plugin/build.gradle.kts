@@ -21,6 +21,9 @@ dependencies {
         // bundledPlugin("com.intellij.java")
     }
 
+    implementation(project(":encdec"))
+    implementation(project(":wasm"))
+
     testImplementation("junit:junit:4.13.2")
 }
 

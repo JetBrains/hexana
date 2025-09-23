@@ -1,6 +1,8 @@
 package org.jetbrains.hexana;
 
 
+import kotlin.ranges.IntRange;
+
 import javax.swing.event.DocumentListener;
 import javax.swing.event.UndoableEditListener;
 import javax.swing.text.*;
@@ -41,6 +43,17 @@ public class HexanaDocument implements Document {
 
         int lineCount = (buf.length + bytesPerLine - 1) / bytesPerLine;
         this.myTextLength = lineCount * lineLength;
+    }
+
+    public int getByteTextOffset(int byteOffset) {
+        int line = byteOffset / bytesPerLine;
+        return line * lineLength + (byteOffset % bytesPerLine) * charPerByte;
+    }
+
+    public IntRange byteRangeToTextRange(IntRange byteRange) {
+        return new IntRange(
+                getByteTextOffset(byteRange.getFirst()),
+                getByteTextOffset(byteRange.getLast() + 1 /*cover the last byte*/));
     }
 
     @Override

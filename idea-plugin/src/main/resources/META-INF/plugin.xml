@@ -28,6 +28,10 @@
                   extensions="wasm" />
 
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
+
+        <virtualFileSystem implementationClass="org.jetbrains.hexana.WasmFs" key="wasm" physical="true"/>
+        <treeStructureProvider implementation="org.jetbrains.hexana.WasmTreeStructureProvider"/>
+        <fileTypeOverrider implementation="org.jetbrains.hexana.WasmEntryFileTypeOverrider"/>
     </extensions>
 
     <actions>
