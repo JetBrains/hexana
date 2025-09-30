@@ -27,6 +27,11 @@
                   fieldName="INSTANCE"
                   extensions="wasm" />
 
+        <fileType name="wat"
+                  implementationClass="org.jetbrains.hexana.wat.WatFileType"
+                  fieldName="INSTANCE"
+                  extensions="wat" />
+
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
 
         <virtualFileSystem implementationClass="org.jetbrains.hexana.WasmFs" key="wasm" physical="true"/>
