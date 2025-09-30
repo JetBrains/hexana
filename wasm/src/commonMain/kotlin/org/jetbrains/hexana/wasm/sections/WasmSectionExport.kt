@@ -2,6 +2,7 @@ package org.jetbrains.hexana.wasm.sections
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 
+
 class WasmSectionExport(size: Int, offset: Int): WasmSection(size, offset) {
     companion object {
         const val SECTION_ID: Byte = 7
@@ -9,6 +10,5 @@ class WasmSectionExport(size: Int, offset: Int): WasmSection(size, offset) {
 
     fun CommonByteBuffer.scan() {
         position(offset)
-
     }
 }

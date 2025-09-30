@@ -3,10 +3,10 @@ package org.jetbrains.hexana.io
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-actual class CommonByteBuffer(buffer: ByteBuffer) : BufferWrapper<ByteBuffer>(buffer) {
+class JvmByteBuffer(val buffer: ByteBuffer) : CommonByteBuffer {
     override fun position(): Int = buffer.position()
 
-    override fun position(index: Int): CommonByteBuffer = CommonByteBuffer(buffer.position(index))
+    override fun position(index: Int): CommonByteBuffer = JvmByteBuffer(buffer.position(index))
 
     override fun remaining(): Int = buffer.remaining()
 

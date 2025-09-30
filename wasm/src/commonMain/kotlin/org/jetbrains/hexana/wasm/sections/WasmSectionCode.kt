@@ -2,8 +2,6 @@ package org.jetbrains.hexana.wasm.sections
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.opcodes.OpCode
-import org.jetbrains.hexana.wasm.opcodes.OpCodes
-import org.jetbrains.hexana.wasm.opcodes.consumeOpCode
 import org.jetbrains.hexana.wasm.opcodes.parseOpCodes
 
 class WasmSectionCode(size: Int, offset: Int): WasmSection(size, offset) {

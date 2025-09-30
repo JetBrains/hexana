@@ -1,16 +1,14 @@
 package org.jetbrains.hexana.io
 
-interface BufferWrapperInterface
-
-abstract class BufferWrapper<T>(internal val buffer: T): BufferWrapperInterface {
-    abstract fun get(): Byte
-    abstract fun get(dst: ByteArray, offset: Int, size: Int)
-    abstract fun position(): Int
-    abstract fun position(index: Int): CommonByteBuffer
-    abstract fun remaining(): Int
-    abstract fun hasRemaining(): Boolean
-    abstract fun getFloatLE(): Float
-    abstract fun getDoubleLE(): Double
+interface CommonByteBuffer {
+    fun get(): Byte
+    fun get(dst: ByteArray, offset: Int, size: Int)
+    fun position(): Int
+    fun position(index: Int): CommonByteBuffer
+    fun remaining(): Int
+    fun hasRemaining(): Boolean
+    fun getFloatLE(): Float
+    fun getDoubleLE(): Double
 
     fun getULEB128(): Long {
         var result = 0L
@@ -48,6 +46,4 @@ abstract class BufferWrapper<T>(internal val buffer: T): BufferWrapperInterface 
         return result
     }
 }
-
-expect class CommonByteBuffer : BufferWrapperInterface
 

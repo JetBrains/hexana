@@ -5,7 +5,7 @@ import org.khronos.webgl.DataView
 import org.khronos.webgl.Int8Array
 import org.khronos.webgl.get
 
-actual class CommonByteBuffer(buffer: ArrayBuffer) : BufferWrapper<ArrayBuffer>(buffer) {
+class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer {
     private var cursorPosition = 0
 
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer
@@ -27,7 +27,7 @@ actual class CommonByteBuffer(buffer: ArrayBuffer) : BufferWrapper<ArrayBuffer>(
         return cursorPosition
     }
 
-    override fun position(index: Int): CommonByteBuffer {
+    override fun position(index: Int): WebByteBuffer {
         cursorPosition = index
         return this
     }
