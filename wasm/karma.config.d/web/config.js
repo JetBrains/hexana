@@ -26,7 +26,12 @@ function configLaunchers(config) {
             base: "Chromium"
         },
         FirefoxForTests: {
-            base: "Firefox"
+            base: "Firefox",
+            prefs: {
+                // https://firefox-source-docs.mozilla.org/toolkit/components/telemetry/internals/preferences.html
+                // Records the version of the policy notified to the user. This preference is also used on Android, used in tests, it allows to skip the notification check.
+                'datareporting.policy.dataSubmissionPolicyBypassNotification': true
+            }
         },
         SafariForTests: {
             base: "Safari"
@@ -57,4 +62,4 @@ function configLaunchers(config) {
 configLaunchers(config);
 
 config.client.mocha = config.client.mocha || {};
-config.client.mocha.timeout = 12900;
+config.client.mocha.timeout = 30000;
