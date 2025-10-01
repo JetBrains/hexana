@@ -3,7 +3,7 @@ const {basePath} = config;
 
 config.files.push(
     {
-        pattern: `${path.resolve(basePath, "kotlin")}/**/*.wasm`,
+        pattern: `${path.resolve(basePath, "kotlin", "**", "*.wasm")}`,
         included: false,
         served: true,
         watched: false,
