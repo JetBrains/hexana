@@ -9,5 +9,7 @@ class WatToken(debugName: String) : IElementType(debugName, WatLanguage) {
         @JvmField val NUMBER = WatToken("number")
         @JvmField val WHITESPACE = WatToken("whitespace")
         @JvmField val NEWLINE = WatToken("newline")
+        @JvmField val LINE_COMMENT = WatToken("line_comment")
+        @JvmField val BLOCK_COMMENT = WatToken("block_comment")
     }
 }

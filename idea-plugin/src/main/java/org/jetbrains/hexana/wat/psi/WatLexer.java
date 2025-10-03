@@ -39,7 +39,16 @@ public class WatLexer extends LexerBase {
             case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> readNumber();
             case '\t', ' ' -> readToken1(WatToken.WHITESPACE);
             case '\r', '\n' -> readToken1(WatToken.NEWLINE);
-
+            case ';' -> {
+                if (!readLineComment()) {
+                    readToken1(TokenType.BAD_CHARACTER);
+                }
+            }
+            case '(' -> {
+                if (!readBlockComment()) {
+                    readToken1(TokenType.BAD_CHARACTER);
+                }
+            }
             default -> {
                 myTokenStart = myOffset;
                 myToken = TokenType.BAD_CHARACTER;
@@ -91,6 +100,50 @@ public class WatLexer extends LexerBase {
     private boolean isDigit(char c, boolean hex) {
         return '0' <= c && c <= '9' ||
                 hex && ('a' <= c && c <= 'f' || 'A' <= c && c <= 'F');
+    }
+
+
+    private boolean readLineComment() {
+        if (getChar(1) != ';') {
+            return false;
+        }
+        myTokenStart = myOffset;
+        myOffset += 2;
+        while (myOffset < myEndOffset) {
+            char c = myBuffer.charAt(myOffset);
+            if (c == '\n' || c == '\r') {
+                break;
+            }
+            myOffset++;
+        }
+        myTokenEnd = myOffset;
+        myToken = WatToken.LINE_COMMENT;
+        return true;
+    }
+
+
+    private boolean readBlockComment() {
+        if (getChar(1) != ';') {
+            return false;
+        }
+        myTokenStart = myOffset;
+        myOffset += 2;
+        int level = 1;
+        while (myOffset < myEndOffset && level > 0) {
+            char c = myBuffer.charAt(myOffset);
+            if (c == ';' && getChar(1) == ')') {
+                level--;
+                myOffset += 2;
+            } else if (c == '(' && getChar(1) == ';') {
+                level++;
+                myOffset += 2;
+            } else {
+                myOffset++;
+            }
+        }
+        myTokenEnd = myOffset;
+        myToken = WatToken.BLOCK_COMMENT;
+        return true;
     }
 
 

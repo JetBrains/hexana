@@ -26,4 +26,8 @@ class WatLexerTest : LexerTestCase() {
     fun testNumbers() {
         doTest()
     }
+
+    fun testComments() {
+        doTest()
+    }
 }
