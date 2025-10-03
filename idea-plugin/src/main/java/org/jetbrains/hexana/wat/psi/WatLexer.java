@@ -8,6 +8,42 @@ import org.jetbrains.annotations.Nullable;
 
 public class WatLexer extends LexerBase {
 
+    private final static boolean[] validIdChar = new boolean[127];
+    static {
+        for (int i = '0'; i <= '9'; i++) {
+            validIdChar[i] = true;
+        }
+        for (int i = 'a'; i <= 'z'; i++) {
+            validIdChar[i] = true;
+        }
+        for (int i = 'A'; i <= 'Z'; i++) {
+            validIdChar[i] = true;
+        }
+        validIdChar['!'] = true;
+        validIdChar['#'] = true;
+        validIdChar['$'] = true;
+        validIdChar['%'] = true;
+        validIdChar['&'] = true;
+        validIdChar['\''] = true;
+        validIdChar['*'] = true;
+        validIdChar['+'] = true;
+        validIdChar['-'] = true;
+        validIdChar['.'] = true;
+        validIdChar['/'] = true;
+        validIdChar[':'] = true;
+        validIdChar['<'] = true;
+        validIdChar['='] = true;
+        validIdChar['>'] = true;
+        validIdChar['?'] = true;
+        validIdChar['@'] = true;
+        validIdChar['\\'] = true;
+        validIdChar['^'] = true;
+        validIdChar['_'] = true;
+        validIdChar['`'] = true;
+        validIdChar['|'] = true;
+        validIdChar['~'] = true;
+    }
+
     private CharSequence myBuffer;
     private int myOffset;
     private int myEndOffset;
@@ -50,6 +86,7 @@ public class WatLexer extends LexerBase {
                 }
             }
             case '"' -> readString();
+            case '$' -> readIdentifier();
             default -> {
                 myTokenStart = myOffset;
                 myToken = TokenType.BAD_CHARACTER;
@@ -168,6 +205,27 @@ public class WatLexer extends LexerBase {
         }
         myTokenEnd = myOffset;
         myToken = WatToken.STRING;
+    }
+
+
+    private void readIdentifier() {
+        myTokenStart = myOffset;
+        myOffset++;
+        if (getChar() == '"') {
+            int tokenStart = myTokenStart;
+            readString();
+            myTokenStart = tokenStart;
+        } else {
+            while (myOffset < myEndOffset) {
+                char c = myBuffer.charAt(myOffset);
+                if (c >= validIdChar.length || !validIdChar[c]) {
+                    break;
+                }
+                myOffset++;
+            }
+        }
+        myTokenEnd = myOffset;
+        myToken = WatToken.IDENTIFIER;
     }
 
 

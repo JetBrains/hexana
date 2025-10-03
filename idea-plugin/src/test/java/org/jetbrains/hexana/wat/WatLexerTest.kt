@@ -34,4 +34,8 @@ class WatLexerTest : LexerTestCase() {
     fun testStrings() {
         doTest()
     }
+
+    fun testIdentifiers() {
+        doTest()
+    }
 }
