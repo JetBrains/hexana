@@ -7,5 +7,7 @@ import org.jetbrains.hexana.wat.WatLanguage
 class WatToken(debugName: String) : IElementType(debugName, WatLanguage) {
     companion object {
         @JvmField val NUMBER = WatToken("number")
+        @JvmField val WHITESPACE = WatToken("whitespace")
+        @JvmField val NEWLINE = WatToken("newline")
     }
 }

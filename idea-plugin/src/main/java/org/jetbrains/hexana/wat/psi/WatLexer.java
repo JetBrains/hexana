@@ -36,8 +36,9 @@ public class WatLexer extends LexerBase {
         }
         char c = myBuffer.charAt(myOffset);
         switch (c) {
-            case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' ->
-                    readNumber();
+            case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> readNumber();
+            case '\t', ' ' -> readToken1(WatToken.WHITESPACE);
+            case '\r', '\n' -> readToken1(WatToken.NEWLINE);
 
             default -> {
                 myTokenStart = myOffset;
@@ -90,6 +91,14 @@ public class WatLexer extends LexerBase {
     private boolean isDigit(char c, boolean hex) {
         return '0' <= c && c <= '9' ||
                 hex && ('a' <= c && c <= 'f' || 'A' <= c && c <= 'F');
+    }
+
+
+    private void readToken1(@NotNull IElementType token) {
+        myTokenStart = myOffset;
+        myOffset++;
+        myTokenEnd = myOffset;
+        myToken = token;
     }
 
 
