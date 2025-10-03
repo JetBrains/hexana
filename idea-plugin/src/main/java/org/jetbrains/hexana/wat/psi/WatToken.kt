@@ -11,5 +11,6 @@ class WatToken(debugName: String) : IElementType(debugName, WatLanguage) {
         @JvmField val NEWLINE = WatToken("newline")
         @JvmField val LINE_COMMENT = WatToken("line_comment")
         @JvmField val BLOCK_COMMENT = WatToken("block_comment")
+        @JvmField val STRING = WatToken("string")
     }
 }

@@ -30,4 +30,8 @@ class WatLexerTest : LexerTestCase() {
     fun testComments() {
         doTest()
     }
+
+    fun testStrings() {
+        doTest()
+    }
 }

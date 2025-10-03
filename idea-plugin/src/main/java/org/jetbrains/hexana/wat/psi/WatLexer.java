@@ -49,6 +49,7 @@ public class WatLexer extends LexerBase {
                     readToken1(TokenType.BAD_CHARACTER);
                 }
             }
+            case '"' -> readString();
             default -> {
                 myTokenStart = myOffset;
                 myToken = TokenType.BAD_CHARACTER;
@@ -144,6 +145,29 @@ public class WatLexer extends LexerBase {
         myTokenEnd = myOffset;
         myToken = WatToken.BLOCK_COMMENT;
         return true;
+    }
+
+
+    private void readString() {
+        myTokenStart = myOffset;
+        myOffset++;
+        while (myOffset < myEndOffset) {
+            char c = myBuffer.charAt(myOffset);
+            if (c < 21) {
+                break;
+            } else if (c == '"') {
+                myOffset++;
+                break;
+            } else if (c == '\\') {
+                // Accept everything after backslash.
+                // An inspection can report invalid sequences if needed.
+                myOffset += 2;
+            } else {
+                myOffset++;
+            }
+        }
+        myTokenEnd = myOffset;
+        myToken = WatToken.STRING;
     }
 
 
