@@ -86,7 +86,8 @@ public class WatLexer extends LexerBase {
                 }
             }
             case '"' -> readString();
-            case '$' -> readIdentifier();
+            case '$' -> readIdentifier(WatToken.IDENTIFIER);
+            case '@' -> readIdentifier(WatToken.ANNOTATION_ID);
             default -> {
                 myTokenStart = myOffset;
                 myToken = TokenType.BAD_CHARACTER;
@@ -208,7 +209,7 @@ public class WatLexer extends LexerBase {
     }
 
 
-    private void readIdentifier() {
+    private void readIdentifier(@NotNull WatToken token) {
         myTokenStart = myOffset;
         myOffset++;
         if (getChar() == '"') {
@@ -225,7 +226,7 @@ public class WatLexer extends LexerBase {
             }
         }
         myTokenEnd = myOffset;
-        myToken = WatToken.IDENTIFIER;
+        myToken = token;
     }
 
 

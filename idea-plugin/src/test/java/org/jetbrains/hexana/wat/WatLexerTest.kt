@@ -38,4 +38,8 @@ class WatLexerTest : LexerTestCase() {
     fun testIdentifiers() {
         doTest()
     }
+
+    fun testAnnotations() {
+        doTest()
+    }
 }
