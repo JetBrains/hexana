@@ -42,4 +42,8 @@ class WatLexerTest : LexerTestCase() {
     fun testAnnotations() {
         doTest()
     }
+
+    fun testKeywords() {
+        doTest()
+    }
 }
