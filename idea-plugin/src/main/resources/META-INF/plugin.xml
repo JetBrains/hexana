@@ -30,6 +30,7 @@
         <fileType name="wat"
                   implementationClass="org.jetbrains.hexana.wat.WatFileType"
                   fieldName="INSTANCE"
+                  language="wat"
                   extensions="wat" />
 
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
@@ -37,6 +38,10 @@
         <virtualFileSystem implementationClass="org.jetbrains.hexana.WasmFs" key="wasm" physical="true"/>
         <treeStructureProvider implementation="org.jetbrains.hexana.WasmTreeStructureProvider"/>
         <fileTypeOverrider implementation="org.jetbrains.hexana.WasmEntryFileTypeOverrider"/>
+
+        <lang.syntaxHighlighter language="wat" implementationClass="org.jetbrains.hexana.wat.WatSyntaxHighlighter"/>
+        <fileEditor.fileSizeChecker implementation="org.jetbrains.hexana.wat.WatFileSizeChecker"/>
+        <fileEditorProvider implementation="org.jetbrains.hexana.wat.WatFileEditorProvider"/>
     </extensions>
 
     <actions>

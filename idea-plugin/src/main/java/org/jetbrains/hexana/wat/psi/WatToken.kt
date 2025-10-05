@@ -588,5 +588,15 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val V128_XOR = WatToken("v128.xor")
 
         @JvmField val UNKNOWN = WatToken("unknown")
+
+        @JvmField
+        val KEYWORDS = arrayOf<WatToken>(
+            ALIGN, ANY, ARRAY, BLOCK, BR, BR_IF, BR_ON_CAST, BR_ON_CAST_FAIL, BR_ON_NULL, BR_ON_NULL,
+            BR_TABLE, CATCH, CATCH_ALL, CATCH_ALL_REF, CATCH_REF, CALL, CALL_INDIRECT, CALL_REF,
+            DATA, ELEM, ELSE, END, EXN, EXPORT, EXTERN, FIELD, FUNC, GLOBAL, IF, IMPORT, ITEM,
+            LOOP, MUT, MODULE, MEMORY, NOEXN, NOEXTERN, OFFSET, PARAM, REC, RESULT, RETURN,
+            RETURN_CALL, SELECT, START, STRUCT, SUB, TABLE, TAG, THEN, THROW, TRY_TABLE, TYPE
+        )
+
     }
 }
