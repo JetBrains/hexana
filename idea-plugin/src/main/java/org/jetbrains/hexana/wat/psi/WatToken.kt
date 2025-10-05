@@ -16,6 +16,8 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val ANNOTATION_ID = WatToken("annotation_id")
         @JvmField val OPEN_PAREN = WatToken("(")
         @JvmField val CLOSE_PAREN = WatToken(")")
+        @JvmField val MINUS = WatToken("-")
+        @JvmField val PLUS = WatToken("+")
 
         @JvmField val ACTIVE = WatToken("active")
         @JvmField val ALIGN = WatToken("align")

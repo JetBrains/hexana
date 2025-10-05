@@ -91,6 +91,8 @@ public class WatLexer extends LexerBase {
                 }
             }
             case ')' -> readToken1(WatToken.CLOSE_PAREN);
+            case '-' -> readToken1(WatToken.MINUS);
+            case '+' -> readToken1(WatToken.PLUS);
             case '"' -> readString();
             case '$' -> readIdentifier(WatToken.IDENTIFIER);
             case '@' -> readIdentifier(WatToken.ANNOTATION_ID);
