@@ -42,6 +42,7 @@
         <lang.syntaxHighlighter language="wat" implementationClass="org.jetbrains.hexana.wat.WatSyntaxHighlighter"/>
         <fileEditor.fileSizeChecker implementation="org.jetbrains.hexana.wat.WatFileSizeChecker"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.wat.WatFileEditorProvider"/>
+        <braceMatcher filetype="wat" implementationClass="org.jetbrains.hexana.wat.WatBraceMatcher"/>
     </extensions>
 
     <actions>
