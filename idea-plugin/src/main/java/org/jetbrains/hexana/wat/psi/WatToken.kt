@@ -18,6 +18,7 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val CLOSE_PAREN = WatToken(")")
         @JvmField val MINUS = WatToken("-")
         @JvmField val PLUS = WatToken("+")
+        @JvmField val EQUALS = WatToken("=")
 
         @JvmField val ACTIVE = WatToken("active")
         @JvmField val ALIGN = WatToken("align")

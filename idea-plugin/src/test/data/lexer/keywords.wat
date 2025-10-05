@@ -564,3 +564,6 @@ v128.store32_lane
 v128.store64_lane
 v128.store8_lane
 v128.xor
+
+align=16
+offset=32

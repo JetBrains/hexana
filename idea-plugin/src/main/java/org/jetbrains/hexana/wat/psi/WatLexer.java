@@ -37,7 +37,6 @@ public class WatLexer extends LexerBase {
         validIdChar['/'] = true;
         validIdChar[':'] = true;
         validIdChar['<'] = true;
-        validIdChar['='] = true;
         validIdChar['>'] = true;
         validIdChar['?'] = true;
         validIdChar['@'] = true;
@@ -93,6 +92,7 @@ public class WatLexer extends LexerBase {
             case ')' -> readToken1(WatToken.CLOSE_PAREN);
             case '-' -> readToken1(WatToken.MINUS);
             case '+' -> readToken1(WatToken.PLUS);
+            case '=' -> readToken1(WatToken.EQUALS);
             case '"' -> readString();
             case '$' -> readIdentifier(WatToken.IDENTIFIER);
             case '@' -> readIdentifier(WatToken.ANNOTATION_ID);
@@ -229,7 +229,7 @@ public class WatLexer extends LexerBase {
             readString();
             myTokenStart = tokenStart;
         } else {
-            readIdChars();
+            readIdChars(true);
         }
         myTokenEnd = myOffset;
         myToken = token;
@@ -238,18 +238,18 @@ public class WatLexer extends LexerBase {
 
     private void readKeyword() {
         myTokenStart = myOffset;
-        long hash = readIdChars();
+        long hash = readIdChars(false);
         myTokenEnd = myOffset;
         WatToken token = keywords.get(myBuffer, hash, myTokenStart, myTokenEnd - myTokenStart);
         myToken = token != null ? token : WatToken.UNKNOWN;
     }
 
 
-    private long readIdChars() {
+    private long readIdChars(boolean includeEq) {
         long hash = initialHash;
         while (myOffset < myEndOffset) {
             char c = myBuffer.charAt(myOffset);
-            if (c >= validIdChar.length || !validIdChar[c]) {
+            if ((c >= validIdChar.length || !validIdChar[c]) && (!includeEq || c != '=')) {
                 break;
             }
             hash = hashChar(hash, c);
