@@ -15,12 +15,6 @@ kotlin {
 
     jvmToolchain(17)
     sourceSets {
-        commonMain {
-            dependencies {
-                implementation(libs.kotlinx.io.core)
-            }
-        }
-
         commonTest {
             dependencies {
                 implementation(libs.kotlin.test)

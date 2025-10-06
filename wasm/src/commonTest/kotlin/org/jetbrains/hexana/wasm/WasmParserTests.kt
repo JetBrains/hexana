@@ -27,7 +27,7 @@ class WasmParserTests {
 
         assertNull(wasmModule.customSection)
         assertEquals(2796, wasmModule.typesSection?.size)
-        assertEquals(4265, wasmModule.importSection?.size)
+        assertEquals(4265, wasmModule.importSection!!.size)
         assertEquals(14363, wasmModule.functionSection?.size)
         assertEquals(7, wasmModule.tableSection?.size)
         assertEquals(7, wasmModule.memorySection?.size)
@@ -40,6 +40,59 @@ class WasmParserTests {
         assertNull(wasmModule.dataCountSection)
         assertEquals(49677, wasmModule.exportSection?.size)
         assertEquals(3, wasmModule.exceptionSection?.size)
+
+        val expectedImports = listOf(
+            "env::abort", "env::emscripten_asm_const_int", "env::glGetString", "env::glGetStringi",
+            "env::glGetIntegerv", "env::glUniform1fv", "env::glUniform1f", "env::glTexSubImage2D",
+            "env::glTexParameteriv", "env::glTexParameteri", "env::glTexParameterfv", "env::glTexParameterf",
+            "env::glTexImage2D", "env::glStencilOpSeparate", "env::glStencilOp", "env::glStencilMaskSeparate",
+            "env::glStencilMask", "env::glStencilFuncSeparate", "env::glStencilFunc", "env::glShaderSource",
+            "env::glScissor", "env::glReadPixels", "env::glPixelStorei", "env::glLinkProgram", "env::glLineWidth",
+            "env::glIsTexture", "env::glGetUniformLocation", "env::glGetShaderiv", "env::glGetShaderInfoLog",
+            "env::glGetProgramiv", "env::glGetProgramInfoLog", "env::glGetFloatv", "env::glGetError",
+            "env::glGetBufferParameteriv", "env::glGenTextures", "env::glGenBuffers", "env::glFrontFace", "env::glFlush",
+            "env::glFinish", "env::glEnableVertexAttribArray", "env::glEnable", "env::glDrawElements", "env::glDrawArrays",
+            "env::glDisableVertexAttribArray", "env::glDisable", "env::glDepthMask", "env::glDeleteTextures",
+            "env::glDeleteShader", "env::glDeleteProgram", "env::glDeleteBuffers", "env::glCullFace", "env::glCreateShader",
+            "env::glCreateProgram", "env::glCopyTexSubImage2D", "env::glCompressedTexSubImage2D",
+            "env::glCompressedTexImage2D", "env::glCompileShader", "env::glColorMask", "env::glClearStencil", "env::glClearColor",
+            "env::glClear", "env::glBufferSubData",
+            "env::glBufferData", "env::glBlendFunc", "env::glBlendEquation", "env::glBlendColor", "env::glBindTexture",
+            "env::glBindBuffer", "env::glBindAttribLocation", "env::glAttachShader", "env::glActiveTexture", "env::glUniform2fv",
+            "env::glUniform2f", "env::glUniform1iv", "env::glUniform1i", "env::glUniform2i", "env::glUniform2iv", "env::glUniform3f",
+            "env::glUniform3fv", "env::glUniform3i", "env::glUniform3iv", "env::glUniform4f", "env::glUniform4fv",
+            "env::glViewport", "env::glVertexAttribPointer", "env::glVertexAttrib4fv", "env::glVertexAttrib3fv",
+            "env::glVertexAttrib2fv", "env::glVertexAttrib1f", "env::glUseProgram", "env::glUniformMatrix4fv",
+            "env::glUniformMatrix3fv", "env::glUniformMatrix2fv", "env::glUniform4iv", "env::glUniform4i",
+            "env::glGenVertexArraysOES", "env::glDeleteVertexArraysOES", "env::glBindVertexArrayOES", "env::glGenVertexArrays",
+            "env::glDeleteVertexArrays", "env::glBindVertexArray", "env::glDrawElementsInstanced", "env::glDrawArraysInstanced",
+            "env::glDrawElementsInstancedBaseVertexBaseInstanceWEBGL", "env::glDrawArraysInstancedBaseInstanceWEBGL",
+            "env::glReadBuffer", "env::glDrawBuffers", "env::glMultiDrawElementsInstancedBaseVertexBaseInstanceWEBGL",
+            "env::glMultiDrawArraysInstancedBaseInstanceWEBGL", "env::glVertexAttribIPointer", "env::glVertexAttribDivisor",
+            "env::glTexStorage2D", "env::glDrawRangeElements", "env::glGenRenderbuffers", "env::glGenFramebuffers",
+            "env::glFramebufferTexture2D", "env::glFramebufferRenderbuffer", "env::glDeleteRenderbuffers", "env::glDeleteFramebuffers",
+            "env::glCheckFramebufferStatus", "env::glBindRenderbuffer", "env::glBindFramebuffer", "env::glRenderbufferStorage",
+            "env::glGetRenderbufferParameteriv", "env::glGetFramebufferAttachmentParameteriv", "env::glGenerateMipmap", "env::glRenderbufferStorageMultisample",
+            "env::glBlitFramebuffer", "env::glDeleteSync", "env::glCopyBufferSubData", "env::glIsSync",
+            "env::glFenceSync", "env::glSamplerParameteriv", "env::glSamplerParameteri", "env::glSamplerParameterf",
+            "env::glGenSamplers", "env::glDeleteSamplers", "env::glBindSampler", "env::glInvalidateSubFramebuffer",
+            "env::glInvalidateFramebuffer", "env::glGetShaderPrecisionFormat", "env::exit", "env::_embind_register_void",
+            "env::_embind_register_bool", "env::_embind_register_integer", "env::_embind_register_float", "env::_embind_register_std_string",
+            "env::_embind_register_std_wstring", "env::_embind_register_emval", "env::_embind_register_memory_view",
+            "wasi_snapshot_preview1::fd_close", "env::emscripten_memcpy_js", "env::emscripten_date_now",
+            "env::_emscripten_get_now_is_monotonic", "env::emscripten_get_now", "env::__syscall_openat", "env::__syscall_fcntl64",
+            "env::__syscall_ioctl", "wasi_snapshot_preview1::fd_write", "wasi_snapshot_preview1::fd_read", "env::__syscall_fstat64",
+            "env::__syscall_stat64", "env::__syscall_newfstatat", "env::__syscall_lstat64", "wasi_snapshot_preview1::environ_sizes_get",
+            "wasi_snapshot_preview1::environ_get", "env::emscripten_resize_heap", "env::strftime_l", "env::glClientWaitSync",
+            "env::glWaitSync", "env::_embind_register_bigint", "wasi_snapshot_preview1::fd_seek", "env::_munmap_js",
+            "env::_mmap_js", "wasi_snapshot_preview1::fd_pread",
+        )
+
+
+        with (wasmModule.importSection) {
+            val importRecords = buffer.getImportRecords()
+            assertContentEquals(expectedImports, importRecords.map { "${it.prefix}::${it.name}"})
+        }
     }
 
     @Test
@@ -57,7 +110,7 @@ class WasmParserTests {
                 WasmImportRecord(
                     "abcdefghijklmnopqrstuvwxyz0123456789_0_abcdefghijklmnopqrstuvwxyz0123456789_1_abcdefghijklmnopqrstuvwxyz0123456789_2_abcdefghijklmnopqrstuvwxyz0123456789_2_abcdefghijklmnopqrstuvwxyz0123456789_3_abcdefghijklmnopqrstuvwxyz0123456789_4_abcdefghijklmnopqrstuvwxyz0123456789_5_abcdefghijklmnopqrstuvwxyz0123456789_6_abcdefghijklmnopqrstuvwxyz0123456789_7_abcdefghijklmnopqrstuvwxyz0123456789_8_abcdefghijklmnopqrstuvwxyz0123456789_9_abcdefghijklmnopqrstuvwxyz0123456789_10_abcdefghijklmnopqrstuvwxyz0123456789_11_",
                     "x",
-                    0
+                    0u
                 ), importRecords[0]
             )
 
@@ -65,7 +118,7 @@ class WasmParserTests {
                 WasmImportRecord(
                     "string",
                     "a",
-                    0
+                    0u
                 ), importRecords[1]
             )
 
@@ -73,7 +126,7 @@ class WasmParserTests {
                 WasmImportRecord(
                     "a",
                     "b",
-                    0
+                    0u
                 ), importRecords[2]
             )
 
@@ -81,7 +134,7 @@ class WasmParserTests {
                 WasmImportRecord(
                     "env",
                     "abort",
-                    0
+                    3u
                 ), importRecords[3]
             )
         }

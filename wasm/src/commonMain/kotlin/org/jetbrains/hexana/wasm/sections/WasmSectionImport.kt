@@ -9,23 +9,21 @@ class WasmSectionImport(size: Int, offset: Int): WasmSection(size, offset) {
 
     fun CommonByteBuffer.getImportRecords(): MutableList<WasmImportRecord> {
         position(offset)
-        val vecCount = getULEB128().toInt()
 
         val records = mutableListOf<WasmImportRecord>()
-
-        repeat(vecCount) {
+        consumeArray {
             val prefix = consumeString()
             val name = consumeString()
-            val type = get()
             position(position() + 1)
+            val type = getULEB128().toUInt()
+
             records.add(
                 WasmImportRecord(prefix, name, type)
             )
         }
-
         return records
     }
 }
 
 
-data class WasmImportRecord(val prefix: String, val name: String, val type: Byte)
+data class WasmImportRecord(val prefix: String, val name: String, val type: UInt)
