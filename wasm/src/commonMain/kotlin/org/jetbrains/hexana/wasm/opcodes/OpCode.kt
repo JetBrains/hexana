@@ -236,9 +236,11 @@ object OpCodes {
             }
         }
 
-        object Store : OpCodeUnit() {
-            const val code: UByte = 0x36u
-            const val description: String = "i32.store"
+        class Store(value: MemArg? = null) : OpMemBlock(value) {
+            companion object {
+                const val code: UByte = 0x36u
+                const val description: String = "i32.store"
+            }
         }
 
         object Shl : OpCodeUnit() {
@@ -362,9 +364,11 @@ object OpCodes {
             }
         }
 
-        object Store : OpCodeUnit() {
-            const val code: UByte = 0x37u
-            const val description: String = "i64.store"
+        class Store(value: MemArg? = null) : OpMemBlock(value) {
+            companion object {
+                const val code: UByte = 0x37u
+                const val description: String = "i64.store"
+            }
         }
 
         object DivS : OpCodeUnit() {
@@ -469,7 +473,7 @@ object OpCodes {
         Local.Set.code to { Local.Set() },
         Local.Tee.code to { Local.Tee() },
         I32.Load.code to { I32.Load() },
-        I32.Store.code to { I32.Store },
+        I32.Store.code to { I32.Store() },
         I32.Shl.code to { I32.Shl },
         I32.PopCnt.code to { I32.PopCnt },
         I32.And.code to { I32.And },
@@ -493,7 +497,7 @@ object OpCodes {
         I32.WrapI64.code to { I32.WrapI64 },
         I32.ReinterpretF32.code to { I32.ReinterpretF32 },
         I64.Const.code to { I64.Const() },
-        I64.Store.code to { I64.Store },
+        I64.Store.code to { I64.Store() },
         I64.DivS.code to { I64.DivS },
         I64.Extent_I32_S.code to { I64.Extent_I32_S },
         F32.Const.code to { F32.Const() },
