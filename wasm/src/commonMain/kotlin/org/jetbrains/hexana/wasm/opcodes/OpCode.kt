@@ -74,8 +74,8 @@ open class OpCodeSignedLong(initValue: Long? = null) : OpCode<Long>(initValue) {
 }
 
 open class OpCodeUnit : OpCode<Unit>(Unit) {
-    override fun CommonByteBuffer.consume() { }
-    override fun CommonByteBuffer.consumeValue() { }
+    override fun CommonByteBuffer.consume() {}
+    override fun CommonByteBuffer.consumeValue() {}
 }
 
 open class OpCodeBlock(initValue: List<OpCode<*>>? = null) : OpCode<List<OpCode<*>>>(initValue) {
@@ -138,6 +138,19 @@ object OpCodes {
             }
         }
 
+        class CallIndirect(value: Int? = null) : OpCode<Int>(value) {
+            override fun CommonByteBuffer.consume(): Int {
+                val x = getULEB128().toInt()
+                get()
+                return x
+            }
+
+            companion object {
+                const val code: UByte = 0x11u
+                const val description: String = "call_indirect"
+            }
+        }
+
         class Br(value: Int? = null) : OpCodeInt(value) {
             companion object {
                 const val code: UByte = 0x0Cu
@@ -168,8 +181,8 @@ object OpCodes {
 
         class If(value: List<OpCode<*>>? = null) : OpCodeBlock(value) {
             companion object {
-               const val code: UByte = 0x04u
-               const val description: String = "if"
+                const val code: UByte = 0x04u
+                const val description: String = "if"
             }
         }
 
@@ -233,6 +246,41 @@ object OpCodes {
             companion object {
                 const val code: UByte = 0x28u
                 const val description: String = "i32.load"
+            }
+        }
+
+        class Load8_S(value: MemArg? = null) : OpMemBlock(value) {
+            companion object {
+                const val code: UByte = 0x2Cu
+                const val description: String = "i32.load8_s"
+            }
+        }
+
+        class Load8_U(value: MemArg? = null) : OpMemBlock(value) {
+            companion object {
+                const val code: UByte = 0x2Du
+                const val description: String = "i32.load8_u"
+            }
+        }
+
+        class Load16_U(value: MemArg? = null) : OpMemBlock(value) {
+            companion object {
+                const val code: UByte = 0x2Fu
+                const val description: String = "i32.load16_u"
+            }
+        }
+
+        class Store8(value: MemArg? = null) : OpMemBlock(value) {
+            companion object {
+                const val code: UByte = 0x3Au
+                const val description: String = "i32.store8"
+            }
+        }
+
+        class Store16(value: MemArg? = null) : OpMemBlock(value) {
+            companion object {
+                const val code: UByte = 0x3Bu
+                const val description: String = "i32.store16"
             }
         }
 
@@ -310,49 +358,109 @@ object OpCodes {
             }
         }
 
-        object Eqz: OpCodeUnit() {
+        object Eqz : OpCodeUnit() {
             const val code: UByte = 0x45u
             const val description: String = "i32.eqz"
         }
 
-        object Eq: OpCodeUnit() {
+        object Eq : OpCodeUnit() {
             const val code: UByte = 0x46u
             const val description: String = "i32.eq"
         }
 
-        object Ne: OpCodeUnit() {
+        object Ne : OpCodeUnit() {
             const val code: UByte = 0x47u
             const val description: String = "i32.ne"
         }
 
-        object LTS: OpCodeUnit() {
+        object LTS : OpCodeUnit() {
             const val code: UByte = 0x48u
             const val description: String = "i32.lt_s"
         }
 
-        object GTU: OpCodeUnit() {
+        object LTU : OpCodeUnit() {
+            const val code: UByte = 0x49u
+            const val description: String = "i32.lt_u"
+        }
+
+        object LES : OpCodeUnit() {
+            const val code: UByte = 0x4Cu
+            const val description: String = "i32.le_s"
+        }
+
+        object LEU : OpCodeUnit() {
+            const val code: UByte = 0x4Du
+            const val description: String = "i32.le_u"
+        }
+
+        object GTS : OpCodeUnit() {
+            const val code: UByte = 0x4Au
+            const val description: String = "i32.gt_s"
+        }
+
+        object GES : OpCodeUnit() {
+            const val code: UByte = 0x4Eu
+            const val description: String = "i32.ge_s"
+        }
+
+        object GTU : OpCodeUnit() {
             const val code: UByte = 0x4Bu
             const val description: String = "i32.gt_u"
         }
 
-        object GEU: OpCodeUnit() {
+        object GEU : OpCodeUnit() {
             const val code: UByte = 0x4Fu
             const val description: String = "i32.ge_u"
         }
 
-        object RemU: OpCodeUnit() {
+        object RemU : OpCodeUnit() {
             const val code: UByte = 0x70u
             const val description: String = "i32.rem_u"
         }
 
-        object WrapI64: OpCodeUnit()  {
+        object WrapI64 : OpCodeUnit() {
             const val code: UByte = 0xA7u
             const val description: String = "i32.wrap_i64"
         }
 
-        object ReinterpretF32: OpCodeUnit()  {
+        object Extend16S : OpCodeUnit() {
+            const val code: UByte = 0xC1u
+            const val description: String = "i32.extend16_s"
+        }
+
+        object ReinterpretF32 : OpCodeUnit() {
             const val code: UByte = 0xBCu
             const val description: String = "i32.reinterpret_f32"
+        }
+
+        object TruncF32S : OpCodeUnit() {
+            const val code: UByte = 0xA8u
+            const val description: String = "i32.trunc_f32_s"
+        }
+
+        object TruncF32U : OpCodeUnit() {
+            const val code: UByte = 0xA9u
+            const val description: String = "i32.trunc_f32_u"
+        }
+
+        object DivU : OpCodeUnit() {
+            const val code: UByte = 0x6Eu
+            const val description: String = "i32.div_u"
+        }
+
+        object DivS : OpCodeUnit() {
+            const val code: UByte = 0x6Du
+            const val description: String = "i32.div_s"
+        }
+
+        object ShrU : OpCodeUnit() {
+            const val code: UByte = 0x76u
+            const val description: String = "i32.shr_u"
+        }
+
+        object ShrS : OpCodeUnit() {
+            const val code: UByte = 0x75u
+            const val description: String = "i32.shr_s"
         }
     }
 
@@ -361,6 +469,13 @@ object OpCodes {
             companion object {
                 const val code: UByte = 0x42u
                 const val description: String = "i64.const"
+            }
+        }
+
+        class Load(value: MemArg? = null) : OpMemBlock(value) {
+            companion object {
+                const val code: UByte = 0x29u
+                const val description: String = "i64.load"
             }
         }
 
@@ -395,6 +510,16 @@ object OpCodes {
             const val description: String = "f32.nearest"
         }
 
+        object NE : OpCodeUnit() {
+            const val code: UByte = 0x5Cu
+            const val description: String = "f32.ne"
+        }
+
+        object LE : OpCodeUnit() {
+            const val code: UByte = 0x5Fu
+            const val description: String = "f32.le"
+        }
+
         object Ceil : OpCodeUnit() {
             const val code: UByte = 0x8du
             const val description: String = "f32.ceil"
@@ -403,6 +528,16 @@ object OpCodes {
         object Floor : OpCodeUnit() {
             const val code: UByte = 0x8eu
             const val description: String = "f32.floor"
+        }
+
+        object Sub : OpCodeUnit() {
+            const val code: UByte = 0x93u
+            const val description: String = "f32.sub"
+        }
+
+        object Mul : OpCodeUnit() {
+            const val code: UByte = 0x94u
+            const val description: String = "f32.mul"
         }
 
         object Trunc : OpCodeUnit() {
@@ -422,9 +557,26 @@ object OpCodes {
             }
         }
 
+        class Store(value: MemArg? = null) : OpMemBlock(value) {
+            companion object {
+                const val code: UByte = 0x38u
+                const val description: String = "f32.store"
+            }
+        }
+
         object Sqrt : OpCodeUnit() {
             const val code: UByte = 0x91u
             const val description: String = "f32.sqrt"
+        }
+
+        object Add : OpCodeUnit() {
+            const val code: UByte = 0x92u
+            const val description: String = "f32.add"
+        }
+
+        object Div : OpCodeUnit() {
+            const val code: UByte = 0x95u
+            const val description: String = "f32.div"
         }
 
         object DemoteF64 : OpCodeUnit() {
@@ -441,12 +593,47 @@ object OpCodes {
             val code: UByte = 0xB2u
             const val description: String = "f32.convert_i32_s"
         }
+
+        object ConvertI32U : OpCodeUnit() {
+            val code: UByte = 0xB3u
+            const val description: String = "f32.convert_i32_u"
+        }
+
+        object GE : OpCodeUnit() {
+            val code: UByte = 0x60u
+            const val description: String = "f32.ge"
+        }
+
+        object LT : OpCodeUnit() {
+            val code: UByte = 0x5Du
+            const val description: String = "f32.lt"
+        }
+
+        object GT : OpCodeUnit() {
+            val code: UByte = 0x5Eu
+            const val description: String = "f32.gt"
+        }
+
+        object Abs : OpCodeUnit() {
+            val code: UByte = 0x8Bu
+            const val description: String = "f32.abs"
+        }
     }
 
     object F64 {
         object PromoteF32 : OpCodeUnit() {
             const val code: UByte = 0xBBu
             const val description: String = "f64.promote_f32"
+        }
+
+        object Add : OpCodeUnit() {
+            const val code: UByte = 0xA0u
+            const val description: String = "f64.add"
+        }
+
+        object Floor : OpCodeUnit() {
+            const val code: UByte = 0x9Cu
+            const val description: String = "f64.floor"
         }
 
         class Const(initValue: Double? = null) : OpCodeDouble(initValue) {
@@ -459,12 +646,14 @@ object OpCodes {
 
     private val UnaryOpcodes = mapOf(
         Flow.Call.code to { Flow.Call() },
+        Flow.CallIndirect.code to { Flow.CallIndirect() },
         Flow.Unreachable.code to { Flow.Unreachable },
         Flow.Nop.code to { Flow.Nop },
         Flow.Br.code to { Flow.Br() },
         Flow.BrIf.code to { Flow.BrIf() },
         Flow.Return.code to { Flow.Return },
         Flow.Drop.code to { Flow.Drop },
+        Flow.Select.code to { Flow.Select },
         Flow.Block.code to { Flow.Block() },
         Flow.Loop.code to { Flow.Loop() },
         Flow.If.code to { Flow.If() },
@@ -473,10 +662,19 @@ object OpCodes {
         Local.Set.code to { Local.Set() },
         Local.Tee.code to { Local.Tee() },
         I32.Load.code to { I32.Load() },
+        I32.Load8_S.code to { I32.Load8_S() },
+        I32.Load8_U.code to { I32.Load8_U() },
+        I32.Load16_U.code to { I32.Load16_U() },
+        I32.Store8.code to { I32.Store8() },
+        I32.Store16.code to { I32.Store16() },
         I32.Store.code to { I32.Store() },
         I32.Shl.code to { I32.Shl },
         I32.PopCnt.code to { I32.PopCnt },
         I32.And.code to { I32.And },
+        I32.DivU.code to { I32.DivU },
+        I32.DivS.code to { I32.DivS },
+        I32.ShrU.code to { I32.ShrU },
+        I32.ShrS.code to { I32.ShrS },
         I32.Or.code to { I32.Or },
         I32.Xor.code to { I32.Xor },
         I32.Add.code to { I32.Add },
@@ -492,26 +690,49 @@ object OpCodes {
         I32.GTU.code to { I32.GTU },
         I32.GEU.code to { I32.GEU },
         I32.LTS.code to { I32.LTS },
+        I32.LTU.code to { I32.LTU },
+        I32.LES.code to { I32.LES },
+        I32.LEU.code to { I32.LEU },
+        I32.GTS.code to { I32.GTS },
+        I32.GES.code to { I32.GES },
         I32.RemU.code to { I32.RemU },
         I32.Const.code to { I32.Const() },
         I32.WrapI64.code to { I32.WrapI64 },
+        I32.Extend16S.code to { I32.Extend16S },
         I32.ReinterpretF32.code to { I32.ReinterpretF32 },
+        I32.TruncF32S.code to { I32.TruncF32S },
+        I32.TruncF32U.code to { I32.TruncF32U },
         I64.Const.code to { I64.Const() },
+        I64.Load.code to { I64.Load() },
         I64.Store.code to { I64.Store() },
         I64.DivS.code to { I64.DivS },
         I64.Extent_I32_S.code to { I64.Extent_I32_S },
         F32.Const.code to { F32.Const() },
+        F32.NE.code to { F32.NE },
+        F32.LE.code to { F32.LE },
         F32.Nearest.code to { F32.Nearest },
         F32.Floor.code to { F32.Floor },
+        F32.Mul.code to { F32.Mul },
+        F32.Sub.code to { F32.Sub },
         F32.Ceil.code to { F32.Ceil },
         F32.Trunc.code to { F32.Trunc },
         F32.CopySign.code to { F32.CopySign },
         F32.Load.code to { F32.Load() },
+        F32.Store.code to { F32.Store() },
         F32.Sqrt.code to { F32.Sqrt },
+        F32.Div.code to { F32.Div },
+        F32.Add.code to { F32.Add },
         F32.Neg.code to { F32.Neg },
         F32.DemoteF64.code to { F32.DemoteF64 },
         F32.ConvertI32S.code to { F32.ConvertI32S },
+        F32.ConvertI32U.code to { F32.ConvertI32U },
+        F32.GE.code to { F32.GE },
+        F32.LT.code to { F32.LT },
+        F32.GT.code to { F32.GT },
+        F32.Abs.code to { F32.Abs },
         F64.PromoteF32.code to { F64.PromoteF32 },
+        F64.Add.code to { F64.Add },
+        F64.Floor.code to { F64.Floor },
         F64.Const.code to { F64.Const() },
         Global.Set.code to { Global.Set() },
         Global.Get.code to { Global.Get() },
@@ -524,7 +745,7 @@ object OpCodes {
 
 fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
     val op = OpCodes.resolveOpCode(code)
-    with (op) {
+    with(op) {
         consumeValue()
     }
     return op
