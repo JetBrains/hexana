@@ -10,6 +10,7 @@ import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 import org.jetbrains.hexana.wasm.sections.WasmSectionTypesRecord
+import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -110,7 +111,7 @@ class WasmParserTests {
                 WasmImportRecord(
                     "abcdefghijklmnopqrstuvwxyz0123456789_0_abcdefghijklmnopqrstuvwxyz0123456789_1_abcdefghijklmnopqrstuvwxyz0123456789_2_abcdefghijklmnopqrstuvwxyz0123456789_2_abcdefghijklmnopqrstuvwxyz0123456789_3_abcdefghijklmnopqrstuvwxyz0123456789_4_abcdefghijklmnopqrstuvwxyz0123456789_5_abcdefghijklmnopqrstuvwxyz0123456789_6_abcdefghijklmnopqrstuvwxyz0123456789_7_abcdefghijklmnopqrstuvwxyz0123456789_8_abcdefghijklmnopqrstuvwxyz0123456789_9_abcdefghijklmnopqrstuvwxyz0123456789_10_abcdefghijklmnopqrstuvwxyz0123456789_11_",
                     "x",
-                    0u
+                    WasmTypeIndexExternalType(0)
                 ), importRecords[0]
             )
 
@@ -118,7 +119,7 @@ class WasmParserTests {
                 WasmImportRecord(
                     "string",
                     "a",
-                    0u
+                    WasmTypeIndexExternalType(0)
                 ), importRecords[1]
             )
 
@@ -126,7 +127,7 @@ class WasmParserTests {
                 WasmImportRecord(
                     "a",
                     "b",
-                    0u
+                    WasmTypeIndexExternalType(0)
                 ), importRecords[2]
             )
 
@@ -134,7 +135,7 @@ class WasmParserTests {
                 WasmImportRecord(
                     "env",
                     "abort",
-                    3u
+                    WasmTypeIndexExternalType(3)
                 ), importRecords[3]
             )
         }
