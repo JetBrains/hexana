@@ -103,7 +103,16 @@ class WasmSectionImport(size: Int, offset: Int): WasmSection(size, offset) {
 }
 
 sealed class WasmExternalType(val type: Byte)
-class WasmTypeIndexExternalType(val index: Long): WasmExternalType(0)
+class WasmTypeIndexExternalType(val index: Long): WasmExternalType(0) {
+    override fun equals(other: Any?): Boolean {
+        val b = other as? WasmTypeIndexExternalType ?: return false
+        return b.index == index && b.type == type
+    }
+
+    override fun hashCode(): Int {
+        return index.hashCode()
+    }
+}
 class WasmTableExternalType(val referenceType: WasmReferenceType, val limits: WasmLimits<*>): WasmExternalType(1)
 
 /**
