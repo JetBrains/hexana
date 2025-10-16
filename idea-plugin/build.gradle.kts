@@ -7,6 +7,7 @@ plugins {
 repositories {
     intellijPlatform {
         defaultRepositories()
+        marketplace()
     }
 }
 
@@ -16,13 +17,14 @@ dependencies {
     intellijPlatform {
         create("IC", "2025.2")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
-
+        bundledPlugins("com.intellij.mcpServer")
         // Add necessary plugin dependencies for compilation here, example:
         // bundledPlugin("com.intellij.java")
     }
 
     implementation(project(":encdec"))
     implementation(project(":wasm"))
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.20.0")
 
     testImplementation("junit:junit:4.13.2")
 }
@@ -44,6 +46,11 @@ tasks {
     withType<JavaCompile> {
         sourceCompatibility = "21"
         targetCompatibility = "21"
+    }
+    // Enable remote debugger attach for runIde and debug against intellij sources.
+    withType<org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask>().configureEach {
+        //jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5007")
+
     }
 }
 

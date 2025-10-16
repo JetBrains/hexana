@@ -17,7 +17,9 @@
 
     <!-- Product and plugin compatibility requirements.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
-    <depends>com.intellij.modules.platform</depends>
+    <dependencies>
+        <plugin id="com.intellij.mcpServer"/>
+    </dependencies>
 
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
@@ -43,6 +45,7 @@
         <fileEditor.fileSizeChecker implementation="org.jetbrains.hexana.wat.WatFileSizeChecker"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.wat.WatFileEditorProvider"/>
         <braceMatcher filetype="wat" implementationClass="org.jetbrains.hexana.wat.WatBraceMatcher"/>
+        <!-- actionConfigurationCustomizer implementation="org.jetbrains.hexana.mcp.McpServerCustomizer"/-->
     </extensions>
 
     <actions>
@@ -51,4 +54,8 @@
                 description="Hexana Test"
                 />
     </actions>
+
+    <extensions defaultExtensionNs="com.intellij.mcpserver">
+        <mcpToolset implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
+    </extensions>
 </idea-plugin>
