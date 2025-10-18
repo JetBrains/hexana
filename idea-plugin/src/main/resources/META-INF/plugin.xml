@@ -46,6 +46,7 @@
         <fileEditorProvider implementation="org.jetbrains.hexana.wat.WatFileEditorProvider"/>
         <braceMatcher filetype="wat" implementationClass="org.jetbrains.hexana.wat.WatBraceMatcher"/>
         <!-- actionConfigurationCustomizer implementation="org.jetbrains.hexana.mcp.McpServerCustomizer"/-->
+        <mcpServer.mcpToolset implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
     </extensions>
 
     <actions>
@@ -54,8 +55,4 @@
                 description="Hexana Test"
                 />
     </actions>
-
-    <extensions defaultExtensionNs="com.intellij.mcpserver">
-        <mcpToolset implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
-    </extensions>
 </idea-plugin>
