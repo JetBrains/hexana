@@ -1,0 +1,6 @@
+Wat File
+  WatPsiElement(FUNC)
+    PsiElement(()('(')
+    PsiElement(func)('func')
+    PsiErrorElement:Unexpected end of file
+      <empty list>

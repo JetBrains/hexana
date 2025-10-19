@@ -1,0 +1,5 @@
+Wat File
+  WatPsiElement(MODULE)
+    PsiElement(()('(')
+    PsiElement(module)('module')
+    PsiElement())(')')

@@ -1,0 +1,13 @@
+Wat File
+  WatPsiElement(TABLE)
+    PsiElement(()('(')
+    PsiElement(table)('table')
+    PsiWhiteSpace(' ')
+    PsiElement(identifier)('$0')
+    PsiWhiteSpace(' ')
+    PsiElement(number)('9941')
+    PsiWhiteSpace(' ')
+    PsiElement(number)('9941')
+    PsiWhiteSpace(' ')
+    PsiElement(funcref)('funcref')
+    PsiElement())(')')

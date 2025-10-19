@@ -77,7 +77,7 @@ public class WatLexer extends LexerBase {
         char c = myBuffer.charAt(myOffset);
         switch (c) {
             case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> readNumber();
-            case '\t', ' ' -> readToken1(WatToken.WHITESPACE);
+            case '\t', ' ' -> readSpace();
             case '\r', '\n' -> readToken1(WatToken.NEWLINE);
             case ';' -> {
                 if (!readLineComment()) {
@@ -264,6 +264,21 @@ public class WatLexer extends LexerBase {
         myOffset++;
         myTokenEnd = myOffset;
         myToken = token;
+    }
+
+
+    private void readSpace() {
+        myTokenStart = myOffset;
+        myOffset++;
+        while (true) {
+            char c = myBuffer.charAt(myOffset);
+            if (c != ' ' && c != '\t') {
+                break;
+            }
+            myOffset++;
+        }
+        myTokenEnd = myOffset;
+        myToken = WatToken.WHITESPACE;
     }
 
 

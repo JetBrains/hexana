@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.wat.psi
 
 import com.intellij.psi.tree.IElementType
+import com.intellij.psi.tree.TokenSet
 import org.jetbrains.hexana.wat.WatLanguage
 
 
@@ -597,6 +598,12 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
             LOOP, MUT, MODULE, MEMORY, NOEXN, NOEXTERN, OFFSET, PARAM, REC, RESULT, RETURN,
             RETURN_CALL, SELECT, START, STRUCT, SUB, TABLE, TAG, THEN, THROW, TRY_TABLE, TYPE
         )
+
+        @JvmField
+        val COMMENTS_SET = TokenSet.create(LINE_COMMENT, BLOCK_COMMENT)
+
+        @JvmField
+        val WHITESPACES_SET = TokenSet.create(WHITESPACE, NEWLINE)
 
     }
 }

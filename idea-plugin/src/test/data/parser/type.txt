@@ -1,0 +1,12 @@
+Wat File
+  WatPsiElement(TYPE)
+    PsiElement(()('(')
+    PsiElement(type)('type')
+    PsiWhiteSpace(' ')
+    PsiElement(identifier)('$0')
+    PsiWhiteSpace(' ')
+    WatPsiElement(FUNC)
+      PsiElement(()('(')
+      PsiElement(func)('func')
+      PsiElement())(')')
+    PsiElement())(')')

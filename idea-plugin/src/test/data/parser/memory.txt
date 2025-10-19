@@ -1,0 +1,11 @@
+Wat File
+  WatPsiElement(MEMORY)
+    PsiElement(()('(')
+    PsiElement(memory)('memory')
+    PsiWhiteSpace(' ')
+    PsiElement(identifier)('$0')
+    PsiWhiteSpace(' ')
+    PsiElement(number)('256')
+    PsiWhiteSpace(' ')
+    PsiElement(number)('32768')
+    PsiElement())(')')
