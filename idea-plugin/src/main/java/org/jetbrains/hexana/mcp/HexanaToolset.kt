@@ -68,14 +68,12 @@ class HexanaToolset : McpToolset {
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
     ): String {
         val fileNotFoundMessage = """{"error": "File not found"}"""
-        val cantReadFileError = """{"error": "Can't read file"}"""
         val notWasmError = """{"error": "Not a .wasm file"}"""
         val file = resolveWasmVirtualFile(path) ?: return fileNotFoundMessage
         if (file.fileType != WasmFileType.INSTANCE) {
             return notWasmError
         }
-        val local = WasmFsUtil.getLocalFile(file) ?: return cantReadFileError
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(local.contentsToByteArray()))
+        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
         val module = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.importSymbols(module))
     }
