@@ -49,6 +49,9 @@ public class WatParserDefinition implements ParserDefinition {
     @NotNull
     @Override
     public PsiElement createElement(ASTNode node) {
+        if (node.getElementType() == WatElementType.IDENTIFIER) {
+            return new WatPsiIdentifierElement(node);
+        }
         return new WatPsiElement(node);
     }
 

@@ -11,6 +11,7 @@ Wat File
       PsiElement(()('(')
       PsiElement(func)('func')
       PsiWhiteSpace(' ')
-      PsiElement(identifier)('$fimport$0')
+      WatPsiIdentifierElement(IDENTIFIER)
+        PsiElement(identifier)('$fimport$0')
       PsiElement())(')')
     PsiElement())(')')

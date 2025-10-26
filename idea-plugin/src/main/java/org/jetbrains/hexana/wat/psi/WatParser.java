@@ -26,6 +26,7 @@ public class WatParser implements PsiParser {
         tokenMap.put(WatToken.ELEM, WatElementType.ELEM);
         tokenMap.put(WatToken.TAG, WatElementType.TAG);
         tokenMap.put(WatToken.FUNC, WatElementType.FUNC);
+        tokenMap.put(WatToken.CALL, WatElementType.CALL);
         tokenMap.put(WatToken.OPEN_PAREN, WatElementType.SEXPR); // ()
     }
 
@@ -66,6 +67,11 @@ public class WatParser implements PsiParser {
                     m.done(psiElementType);
                 }
                 prevToken = token;
+                continue;
+            } else if (token == WatToken.IDENTIFIER) {
+                PsiBuilder.Marker m = b.mark();
+                b.advanceLexer();
+                m.done(WatElementType.IDENTIFIER);
                 continue;
             }
 
