@@ -12,9 +12,8 @@ class WatResolveTest : BasePlatformTestCase() {
         return Path.of(relativePath).toAbsolutePath().toString()
     }
 
-    fun doTest() {
-        val testName = getTestName(true)
-        val file = myFixture.configureByFile("${testName}.wat")
+    fun doTest(watText: String) {
+        val file = myFixture.configureByText(WatFileType.INSTANCE, watText.trimIndent())
         val target = SyntaxTraverser.psiTraverser(file)
             .filter { it is PsiComment }
             .find { it.text == "(;TARGET;)" }
@@ -33,6 +32,10 @@ class WatResolveTest : BasePlatformTestCase() {
     }
 
     fun testCallRef() {
-        doTest()
+        doTest($$"""
+            (module
+              (func (;TARGET;)$f (param $x i64) (result i64)
+                (call <caret>$f (local.get $x))))
+        """)
     }
 }
