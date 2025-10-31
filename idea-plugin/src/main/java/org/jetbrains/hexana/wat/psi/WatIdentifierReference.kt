@@ -25,6 +25,13 @@ class WatIdentifierReference(
             val file = identifier.containingFile
             val module = file.children.firstOrNull { it.elementType == WatElementType.MODULE } ?: return null
             for (child in module.children) {
+                if (child.elementType == WatElementType.IMPORT) {
+                    val importedFunc = child.children.find { it.elementType == WatElementType.FUNC }
+                    val funcName = importedFunc?.children?.find { it.elementType == WatElementType.IDENTIFIER }
+                    if (funcName?.textMatches(refName) == true) {
+                        return funcName
+                    }
+                }
                 if (child.elementType == WatElementType.FUNC) {
                     val funcName = child.children.find { it.elementType == WatElementType.IDENTIFIER }
                     if (funcName != null && funcName.textMatches(refName)) {

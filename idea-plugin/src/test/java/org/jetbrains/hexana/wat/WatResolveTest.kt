@@ -38,4 +38,13 @@ class WatResolveTest : BasePlatformTestCase() {
                 (call <caret>$f (local.get $x))))
         """)
     }
+
+    fun testCallRefToImport() {
+        doTest($$"""
+            (module
+              (import "env" "abort" (func (;TARGET;)$f))
+              (func $0
+                (call <caret>$f)))
+        """)
+    }
 }
