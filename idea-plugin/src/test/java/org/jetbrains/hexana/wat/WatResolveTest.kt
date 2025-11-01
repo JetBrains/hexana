@@ -34,17 +34,31 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testCallRef() {
         doTest($$"""
             (module
-              (func (;TARGET;)$f (param $x i64) (result i64)
-                (call <caret>$f (local.get $x))))
+              (func $f0)
+              (func (;TARGET;)$f1 (param $x i64) (result i64)
+                (call <caret>$f1 (local.get $x)))
+              (func $f2))
         """)
     }
 
     fun testCallRefToImport() {
         doTest($$"""
             (module
-              (import "env" "abort" (func (;TARGET;)$f))
+              (import "env" "f0" (func $f0))
+              (import "env" "f1" (func (;TARGET;)$f1))
+              (import "env" "f2" (func $f2))
               (func $0
-                (call <caret>$f)))
+                (call <caret>$f1)))
+        """)
+    }
+
+    fun testExportFunc() {
+        doTest($$"""
+            (module
+              (export "f" (func <caret>$1))
+              (func $0)
+              (func (;TARGET;)$1)
+              (func $2))
         """)
     }
 }
