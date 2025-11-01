@@ -27,6 +27,11 @@ class WatIdentifierReference(
         if (parent.elementType == WatElementType.FUNC && parent.parent.elementType == WatElementType.EXPORT) {
             return resolveFunc(identifier.containingFile, identifier.text)
         }
+        if (parent.elementType == WatElementType.ELEM) {
+            if (getTableName(parent) == identifier) {
+                return resolveTable(identifier.containingFile, identifier.text)
+            }
+        }
         return null
     }
 
@@ -52,7 +57,7 @@ class WatIdentifierReference(
     }
 
     fun resolveFunc(file: PsiFile?, funcName: String): PsiElement? {
-        val module = file?.children?.firstOrNull { it.elementType == WatElementType.MODULE } ?: return null
+        val module = getModule(file) ?: return null
         for (child in module.children) {
             if (child.elementType == WatElementType.IMPORT) {
                 val importedFunc = child.children.find { it.elementType == WatElementType.FUNC }
@@ -69,5 +74,26 @@ class WatIdentifierReference(
             }
         }
         return null
+    }
+
+    fun getTableName(elemOrTable: PsiElement?): WatPsiIdentifierElement? {
+        return elemOrTable?.children?.firstOrNull() as? WatPsiIdentifierElement
+    }
+
+    fun resolveTable(file: PsiFile?, tableName: String): PsiElement? {
+        val module = getModule(file) ?: return null
+        for (child in module.children) {
+            if (child.elementType == WatElementType.TABLE) {
+                val nameElement = getTableName(child)
+                if (nameElement?.textMatches(tableName) == true) {
+                    return nameElement
+                }
+            }
+        }
+        return null
+    }
+
+    fun getModule(file: PsiFile?): PsiElement? {
+        return file?.children?.firstOrNull { it.elementType == WatElementType.MODULE }
     }
 }
