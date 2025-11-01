@@ -47,7 +47,7 @@ class WatResolveTest : BasePlatformTestCase() {
               (import "env" "f0" (func $f0))
               (import "env" "f1" (func (;TARGET;)$f1))
               (import "env" "f2" (func $f2))
-              (func $0
+              (func $4
                 (call <caret>$f1)))
         """)
     }
