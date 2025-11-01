@@ -28,8 +28,16 @@ class WatIdentifierReference(
             return resolveFunc(identifier.containingFile, identifier.text)
         }
         if (parent.elementType == WatElementType.ELEM) {
-            if (getTableName(parent) == identifier) {
+            val tableName = getTableName(parent) ?: return null
+            if (tableName == identifier) {
                 return resolveTable(identifier.containingFile, identifier.text)
+            } else {
+                val tableName = resolveTable(identifier.containingFile, tableName.text)
+                val tableElement = tableName?.parent
+                if (tableElement?.node?.findChildByType(WatToken.FUNCREF) != null) {
+                    return resolveFunc(identifier.containingFile, identifier.text)
+                }
+
             }
         }
         return null

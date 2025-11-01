@@ -71,4 +71,15 @@ class WatResolveTest : BasePlatformTestCase() {
               (elem <caret>$t1 (i32.const 0) $f))
         """)
     }
+
+    fun testFuncElem() {
+        doTest($$"""
+            (module
+              (table $t0 3 3 funcref)
+              (elem $t0 (i32.const 0) $f0 <caret>$f1 $f2)
+              (func $f0)
+              (func (;TARGET;)$f1)
+              (func $f2))
+        """)
+    }
 }
