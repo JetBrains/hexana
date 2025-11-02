@@ -6,7 +6,7 @@ Wat File
     WatPsiIdentifierElement(IDENTIFIER)
       PsiElement(identifier)('$0')
     PsiWhiteSpace(' ')
-    WatPsiElement(FUNC)
+    WatFuncElement(FUNC)
       PsiElement(()('(')
       PsiElement(func)('func')
       PsiElement())(')')

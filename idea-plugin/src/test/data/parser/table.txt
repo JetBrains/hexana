@@ -1,5 +1,5 @@
 Wat File
-  WatPsiElement(TABLE)
+  WatTableElement(TABLE)
     PsiElement(()('(')
     PsiElement(table)('table')
     PsiWhiteSpace(' ')

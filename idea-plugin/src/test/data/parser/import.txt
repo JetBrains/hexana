@@ -7,7 +7,7 @@ Wat File
     PsiWhiteSpace(' ')
     PsiElement(string)('"abort"')
     PsiWhiteSpace(' ')
-    WatPsiElement(FUNC)
+    WatFuncElement(FUNC)
       PsiElement(()('(')
       PsiElement(func)('func')
       PsiWhiteSpace(' ')

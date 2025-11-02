@@ -52,6 +52,12 @@ public class WatParserDefinition implements ParserDefinition {
         if (node.getElementType() == WatElementType.IDENTIFIER) {
             return new WatPsiIdentifierElement(node);
         }
+        if (node.getElementType() == WatElementType.FUNC) {
+            return new WatFuncElement(node);
+        }
+        if (node.getElementType() == WatElementType.TABLE) {
+            return new WatTableElement(node);
+        }
         return new WatPsiElement(node);
     }
 

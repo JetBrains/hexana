@@ -32,9 +32,8 @@ class WatIdentifierReference(
             if (tableName == identifier) {
                 return resolveTable(identifier.containingFile, identifier.text)
             } else {
-                val tableName = resolveTable(identifier.containingFile, tableName.text)
-                val tableElement = tableName?.parent
-                if (tableElement?.node?.findChildByType(WatToken.FUNCREF) != null) {
+                val table = resolveTable(identifier.containingFile, tableName.text)
+                if (table?.node?.findChildByType(WatToken.FUNCREF) != null) {
                     return resolveFunc(identifier.containingFile, identifier.text)
                 }
 
@@ -71,13 +70,13 @@ class WatIdentifierReference(
                 val importedFunc = child.children.find { it.elementType == WatElementType.FUNC }
                 val nameElement = importedFunc?.children?.find { it.elementType == WatElementType.IDENTIFIER }
                 if (nameElement?.textMatches(funcName) == true) {
-                    return nameElement
+                    return importedFunc
                 }
             }
             if (child.elementType == WatElementType.FUNC) {
                 val nameElement = child.children.find { it.elementType == WatElementType.IDENTIFIER }
                 if (nameElement?.textMatches(funcName) == true) {
-                    return nameElement
+                    return child
                 }
             }
         }
@@ -94,7 +93,7 @@ class WatIdentifierReference(
             if (child.elementType == WatElementType.TABLE) {
                 val nameElement = getTableName(child)
                 if (nameElement?.textMatches(tableName) == true) {
-                    return nameElement
+                    return child
                 }
             }
         }

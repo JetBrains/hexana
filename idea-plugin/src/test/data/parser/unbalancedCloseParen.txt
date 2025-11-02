@@ -10,7 +10,7 @@ Wat File
     <empty list>
   PsiElement())(')')
   PsiWhiteSpace('\n')
-  WatPsiElement(FUNC)
+  WatFuncElement(FUNC)
     PsiElement(()('(')
     PsiElement(func)('func')
     PsiElement())(')')

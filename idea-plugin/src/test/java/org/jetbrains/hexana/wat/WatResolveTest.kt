@@ -28,7 +28,7 @@ class WatResolveTest : BasePlatformTestCase() {
 
         assertEquals("Unexpected resolve result offset",
             expectedResolveOffset,
-            resolveResult!!.textRange.startOffset)
+            resolveResult!!.textOffset)
     }
 
     fun testCallRef() {
