@@ -82,4 +82,13 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $f2))
         """)
     }
+
+    fun testTypeCallIndirect() {
+        doTest($$"""
+            (module
+              (type (;TARGET;)$1 (func))
+              (func $1
+                (call_indirect (type <caret>$1))))
+        """)
+    }
 }

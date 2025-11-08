@@ -40,6 +40,12 @@ class WatIdentifierReference(
 
             }
         }
+        if (parent.elementType == WatElementType.TYPE) {
+            val grandParent = parent.parent
+            if (grandParent?.elementType == WatElementType.CALL_INDIRECT) {
+                return resolveType(identifier.containingFile, identifier.text)
+            }
+        }
         return null
     }
 
@@ -103,5 +109,18 @@ class WatIdentifierReference(
 
     fun getModule(file: PsiFile?): PsiElement? {
         return file?.children?.firstOrNull { it.elementType == WatElementType.MODULE }
+    }
+
+    fun resolveType(file: PsiFile?, typeName: String): PsiElement? {
+        val module = getModule(file) ?: return null
+        for (child in module.children) {
+            if (child is WatTypeElement) {
+                val name = child.nameIdentifier
+                if (name?.textMatches(typeName) == true) {
+                    return child
+                }
+            }
+        }
+        return null
     }
 }

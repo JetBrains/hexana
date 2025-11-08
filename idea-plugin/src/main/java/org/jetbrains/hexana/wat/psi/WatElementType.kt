@@ -19,6 +19,7 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val TAG = WatElementType("TAG")
         @JvmField val FUNC = WatElementType("FUNC")
         @JvmField val CALL = WatElementType("CALL")
+        @JvmField val CALL_INDIRECT = WatElementType("CALL_INDIRECT")
         @JvmField val IDENTIFIER = WatElementType("IDENTIFIER")
     }
 }

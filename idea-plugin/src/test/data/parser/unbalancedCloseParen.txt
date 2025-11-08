@@ -1,5 +1,5 @@
 Wat File
-  WatPsiElement(TYPE)
+  WatTypeElement(TYPE)
     PsiElement(()('(')
     PsiElement(type)('type')
     PsiElement())(')')

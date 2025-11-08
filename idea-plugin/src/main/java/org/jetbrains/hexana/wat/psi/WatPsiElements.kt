@@ -40,3 +40,5 @@ abstract class WatNameIdentifierOwner(node: ASTNode) : WatPsiElement(node), PsiN
 class WatFuncElement(node: ASTNode) : WatNameIdentifierOwner(node)
 
 class WatTableElement(node: ASTNode) : WatNameIdentifierOwner(node)
+
+class WatTypeElement(node: ASTNode) : WatNameIdentifierOwner(node)

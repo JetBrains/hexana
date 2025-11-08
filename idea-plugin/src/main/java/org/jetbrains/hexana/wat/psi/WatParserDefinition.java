@@ -58,6 +58,9 @@ public class WatParserDefinition implements ParserDefinition {
         if (node.getElementType() == WatElementType.TABLE) {
             return new WatTableElement(node);
         }
+        if (node.getElementType() == WatElementType.TYPE) {
+            return new WatTypeElement(node);
+        }
         return new WatPsiElement(node);
     }
 
