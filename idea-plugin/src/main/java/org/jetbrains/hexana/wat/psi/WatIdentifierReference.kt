@@ -5,6 +5,7 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiReference
+import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.elementType
 
 class WatIdentifierReference(
@@ -28,7 +29,7 @@ class WatIdentifierReference(
             return resolveFunc(identifier.containingFile, identifier.text)
         }
         if (parent.elementType == WatElementType.ELEM) {
-            val tableName = getTableName(parent) ?: return null
+            val tableName = getElementTableName(parent) ?: return null
             if (tableName == identifier) {
                 return resolveTable(identifier.containingFile, identifier.text)
             } else {
@@ -67,14 +68,14 @@ class WatIdentifierReference(
         val module = getModule(file) ?: return null
         for (child in module.children) {
             if (child.elementType == WatElementType.IMPORT) {
-                val importedFunc = child.children.find { it.elementType == WatElementType.FUNC }
-                val nameElement = importedFunc?.children?.find { it.elementType == WatElementType.IDENTIFIER }
+                val importedFunc = PsiTreeUtil.findChildOfType(child, WatFuncElement::class.java)
+                val nameElement = importedFunc?.nameIdentifier
                 if (nameElement?.textMatches(funcName) == true) {
                     return importedFunc
                 }
             }
-            if (child.elementType == WatElementType.FUNC) {
-                val nameElement = child.children.find { it.elementType == WatElementType.IDENTIFIER }
+            if (child is WatFuncElement) {
+                val nameElement = child.nameIdentifier
                 if (nameElement?.textMatches(funcName) == true) {
                     return child
                 }
@@ -83,15 +84,15 @@ class WatIdentifierReference(
         return null
     }
 
-    fun getTableName(elemOrTable: PsiElement?): WatPsiIdentifierElement? {
+    fun getElementTableName(elemOrTable: PsiElement?): WatPsiIdentifierElement? {
         return elemOrTable?.children?.firstOrNull() as? WatPsiIdentifierElement
     }
 
     fun resolveTable(file: PsiFile?, tableName: String): PsiElement? {
         val module = getModule(file) ?: return null
         for (child in module.children) {
-            if (child.elementType == WatElementType.TABLE) {
-                val nameElement = getTableName(child)
+            if (child is WatTableElement) {
+                val nameElement = child.nameIdentifier
                 if (nameElement?.textMatches(tableName) == true) {
                     return child
                 }
