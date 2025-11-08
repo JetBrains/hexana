@@ -1,5 +1,5 @@
 Wat File
-  WatPsiElement(GLOBAL)
+  WatGlobalElement(GLOBAL)
     PsiElement(()('(')
     PsiElement(global)('global')
     PsiWhiteSpace(' ')

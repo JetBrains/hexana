@@ -4,6 +4,7 @@ import com.intellij.openapi.util.NlsSafe
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
+import com.intellij.psi.PsiNameIdentifierOwner
 import com.intellij.psi.PsiReference
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.elementType
@@ -45,6 +46,9 @@ class WatIdentifierReference(
             if (grandParent?.elementType == WatElementType.CALL_INDIRECT) {
                 return resolveType(identifier.containingFile, identifier.text)
             }
+        }
+        if (parent.elementType == WatElementType.GLOBAL_GET || parent.elementType == WatElementType.GLOBAL_SET) {
+            return resolveGlobal(identifier.containingFile, identifier.text)
         }
         return null
     }
@@ -96,15 +100,7 @@ class WatIdentifierReference(
 
     fun resolveTable(file: PsiFile?, tableName: String): PsiElement? {
         val module = getModule(file) ?: return null
-        for (child in module.children) {
-            if (child is WatTableElement) {
-                val nameElement = child.nameIdentifier
-                if (nameElement?.textMatches(tableName) == true) {
-                    return child
-                }
-            }
-        }
-        return null
+        return findChildWithName<WatTableElement>(module, tableName)
     }
 
     fun getModule(file: PsiFile?): PsiElement? {
@@ -113,10 +109,22 @@ class WatIdentifierReference(
 
     fun resolveType(file: PsiFile?, typeName: String): PsiElement? {
         val module = getModule(file) ?: return null
-        for (child in module.children) {
-            if (child is WatTypeElement) {
-                val name = child.nameIdentifier
-                if (name?.textMatches(typeName) == true) {
+        return findChildWithName<WatTypeElement>(module, typeName)
+    }
+
+    fun resolveGlobal(file: PsiFile?, globalName: String): PsiElement? {
+        val module = getModule(file) ?: return null
+        return findChildWithName<WatGlobalElement>(module, globalName)
+    }
+
+    inline fun <reified T : PsiNameIdentifierOwner> findChildWithName(parent: PsiElement?, name: String): T? {
+        if (parent == null) {
+            return null
+        }
+        for (child in parent.children) {
+            if (child is T) {
+                val identifier = child.nameIdentifier
+                if (identifier?.textMatches(name) == true) {
                     return child
                 }
             }

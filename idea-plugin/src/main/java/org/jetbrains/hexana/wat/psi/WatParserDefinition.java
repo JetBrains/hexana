@@ -61,6 +61,9 @@ public class WatParserDefinition implements ParserDefinition {
         if (node.getElementType() == WatElementType.TYPE) {
             return new WatTypeElement(node);
         }
+        if (node.getElementType() == WatElementType.GLOBAL) {
+            return new WatGlobalElement(node);
+        }
         return new WatPsiElement(node);
     }
 

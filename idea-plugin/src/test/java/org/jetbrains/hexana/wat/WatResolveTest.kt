@@ -91,4 +91,22 @@ class WatResolveTest : BasePlatformTestCase() {
                 (call_indirect (type <caret>$1))))
         """)
     }
+
+    fun testGlobalSet() {
+        doTest($$"""
+            (module
+              (global (;TARGET;)$1 (mut i32) (i32.const 0))
+              (func $1
+                (global.set <caret>$1 (i32.const 1))))
+        """)
+    }
+
+    fun testGlobalGet() {
+        doTest($$"""
+            (module
+              (global (;TARGET;)$1 (mut i32) (i32.const 0))
+              (func $1
+                (global.get <caret>$1)))
+        """)
+    }
 }
