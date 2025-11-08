@@ -22,6 +22,8 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val CALL_INDIRECT = WatElementType("CALL_INDIRECT")
         @JvmField val GLOBAL_SET = WatElementType("GLOBAL_SET")
         @JvmField val GLOBAL_GET = WatElementType("GLOBAL_GET")
+        @JvmField val THROW = WatElementType("THROW")
+        @JvmField val CATCH = WatElementType("CATCH")
         @JvmField val IDENTIFIER = WatElementType("IDENTIFIER")
     }
 }

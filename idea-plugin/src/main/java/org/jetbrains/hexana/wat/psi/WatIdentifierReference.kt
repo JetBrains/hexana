@@ -50,6 +50,9 @@ class WatIdentifierReference(
         if (parent.elementType == WatElementType.GLOBAL_GET || parent.elementType == WatElementType.GLOBAL_SET) {
             return resolveGlobal(identifier.containingFile, identifier.text)
         }
+        if (parent.elementType == WatElementType.THROW || parent.elementType == WatElementType.CATCH) {
+            return resolveTag(identifier.containingFile, identifier.text)
+        }
         return null
     }
 
@@ -115,6 +118,11 @@ class WatIdentifierReference(
     fun resolveGlobal(file: PsiFile?, globalName: String): PsiElement? {
         val module = getModule(file) ?: return null
         return findChildWithName<WatGlobalElement>(module, globalName)
+    }
+
+    fun resolveTag(file: PsiFile?, tagName: String): PsiElement? {
+        val module = getModule(file) ?: return null
+        return findChildWithName<WatTagElement>(module, tagName)
     }
 
     inline fun <reified T : PsiNameIdentifierOwner> findChildWithName(parent: PsiElement?, name: String): T? {

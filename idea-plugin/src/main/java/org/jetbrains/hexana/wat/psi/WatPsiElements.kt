@@ -44,3 +44,5 @@ class WatTableElement(node: ASTNode) : WatNameIdentifierOwner(node)
 class WatTypeElement(node: ASTNode) : WatNameIdentifierOwner(node)
 
 class WatGlobalElement(node: ASTNode) : WatNameIdentifierOwner(node)
+
+class WatTagElement(node: ASTNode) : WatNameIdentifierOwner(node)

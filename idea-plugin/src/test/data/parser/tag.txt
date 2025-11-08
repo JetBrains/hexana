@@ -1,5 +1,5 @@
 Wat File
-  WatPsiElement(TAG)
+  WatTagElement(TAG)
     PsiElement(()('(')
     PsiElement(tag)('tag')
     PsiWhiteSpace(' ')

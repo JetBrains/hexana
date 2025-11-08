@@ -109,4 +109,22 @@ class WatResolveTest : BasePlatformTestCase() {
                 (global.get <caret>$1)))
         """)
     }
+
+    fun testTagThrow() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$1 (type $0) (param i32))
+              (func $1
+                (throw <caret>$1 (i32.const 0))))
+        """)
+    }
+
+    fun testTagCatch() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$1 (type $0) (param i32))
+              (func $1
+                (catch <caret>$1)))
+        """)
+    }
 }
