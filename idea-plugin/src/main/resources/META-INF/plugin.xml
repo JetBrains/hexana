@@ -46,6 +46,7 @@
         <fileEditor.fileSizeChecker implementation="org.jetbrains.hexana.wat.WatFileSizeChecker"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.wat.WatFileEditorProvider"/>
         <braceMatcher filetype="wat" implementationClass="org.jetbrains.hexana.wat.WatBraceMatcher"/>
+        <lang.fileViewProviderFactory language="wat" implementationClass="org.jetbrains.hexana.wat.psi.WatFileViewProviderFactory"/>
         <!-- actionConfigurationCustomizer implementation="org.jetbrains.hexana.mcp.McpServerCustomizer"/-->
         <mcpServer.mcpToolset implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
     </extensions>
