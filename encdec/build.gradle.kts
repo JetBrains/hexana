@@ -13,7 +13,6 @@ kotlin {
         browser()
     }
 
-    jvmToolchain(17)
     sourceSets {
         commonTest {
             dependencies {

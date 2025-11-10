@@ -13,7 +13,6 @@ kotlin {
         browser()
     }
 
-    jvmToolchain(17)
     sourceSets {
         val commonMain by getting
         val commonTest by getting
