@@ -438,6 +438,50 @@ object OpCodes {
             const val code: UByte = 0x7Fu
         }
 
+        object DivU : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x80u
+        }
+
+        object RemS : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x81u
+        }
+
+        object RemU : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x82u
+        }
+
+        object And : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x83u
+        }
+
+        object Or : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x84u
+        }
+
+        object Xor : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x85u
+        }
+
+        object Shl : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x86u
+        }
+
+        object ShrS : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x87u
+        }
+
+        object ShrU : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x88u
+        }
+
+        object RotL : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x89u
+        }
+
+        object RotR : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x8Au
+        }
+
         object Extent_I32_S : OpCode<Unit>(Unit) {
             const val code: UByte = 0xACu
         }
@@ -772,17 +816,17 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0x7Eu -> I64.Mul
         0x7Fu -> I64.DivS
 
-        0x80u -> null // i64.div_u
-        0x81u -> null // i64.rem_s
-        0x82u -> null // i64.rem_u
-        0x83u -> null // i64.and
-        0x84u -> null // i64.or
-        0x85u -> null // i64.xor
-        0x86u -> null // i64.shl
-        0x87u -> null // i64.shr_s
-        0x88u -> null // i64.shr_u
-        0x89u -> null // i64.rotl
-        0x8Au -> null // i64.rotr
+        0x80u -> I64.DivU
+        0x81u -> I64.RemS
+        0x82u -> I64.RemU
+        0x83u -> I64.And
+        0x84u -> I64.Or
+        0x85u -> I64.Xor
+        0x86u -> I64.Shl
+        0x87u -> I64.ShrS
+        0x88u -> I64.ShrU
+        0x89u -> I64.RotL
+        0x8Au -> I64.RotR
         0x8Bu -> F32.Abs
         0x8Cu -> F32.Neg
         0x8Du -> F32.Ceil
