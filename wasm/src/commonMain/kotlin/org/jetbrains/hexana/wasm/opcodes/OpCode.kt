@@ -632,6 +632,30 @@ object OpCodes {
             const val code: UByte = 0xA0u
         }
 
+        object Sub : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xA1u
+        }
+
+        object Mul : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xA2u
+        }
+
+        object Div : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xA3u
+        }
+
+        object Min : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xA4u
+        }
+
+        object Max : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xA5u
+        }
+
+        object Copysign : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xA6u
+        }
+
         object Abs : OpCode<Unit>(Unit) {
             const val code: UByte = 0x99u
         }
@@ -851,12 +875,12 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0x9Fu -> F64.Sqrt
 
         0xA0u -> F64.Add
-        0xA1u -> null // f64.sub
-        0xA2u -> null // f64.mul
-        0xA3u -> null // f64.div
-        0xA4u -> null // f64.min
-        0xA5u -> null // f64.max
-        0xA6u -> null // f64.copysign
+        0xA1u -> F64.Sub
+        0xA2u -> F64.Mul
+        0xA3u -> F64.Div
+        0xA4u -> F64.Min
+        0xA5u -> F64.Max
+        0xA6u -> F64.Copysign
         0xA7u -> I32.WrapI64
         0xA8u -> I32.TruncF32S
         0xA9u -> I32.TruncF32U
