@@ -48,92 +48,77 @@ object OpCodes {
     object Flow {
         object Terminal : OpCode<Unit>(Unit) {
             const val code: UByte = 0x0Bu
-            const val description: String = "terminal"
         }
 
         object Return : OpCode<Unit>(Unit) {
             const val code: UByte = 0x0Fu
-            const val description: String = "return"
         }
 
         object ReturnCall : OpCode<Unit>(Unit) {
             const val code: UByte = 0x12u
-            const val description: String = "return_call"
         }
 
         object Drop : OpCode<Unit>(Unit) {
             const val code: UByte = 0x1Au
-            const val description: String = "drop"
         }
 
         object Select : OpCode<Unit>(Unit) {
             const val code: UByte = 0x1Bu
-            const val description: String = "select"
         }
 
         object Unreachable : OpCode<Unit>(Unit) {
             const val code: UByte = 0x00u
-            const val description: String = "unreachable"
         }
 
         object Nop : OpCode<Unit>(Unit) {
             const val code: UByte = 0x01u
-            const val description: String = "nop"
         }
 
         class Call(value: Int) : OpCode<Int>(value) {
             companion object {
                 const val code: UByte = 0x10u
-                const val description: String = "call"
             }
         }
 
         class CallIndirect(value: Int) : OpCode<Int>(value) {
             companion object {
                 const val code: UByte = 0x11u
-                const val description: String = "call_indirect"
             }
         }
 
         class Br(value: Int) : OpCode<Int>(value) {
             companion object {
                 const val code: UByte = 0x0Cu
-                const val description: String = "br"
             }
         }
 
         class BrIf(value: Int) : OpCode<Int>(value) {
             companion object {
                 const val code: UByte = 0x0Du
-                const val description: String = "br_if"
             }
         }
 
         class Block(value: List<OpCode<*>>) : OpCode<List<OpCode<*>>>(value) {
             companion object {
                 const val code: UByte = 0x02u
-                const val description: String = "block"
             }
         }
 
         class Loop(value: List<OpCode<*>>) : OpCode<List<OpCode<*>>>(value) {
             companion object {
                 const val code: UByte = 0x03u
-                const val description: String = "loop"
             }
         }
 
         class If(value: List<OpCode<*>>) : OpCode<List<OpCode<*>>>(value) {
             companion object {
                 const val code: UByte = 0x04u
-                const val description: String = "if"
             }
         }
 
         class Else(value: List<OpCode<*>>) : OpCode<List<OpCode<*>>>(value) {
             companion object {
                 const val code: UByte = 0x05u
-                const val description: String = "else"
             }
         }
     }
@@ -142,21 +127,18 @@ object OpCodes {
         class Get(value: Int) : OpCode<Int>(value) {
             companion object {
                 const val code: UByte = 0x20u
-                const val description: String = "local.get"
             }
         }
 
         class Set(value: Int) : OpCode<Int>(value) {
             companion object {
                 const val code: UByte = 0x21u
-                const val description: String = "local.set"
             }
         }
 
         class Tee(value: Int) : OpCode<Int>(value) {
             companion object {
                 const val code: UByte = 0x22u
-                const val description: String = "local.tee"
             }
         }
     }
@@ -165,14 +147,12 @@ object OpCodes {
         class Get(value: Int) : OpCode<Int>(value) {
             companion object {
                 const val code: UByte = 0x23u
-                const val description: String = "global.get"
             }
         }
 
         class Set(value: Int) : OpCode<Int>(value) {
             companion object {
                 const val code: UByte = 0x24u
-                const val description: String = "global.set"
             }
         }
     }
@@ -181,222 +161,181 @@ object OpCodes {
         class Load(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x28u
-                const val description: String = "i32.load"
             }
         }
 
         class Load8_S(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x2Cu
-                const val description: String = "i32.load8_s"
             }
         }
 
         class Load8_U(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x2Du
-                const val description: String = "i32.load8_u"
             }
         }
 
         class Load16_U(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x2Fu
-                const val description: String = "i32.load16_u"
             }
         }
 
         class Store8(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x3Au
-                const val description: String = "i32.store8"
             }
         }
 
         class Store16(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x3Bu
-                const val description: String = "i32.store16"
             }
         }
 
         class Store(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x36u
-                const val description: String = "i32.store"
             }
         }
 
         object Shl : OpCode<Unit>(Unit) {
             const val code: UByte = 0x74u
-            const val description: String = "i32.shl"
         }
 
         object PopCnt : OpCode<Unit>(Unit) {
             const val code: UByte = 0x69u
-            const val description: String = "i32.popcnt"
         }
 
         object And : OpCode<Unit>(Unit) {
             const val code: UByte = 0x71u
-            const val description: String = "i32.and"
         }
 
         object Or : OpCode<Unit>(Unit) {
             const val code: UByte = 0x72u
-            const val description: String = "i32.or"
         }
 
         object Xor : OpCode<Unit>(Unit) {
             const val code: UByte = 0x73u
-            const val description: String = "i32.xor"
         }
 
         object Add : OpCode<Unit>(Unit) {
             const val code: UByte = 0x6Au
-            const val description: String = "i32.add"
         }
 
         object Sub : OpCode<Unit>(Unit) {
             const val code: UByte = 0x6Bu
-            const val description: String = "i32.sub"
         }
 
         object Mul : OpCode<Unit>(Unit) {
             const val code: UByte = 0x6Cu
-            const val description: String = "i32.mul"
         }
 
         object Rotl : OpCode<Unit>(Unit) {
             const val code: UByte = 0x77u
-            const val description: String = "i32.rotl"
         }
 
         object Rotr : OpCode<Unit>(Unit) {
             const val code: UByte = 0x78u
-            const val description: String = "i32.rotr"
         }
 
         object Clz : OpCode<Unit>(Unit) {
             const val code: UByte = 0x67u
-            const val description: String = "i32.clz"
         }
 
         object Ctz : OpCode<Unit>(Unit) {
             const val code: UByte = 0x68u
-            const val description: String = "i32.ctz"
         }
 
         class Const(value: Int) : OpCode<Int>(value) {
             companion object {
                 const val code: UByte = 0x41u
-                const val description: String = "i32.const"
             }
         }
 
         object Eqz : OpCode<Unit>(Unit) {
             const val code: UByte = 0x45u
-            const val description: String = "i32.eqz"
         }
 
         object Eq : OpCode<Unit>(Unit) {
             const val code: UByte = 0x46u
-            const val description: String = "i32.eq"
         }
 
         object Ne : OpCode<Unit>(Unit) {
             const val code: UByte = 0x47u
-            const val description: String = "i32.ne"
         }
 
         object LTS : OpCode<Unit>(Unit) {
             const val code: UByte = 0x48u
-            const val description: String = "i32.lt_s"
         }
 
         object LTU : OpCode<Unit>(Unit) {
             const val code: UByte = 0x49u
-            const val description: String = "i32.lt_u"
         }
 
         object LES : OpCode<Unit>(Unit) {
             const val code: UByte = 0x4Cu
-            const val description: String = "i32.le_s"
         }
 
         object LEU : OpCode<Unit>(Unit) {
             const val code: UByte = 0x4Du
-            const val description: String = "i32.le_u"
         }
 
         object GTS : OpCode<Unit>(Unit) {
             const val code: UByte = 0x4Au
-            const val description: String = "i32.gt_s"
         }
 
         object GES : OpCode<Unit>(Unit) {
             const val code: UByte = 0x4Eu
-            const val description: String = "i32.ge_s"
         }
 
         object GTU : OpCode<Unit>(Unit) {
             const val code: UByte = 0x4Bu
-            const val description: String = "i32.gt_u"
         }
 
         object GEU : OpCode<Unit>(Unit) {
             const val code: UByte = 0x4Fu
-            const val description: String = "i32.ge_u"
         }
 
         object RemU : OpCode<Unit>(Unit) {
             const val code: UByte = 0x70u
-            const val description: String = "i32.rem_u"
         }
 
         object WrapI64 : OpCode<Unit>(Unit) {
             const val code: UByte = 0xA7u
-            const val description: String = "i32.wrap_i64"
         }
 
         object Extend16S : OpCode<Unit>(Unit) {
             const val code: UByte = 0xC1u
-            const val description: String = "i32.extend16_s"
         }
 
         object ReinterpretF32 : OpCode<Unit>(Unit) {
             const val code: UByte = 0xBCu
-            const val description: String = "i32.reinterpret_f32"
         }
 
         object TruncF32S : OpCode<Unit>(Unit) {
             const val code: UByte = 0xA8u
-            const val description: String = "i32.trunc_f32_s"
         }
 
         object TruncF32U : OpCode<Unit>(Unit) {
             const val code: UByte = 0xA9u
-            const val description: String = "i32.trunc_f32_u"
         }
 
         object DivU : OpCode<Unit>(Unit) {
             const val code: UByte = 0x6Eu
-            const val description: String = "i32.div_u"
         }
 
         object DivS : OpCode<Unit>(Unit) {
             const val code: UByte = 0x6Du
-            const val description: String = "i32.div_s"
         }
 
         object ShrU : OpCode<Unit>(Unit) {
             const val code: UByte = 0x76u
-            const val description: String = "i32.shr_u"
         }
 
         object ShrS : OpCode<Unit>(Unit) {
             const val code: UByte = 0x75u
-            const val description: String = "i32.shr_s"
         }
     }
 
@@ -405,32 +344,27 @@ object OpCodes {
         class Const(value: Long) : OpCode<Long>(value) {
             companion object {
                 const val code: UByte = 0x42u
-                const val description: String = "i64.const"
             }
         }
 
         class Load(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x29u
-                const val description: String = "i64.load"
             }
         }
 
         class Store(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x37u
-                const val description: String = "i64.store"
             }
         }
 
         object DivS : OpCode<Unit>(Unit) {
             const val code: UByte = 0x7Fu
-            const val description: String = "i64.div_s"
         }
 
         object Extent_I32_S : OpCode<Unit>(Unit) {
             const val code: UByte = 0xACu
-            const val description: String = "i64.extend_i32_s"
         }
     }
 
@@ -438,145 +372,118 @@ object OpCodes {
         class Const(initValue: Float) : OpCode<Float>(initValue) {
             companion object {
                 const val code: UByte = 0x43u
-                const val description: String = "f32.const"
             }
         }
 
         object Nearest : OpCode<Unit>(Unit) {
             const val code: UByte = 0x90u
-            const val description: String = "f32.nearest"
         }
 
         object NE : OpCode<Unit>(Unit) {
             const val code: UByte = 0x5Cu
-            const val description: String = "f32.ne"
         }
 
         object LE : OpCode<Unit>(Unit) {
             const val code: UByte = 0x5Fu
-            const val description: String = "f32.le"
         }
 
         object Ceil : OpCode<Unit>(Unit) {
             const val code: UByte = 0x8du
-            const val description: String = "f32.ceil"
         }
 
         object Floor : OpCode<Unit>(Unit) {
             const val code: UByte = 0x8eu
-            const val description: String = "f32.floor"
         }
 
         object Sub : OpCode<Unit>(Unit) {
             const val code: UByte = 0x93u
-            const val description: String = "f32.sub"
         }
 
         object Mul : OpCode<Unit>(Unit) {
             const val code: UByte = 0x94u
-            const val description: String = "f32.mul"
         }
 
         object Trunc : OpCode<Unit>(Unit) {
             const val code: UByte = 0x8fu
-            const val description: String = "f32.trunc"
         }
 
         object CopySign : OpCode<Unit>(Unit) {
             const val code: UByte = 0x98u
-            const val description: String = "f32.copysign"
         }
 
         class Load(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x2Au
-                const val description: String = "f32.load"
             }
         }
 
         class Store(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x38u
-                const val description: String = "f32.store"
             }
         }
 
         object Sqrt : OpCode<Unit>(Unit) {
             const val code: UByte = 0x91u
-            const val description: String = "f32.sqrt"
         }
 
         object Add : OpCode<Unit>(Unit) {
             const val code: UByte = 0x92u
-            const val description: String = "f32.add"
         }
 
         object Div : OpCode<Unit>(Unit) {
             const val code: UByte = 0x95u
-            const val description: String = "f32.div"
         }
 
         object DemoteF64 : OpCode<Unit>(Unit) {
             const val code: UByte = 0xB6u
-            const val description: String = "f32.demote_f64"
         }
 
         object Neg : OpCode<Unit>(Unit) {
             const val code: UByte = 0x8Cu
-            const val description: String = "f32.neg"
         }
 
         object ConvertI32S : OpCode<Unit>(Unit) {
             val code: UByte = 0xB2u
-            const val description: String = "f32.convert_i32_s"
         }
 
         object ConvertI32U : OpCode<Unit>(Unit) {
             val code: UByte = 0xB3u
-            const val description: String = "f32.convert_i32_u"
         }
 
         object GE : OpCode<Unit>(Unit) {
             val code: UByte = 0x60u
-            const val description: String = "f32.ge"
         }
 
         object LT : OpCode<Unit>(Unit) {
             val code: UByte = 0x5Du
-            const val description: String = "f32.lt"
         }
 
         object GT : OpCode<Unit>(Unit) {
             val code: UByte = 0x5Eu
-            const val description: String = "f32.gt"
         }
 
         object Abs : OpCode<Unit>(Unit) {
             val code: UByte = 0x8Bu
-            const val description: String = "f32.abs"
         }
     }
 
     object F64 {
         object PromoteF32 : OpCode<Unit>(Unit) {
             const val code: UByte = 0xBBu
-            const val description: String = "f64.promote_f32"
         }
 
         object Add : OpCode<Unit>(Unit) {
             const val code: UByte = 0xA0u
-            const val description: String = "f64.add"
         }
 
         object Floor : OpCode<Unit>(Unit) {
             const val code: UByte = 0x9Cu
-            const val description: String = "f64.floor"
         }
 
         class Const(initValue: Double) : OpCode<Double>(initValue) {
             companion object {
                 const val code: UByte = 0x44u
-                const val description: String = "f64.const"
             }
         }
     }
