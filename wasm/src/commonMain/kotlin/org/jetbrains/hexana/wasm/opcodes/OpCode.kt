@@ -301,6 +301,10 @@ object OpCodes {
             const val code: UByte = 0x4Fu
         }
 
+        object RemS : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x6Fu
+        }
+
         object RemU : OpCode<Unit>(Unit) {
             const val code: UByte = 0x70u
         }
@@ -472,6 +476,30 @@ object OpCodes {
     }
 
     object F64 {
+        object EQ : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x61u
+        }
+
+        object NE : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x62u
+        }
+
+        object LT : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x63u
+        }
+
+        object GT : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x64u
+        }
+
+        object LE : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x65u
+        }
+
+        object GE : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x66u
+        }
+
         object PromoteF32 : OpCode<Unit>(Unit) {
             const val code: UByte = 0xBBu
         }
@@ -607,12 +635,12 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0x5Fu -> F32.LE
 
         0x60u -> F32.GE
-        0x61u -> null // f64.eq
-        0x62u -> null // f64.ne
-        0x63u -> null // f64.lt
-        0x64u -> null // f64.gt
-        0x65u -> null // f64.le
-        0x66u -> null // f64.ge
+        0x61u ->F64.EQ
+        0x62u -> F64.NE
+        0x63u -> F64.LT
+        0x64u -> F64.GT
+        0x65u -> F64.LE
+        0x66u -> F64.GE
         0x67u -> I32.Clz
         0x68u -> I32.Ctz
         0x69u -> I32.PopCnt
@@ -621,7 +649,7 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0x6Cu -> I32.Mul
         0x6Du -> I32.DivS
         0x6Eu -> I32.DivU
-        0x6Fu -> null // i32.rem_s
+        0x6Fu -> I32.RemS
 
         0x70u -> I32.RemU
         0x71u -> I32.And
