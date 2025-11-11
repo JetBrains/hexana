@@ -366,6 +366,30 @@ object OpCodes {
             }
         }
 
+        object Clz : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x79u
+        }
+
+        object Ctz : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x7Au
+        }
+
+        object PopCnt : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x7Bu
+        }
+
+        object Add : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x7Cu
+        }
+
+        object Sub : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x7Du
+        }
+
+        object Mul : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x7Eu
+        }
+
         object DivS : OpCode<Unit>(Unit) {
             const val code: UByte = 0x7Fu
         }
@@ -660,12 +684,12 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0x76u -> I32.ShrU
         0x77u -> I32.Rotl
         0x78u -> I32.Rotr
-        0x79u -> null // i64.clz
-        0x7Au -> null // i64.ctz
-        0x7Bu -> null // i64.popcnt
-        0x7Cu -> null // i64.add
-        0x7Du -> null // i64.sub
-        0x7Eu -> null // i64.mul
+        0x79u -> I64.Clz
+        0x7Au -> I64.Ctz
+        0x7Bu -> I64.PopCnt
+        0x7Cu -> I64.Add
+        0x7Du -> I64.Sub
+        0x7Eu -> I64.Mul
         0x7Fu -> I64.DivS
 
         0x80u -> null // i64.div_u
