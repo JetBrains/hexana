@@ -466,6 +466,14 @@ object OpCodes {
             const val code: UByte = 0x95u
         }
 
+        object Min : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x96u
+        }
+
+        object Max : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x97u
+        }
+
         object DemoteF64 : OpCode<Unit>(Unit) {
             const val code: UByte = 0xB6u
         }
@@ -532,8 +540,32 @@ object OpCodes {
             const val code: UByte = 0xA0u
         }
 
+        object Abs : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x99u
+        }
+
+        object Neg : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x9Au
+        }
+
+        object Ceil : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x9Bu
+        }
+
         object Floor : OpCode<Unit>(Unit) {
             const val code: UByte = 0x9Cu
+        }
+
+        object Trunc : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x9Du
+        }
+
+        object Nearest : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x9Eu
+        }
+
+        object Sqrt : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x9Fu
         }
 
         class Const(initValue: Double) : OpCode<Double>(initValue) {
@@ -715,16 +747,16 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0x93u -> F32.Sub
         0x94u -> F32.Mul
         0x95u -> F32.Div
-        0x96u -> null // f32.min
-        0x97u -> null // f32.max
+        0x96u -> F32.Min
+        0x97u -> F32.Max
         0x98u -> F32.CopySign
-        0x99u -> null // f64.abs
-        0x9Au -> null // f64.neg
-        0x9Bu -> null // f64.ceil
+        0x99u -> F64.Abs
+        0x9Au -> F64.Neg
+        0x9Bu -> F64.Ceil
         0x9Cu -> F64.Floor
-        0x9Du -> null // f64.trunc
-        0x9Eu -> null // f64.nearest
-        0x9Fu -> null // f64.sqrt
+        0x9Du -> F64.Trunc
+        0x9Eu -> F64.Nearest
+        0x9Fu -> F64.Sqrt
 
         0xA0u -> F64.Add
         0xA1u -> null // f64.sub
