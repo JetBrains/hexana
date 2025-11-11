@@ -44,6 +44,9 @@ open class OpCode<T : Any>(val value: T) {
     }
 }
 
+// When we don't know how to process specific opCode we just treat it as unknown OpCode with value being the opCode itself
+class OpCodeUnknown(value: UByte) : OpCode<UByte>(value)
+
 object OpCodes {
     object Flow {
         object Terminal : OpCode<Unit>(Unit) {
@@ -712,14 +715,14 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0xC4u -> null // i64.extend32_s
 
         else -> null
-    } ?: error("Unknown opcode $code (0x${code.toString(16).uppercase()})")
+    } ?: OpCodeUnknown(code)
 }
 
 fun CommonByteBuffer.parseOpCodes(): List<OpCode<*>> {
     val opCodes = mutableListOf<OpCode<*>>()
     while (true) {
         val opCode = get().toUByte()
-        if (opCode == OpCodes.Flow.Terminal.code) {
+        if (opCode == Flow.Terminal.code) {
             break
         }
 
