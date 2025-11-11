@@ -366,6 +366,50 @@ object OpCodes {
             }
         }
 
+        object Eqz : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x50u
+        }
+
+        object EQ : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x51u
+        }
+
+        object NE : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x52u
+        }
+
+        object LTS : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x53u
+        }
+
+        object LTU : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x54u
+        }
+
+        object GTS : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x55u
+        }
+
+        object GTU : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x56u
+        }
+
+        object LES : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x57u
+        }
+
+        object LEU : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x58u
+        }
+
+        object GES : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x59u
+        }
+
+        object GEU : OpCode<Unit>(Unit) {
+            const val code: UByte = 0x5Au
+        }
+
         object Clz : OpCode<Unit>(Unit) {
             const val code: UByte = 0x79u
         }
@@ -488,6 +532,10 @@ object OpCodes {
 
         object ConvertI32U : OpCode<Unit>(Unit) {
             val code: UByte = 0xB3u
+        }
+
+        object EQ : OpCode<Unit>(Unit) {
+            val code: UByte = 0x5Bu
         }
 
         object GE : OpCode<Unit>(Unit) {
@@ -673,18 +721,18 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0x4Eu -> I32.GES
         0x4Fu -> I32.GEU
 
-        0x50u -> null // i64.eqz
-        0x51u -> null // i64.eq
-        0x52u -> null // i64.ne
-        0x53u -> null // i64.lt_s
-        0x54u -> null // i64.lt_u
-        0x55u -> null // i64.gt_s
-        0x56u -> null // i64.gt_u
-        0x57u -> null // i64.le_s
-        0x58u -> null // i64.le_u
-        0x59u -> null // i64.ge_s
-        0x5Au -> null // i64.ge_u
-        0x5Bu -> null // f32.eq
+        0x50u -> I64.Eqz
+        0x51u -> I64.EQ
+        0x52u -> I64.NE
+        0x53u -> I64.LTS
+        0x54u -> I64.LTU
+        0x55u -> I64.GTS
+        0x56u -> I64.GTU
+        0x57u -> I64.LES
+        0x58u -> I64.LEU
+        0x59u -> I64.GES
+        0x5Au -> I64.GEU
+        0x5Bu -> F32.EQ
         0x5Cu -> F32.NE
         0x5Du -> F32.LT
         0x5Eu -> F32.GT
