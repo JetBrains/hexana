@@ -148,6 +148,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32, TypeId.TYPE_I32), listOf(TypeId.TYPE_I32)),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -168,6 +169,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32), listOf(TypeId.TYPE_I32)),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -187,6 +189,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32, TypeId.TYPE_I32), listOf(TypeId.TYPE_I32)),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -207,6 +210,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32, TypeId.TYPE_I32), listOf(TypeId.TYPE_I32)),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -227,6 +231,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -247,6 +252,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32, TypeId.TYPE_I32), listOf(TypeId.TYPE_I32)),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -267,6 +273,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32, TypeId.TYPE_I32), listOf(TypeId.TYPE_I32)),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -287,6 +294,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32, TypeId.TYPE_I32), listOf(TypeId.TYPE_I32)),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -307,6 +315,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -325,6 +334,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -343,6 +353,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -361,6 +372,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -390,6 +402,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -411,6 +424,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32), listOf(TypeId.TYPE_I32)),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -431,6 +445,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32), listOf(TypeId.TYPE_I32)),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -450,6 +465,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -469,6 +485,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -490,6 +507,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -512,6 +530,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf(TypeId.TYPE_I32)),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -533,6 +552,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -554,6 +574,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32), listOf(TypeId.TYPE_I32)),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -573,6 +594,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -592,6 +614,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -611,6 +634,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -631,6 +655,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -652,6 +677,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -674,6 +700,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         listOf(WasmCodeLocalRecord(1, 127)),
                         listOf(
@@ -696,6 +723,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         listOf(),
                         listOf(
@@ -718,6 +746,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         listOf(),
                         listOf(
@@ -737,6 +766,7 @@ class WasmParserTests {
         FunctionRecord(
             signature = WasmSectionTypesRecord(listOf(), listOf()),
             body = WasmCodeRecord(
+                0,
                 1u,
                 listOf(),
                 listOf(
@@ -757,6 +787,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         listOf(),
                         listOf(
@@ -778,6 +809,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         listOf(),
                         listOf(
@@ -799,6 +831,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         listOf(),
                         listOf(
@@ -821,6 +854,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         listOf(),
                         listOf(
@@ -842,6 +876,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         listOf(),
                         listOf(
@@ -862,6 +897,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         listOf(),
                         listOf(
@@ -883,6 +919,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(TypeId.TYPE_I32), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         listOf(),
                         listOf(
@@ -912,6 +949,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         listOf(),
                         listOf(
@@ -938,6 +976,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -958,6 +997,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -978,6 +1018,7 @@ class WasmParserTests {
                 FunctionRecord(
                     signature = WasmSectionTypesRecord(listOf(), listOf()),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         emptyList(),
                         listOf(
@@ -1002,6 +1043,7 @@ class WasmParserTests {
                     listOf(TypeId.TYPE_I32)
                     ),
                     body = WasmCodeRecord(
+                        0,
                         1u,
                         listOf(WasmCodeLocalRecord(1, 127)),
                         listOf(
