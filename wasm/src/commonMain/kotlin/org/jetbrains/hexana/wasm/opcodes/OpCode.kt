@@ -417,6 +417,24 @@ object OpCodes {
             }
         }
 
+        class Store8(value: MemArg) : OpCode<MemArg>(value) {
+            companion object {
+                const val code: UByte = 0x3Cu
+            }
+        }
+
+        class Store16(value: MemArg) : OpCode<MemArg>(value) {
+            companion object {
+                const val code: UByte = 0x3Du
+            }
+        }
+
+        class Store32(value: MemArg) : OpCode<MemArg>(value) {
+            companion object {
+                const val code: UByte = 0x3Eu
+            }
+        }
+
         object Eqz : OpCode<Unit>(Unit) {
             const val code: UByte = 0x50u
         }
@@ -867,9 +885,9 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0x39u -> null // f64.store
         0x3Au -> I32.Store8(consumeMemArg())
         0x3Bu -> I32.Store16(consumeMemArg())
-        0x3Cu -> null // i64.store8
-        0x3Du -> null // i64.store16
-        0x3Eu -> null // i64.store32
+        0x3Cu -> I64.Store8(consumeMemArg())
+        0x3Du -> I64.Store16(consumeMemArg())
+        0x3Eu -> I64.Store32(consumeMemArg())
         0x3Fu -> null // memory.size
 
         0x40u -> null // memory.grow
