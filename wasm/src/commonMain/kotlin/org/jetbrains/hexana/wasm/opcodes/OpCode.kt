@@ -548,6 +548,14 @@ object OpCodes {
         object TruncF32U : OpCode<Unit>(Unit) {
             const val code: UByte = 0xAFu
         }
+
+        object TruncF64S : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xB0u
+        }
+
+        object TruncF64U : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xB1u
+        }
     }
 
     object F32 {
@@ -641,6 +649,14 @@ object OpCodes {
             val code: UByte = 0xB3u
         }
 
+        object ConvertI64S : OpCode<Unit>(Unit) {
+            val code: UByte = 0xB4u
+        }
+
+        object ConvertI64U : OpCode<Unit>(Unit) {
+            val code: UByte = 0xB5u
+        }
+
         object EQ : OpCode<Unit>(Unit) {
             val code: UByte = 0x5Bu
         }
@@ -685,6 +701,22 @@ object OpCodes {
 
         object GE : OpCode<Unit>(Unit) {
             const val code: UByte = 0x66u
+        }
+
+        object ConvertI32S : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xB7u
+        }
+
+        object ConvertI32U : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xB8u
+        }
+
+        object ConvertI64S : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xB9u
+        }
+
+        object ConvertI64U : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xBAu
         }
 
         object PromoteF32 : OpCode<Unit>(Unit) {
@@ -959,17 +991,17 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0xAEu -> I64.TruncF32S
         0xAFu -> I64.TruncF32U
 
-        0xB0u -> null // i64.trunc_f64_s
-        0xB1u -> null // i64.trunc_f64_u
+        0xB0u -> I64.TruncF64S
+        0xB1u -> I64.TruncF64U
         0xB2u -> F32.ConvertI32S
         0xB3u -> F32.ConvertI32U
-        0xB4u -> null // f32.convert_i64_s
-        0xB5u -> null // f32.convert_i64_u
+        0xB4u -> F32.ConvertI64S
+        0xB5u -> F32.ConvertI64U
         0xB6u -> F32.DemoteF64
-        0xB7u -> null // f64.convert_i32_s
-        0xB8u -> null // f64.convert_i32_u
-        0xB9u -> null // f64.convert_i64_s
-        0xBAu -> null // f64.convert_i64_u
+        0xB7u -> F64.ConvertI32S
+        0xB8u -> F64.ConvertI32U
+        0xB9u -> F64.ConvertI64S
+        0xBAu -> F64.ConvertI64U
         0xBBu -> F64.PromoteF32
         0xBCu -> I32.ReinterpretF32
         0xBDu -> null // i64.reinterpret_f64
