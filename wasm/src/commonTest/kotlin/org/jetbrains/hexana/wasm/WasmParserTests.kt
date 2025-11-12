@@ -231,7 +231,7 @@ class WasmParserTests {
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
-                            OpCodes.I64.Extent_I32_S,
+                            OpCodes.I64.Extend_I32_S,
                             OpCodes.Flow.Call(0),
                         )
                     )

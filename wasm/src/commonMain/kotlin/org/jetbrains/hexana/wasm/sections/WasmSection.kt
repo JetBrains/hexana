@@ -4,10 +4,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 
 
 sealed class WasmSection(val size: Int, val offset: Int) {
-    fun CommonByteBuffer.consumeArray(block: (Int) -> Unit) {
-        val vecCount = getULEB128().toInt()
-        repeat(vecCount, block)
-    }
+
 
     fun CommonByteBuffer.consumeString(): String {
         val nameSize = getULEB128().toInt()
@@ -18,3 +15,8 @@ sealed class WasmSection(val size: Int, val offset: Int) {
 }
 
 class WasmSectionUnresolved(val id: Byte, size: Int, offset: Int): WasmSection(size, offset)
+
+internal fun CommonByteBuffer.consumeArray(block: (Int) -> Unit) {
+    val vecCount = getULEB128().toInt()
+    repeat(vecCount, block)
+}
