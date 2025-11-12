@@ -574,6 +574,11 @@ object OpCodes {
         object TruncF64U : OpCode<Unit>(Unit) {
             const val code: UByte = 0xB1u
         }
+
+        object ReinterpretF64 : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xBDu
+        }
+
     }
 
     object F32 {
@@ -653,6 +658,10 @@ object OpCodes {
 
         object DemoteF64 : OpCode<Unit>(Unit) {
             const val code: UByte = 0xB6u
+        }
+
+        object ReinterpretI32 : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xBEu
         }
 
         object Neg : OpCode<Unit>(Unit) {
@@ -739,6 +748,10 @@ object OpCodes {
 
         object PromoteF32 : OpCode<Unit>(Unit) {
             const val code: UByte = 0xBBu
+        }
+
+        object ReinterpretI64 : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xBFu
         }
 
         object Add : OpCode<Unit>(Unit) {
@@ -1022,9 +1035,9 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0xBAu -> F64.ConvertI64U
         0xBBu -> F64.PromoteF32
         0xBCu -> I32.ReinterpretF32
-        0xBDu -> null // i64.reinterpret_f64
-        0xBEu -> null // f32.reinterpret_i32
-        0xBFu -> null // f64.reinterpret_i64
+        0xBDu -> I64.ReinterpretF64
+        0xBEu -> F32.ReinterpretI32
+        0xBFu -> F64.ReinterpretI64
 
         0xC0u -> null // i32.extend8_s
         0xC1u -> I32.Extend16S
