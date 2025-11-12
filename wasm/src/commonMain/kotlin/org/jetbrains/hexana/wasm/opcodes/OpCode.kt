@@ -375,6 +375,42 @@ object OpCodes {
             }
         }
 
+        class Load8_S(value: MemArg) : OpCode<MemArg>(value) {
+            companion object {
+                const val code: UByte = 0x30u
+            }
+        }
+
+        class Load8_U(value: MemArg) : OpCode<MemArg>(value) {
+            companion object {
+                const val code: UByte = 0x31u
+            }
+        }
+
+        class Load16_S(value: MemArg) : OpCode<MemArg>(value) {
+            companion object {
+                const val code: UByte = 0x32u
+            }
+        }
+
+        class Load16_U(value: MemArg) : OpCode<MemArg>(value) {
+            companion object {
+                const val code: UByte = 0x33u
+            }
+        }
+
+        class Load32_S(value: MemArg) : OpCode<MemArg>(value) {
+            companion object {
+                const val code: UByte = 0x34u
+            }
+        }
+
+        class Load32_U(value: MemArg) : OpCode<MemArg>(value) {
+            companion object {
+                const val code: UByte = 0x35u
+            }
+        }
+
         class Store(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x37u
@@ -787,12 +823,12 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0x2Eu -> null // i32.load16_s
         0x2Fu -> I32.Load16_U(consumeMemArg())
 
-        0x30u -> null // i64.load8_s
-        0x31u -> null // i64.load8_u
-        0x32u -> null // i64.load16_s
-        0x33u -> null // i64.load16_u
-        0x34u -> null // i64.load32_s
-        0x35u -> null // i64.load32_u
+        0x30u -> I64.Load8_S(consumeMemArg())
+        0x31u -> I64.Load8_U(consumeMemArg())
+        0x32u -> I64.Load16_S(consumeMemArg())
+        0x33u -> I64.Load16_U(consumeMemArg())
+        0x34u -> I64.Load32_S(consumeMemArg())
+        0x35u -> I64.Load32_U(consumeMemArg())
         0x36u -> I32.Store(consumeMemArg())
         0x37u -> I64.Store(consumeMemArg())
         0x38u -> F32.Store(consumeMemArg())
