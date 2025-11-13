@@ -320,6 +320,10 @@ object OpCodes {
             const val code: UByte = 0xA7u
         }
 
+        object Extend8S : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xC0u
+        }
+
         object Extend16S : OpCode<Unit>(Unit) {
             const val code: UByte = 0xC1u
         }
@@ -579,6 +583,17 @@ object OpCodes {
             const val code: UByte = 0xBDu
         }
 
+        object Extend8S : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xC2u
+        }
+
+        object Extend16S : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xC3u
+        }
+
+        object Extend32S : OpCode<Unit>(Unit) {
+            const val code: UByte = 0xC4u
+        }
     }
 
     object F32 {
@@ -1039,11 +1054,11 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0xBEu -> F32.ReinterpretI32
         0xBFu -> F64.ReinterpretI64
 
-        0xC0u -> null // i32.extend8_s
+        0xC0u -> I32.Extend8S
         0xC1u -> I32.Extend16S
-        0xC2u -> null // i64.extend8_s
-        0xC3u -> null // i64.extend16_s
-        0xC4u -> null // i64.extend32_s
+        0xC2u -> I64.Extend8S
+        0xC3u -> I64.Extend16S
+        0xC4u -> I64.Extend32S
 
         else -> null
     } ?: OpCodeUnknown(code)
