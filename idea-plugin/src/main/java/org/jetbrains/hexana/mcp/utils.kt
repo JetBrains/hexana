@@ -11,9 +11,28 @@ import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.sections.TypeId
+import org.jetbrains.hexana.wasm.sections.WasmDataRecordActive
+import org.jetbrains.hexana.wasm.sections.WasmDataRecordActiveWithMemoryIndex
+import org.jetbrains.hexana.wasm.sections.WasmDataRecordPassive
 import org.jetbrains.hexana.wasm.sections.WasmSectionTypesRecord
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 
+
+
+internal fun CommonByteBuffer.listDataSections(wasmModule: WasmModule?): List<DataEntry> {
+
+    val data = with(wasmModule!!.dataSection!!) {
+        scan()
+    }
+    return data.mapIndexedNotNull { index, record ->
+        when(record) {
+            is WasmDataRecordActive -> DataEntry(0,index, record.offset, record.data, expression = record.expression.wat())
+            is WasmDataRecordPassive -> DataEntry(1,index, record.offset, record.data)
+            is WasmDataRecordActiveWithMemoryIndex -> DataEntry(2, index, record.offset, record.data, record.memoryIndex, record.expression.wat())
+            else -> null
+        }
+    }
+}
 internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<FunctionSignature> {
     wasmModule ?: return emptyList()
     val types = types(wasmModule)
@@ -87,6 +106,36 @@ fun TypeId.toSignature(): String {
         is TypeId.TYPE_I32 -> return "i32"
         is TypeId.TYPE_I64 -> return "i64"
     }
+}
+
+
+data class DataEntry(val kind:Int, val index: Int, val offset: Long, val data: ByteArray, val memoryIndex: UInt? = null, val expression: String? = null) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as DataEntry
+
+        if (kind != other.kind) return false
+        if (index != other.index) return false
+        if (offset != other.offset) return false
+        if (!data.contentEquals(other.data)) return false
+        if (memoryIndex != other.memoryIndex) return false
+        if (expression != other.expression) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = kind
+        result = 31 * result + index
+        result = 31 * result + offset.hashCode()
+        result = 31 * result + data.contentHashCode()
+        result = 31 * result + (memoryIndex?.hashCode() ?: 0)
+        result = 31 * result + (expression?.hashCode() ?: 0)
+        return result
+    }
+
 }
 
 data class ImportSignature(
