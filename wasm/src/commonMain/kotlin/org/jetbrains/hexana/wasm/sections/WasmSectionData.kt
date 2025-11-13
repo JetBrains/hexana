@@ -22,7 +22,7 @@ class WasmSectionData(size: Int, offset: Int): WasmSection(size, offset) {
                         add(WasmDataRecordPassive(off, this@scan.fetchDataArray()))
                     }
                     2u -> {
-                        add(WasmDataRecordActiveWithMemoryIndex(off, getULEB128().toUInt(), this@scan.fetchDataArray()))
+                        add(WasmDataRecordActiveWithMemoryIndex(off, getULEB128().toUInt(), this@scan.parseOpCodes(), this@scan.fetchDataArray()))
                     }
                     else -> throw IllegalArgumentException("Unknown data record type: $recordType")
                 }
@@ -82,14 +82,7 @@ data class WasmDataRecordPassive(override val offset: Long, override val data: B
     }
 }
 
-data class WasmDataRecordActiveWithMemoryIndex(override val offset: Long, val memoryIndex: UInt, override val data: ByteArray): WasmDataRecord(0x2u, offset, data) {
-    override fun hashCode(): Int {
-        var result = offset.hashCode()
-        result = 31 * result + memoryIndex.hashCode()
-        result = 31 * result + data.contentHashCode()
-        return result
-    }
-
+data class WasmDataRecordActiveWithMemoryIndex(override val offset: Long, val memoryIndex: UInt, val expression: List<OpCode<*>>, override val data: ByteArray): WasmDataRecord(0x2u, offset, data) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false
@@ -98,8 +91,18 @@ data class WasmDataRecordActiveWithMemoryIndex(override val offset: Long, val me
 
         if (offset != other.offset) return false
         if (memoryIndex != other.memoryIndex) return false
+        if (expression != other.expression) return false
         if (!data.contentEquals(other.data)) return false
 
         return true
     }
+
+    override fun hashCode(): Int {
+        var result = offset.hashCode()
+        result = 31 * result + memoryIndex.hashCode()
+        result = 31 * result + expression.hashCode()
+        result = 31 * result + data.contentHashCode()
+        return result
+    }
+
 }
