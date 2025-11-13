@@ -32,7 +32,8 @@ internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<Funct
                 codes.getOrNull(index)?.offset,
                 signature,
                 // TODO: types are encoded more complexly
-                codes.getOrNull(index)?.locals?.map { Local(it.local, it.type.toInt()) })
+                codes.getOrNull(index)?.locals?.map { Local(it.local, it.type.toInt()) },
+                codes.getOrNull(index)?.opCodes?.wat())
         }
     }
     return signatures
@@ -105,7 +106,9 @@ data class FunctionSignature(
     @JsonProperty("signature")
     val signature: SerializationSignature?,
     @JsonProperty("locals")
-    val locals: List<Local>?
+    val locals: List<Local>?,
+    @JsonProperty("code")
+    val code: String? = null
 )
 
 data class Local(val local: Int, val type: Int)
