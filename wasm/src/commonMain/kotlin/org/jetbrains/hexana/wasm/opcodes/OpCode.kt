@@ -186,6 +186,12 @@ object OpCodes {
             }
         }
 
+        class Load16_S(value: MemArg) : OpCode<MemArg>(value) {
+            companion object {
+                const val code: UByte = 0x2Eu
+            }
+        }
+
         class Load16_U(value: MemArg) : OpCode<MemArg>(value) {
             companion object {
                 const val code: UByte = 0x2Fu
@@ -721,6 +727,12 @@ object OpCodes {
     }
 
     object F64 {
+        class Load(value: MemArg) : OpCode<MemArg>(value) {
+            companion object {
+                val code: UByte = 0x2Bu
+            }
+        }
+
         object EQ : OpCode<Unit>(Unit) {
             const val code: UByte = 0x61u
         }
@@ -895,10 +907,10 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0x28u -> I32.Load(consumeMemArg())
         0x29u -> I64.Load(consumeMemArg())
         0x2Au -> F32.Load(consumeMemArg())
-        0x2Bu -> null // f64.load
+        0x2Bu -> F64.Load(consumeMemArg())
         0x2Cu -> I32.Load8_S(consumeMemArg())
         0x2Du -> I32.Load8_U(consumeMemArg())
-        0x2Eu -> null // i32.load16_s
+        0x2Eu -> I32.Load16_S(consumeMemArg())
         0x2Fu -> I32.Load16_U(consumeMemArg())
 
         0x30u -> I64.Load8_S(consumeMemArg())
