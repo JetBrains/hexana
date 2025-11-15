@@ -53,7 +53,8 @@ class WatIdentifierReference(
         if (parent.elementType == WatElementType.THROW || parent.elementType == WatElementType.CATCH) {
             return resolveTag(identifier.containingFile, identifier.text)
         }
-        return null
+
+        return resolveLocal(identifier)
     }
 
     override fun getCanonicalText(): @NlsSafe String {
@@ -123,6 +124,26 @@ class WatIdentifierReference(
     fun resolveTag(file: PsiFile?, tagName: String): PsiElement? {
         val module = getModule(file) ?: return null
         return findChildWithName<WatTagElement>(module, tagName)
+    }
+
+    fun resolveLocal(identifier: WatPsiIdentifierElement): PsiElement? {
+        val name = identifier.text
+        var stop: PsiElement = identifier
+        var parent = identifier.parent
+        while (parent != null && parent.elementType != WatElementType.MODULE) {
+            val children = parent.children
+            for (child in children) {
+                if (child is WatLocalElement && child.nameIdentifier?.textMatches(name) == true) {
+                    return child
+                }
+                else if (child == stop) {
+                    break
+                }
+            }
+            stop = parent
+            parent = parent.parent
+        }
+        return null
     }
 
     inline fun <reified T : PsiNameIdentifierOwner> findChildWithName(parent: PsiElement?, name: String): T? {

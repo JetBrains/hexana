@@ -127,4 +127,14 @@ class WatResolveTest : BasePlatformTestCase() {
                 (catch <caret>$1)))
         """)
     }
+
+    fun testLocal() {
+        doTest($$"""
+            (module
+              (func $1 
+                (local $0 i32)
+                (local (;TARGET;)$1 i32)
+                (local.set <caret>$1 (i32.const 10)))
+        """)
+    }
 }
