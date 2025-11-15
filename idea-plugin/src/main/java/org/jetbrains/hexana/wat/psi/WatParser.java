@@ -31,7 +31,7 @@ public class WatParser implements PsiParser {
         tokenMap.put(WatToken.GLOBAL_SET, WatElementType.GLOBAL_SET);
         tokenMap.put(WatToken.GLOBAL_GET, WatElementType.GLOBAL_GET);
         tokenMap.put(WatToken.THROW, WatElementType.THROW);
-        tokenMap.put(WatToken.CATCH, WatElementType.THROW);
+        tokenMap.put(WatToken.CATCH, WatElementType.CATCH);
         tokenMap.put(WatToken.OPEN_PAREN, WatElementType.SEXPR); // ()
     }
 
