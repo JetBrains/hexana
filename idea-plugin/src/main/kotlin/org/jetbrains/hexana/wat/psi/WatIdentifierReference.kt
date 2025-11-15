@@ -133,7 +133,7 @@ class WatIdentifierReference(
         while (parent != null && parent.elementType != WatElementType.MODULE) {
             val children = parent.children
             for (child in children) {
-                if (child is WatLocalElement && child.nameIdentifier?.textMatches(name) == true) {
+                if ((child is WatLocalElement || child is WatParamElement) && child.nameIdentifier?.textMatches(name) == true) {
                     return child
                 }
                 else if (child == stop) {

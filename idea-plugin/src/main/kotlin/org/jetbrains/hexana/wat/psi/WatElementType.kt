@@ -25,6 +25,7 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val THROW = WatElementType("THROW")
         @JvmField val CATCH = WatElementType("CATCH")
         @JvmField val LOCAL = WatElementType("LOCAL")
+        @JvmField val PARAM = WatElementType("PARAM")
         @JvmField val IDENTIFIER = WatElementType("IDENTIFIER")
     }
 }

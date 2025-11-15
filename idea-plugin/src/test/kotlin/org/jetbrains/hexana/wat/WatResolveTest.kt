@@ -137,4 +137,13 @@ class WatResolveTest : BasePlatformTestCase() {
                 (local.set <caret>$1 (i32.const 10)))
         """)
     }
+
+    fun testParam() {
+        doTest($$"""
+            (module
+              (func $1 (param $0 i32) (param (;TARGET;)$1 i32)
+                (local $2 i32)
+                (local.set <caret>$1 (i32.const 10)))
+        """)
+    }
 }

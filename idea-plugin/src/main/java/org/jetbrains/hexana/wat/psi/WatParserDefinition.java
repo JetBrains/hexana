@@ -70,6 +70,9 @@ public class WatParserDefinition implements ParserDefinition {
         if (node.getElementType() == WatElementType.LOCAL) {
             return new WatLocalElement(node);
         }
+        if (node.getElementType() == WatElementType.PARAM) {
+            return new WatParamElement(node);
+        }
         return new WatPsiElement(node);
     }
 

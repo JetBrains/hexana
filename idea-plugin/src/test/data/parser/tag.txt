@@ -14,7 +14,7 @@ Wat File
         PsiElement(identifier)('$0')
       PsiElement())(')')
     PsiWhiteSpace(' ')
-    WatPsiElement(SEXPR)
+    WatParamElement(PARAM)
       PsiElement(()('(')
       PsiElement(param)('param')
       PsiWhiteSpace(' ')
