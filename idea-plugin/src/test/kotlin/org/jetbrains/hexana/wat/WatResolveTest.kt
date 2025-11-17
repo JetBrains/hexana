@@ -226,7 +226,7 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
-    fun testLocal() {
+    fun testLocalSet() {
         doTest($$"""
             (module
               (func $1 
@@ -236,13 +236,53 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
-    fun testLocalByIndex() {
+    fun testLocalSetByIndex() {
         doTest($$"""
             (module
               (func $1 (param $0 i32)
                 (local $l0 i32)
                 (local (;TARGET;)$l1 i32)
                 (local.set <caret>2 (i32.const 10)))
+        """)
+    }
+
+    fun testLocalGet() {
+        doTest($$"""
+            (module
+              (func $1 
+                (local $0 i32)
+                (local (;TARGET;)$1 i32)
+                (local.get <caret>$1 (i32.const 10)))
+        """)
+    }
+
+    fun testLocalGetByIndex() {
+        doTest($$"""
+            (module
+              (func $1 (param $0 i32)
+                (local $l0 i32)
+                (local (;TARGET;)$l1 i32)
+                (local.get <caret>2 (i32.const 10)))
+        """)
+    }
+
+    fun testLocalTee() {
+        doTest($$"""
+            (module
+              (func $1 
+                (local $0 i32)
+                (local (;TARGET;)$1 i32)
+                (local.tee <caret>$1 (i32.const 10)))
+        """)
+    }
+
+    fun testLocalTeeByIndex() {
+        doTest($$"""
+            (module
+              (func $1 (param $0 i32)
+                (local $l0 i32)
+                (local (;TARGET;)$l1 i32)
+                (local.tee <caret>2 (i32.const 10)))
         """)
     }
 

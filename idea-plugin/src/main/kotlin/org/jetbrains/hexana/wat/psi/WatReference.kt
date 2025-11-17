@@ -1,11 +1,13 @@
 package org.jetbrains.hexana.wat.psi
 
+import com.intellij.lang.tree.util.children
 import com.intellij.openapi.util.NlsSafe
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiNameIdentifierOwner
 import com.intellij.psi.PsiReference
+import com.intellij.psi.tree.IElementType
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.elementType
 
@@ -53,7 +55,11 @@ class WatReference(
         if (parent.elementType == WatElementType.THROW || parent.elementType == WatElementType.CATCH) {
             return resolveTag(nameOrIndex.containingFile, nameOrIndex)
         }
-        return resolveLocal(nameOrIndex)
+        val exprType = getExprToken(parent)
+        if (exprType == WatToken.LOCAL_SET || exprType == WatToken.LOCAL_GET || exprType == WatToken.LOCAL_TEE) {
+            return resolveLocal(nameOrIndex)
+        }
+        return null
     }
 
     override fun getCanonicalText(): @NlsSafe String {
@@ -284,4 +290,11 @@ class WatReference(
         }
     }
 
+    fun getExprToken(expr: PsiElement?): IElementType? {
+        if (expr?.elementType == WatElementType.SEXPR) {
+            val withoutParen = expr.node.children().drop(1)
+            return withoutParen.firstOrNull()?.elementType
+        }
+        return null
+    }
 }
