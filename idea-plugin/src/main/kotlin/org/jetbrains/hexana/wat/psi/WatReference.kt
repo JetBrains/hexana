@@ -59,6 +59,11 @@ class WatReference(
         if (exprType == WatToken.LOCAL_SET || exprType == WatToken.LOCAL_GET || exprType == WatToken.LOCAL_TEE) {
             return resolveLocal(nameOrIndex)
         }
+        if (exprType == WatToken.BR || exprType == WatToken.BR_IF || exprType == WatToken.BR_TABLE ||
+            exprType == WatToken.BR_ON_NULL || exprType == WatToken.BR_ON_NON_NULL ||
+            exprType == WatToken.BR_ON_CAST || exprType == WatToken.BR_ON_CAST_FAIL) {
+            return resolveLabel(nameOrIndex)
+        }
         return null
     }
 
@@ -224,6 +229,41 @@ class WatReference(
                 }
                 currentIndex++
             }
+        }
+        return null
+    }
+
+    fun resolveLabel(nameOrIndex: WatPsiElement): PsiElement? {
+        return resolveByNameOrIndex(
+            nameOrIndex.containingFile,
+            nameOrIndex,
+            { _, name -> resolveLabelByName(nameOrIndex as WatPsiIdentifierElement, name) },
+            { _, index -> resolveLabelByIndex(nameOrIndex as WatPsiNumberElement, index) }
+        )
+    }
+
+    fun resolveLabelByName(identifier: WatPsiIdentifierElement, name: String): PsiElement? {
+        var e: PsiElement? = identifier
+        while (e != null) {
+            val labelOwner = PsiTreeUtil.getParentOfType(e, WatLabelOwner::class.java)
+            if (labelOwner?.nameIdentifier?.textMatches(name) == true) {
+                return labelOwner
+            }
+            e = labelOwner
+        }
+        return null
+    }
+
+    fun resolveLabelByIndex(number: WatPsiNumberElement, index: Int): PsiElement? {
+        var e: PsiElement? = number
+        var currentIndex = 0
+        while (e != null) {
+            val labelOwner = PsiTreeUtil.getParentOfType(e, WatLabelOwner::class.java)
+            if (currentIndex == index) {
+                return labelOwner
+            }
+            currentIndex++
+            e = labelOwner
         }
         return null
     }

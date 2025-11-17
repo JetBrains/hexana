@@ -78,6 +78,15 @@ public class WatParserDefinition implements ParserDefinition {
         if (nodeType == WatElementType.PARAM) {
             return new WatParamElement(node);
         }
+        if (nodeType == WatElementType.BLOCK) {
+            return new WatBlockElement(node);
+        }
+        if (nodeType == WatElementType.LOOP) {
+            return new WatLoopElement(node);
+        }
+        if (nodeType == WatElementType.IF) {
+            return new WatIfElement(node);
+        }
         return new WatPsiElement(node);
     }
 

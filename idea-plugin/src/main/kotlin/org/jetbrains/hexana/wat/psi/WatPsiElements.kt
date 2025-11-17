@@ -55,3 +55,11 @@ class WatTagElement(node: ASTNode) : WatNameIdentifierOwner(node)
 class WatLocalElement(node: ASTNode) : WatNameIdentifierOwner(node)
 
 class WatParamElement(node: ASTNode) : WatNameIdentifierOwner(node)
+
+open class WatLabelOwner(node: ASTNode) : WatNameIdentifierOwner(node)
+
+class WatBlockElement(node: ASTNode) : WatLabelOwner(node)
+
+class WatLoopElement(node: ASTNode) : WatLabelOwner(node)
+
+class WatIfElement(node: ASTNode) : WatLabelOwner(node)

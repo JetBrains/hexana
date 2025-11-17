@@ -321,4 +321,224 @@ class WatResolveTest : BasePlatformTestCase() {
                 (local.set <caret>1 (i32.const 10)))
         """)
     }
+
+    fun testBlock() {
+        doTest($$"""
+            (module
+              (func $1)
+                (block (;TARGET;)$L1
+                  (loop $L2
+                    (if $L3
+                      (br <caret>$L1)))))
+        """)
+    }
+
+    fun testBlockByIndex() {
+        doTest($$"""
+            (module
+              (func $1)
+                (block (;TARGET;)$L1
+                  (loop $L2
+                    (if $L3
+                      (br <caret>2)))))
+        """)
+    }
+
+    fun testLoop() {
+        doTest($$"""
+            (module
+              (func $1)
+                (loop (;TARGET;)$L1
+                  (block $L2
+                    (if $L3
+                      (br <caret>$L1)))))
+        """)
+    }
+
+    fun testLoopByIndex() {
+        doTest($$"""
+            (module
+              (func $1)
+                (loop (;TARGET;)$L1
+                  (block $L2
+                    (if $L3
+                      (br <caret>2)))))
+        """)
+    }
+
+    fun testIf() {
+        doTest($$"""
+            (module
+              (func $1)
+                (if (;TARGET;)$L1
+                  (block $L2
+                    (loop $L3
+                      (br <caret>$L1)))))
+        """)
+    }
+
+    fun testIfByIndex() {
+        doTest($$"""
+            (module
+              (func $1)
+                (if (;TARGET;)$L1
+                  (block $L2
+                    (loop $L3
+                      (br <caret>2)))))
+        """)
+    }
+
+    fun testBr() {
+        doTest($$"""
+            (module
+              (func $1)
+                (if (;TARGET;)$L1
+                  (block $L2
+                    (loop $L3
+                      (br <caret>$L1)))))
+        """)
+    }
+
+    fun testBrByIndex() {
+        doTest($$"""
+            (module
+              (func $1)
+                (if (;TARGET;)$L1
+                  (block $L2
+                    (loop $L3
+                      (br <caret>2)))))
+        """)
+    }
+
+    fun testBrIf() {
+        doTest($$"""
+            (module
+              (func $1)
+                (if (;TARGET;)$L1
+                  (block $L2
+                    (loop $L3
+                      (br_if <caret>$L1)))))
+        """)
+    }
+
+    fun testBrIfByIndex() {
+        doTest($$"""
+            (module
+              (func $1)
+                (if (;TARGET;)$L1
+                  (block $L2
+                    (loop $L3
+                      (br_if <caret>2)))))
+        """)
+    }
+
+    fun testBrTable() {
+        doTest($$"""
+            (module
+              (func $1)
+                (if (;TARGET;)$L1
+                  (block $L2
+                    (loop $L3
+                      (br_table $b3 $b2 <caret>$L1 (local.get 0))))))
+        """)
+    }
+
+    fun testBrTableByIndex() {
+        doTest($$"""
+            (module
+              (func $1)
+                (if (;TARGET;)$L1
+                  (block $L2
+                    (loop $L3
+                      (br_table 0 1 <caret>2 (local.get 0))))))
+        """)
+    }
+
+    fun testBrOnNull() {
+        doTest($$"""
+            (module
+              (func $1)
+                (block (;TARGET;)$L1
+                  (if $L2
+                    (loop $L3
+                      (br_on_null <caret>$L1)))))
+        """)
+    }
+
+    fun testBrOnNullByIndex() {
+        doTest($$"""
+            (module
+              (func $1)
+                (block (;TARGET;)$L1
+                  (if $L2
+                    (loop $L3
+                      (br_on_null <caret>2)))))
+        """)
+    }
+
+    fun testBrOnNonNull() {
+        doTest($$"""
+            (module
+              (func $1)
+                (block (;TARGET;)$L1
+                  (if $L2
+                    (loop $L3
+                      (br_on_non_null <caret>$L1)))))
+        """)
+    }
+
+    fun testBrOnNonNullByIndex() {
+        doTest($$"""
+            (module
+              (func $1)
+                (block (;TARGET;)$L1
+                  (if $L2
+                    (loop $L3
+                      (br_on_non_null <caret>2)))))
+        """)
+    }
+
+    fun testBrOnCast() {
+        doTest($$"""
+            (module
+              (func $1)
+                (block (;TARGET;)$L1
+                  (if $L2
+                    (loop $L3
+                      (br_on_cast <caret>$L1 (ref $child_struct))))))
+        """)
+    }
+
+    fun testBrOnCastByIndex() {
+        doTest($$"""
+            (module
+              (func $1)
+                (block (;TARGET;)$L1
+                  (if $L2
+                    (loop $L3
+                      (br_on_cast <caret>2 (ref $child_struct))))))
+        """)
+    }
+
+    fun testBrOnCastFail() {
+        doTest($$"""
+            (module
+              (func $1)
+                (block (;TARGET;)$L1
+                  (if $L2
+                    (loop $L3
+                      (br_on_cast_fail <caret>$L1 (ref $child_struct))))))
+        """)
+    }
+
+    fun testBrOnCastFailByIndex() {
+        doTest($$"""
+            (module
+              (func $1)
+                (block (;TARGET;)$L1
+                  (if $L2
+                    (loop $L3
+                      (br_on_cast_fail <caret>2 (ref $child_struct))))))
+        """)
+    }
 }

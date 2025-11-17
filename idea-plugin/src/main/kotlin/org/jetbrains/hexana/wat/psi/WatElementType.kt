@@ -28,5 +28,8 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val PARAM = WatElementType("PARAM")
         @JvmField val IDENTIFIER = WatElementType("IDENTIFIER")
         @JvmField val NUMBER = WatElementType("NUMBER")
+        @JvmField val BLOCK = WatElementType("BLOCK")
+        @JvmField val LOOP = WatElementType("LOOP")
+        @JvmField val IF = WatElementType("IF")
     }
 }
