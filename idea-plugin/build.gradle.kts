@@ -2,6 +2,9 @@ plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.intellij.platform") version "2.5.0"
+    // Compose compiler plugin from version catalog
+    alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.compose.multiplatform)
 }
 
 repositories {
@@ -24,7 +27,11 @@ dependencies {
 
     implementation(project(":encdec"))
     implementation(project(":wasm"))
+    implementation(project(":ui"))
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.20.0")
+
+    // JetBrains Compose for Desktop (AWT/Swing interop via ComposePanel)
+    implementation(compose.desktop.currentOs)
 
     testImplementation("junit:junit:4.13.2")
 }
@@ -56,4 +63,12 @@ tasks {
 
 kotlin {
     jvmToolchain(21)
+}
+
+// Exclude standard kotlin coroutines from runtime / testRuntime since IDEA is using its own implementation
+configurations.matching { it.name.endsWith("RuntimeClasspath") }.configureEach {
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-swing")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-jdk8")
 }

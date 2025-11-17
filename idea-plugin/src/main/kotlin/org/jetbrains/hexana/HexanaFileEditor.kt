@@ -1,70 +1,37 @@
 package org.jetbrains.hexana
 
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.ui.AncestorListenerAdapter
-import com.intellij.ui.JBColor
-import com.intellij.ui.components.JBScrollPane
+import org.jetbrains.compose.ui.createComposePanel
 import org.jetbrains.annotations.Nls
+import org.jetbrains.compose.ui.createHexEditView
 import java.awt.BorderLayout
-import java.awt.Font
-import java.awt.Rectangle
 import java.beans.PropertyChangeListener
 import javax.swing.JComponent
 import javax.swing.JPanel
-import javax.swing.JTextArea
-import javax.swing.ScrollPaneConstants
-import javax.swing.event.AncestorEvent
-import javax.swing.text.DefaultHighlighter
-
 
 class HexanaFileEditor(
     val myProject: Project,
     val myFile: VirtualFile
-): FileEditor, UserDataHolderBase() {
+) : FileEditor, UserDataHolderBase() {
     val panel: JPanel
 
     init {
         panel = JPanel(BorderLayout())
-        val textArea = JTextArea()
-        textArea.isEditable = false
-        textArea.setFont(Font(Font.MONOSPACED, Font.PLAIN, 14))
+        // TODO: 🐛 if we will have the same code in init section without moving it to a separate method
+        // all closure variables will be lost
+        initPanel()
+    }
 
+    fun initPanel() {
         val file = WasmFsUtil.getLocalFile(myFile) ?: myFile
         val buf = file.contentsToByteArray();
-        val doc = HexanaDocument(buf)
-        textArea.setDocument(doc)
-        val scrollPane = JBScrollPane(textArea)
-        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-
-        val range = WasmFsUtil.getRange(myFile)
-        if (range != null && range.first < Int.MAX_VALUE && range.last < Int.MAX_VALUE) {
-            val highlighter = textArea.highlighter
-            val color = JBColor.LIGHT_GRAY
-            val textRange = doc.byteRangeToTextRange(IntRange(range.first.toInt(), range.last.toInt()))
-            highlighter?.addHighlight(textRange.first, textRange.last, DefaultHighlighter.DefaultHighlightPainter(color))
-            textArea.addAncestorListener(object: AncestorListenerAdapter() {
-                override fun ancestorAdded(event: AncestorEvent?) {
-                    ApplicationManager.getApplication().invokeLater {
-                        val rect = textArea.modelToView2D(textRange.first)
-                        if (rect != null) {
-                            val scrolledToTopRect = Rectangle(
-                                rect.x.toInt(),
-                                rect.y.toInt() + (scrollPane.height * 0.9).toInt(),
-                                rect.width.toInt(),
-                                rect.height.toInt())
-                            textArea.scrollRectToVisible(scrolledToTopRect.bounds)
-                        }
-                    }
-                }
-            })
-        }
-
-        panel.add(scrollPane, BorderLayout.CENTER)
+        panel.add(createComposePanel {
+            createHexEditView(buf)
+        })
     }
 
     override fun getComponent(): JComponent {
