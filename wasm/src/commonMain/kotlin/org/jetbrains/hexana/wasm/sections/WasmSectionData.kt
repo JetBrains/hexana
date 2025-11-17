@@ -31,7 +31,8 @@ class WasmSectionData(size: Int, offset: Int): WasmSection(size, offset) {
     }
 
     private fun CommonByteBuffer.fetchDataArray(): ByteArray = buildList {
-        consumeArray { add(get()) }
+        // TODO: 🐛 without this@fetchDataArray this will fail in JS (and it shouldn't)
+        consumeArray { add(this@fetchDataArray.get()) }
     }.toByteArray()
 }
 
