@@ -13,15 +13,19 @@ import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordActive
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordActiveWithMemoryIndex
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordPassive
-import org.jetbrains.hexana.wasm.sections.WasmSectionTypesRecord
 import org.jetbrains.hexana.wasm.sections.WasmF32Type
 import org.jetbrains.hexana.wasm.sections.WasmF64Type
+import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmGlobalExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
 import org.jetbrains.hexana.wasm.sections.WasmI64Type
+import org.jetbrains.hexana.wasm.sections.WasmMemoryExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmNumType
 import org.jetbrains.hexana.wasm.sections.WasmPactTypeI16
 import org.jetbrains.hexana.wasm.sections.WasmPactTypeI8
 import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
+import org.jetbrains.hexana.wasm.sections.WasmTableExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmTagExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmValueType
@@ -39,6 +43,39 @@ internal fun CommonByteBuffer.listDataSections(wasmModule: WasmModule?): List<Da
             is WasmDataRecordActiveWithMemoryIndex -> DataEntry(2, index, record.offset, record.data, record.memoryIndex, record.expression.wat())
             else -> null
         }
+    }
+}
+
+internal fun CommonByteBuffer.listExports(wasmModule: WasmModule?): List<WasmExportRecord> {
+    wasmModule ?: return emptyList()
+    val records = with(wasmModule.exportSection) {
+        this ?: return@with emptyList()
+        this@listExports.scan()
+    }
+    return records.mapNotNull {
+        when(it) {
+            is WasmTagExportRecordEntry -> WasmExportRecord(it.name, it.index.toLong(), it.externType)
+            is WasmFunctionExportRecordEntry -> WasmExportRecord(it.name, it.index.toLong(), it.externType)
+            is WasmGlobalExportRecordEntry -> WasmExportRecord(it.name, it.index.toLong(), it.externType)
+            is WasmMemoryExportRecordEntry -> WasmExportRecord(it.name, it.index.toLong(), it.externType)
+            is WasmTableExportRecordEntry -> WasmExportRecord(it.name, it.index.toLong(), it.externType)
+            else -> null
+        }
+    }
+}
+
+internal fun CommonByteBuffer.listExportedFunctions(wasmModule: WasmModule?): List<WasmExportFunctionRecord> {
+    wasmModule ?: return emptyList()
+    val records = with(wasmModule.exportSection) {
+        this ?: return@with emptyList()
+        this@listExportedFunctions.scan()
+    }
+    val functions = listFunctions(wasmModule)
+    return records
+        .filter { it is WasmFunctionExportRecordEntry }
+        .map { it as WasmFunctionExportRecordEntry }.mapNotNull {
+            val function = functions.getOrNull(it.index.toInt()) ?: return@mapNotNull null
+            WasmExportFunctionRecord(it.name, function)
     }
 }
 internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<FunctionSignature> {
@@ -149,6 +186,7 @@ data class DataEntry(val kind:Int, val index: Int, val offset: Long, val data: B
 
 }
 
+data class WasmExportFunctionRecord(val name: String, val signature: FunctionSignature)
 data class ImportSignature(
     @JsonProperty("module")
     val module: String,
@@ -179,6 +217,8 @@ data class ParameterSignature(
     @JsonProperty("return")
     val ret: List<String>
 ) : SerializationSignature
+
+data class WasmExportRecord(val name: String, val externIndex: Long, val kind: Byte)
 
 interface SerializationSignature
 
