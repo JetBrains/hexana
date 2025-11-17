@@ -27,5 +27,6 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val LOCAL = WatElementType("LOCAL")
         @JvmField val PARAM = WatElementType("PARAM")
         @JvmField val IDENTIFIER = WatElementType("IDENTIFIER")
+        @JvmField val NUMBER = WatElementType("NUMBER")
     }
 }

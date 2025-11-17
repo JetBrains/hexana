@@ -17,6 +17,7 @@ Wat File
       PsiElement(()('(')
       PsiElement(i32.const)('i32.const')
       PsiWhiteSpace(' ')
-      PsiElement(number)('0')
+      WatPsiNumberElement(NUMBER)
+        PsiElement(number)('0')
       PsiElement())(')')
     PsiElement())(')')

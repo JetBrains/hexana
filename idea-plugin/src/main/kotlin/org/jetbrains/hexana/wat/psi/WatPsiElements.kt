@@ -11,10 +11,15 @@ open class WatPsiElement(node: ASTNode) : ASTWrapperPsiElement(node), PsiElement
 
 class WatPsiIdentifierElement(node: ASTNode) : WatPsiElement(node) {
     override fun getReference(): PsiReference {
-        return WatIdentifierReference(this)
+        return WatReference(this)
     }
 }
 
+class WatPsiNumberElement(node: ASTNode) : WatPsiElement(node) {
+    override fun getReference(): PsiReference {
+        return WatReference(this)
+    }
+}
 
 abstract class WatNameIdentifierOwner(node: ASTNode) : WatPsiElement(node), PsiNameIdentifierOwner {
     override fun getNameIdentifier(): PsiElement? {

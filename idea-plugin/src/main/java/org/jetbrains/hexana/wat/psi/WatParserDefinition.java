@@ -8,6 +8,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.psi.FileViewProvider;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.IFileElementType;
 import com.intellij.psi.tree.TokenSet;
 import org.jetbrains.annotations.NotNull;
@@ -49,28 +50,32 @@ public class WatParserDefinition implements ParserDefinition {
     @NotNull
     @Override
     public PsiElement createElement(ASTNode node) {
-        if (node.getElementType() == WatElementType.IDENTIFIER) {
+        IElementType nodeType = node.getElementType();
+        if (nodeType == WatElementType.IDENTIFIER) {
             return new WatPsiIdentifierElement(node);
         }
-        if (node.getElementType() == WatElementType.FUNC) {
+        if (nodeType == WatElementType.NUMBER) {
+            return new WatPsiNumberElement(node);
+        }
+        if (nodeType == WatElementType.FUNC) {
             return new WatFuncElement(node);
         }
-        if (node.getElementType() == WatElementType.TABLE) {
+        if (nodeType == WatElementType.TABLE) {
             return new WatTableElement(node);
         }
-        if (node.getElementType() == WatElementType.TYPE) {
+        if (nodeType == WatElementType.TYPE) {
             return new WatTypeElement(node);
         }
-        if (node.getElementType() == WatElementType.GLOBAL) {
+        if (nodeType == WatElementType.GLOBAL) {
             return new WatGlobalElement(node);
         }
-        if (node.getElementType() == WatElementType.TAG) {
+        if (nodeType == WatElementType.TAG) {
             return new WatTagElement(node);
         }
-        if (node.getElementType() == WatElementType.LOCAL) {
+        if (nodeType == WatElementType.LOCAL) {
             return new WatLocalElement(node);
         }
-        if (node.getElementType() == WatElementType.PARAM) {
+        if (nodeType == WatElementType.PARAM) {
             return new WatParamElement(node);
         }
         return new WatPsiElement(node);

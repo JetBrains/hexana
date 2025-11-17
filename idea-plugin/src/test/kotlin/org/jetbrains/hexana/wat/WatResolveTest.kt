@@ -41,6 +41,16 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testCallRefByIndex() {
+        doTest($$"""
+            (module
+              (import "env" "f0" (func $f0))
+              (func (;TARGET;)$f1 (param $x i64) (result i64)
+                (call <caret>1 (local.get $x)))
+              (func $f2))
+        """)
+    }
+
     fun testCallRefToImport() {
         doTest($$"""
             (module
@@ -52,12 +62,34 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testCallRefToImportByIndex() {
+        doTest($$"""
+            (module
+              (import "env" "f0" (func $f0))
+              (func) 
+              (import "env" "f1" (func (;TARGET;)$f1))
+              (import "env" "f2" (func $f2))
+              (func 
+                (call <caret>2)))
+        """)
+    }
+
     fun testExportFunc() {
         doTest($$"""
             (module
               (export "f" (func <caret>$1))
               (func $0)
               (func (;TARGET;)$1)
+              (func $2))
+        """)
+    }
+
+    fun testExportFuncByIndex() {
+        doTest($$"""
+            (module
+              (export "f" (func <caret>1))
+              (func $0)
+              (func (;TARGET;)$f)
               (func $2))
         """)
     }
@@ -72,11 +104,32 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testTableRefByIndex() {
+        doTest($$"""
+            (module
+              (table $t0 1 1 funcref)
+              (table (;TARGET;)$t1 1 1 funcref)
+              (table $t2 1 1 funcref)
+              (elem <caret>1 (i32.const 0) $f))
+        """)
+    }
+
     fun testFuncElem() {
         doTest($$"""
             (module
               (table $t0 3 3 funcref)
               (elem $t0 (i32.const 0) $f0 <caret>$f1 $f2)
+              (func $f0)
+              (func (;TARGET;)$f1)
+              (func $f2))
+        """)
+    }
+
+    fun testFuncElemByIndex() {
+        doTest($$"""
+            (module
+              (table $t0 3 3 funcref)
+              (elem $t0 (i32.const 0) $f0 <caret>1 $f2)
               (func $f0)
               (func (;TARGET;)$f1)
               (func $f2))
@@ -92,12 +145,30 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testTypeCallIndirectByIndex() {
+        doTest($$"""
+            (module
+              (type (;TARGET;)$t1 0 (func))
+              (func $1
+                (call_indirect (type <caret>0))))
+        """)
+    }
+
     fun testGlobalSet() {
         doTest($$"""
             (module
               (global (;TARGET;)$1 (mut i32) (i32.const 0))
               (func $1
                 (global.set <caret>$1 (i32.const 1))))
+        """)
+    }
+
+    fun testGlobalSetByIndex() {
+        doTest($$"""
+            (module
+              (global (;TARGET;)$g1 (mut i32) (i32.const 0))
+              (func $1
+                (global.set <caret>0 (i32.const 1))))
         """)
     }
 
@@ -110,6 +181,15 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testGlobalGetByIndex() {
+        doTest($$"""
+            (module
+              (global (;TARGET;)$g1 (mut i32) (i32.const 0))
+              (func $1
+                (global.get <caret>0)))
+        """)
+    }
+
     fun testTagThrow() {
         doTest($$"""
             (module
@@ -119,12 +199,30 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testTagThrowIndex() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$tag1 (type $0) (param i32))
+              (func $1
+                (throw <caret>0 (i32.const 0))))
+        """)
+    }
+
     fun testTagCatch() {
         doTest($$"""
             (module
               (tag (;TARGET;)$1 (type $0) (param i32))
               (func $1
                 (catch <caret>$1)))
+        """)
+    }
+
+    fun testTagCatchByIndex() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$tag1 (type $0) (param i32))
+              (func $1
+                (catch <caret>0)))
         """)
     }
 
@@ -138,12 +236,31 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testLocalByIndex() {
+        doTest($$"""
+            (module
+              (func $1 (param $0 i32)
+                (local $l0 i32)
+                (local (;TARGET;)$l1 i32)
+                (local.set <caret>2 (i32.const 10)))
+        """)
+    }
+
     fun testParam() {
         doTest($$"""
             (module
               (func $1 (param $0 i32) (param (;TARGET;)$1 i32)
                 (local $2 i32)
                 (local.set <caret>$1 (i32.const 10)))
+        """)
+    }
+
+    fun testParamByIndex() {
+        doTest($$"""
+            (module
+              (func $1 (param $0 i32) (param (;TARGET;)$1 i32)
+                (local $2 i32)
+                (local.set <caret>1 (i32.const 10)))
         """)
     }
 }

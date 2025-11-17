@@ -80,6 +80,11 @@ public class WatParser implements PsiParser {
                 b.advanceLexer();
                 m.done(WatElementType.IDENTIFIER);
                 continue;
+            } else if (token == WatToken.NUMBER) {
+                PsiBuilder.Marker m = b.mark();
+                b.advanceLexer();
+                m.done(WatElementType.NUMBER);
+                continue;
             }
 
             if (prevToken == WatToken.OPEN_PAREN) {
