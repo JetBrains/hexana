@@ -44,7 +44,7 @@ class WatReference(
         }
         if (parent.elementType == WatElementType.TYPE) {
             val grandParent = parent.parent
-            if (grandParent?.elementType == WatElementType.CALL_INDIRECT) {
+            if (grandParent is WatFuncElement || grandParent?.elementType == WatElementType.CALL_INDIRECT) {
                 return resolveType(nameOrIndex.containingFile, nameOrIndex)
             }
             return null

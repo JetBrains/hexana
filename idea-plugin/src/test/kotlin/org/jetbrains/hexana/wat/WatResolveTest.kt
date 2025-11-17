@@ -154,6 +154,24 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testTypeInFunc() {
+        doTest($$"""
+            (module
+              (type (;TARGET;)$1 (func))
+              (func $1 (type <caret>$1)
+                ))
+        """)
+    }
+
+    fun testTypeInFuncByIndex() {
+        doTest($$"""
+            (module
+              (type (;TARGET;)$1 (func))
+              (func $1 (type <caret>0)
+                ))
+        """)
+    }
+
     fun testGlobalSet() {
         doTest($$"""
             (module
