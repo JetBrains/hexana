@@ -17,7 +17,7 @@ import org.jetbrains.hexana.wasm.sections.WasmSectionMemory
 import org.jetbrains.hexana.wasm.sections.WasmSectionStart
 import org.jetbrains.hexana.wasm.sections.WasmSectionTable
 import org.jetbrains.hexana.wasm.sections.WasmSectionTypes
-import org.jetbrains.hexana.wasm.sections.WasmSectionTypesRecord
+import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 
 class WasmModule(
     val customSection: WasmSectionCustom? = null,
@@ -107,10 +107,10 @@ class WasmModule(
             scan()
         }
 
-        return functions.map { types[it] }.zip(bodies).map { (signature, body) ->
+        return functions.map { types[it] as WasmSectionFunctionTypeRecord }.zip(bodies).map { (signature, body) ->
             FunctionRecord(signature, body)
         }
     }
 }
 
-data class FunctionRecord(val signature: WasmSectionTypesRecord, val body: WasmCodeRecord)
+data class FunctionRecord(val signature: WasmSectionFunctionTypeRecord, val body: WasmCodeRecord)

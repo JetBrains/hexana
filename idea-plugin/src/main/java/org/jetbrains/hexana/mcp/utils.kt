@@ -10,13 +10,21 @@ import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
-import org.jetbrains.hexana.wasm.sections.TypeId
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordActive
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordActiveWithMemoryIndex
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordPassive
 import org.jetbrains.hexana.wasm.sections.WasmSectionTypesRecord
+import org.jetbrains.hexana.wasm.sections.WasmF32Type
+import org.jetbrains.hexana.wasm.sections.WasmF64Type
+import org.jetbrains.hexana.wasm.sections.WasmI32Type
+import org.jetbrains.hexana.wasm.sections.WasmI64Type
+import org.jetbrains.hexana.wasm.sections.WasmNumType
+import org.jetbrains.hexana.wasm.sections.WasmPactTypeI16
+import org.jetbrains.hexana.wasm.sections.WasmPactTypeI8
+import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
-
+import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
+import org.jetbrains.hexana.wasm.sections.WasmValueType
 
 
 internal fun CommonByteBuffer.listDataSections(wasmModule: WasmModule?): List<DataEntry> {
@@ -45,7 +53,7 @@ internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<Funct
         this@listFunctions.scan()
     }
     val signatures = records.mapIndexedNotNull { index, typeIndex  ->
-        types.getOrNull(typeIndex)?.toSignature()?.let { signature ->
+        (types.getOrNull(typeIndex) as? WasmSectionFunctionTypeRecord)?.toSignature()?.let { signature ->
             FunctionSignature(
                 index,
                 codes.getOrNull(index)?.offset,
@@ -77,7 +85,7 @@ internal fun CommonByteBuffer.importSymbols(
     return signatures
 }
 
-internal fun CommonByteBuffer.types(wasmModule: WasmModule): List<WasmSectionTypesRecord> =
+internal fun CommonByteBuffer.types(wasmModule: WasmModule): List<WasmTypeRecord> =
     with(wasmModule.typesSection) {
         this ?: return@with emptyList()
         parseTypes()
@@ -87,24 +95,27 @@ val objectMapper = jacksonObjectMapper().apply {
     registerModule(KotlinModule.Builder().build())
 }
 
-fun WasmTypeIndexExternalType.toSignature(types: List<WasmSectionTypesRecord>): ParameterSignature? {
+fun WasmTypeIndexExternalType.toSignature(types: List<WasmTypeRecord>): ParameterSignature? {
     val typeIndex = index.toInt()
     val rawSignature = types.getOrNull(typeIndex)
-    return rawSignature?.toSignature()
+    return (rawSignature as? WasmSectionFunctionTypeRecord)?.toSignature()
 }
 
-fun WasmSectionTypesRecord.toSignature(): ParameterSignature {
+fun WasmSectionFunctionTypeRecord.toSignature(): ParameterSignature {
     return ParameterSignature(
         this.params.map { it.toSignature() },
         this.retTypes.map { it.toSignature() })
 }
 
-fun TypeId.toSignature(): String {
-    when (this) {
-        is TypeId.TYPE_F32 -> return "f32"
-        is TypeId.TYPE_F64 -> return "f64"
-        is TypeId.TYPE_I32 -> return "i32"
-        is TypeId.TYPE_I64 -> return "i64"
+fun WasmValueType<*>.toSignature(): String {
+    return when (this) {
+        is WasmF32Type -> "f32"
+        is WasmF64Type -> "f64"
+        is WasmI32Type -> "i32"
+        is WasmI64Type -> "i64"
+        is WasmPactTypeI8 -> "i8"
+        is WasmPactTypeI16 -> "i16"
+        else -> "unknown"
     }
 }
 
