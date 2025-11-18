@@ -193,4 +193,182 @@ class HexanaToolset : McpToolset {
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listDataSections(wasmModule))
     }
+
+    @McpTool("list_exports")
+    @McpDescription(
+        """
+    Extracts all exports from a WebAssembly (.wasm) module and returns
+    them as a list of ExportRecord objects:
+    
+        data class ExportRecord(
+            val name: String,
+            val externIndex: Long,
+            val kind: Byte
+        )
+
+    ───────────────────────────────────────────────────────────────
+    🧩 What this tool does
+    Parses the WebAssembly Export section and returns all exported
+    functions, memories, tables, and globals in a structured format.
+    
+    Fields:
+      • name — the name under which the item is exported
+      • externIndex — the index into the function/table/memory/global space
+      • kind — numeric tag following the WebAssembly spec:
+            0 = function
+            1 = table
+            2 = memory
+            3 = global
+
+    ───────────────────────────────────────────────────────────────
+    📘 Example response
+
+        {
+          "exports": [
+            {
+              "name": "add",
+              "externIndex": 1,
+              "kind": 0
+            },
+            {
+              "name": "memory",
+              "externIndex": 0,
+              "kind": 2
+            }
+          ]
+        }
+
+     ───────────────────────────────────────────────────────────────
+    🔧 Command-line equivalents for validation
+
+      wasm-tools:
+        wasm-tools print module.wasm --details --exports
+
+      wasm-objdump:
+        wasm-objdump -x module.wasm | grep export
+
+    ───────────────────────────────────────────────────────────────
+    📌 Notes
+    • Output format is stable for LLM processing.
+    • This tool is analogous to "exports" view in wasm-objdump,
+      but returns structured JSON instead of textual output.
+    """
+    )
+    suspend fun listExports(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
+    ): String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.listExports(wasmModule))
+    }
+
+    @McpTool("list_exported_functions")
+    @McpDescription(
+        """
+    Extracts exported functions from a WebAssembly (.wasm) module and returns
+    them as JSON-serialized WasmExportFunctionRecord objects:
+
+        data class WasmExportFunctionRecord(
+            val name: String,
+            val signature: WasmSignature
+        )
+
+    The 'signature' field is a polymorphic structure implementing WasmSignature,
+    with two possible concrete variants:
+
+    ───────────────────────────────────────────────────────────────
+    🧩 1. ImportSignature  (for exported imported functions)
+
+        data class ImportSignature(
+            val module: String,
+            val name: String,
+            val signature: SerializationSignature?
+        )
+
+      • module   — the module path of the import ("env", "wasi_snapshot_preview1", etc.)
+      • name     — the imported function's name
+      • signature — optional parameter/result type information
+
+      These appear when a module re-exports an imported function, e.g.:
+
+          (import "env" "log" (func ${'$'}log (param i32)))
+          (export "log" (func ${'$'}log))
+
+    ───────────────────────────────────────────────────────────────
+    🧩 2. FunctionSignature  (for exported internally-defined functions)
+
+        data class FunctionSignature(
+            val index: Int,
+            val offset: Long?,
+            val signature: SerializationSignature?,
+            val locals: List<Local>?,
+            val code: String? = null
+        )
+
+      • index     — function index in the module
+      • offset    — code section offset (if available)
+      • signature — parameters / result types
+      • locals    — list of parsed local declarations
+      • code      — disassembled code or textual representation (optional)
+
+      This corresponds to wasm-objdump function metadata.
+
+    ───────────────────────────────────────────────────────────────
+    📘 Example response
+
+        {
+          "functions": [
+            {
+              "name": "add",
+              "signature": {
+                "index": 1,
+                "offset": 280,
+                "signature": { "params": ["i32", "i32"], "results": ["i32"] },
+                "locals": [],
+                "code": "(local.get 0) (local.get 1) (i32.add)"
+              }
+            },
+            {
+              "name": "log",
+              "signature": {
+                "module": "env",
+                "name": "log",
+                "signature": { "params": ["i32"], "results": [] }
+              }
+            }
+          ]
+        }
+
+    ───────────────────────────────────────────────────────────────
+    🔧 Command-line equivalents for validation
+
+      wasm-tools:
+        wasm-tools print module.wasm --details --exports
+
+      wasm-objdump:
+        wasm-objdump -x module.wasm | grep FUNC
+
+    ───────────────────────────────────────────────────────────────
+    📌 Notes
+    • This tool returns ONLY exported functions (not all functions).
+    • For imported functions re-exported by the module, ImportSignature is returned.
+    • For defined functions exported by the module, FunctionSignature is returned.
+    • The result format is explicitly designed for LLM reasoning and static tooling.
+    """
+    )
+    suspend fun listExportedFunctions(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
+    ): String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.listExportedFunctions(wasmModule))
+    }
 }

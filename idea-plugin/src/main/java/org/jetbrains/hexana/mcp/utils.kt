@@ -82,7 +82,7 @@ internal fun CommonByteBuffer.listDataSections(wasmModule: WasmModule?): List<Da
     }
 }
 
-internal fun CommonByteBuffer.listExports(wasmModule: WasmModule?): List<WasmExportRecord> {
+internal fun CommonByteBuffer.listExports(wasmModule: WasmModule?): List<ExportRecord> {
     wasmModule ?: return emptyList()
     val records = with(wasmModule.exportSection) {
         this ?: return@with emptyList()
@@ -90,11 +90,11 @@ internal fun CommonByteBuffer.listExports(wasmModule: WasmModule?): List<WasmExp
     }
     return records.mapNotNull {
         when (it) {
-            is WasmTagExportRecordEntry -> WasmExportRecord(it.name, it.index.toLong(), it.externType)
-            is WasmFunctionExportRecordEntry -> WasmExportRecord(it.name, it.index.toLong(), it.externType)
-            is WasmGlobalExportRecordEntry -> WasmExportRecord(it.name, it.index.toLong(), it.externType)
-            is WasmMemoryExportRecordEntry -> WasmExportRecord(it.name, it.index.toLong(), it.externType)
-            is WasmTableExportRecordEntry -> WasmExportRecord(it.name, it.index.toLong(), it.externType)
+            is WasmTagExportRecordEntry -> ExportRecord(it.name, it.index.toLong(), it.externType)
+            is WasmFunctionExportRecordEntry -> ExportRecord(it.name, it.index.toLong(), it.externType)
+            is WasmGlobalExportRecordEntry -> ExportRecord(it.name, it.index.toLong(), it.externType)
+            is WasmMemoryExportRecordEntry -> ExportRecord(it.name, it.index.toLong(), it.externType)
+            is WasmTableExportRecordEntry -> ExportRecord(it.name, it.index.toLong(), it.externType)
             else -> null
         }
     }
@@ -106,12 +106,19 @@ internal fun CommonByteBuffer.listExportedFunctions(wasmModule: WasmModule?): Li
         this ?: return@with emptyList()
         this@listExportedFunctions.scan()
     }
+    val imports = importSymbols(wasmModule)
     val functions = listFunctions(wasmModule)
     return records
         .filter { it is WasmFunctionExportRecordEntry }
         .map { it as WasmFunctionExportRecordEntry }.mapNotNull {
-            val function = functions.getOrNull(it.index.toInt()) ?: return@mapNotNull null
-            WasmExportFunctionRecord(it.name, function)
+            val index = it.index.toInt()
+            if (index < imports.size) {
+                val function = imports.getOrNull(index) ?: return@mapNotNull null
+                WasmExportFunctionRecord(it.name, function)
+            } else {
+                val function = functions.getOrNull(index - imports.size) ?: return@mapNotNull null
+                WasmExportFunctionRecord(it.name, function)
+            }
         }
 }
 
@@ -331,7 +338,9 @@ data class DataEntry(
 
 }
 
-data class WasmExportFunctionRecord(val name: String, val signature: FunctionSignature)
+data class WasmExportFunctionRecord(val name: String, val signature: WasmSignature)
+
+interface WasmSignature
 data class ImportSignature(
     @JsonProperty("module")
     val module: String,
@@ -339,7 +348,7 @@ data class ImportSignature(
     val name: String,
     @JsonProperty("signature")
     val signature: SerializationSignature?
-)
+): WasmSignature
 
 data class FunctionSignature(
     @JsonProperty("index")
@@ -352,7 +361,7 @@ data class FunctionSignature(
     val locals: List<Local>?,
     @JsonProperty("code")
     val code: String? = null
-)
+) : WasmSignature
 
 @JsonSerialize(using = LocalSerializer::class)
 sealed class Local(open val local: Int)
@@ -381,7 +390,7 @@ data class ParameterSignature(
     val ret: List<String>
 ) : SerializationSignature
 
-data class WasmExportRecord(val name: String, val externIndex: Long, val kind: Byte)
+data class ExportRecord(val name: String, val externIndex: Long, val kind: Byte)
 
 interface SerializationSignature
 
