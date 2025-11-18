@@ -39,6 +39,8 @@ dependencies {
 }
 
 intellijPlatform {
+    projectName = "hexana"
+
     pluginConfiguration {
         ideaVersion {
             sinceBuild = "252"
