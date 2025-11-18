@@ -7,6 +7,8 @@ plugins {
     alias(libs.plugins.compose.multiplatform)
 }
 
+group = "org.jetbrains.hexana"
+
 repositories {
     intellijPlatform {
         defaultRepositories()
