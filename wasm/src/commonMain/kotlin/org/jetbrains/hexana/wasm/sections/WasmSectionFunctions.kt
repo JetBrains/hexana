@@ -12,8 +12,7 @@ class WasmSectionFunctions(size: Int, offset: Int): WasmSection(size, offset) {
         position(offset)
         val typeRefs = mutableListOf<Int>()
         consumeArray {
-            val typeidx = getULEB128().toInt()
-            typeRefs.add(typeidx)
+            typeRefs.add(getULEB128().toInt())
         }
 
         return typeRefs
