@@ -47,10 +47,4 @@
         <mcpServer.mcpToolset implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
     </extensions>
 
-    <actions>
-        <action class="org.jetbrains.hexana.HexanaTestAction"
-                text="Hexana Test"
-                description="Hexana Test"
-                />
-    </actions>
 </idea-plugin>
