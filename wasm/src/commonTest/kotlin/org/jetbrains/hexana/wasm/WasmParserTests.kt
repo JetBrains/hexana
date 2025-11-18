@@ -702,7 +702,7 @@ class WasmParserTests {
                     body = WasmCodeRecord(
                         0,
                         1u,
-                        listOf(WasmCodeLocalRecord(1, 127)),
+                        listOf(WasmCodeLocalRecord(1, WasmI32Type)),
                         listOf(
                             OpCodes.I32.Const(10),
                             OpCodes.Local.Set(0),
@@ -1045,7 +1045,7 @@ class WasmParserTests {
                     body = WasmCodeRecord(
                         0,
                         1u,
-                        listOf(WasmCodeLocalRecord(1, 127)),
+                        listOf(WasmCodeLocalRecord(1, WasmI32Type)),
                         listOf(
                             OpCodes.I32.Const(0),
                             OpCodes.Local.Set(1),

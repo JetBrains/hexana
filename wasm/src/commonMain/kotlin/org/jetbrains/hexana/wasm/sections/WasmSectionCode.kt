@@ -21,7 +21,7 @@ class WasmSectionCode(size: Int, offset: Int): WasmSection(size, offset) {
             val locals = mutableListOf<WasmCodeLocalRecord>()
             consumeArray {
                 val local = getULEB128().toInt()
-                val type = get()
+                val type = valueType()
                 locals.add(WasmCodeLocalRecord(local, type))
             }
 
@@ -32,5 +32,5 @@ class WasmSectionCode(size: Int, offset: Int): WasmSection(size, offset) {
     }
 }
 
-data class WasmCodeLocalRecord(val local: Int, val type: Byte)
+data class WasmCodeLocalRecord(val local: Int, val type: WasmValueType<*>)
 data class WasmCodeRecord(val offset: Long, val size: UInt, val locals: List<WasmCodeLocalRecord>, val opCodes: List<OpCode<*>>)
