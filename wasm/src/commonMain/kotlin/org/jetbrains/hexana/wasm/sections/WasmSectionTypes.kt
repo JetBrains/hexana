@@ -35,7 +35,8 @@ class WasmSectionTypes(size: Int, offset: Int) : WasmSection(size, offset) {
         return WasmRecursiveTypeRecord(subtype)
     }
     private fun CommonByteBuffer.subtype():WasmTypeRecord {
-        return when (get()) {
+        val subType = get()
+        return when (subType) {
             0x4f.toByte(),
             0x50.toByte() -> {
                 val superTypers = mutableListOf<UInt>()
@@ -43,7 +44,7 @@ class WasmSectionTypes(size: Int, offset: Int) : WasmSection(size, offset) {
                     val subType = getULEB128().toUInt()
                     superTypers.add(subType)
                 }
-                compType(superTypers.toList(), get().toUByte() == 0x4f.toUByte())
+                compType(superTypers.toList(), subType.toUByte() == 0x4f.toUByte())
             }
 
             else -> {
