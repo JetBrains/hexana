@@ -1,6 +1,10 @@
 package org.jetbrains.hexana.mcp
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.databind.JsonSerializer
+import com.fasterxml.jackson.databind.SerializerProvider
+import com.fasterxml.jackson.databind.annotation.JsonSerialize
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.intellij.openapi.project.ProjectManager
@@ -215,6 +219,57 @@ val objectMapper = jacksonObjectMapper().apply {
     registerModule(KotlinModule.Builder().build())
 }
 
+private class LocalSerializer : JsonSerializer<Local>() {
+
+    override fun serialize(value: Local, gen: JsonGenerator, serializers: SerializerProvider) {
+        gen.writeStartObject()
+
+        gen.writeNumberField("local", value.local)
+        gen.writeStringField("type", stringifyLocalType(value))
+
+        gen.writeEndObject()
+    }
+
+    private fun stringifyLocalType(value: Local): String =
+        when (value) {
+            is LocalNum       -> "num:${byteToNumType(value.type)}"
+            is LocalPackI8    -> "pack:i8"
+            is LocalPackI16   -> "pack:i16"
+            is LocalVec       -> "vec:v128"
+            is LocalEq        -> "ref:eq${nullable(value)}"
+            is LocalAny       -> "ref:anyref${nullable(value)}"
+            is LocalNone      -> "ref:none${nullable(value)}"
+            is LocalNoExn     -> "ref:noexn${nullable(value)}"
+            is LocalNoFunc    -> "ref:nofunc${nullable(value)}"
+            is LocalNoExtern  -> "ref:noextern${nullable(value)}"
+            is LocalFunc      -> "ref:func${nullable(value)}"
+            is LocalStruct    -> "ref:struct${nullable(value)}"
+            is LocalI31       -> "ref:i31${nullable(value)}"
+            is LocalExn       -> "ref:exn${nullable(value)}"
+            is LocalExtern    -> "ref:extern${nullable(value)}"
+            is LocalArray     -> "ref:array${nullable(value)}"
+            is LocalIndex     -> "ref:index:${value.type}${nullable(value)}"
+        }
+
+    private fun nullable(v: Local): String =
+        when (v) {
+            is LocalEq, is LocalAny, is LocalNone, is LocalNoExn, is LocalNoFunc,
+            is LocalNoExtern, is LocalFunc, is LocalStruct, is LocalI31,
+            is LocalExn, is LocalExtern, is LocalArray, is LocalIndex ->
+                if ((v as? Any)?.let { (it as? LocalEq)?.nullable } == true) "?" else ""
+            else -> ""
+        }
+
+    private fun byteToNumType(type: Byte) =
+        when (type.toInt()) {
+            0x7F -> "i32"
+            0x7E -> "i64"
+            0x7D -> "f32"
+            0x7C -> "f64"
+            else -> "unknown"
+        }
+}
+
 fun WasmTypeIndexExternalType.toSignature(types: List<WasmTypeRecord>): ParameterSignature? {
     val typeIndex = index.toInt()
     val rawSignature = types.getOrNull(typeIndex)
@@ -299,6 +354,7 @@ data class FunctionSignature(
     val code: String? = null
 )
 
+@JsonSerialize(using = LocalSerializer::class)
 sealed class Local(open val local: Int)
 data class LocalNum(override val local: Int, val type: Byte) : Local(local)
 data class LocalPackI8(override val local: Int) : Local(local)
