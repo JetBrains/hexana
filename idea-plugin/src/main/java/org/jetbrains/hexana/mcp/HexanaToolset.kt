@@ -75,7 +75,9 @@ class HexanaToolset : McpToolset {
         but returns a structured JSON result for use by LLMs and developer tools.
     """)
     @Suppress("unused")
-    suspend fun listFunctions(path: String): String {
+    suspend fun listFunctions(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
+    ): String {
         val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
@@ -184,7 +186,9 @@ class HexanaToolset : McpToolset {
     combines structural information (kind, memoryIndex), decoded offset expression,
     and base64-encoded raw payload bytes suitable for analysis and testing.
     """)
-    fun listData(path: String): String {
+    fun listData(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
+    ): String {
         val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
