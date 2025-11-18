@@ -1,4 +1,4 @@
-package org.jetbrains.compose.ui
+package org.jetbrains.hexana.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement

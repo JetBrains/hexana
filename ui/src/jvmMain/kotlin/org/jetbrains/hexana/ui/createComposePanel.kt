@@ -1,4 +1,4 @@
-package org.jetbrains.compose.ui
+package org.jetbrains.hexana.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.awt.ComposePanel

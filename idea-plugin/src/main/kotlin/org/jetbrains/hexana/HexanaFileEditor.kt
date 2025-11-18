@@ -5,9 +5,9 @@ import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.compose.ui.createComposePanel
+import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.annotations.Nls
-import org.jetbrains.compose.ui.createHexEditView
+import org.jetbrains.hexana.ui.createHexEditView
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
 import javax.swing.JComponent
