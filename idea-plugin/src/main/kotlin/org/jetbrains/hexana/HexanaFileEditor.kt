@@ -3,9 +3,11 @@ package org.jetbrains.hexana
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Splitter
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.ui.createComposePanel
+import com.intellij.ui.components.JBTabbedPane
 import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.ui.createHexEditView
 import java.awt.BorderLayout
@@ -28,10 +30,26 @@ class HexanaFileEditor(
 
     fun initPanel() {
         val file = WasmFsUtil.getLocalFile(myFile) ?: myFile
-        val buf = file.contentsToByteArray();
-        panel.add(createComposePanel {
+        val additionalViews = HexanaFileViewProvider.getAllViews(file)
+
+        val buf = file.contentsToByteArray()
+        val hexView = createComposePanel {
             createHexEditView(buf)
-        })
+        }
+
+        if (additionalViews.isEmpty()) {
+            panel.add(hexView)
+        } else {
+            val splitter = Splitter(true, 0.5f)
+            splitter.firstComponent = hexView
+
+            val tabsPane = JBTabbedPane()
+            for (view in additionalViews) {
+                tabsPane.addTab(view.tabName, null, view.component)
+            }
+            splitter.secondComponent = tabsPane
+            panel.add(splitter)
+        }
     }
 
     override fun getComponent(): JComponent {

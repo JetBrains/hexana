@@ -47,4 +47,9 @@
         <mcpServer.mcpToolset implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
     </extensions>
 
+    <extensionPoints>
+        <extensionPoint qualifiedName="org.jetbrains.hexana.hexanaFileViewProvider"
+                        interface="org.jetbrains.hexana.HexanaFileViewProvider"/>
+    </extensionPoints>
+
 </idea-plugin>
