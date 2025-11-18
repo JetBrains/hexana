@@ -52,4 +52,7 @@
                         interface="org.jetbrains.hexana.HexanaFileViewProvider"/>
     </extensionPoints>
 
+    <extensions defaultExtensionNs="org.jetbrains.hexana">
+        <hexanaFileViewProvider implementation="org.jetbrains.hexana.WasmFileViewProvider"/>
+    </extensions>
 </idea-plugin>
