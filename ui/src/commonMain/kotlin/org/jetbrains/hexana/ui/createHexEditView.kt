@@ -1,18 +1,23 @@
 package org.jetbrains.hexana.ui
 
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -22,6 +27,7 @@ import kotlin.math.min
 
 @Composable
 fun createHexEditView(buf: ByteArray) {
+    val listState = rememberLazyListState()
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         val separator = 1.dp
         val half = (maxWidth - separator) / 2
@@ -56,48 +62,55 @@ fun createHexEditView(buf: ByteArray) {
                     )
                 }
             }
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(count = rowCount) { rowIndex ->
-                    Row(Modifier.fillMaxWidth()) {
-                        Box(modifier = Modifier.width(half).background(Color.Black).padding(horizontal = 8.dp)) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(spacing)
-                            ) {
-                                val start = rowIndex * bytesPerRow
-                                val end = min(start + bytesPerRow, buf.size)
-                                for (idx in start until end) {
-                                    Text(
-                                        (buf[idx].toInt() and 0xFF).asHexString(),
-                                        style = TextStyle(
-                                            color = Color.White,
-                                            fontFamily = FontFamily.Monospace
+            Box {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                    items(count = rowCount) { rowIndex ->
+                        Row(Modifier.fillMaxWidth()) {
+                            Box(modifier = Modifier.width(half).background(Color.Black).padding(horizontal = 8.dp)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(spacing)
+                                ) {
+                                    val start = rowIndex * bytesPerRow
+                                    val end = min(start + bytesPerRow, buf.size)
+                                    for (idx in start until end) {
+                                        Text(
+                                            (buf[idx].toInt() and 0xFF).asHexString(),
+                                            style = TextStyle(
+                                                color = Color.Gray,
+                                                fontFamily = FontFamily.Monospace
+                                            )
                                         )
-                                    )
+                                    }
                                 }
                             }
-                        }
-                        Box(modifier = Modifier.width(separator).background(Color.Gray))
-                        Box(modifier = Modifier.width(half).background(Color.Black).padding(horizontal = 8.dp)) {
-                            Row(
-                                horizontalArrangement = Arrangement.Start
-                            ) {
-                                val start = rowIndex * bytesPerRow
-                                val end = min(start + bytesPerRow, buf.size)
-                                for (idx in start until end) {
-                                    val b = buf[idx].toInt() and 0xFF
-                                    val ch = if (b in 32..126) b.toChar().toString() else "."
-                                    Text(
-                                        ch,
-                                        style = TextStyle(
-                                            color = Color.White,
-                                            fontFamily = FontFamily.Monospace
+                            Box(modifier = Modifier.width(separator).background(Color.Gray))
+                            Box(modifier = Modifier.width(half).background(Color.Black).padding(horizontal = 8.dp)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.Start
+                                ) {
+                                    val start = rowIndex * bytesPerRow
+                                    val end = min(start + bytesPerRow, buf.size)
+                                    for (idx in start until end) {
+                                        val b = buf[idx].toInt() and 0xFF
+                                        val ch = if (b in 32..126) b.toChar().toString() else "."
+                                        Text(
+                                            ch,
+                                            style = TextStyle(
+                                                color = Color.White,
+                                                fontFamily = FontFamily.Monospace
+                                            )
                                         )
-                                    )
+                                    }
                                 }
                             }
                         }
                     }
                 }
+
+                VerticalScrollbar(
+                    modifier = Modifier.align(alignment = Alignment.CenterEnd).fillMaxHeight().background(Color.Gray),
+                    adapter = rememberScrollbarAdapter(scrollState = listState)
+                )
             }
         }
     }
