@@ -21,6 +21,8 @@ class HexanaFileEditor(
 ) : FileEditor, UserDataHolderBase() {
     val panel: JPanel
 
+    val additionalViews = HexanaFileViewProvider.getAllViews(myProject, file)
+
     init {
         panel = JPanel(BorderLayout())
         // TODO: 🐛 if we will have the same code in init section without moving it to a separate method
@@ -30,7 +32,6 @@ class HexanaFileEditor(
 
     fun initPanel() {
         val file = WasmFsUtil.getLocalFile(myFile) ?: myFile
-        val additionalViews = HexanaFileViewProvider.getAllViews(file)
 
         val buf = file.contentsToByteArray()
         val hexView = createComposePanel {
@@ -89,6 +90,10 @@ class HexanaFileEditor(
     }
 
     override fun dispose() {
-
+        additionalViews.forEach {
+            it.runCatching {
+                dispose()
+            }
+        }
     }
 }
