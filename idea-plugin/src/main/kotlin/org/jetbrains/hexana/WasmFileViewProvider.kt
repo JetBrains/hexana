@@ -59,7 +59,8 @@ class WasmFileViewProvider : HexanaFileViewProvider {
             val conversionResult = convertWasmToWat(ioFile)
             when (conversionResult) {
                 is WatConversionResult.Success -> {
-                    val watFile = object : LightVirtualFile("test", WatFileType.INSTANCE, conversionResult.wat) {
+                    val watFileName = ioFile.name.removeSuffix(".wasm") + ".wat"
+                    val watFile = object : LightVirtualFile(watFileName, WatFileType.INSTANCE, conversionResult.wat) {
                         override fun isWritable(): Boolean {
                             return false
                         }
