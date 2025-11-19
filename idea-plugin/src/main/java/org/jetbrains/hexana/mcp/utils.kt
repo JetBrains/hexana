@@ -199,6 +199,16 @@ internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<Gener
     return signatures
 }
 
+internal fun CommonByteBuffer.functionsByIndices(
+    wasmModule: WasmModule?,
+    indices: List<Int>
+): List<FunctionEntry> {
+    wasmModule ?: return emptyList()
+    val imports = importSymbols(wasmModule)
+    val functions = listFunctions(wasmModule)
+    return  imports.filter { indices.contains(it.index) } + functions.filter { indices.contains(it.index) }
+}
+
 internal fun CommonByteBuffer.importSymbols(
     wasmModule: WasmModule?
 ): List<ImportFunctionEntry> {
