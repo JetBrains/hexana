@@ -539,4 +539,89 @@ class HexanaToolset : McpToolset {
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.functionsByIndices(wasmModule, indices))
     }
+
+    @McpTool("list_globals")
+    @McpDescription(
+        """
+    Extracts all global variables from a WebAssembly (.wasm) module and
+    returns them as structured JSON records. Each returned global entry
+    describes the global's index, its value type, mutability, and the
+    initialization expression represented as a stringified opcode sequence.
+
+    ───────────────────────────────────────────────────────────────
+    🧩 Output JSON format
+
+        {
+          "globalidx": number,
+          "type": string,
+          "mutability": boolean,
+          "expression": string
+        }
+
+    • globalidx    — the zero-based index of the global in the module's
+                      global index space.
+    • type         — a human-readable, stringified Wasm value type such as:
+                      "i32", "i64", "f32", "f64", "v128", etc.
+    • mutability   — true if the global is mutable (var), false if immutable (const).
+    • expression   — the stringified initializer expression containing the
+                      Wasm opcode sequence used to establish the global’s
+                      initial value (e.g. "i32.const 42", "global.get 0").
+
+    ───────────────────────────────────────────────────────────────
+    📘 Example response
+
+        {
+          "globals": [
+            {
+              "globalidx": 0,
+              "type": "i32",
+              "mutability": false,
+              "expression": "i32.const 42"
+            },
+            {
+              "globalidx": 1,
+              "type": "i64",
+              "mutability": true,
+              "expression": "global.get 0"
+            }
+          ]
+        }
+
+    ───────────────────────────────────────────────────────────────
+    🔧 Command-line equivalents for validation
+
+      wasm-tools:
+        wasm-tools print module.wasm --details --globals
+
+      wasm-objdump:
+        wasm-objdump -x module.wasm | grep GLOBAL
+
+      wasm2wat:
+        wasm2wat module.wasm | grep "(global"
+
+    Example CLI output (wasm-tools):
+        (global (mut i32) (i32.const 42))
+        (global i64 (global.get 0))
+
+    ───────────────────────────────────────────────────────────────
+    📌 Notes
+
+    • This tool returns only global declarations (not memories, tables,
+      functions or element segments).
+    • The initializer expression is normalized into a readable textual
+      sequence of Wasm opcodes to aid LLM reasoning.
+    • The returned type string follows the standard Wasm type syntax.
+    """
+    )
+    suspend fun listGlobals(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+    ):String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.listGlobals(wasmModule))
+    }
 }

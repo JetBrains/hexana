@@ -27,6 +27,7 @@ import org.jetbrains.hexana.wasm.sections.WasmF64Type
 import org.jetbrains.hexana.wasm.sections.WasmFuncHeapType
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmGlobalExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmGlobalRecord
 import org.jetbrains.hexana.wasm.sections.WasmI31RefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
 import org.jetbrains.hexana.wasm.sections.WasmI64Type
@@ -233,6 +234,17 @@ internal fun CommonByteBuffer.types(wasmModule: WasmModule): List<WasmTypeRecord
         this ?: return@with emptyList()
         parseTypes()
     }
+
+internal fun CommonByteBuffer.listGlobals(wasmModule: WasmModule?): List<GlobalRecord> {
+    wasmModule ?: return emptyList()
+    val globals = with(wasmModule.globalSection) {
+        this ?: return@with emptyList()
+        scan()
+    }
+    return globals.map { GlobalRecord(it.globalidx, it.type.valueType.toSignature(), it.type.mutable, it.expression.wat()) }
+}
+
+class GlobalRecord(val globalIdx: Int, val type: String, val mutability: Boolean, val expression: String?)
 
 val objectMapper = jacksonObjectMapper().apply {
     registerModule(KotlinModule.Builder().build())
