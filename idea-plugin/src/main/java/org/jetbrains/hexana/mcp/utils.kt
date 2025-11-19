@@ -133,10 +133,12 @@ internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<Funct
         this ?: return@with emptyList()
         this@listFunctions.scan()
     }
+    val imports = importSymbols(wasmModule)
+    val indexBase = imports.size
     val signatures = records.mapIndexedNotNull { index, typeIndex ->
         (types.getOrNull(typeIndex) as? WasmSectionFunctionTypeRecord)?.toSignature()?.let { signature ->
             FunctionSignature(
-                index,
+                index + indexBase,
                 codes.getOrNull(index)?.offset,
                 signature,
                 codes.getOrNull(index)?.locals?.map {
@@ -206,12 +208,12 @@ internal fun CommonByteBuffer.importSymbols(
     }
 
     val types = types(wasmModule)
-    val signatures = records.map {
-        val signature = when (it.type) {
-            is WasmTypeIndexExternalType -> (it.type as WasmTypeIndexExternalType).toSignature(types)
+    val signatures = records.mapIndexed { index, record ->
+        val signature = when (record.type) {
+            is WasmTypeIndexExternalType -> (record.type as WasmTypeIndexExternalType).toSignature(types)
             else -> null
         }
-        ImportSignature(it.prefix, it.name, signature)
+        ImportSignature(index,record.prefix, record.name, signature)
     }
     return signatures
 }
@@ -342,6 +344,8 @@ data class WasmExportFunctionRecord(val name: String, val signature: WasmSignatu
 
 interface WasmSignature
 data class ImportSignature(
+    @JsonProperty("funcidx")
+    val index: Int,
     @JsonProperty("module")
     val module: String,
     @JsonProperty("name")
@@ -351,7 +355,7 @@ data class ImportSignature(
 ): WasmSignature
 
 data class FunctionSignature(
-    @JsonProperty("index")
+    @JsonProperty("funcidx")
     val index: Int,
     @JsonProperty("offset")
     val offset: Long?,

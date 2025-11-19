@@ -20,32 +20,75 @@ class HexanaToolset : McpToolset {
     }
     @Suppress("unused")
     @McpTool("list_imports")
-    @McpDescription("""
-       MCP Tool: WebAssembly Import Listing
-       - Tool: `extract_import_declarations`
-       - Call: `{ "tool": "extract_import_declarations", "arguments": { "path": "/abs/or/project/path/to/file.wasm" } }`
-       - Returns: JSON array of imports; empty array if no imports; `{ "error": "…" }` on error.
-       - If the tool is not visible in your session, ensure Hexana MCP is enabled or use CLI fallback:
-         - `wasm-tools print --imports <file.wasm>`
-         - `wasm-objdump -x <file.wasm>`
-       Use this tool when the user asks to extract import declarations (the import section) from a WebAssembly (.wasm) file.
-       This tools can be used to avoid installation and execution of command line tools like wabt or wasm2wat or python scripts.
-       Input: absolute path or IDE VFS/project path to a .wasm file. 
-       Output: application/json — array of objects 
+    @McpDescription(
+        """
+    Extracts all **imported functions** from a WebAssembly (.wasm) module and returns
+    them as JSON-serialized ImportSignature objects implementing WasmSignature.
+
+   
+    🧠 Semantics
+
+    Each imported function entry is represented as:
+      • funcidx   — the function's **funcidx**, i.e. its assigned function index
+                   in the module’s unified function index space.
+      • module  — the imported module name ("env", "wasi_snapshot_preview1", etc.)
+      • name    — the field name of the imported function
+      • signature — parsed parameter/result types, when available.
+
+    The tool corresponds to the WebAssembly Import Section where:
+      (import "module" "name" (func (param ...) (result ...)))
+
+    ───────────────────────────────────────────────────────────────
+    📘 Example response
+
+        {
+          "imports": [
             {
-                "module": string, 
-                "name": string, 
-                "signature": {
-                    "params": ["i32"|"i64"|"f32"|"f64"], 
-                    "return": "i32"|"i64"|"f32"|"f64"|null
-                } | null
-                
-             } 
-       Errors: returns {"error": "..."}. 
-       Example input: "/path/to/module.wasm". 
-       Example output: [{"module":"env","name":"puts","signature":{"params":["i32"],"return":[]}}]. 
-       If the path is not a .wasm file, ask for a correct .wasm path."
-    """)
+              "funcidx": 0,
+              "module": "env",
+              "name": "log",
+              "signature": {
+                "params": ["i32"],
+                "return": []
+              }
+            },
+            {
+              "funcidx": 1,
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "signature": {
+                "params": ["i32", "i32", "i32", "i32"],
+                "return": ["i32"]
+              }
+            }
+          ]
+        }
+
+      ───────────────────────────────────────────────────────────────
+    🔧 Command-line equivalents for validation
+
+      wasm-tools:
+        wasm-tools print module.wasm --imports
+
+      wasm-objdump:
+        wasm-objdump -x module.wasm | grep IMPORT
+
+      wasm2wat:
+        wasm2wat module.wasm | grep "(import"
+
+    Example CLI output equivalent:
+
+        (import "env" "log" (func (param i32)))
+        (import "wasi_snapshot_preview1" "fd_write" (func (param i32 i32 i32 i32) (result i32)))
+
+    ───────────────────────────────────────────────────────────────
+    📌 Notes
+    • This tool returns only **function imports** (not tables, memories, or globals).
+    • The index field refers to the **function index in the expanded index space**,
+      following the WebAssembly spec.
+    • The result format is intentionally structured for LLM reasoning and IDE tooling.
+    """
+    )
     suspend fun listImports(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
     ): String {
@@ -274,46 +317,38 @@ class HexanaToolset : McpToolset {
     @McpDescription(
         """
     Extracts exported functions from a WebAssembly (.wasm) module and returns
-    them as JSON-serialized WasmExportFunctionRecord objects:
+    them as JSON-serialized objects:
 
-        data class WasmExportFunctionRecord(
-            val name: String,
-            val signature: WasmSignature
-        )
-
-    The 'signature' field is a polymorphic structure implementing WasmSignature,
-    with two possible concrete variants:
-
-    ───────────────────────────────────────────────────────────────
-    🧩 1. ImportSignature  (for exported imported functions)
-
-        data class ImportSignature(
-            val module: String,
-            val name: String,
-            val signature: SerializationSignature?
-        )
-
+        {
+          "name": string,
+          "signature": {
+            "funcidx": number,
+            "module": string,
+            "name": string,
+            signature: {
+              "params": List<String>,
+              "ret": List<String>
+            }
+          }
+        }
+        for re-imported functions, or 
+        {
+          "name": string,
+          "signature": {
+            "funcidx": number,
+            "offset": number,
+            signature: {
+              "params": [string],
+              "ret": [string]
+            },
+            "locals":[String],
+            "code": string
+          }
+        
       • module   — the module path of the import ("env", "wasi_snapshot_preview1", etc.)
       • name     — the imported function's name
       • signature — optional parameter/result type information
-
-      These appear when a module re-exports an imported function, e.g.:
-
-          (import "env" "log" (func ${'$'}log (param i32)))
-          (export "log" (func ${'$'}log))
-
-    ───────────────────────────────────────────────────────────────
-    🧩 2. FunctionSignature  (for exported internally-defined functions)
-
-        data class FunctionSignature(
-            val index: Int,
-            val offset: Long?,
-            val signature: SerializationSignature?,
-            val locals: List<Local>?,
-            val code: String? = null
-        )
-
-      • index     — function index in the module
+      • funcidx     — function index in the module
       • offset    — code section offset (if available)
       • signature — parameters / result types
       • locals    — list of parsed local declarations
