@@ -39,9 +39,16 @@ fun createHexEditView(buf: ByteArray) {
         val bytesPerRow = 16
         val spacing = 8.dp
         val rowCount = (buf.size + bytesPerRow - 1) / bytesPerRow
+        val offsetWidth = 96.dp
 
         Column(modifier = Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .width(offsetWidth)
+                        .background(backgroundColor)
+                        .padding(horizontal = 8.dp)
+                ) {}
                 Box(modifier = Modifier.width(half).background(backgroundColor).padding(horizontal = 8.dp)) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(spacing)
@@ -72,9 +79,23 @@ fun createHexEditView(buf: ByteArray) {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     items(count = rowCount) { rowIndex ->
                         Row(Modifier.fillMaxWidth()) {
+                            Box(
+                                modifier = Modifier
+                                    .width(offsetWidth)
+                                    .background(backgroundColor)
+                                    .padding(horizontal = 8.dp),
+                                contentAlignment = Alignment.CenterEnd
+                            ) {
+                                Row {
+                                     Text((rowIndex * bytesPerRow).asHexString(padStart = 8),
+                                        style = TextStyle(fontFamily = FontFamily.Monospace)
+                                     )
+                                }
+                            }
+
                             Box(modifier = Modifier.width(half).background(backgroundColor).padding(horizontal = 8.dp)) {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(spacing)
+                                    horizontalArrangement = Arrangement.spacedBy(spacing),
                                 ) {
                                     val start = rowIndex * bytesPerRow
                                     val end = min(start + bytesPerRow, buf.size)
@@ -122,4 +143,4 @@ fun createHexEditView(buf: ByteArray) {
     }
 }
 
-private fun Int.asHexString() = toString(16).padStart(2, '0').uppercase()
+private fun Int.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
