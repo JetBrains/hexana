@@ -1076,6 +1076,33 @@ class WasmParserTests {
         )
     }
 
+    /**
+     * > wasm-objdump -x string.wasm | grep -A 20 "Global
+     * Global[3]:
+     *  - global[0] i32 mutable=0 - init i32=44
+     *  - global[1] i32 mutable=1 - init i32=32812
+     *  - global[2] i32 mutable=0 - init i32=3281
+     */
+    @Test
+    fun `HX-T-22`() = runTest {
+        val buffer = resourceAsByteBuffer("string.wasm") ?: error("Failed to read test file")
+        val wasmModule = WasmParser().parse(buffer) ?: error("Failed to parse wasm")
+        with(wasmModule.globalSection) {
+            this ?: error("Failed to parse global section")
+            val globals = buffer.scan()
+            assertEquals(3, globals.size)
+            assertEquals(globals[0].type.valueType, WasmI32Type)
+            assertEquals(globals[0].type.mutable, false)
+            assertEquals(globals[0].expression, listOf(OpCodes.I32.Const(44)))
+            assertEquals(globals[1].type.valueType, WasmI32Type)
+            assertEquals(globals[1].type.mutable, true)
+            assertEquals(globals[1].expression, listOf(OpCodes.I32.Const(32812)))
+            assertEquals(globals[2].type.valueType, WasmI32Type)
+            assertEquals(globals[2].type.mutable, false)
+            assertEquals(globals[2].expression, listOf(OpCodes.I32.Const(32812)))
+        }
+    }
+
 }
 
 
