@@ -32,6 +32,7 @@ import org.jetbrains.hexana.wasm.sections.WasmI31RefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
 import org.jetbrains.hexana.wasm.sections.WasmI64Type
 import org.jetbrains.hexana.wasm.sections.WasmIndexHeapType
+import org.jetbrains.hexana.wasm.sections.WasmLimits
 import org.jetbrains.hexana.wasm.sections.WasmMemoryExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmNoExnHeapType
 import org.jetbrains.hexana.wasm.sections.WasmNoExternRefHeapType
@@ -39,6 +40,8 @@ import org.jetbrains.hexana.wasm.sections.WasmNoFuncHeapType
 import org.jetbrains.hexana.wasm.sections.WasmNoneHeapType
 import org.jetbrains.hexana.wasm.sections.WasmNullableReferenceType
 import org.jetbrains.hexana.wasm.sections.WasmNumType
+import org.jetbrains.hexana.wasm.sections.WasmOpenI32Limits
+import org.jetbrains.hexana.wasm.sections.WasmOpenI64Limits
 import org.jetbrains.hexana.wasm.sections.WasmPactTypeI16
 import org.jetbrains.hexana.wasm.sections.WasmPactTypeI8
 import org.jetbrains.hexana.wasm.sections.WasmRefType
@@ -244,7 +247,40 @@ internal fun CommonByteBuffer.listGlobals(wasmModule: WasmModule?): List<GlobalR
     return globals.map { GlobalRecord(it.globalidx, it.type.valueType.toSignature(), it.type.mutable, it.expression.wat()) }
 }
 
-class GlobalRecord(val globalIdx: Int, val type: String, val mutability: Boolean, val expression: String?)
+data class GlobalRecord(val globalIdx: Int, val type: String, val mutability: Boolean, val expression: String?)
+
+internal fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRecord> {
+    wasmModule ?: return emptyList()
+    val memories = with(wasmModule.memorySection) {
+        this ?: return@with emptyList()
+        scan()
+    }
+
+    return memories.map { MemoryRecord(it.memidx, Limits(it.limits)) }
+}
+
+internal data class MemoryRecord(val memoryIdx: Int, val limit: Limits<*>)
+
+internal class Limits<T>(private val internal: WasmLimits<T>){
+    val addressType: String
+        get() {
+            when (internal.min) {
+                is Int -> return "i32"
+                is Long -> return "i64"
+                else -> throw IllegalStateException("Unknown address type")
+            }
+        }
+    val min: T
+        get() = internal.min
+    val max: T?
+        get() = internal.max
+    val hasMax: Boolean
+        get() = internal is WasmOpenI64Limits || internal is WasmOpenI32Limits
+    val range: String
+        get() = "${internal.min}..${internal.max ?: "ε"}"
+    val flag: String
+        get() = "0x${internal.kind.toHexString()}"
+}
 
 val objectMapper = jacksonObjectMapper().apply {
     registerModule(KotlinModule.Builder().build())

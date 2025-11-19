@@ -624,4 +624,119 @@ class HexanaToolset : McpToolset {
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listGlobals(wasmModule))
     }
+
+    @McpTool("list_memory")
+    @McpDescription(
+        """
+    Returns the list of all linear memories declared in a WebAssembly (.wasm)
+    module. Each memory entry includes its memory index (memidx) and its 
+    WebAssembly limits represented in an AI-friendly, self-describing format.
+
+    ───────────────────────────────────────────────────────────────
+    🧩 Output JSON format
+
+        {
+          "memories": [
+            {
+              "memidx": number,
+              "limits": {
+                "addressType": "i32" | "i64",
+                "min": number,
+                "max": number | null,
+                "hasMax": boolean,
+                "range": "n..m" | "n..ε",
+                "flag": "0x00" | "0x01" | "0x04" | "0x05"
+              }
+            }
+          ]
+        }
+
+    ───────────────────────────────────────────────────────────────
+    🧠 Meaning of the fields
+
+      • memidx       — linear memory index in the module (0-based)
+      • addressType  — "i32" for 32-bit memory, "i64" for 64-bit memory
+      • min          — minimum number of pages (or elements for table-like limits)
+      • max          — maximum number of pages (null if unbounded)
+      • hasMax       — explicit boolean so AI does not infer max incorrectly
+      • range        — human-friendly format:
+                          "min..m"  (bounded)
+                          "min..ε"  (unbounded)
+      • flag         — original binary prefix from the Wasm encoding:
+                          0x00 — (i32, min only)
+                          0x01 — (i32, min..max)
+                          0x04 — (i64, min only)
+                          0x05 — (i64, min..max)
+
+    These encodings correspond directly to WebAssembly spec section 5.3.9.
+
+    ───────────────────────────────────────────────────────────────
+    📘 Example response
+
+        {
+          "memories": [
+            {
+              "memidx": 0,
+              "limits": {
+                "addressType": "i32",
+                "min": 1,
+                "max": null,
+                "hasMax": false,
+                "range": "1..ε",
+                "flag": "0x00"
+              }
+            },
+            {
+              "memidx": 1,
+              "limits": {
+                "addressType": "i32",
+                "min": 2,
+                "max": 8,
+                "hasMax": true,
+                "range": "2..8",
+                "flag": "0x01"
+              }
+            }
+          ]
+        }
+
+    ───────────────────────────────────────────────────────────────
+    🔧 Command-line equivalents for validation
+
+      wasm-tools:
+        wasm-tools print module.wasm --details --memory
+
+      wasm-objdump:
+        wasm-objdump -x module.wasm | grep "Memory" -A 2
+
+      wasm2wat:
+        wasm2wat module.wasm | grep "(memory"
+
+    Example Wasm textual form:
+        (memory (export "mem") 2 8)
+        (memory 1)
+
+    ───────────────────────────────────────────────────────────────
+    📌 Notes
+
+    • This tool returns only memories, not tables or globals.
+    • The limits representation is designed for LLM correctness:
+         - explicit max presence (hasMax)
+         - stringified range (n..m)
+         - explicit addressType
+         - preserved binary flag for tooling
+    • Linear memory units are in WebAssembly pages (64 KiB each).
+    """
+    )
+    suspend fun listMemory(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+    ): String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.listMemory(wasmModule))
+    }
 }
