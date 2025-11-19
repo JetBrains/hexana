@@ -9,11 +9,13 @@ import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
+import org.jetbrains.hexana.wasm.sections.WasmOpenI32Limits
 import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
@@ -1100,6 +1102,24 @@ class WasmParserTests {
             assertEquals(globals[2].type.valueType, WasmI32Type)
             assertEquals(globals[2].type.mutable, false)
             assertEquals(globals[2].expression, listOf(OpCodes.I32.Const(32812)))
+        }
+    }
+
+    /**
+     * > wasm-objdump -x string.wasm | grep -A 20 "Memory"
+     * Memory[1]:
+     *  - memory[0] pages: initial=1
+     */
+    @Test
+    fun `HX-T-23`() = runTest {
+        val buffer = resourceAsByteBuffer("string.wasm") ?: error("Failed to read test file")
+        val wasmModule = WasmParser().parse(buffer) ?: error("Failed to parse wasm")
+        with(wasmModule.memorySection) {
+            this ?: error("Failed to parse global section")
+            val memory = buffer.scan()
+            assertEquals(1, memory.size)
+            assertIs<WasmOpenI32Limits>(memory[0].limits)
+            assertEquals(memory[0].limits.min, 1)
         }
     }
 
