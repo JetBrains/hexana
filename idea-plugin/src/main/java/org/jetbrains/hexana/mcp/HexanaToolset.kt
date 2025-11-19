@@ -410,4 +410,133 @@ class HexanaToolset : McpToolset {
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listExportedFunctions(wasmModule))
     }
+
+    @McpTool("functions_for_indices")
+    @McpDescription(
+        """
+    Returns detailed function records for a given list of WebAssembly
+    function indices (funcidx). The output format resolves whether each
+    index corresponds to:
+
+      1) a re-exported **imported function**, or
+      2) a **locally defined function** within the module.
+
+    Each returned object contains:
+        • name   — the exported name (if applicable)
+        • entry  — a full structured representation of the function body
+                   or imported signature
+
+    ───────────────────────────────────────────────────────────────
+    🧩 Output format for re-imported (imported) functions
+
+        {
+          "name": string,
+          "entry": {
+            "funcidx": number,
+            "module": string,
+            "name": string,
+            "signature": {
+              "params": [string],
+              "ret": [string]
+            }
+          }
+        }
+
+      • funcidx  — function index (non-local definition)
+      • module   — imported module name ("env", "wasi_snapshot_preview1", etc.)
+      • name     — field name of the imported function
+      • signature — parameter + result types from the import description
+
+    ───────────────────────────────────────────────────────────────
+    🧩 Output format for locally defined functions
+
+        {
+          "name": string,
+          "entry": {
+            "funcidx": number,
+            "offset": number,
+            "signature": {
+              "params": [string],
+              "ret": [string]
+            },
+            "locals": [string],
+            "code": string
+          }
+        }
+
+      • funcidx  — function index inside the function index space
+      • offset   — code-section byte offset for the function body
+      • signature — parameter + result types
+      • locals   — list of local declarations as strings
+      • code     — textual / disassembled form of the function body
+
+    ───────────────────────────────────────────────────────────────
+    📘 Example response
+
+        {
+          "functions": [
+            {
+              "name": "log",
+              "entry": {
+                "funcidx": 0,
+                "module": "env",
+                "name": "log",
+                "signature": {
+                  "params": ["i32"],
+                  "ret": []
+                }
+              }
+            },
+            {
+              "name": "add",
+              "entry": {
+                "funcidx": 1,
+                "offset": 320,
+                "signature": {
+                  "params": ["i32", "i32"],
+                  "ret": ["i32"]
+                },
+                "locals": ["i32"],
+                "code": "(local.get 0) (local.get 1) (i32.add)"
+              }
+            }
+          ]
+        }
+
+    ───────────────────────────────────────────────────────────────
+    🔧 Command-line equivalents for validation
+
+      wasm-tools:
+        wasm-tools print module.wasm --details
+
+      wasm-objdump:
+        wasm-objdump -x module.wasm | grep FUNC
+
+      wasm2wat:
+        wasm2wat module.wasm | sed -n '/func /,/)/p'
+
+    ───────────────────────────────────────────────────────────────
+    📌 Notes
+    • This tool resolves BOTH imported and internally-defined
+      function entries.
+    • It operates strictly on the **function index space**
+      (imported functions come first, followed by defined functions).
+    • Returned structures are tailored for LLM reasoning and IDE tooling,
+      with explicit signatures, locals, offsets, and optional bytecode dump.
+    • The 'name' field refers to the export name if the function is exported,
+      otherwise it may be derived from debug names or remain synthetic.
+    """
+    )
+    suspend fun functionsForIndices(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+        @McpDescription("List of function indices to retrieve details for") indices: List<Int>
+    ): String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.functionsByIndices(wasmModule, indices))
+    }
 }
