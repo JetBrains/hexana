@@ -41,6 +41,10 @@ dependencies {
 intellijPlatform {
     projectName = "hexana"
 
+    publishing {
+        token = providers.gradleProperty("publishToken")
+    }
+
     pluginConfiguration {
         ideaVersion {
             sinceBuild = "252"
