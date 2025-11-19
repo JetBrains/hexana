@@ -22,21 +22,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import kotlin.math.min
 
 @Composable
 fun createHexEditView(buf: ByteArray) {
     val listState = rememberLazyListState()
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    val backgroundColor = if (JewelTheme.isDark) Color.Black else Color.White
+    val textColor = if (JewelTheme.isDark) Color.White else Color.Black
+    val hexTextColor = if (JewelTheme.isDark) Color.Gray else Color.DarkGray
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(backgroundColor)) {
         val separator = 1.dp
         val half = (maxWidth - separator) / 2
         val bytesPerRow = 16
         val spacing = 8.dp
         val rowCount = (buf.size + bytesPerRow - 1) / bytesPerRow
+
         Column(modifier = Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth()) {
-                Box(modifier = Modifier.width(half).background(Color.Black).padding(horizontal = 8.dp)) {
+                Box(modifier = Modifier.width(half).background(backgroundColor).padding(horizontal = 8.dp)) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(spacing)
                     ) {
@@ -44,7 +50,7 @@ fun createHexEditView(buf: ByteArray) {
                             Text(
                                 i.asHexString(),
                                 style = TextStyle(
-                                    color = Color.White,
+                                    color = textColor,
                                     fontFamily = FontFamily.Monospace
                                 )
                             )
@@ -52,11 +58,11 @@ fun createHexEditView(buf: ByteArray) {
                     }
                 }
                 Box(modifier = Modifier.width(separator).background(Color.Gray))
-                Box(modifier = Modifier.width(half).background(Color.Black).padding(horizontal = 8.dp)) {
+                Box(modifier = Modifier.width(half).background(backgroundColor).padding(horizontal = 8.dp)) {
                     Text(
                         "ASCII",
                         style = TextStyle(
-                            color = Color.White,
+                            color = textColor,
                             fontFamily = FontFamily.Monospace
                         )
                     )
@@ -66,7 +72,7 @@ fun createHexEditView(buf: ByteArray) {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     items(count = rowCount) { rowIndex ->
                         Row(Modifier.fillMaxWidth()) {
-                            Box(modifier = Modifier.width(half).background(Color.Black).padding(horizontal = 8.dp)) {
+                            Box(modifier = Modifier.width(half).background(backgroundColor).padding(horizontal = 8.dp)) {
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(spacing)
                                 ) {
@@ -76,7 +82,7 @@ fun createHexEditView(buf: ByteArray) {
                                         Text(
                                             (buf[idx].toInt() and 0xFF).asHexString(),
                                             style = TextStyle(
-                                                color = Color.Gray,
+                                                color = hexTextColor,
                                                 fontFamily = FontFamily.Monospace
                                             )
                                         )
@@ -84,7 +90,7 @@ fun createHexEditView(buf: ByteArray) {
                                 }
                             }
                             Box(modifier = Modifier.width(separator).background(Color.Gray))
-                            Box(modifier = Modifier.width(half).background(Color.Black).padding(horizontal = 8.dp)) {
+                            Box(modifier = Modifier.width(half).background(backgroundColor).padding(horizontal = 8.dp)) {
                                 Row(
                                     horizontalArrangement = Arrangement.Start
                                 ) {
@@ -96,7 +102,7 @@ fun createHexEditView(buf: ByteArray) {
                                         Text(
                                             ch,
                                             style = TextStyle(
-                                                color = Color.White,
+                                                color = textColor,
                                                 fontFamily = FontFamily.Monospace
                                             )
                                         )
