@@ -32,19 +32,31 @@ dependencies {
     intellijPlatform {
         create("IC", "2025.2.3")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
+
+
         bundledPlugins("com.intellij.mcpServer")
-        // Add necessary plugin dependencies for compilation here, example:
-        // bundledPlugin("com.intellij.java")
+
+        // TODO: whenever composeUI() will be updated, we can safely remove direct dependencies to dekstop runtime
+        // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
+        // composeUI()
+
+        bundledModules(
+            "intellij.libraries.skiko",
+            "intellij.libraries.compose.foundation.desktop",
+
+            "intellij.platform.compose",
+            "intellij.platform.jewel.foundation",
+            "intellij.platform.jewel.ui",
+            "intellij.platform.jewel.ideLafBridge"
+        )
     }
 
     implementation(project(":encdec"))
     implementation(project(":wasm"))
-    implementation(project(":ui"))
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.20.0")
 
-    // JetBrains Compose for Desktop (AWT/Swing interop via ComposePanel)
-    implementation(compose.desktop.currentOs)
-
+    // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
+    compileOnly(compose.desktop.currentOs)
     testImplementation("junit:junit:4.13.2")
 }
 
