@@ -24,7 +24,23 @@ Examples
 
 ## Deployment
 
-Add additional notes about how to deploy this on a production system.
+To publish an Idea plugin version A.B:
+
+- change pluginVersion in `idea-plugin/gradle.properties` to A.B
+
+- run `./gradlew :idea-plugin:patchChangeLog`
+
+  This will generate a section for version A.B.0 in
+  idea-plugin/CHANGELOG.md and create an empty section for the Unreleased
+  version.
+
+- (optional) run `./gradlew :idea-plugin:buildPlugin`
+
+  You can install the built plugin from disk to check that change-notes look as expected.
+
+- commit and push changes in `idea-plugin/gradle.properties` and `idea-plugin/CHANGELOG.md`
+
+- run the 'Publish Idea Plugin' build on TC
 
 ## Resources
 

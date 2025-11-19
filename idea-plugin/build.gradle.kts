@@ -1,13 +1,23 @@
+import org.jetbrains.changelog.Changelog
+
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.intellij.platform") version "2.5.0"
+    id("org.jetbrains.changelog") version "2.4.0"
     // Compose compiler plugin from version catalog
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.compose.multiplatform)
 }
 
 group = "org.jetbrains.hexana"
+
+val baseVersion = project.property("pluginVersion") as String
+version = if (System.getenv()["HEXANA_RELEASE_BUILD"] == "1") {
+    baseVersion
+} else {
+    "$baseVersion-SNAPSHOT"
+}
 
 repositories {
     intellijPlatform {
@@ -38,6 +48,11 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
+changelog {
+    version = baseVersion
+    headerParserRegex = """(\d+\.\d+)""".toRegex()
+}
+
 intellijPlatform {
     projectName = "hexana"
 
@@ -66,6 +81,18 @@ tasks {
     withType<org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask>().configureEach {
         //jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5007")
 
+    }
+
+    patchPluginXml {
+        changeNotes = provider {
+            changelog.renderItem(
+                changelog
+                    .getUnreleased()
+                    .withHeader(false)
+                    .withEmptySections(false),
+                Changelog.OutputType.HTML
+            )
+        }
     }
 }
 
