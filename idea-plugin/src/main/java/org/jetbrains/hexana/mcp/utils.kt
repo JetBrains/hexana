@@ -122,7 +122,7 @@ internal fun CommonByteBuffer.listExportedFunctions(wasmModule: WasmModule?): Li
         }
 }
 
-internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<FunctionSignature> {
+internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<GeneralFunctionEntry> {
     wasmModule ?: return emptyList()
     val types = types(wasmModule)
     val records = with(wasmModule.functionSection) {
@@ -137,7 +137,7 @@ internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<Funct
     val indexBase = imports.size
     val signatures = records.mapIndexedNotNull { index, typeIndex ->
         (types.getOrNull(typeIndex) as? WasmSectionFunctionTypeRecord)?.toSignature()?.let { signature ->
-            FunctionSignature(
+            GeneralFunctionEntry(
                 index + indexBase,
                 codes.getOrNull(index)?.offset,
                 signature,
@@ -201,7 +201,7 @@ internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<Funct
 
 internal fun CommonByteBuffer.importSymbols(
     wasmModule: WasmModule?
-): List<ImportSignature> {
+): List<ImportFunctionEntry> {
     val records = with(wasmModule!!.importSection) {
         this ?: return@with emptyList()
         this@importSymbols.getImportRecords()
@@ -213,7 +213,7 @@ internal fun CommonByteBuffer.importSymbols(
             is WasmTypeIndexExternalType -> (record.type as WasmTypeIndexExternalType).toSignature(types)
             else -> null
         }
-        ImportSignature(index,record.prefix, record.name, signature)
+        ImportFunctionEntry(index,record.prefix, record.name, signature)
     }
     return signatures
 }
@@ -340,23 +340,23 @@ data class DataEntry(
 
 }
 
-data class WasmExportFunctionRecord(val name: String, val signature: WasmSignature)
+data class WasmExportFunctionRecord(val name: String, val entry: FunctionEntry)
 
-interface WasmSignature
-data class ImportSignature(
+sealed class FunctionEntry(open val index: Int)
+data class ImportFunctionEntry(
     @JsonProperty("funcidx")
-    val index: Int,
+    override val index: Int,
     @JsonProperty("module")
     val module: String,
     @JsonProperty("name")
     val name: String,
     @JsonProperty("signature")
     val signature: SerializationSignature?
-): WasmSignature
+): FunctionEntry(index)
 
-data class FunctionSignature(
+data class GeneralFunctionEntry(
     @JsonProperty("funcidx")
-    val index: Int,
+    override val index: Int,
     @JsonProperty("offset")
     val offset: Long?,
     @JsonProperty("signature")
@@ -365,7 +365,7 @@ data class FunctionSignature(
     val locals: List<Local>?,
     @JsonProperty("code")
     val code: String? = null
-) : WasmSignature
+) : FunctionEntry(index)
 
 @JsonSerialize(using = LocalSerializer::class)
 sealed class Local(open val local: Int)

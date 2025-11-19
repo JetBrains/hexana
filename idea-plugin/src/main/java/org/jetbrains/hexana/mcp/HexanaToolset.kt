@@ -321,7 +321,7 @@ class HexanaToolset : McpToolset {
 
         {
           "name": string,
-          "signature": {
+          "entry": {
             "funcidx": number,
             "module": string,
             "name": string,
@@ -334,7 +334,7 @@ class HexanaToolset : McpToolset {
         for re-imported functions, or 
         {
           "name": string,
-          "signature": {
+          "entry": {
             "funcidx": number,
             "offset": number,
             signature: {
@@ -347,7 +347,7 @@ class HexanaToolset : McpToolset {
         
       • module   — the module path of the import ("env", "wasi_snapshot_preview1", etc.)
       • name     — the imported function's name
-      • signature — optional parameter/result type information
+      • entry — description of the function entry point (imported or general)
       • funcidx     — function index in the module
       • offset    — code section offset (if available)
       • signature — parameters / result types
@@ -363,7 +363,7 @@ class HexanaToolset : McpToolset {
           "functions": [
             {
               "name": "add",
-              "signature": {
+              "entry": {
                 "index": 1,
                 "offset": 280,
                 "signature": { "params": ["i32", "i32"], "results": ["i32"] },
@@ -373,7 +373,7 @@ class HexanaToolset : McpToolset {
             },
             {
               "name": "log",
-              "signature": {
+              "entry": {
                 "module": "env",
                 "name": "log",
                 "signature": { "params": ["i32"], "results": [] }
