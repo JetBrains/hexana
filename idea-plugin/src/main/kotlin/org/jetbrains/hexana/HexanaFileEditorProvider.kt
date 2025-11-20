@@ -17,7 +17,7 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
         project: Project,
         file: VirtualFile
     ): Boolean {
-        return file.fileType is WasmFileType
+        return file.fileType is WasmFileType || file.fileType is BinaryFileType
     }
 
     override fun createEditor(

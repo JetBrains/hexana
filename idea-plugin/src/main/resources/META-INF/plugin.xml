@@ -36,6 +36,10 @@
                   fieldName="INSTANCE"
                   extensions="wasm" />
 
+        <fileType name="binary"
+                  implementationClass="org.jetbrains.hexana.BinaryFileType"
+                  fieldName="INSTANCE"/>
+
         <fileType name="wat"
                   implementationClass="org.jetbrains.hexana.wat.WatFileType"
                   fieldName="INSTANCE"
