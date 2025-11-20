@@ -12,6 +12,7 @@ import com.intellij.ui.dsl.builder.AlignY
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
 import org.jetbrains.annotations.NonNls
+import java.nio.file.Path
 
 
 @Service
@@ -32,7 +33,7 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
     val wasm2watExecPath: String
         get() {
             return wabtDir.takeIf { it.isNotBlank() }?.let {
-                "$it/wasm2wat"
+                Path.of(it, "wasm2wat").toString()
             } ?: "wasm2wat"
         }
 
