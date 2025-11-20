@@ -15,8 +15,7 @@ pluginManagement {
 
 rootProject.name = "hexana"
 
-include("core")
+include("binaryProvider")
 include("wasm")
 include("encdec")
 include("idea-plugin")
-//include("mcp:client")

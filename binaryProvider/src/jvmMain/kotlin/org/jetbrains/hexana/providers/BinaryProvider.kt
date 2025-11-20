@@ -5,7 +5,7 @@ import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 import java.nio.ByteBuffer
 
-internal sealed interface BinaryProvider {
+sealed interface BinaryProvider {
     val bytes: ByteArray
 }
 

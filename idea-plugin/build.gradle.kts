@@ -53,6 +53,8 @@ dependencies {
 
     implementation(project(":encdec"))
     implementation(project(":wasm"))
+    implementation(project(":binaryProvider"))
+
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.20.0")
 
     // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799

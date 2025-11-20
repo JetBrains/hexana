@@ -42,7 +42,6 @@ import androidx.compose.ui.platform.LocalDensity
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.Text
 import java.awt.Cursor
