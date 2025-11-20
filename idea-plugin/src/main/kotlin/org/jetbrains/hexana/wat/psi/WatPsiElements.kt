@@ -6,6 +6,8 @@ import com.intellij.openapi.util.NlsSafe
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiNameIdentifierOwner
 import com.intellij.psi.PsiReference
+import org.jetbrains.hexana.wat.WatPreviewProvider
+
 
 open class WatPsiElement(node: ASTNode) : ASTWrapperPsiElement(node), PsiElement
 
@@ -37,6 +39,12 @@ abstract class WatNameIdentifierOwner(node: ASTNode) : WatPsiElement(node), PsiN
 
     override fun setName(name: @NlsSafe String): PsiElement? {
         return null
+    }
+
+    override fun navigate(requestFocus: Boolean) {
+        if (!WatPreviewProvider.navigateInWatPreviewFile(project, containingFile.virtualFile, textOffset, requestFocus)) {
+            super.navigate(requestFocus)
+        }
     }
 }
 

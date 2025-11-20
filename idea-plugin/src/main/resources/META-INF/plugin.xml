@@ -43,6 +43,7 @@
                   extensions="wat" />
 
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
+        <fileEditorProvider implementation="org.jetbrains.hexana.wat.WatPreviewProvider"/>
 
         <lang.parserDefinition language="wat" implementationClass="org.jetbrains.hexana.wat.psi.WatParserDefinition" />
         <lang.syntaxHighlighter language="wat" implementationClass="org.jetbrains.hexana.wat.WatSyntaxHighlighter"/>
