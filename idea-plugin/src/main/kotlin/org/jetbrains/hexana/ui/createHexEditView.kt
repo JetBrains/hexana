@@ -22,18 +22,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import kotlin.math.min
 
 @Composable
 fun createHexEditView(buf: ByteArray) {
     val listState = rememberLazyListState()
-    val backgroundColor = if (JewelTheme.isDark) Color.Black else Color.White
-    val textColor = if (JewelTheme.isDark) Color.White else Color.Black
-    val hexTextColor = if (JewelTheme.isDark) Color.Gray else Color.DarkGray
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(backgroundColor)) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         val separator = 1.dp
         val half = (maxWidth - separator) / 2
         val bytesPerRow = 16
@@ -46,10 +42,10 @@ fun createHexEditView(buf: ByteArray) {
                 Box(
                     modifier = Modifier
                         .width(offsetWidth)
-                        .background(backgroundColor)
+                        .background(HexanaTheme.backgroundColor)
                         .padding(horizontal = 8.dp)
                 ) {}
-                Box(modifier = Modifier.width(half).background(backgroundColor).padding(horizontal = 8.dp)) {
+                Box(modifier = Modifier.width(half).background(HexanaTheme.backgroundColor).padding(horizontal = 8.dp)) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(spacing)
                     ) {
@@ -57,7 +53,7 @@ fun createHexEditView(buf: ByteArray) {
                             Text(
                                 i.asHexString(),
                                 style = TextStyle(
-                                    color = textColor,
+                                    color = HexanaTheme.textColor,
                                     fontFamily = FontFamily.Monospace
                                 )
                             )
@@ -65,11 +61,11 @@ fun createHexEditView(buf: ByteArray) {
                     }
                 }
                 Box(modifier = Modifier.width(separator).background(Color.Gray))
-                Box(modifier = Modifier.width(half).background(backgroundColor).padding(horizontal = 8.dp)) {
+                Box(modifier = Modifier.width(half).background(HexanaTheme.backgroundColor).padding(horizontal = 8.dp)) {
                     Text(
                         "ASCII",
                         style = TextStyle(
-                            color = textColor,
+                            color = HexanaTheme.textColor,
                             fontFamily = FontFamily.Monospace
                         )
                     )
@@ -82,7 +78,7 @@ fun createHexEditView(buf: ByteArray) {
                             Box(
                                 modifier = Modifier
                                     .width(offsetWidth)
-                                    .background(backgroundColor)
+                                    .background(HexanaTheme.backgroundColor)
                                     .padding(horizontal = 8.dp),
                                 contentAlignment = Alignment.CenterEnd
                             ) {
@@ -93,7 +89,7 @@ fun createHexEditView(buf: ByteArray) {
                                 }
                             }
 
-                            Box(modifier = Modifier.width(half).background(backgroundColor).padding(horizontal = 8.dp)) {
+                            Box(modifier = Modifier.width(half).background(HexanaTheme.backgroundColor).padding(horizontal = 8.dp)) {
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(spacing),
                                 ) {
@@ -103,7 +99,7 @@ fun createHexEditView(buf: ByteArray) {
                                         Text(
                                             (buf[idx].toInt() and 0xFF).asHexString(),
                                             style = TextStyle(
-                                                color = hexTextColor,
+                                                color = HexanaTheme.textColor,
                                                 fontFamily = FontFamily.Monospace
                                             )
                                         )
@@ -111,7 +107,7 @@ fun createHexEditView(buf: ByteArray) {
                                 }
                             }
                             Box(modifier = Modifier.width(separator).background(Color.Gray))
-                            Box(modifier = Modifier.width(half).background(backgroundColor).padding(horizontal = 8.dp)) {
+                            Box(modifier = Modifier.width(half).background(HexanaTheme.backgroundColor).padding(horizontal = 8.dp)) {
                                 Row(
                                     horizontalArrangement = Arrangement.Start
                                 ) {
@@ -123,7 +119,7 @@ fun createHexEditView(buf: ByteArray) {
                                         Text(
                                             ch,
                                             style = TextStyle(
-                                                color = textColor,
+                                                color = HexanaTheme.textColor,
                                                 fontFamily = FontFamily.Monospace
                                             )
                                         )
