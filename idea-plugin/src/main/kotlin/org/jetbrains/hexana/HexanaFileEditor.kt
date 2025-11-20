@@ -63,7 +63,7 @@ class HexanaFileEditor(
     }
 
     override fun getName(): @Nls(capitalization = Nls.Capitalization.Title) String {
-        return "WASM"
+        return "Hex"
     }
 
     override fun setState(state: FileEditorState) {
