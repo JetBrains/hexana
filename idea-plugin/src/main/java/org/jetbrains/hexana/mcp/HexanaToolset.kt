@@ -739,4 +739,104 @@ class HexanaToolset : McpToolset {
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listMemory(wasmModule))
     }
+
+    @McpTool("get_globals_for_indices")
+    @McpDescription(
+        """
+    Returns a subset of WebAssembly global variables selected by their
+    global indices (globalidx). This tool behaves like list_globals,
+    but filters the output to only the requested indices, which is often
+    more efficient and more relevant for AI workflows, dependency tracing,
+    and targeted analysis.
+
+    ───────────────────────────────────────────────────────────────
+    🧩 Input format
+
+        {
+          "file": "/absolute/path/to/module.wasm",
+          "globalidx": [0, 3, 7, 12]
+        }
+
+    The globalidx list specifies exactly which globals should be returned.
+    Indices follow the module's global index space.
+
+    ───────────────────────────────────────────────────────────────
+    🧩 Output JSON format
+
+    For each requested global index, a JSON record is returned:
+
+        {
+          "globalidx": number,
+          "type": string,          // e.g. "i32", "i64", "f32", "f64", "v128"
+          "mutability": boolean,   // true = mutable, false = immutable
+          "expression": string     // stringified Wasm opcode sequence
+        }
+
+    • type         — stringified WebAssembly value type  
+    • mutability   — "var" = true, "const" = false  
+    • expression   — initializer expression, normalized into a readable
+                      sequence of Wasm opcodes (e.g. "i32.const 42",
+                      "global.get 1", "i64.const 0", etc.)
+
+    ───────────────────────────────────────────────────────────────
+    📘 Example response
+
+        {
+          "globals": [
+            {
+              "globalidx": 0,
+              "type": "i32",
+              "mutability": false,
+              "expression": "i32.const 42"
+            },
+            {
+              "globalidx": 7,
+              "type": "i64",
+              "mutability": true,
+              "expression": "global.get 0"
+            }
+          ]
+        }
+
+    Only globals listed in the input appear in the response.
+
+    ───────────────────────────────────────────────────────────────
+    🔧 Command-line equivalents for validation
+
+      wasm-tools:
+        wasm-tools print module.wasm --details --globals
+
+      wasm-objdump:
+        wasm-objdump -x module.wasm | grep GLOBAL -A 2
+
+      wasm2wat:
+        wasm2wat module.wasm | grep "(global"
+
+    Example textual form:
+        (global (mut i32) (i32.const 42))
+        (global i64 (global.get 0))
+
+    ───────────────────────────────────────────────────────────────
+    📌 Notes
+
+    • This tool returns only the globals explicitly requested, which is
+      ideal for selective data extraction in LLM-driven workflows.
+    • The initializer expression is normalized for readability, not raw
+      binary opcode bytes.
+    • globalidx refers to the unified global index space defined by the
+      WebAssembly spec.
+    """
+    )
+    suspend fun getGlobalsForIndices(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+        @McpDescription("List of function indices (globalidx) to retrieve details for") indices: List<Int>
+    ): String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.listGlobalsByIndices(wasmModule, indices))
+    }
 }

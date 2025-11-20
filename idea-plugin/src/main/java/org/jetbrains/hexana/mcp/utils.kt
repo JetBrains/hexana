@@ -247,6 +247,14 @@ internal fun CommonByteBuffer.listGlobals(wasmModule: WasmModule?): List<GlobalR
     return globals.map { GlobalRecord(it.globalidx, it.type.valueType.toSignature(), it.type.mutable, it.expression.wat()) }
 }
 
+internal fun CommonByteBuffer.listGlobalsByIndices(
+    wasmModule: WasmModule?,
+    indices: List<Int>
+): List<GlobalRecord> {
+    wasmModule ?: return emptyList()
+    return listGlobals(wasmModule).filter { indices.contains(it.globalIdx) }
+}
+
 data class GlobalRecord(val globalIdx: Int, val type: String, val mutability: Boolean, val expression: String?)
 
 internal fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRecord> {
