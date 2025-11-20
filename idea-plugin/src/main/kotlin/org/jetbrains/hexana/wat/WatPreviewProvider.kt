@@ -79,7 +79,7 @@ class WatPreviewProvider : AsyncFileEditorProvider, DumbAware {
         editorCoroutineScope: CoroutineScope
     ): FileEditor {
         val ioFile = VfsUtil.virtualToIoFile(file)
-        val conversionResult = HexanaService.Companion.getInstance().convertWasmToWat(ioFile)
+        val conversionResult = HexanaService.getInstance().convertWasmToWat(ioFile)
         val watText = when (conversionResult) {
             is HexanaService.WatConversionResult.Success -> conversionResult.wat
             is HexanaService.WatConversionResult.Error -> "(;" + conversionResult.error.trim() + ";)"

@@ -25,7 +25,8 @@ class HexanaService(
 
     @RequiresBackgroundThread
     fun convertWasmToWat(file: File): WatConversionResult {
-        val cmd = GeneralCommandLine("wasm2wat", "--fold-exprs", "--generate-names", file.absolutePath)
+        val wasm2wat = HexanaSettings.getInstance().wasm2watExecPath
+        val cmd = GeneralCommandLine(wasm2wat, "--fold-exprs", "--generate-names", file.absolutePath)
         return try {
             val processOutput = ExecUtil.execAndGetOutput(cmd)
             if (processOutput.exitCode != 0) {

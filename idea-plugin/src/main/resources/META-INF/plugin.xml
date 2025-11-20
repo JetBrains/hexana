@@ -45,6 +45,12 @@
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
+        <applicationConfigurable parentId="tools"
+                                 id="hexana.settings"
+                                 bundle="messages.HexanaBundle"
+                                 key="hexana.settings.displayName"
+                                 instance="org.jetbrains.hexana.HexanaConfigurable"  />
+
         <fileType name="wasm"
                   implementationClass="org.jetbrains.hexana.WasmFileType"
                   fieldName="INSTANCE"
