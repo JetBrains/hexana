@@ -12,7 +12,21 @@
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        Plugin adds support for various binary files
+        Hexana is a WebAssembly analysis and inspection tool integrated
+  into JetBrains IDEs. It provides a structured view of WASM modules,
+  including imports, exports, function indices, type signatures,
+  locals, code bodies, GC types, and recursive type definitions.
+
+  Hexana also exposes a set of Model Context Protocol (MCP) tools that
+  allow AI-assisted exploration of WebAssembly binaries. These tools
+  support tasks such as retrieving function metadata, generating stubs,
+  analyzing signatures, and navigating module structure directly from
+  an AI assistant.
+
+  Hexana aims to streamline work with WebAssembly artifacts by offering
+  an interactive viewer, WAT integration, section browsing, and
+  function-level introspection – providing a seamless workflow for
+  developers working with compiled WASM modules.
     ]]></description>
 
     <!-- Product and plugin compatibility requirements.
