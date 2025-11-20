@@ -1,9 +1,8 @@
 package org.jetbrains.hexana.providers
 
-import org.jetbrains.hexana.io.JvmByteBuffer
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
-import java.nio.ByteBuffer
 
 sealed interface BinaryProvider {
     val bytes: ByteArray
@@ -11,7 +10,7 @@ sealed interface BinaryProvider {
 
 class GenericBinaryProvider(override val bytes: ByteArray) : BinaryProvider
 class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
-    private val buffer = JvmByteBuffer(ByteBuffer.wrap(bytes))
+    private val buffer = bytes.toCommonByteBuffer()
     val wasmModule = WasmParser().parse(buffer)
 
     fun getImports(): List<WasmImportRecord> {
