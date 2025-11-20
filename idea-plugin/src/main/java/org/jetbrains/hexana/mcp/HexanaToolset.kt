@@ -5,11 +5,10 @@ import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.toolsets.Constants
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.WasmFileType
-import org.jetbrains.hexana.io.JvmByteBuffer
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmParser
-import java.nio.ByteBuffer
-
 
 private val logger: Logger = Logger.getInstance(HexanaToolset::class.java)
 
@@ -98,7 +97,7 @@ class HexanaToolset : McpToolset {
         if (file.fileType != WasmFileType.INSTANCE) {
             return notWasmError
         }
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val buffer = file.contentsToCommonByteBuffer()
         val module = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.importSymbols(module))
     }
@@ -125,7 +124,7 @@ class HexanaToolset : McpToolset {
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listFunctions(wasmModule))
     }
@@ -236,7 +235,7 @@ class HexanaToolset : McpToolset {
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listDataSections(wasmModule))
     }
@@ -308,7 +307,7 @@ class HexanaToolset : McpToolset {
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listExports(wasmModule))
     }
@@ -406,7 +405,7 @@ class HexanaToolset : McpToolset {
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listExportedFunctions(wasmModule))
     }
@@ -535,7 +534,7 @@ class HexanaToolset : McpToolset {
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.functionsByIndices(wasmModule, indices))
     }
@@ -620,7 +619,7 @@ class HexanaToolset : McpToolset {
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listGlobals(wasmModule))
     }
@@ -735,7 +734,7 @@ class HexanaToolset : McpToolset {
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listMemory(wasmModule))
     }
@@ -835,7 +834,7 @@ class HexanaToolset : McpToolset {
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listGlobalsByIndices(wasmModule, indices))
     }
@@ -960,7 +959,7 @@ class HexanaToolset : McpToolset {
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listMemoryByIndices(wasmModule, indices))
     }
@@ -1101,7 +1100,7 @@ class HexanaToolset : McpToolset {
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listTypes(wasmModule))
     }
@@ -1215,8 +1214,11 @@ class HexanaToolset : McpToolset {
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
-        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listTypesByIndices(wasmModule, indices))
     }
 }
+
+
+private fun VirtualFile.contentsToCommonByteBuffer() = contentsToByteArray().toCommonByteBuffer()

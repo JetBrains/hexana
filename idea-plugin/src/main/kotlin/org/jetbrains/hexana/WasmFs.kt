@@ -12,7 +12,7 @@ import com.intellij.openapi.vfs.newvfs.VfsImplUtil
 import com.intellij.openapi.vfs.newvfs.impl.FsRoot
 import fleet.util.safeAs
 import org.jetbrains.annotations.NonNls
-import org.jetbrains.hexana.io.JvmByteBuffer
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.sections.*
 import java.nio.ByteBuffer
@@ -93,7 +93,7 @@ class WasmArchiveHandler(
         } catch (_: Exception) {
             return emptyMap()
         }
-        val module = parser.parse(JvmByteBuffer(ByteBuffer.wrap(content))) ?: return emptyMap()
+        val module = parser.parse(content.toCommonByteBuffer()) ?: return emptyMap()
 
         val sections = listOfNotNull(
             module.customSection,
