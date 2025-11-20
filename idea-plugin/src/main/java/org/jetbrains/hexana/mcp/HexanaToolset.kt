@@ -839,4 +839,129 @@ class HexanaToolset : McpToolset {
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listGlobalsByIndices(wasmModule, indices))
     }
+
+    @McpTool("get_memory_for_indices")
+    @McpDescription(
+        """
+    Returns a filtered subset of linear memory declarations from a WebAssembly
+    (.wasm) module, selected by their memory indices (memidx). This tool is the
+    selective version of list_memory and is useful when AI or analysis workflows
+    require only specific memories, especially in multi-memory or wasm64 modules.
+
+    ───────────────────────────────────────────────────────────────
+    🧩 Input format
+
+        {
+          "file": "/absolute/path/to/module.wasm",
+          "memidx": [0, 2, 5]
+        }
+
+    The memidx list specifies the exact memory indices to return. Indices follow
+    the module's memory index space.
+
+    ───────────────────────────────────────────────────────────────
+    🧩 Output JSON format
+
+        {
+          "memories": [
+            {
+              "memidx": number,
+              "limits": {
+                "addressType": "i32" | "i64",
+                "min": number,
+                "max": number | null,
+                "hasMax": boolean,
+                "range": "n..m" | "n..ε",
+                "flag": "0x00" | "0x01" | "0x04" | "0x05"
+              }
+            }
+          ]
+        }
+
+    Meaning of fields:
+      • memidx       — linear memory index in the module (0-based)
+      • addressType  — "i32" for 32-bit memory, "i64" for 64-bit memory
+      • min          — minimum number of pages required by the module
+      • max          — maximum number of pages (null = unbounded)
+      • hasMax       — explicit boolean to avoid inference errors
+      • range        — human-readable representation ("1..ε", "2..8")
+      • flag         — original Wasm encoding prefix:
+                         0x00: (i32, min only)
+                         0x01: (i32, min..max)
+                         0x04: (i64, min only)
+                         0x05: (i64, min..max)
+
+    These correspond to the WebAssembly limits grammar in spec §5.3.9.
+
+    ───────────────────────────────────────────────────────────────
+    📘 Example response
+
+        {
+          "memories": [
+            {
+              "memidx": 0,
+              "limits": {
+                "addressType": "i32",
+                "min": 1,
+                "max": null,
+                "hasMax": false,
+                "range": "1..ε",
+                "flag": "0x00"
+              }
+            },
+            {
+              "memidx": 2,
+              "limits": {
+                "addressType": "i32",
+                "min": 2,
+                "max": 8,
+                "hasMax": true,
+                "range": "2..8",
+                "flag": "0x01"
+              }
+            }
+          ]
+        }
+
+    ───────────────────────────────────────────────────────────────
+    🔧 Command-line equivalents for validation
+
+      wasm-tools:
+        wasm-tools print module.wasm --details --memory
+
+      wasm-objdump:
+        wasm-objdump -x module.wasm | grep "Memory" -A 2
+
+      wasm2wat:
+        wasm2wat module.wasm | grep "(memory"
+
+    Example Wasm textual output:
+        (memory (export "mem") 2 8)
+        (memory 1)
+
+    ───────────────────────────────────────────────────────────────
+    📌 Notes
+
+    • This tool returns only the memories requested by their indices.
+    • Especially useful for wasm64, multi-memory modules, or when only
+      memory used by a specific function needs to be analyzed.
+    • The limit representation is optimized for LLM correctness:
+        - explicit maximum presence (hasMax)
+        - human-readable range
+        - preserved encoding flag
+        - explicit addressType
+    """
+    )
+    suspend fun getMemoryForIndices(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+        @McpDescription("List of memory indices (memidx) to retrieve details for") indices: List<Int>
+    ): String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.listMemoryByIndices(wasmModule, indices))
+    }
 }

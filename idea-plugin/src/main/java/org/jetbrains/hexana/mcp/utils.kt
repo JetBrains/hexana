@@ -267,6 +267,14 @@ internal fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRe
     return memories.map { MemoryRecord(it.memidx, Limits(it.limits)) }
 }
 
+internal fun CommonByteBuffer.listMemoryByIndices(
+    wasmModule: WasmModule?,
+    indices: List<Int>
+): List<MemoryRecord> {
+    wasmModule ?: return emptyList()
+    return listMemory(wasmModule).filter { indices.contains(it.memoryIdx) }
+}
+
 internal data class MemoryRecord(val memoryIdx: Int, val limit: Limits<*>)
 
 internal class Limits<T>(private val internal: WasmLimits<T>){
