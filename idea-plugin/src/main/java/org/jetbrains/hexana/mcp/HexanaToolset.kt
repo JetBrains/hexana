@@ -964,4 +964,145 @@ class HexanaToolset : McpToolset {
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listMemoryByIndices(wasmModule, indices))
     }
+
+    @McpTool("list_types")
+    @McpDescription(
+        """
+    Returns all type definitions declared in a WebAssembly (.wasm) module.
+    This includes all function types, reference types, and GC composite
+    types (struct, array), as well as recursive type groups when present.
+    The result is encoded using an AI-friendly, self-describing representation
+    that avoids Wasm binary ambiguities and is optimal for LLM reasoning.
+
+    ───────────────────────────────────────────────────────────────
+    🧩 Output JSON format
+
+        {
+          "types": [
+            {
+              "typeidx": number,
+              "kind": "func",
+              "params": [string],
+              "results": [string],
+              "repr": "(func (param ...) (result ...))"
+            },
+            {
+              "typeidx": number,
+              "kind": "struct",
+              "fields": [
+                {
+                  "type": { "kind": "val" | "ref" | "packed", ... },
+                  "mutable": boolean
+                }
+              ],
+              "repr": "(struct (field ...) ...)"
+            },
+            {
+              "typeidx": number,
+              "kind": "array",
+              "element": {
+                "type":  { "kind": "val" | "ref" | "packed", ... },
+                "mutable": boolean
+              },
+              "repr": "(array ...)"
+            },
+            {
+              "typeidx": number,
+              "kind": "rec",
+              "types": [ ... recursive element type entries ... ],
+              "repr": "(rec (type ...) ...)"
+            }
+          ]
+        }
+
+    Each type entry includes:
+      • typeidx — the index in the module’s type index space  
+      • kind    — "func", "struct", "array", "rec", or future composite kinds  
+      • params  — list of parameter value types (function types only)  
+      • results — list of result types (function types only)  
+      • fields  — array of field descriptors (struct types)  
+      • element — element descriptor (array types)  
+      • repr    — readable s-expression form for LLM interpretation  
+      • types   — nested types for recursive groups  
+
+    Value types use:
+        { "kind": "val", "type": "i32" }
+
+    Reference types use:
+        { "kind": "ref", "refKind": "eq" | "func" | "extern" | "any" | "i31" | "struct" | "array", "nullable": true/false }
+
+    Packed types use:
+        { "kind": "packed", "packType": "i8" | "i16" }
+
+    ───────────────────────────────────────────────────────────────
+    📘 Example response
+
+        {
+          "types": [
+            {
+              "typeidx": 0,
+              "kind": "func",
+              "params": ["i32"],
+              "results": [],
+              "repr": "(func (param i32))"
+            },
+            {
+              "typeidx": 1,
+              "kind": "func",
+              "params": ["i32", "i32"],
+              "results": ["i32"],
+              "repr": "(func (param i32 i32) (result i32))"
+            },
+            {
+              "typeidx": 2,
+              "kind": "struct",
+              "fields": [
+                { "type": { "kind": "val", "type": "i32" }, "mutable": false },
+                { "type": { "kind": "ref", "refKind": "eq", "nullable": true }, "mutable": true }
+              ],
+              "repr": "(struct (field i32) (field (ref null eq)))"
+            }
+          ]
+        }
+
+    ───────────────────────────────────────────────────────────────
+    🔧 Command-line equivalents for validation
+
+      wasm-tools:
+        wasm-tools print module.wasm --details --types
+
+      wasm-objdump:
+        wasm-objdump -x module.wasm | grep Type -A 5
+
+      wasm2wat:
+        wasm2wat module.wasm | grep "(type"
+
+    Example textual output:
+        (type (;0;) (func (param i32)))
+        (type (;1;) (func (param i32 i32) (result i32)))
+        (type (;2;) (struct (field i32) (field (ref null any))))
+
+    ───────────────────────────────────────────────────────────────
+    📌 Notes
+
+    • All type forms defined in the module are returned, including GC types
+      and recursive type groups when present.
+    • The AI-friendly representation avoids raw bytes or binary encodings.
+    • The `repr` field helps LLMs reason about type shapes and signature
+      structures with minimal hallucination risk.
+    • This tool is complementary to get_types_for_indices, which provides
+      selective retrieval for typeidx-dependent analysis.
+    """
+    )
+    suspend fun listTypes(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
+    ): String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.listTypes(wasmModule))
+    }
 }
