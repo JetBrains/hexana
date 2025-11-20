@@ -87,7 +87,7 @@ class WatPreviewProvider : AsyncFileEditorProvider, DumbAware {
         val watPreviewFile = LightVirtualFile(file.name, WatFileType.INSTANCE, watText)
         watPreviewFile.putUserData(ORIGINAL_WASM_FILE, file)
         return withContext(Dispatchers.EDT) {
-            TextEditorProvider.Companion.getInstance().createEditor(project, watPreviewFile)
+            TextEditorProvider.getInstance().createEditor(project, watPreviewFile)
         }
     }
 
