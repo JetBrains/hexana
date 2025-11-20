@@ -38,20 +38,21 @@ class HexanaFileEditor(
         val hexView = createComposePanel {
             createHexEditView(buf)
         }
+        panel.add(hexView)
 
-        if (additionalViews.isEmpty()) {
-            panel.add(hexView)
-        } else {
-            val splitter = Splitter(true, 0.5f)
-            splitter.firstComponent = hexView
-
-            val tabsPane = JBTabbedPane()
-            for (view in additionalViews) {
-                tabsPane.addTab(view.tabName, null, view.component)
-            }
-            splitter.secondComponent = tabsPane
-            panel.add(splitter)
-        }
+//        if (additionalViews.isEmpty()) {
+//            panel.add(hexView)
+//        } else {
+//            val splitter = Splitter(true, 0.5f)
+//            splitter.firstComponent = hexView
+//
+//            val tabsPane = JBTabbedPane()
+//            for (view in additionalViews) {
+//                tabsPane.addTab(view.tabName, null, view.component)
+//            }
+//            splitter.secondComponent = tabsPane
+//            panel.add(splitter)
+//        }
     }
 
     override fun getComponent(): JComponent {
