@@ -5,6 +5,9 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+
+private fun createByteBuffer(vararg bytes: Byte = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8, 9)) = bytes.toCommonByteBuffer()
+
 class CommonByteBufferTests {
 
     @Test
