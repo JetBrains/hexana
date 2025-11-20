@@ -39,16 +39,22 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalDensity
+import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.GenericBinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.Text
 import java.awt.Cursor
 import kotlin.math.min
 
 @Composable
-fun createHexEditView(buf: ByteArray) {
+internal fun createHexEditView(binaryProvider: BinaryProvider) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     var topFraction by remember { mutableFloatStateOf(0.6f) }
+
+    val buf = binaryProvider.bytes
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         val totalHeightPx = with(density) { maxHeight.toPx() }
@@ -189,9 +195,9 @@ fun createHexEditView(buf: ByteArray) {
                 }
             }
 
-            val tabs = remember { mutableStateListOf<Tab>() }
+            val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels()) }
 
-            if (tabs.isNotEmpty()) {
+            if (panels.isNotEmpty()) {
                 HorizontalDraggableDivider(
                     onDrag = { deltaY ->
                         if (totalHeightPx > 0) {
@@ -208,7 +214,7 @@ fun createHexEditView(buf: ByteArray) {
                         .background(HexanaTheme.backgroundColor),
                     contentAlignment = Alignment.TopStart
                 ) {
-                    TabsPanel(tabs)
+                    TabsPanel(panels)
                 }
             }
         }
@@ -216,13 +222,15 @@ fun createHexEditView(buf: ByteArray) {
 }
 
 @Composable
-private fun TabsPanel(tabs: List<Tab>) {
-    var selectedTab by remember { mutableStateOf<Tab>(Tab.Imports) }
+private fun TabsPanel(tabs: List<Panel>) {
+    if (tabs.isEmpty()) return
+
+    var selectedPanel by remember { mutableStateOf<Panel>(tabs.first()) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().background(HexanaTheme.backgroundColor)) {
             tabs.forEach { tab ->
-                val selected = tab == selectedTab
+                val selected = tab == selectedPanel
                 val fg = if (selected) HexanaTheme.textColor else HexanaTheme.textColor.copy(alpha = 0.8f)
                 val underline = if (selected) HexanaTheme.textColor else Color.Transparent
 
@@ -230,11 +238,11 @@ private fun TabsPanel(tabs: List<Tab>) {
                     modifier = Modifier
                         .width(IntrinsicSize.Min)
                         .padding(horizontal = 8.dp)
-                        .clickable { selectedTab = tab }
+                        .clickable { selectedPanel = tab }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(tab.title, style = TextStyle(color = fg))
+                    Text(tab.description, style = TextStyle(color = fg))
                     Spacer(Modifier.height(4.dp))
                     Divider(
                         orientation = org.jetbrains.jewel.ui.Orientation.Horizontal,
@@ -249,12 +257,8 @@ private fun TabsPanel(tabs: List<Tab>) {
 
         Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
 
-        // Tab content
         Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-            when (selectedTab) {
-                Tab.Imports -> Text("Preview content", style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace))
-                Tab.Exports -> Text("Inspector content", style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace))
-            }
+            selectedPanel.onRender()
         }
     }
 
@@ -291,8 +295,57 @@ private fun HorizontalDraggableDivider(onDrag: (deltaY: Float) -> Unit) {
 
 private fun Int.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
 
-private sealed interface Tab {
-    val title: String
-    data object Imports : Tab { override val title = "Imports" }
-    data object Exports : Tab { override val title = "Exports" }
+
+private interface Panel {
+    val description: String
+
+    @Composable
+    fun onRender()
+}
+
+private sealed interface WasmPanel : Panel {
+    val wasmBinaryProvider: WasmBinaryProvider
+
+    class Imports(override val wasmBinaryProvider: WasmBinaryProvider) : WasmPanel {
+        override val description = "Imports"
+
+        @Composable
+        override fun onRender() {
+            val imports = remember { wasmBinaryProvider.getImports() }
+            val listState = rememberLazyListState()
+
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                items(imports.size) { idx ->
+                    val importRecord = imports[idx]
+                    Text(
+                        importRecord.name,
+                        style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace)
+                    )
+                }
+            }
+        }
+    }
+
+
+    class Exports(override val wasmBinaryProvider: WasmBinaryProvider) : WasmPanel {
+        override val description = "Exports"
+
+        @Composable
+        override fun onRender() {
+            Text("[EXPORTS]", style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace))
+        }
+    }
+}
+
+
+private fun BinaryProvider.resolvePanels(): Array<Panel> {
+    return when (this) {
+        is GenericBinaryProvider -> emptyArray()
+        is WasmBinaryProvider -> {
+            if (wasmModule == null) return emptyArray() else arrayOf(
+                WasmPanel.Imports(this),
+                WasmPanel.Exports(this)
+            )
+        }
+    }
 }

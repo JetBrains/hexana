@@ -3,13 +3,13 @@ package org.jetbrains.hexana
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Splitter
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.ui.createComposePanel
-import com.intellij.ui.components.JBTabbedPane
 import org.jetbrains.annotations.Nls
+import org.jetbrains.hexana.providers.GenericBinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.createHexEditView
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
@@ -35,24 +35,15 @@ class HexanaFileEditor(
         val file = WasmFsUtil.getLocalFile(myFile) ?: myFile
 
         val buf = file.contentsToByteArray()
+        val binaryProvider = when (file.extension) {
+            "wasm" -> WasmBinaryProvider(buf)
+            else -> GenericBinaryProvider(buf)
+        }
+
         val hexView = createComposePanel {
-            createHexEditView(buf)
+            createHexEditView(binaryProvider)
         }
         panel.add(hexView)
-
-//        if (additionalViews.isEmpty()) {
-//            panel.add(hexView)
-//        } else {
-//            val splitter = Splitter(true, 0.5f)
-//            splitter.firstComponent = hexView
-//
-//            val tabsPane = JBTabbedPane()
-//            for (view in additionalViews) {
-//                tabsPane.addTab(view.tabName, null, view.component)
-//            }
-//            splitter.secondComponent = tabsPane
-//            panel.add(splitter)
-//        }
     }
 
     override fun getComponent(): JComponent {
