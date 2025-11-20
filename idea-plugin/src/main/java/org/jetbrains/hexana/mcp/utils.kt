@@ -317,6 +317,14 @@ class McpPacked(val packType: String): McpType("packed")
 class McpRef(val refKind: String): McpType("ref")
 class McpRefWithNullability(val refKind: String, val nullable: Boolean): McpType("ref")
 
+internal fun CommonByteBuffer.listTypesByIndices(
+    wasmModule: WasmModule?,
+    indices: List<Int>
+): List<WasmTypeRecord> {
+    wasmModule ?: return emptyList()
+    return types(wasmModule).filterIndexed { index, _ -> indices.contains(index) }
+}
+
 internal fun CommonByteBuffer.listGlobals(wasmModule: WasmModule?): List<GlobalRecord> {
     wasmModule ?: return emptyList()
     val globals = with(wasmModule.globalSection) {

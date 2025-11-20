@@ -1105,4 +1105,118 @@ class HexanaToolset : McpToolset {
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listTypes(wasmModule))
     }
+
+    @McpTool("get_types_for_indices")
+    @McpDescription(
+        """
+    Returns a subset of WebAssembly type definitions selected by their
+    type indices (typeidx). This tool is the selective version of a
+    full type listing and is used when only specific type signatures
+    are relevant for analysis, signature resolution, or LLM-driven
+    reasoning about function interfaces.
+
+    ───────────────────────────────────────────────────────────────
+    🧩 Input format
+
+        {
+          "file": "/absolute/path/to/module.wasm",
+          "typeidx": [0, 3, 7]
+        }
+
+    The typeidx list specifies exactly which types should be returned.
+    Indices follow the module's type index space.
+
+    ───────────────────────────────────────────────────────────────
+    🧩 Output JSON format
+
+    Each returned entry has the form:
+
+        {
+          "typeidx": number,
+          "kind": "func",
+          "params": [string],
+          "results": [string],
+          "repr": "(param i32 i64) (result i32)"
+        }
+
+    Where:
+      • typeidx  — index of the type in the Wasm type space
+      • kind     — "func" (currently the only core Wasm type constructor)
+      • params   — list of parameter types (e.g. "i32", "f64")
+      • results  — list of result types (0 or 1 for MVP; multiple for 
+                    multi-value Wasm)
+      • repr     — a readable textual representation matching WebAssembly’s
+                    S-expression syntax, useful for LLM reasoning
+
+    Composite or reference types (future proposals) may also appear via:
+        {
+          "kind": "struct" | "array" | "subtype" | "rec",
+          ...
+        }
+    but only if present in the module (e.g. GC types).
+
+    ───────────────────────────────────────────────────────────────
+    📘 Example response
+
+        {
+          "types": [
+            {
+              "typeidx": 0,
+              "kind": "func",
+              "params": ["i32"],
+              "results": [],
+              "repr": "(func (param i32))"
+            },
+            {
+              "typeidx": 3,
+              "kind": "func",
+              "params": ["i32", "i32"],
+              "results": ["i32"],
+              "repr": "(func (param i32 i32) (result i32))"
+            }
+          ]
+        }
+
+    ───────────────────────────────────────────────────────────────
+    🔧 Command-line equivalents for validation
+
+      wasm-tools:
+        wasm-tools print module.wasm --details --types
+
+      wasm-objdump:
+        wasm-objdump -x module.wasm | grep Type -A 4
+
+      wasm2wat:
+        wasm2wat module.wasm | grep "(type"
+
+    Example textual equivalent:
+        (type ${'$'}t0 (func (param i32)))
+        (type ${'$'}t3 (func (param i32 i32) (result i32)))
+
+    ───────────────────────────────────────────────────────────────
+    📌 Notes
+
+    • Only requested types appear in the output.
+    • Output format is optimized for LLM correctness:
+        - explicit kind
+        - explicit param / result arrays
+        - readable repr for reasoning
+    • Multi-value returns and GC types are included if present.
+    • This tool integrates naturally with function-index based tools
+      that refer to type signatures by index.
+
+    """
+    )
+    suspend fun getTypesForIndices(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+        @McpDescription("List of type indices (typeidx) to retrieve details for") indices: List<Int>
+    ): String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = JvmByteBuffer(ByteBuffer.wrap(file.contentsToByteArray()))
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.listTypesByIndices(wasmModule, indices))
+    }
 }
