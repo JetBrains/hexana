@@ -4,6 +4,7 @@ import com.intellij.codeInsight.hint.HintUtil
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.editor.Document
+import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.fileEditor.*
 import com.intellij.openapi.fileEditor.impl.EditorComposite
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
@@ -67,6 +68,7 @@ class WatPreviewProvider : AsyncFileEditorProvider, DumbAware {
             val descriptor = OpenFileDescriptor(project, originalWasmFile, 0)
             descriptor.navigate(requestFocus)
             watEditor.caretModel.moveToOffset(offset)
+            watEditor.scrollingModel.scrollTo(watEditor.offsetToLogicalPosition(offset), ScrollType.MAKE_VISIBLE)
             return true
         }
     }
