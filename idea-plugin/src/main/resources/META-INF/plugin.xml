@@ -29,6 +29,8 @@
   developers working with compiled WASM modules.
     ]]></description>
 
+    <resource-bundle>messages.HexanaBundle</resource-bundle>
+
     <!-- Product and plugin compatibility requirements.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
     <dependencies>
@@ -69,6 +71,7 @@
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.wat.WatPreviewProvider"/>
         <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasm2WatNotification"/>
+        <fileTypeOverrider implementation="org.jetbrains.hexana.actions.HexFileTypeOverrider"/>
 
         <lang.parserDefinition language="wat" implementationClass="org.jetbrains.hexana.wat.psi.WatParserDefinition" />
         <lang.syntaxHighlighter language="wat" implementationClass="org.jetbrains.hexana.wat.WatSyntaxHighlighter"/>
@@ -78,6 +81,12 @@
         <!-- actionConfigurationCustomizer implementation="org.jetbrains.hexana.mcp.McpServerCustomizer"/-->
         <mcpServer.mcpToolset implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
     </extensions>
+
+    <actions>
+        <action id="hexana.openInHexView" class="org.jetbrains.hexana.actions.OpenInHexViewAction">
+            <add-to-group group-id="RevealGroup" anchor="last"/>
+        </action>
+    </actions>
 
     <extensionPoints>
         <extensionPoint qualifiedName="org.jetbrains.hexana.hexanaFileViewProvider"
