@@ -40,8 +40,17 @@ To publish an Idea plugin version A.B:
 
 - commit and push changes in `idea-plugin/gradle.properties` and `idea-plugin/CHANGELOG.md`
 
-- run the 'Publish Idea Plugin' build on TC
+- run the Publish Idea Plugin [1] build on TC
+
+To publish a nightly version of Idea plugin, run the Publish Idea Plugin Nightly [2] build.
+
+Or run locally: `./gradlew -PhexanaBuild=nightly -PhexanaNightlyBuildNumber=<nigthlyBuildNumber> -PpublishToken=<yourToken> :idea-plugin:publishPlugin`.
+This will pulblish version A.B.<nigthlyBuildNumber> to the nightly channel.
+
+[1]: https://ci.example.invalid/buildConfiguration/InnoHub_HexFlow_PublishIdeaPlugin
+[2]: https://ci.example.invalid/buildConfiguration/InnoHub_HexFlow_PublishIdeaPluginNightly
 
 ## Resources
+
 
 Add links to external resources for this project, such as CI server, bug tracker, etc.

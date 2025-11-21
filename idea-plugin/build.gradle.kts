@@ -13,10 +13,18 @@ plugins {
 group = "org.jetbrains.hexana"
 
 val baseVersion = project.property("pluginVersion") as String
-version = if (System.getenv()["HEXANA_RELEASE_BUILD"] == "1") {
-    baseVersion
-} else {
-    "$baseVersion-SNAPSHOT"
+val hexanaBuild = project.property("hexanaBuild")
+version = when (hexanaBuild) {
+    "release" -> {
+        baseVersion
+    }
+    "nightly" -> {
+        val buildNumber = project.findProperty("hexanaNightlyBuildNumber") as String
+        "$baseVersion.$buildNumber-nightly"
+    }
+    else -> {
+        "$baseVersion-SNAPSHOT"
+    }
 }
 
 repositories {
@@ -72,6 +80,9 @@ intellijPlatform {
 
     publishing {
         token = providers.gradleProperty("publishToken")
+        if (hexanaBuild == "nightly") {
+            channels = listOf("nightly")
+        }
     }
 
     pluginConfiguration {
