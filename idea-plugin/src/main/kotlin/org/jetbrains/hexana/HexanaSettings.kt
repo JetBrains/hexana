@@ -11,8 +11,8 @@ import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.AlignY
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.dsl.builder.toNonNullableProperty
 import org.jetbrains.annotations.NonNls
-import java.nio.file.Path
 
 
 @Service
@@ -24,23 +24,19 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
         fun getInstance(): HexanaSettings = service()
     }
 
-    var wabtDir: String
-        get() = state.wabtDir ?: ""
+    var wasmToolsPathInUi: String?
+        get() = state.wasmToolsPath
         set(value) {
-            state.wabtDir = value.takeIf { it.isNotBlank() }
+            state.wasmToolsPath = value?.takeIf { it.isNotBlank() }
         }
 
-    val wasmToolsExecPath: String
-        get() {
-            return wabtDir.takeIf { it.isNotBlank() }?.let {
-                Path.of(it, "wasm-tools").toString()
-            } ?: "wasm-tools"
-        }
+    val wasmToolsPath: String
+        get() = wasmToolsPathInUi ?: "wasm-tools"
 
 }
 
 class HexanaSettingsState : BaseState() {
-    var wabtDir: String? by string()
+    var wasmToolsPath: String? by string()
 }
 
 class HexanaConfigurable : DslConfigurableBase(), SearchableConfigurable {
@@ -48,15 +44,15 @@ class HexanaConfigurable : DslConfigurableBase(), SearchableConfigurable {
         val settings = HexanaSettings.getInstance()
         return panel {
             row {
-                textFieldWithBrowseButton(FileChooserDescriptorFactory.singleDir())
-                    .label(HexanaBundle.message("hexana.settings.wabtDirLabel"))
+                textFieldWithBrowseButton(FileChooserDescriptorFactory.singleFile())
+                    .label(HexanaBundle.message("hexana.settings.wasmTools"))
                     .align(AlignY.TOP)
                     .align(AlignX.FILL)
-                    .comment(HexanaBundle.message("hexana.settings.wabtDirComment"))
+                    .comment(HexanaBundle.message("hexana.settings.wasmToolsComment"))
                     .applyToComponent {
-                        emptyText.text = HexanaBundle.message("hexana.settings.wabtDirEmptyText")
+                        emptyText.text = HexanaBundle.message("hexana.settings.wasmToolsEmptyText")
                     }
-                    .bindText(settings::wabtDir)
+                    .bindText(settings::wasmToolsPathInUi.toNonNullableProperty(""))
             }
         }
     }
