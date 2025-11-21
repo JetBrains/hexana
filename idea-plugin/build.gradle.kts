@@ -27,7 +27,7 @@ version = when (hexanaBuild) {
     }
 }
 
-if (hexanaBuild == "nightly") {
+if (hexanaBuild == "nightly" || hexanaBuild == "release") {
     // set TeamCity build number to the published plugin version
     println("##teamcity[buildNumber '${version}']")
 }
