@@ -149,7 +149,7 @@ class MissingWasm2WatNotification : EditorNotificationProvider, DumbAware {
     }
 
     private fun wasm2watExist(): Boolean {
-        val wasm2wat = Path.of(HexanaSettings.getInstance().wasm2watExecPath)
+        val wasm2wat = Path.of(HexanaSettings.getInstance().wasmToolsExecPath)
         return if (wasm2wat.isAbsolute) {
             wasm2wat.exists()
         } else {

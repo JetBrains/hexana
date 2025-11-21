@@ -30,11 +30,11 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
             state.wabtDir = value.takeIf { it.isNotBlank() }
         }
 
-    val wasm2watExecPath: String
+    val wasmToolsExecPath: String
         get() {
             return wabtDir.takeIf { it.isNotBlank() }?.let {
-                Path.of(it, "wasm2wat").toString()
-            } ?: "wasm2wat"
+                Path.of(it, "wasm-tools").toString()
+            } ?: "wasm-tools"
         }
 
 }

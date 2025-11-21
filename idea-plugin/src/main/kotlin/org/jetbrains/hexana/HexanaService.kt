@@ -25,14 +25,22 @@ class HexanaService(
 
     @RequiresBackgroundThread
     fun convertWasmToWat(file: File): WatConversionResult {
-        val wasm2wat = HexanaSettings.getInstance().wasm2watExecPath
-        val cmd = GeneralCommandLine(wasm2wat, "--fold-exprs", "--generate-names", file.absolutePath)
+        val wasmTools = HexanaSettings.getInstance().wasmToolsExecPath
+        val cmd = GeneralCommandLine(wasmTools, "print", "--fold-instructions", "--name-unnamed", file.absolutePath)
         return try {
             val processOutput = ExecUtil.execAndGetOutput(cmd)
-            if (processOutput.exitCode != 0) {
-                WatConversionResult.Error(processOutput.stderr)
-            } else {
-                WatConversionResult.Success(processOutput.stdout)
+            when (processOutput.exitCode) {
+                0 -> {
+                    WatConversionResult.Success(processOutput.stdout)
+                }
+                1 -> {
+                    // We treat this as a warning, so we just pust stderr as a comment to a supposedly still valid output
+                    val stdErrAsComment = "(;${processOutput.stderr.removeSuffix("\n")});) \n"
+                    WatConversionResult.Success(stdErrAsComment + processOutput.stdout)
+                }
+                else -> {
+                    WatConversionResult.Error(processOutput.stderr)
+                }
             }
         }
         catch (e: Exception) {
