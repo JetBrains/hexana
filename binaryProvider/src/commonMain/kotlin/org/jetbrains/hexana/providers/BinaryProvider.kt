@@ -10,7 +10,7 @@ sealed interface BinaryProvider {
 }
 
 class GenericBinaryProvider(override val bytes: ByteArray) : BinaryProvider
-class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
+open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
     private val buffer = bytes.toCommonByteBuffer()
     val wasmModule = WasmParser().parse(buffer)
 

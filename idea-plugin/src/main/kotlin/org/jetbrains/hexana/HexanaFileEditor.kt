@@ -2,16 +2,20 @@ package org.jetbrains.hexana
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileEditorStateLevel
+import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.providers.GenericBinaryProvider
-import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.createHexEditView
 import java.awt.BorderLayout
@@ -43,7 +47,14 @@ class HexanaFileEditor(
 
         val buf = file.contentsToByteArray()
         val binaryProvider = when (file.extension) {
-            "wasm" -> WasmBinaryProvider(buf)
+            "wasm" -> object: WasmBinaryVirtualFileProvider(file) {
+                override suspend fun createTextEditor(file: VirtualFile): JComponent {
+                     return withContext(Dispatchers.EDT) {
+                        val textEditor = TextEditorProvider.getInstance().createEditor(myProject, file)
+                        textEditor.component
+                    }
+                }
+            }
             else -> GenericBinaryProvider(buf)
         }
 

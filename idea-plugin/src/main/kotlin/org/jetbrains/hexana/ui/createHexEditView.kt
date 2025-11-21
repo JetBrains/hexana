@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
@@ -38,13 +39,22 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalDensity
+import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.testFramework.LightVirtualFile
+import kotlinx.coroutines.launch
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
+import org.jetbrains.hexana.wat.WatFileType
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.Text
+import java.awt.BorderLayout
 import java.awt.Cursor
+import javax.swing.JButton
+import javax.swing.JPanel
 import kotlin.math.min
 
 @Composable
@@ -357,18 +367,62 @@ private sealed interface WasmPanel : Panel {
 
         }
     }
+
+    class Wat(override val wasmBinaryProvider: WasmBinaryVirtualFileProvider) : WasmPanel {
+        override val description = "WAT"
+
+        @Composable
+        override fun onRender() {
+            val coroutineScope = remember { kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default) }
+
+            SwingPanel(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(),
+                factory = {
+                    val container = JPanel(BorderLayout())
+
+                    coroutineScope.launch {
+                        runCatching {
+                            val conversionResult = HexanaService.getInstance().convertWasmToWat(VfsUtil.virtualToIoFile(wasmBinaryProvider.file))
+                            conversionResult as? HexanaService.WatConversionResult.Success ?: return@launch
+                            val watPreviewFile = LightVirtualFile(wasmBinaryProvider.file.name, WatFileType.INSTANCE, conversionResult.wat)
+                            wasmBinaryProvider.createTextEditor(watPreviewFile)
+                        }.onSuccess { editorPanel ->
+                            // Ensure Swing updates happen on EDT
+                            javax.swing.SwingUtilities.invokeLater {
+                                container.removeAll()
+                                container.add(editorPanel, BorderLayout.CENTER)
+                                container.revalidate()
+                                container.repaint()
+                            }
+                        }.onFailure {
+                            println("Failed to convert WASM to WAT: ${it.message}")
+                        }
+                    }
+
+                    container
+                },
+                update = { panel ->
+                    // Optional: Update the Swing component when Compose state changes
+                }
+            )
+        }
+    }
 }
 
 
 private fun BinaryProvider.resolvePanels(): Array<Panel> {
     return when (this) {
         is GenericBinaryProvider -> emptyArray()
-        is WasmBinaryProvider -> {
+        is WasmBinaryVirtualFileProvider -> {
             if (wasmModule == null) return emptyArray() else arrayOf(
                 WasmPanel.Imports(this),
                 WasmPanel.Exports(this),
-                WasmPanel.Data(this)
+                WasmPanel.Data(this),
+                WasmPanel.Wat(this)
             )
         }
+        else -> emptyArray()
     }
 }
