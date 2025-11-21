@@ -1,18 +1,22 @@
 package org.jetbrains.hexana
 
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
+import com.intellij.openapi.fileEditor.FileEditorStateLevel
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.createHexEditView
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
+import java.io.Serializable
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -23,6 +27,9 @@ class HexanaFileEditor(
     val panel: JPanel
 
     val additionalViews = HexanaFileViewProvider.getAllViews(myProject, file)
+
+    //private var hexViewState = HexViewState(0.6f)
+    private val stateHolder = HexViewStateHolder()
 
     init {
         panel = JPanel(BorderLayout())
@@ -41,7 +48,7 @@ class HexanaFileEditor(
         }
 
         val hexView = createComposePanel {
-            createHexEditView(binaryProvider)
+            createHexEditView(binaryProvider, stateHolder)
         }
         panel.add(hexView)
     }
@@ -59,7 +66,13 @@ class HexanaFileEditor(
     }
 
     override fun setState(state: FileEditorState) {
+        if (state is HexViewState) {
+            stateHolder.currentState.value = state
+        }
+    }
 
+    override fun getState(level: FileEditorStateLevel): FileEditorState {
+        return stateHolder.currentState.value
     }
 
     override fun isModified(): Boolean {
@@ -88,5 +101,21 @@ class HexanaFileEditor(
                 Disposer.dispose(it)
             }
         }
+    }
+}
+
+data class HexViewState(
+    val topFraction: Float = 0.6f
+) : FileEditorState, Serializable {
+    override fun canBeMergedWith(otherState: FileEditorState, level: FileEditorStateLevel): Boolean {
+        return false
+    }
+}
+
+class HexViewStateHolder {
+    var currentState: MutableState<HexViewState> = mutableStateOf(HexViewState())
+
+    fun setTopFraction(topFraction: Float) {
+        currentState.value = currentState.value.copy(topFraction = topFraction)
     }
 }

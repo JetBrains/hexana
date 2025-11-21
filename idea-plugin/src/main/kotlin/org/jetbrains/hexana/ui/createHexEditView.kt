@@ -25,7 +25,6 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +38,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalDensity
+import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -48,10 +48,13 @@ import java.awt.Cursor
 import kotlin.math.min
 
 @Composable
-internal fun createHexEditView(binaryProvider: BinaryProvider) {
+internal fun createHexEditView(
+    binaryProvider: BinaryProvider,
+    state: HexViewStateHolder,
+) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
-    var topFraction by remember { mutableFloatStateOf(0.6f) }
+    val stateHolder = remember { state.currentState }
 
     val buf = binaryProvider.bytes
 
@@ -60,7 +63,7 @@ internal fun createHexEditView(binaryProvider: BinaryProvider) {
         val maxW = maxWidth
 
         Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.fillMaxWidth().weight(topFraction)) {
+            Box(modifier = Modifier.fillMaxWidth().weight(stateHolder.value.topFraction)) {
                 val separator = 1.dp
                 val half = (maxW - separator) / 2
                 val bytesPerRow = 16
@@ -201,7 +204,8 @@ internal fun createHexEditView(binaryProvider: BinaryProvider) {
                     onDrag = { deltaY ->
                         if (totalHeightPx > 0) {
                             val deltaRatio = deltaY / totalHeightPx
-                            topFraction = (topFraction + deltaRatio).coerceIn(0.1f, 0.9f)
+                            val topFraction = (stateHolder.value.topFraction + deltaRatio).coerceIn(0.1f, 0.9f)
+                            state.setTopFraction(topFraction)
                         }
                     }
                 )
@@ -209,7 +213,7 @@ internal fun createHexEditView(binaryProvider: BinaryProvider) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f - topFraction)
+                        .weight(1f - stateHolder.value.topFraction)
                         .background(HexanaTheme.backgroundColor),
                     contentAlignment = Alignment.TopStart
                 ) {
