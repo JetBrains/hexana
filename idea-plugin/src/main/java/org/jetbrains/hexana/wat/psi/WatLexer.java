@@ -270,7 +270,7 @@ public class WatLexer extends LexerBase {
     private void readSpace() {
         myTokenStart = myOffset;
         myOffset++;
-        while (true) {
+        while (myOffset < myEndOffset) {
             char c = myBuffer.charAt(myOffset);
             if (c != ' ' && c != '\t') {
                 break;

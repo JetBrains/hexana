@@ -1,0 +1,3 @@
+line_comment (';; the following line has three trailing spaces')
+newline ('\n')
+whitespace ('   ')

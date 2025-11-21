@@ -1,8 +1,10 @@
 package org.jetbrains.hexana.wat
 
 import com.intellij.lexer.Lexer
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.testFramework.LexerTestCase
 import org.jetbrains.hexana.wat.psi.WatLexer
+import java.io.File
 import java.nio.file.Path
 
 class WatLexerTest : LexerTestCase() {
@@ -45,5 +47,11 @@ class WatLexerTest : LexerTestCase() {
 
     fun testKeywords() {
         doTest()
+    }
+
+    fun testTrailingSpaces() {
+        val fileName = getPathToTestDataFile(".wat")
+        val fileText = FileUtil.loadFile(File(fileName))
+        doTest(fileText)
     }
 }
