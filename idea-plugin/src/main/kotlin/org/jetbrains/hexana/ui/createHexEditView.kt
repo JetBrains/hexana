@@ -39,9 +39,12 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalDensity
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.testFramework.LightVirtualFile
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.providers.BinaryProvider
@@ -373,7 +376,7 @@ private sealed interface WasmPanel : Panel {
 
         @Composable
         override fun onRender() {
-            val coroutineScope = remember { kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default) }
+            val coroutineScope = remember { HexanaService.getInstance().coroutineScope }
 
             SwingPanel(
                 modifier = Modifier
@@ -392,7 +395,7 @@ private sealed interface WasmPanel : Panel {
                             watTextEditor.component
                         }.onSuccess { editorPanel ->
                             // Ensure Swing updates happen on EDT
-                            javax.swing.SwingUtilities.invokeLater {
+                            withContext(Dispatchers.EDT) {
                                 container.removeAll()
                                 container.add(editorPanel, BorderLayout.CENTER)
                                 container.revalidate()
