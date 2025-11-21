@@ -4,9 +4,9 @@ import com.intellij.codeInsight.hint.HintUtil
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.editor.Document
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.fileEditor.*
-import com.intellij.openapi.fileEditor.impl.EditorComposite
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.DumbAware
@@ -17,7 +17,6 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.ui.EditorNotificationPanel
 import com.intellij.ui.EditorNotificationProvider
-import fleet.util.safeAs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -41,8 +40,8 @@ class WatPreviewProvider : AsyncFileEditorProvider, DumbAware {
     companion object {
         const val EDITOR_TYPE_ID: String = "wat-preview-for-wasm"
 
-        val ORIGINAL_WASM_FILE = Key.create<VirtualFile>("hexana_wat_wasm_file")
         val WASM_CONVERSION_ERROR = Key.create<HexanaService.WatConversionResult.Error>("hexana_wasm2wat_error")
+        val NAVIGATE_IN_EDITOR = Key.create<Editor>("hexana_wat_navigate_in_editor")
 
         /**
          * Handles navigation in the preview wat files.
@@ -57,16 +56,11 @@ class WatPreviewProvider : AsyncFileEditorProvider, DumbAware {
          * the EditorComposite for it (wat file != wasm file) and opens
          * the preview wat file in a new composite.
          *
-         * To work that around, we find the composite and navigate to the
-         * desired offset manually.
+         * To work that around, we find put the editor where the navigation should happen
+         * in user data and move to the desired offset manually.
          */
         fun navigateInWatPreviewFile(project: Project, watFile: VirtualFile, offset: Int, requestFocus: Boolean): Boolean {
-            val originalWasmFile = watFile.getUserData(ORIGINAL_WASM_FILE) ?: return false
-            val wasmComposite = FileEditorManager.getInstance(project).getComposite(originalWasmFile) as? EditorComposite
-                ?: return false
-            val watEditor = wasmComposite.allEditors.firstOrNull { it.file == watFile }.safeAs<TextEditor>()?.editor ?: return false
-            val descriptor = OpenFileDescriptor(project, originalWasmFile, 0)
-            descriptor.navigate(requestFocus)
+            val watEditor = watFile.getUserData(NAVIGATE_IN_EDITOR) ?: return false
             watEditor.caretModel.moveToOffset(offset)
             watEditor.scrollingModel.scrollTo(watEditor.offsetToLogicalPosition(offset), ScrollType.MAKE_VISIBLE)
             return true
@@ -81,7 +75,7 @@ class WatPreviewProvider : AsyncFileEditorProvider, DumbAware {
     }
 
     /**
-     * Overriding [createFileEditor] instead of [createEditorAsync] so that we can run wasm2wat
+     * Overriding [createFileEditor] instead of [createEditorAsync] so that we can run wasm-tools
      * command-line without a readAction (by default, createEditorAsync is executed under read action).
      */
     override suspend fun createFileEditor(
@@ -97,12 +91,15 @@ class WatPreviewProvider : AsyncFileEditorProvider, DumbAware {
             is HexanaService.WatConversionResult.Error -> "(;" + conversionResult.error.trim() + ";)"
         }
         val watPreviewFile = LightVirtualFile(file.name, WatFileType.INSTANCE, watText)
-        watPreviewFile.putUserData(ORIGINAL_WASM_FILE, file)
         if (conversionResult is HexanaService.WatConversionResult.Error) {
             watPreviewFile.putUserData(WASM_CONVERSION_ERROR, conversionResult)
         }
         return withContext(Dispatchers.EDT) {
-            TextEditorProvider.getInstance().createEditor(project, watPreviewFile)
+            val fileEditor = TextEditorProvider.getInstance().createEditor(project, watPreviewFile)
+            if (fileEditor is TextEditor) {
+                watPreviewFile.putUserData(NAVIGATE_IN_EDITOR, fileEditor.editor)
+            }
+            fileEditor
         }
     }
 

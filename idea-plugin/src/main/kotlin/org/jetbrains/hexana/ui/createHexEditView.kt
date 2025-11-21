@@ -49,11 +49,11 @@ import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.wat.WatFileType
+import org.jetbrains.hexana.wat.WatPreviewProvider
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.Text
 import java.awt.BorderLayout
 import java.awt.Cursor
-import javax.swing.JButton
 import javax.swing.JPanel
 import kotlin.math.min
 
@@ -387,7 +387,9 @@ private sealed interface WasmPanel : Panel {
                             val conversionResult = HexanaService.getInstance().convertWasmToWat(VfsUtil.virtualToIoFile(wasmBinaryProvider.file))
                             conversionResult as? HexanaService.WatConversionResult.Success ?: return@launch
                             val watPreviewFile = LightVirtualFile(wasmBinaryProvider.file.name, WatFileType.INSTANCE, conversionResult.wat)
-                            wasmBinaryProvider.createTextEditor(watPreviewFile)
+                            val watTextEditor = wasmBinaryProvider.createTextEditor(watPreviewFile)
+                            watPreviewFile.putUserData(WatPreviewProvider.NAVIGATE_IN_EDITOR, watTextEditor.editor)
+                            watTextEditor.component
                         }.onSuccess { editorPanel ->
                             // Ensure Swing updates happen on EDT
                             javax.swing.SwingUtilities.invokeLater {

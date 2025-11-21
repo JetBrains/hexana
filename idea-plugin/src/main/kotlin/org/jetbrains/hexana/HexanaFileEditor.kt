@@ -6,6 +6,7 @@ import com.intellij.openapi.application.EDT
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileEditorStateLevel
+import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
@@ -48,10 +49,10 @@ class HexanaFileEditor(
         val buf = file.contentsToByteArray()
         val binaryProvider = when (file.extension) {
             "wasm" -> object: WasmBinaryVirtualFileProvider(file) {
-                override suspend fun createTextEditor(file: VirtualFile): JComponent {
+                override suspend fun createTextEditor(file: VirtualFile): TextEditor {
                      return withContext(Dispatchers.EDT) {
                         val textEditor = TextEditorProvider.getInstance().createEditor(myProject, file)
-                        textEditor.component
+                        textEditor as TextEditor
                     }
                 }
             }
