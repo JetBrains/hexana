@@ -27,6 +27,11 @@ version = when (hexanaBuild) {
     }
 }
 
+if (hexanaBuild == "nightly") {
+    // set TeamCity build number to the published plugin version
+    println("##teamcity[buildNumber '${version}']")
+}
+
 repositories {
     intellijPlatform {
         defaultRepositories()
