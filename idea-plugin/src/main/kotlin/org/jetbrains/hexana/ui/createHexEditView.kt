@@ -315,9 +315,8 @@ private sealed interface WasmPanel : Panel {
         @Composable
         override fun onRender() {
             val imports = remember { wasmBinaryProvider.getImports() }
-            val listState = rememberLazyListState()
 
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            LazyColumn(state = rememberLazyListState(), modifier = Modifier.fillMaxSize()) {
                 items(imports.size) { idx ->
                     val importRecord = imports[idx]
                     Text(
@@ -338,6 +337,26 @@ private sealed interface WasmPanel : Panel {
             Text("[EXPORTS]", style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace))
         }
     }
+
+    class Data(override val wasmBinaryProvider: WasmBinaryProvider) : WasmPanel {
+        override val description = "Data"
+
+        @Composable
+        override fun onRender() {
+            val dataRecords = remember { wasmBinaryProvider.getData() }
+
+            LazyColumn(state = rememberLazyListState(), modifier = Modifier.fillMaxSize()) {
+                items(dataRecords.size) { dataRecordIndex ->
+                    val dataRecord = dataRecords[dataRecordIndex]
+                    Text(
+                        "Data record $dataRecordIndex ${dataRecord::class.simpleName}",
+                        style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace)
+                    )
+                }
+            }
+
+        }
+    }
 }
 
 
@@ -347,7 +366,8 @@ private fun BinaryProvider.resolvePanels(): Array<Panel> {
         is WasmBinaryProvider -> {
             if (wasmModule == null) return emptyArray() else arrayOf(
                 WasmPanel.Imports(this),
-                WasmPanel.Exports(this)
+                WasmPanel.Exports(this),
+                WasmPanel.Data(this)
             )
         }
     }
