@@ -1,0 +1,32 @@
+[package]
+name = "wasmprinter_wrapper"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasmparser = { version = "0.241.2", fetures = [
+    "std",
+    "simd",
+    "gc",
+    "threads",
+    "sign-ext",
+    "multi-value",
+    "reference-types",
+    "bulk-memory",
+    "extended-const",
+    "exceptions",
+    "memory64",
+    "multi-memory",
+    "component-model",
+    "tail-call",
+    "relaxed-simd",
+    "validate",
+    "features"
+]}
+wasmprinter = { version = "0.241.2", features = [
+    "validate",
+    "component-model"] }
+wee_alloc = "0.4"
