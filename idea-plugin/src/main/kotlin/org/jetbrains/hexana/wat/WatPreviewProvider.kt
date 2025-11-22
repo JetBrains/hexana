@@ -71,7 +71,7 @@ class WatPreviewProvider : AsyncFileEditorProvider, DumbAware {
         project: Project,
         file: VirtualFile
     ): Boolean {
-        return file.fileType is WasmFileType
+        return false // file.fileType is WasmFileType
     }
 
     /**
