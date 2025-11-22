@@ -52,7 +52,7 @@ import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.wat.WatFileType
-import org.jetbrains.hexana.wat.WatPreviewProvider
+import org.jetbrains.hexana.wat.WatNavigation
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.Text
 import java.awt.BorderLayout
@@ -392,7 +392,7 @@ private sealed interface WasmPanel : Panel {
                             val watFileName = wasmBinaryProvider.file.name.removeSuffix(".wasm") + ".wat"
                             val watPreviewFile = LightVirtualFile(watFileName, WatFileType.INSTANCE, conversionResult.wat)
                             val watTextEditor = wasmBinaryProvider.createTextEditor(watPreviewFile)
-                            watPreviewFile.putUserData(WatPreviewProvider.NAVIGATE_IN_EDITOR, watTextEditor.editor)
+                            watPreviewFile.putUserData(WatNavigation.WAT_EDITOR, watTextEditor.editor)
                             watTextEditor.component
                         }.onSuccess { editorPanel ->
                             // Ensure Swing updates happen on EDT
