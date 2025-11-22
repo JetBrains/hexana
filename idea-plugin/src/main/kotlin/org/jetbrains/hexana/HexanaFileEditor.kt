@@ -9,7 +9,6 @@ import com.intellij.openapi.fileEditor.FileEditorStateLevel
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.coroutines.Dispatchers
@@ -31,9 +30,6 @@ class HexanaFileEditor(
 ) : FileEditor, UserDataHolderBase() {
     val panel: JPanel
 
-    val additionalViews = HexanaFileViewProvider.getAllViews(myProject, file)
-
-    //private var hexViewState = HexViewState(0.6f)
     private val stateHolder = HexViewStateHolder()
 
     init {
@@ -108,11 +104,6 @@ class HexanaFileEditor(
     }
 
     override fun dispose() {
-        additionalViews.forEach {
-            it.runCatching {
-                Disposer.dispose(it)
-            }
-        }
     }
 }
 
