@@ -389,7 +389,8 @@ private sealed interface WasmPanel : Panel {
                         runCatching {
                             val conversionResult = HexanaService.getInstance().convertWasmToWat(VfsUtil.virtualToIoFile(wasmBinaryProvider.file))
                             conversionResult as? HexanaService.WatConversionResult.Success ?: return@launch
-                            val watPreviewFile = LightVirtualFile(wasmBinaryProvider.file.name, WatFileType.INSTANCE, conversionResult.wat)
+                            val watFileName = wasmBinaryProvider.file.name.removeSuffix(".wasm") + ".wat"
+                            val watPreviewFile = LightVirtualFile(watFileName, WatFileType.INSTANCE, conversionResult.wat)
                             val watTextEditor = wasmBinaryProvider.createTextEditor(watPreviewFile)
                             watPreviewFile.putUserData(WatPreviewProvider.NAVIGATE_IN_EDITOR, watTextEditor.editor)
                             watTextEditor.component
