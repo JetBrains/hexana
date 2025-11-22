@@ -23,7 +23,7 @@ class BinaryFileType : FileType {
     }
 
     override fun getDefaultExtension(): @NlsSafe String {
-        return ""
+        return "bin"
     }
 
     override fun getIcon(): Icon {

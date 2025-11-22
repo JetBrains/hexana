@@ -60,7 +60,8 @@
 
         <fileType name="binary"
                   implementationClass="org.jetbrains.hexana.BinaryFileType"
-                  fieldName="INSTANCE"/>
+                  fieldName="INSTANCE"
+                  extensions="bin;elf;exe"/>
 
         <fileType name="wat"
                   implementationClass="org.jetbrains.hexana.wat.WatFileType"
