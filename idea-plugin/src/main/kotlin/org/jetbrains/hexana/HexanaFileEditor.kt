@@ -40,11 +40,9 @@ class HexanaFileEditor(
     }
 
     fun initPanel() {
-        val file = WasmFsUtil.getLocalFile(myFile) ?: myFile
-
-        val buf = file.contentsToByteArray()
-        val binaryProvider = when (file.extension) {
-            "wasm" -> object: WasmBinaryVirtualFileProvider(file) {
+        val buf = myFile.contentsToByteArray()
+        val binaryProvider = when (myFile.extension) {
+            "wasm" -> object: WasmBinaryVirtualFileProvider(myFile) {
                 override suspend fun createTextEditor(file: VirtualFile): TextEditor {
                      return withContext(Dispatchers.EDT) {
                         val textEditor = TextEditorProvider.getInstance().createEditor(myProject, file)
