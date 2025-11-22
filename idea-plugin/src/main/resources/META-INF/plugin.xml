@@ -70,7 +70,7 @@
 
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.wat.WatPreviewProvider"/>
-        <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasm2WatNotification"/>
+        <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>
         <fileTypeOverrider implementation="org.jetbrains.hexana.actions.HexFileTypeOverrider"/>
 
         <lang.parserDefinition language="wat" implementationClass="org.jetbrains.hexana.wat.psi.WatParserDefinition" />

@@ -121,7 +121,7 @@ class WatPreviewProvider : AsyncFileEditorProvider, DumbAware {
 }
 
 
-class MissingWasm2WatNotification : EditorNotificationProvider, DumbAware {
+class MissingWasmToolsNotification : EditorNotificationProvider, DumbAware {
     override fun collectNotificationData(
         project: Project,
         file: VirtualFile
@@ -129,7 +129,7 @@ class MissingWasm2WatNotification : EditorNotificationProvider, DumbAware {
         if (file.getUserData(WASM_CONVERSION_ERROR) == null) {
             return null
         }
-        if (wasm2watExist()) {
+        if (wasmToolsExist()) {
             return null
         }
         return Function {
@@ -145,12 +145,12 @@ class MissingWasm2WatNotification : EditorNotificationProvider, DumbAware {
         }
     }
 
-    private fun wasm2watExist(): Boolean {
-        val wasm2wat = Path.of(HexanaSettings.getInstance().wasmToolsPath)
-        return if (wasm2wat.isAbsolute) {
-            wasm2wat.exists()
+    private fun wasmToolsExist(): Boolean {
+        val wasmTools = Path.of(HexanaSettings.getInstance().wasmToolsPath)
+        return if (wasmTools.isAbsolute) {
+            wasmTools.exists()
         } else {
-            PathEnvironmentVariableUtil.findInPath(wasm2wat.toString()) != null
+            PathEnvironmentVariableUtil.findInPath(wasmTools.toString()) != null
         }
     }
 }
