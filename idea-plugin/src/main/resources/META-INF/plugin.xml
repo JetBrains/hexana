@@ -79,6 +79,7 @@
         <braceMatcher filetype="wat" implementationClass="org.jetbrains.hexana.wat.WatBraceMatcher"/>
         <lang.fileViewProviderFactory language="wat" implementationClass="org.jetbrains.hexana.wat.psi.WatFileViewProviderFactory"/>
         <!-- actionConfigurationCustomizer implementation="org.jetbrains.hexana.mcp.McpServerCustomizer"/-->
+        <actionConfigurationCustomizer implementation="org.jetbrains.hexana.graalvm.GraalInstallationCustomizer"/>
         <mcpServer.mcpToolset implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
     </extensions>
 

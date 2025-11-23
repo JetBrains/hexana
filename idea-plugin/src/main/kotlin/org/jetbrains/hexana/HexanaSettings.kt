@@ -9,6 +9,7 @@ import com.intellij.openapi.ui.emptyText
 import com.intellij.openapi.util.NlsContexts
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.AlignY
+import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.dsl.builder.toNonNullableProperty
@@ -29,6 +30,11 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
         set(value) {
             state.wasmToolsPath = value?.takeIf { it.isNotBlank() }
         }
+    var useBuiltInWasmTools: Boolean?
+        get() = state.useBuiltInWasmTools
+        set(value) {
+            state.useBuiltInWasmTools = value?:false
+        }
 
     val wasmToolsPath: String
         get() = wasmToolsPathInUi ?: "wasm-tools"
@@ -37,6 +43,7 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
 
 class HexanaSettingsState : BaseState() {
     var wasmToolsPath: String? by string()
+    var useBuiltInWasmTools: Boolean by property(false)
 }
 
 class HexanaConfigurable : DslConfigurableBase(), SearchableConfigurable {
@@ -53,6 +60,13 @@ class HexanaConfigurable : DslConfigurableBase(), SearchableConfigurable {
                         emptyText.text = HexanaBundle.message("hexana.settings.wasmToolsEmptyText")
                     }
                     .bindText(settings::wasmToolsPathInUi.toNonNullableProperty(""))
+            }
+            row {
+                checkBox(HexanaBundle.message("hexana.settings.useBuiltInWasmTools"))
+                    .align(AlignY.TOP)
+                    .align(AlignX.FILL)
+                    .comment(HexanaBundle.message("hexana.settings.builtInWasmToolsComment"))
+                    .bindSelected(settings::useBuiltInWasmTools.toNonNullableProperty(false))
             }
         }
     }

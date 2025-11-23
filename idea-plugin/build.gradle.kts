@@ -67,6 +67,11 @@ dependencies {
     implementation(project(":encdec"))
     implementation(project(":wasm"))
     implementation(project(":binaryProvider"))
+    implementation(project(":graalwasm:wasmprinter"))
+    implementation(project(":graalwasm:common"))
+    implementation(kotlin("reflect"))
+    implementation("org.graalvm.polyglot:polyglot:25.0.0")
+    implementation("org.graalvm.polyglot:wasm:25.0.0")
 
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.20.0")
 
