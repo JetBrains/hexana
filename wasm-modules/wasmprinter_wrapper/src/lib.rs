@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 
 unsafe extern "C" {
     fn host_print(ptr: *const u8, len: usize);
+    fn host_error(ptr: *const u8, len: usize);
 }
 
 
@@ -33,7 +34,7 @@ pub extern "C" fn print_wat(ptr: *const u8, len: usize) {
             let msg = format!("wasmprinter error: {e}");
             let msg_bytes = msg.as_bytes();
             unsafe {
-                host_print(msg_bytes.as_ptr(), msg_bytes.len());
+                host_error(msg_bytes.as_ptr(), msg_bytes.len());
             }
         }
     }

@@ -10,7 +10,9 @@ import java.io.ByteArrayOutputStream
 import java.net.URL
 
 internal class WasmPrinter() {
-    private val context: Context
+    private val context: Context = Context.newBuilder("wasm")
+        .option("engine.WarnInterpreterOnly", "false")
+        .build()
     private val module: Value
     private val memory: WasmModuleMemory
     private val allocInput: Value
@@ -18,9 +20,6 @@ internal class WasmPrinter() {
     private val out = ByteArrayOutputStream()
 
     init {
-        context = Context.newBuilder("wasm")
-            .option("engine.WarnInterpreterOnly", "false")
-            .build()
 
         val wasmFile: URL? = WasmPrinter::class.java.getResource("/wasmprinter_wrapper.wasm")
 
@@ -29,11 +28,16 @@ internal class WasmPrinter() {
             ProxyObject.fromMap(
                 mapOf("env" to ProxyObject.fromMap(
                     mapOf("host_print" to ProxyExecutable { arguments ->
-                        // Ensure arguments are properly cast to match the function definition
                         val ptr = arguments[0].asInt()
                         val len = arguments[1].asInt()
                         hostPrint(ptr, len)
-                        null // WebAssembly requires void functions to return null
+                        null
+                    },
+                    "host_error" to ProxyExecutable { arguments ->
+                        val ptr = arguments[0].asInt()
+                        val len = arguments[1].asInt()
+                        hostError(ptr, len)
+                        null
                     })
                 ))
             ))
@@ -49,6 +53,10 @@ internal class WasmPrinter() {
         memory.read(ptr, len).let {
             out.write(it)
         }
+    }
+
+    private fun hostError(ptr: Int, len: Int) {
+        throw Exception(memory.read(ptr, len).decodeToString())
     }
 
     fun print(bytes: ByteArray): String {
