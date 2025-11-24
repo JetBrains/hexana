@@ -6,13 +6,12 @@ import org.graalvm.polyglot.Value
 import org.graalvm.polyglot.proxy.ProxyExecutable
 import org.graalvm.polyglot.proxy.ProxyObject
 import org.jetbrains.hexana.graalwasm.WasmModuleMemory
+import org.jetbrains.hexana.graalwasm.initWasmContext
 import java.io.ByteArrayOutputStream
 import java.net.URL
 
 internal class WasmPrinter() {
-    private val context: Context = Context.newBuilder("wasm")
-        .option("engine.WarnInterpreterOnly", "false")
-        .build()
+    private val context: Context = initWasmContext()
     private val module: Value
     private val memory: WasmModuleMemory
     private val allocInput: Value
