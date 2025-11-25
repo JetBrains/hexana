@@ -1,0 +1,2 @@
+(module
+  (func $1

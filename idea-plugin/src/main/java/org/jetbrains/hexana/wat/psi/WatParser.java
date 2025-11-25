@@ -37,65 +37,64 @@ public class WatParser implements PsiParser {
         tokenMap.put(WatToken.BLOCK, WatElementType.BLOCK);
         tokenMap.put(WatToken.LOOP, WatElementType.LOOP);
         tokenMap.put(WatToken.IF, WatElementType.IF);
-        tokenMap.put(WatToken.OPEN_PAREN, WatElementType.SEXPR); // ()
+    }
+
+    private static class Expr {
+        final PsiBuilder.Marker marker;
+        final IElementType type;
+        private Expr(PsiBuilder.Marker marker, IElementType type) {
+            this.marker = marker;
+            this.type = type;
+        }
+
+        void done() {
+            marker.done(type);
+        }
     }
 
     @Override
     public @NotNull ASTNode parse(@NotNull IElementType root, @NotNull PsiBuilder b) {
         PsiBuilder.Marker rootMark = b.mark();
 
-        ArrayList<PsiBuilder.Marker> markerStack = new ArrayList<>();
-        ArrayList<IElementType> firstElementStack = new ArrayList<>();
-        IElementType prevToken = null;
+        ArrayList<Expr> exprStack = new ArrayList<>();
         while (true) {
             IElementType token = b.getTokenType();
             if (token == null) {
-                if (!markerStack.isEmpty()) {
+                if (!exprStack.isEmpty()) {
                     b.error("Unexpected end of file");
-                    while (!markerStack.isEmpty()) {
-                        PsiBuilder.Marker m = markerStack.removeLast();
-                        IElementType firstElem = firstElementStack.removeLast();
-                        IElementType psiElementType = tokenMap.getOrDefault(firstElem, WatElementType.SEXPR);
-                        m.done(psiElementType);
+                    while (!exprStack.isEmpty()) {
+                        Expr expr = exprStack.removeLast();
+                        expr.done();
                     }
                 }
                 break;
             }
             if (token == WatToken.OPEN_PAREN) {
                 PsiBuilder.Marker m = b.mark();
-                markerStack.add(m);
-                firstElementStack.add(token); // replaced with the real first element once we get it
+                IElementType next = b.lookAhead(1);
+                IElementType exprType = next != null ? tokenMap.getOrDefault(next, WatElementType.SEXPR) : WatElementType.SEXPR;
+                exprStack.add(new Expr(m, exprType));
+                b.advanceLexer();
             } else if (token == WatToken.CLOSE_PAREN) {
-                if (markerStack.isEmpty()) {
+                if (exprStack.isEmpty()) {
                     b.error("Unexpected token");
                     b.advanceLexer();
                 } else {
-                    PsiBuilder.Marker m = markerStack.removeLast();
-                    IElementType firstElem = firstElementStack.removeLast();
-                    IElementType psiElementType = tokenMap.getOrDefault(firstElem, WatElementType.SEXPR);
+                    Expr expr = exprStack.removeLast();
                     b.advanceLexer();
-                    m.done(psiElementType);
+                    expr.done();
                 }
-                prevToken = token;
-                continue;
             } else if (token == WatToken.IDENTIFIER) {
                 PsiBuilder.Marker m = b.mark();
                 b.advanceLexer();
                 m.done(WatElementType.IDENTIFIER);
-                continue;
             } else if (token == WatToken.NUMBER) {
                 PsiBuilder.Marker m = b.mark();
                 b.advanceLexer();
                 m.done(WatElementType.NUMBER);
-                continue;
+            } else {
+                b.advanceLexer();
             }
-
-            if (prevToken == WatToken.OPEN_PAREN) {
-                firstElementStack.set(firstElementStack.size() - 1, token);
-            }
-
-            prevToken = token;
-            b.advanceLexer();
         }
 
         rootMark.done(root);
