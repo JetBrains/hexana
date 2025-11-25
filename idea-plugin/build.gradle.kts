@@ -68,9 +68,11 @@ dependencies {
     implementation(project(":wasmParser"))
     implementation(project(":binaryProvider"))
     implementation(project(":graalwasm:wasmprinter"))
+    implementation(project(":graalwasm:wat2wasm"))
     implementation(project(":graalwasm:common"))
     implementation(kotlin("reflect"))
     implementation("org.graalvm.polyglot:polyglot:25.0.0")
+    api("org.graalvm.truffle:truffle-api:25.0.0")
     implementation("org.graalvm.polyglot:wasm:25.0.0")
 
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.20.0")
@@ -128,6 +130,10 @@ tasks {
                 Changelog.OutputType.HTML
             )
         }
+    }
+
+    test {
+        jvmArgs("-Dpolyglotimpl.DisableMultiReleaseCheck=true")
     }
 }
 
