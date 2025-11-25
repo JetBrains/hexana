@@ -24,6 +24,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalDensity
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.testFramework.LightVirtualFile
@@ -52,9 +54,12 @@ import org.jetbrains.hexana.wat.WatFileType
 import org.jetbrains.hexana.wat.WatNavigation
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Divider
+import org.jetbrains.jewel.ui.component.Icon
+import org.jetbrains.jewel.ui.component.IconButton
 import org.jetbrains.jewel.ui.component.TabData
 import org.jetbrains.jewel.ui.component.TabStrip
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import org.jetbrains.jewel.ui.theme.defaultTabStyle
 import java.awt.BorderLayout
 import java.awt.Cursor
@@ -232,7 +237,13 @@ internal fun createHexEditView(
                         .background(HexanaTheme.backgroundColor),
                     contentAlignment = Alignment.TopStart
                 ) {
-                    TabsPanel(panels)
+                    TabsPanel(panels) { expanded ->
+                        if (expanded) {
+                            state.setTopFraction(0.01f)
+                        } else {
+                            state.setTopFraction(0.5f)
+                        }
+                    }
                 }
             }
         }
@@ -240,10 +251,11 @@ internal fun createHexEditView(
 }
 
 @Composable
-private fun TabsPanel(panels: List<Panel>) {
+private fun TabsPanel(panels: List<Panel>, onExpand: (Boolean) -> Unit) {
     if (panels.isEmpty()) return
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
+    var expanded by remember { mutableStateOf(false) }
 
     val tabs by remember {
         derivedStateOf {
@@ -259,12 +271,33 @@ private fun TabsPanel(panels: List<Panel>) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxWidth().background(HexanaTheme.backgroundColor)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(HexanaTheme.backgroundColor),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Center the IconButton both vertically and horizontally within its own parent container
+            Box(
+                modifier = Modifier
+                    .width(40.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                IconButton(onClick = {
+                    expanded = !expanded
+                    onExpand(expanded)
+                }) {
+                    Icon(
+                        if (expanded) AllIconsKeys.General.CollapseComponent else AllIconsKeys.General.ExpandComponent,
+                        contentDescription = null,
+                        iconClass = AllIcons::class.java
+                    )
+                }
+            }
             TabStrip(
                 tabs = tabs,
                 style = JewelTheme.defaultTabStyle,
             )
-
         }
 
         Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
