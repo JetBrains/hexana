@@ -1,48 +1,33 @@
 package org.jetbrains.hexana.ui
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.LocalDensity
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.testFramework.LightVirtualFile
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaService
@@ -53,16 +38,12 @@ import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.wat.WatFileType
 import org.jetbrains.hexana.wat.WatNavigation
 import org.jetbrains.jewel.foundation.theme.JewelTheme
-import org.jetbrains.jewel.ui.component.Divider
-import org.jetbrains.jewel.ui.component.Icon
-import org.jetbrains.jewel.ui.component.IconButton
-import org.jetbrains.jewel.ui.component.TabData
-import org.jetbrains.jewel.ui.component.TabStrip
-import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import org.jetbrains.jewel.ui.theme.defaultTabStyle
 import java.awt.BorderLayout
 import java.awt.Cursor
+import javax.swing.JComponent
 import javax.swing.JPanel
 import kotlin.math.min
 
@@ -100,7 +81,10 @@ internal fun createHexEditView(
                                     .background(HexanaTheme.backgroundColor)
                                     .padding(horizontal = 8.dp)
                             ) {}
-                            Box(modifier = Modifier.width(half).background(HexanaTheme.backgroundColor).padding(horizontal = 8.dp)) {
+                            Box(
+                                modifier = Modifier.width(half).background(HexanaTheme.backgroundColor)
+                                    .padding(horizontal = 8.dp)
+                            ) {
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(spacing)
                                 ) {
@@ -116,7 +100,10 @@ internal fun createHexEditView(
                                 }
                             }
                             Box(modifier = Modifier.width(separator).background(Color.Gray))
-                            Box(modifier = Modifier.width(half).background(HexanaTheme.backgroundColor).padding(horizontal = 8.dp)) {
+                            Box(
+                                modifier = Modifier.width(half).background(HexanaTheme.backgroundColor)
+                                    .padding(horizontal = 8.dp)
+                            ) {
                                 Text(
                                     "ASCII",
                                     style = TextStyle(
@@ -155,7 +142,8 @@ internal fun createHexEditView(
                                                 val start = rowIndex * bytesPerRow
                                                 val end = min(start + bytesPerRow, buf.size)
 
-                                                val rowText = buf.slice(start until end).joinToString(" ") { (it.toInt() and 0xFF).asHexString() }
+                                                val rowText = buf.slice(start until end)
+                                                    .joinToString(" ") { (it.toInt() and 0xFF).asHexString() }
                                                 Text(
                                                     rowText,
                                                     style = TextStyle(
@@ -405,45 +393,99 @@ private sealed interface WasmPanel : Panel {
 
         @Composable
         override fun onRender() {
-            val coroutineScope = remember { HexanaService.getInstance().coroutineScope }
+            var loading by remember { mutableStateOf(true) }
+            var editorPanel by remember { mutableStateOf<JComponent?>(null) }
 
-            SwingPanel(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(),
-                factory = {
-                    val container = JPanel(BorderLayout())
-
-                    coroutineScope.launch {
-                        runCatching {
-                            val conversionResult = HexanaService.getInstance().convertWasmToWat(VfsUtil.virtualToIoFile(wasmBinaryProvider.file))
-                            conversionResult as? HexanaService.WatConversionResult.Success ?: return@launch
-                            val watFileName = wasmBinaryProvider.file.name.removeSuffix(".wasm") + ".wat"
-                            val watPreviewFile = LightVirtualFile(watFileName, WatFileType.INSTANCE, conversionResult.wat)
-                            val watTextEditor = wasmBinaryProvider.createTextEditor(watPreviewFile)
-                            watPreviewFile.putUserData(WatNavigation.WAT_EDITOR, watTextEditor.editor)
-                            watTextEditor.component
-                        }.onSuccess { editorPanel ->
-                            // Ensure Swing updates happen on EDT
-                            withContext(Dispatchers.EDT) {
-                                container.removeAll()
-                                container.add(editorPanel, BorderLayout.CENTER)
-                                container.revalidate()
-                                container.repaint()
-                            }
-                        }.onFailure {
-                            println("Failed to convert WASM to WAT: ${it.message}")
-                        }
+            // Perform conversion once per file; create Swing components on EDT
+            androidx.compose.runtime.LaunchedEffect(wasmBinaryProvider.file) {
+                loading = true
+                runCatching {
+                    val conversionResult = withContext(Dispatchers.IO) {
+                        HexanaService.getInstance().convertWasmToWat(
+                            VfsUtil.virtualToIoFile(wasmBinaryProvider.file)
+                        )
                     }
-
-                    container
-                },
-                update = { panel ->
-                    // Optional: Update the Swing component when Compose state changes
+                    conversionResult as? HexanaService.WatConversionResult.Success
+                        ?: error("WAT conversion failed")
+                }.onSuccess { success ->
+                    withContext(Dispatchers.EDT) {
+                        val watFileName = wasmBinaryProvider.file.name.removeSuffix(".wasm") + ".wat"
+                        val watPreviewFile = LightVirtualFile(watFileName, WatFileType.INSTANCE, success.wat)
+                        val watTextEditor = wasmBinaryProvider.createTextEditor(watPreviewFile)
+                        watPreviewFile.putUserData(WatNavigation.WAT_EDITOR, watTextEditor.editor)
+                        editorPanel = watTextEditor.component
+                    }
+                    loading = false
+                }.onFailure {
+                    println("Failed to convert WASM to WAT: ${it.message}")
+                    loading = false
+                    editorPanel = null
                 }
-            )
+            }
+
+            if (loading) {
+                ConvertingIndicator()
+            } else {
+                Box(Modifier.fillMaxSize()) {
+                    SwingPanel(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(),
+                        factory = {
+                            JPanel(BorderLayout())
+                        },
+                        update = { panel ->
+                            if (loading) return@SwingPanel
+                            panel.removeAll()
+                            val child = editorPanel
+                            if (child != null) {
+                                panel.add(child, BorderLayout.CENTER)
+                            }
+                            panel.revalidate()
+                            panel.repaint()
+                        }
+                    )
+                }
+            }
+
         }
     }
+}
+
+@Composable
+private fun ConvertingIndicator() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        val colorStart = Color(0xFF00C6FF)
+        val colorEnd = Color(0xFF0072FF)
+
+        val infinite = rememberInfiniteTransition(label = "convertingGradient")
+        val t by infinite.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 900, easing = LinearEasing)
+            ),
+            label = "pulse"
+        )
+
+        val brush = Brush.linearGradient(
+            colors = listOf(
+                lerp(colorStart, colorEnd, t),
+                lerp(colorEnd, colorStart, t)
+            )
+        )
+
+        Text(
+            "0000 0 1001 01 10 01 converting",
+            style = TextStyle(brush = brush, fontFamily = FontFamily.Monospace)
+        )
+    }
+
 }
 
 private fun BinaryProvider.resolvePanels(): Array<Panel> {
@@ -457,6 +499,7 @@ private fun BinaryProvider.resolvePanels(): Array<Panel> {
                 WasmPanel.Wat(this)
             )
         }
+
         else -> emptyArray()
     }
 }
