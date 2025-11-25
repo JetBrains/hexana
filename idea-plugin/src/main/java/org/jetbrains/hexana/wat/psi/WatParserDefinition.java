@@ -60,6 +60,9 @@ public class WatParserDefinition implements ParserDefinition {
         if (nodeType == WatElementType.FUNC) {
             return new WatFuncElement(node);
         }
+        if (nodeType == WatElementType.FUNC_BODY) {
+            return new WatFuncBodyElement(node);
+        }
         if (nodeType == WatElementType.TABLE) {
             return new WatTableElement(node);
         }

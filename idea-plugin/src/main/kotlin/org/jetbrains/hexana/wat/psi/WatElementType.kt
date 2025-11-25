@@ -1,7 +1,10 @@
 package org.jetbrains.hexana.wat.psi
 
 
+import com.intellij.lang.ASTNode
+import com.intellij.psi.PsiElement
 import com.intellij.psi.tree.IElementType
+import com.intellij.psi.tree.ILazyParseableElementType
 import org.jetbrains.hexana.wat.WatLanguage
 
 class WatElementType(val name: String) : IElementType(name, WatLanguage) {
@@ -18,6 +21,7 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val ELEM = WatElementType("ELEM")
         @JvmField val TAG = WatElementType("TAG")
         @JvmField val FUNC = WatElementType("FUNC")
+        @JvmField val FUNC_BODY = WatLazyElementType("FUNC_BODY")
         @JvmField val CALL = WatElementType("CALL")
         @JvmField val CALL_INDIRECT = WatElementType("CALL_INDIRECT")
         @JvmField val GLOBAL_SET = WatElementType("GLOBAL_SET")
@@ -33,3 +37,5 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val IF = WatElementType("IF")
     }
 }
+
+class WatLazyElementType(val name: String) : ILazyParseableElementType(name, WatLanguage)

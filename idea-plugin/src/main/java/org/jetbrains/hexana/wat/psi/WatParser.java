@@ -5,6 +5,8 @@ import com.intellij.lang.PsiBuilder;
 import com.intellij.lang.PsiParser;
 import com.intellij.psi.tree.IElementType;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,6 +39,7 @@ public class WatParser implements PsiParser {
         tokenMap.put(WatToken.BLOCK, WatElementType.BLOCK);
         tokenMap.put(WatToken.LOOP, WatElementType.LOOP);
         tokenMap.put(WatToken.IF, WatElementType.IF);
+        tokenMap.put(WatElementType.FUNC_BODY, WatElementType.FUNC_BODY);
     }
 
     private static class Expr {
@@ -50,12 +53,25 @@ public class WatParser implements PsiParser {
         void done() {
             marker.done(type);
         }
+
+        void done(boolean collapse) {
+            if (collapse) {
+                marker.collapse(type);
+            } else {
+                marker.done(type);
+            }
+        }
+
+        @Override
+        public String toString() {
+            return type.toString();
+        }
     }
 
     @Override
     public @NotNull ASTNode parse(@NotNull IElementType root, @NotNull PsiBuilder b) {
         PsiBuilder.Marker rootMark = b.mark();
-
+        boolean collapseLazy = root instanceof WatFileElementType;
         ArrayList<Expr> exprStack = new ArrayList<>();
         while (true) {
             IElementType token = b.getTokenType();
@@ -75,29 +91,68 @@ public class WatParser implements PsiParser {
                 IElementType exprType = next != null ? tokenMap.getOrDefault(next, WatElementType.SEXPR) : WatElementType.SEXPR;
                 exprStack.add(new Expr(m, exprType));
                 b.advanceLexer();
+
+                if (next == WatToken.FUNC) {
+                    b.advanceLexer(); // func
+                    // Keep the function name/index outside the body to be able to check it
+                    // during resolve without expanding the body.
+                    idOrNum(b, b.getTokenType());
+                    IElementType nextToken = b.getTokenType();
+                    if (nextToken != null && nextToken != WatToken.CLOSE_PAREN) {
+                        exprStack.add(new Expr(b.mark(), WatElementType.FUNC_BODY));
+                        if (collapseLazy) {
+                            // fast-forward to the close parenthesis of the function
+                            IElementType t = b.getTokenType();
+                            int openParenCount = 1;
+                            while (t != null) {
+                                if (t == WatToken.OPEN_PAREN) {
+                                    openParenCount++;
+                                } else if (t == WatToken.CLOSE_PAREN) {
+                                    openParenCount--;
+                                    if (openParenCount == 0) {
+                                        break;
+                                    }
+                                }
+                                b.advanceLexer();
+                                t = b.getTokenType();
+                            }
+                        }
+                    }
+                }
             } else if (token == WatToken.CLOSE_PAREN) {
                 if (exprStack.isEmpty()) {
                     b.error("Unexpected token");
                     b.advanceLexer();
                 } else {
                     Expr expr = exprStack.removeLast();
+                    if (expr.type == WatElementType.FUNC_BODY) {
+                        expr.done(collapseLazy);
+                        expr = exprStack.removeLast();
+                    }
                     b.advanceLexer();
                     expr.done();
                 }
-            } else if (token == WatToken.IDENTIFIER) {
-                PsiBuilder.Marker m = b.mark();
-                b.advanceLexer();
-                m.done(WatElementType.IDENTIFIER);
-            } else if (token == WatToken.NUMBER) {
-                PsiBuilder.Marker m = b.mark();
-                b.advanceLexer();
-                m.done(WatElementType.NUMBER);
-            } else {
+            } else if (!idOrNum(b, token)) {
                 b.advanceLexer();
             }
         }
 
         rootMark.done(root);
         return b.getTreeBuilt();
+    }
+
+    private static boolean idOrNum(@NonNull PsiBuilder b, @Nullable IElementType token) {
+        IElementType elementType;
+        if (token == WatToken.IDENTIFIER) {
+            elementType = WatElementType.IDENTIFIER;
+        } else if (token == WatToken.NUMBER) {
+            elementType = WatElementType.NUMBER;
+        } else {
+            return false;
+        }
+        PsiBuilder.Marker m = b.mark();
+        b.advanceLexer();
+        m.done(elementType);
+        return true;
     }
 }

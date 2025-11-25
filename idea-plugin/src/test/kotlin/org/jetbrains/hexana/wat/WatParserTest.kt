@@ -68,6 +68,10 @@ class WatParserTest : ParsingTestCase("parser", "wat", true, WatParserDefinition
         doTest()
     }
 
+    fun testUnbalancedOpenParen2() {
+        doTest()
+    }
+
     fun testSexpr() {
         doTest()
     }

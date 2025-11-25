@@ -44,7 +44,8 @@ class WatReference(
         }
         if (parent.elementType == WatElementType.TYPE) {
             val grandParent = parent.parent
-            if (grandParent is WatFuncElement || grandParent?.elementType == WatElementType.CALL_INDIRECT) {
+            if (grandParent?.elementType == WatElementType.CALL_INDIRECT ||
+                PsiTreeUtil.getParentOfType(grandParent, WatFuncElement::class.java) != null) {
                 return resolveType(nameOrIndex.containingFile, nameOrIndex)
             }
             return null
@@ -210,7 +211,7 @@ class WatReference(
     }
 
     fun resolveLocalByName(identifier: WatPsiIdentifierElement, name: String): PsiElement? {
-        val func = PsiTreeUtil.getParentOfType(identifier, WatFuncElement::class.java) ?: return null
+        val func = PsiTreeUtil.getParentOfType(identifier, WatFuncBodyElement::class.java) ?: return null
         for (e in func.children) {
             if ((e is WatLocalElement || e is WatParamElement) && e.nameIdentifier?.textMatches(name) == true) {
                 return e
@@ -220,7 +221,7 @@ class WatReference(
     }
 
     fun resolveLocalByIndex(number: WatPsiNumberElement, index: Int): PsiElement? {
-        val func = PsiTreeUtil.getParentOfType(number, WatFuncElement::class.java) ?: return null
+        val func = PsiTreeUtil.getParentOfType(number, WatFuncBodyElement::class.java) ?: return null
         var currentIndex = 0
         for (e in func.children) {
             if (e is WatLocalElement || e is WatParamElement) {

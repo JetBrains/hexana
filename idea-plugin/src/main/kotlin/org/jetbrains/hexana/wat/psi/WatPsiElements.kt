@@ -71,3 +71,5 @@ class WatBlockElement(node: ASTNode) : WatLabelOwner(node)
 class WatLoopElement(node: ASTNode) : WatLabelOwner(node)
 
 class WatIfElement(node: ASTNode) : WatLabelOwner(node)
+
+class WatFuncBodyElement(node: ASTNode) : WatPsiElement(node)
