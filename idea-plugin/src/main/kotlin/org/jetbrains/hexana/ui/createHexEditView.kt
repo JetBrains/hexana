@@ -146,15 +146,15 @@ internal fun createHexEditView(
                                         ) {
                                             val start = rowIndex * bytesPerRow
                                             val end = min(start + bytesPerRow, buf.size)
-                                            for (idx in start until end) {
-                                                Text(
-                                                    (buf[idx].toInt() and 0xFF).asHexString(),
-                                                    style = TextStyle(
-                                                        color = HexanaTheme.hexTextColor,
-                                                        fontFamily = FontFamily.Monospace
-                                                    )
+
+                                            val rowText = buf.slice(start until end).joinToString(" ") { (it.toInt() and 0xFF).asHexString() }
+                                            Text(
+                                                rowText,
+                                                style = TextStyle(
+                                                    color = HexanaTheme.hexTextColor,
+                                                    fontFamily = FontFamily.Monospace
                                                 )
-                                            }
+                                            )
                                         }
                                     }
                                     Box(modifier = Modifier.width(separator).background(Color.Gray))
@@ -167,17 +167,17 @@ internal fun createHexEditView(
                                         ) {
                                             val start = rowIndex * bytesPerRow
                                             val end = min(start + bytesPerRow, buf.size)
-                                            for (idx in start until end) {
-                                                val b = buf[idx].toInt() and 0xFF
-                                                val ch = if (b in 32..126) b.toChar().toString() else "."
-                                                Text(
-                                                    ch,
-                                                    style = TextStyle(
-                                                        color = HexanaTheme.textColor,
-                                                        fontFamily = FontFamily.Monospace
-                                                    )
-                                                )
+                                            val str = buf.slice(start until end).joinToString("") {
+                                                val b = it.toInt() and 0xFF
+                                                if (b in 32..126) b.toChar().toString() else "."
                                             }
+                                            Text(
+                                                str,
+                                                style = TextStyle(
+                                                    color = HexanaTheme.textColor,
+                                                    fontFamily = FontFamily.Monospace
+                                                )
+                                            )
                                         }
                                     }
                                 }
