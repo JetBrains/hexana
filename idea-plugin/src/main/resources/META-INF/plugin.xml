@@ -73,12 +73,13 @@
         <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>
         <fileTypeOverrider implementation="org.jetbrains.hexana.actions.HexFileTypeOverrider"/>
         <useScopeOptimizer implementation="org.jetbrains.hexana.wat.WatScopeOptimizer"/>
-
         <lang.parserDefinition language="wat" implementationClass="org.jetbrains.hexana.wat.psi.WatParserDefinition" />
         <lang.syntaxHighlighter language="wat" implementationClass="org.jetbrains.hexana.wat.WatSyntaxHighlighter"/>
         <fileEditor.fileSizeChecker implementation="org.jetbrains.hexana.wat.WatFileSizeChecker"/>
         <braceMatcher filetype="wat" implementationClass="org.jetbrains.hexana.wat.WatBraceMatcher"/>
         <lang.fileViewProviderFactory language="wat" implementationClass="org.jetbrains.hexana.wat.psi.WatFileViewProviderFactory"/>
+        <problemHighlightFilter implementation="org.jetbrains.hexana.wat.WatProblemHighlightFilter"/>
+
         <!-- actionConfigurationCustomizer implementation="org.jetbrains.hexana.mcp.McpServerCustomizer"/-->
         <actionConfigurationCustomizer implementation="org.jetbrains.hexana.graalvm.GraalInstallationCustomizer"/>
         <mcpServer.mcpToolset implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
