@@ -2,10 +2,13 @@ package org.jetbrains.hexana.wat.psi
 
 
 import com.intellij.lang.ASTNode
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.tree.ILazyParseableElementType
+import io.ktor.server.application.Application
 import org.jetbrains.hexana.wat.WatLanguage
+import kotlin.math.log
 
 class WatElementType(val name: String) : IElementType(name, WatLanguage) {
     companion object {
@@ -38,4 +41,23 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
     }
 }
 
-class WatLazyElementType(val name: String) : ILazyParseableElementType(name, WatLanguage)
+class WatLazyElementType(val name: String) : ILazyParseableElementType(name, WatLanguage) {
+    val logExpansion = false
+
+    override fun doParseContents(
+        chameleon: ASTNode,
+        psi: PsiElement
+    ): ASTNode? {
+        if (logExpansion && ApplicationManager.getApplication().isInternal) {
+            val parent = chameleon.treeParent
+            if (parent.elementType == WatElementType.FUNC) {
+                val idOrNum = parent.findChildByType(WatElementType.IDENTIFIER) ?: parent.findChildByType(WatElementType.NUMBER)
+                println("WatLazyElementType ${idOrNum?.text}")
+            }
+            else {
+                println("WatLazyElementType")
+            }
+        }
+        return super.doParseContents(chameleon, psi)
+    }
+}
