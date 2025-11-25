@@ -16,9 +16,6 @@ allprojects {
         mavenCentral()
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
     }
-    configurations.all {
-        exclude(group = "org.graalvm.wasm", module = "wasm")
-    }
 }
 
 subprojects {
