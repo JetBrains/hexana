@@ -2,7 +2,6 @@ package org.jetbrains.hexana.ui
 
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -11,22 +10,20 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -53,8 +50,12 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.wat.WatFileType
 import org.jetbrains.hexana.wat.WatNavigation
+import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Divider
+import org.jetbrains.jewel.ui.component.TabData
+import org.jetbrains.jewel.ui.component.TabStrip
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.theme.defaultTabStyle
 import java.awt.BorderLayout
 import java.awt.Cursor
 import javax.swing.JPanel
@@ -74,6 +75,7 @@ internal fun createHexEditView(
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         val totalHeightPx = with(density) { maxHeight.toPx() }
         val maxW = maxWidth
+
 
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.fillMaxWidth().weight(stateHolder.value.topFraction)) {
@@ -238,48 +240,40 @@ internal fun createHexEditView(
 }
 
 @Composable
-private fun TabsPanel(tabs: List<Panel>) {
-    if (tabs.isEmpty()) return
+private fun TabsPanel(panels: List<Panel>) {
+    if (panels.isEmpty()) return
 
-    var selectedPanel by remember { mutableStateOf<Panel>(tabs.first()) }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
+
+    val tabs by remember {
+        derivedStateOf {
+            panels.mapIndexed { index, panel ->
+                TabData.Default(
+                    selected = index == selectedTabIndex,
+                    content = { Text(text = panel.description) },
+                    closable = false,
+                    onClick = { selectedTabIndex = index }
+                )
+            }
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().background(HexanaTheme.backgroundColor)) {
-            tabs.forEach { tab ->
-                val selected = tab == selectedPanel
-                val fg = if (selected) HexanaTheme.textColor else HexanaTheme.textColor.copy(alpha = 0.8f)
-                val underline = if (selected) HexanaTheme.textColor else Color.Transparent
+            TabStrip(
+                tabs = tabs,
+                style = JewelTheme.defaultTabStyle,
+            )
 
-                Column(
-                    modifier = Modifier
-                        .width(IntrinsicSize.Min)
-                        .padding(horizontal = 8.dp)
-                        .clickable { selectedPanel = tab }
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(tab.description, style = TextStyle(color = fg))
-                    Spacer(Modifier.height(4.dp))
-                    Divider(
-                        orientation = org.jetbrains.jewel.ui.Orientation.Horizontal,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .background(underline)
-                    )
-                }
-            }
         }
 
         Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
 
         Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-            selectedPanel.onRender()
+            panels.get(selectedTabIndex).onRender()
         }
     }
-
 }
-
 
 @Composable
 private fun HorizontalDraggableDivider(onDrag: (deltaY: Float) -> Unit) {
@@ -416,7 +410,6 @@ private sealed interface WasmPanel : Panel {
         }
     }
 }
-
 
 private fun BinaryProvider.resolvePanels(): Array<Panel> {
     return when (this) {
