@@ -69,6 +69,7 @@ dependencies {
     implementation(project(":binaryProvider"))
     implementation(project(":graalwasm:wasmprinter"))
     implementation(project(":graalwasm:common"))
+    implementation(project(":graalwasm:wat2wasm"))
     implementation(kotlin("reflect"))
     implementation("org.graalvm.polyglot:polyglot:25.0.0")
     implementation("org.graalvm.polyglot:wasm:25.0.0")
@@ -78,6 +79,8 @@ dependencies {
     // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
     compileOnly(compose.desktop.currentOs)
     testImplementation("junit:junit:4.13.2")
+    testRuntimeOnly("org.graalvm.polyglot:wasm:25.0.0")
+    testRuntimeOnly("org.graalvm.polyglot:polyglot:25.0.0")
 }
 
 changelog {
@@ -127,6 +130,23 @@ tasks {
                     .withEmptySections(false),
                 Changelog.OutputType.HTML
             )
+        }
+    }
+    test {
+        jvmArgs("-Dpolyglotimpl.DisableMultiReleaseCheck=true")
+        doFirst {
+            val testClasses = sourceSets.test.get().output.classesDirs.files
+            val mainClasses = sourceSets.main.get().output.classesDirs.files
+            val modulePath = (
+                    configurations.testRuntimeClasspath.get().files +
+                            testClasses +
+                            mainClasses
+                    )
+                .filterNot { it.name.endsWith(".pom") }
+                .joinToString(File.pathSeparator) { it.absolutePath }
+
+            println("Using module-path for tests:\n$modulePath")
+            classpath = classpath.filter { !it.name.endsWith(".pom") }
         }
     }
 }

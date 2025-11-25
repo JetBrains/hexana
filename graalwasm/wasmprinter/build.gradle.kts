@@ -8,3 +8,7 @@ dependencies {
     implementation("org.graalvm.polyglot:wasm:25.0.0")
     implementation(project.parent!!.project("common"))
 }
+
+kotlin {
+    jvmToolchain(21)
+}
