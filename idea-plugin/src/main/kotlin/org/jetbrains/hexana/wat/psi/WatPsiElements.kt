@@ -48,7 +48,11 @@ abstract class WatNameIdentifierOwner(node: ASTNode) : WatPsiElement(node), PsiN
     }
 }
 
-
+/**
+ * [WatFunctionLocalElement] is a marker for elements which can be referenced
+ * only in a function.
+ */
+interface WatFunctionLocalElement
 
 class WatFuncElement(node: ASTNode) : WatNameIdentifierOwner(node)
 
@@ -60,11 +64,11 @@ class WatGlobalElement(node: ASTNode) : WatNameIdentifierOwner(node)
 
 class WatTagElement(node: ASTNode) : WatNameIdentifierOwner(node)
 
-class WatLocalElement(node: ASTNode) : WatNameIdentifierOwner(node)
+class WatLocalElement(node: ASTNode) : WatNameIdentifierOwner(node), WatFunctionLocalElement
 
-class WatParamElement(node: ASTNode) : WatNameIdentifierOwner(node)
+class WatParamElement(node: ASTNode) : WatNameIdentifierOwner(node), WatFunctionLocalElement
 
-open class WatLabelOwner(node: ASTNode) : WatNameIdentifierOwner(node)
+open class WatLabelOwner(node: ASTNode) : WatNameIdentifierOwner(node), WatFunctionLocalElement
 
 class WatBlockElement(node: ASTNode) : WatLabelOwner(node)
 
