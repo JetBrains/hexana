@@ -83,135 +83,137 @@ internal fun createHexEditView(
 
 
         Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.fillMaxWidth().weight(stateHolder.value.topFraction)) {
-                val separator = 1.dp
-                val half = (maxW - separator) / 2
-                val bytesPerRow = 16
-                val spacing = 8.dp
-                val rowCount = (buf.size + bytesPerRow - 1) / bytesPerRow
-                val offsetWidth = 96.dp
+            if (stateHolder.value.topFraction > 0) {
+                Box(modifier = Modifier.fillMaxWidth().weight(stateHolder.value.topFraction)) {
+                    val separator = 1.dp
+                    val half = (maxW - separator) / 2
+                    val bytesPerRow = 16
+                    val spacing = 8.dp
+                    val rowCount = (buf.size + bytesPerRow - 1) / bytesPerRow
+                    val offsetWidth = 96.dp
 
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Row(Modifier.fillMaxWidth()) {
-                        Box(
-                            modifier = Modifier
-                                .width(offsetWidth)
-                                .background(HexanaTheme.backgroundColor)
-                                .padding(horizontal = 8.dp)
-                        ) {}
-                        Box(modifier = Modifier.width(half).background(HexanaTheme.backgroundColor).padding(horizontal = 8.dp)) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(spacing)
-                            ) {
-                                for (i in 0 until bytesPerRow) {
-                                    Text(
-                                        i.asHexString(),
-                                        style = TextStyle(
-                                            color = HexanaTheme.textColor,
-                                            fontFamily = FontFamily.Monospace
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                        Box(modifier = Modifier.width(separator).background(Color.Gray))
-                        Box(modifier = Modifier.width(half).background(HexanaTheme.backgroundColor).padding(horizontal = 8.dp)) {
-                            Text(
-                                "ASCII",
-                                style = TextStyle(
-                                    color = HexanaTheme.textColor,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            )
-                        }
-                    }
-                    Box {
-                        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                            items(count = rowCount) { rowIndex ->
-                                Row(Modifier.fillMaxWidth()) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(offsetWidth)
-                                            .background(HexanaTheme.backgroundColor)
-                                            .padding(horizontal = 8.dp),
-                                        contentAlignment = Alignment.CenterEnd
-                                    ) {
-                                        Row {
-                                            Text(
-                                                (rowIndex * bytesPerRow).asHexString(padStart = 8),
-                                                style = TextStyle(fontFamily = FontFamily.Monospace)
-                                            )
-                                        }
-                                    }
-
-                                    Box(
-                                        modifier = Modifier.width(half).background(HexanaTheme.backgroundColor)
-                                            .padding(horizontal = 8.dp)
-                                    ) {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(spacing),
-                                        ) {
-                                            val start = rowIndex * bytesPerRow
-                                            val end = min(start + bytesPerRow, buf.size)
-
-                                            val rowText = buf.slice(start until end).joinToString(" ") { (it.toInt() and 0xFF).asHexString() }
-                                            Text(
-                                                rowText,
-                                                style = TextStyle(
-                                                    color = HexanaTheme.hexTextColor,
-                                                    fontFamily = FontFamily.Monospace
-                                                )
-                                            )
-                                        }
-                                    }
-                                    Box(modifier = Modifier.width(separator).background(Color.Gray))
-                                    Box(
-                                        modifier = Modifier.width(half).background(HexanaTheme.backgroundColor)
-                                            .padding(horizontal = 8.dp)
-                                    ) {
-                                        Row(
-                                            horizontalArrangement = Arrangement.Start
-                                        ) {
-                                            val start = rowIndex * bytesPerRow
-                                            val end = min(start + bytesPerRow, buf.size)
-                                            val str = buf.slice(start until end).joinToString("") {
-                                                val b = it.toInt() and 0xFF
-                                                if (b in 32..126) b.toChar().toString() else "."
-                                            }
-                                            Text(
-                                                str,
-                                                style = TextStyle(
-                                                    color = HexanaTheme.textColor,
-                                                    fontFamily = FontFamily.Monospace
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Show scrollbar only when content overflows the viewport
-                        val showScrollbar by remember(listState) {
-                            derivedStateOf {
-                                val layout = listState.layoutInfo
-                                val total = layout.totalItemsCount
-                                if (total == 0) return@derivedStateOf false
-                                val first = layout.visibleItemsInfo.firstOrNull()?.index ?: 0
-                                val last = layout.visibleItemsInfo.lastOrNull()?.index ?: -1
-                                // If not all items are visible, show scrollbar
-                                !(first == 0 && last >= total - 1)
-                            }
-                        }
-
-                        if (showScrollbar) {
-                            VerticalScrollbar(
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Row(Modifier.fillMaxWidth()) {
+                            Box(
                                 modifier = Modifier
-                                    .align(alignment = Alignment.CenterEnd)
-                                    .fillMaxHeight()
-                                    .background(Color.Gray),
-                                adapter = rememberScrollbarAdapter(scrollState = listState)
-                            )
+                                    .width(offsetWidth)
+                                    .background(HexanaTheme.backgroundColor)
+                                    .padding(horizontal = 8.dp)
+                            ) {}
+                            Box(modifier = Modifier.width(half).background(HexanaTheme.backgroundColor).padding(horizontal = 8.dp)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(spacing)
+                                ) {
+                                    for (i in 0 until bytesPerRow) {
+                                        Text(
+                                            i.asHexString(),
+                                            style = TextStyle(
+                                                color = HexanaTheme.textColor,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                            Box(modifier = Modifier.width(separator).background(Color.Gray))
+                            Box(modifier = Modifier.width(half).background(HexanaTheme.backgroundColor).padding(horizontal = 8.dp)) {
+                                Text(
+                                    "ASCII",
+                                    style = TextStyle(
+                                        color = HexanaTheme.textColor,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                )
+                            }
+                        }
+                        Box {
+                            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                                items(count = rowCount) { rowIndex ->
+                                    Row(Modifier.fillMaxWidth()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(offsetWidth)
+                                                .background(HexanaTheme.backgroundColor)
+                                                .padding(horizontal = 8.dp),
+                                            contentAlignment = Alignment.CenterEnd
+                                        ) {
+                                            Row {
+                                                Text(
+                                                    (rowIndex * bytesPerRow).asHexString(padStart = 8),
+                                                    style = TextStyle(fontFamily = FontFamily.Monospace)
+                                                )
+                                            }
+                                        }
+
+                                        Box(
+                                            modifier = Modifier.width(half).background(HexanaTheme.backgroundColor)
+                                                .padding(horizontal = 8.dp)
+                                        ) {
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(spacing),
+                                            ) {
+                                                val start = rowIndex * bytesPerRow
+                                                val end = min(start + bytesPerRow, buf.size)
+
+                                                val rowText = buf.slice(start until end).joinToString(" ") { (it.toInt() and 0xFF).asHexString() }
+                                                Text(
+                                                    rowText,
+                                                    style = TextStyle(
+                                                        color = HexanaTheme.hexTextColor,
+                                                        fontFamily = FontFamily.Monospace
+                                                    )
+                                                )
+                                            }
+                                        }
+                                        Box(modifier = Modifier.width(separator).background(Color.Gray))
+                                        Box(
+                                            modifier = Modifier.width(half).background(HexanaTheme.backgroundColor)
+                                                .padding(horizontal = 8.dp)
+                                        ) {
+                                            Row(
+                                                horizontalArrangement = Arrangement.Start
+                                            ) {
+                                                val start = rowIndex * bytesPerRow
+                                                val end = min(start + bytesPerRow, buf.size)
+                                                val str = buf.slice(start until end).joinToString("") {
+                                                    val b = it.toInt() and 0xFF
+                                                    if (b in 32..126) b.toChar().toString() else "."
+                                                }
+                                                Text(
+                                                    str,
+                                                    style = TextStyle(
+                                                        color = HexanaTheme.textColor,
+                                                        fontFamily = FontFamily.Monospace
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Show scrollbar only when content overflows the viewport
+                            val showScrollbar by remember(listState) {
+                                derivedStateOf {
+                                    val layout = listState.layoutInfo
+                                    val total = layout.totalItemsCount
+                                    if (total == 0) return@derivedStateOf false
+                                    val first = layout.visibleItemsInfo.firstOrNull()?.index ?: 0
+                                    val last = layout.visibleItemsInfo.lastOrNull()?.index ?: -1
+                                    // If not all items are visible, show scrollbar
+                                    !(first == 0 && last >= total - 1)
+                                }
+                            }
+
+                            if (showScrollbar) {
+                                VerticalScrollbar(
+                                    modifier = Modifier
+                                        .align(alignment = Alignment.CenterEnd)
+                                        .fillMaxHeight()
+                                        .background(Color.Gray),
+                                    adapter = rememberScrollbarAdapter(scrollState = listState)
+                                )
+                            }
                         }
                     }
                 }
@@ -239,7 +241,7 @@ internal fun createHexEditView(
                 ) {
                     TabsPanel(panels) { expanded ->
                         if (expanded) {
-                            state.setTopFraction(0.01f)
+                            state.setTopFraction(0f)
                         } else {
                             state.setTopFraction(0.5f)
                         }
