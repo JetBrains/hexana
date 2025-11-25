@@ -6,6 +6,8 @@ import com.intellij.openapi.util.NlsSafe
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiNameIdentifierOwner
 import com.intellij.psi.PsiReference
+import com.intellij.psi.util.CachedValueProvider
+import com.intellij.psi.util.CachedValuesManager
 import org.jetbrains.hexana.wat.WatNavigation
 
 
@@ -60,7 +62,15 @@ class WatTableElement(node: ASTNode) : WatNameIdentifierOwner(node)
 
 class WatTypeElement(node: ASTNode) : WatNameIdentifierOwner(node)
 
-class WatGlobalElement(node: ASTNode) : WatNameIdentifierOwner(node)
+class WatGlobalElement(node: ASTNode) : WatNameIdentifierOwner(node) {
+    fun getIndex(): Int? {
+        val module = parent as? WatModuleElement ?: return null
+        return CachedValuesManager.getCachedValue(this) {
+            val index = module.getGlobals().indexOf(this).takeIf { it >= 0 }
+            CachedValueProvider.Result.create(index, this, module)
+        }
+    }
+}
 
 class WatTagElement(node: ASTNode) : WatNameIdentifierOwner(node)
 
@@ -77,3 +87,14 @@ class WatLoopElement(node: ASTNode) : WatLabelOwner(node)
 class WatIfElement(node: ASTNode) : WatLabelOwner(node)
 
 class WatFuncBodyElement(node: ASTNode) : WatPsiElement(node)
+
+class WatModuleElement(node: ASTNode) : WatPsiElement(node) {
+
+    fun getGlobals(): List<WatGlobalElement> {
+        return CachedValuesManager.getCachedValue(this) {
+            val globals = children.filterIsInstance<WatGlobalElement>()
+            CachedValueProvider.Result.create(globals, this)
+        }
+    }
+
+}

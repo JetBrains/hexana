@@ -91,7 +91,7 @@ class WatReference(
 
 
     fun getModule(file: PsiFile?): PsiElement? {
-        return file?.children?.firstOrNull { it.elementType == WatElementType.MODULE }
+        return file?.children?.firstOrNull { it is WatModuleElement }
     }
 
     fun resolveFunc(file: PsiFile?, nameOrIndex: WatPsiElement): PsiElement? {
