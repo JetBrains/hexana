@@ -16,7 +16,7 @@ pluginManagement {
 rootProject.name = "hexana"
 
 include("binaryProvider")
-include("wasm")
+include("wasmParser")
 include("encdec")
 include("idea-plugin")
 include("graalwasm:wasmprinter")

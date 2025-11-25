@@ -65,7 +65,7 @@ dependencies {
     }
 
     implementation(project(":encdec"))
-    implementation(project(":wasm"))
+    implementation(project(":wasmParser"))
     implementation(project(":binaryProvider"))
     implementation(project(":graalwasm:wasmprinter"))
     implementation(project(":graalwasm:common"))

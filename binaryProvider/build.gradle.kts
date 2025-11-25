@@ -16,7 +16,7 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
-                implementation(project(":wasm"))
+                implementation(project(":wasmParser"))
                 implementation(project(":encdec"))
             }
         }
