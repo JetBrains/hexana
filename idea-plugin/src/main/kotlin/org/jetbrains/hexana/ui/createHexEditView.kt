@@ -24,9 +24,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
+import com.intellij.notebook.editor.BackedVirtualFile
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.util.asSafely
 import kotlinx.coroutines.Dispatchers
@@ -390,6 +392,16 @@ private sealed interface WasmPanel : Panel {
         }
     }
 
+    class LightWatFile(
+        val originWasmFile: VirtualFile,
+        val watFileName: String,
+        val text: String,
+    ): LightVirtualFile(watFileName, WatFileType.INSTANCE, text), BackedVirtualFile {
+        override fun getOriginFile(): VirtualFile {
+            return originWasmFile
+        }
+    }
+
     class Wat(override val wasmBinaryProvider: WasmBinaryVirtualFileProvider) : WasmPanel {
         override val description = "WAT"
 
@@ -412,7 +424,7 @@ private sealed interface WasmPanel : Panel {
                 }.onSuccess { success ->
                     withContext(Dispatchers.EDT) {
                         val watFileName = wasmBinaryProvider.file.name.removeSuffix(".wasm") + ".wat"
-                        val watPreviewFile = LightVirtualFile(watFileName, WatFileType.INSTANCE, success.wat)
+                        val watPreviewFile = LightWatFile(wasmBinaryProvider.file, watFileName, success.wat)
                         val watTextEditor = wasmBinaryProvider.createTextEditor(watPreviewFile)
                         watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
                         watPreviewFile.putUserData(WatNavigation.WAT_EDITOR, watTextEditor.editor)
