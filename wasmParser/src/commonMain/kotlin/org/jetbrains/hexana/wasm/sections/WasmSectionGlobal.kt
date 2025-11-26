@@ -12,13 +12,13 @@ class WasmSectionGlobal(size: Int, offset: Int): WasmSection(size, offset) {
     fun CommonByteBuffer.scan(): List<WasmGlobalRecord> {
         position(offset)
         val records = mutableListOf<WasmGlobalRecord>()
-        consumeArray { index ->
+        consumeArray {
             val globalType = WasmGlobalType(valueType(), get() == 0x01.toByte())
             val expression = parseOpCodes()
-            records.add(WasmGlobalRecord(index, globalType, expression))
+            records.add(WasmGlobalRecord(globalType, expression))
         }
         return records
     }
 }
 
-data class WasmGlobalRecord(val globalidx:Int, val type: WasmGlobalType, val expression: List<OpCode<*>>)
+data class WasmGlobalRecord(val type: WasmGlobalType, val expression: List<OpCode<*>>)

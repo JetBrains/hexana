@@ -29,6 +29,7 @@ import org.jetbrains.hexana.wasm.sections.WasmFieldType
 import org.jetbrains.hexana.wasm.sections.WasmFuncHeapType
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmGlobalExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmGlobalType
 import org.jetbrains.hexana.wasm.sections.WasmHeapType
 import org.jetbrains.hexana.wasm.sections.WasmI31RefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
@@ -329,11 +330,37 @@ internal fun CommonByteBuffer.listTypesByIndices(
 
 internal fun CommonByteBuffer.listGlobals(wasmModule: WasmModule?): List<GlobalRecord> {
     wasmModule ?: return emptyList()
+    val importedGlobals = with(wasmModule.importSection) {
+        this ?: return@with emptyList()
+        getImportRecords().filter { it.type is WasmGlobalType }.mapIndexed { index, record ->
+            val globalType = record.type as WasmGlobalType
+
+            GlobalRecord(
+                index,
+                record.prefix,
+                record.name,
+                globalType.valueType.toSignature(),
+                globalType.mutable,
+                null,
+                "import"
+            )
+        }
+    }
+    val baseIndex = importedGlobals.size
     val globals = with(wasmModule.globalSection) {
         this ?: return@with emptyList()
-        scan()
+        scan().mapIndexed { index, record ->
+            GlobalRecord(
+                baseIndex + index,
+                null,
+                null,
+                record.type.valueType.toSignature(),
+                record.type.mutable,
+                record.expression.wat(), "global_section"
+            )
+        }
     }
-    return globals.map { GlobalRecord(it.globalidx, it.type.valueType.toSignature(), it.type.mutable, it.expression.wat()) }
+    return importedGlobals + globals
 }
 
 internal fun CommonByteBuffer.listGlobalsByIndices(
@@ -344,7 +371,15 @@ internal fun CommonByteBuffer.listGlobalsByIndices(
     return listGlobals(wasmModule).filter { indices.contains(it.globalIdx) }
 }
 
-data class GlobalRecord(val globalIdx: Int, val type: String, val mutability: Boolean, val expression: String?)
+data class GlobalRecord(
+    val globalIdx: Int,
+    val prefix: String?,
+    val name: String?,
+    val type: String,
+    val mutability: Boolean,
+    val expression: String?,
+    val definedIn: String
+)
 
 internal fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRecord> {
     wasmModule ?: return emptyList()
