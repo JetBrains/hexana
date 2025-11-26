@@ -29,4 +29,7 @@ abstract class WasmTest: UsefulTestCase() {
     internal inline fun doMemTest(crossinline body: (List<MemoryRecord>) -> Unit) = doTest("memory") {
         listMemory(it).let(body)
     }
+    internal inline fun doGlobalTest(crossinline body: (List<GlobalRecord>) -> Unit) = doTest("global") {
+        listGlobals(it).let(body)
+    }
 }
