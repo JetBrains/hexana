@@ -55,7 +55,7 @@ internal class WasmPrinter() {
     }
 
     private fun hostError(ptr: Int, len: Int) {
-        throw Exception(memory.read(ptr, len).decodeToString())
+        //throw Exception(memory.read(ptr, len).decodeToString())
     }
 
     fun print(bytes: ByteArray): String {

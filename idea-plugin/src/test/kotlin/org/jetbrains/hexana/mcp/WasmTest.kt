@@ -32,4 +32,7 @@ abstract class WasmTest: UsefulTestCase() {
     internal inline fun doGlobalTest(crossinline body: (List<GlobalRecord>) -> Unit) = doTest("global") {
         listGlobals(it).let(body)
     }
+    internal inline fun doExportTest(crossinline body: (List<ExportRecord>) -> Unit) = doTest("exports") {
+        listExports(it).let(body)
+    }
 }

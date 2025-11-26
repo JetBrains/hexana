@@ -18,14 +18,14 @@ pub extern "C" fn alloc_input(len: usize) -> *mut u8 {
     ptr
 }
 
-pub fn print_bytes_internal(wasm: impl AsRef<[u8]>) -> Result<String, String> {
+pub fn print_bytes_internal(wasm: impl AsRef<[u8]>) -> Result<String, (String, String)> {
     let mut dst = String::new();
     let mut cfg = wasmprinter::Config::new();
     cfg.fold_instructions(true)
         .name_unnamed(true);
     match cfg.print(wasm.as_ref(), &mut PrintFmtWrite(&mut dst)) {
         Ok(_) => Ok(dst),
-        Err(e) => Err(format!("{e}"))
+        Err(e) => Err((dst, format!("{e}"))),
     }
 }
 
@@ -40,10 +40,12 @@ pub extern "C" fn print_wat(ptr: *const u8, len: usize) {
                 host_print(wat_bytes.as_ptr(), wat_bytes.len());
             }
         }
-        Err(e) => {
+        Err((wat, e)) => {
             let msg = format!("wasmprinter error: {e}");
             let msg_bytes = msg.as_bytes();
+            let wat_bytes = wat.as_bytes();
             unsafe {
+                host_print(wat_bytes.as_ptr(), wat_bytes.len());
                 host_error(msg_bytes.as_ptr(), msg_bytes.len());
             }
         }
