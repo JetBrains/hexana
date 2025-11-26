@@ -4,6 +4,11 @@ plugins {
     alias(libs.plugins.compose.multiplatform) apply(false)
 }
 
+repositories {
+    maven("https://www.jetbrains.com/intellij-repository/releases")
+    maven("https://www.jetbrains.com/intellij-repository/snapshots")
+}
+
 allprojects {
     repositories {
         google {
