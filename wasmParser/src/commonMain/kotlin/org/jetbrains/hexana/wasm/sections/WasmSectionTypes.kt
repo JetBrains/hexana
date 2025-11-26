@@ -127,12 +127,16 @@ internal fun CommonByteBuffer.referenceType(): WasmReferenceType {
 
 }
 
+/**
+ * 5.3.9 Limits
+ */
 internal fun CommonByteBuffer.limits(): WasmLimits<*> {
-    return when (get()) {
+    val limitType = get()
+    return when (limitType) {
         0x00.toByte() -> WasmOpenI32Limits(getULEB128().toInt())
         0x01.toByte() -> WasmFixedI32Limits(getULEB128().toInt(), getULEB128().toInt())
-        0x02.toByte() -> WasmOpenI64Limits(getULEB128())
-        0x03.toByte() -> WasmFixedI64Limits(getULEB128(), getULEB128())
+        0x04.toByte() -> WasmOpenI64Limits(getULEB128())
+        0x05.toByte() -> WasmFixedI64Limits(getULEB128(), getULEB128())
         else -> error("unknown limits type")
     }
 }
