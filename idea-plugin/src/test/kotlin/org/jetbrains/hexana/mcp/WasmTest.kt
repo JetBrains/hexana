@@ -26,4 +26,7 @@ abstract class WasmTest: UsefulTestCase() {
     protected fun getPathToTestDataFile(section: String): String {
         return Path("${dataPath}/$section/${getTestName(true)}.wat").toAbsolutePath().toString()
     }
+    internal inline fun doMemTest(crossinline body: (List<MemoryRecord>) -> Unit) = doTest("memory") {
+        listMemory(it).let(body)
+    }
 }
