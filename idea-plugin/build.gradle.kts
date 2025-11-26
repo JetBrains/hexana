@@ -3,7 +3,7 @@ import org.jetbrains.changelog.Changelog
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm")
-    id("org.jetbrains.intellij.platform") version "2.10.4"
+    id("org.jetbrains.intellij.platform") version "2.10.5"
     id("org.jetbrains.changelog") version "2.4.0"
     // Compose compiler plugin from version catalog
     alias(libs.plugins.compose.compiler)
