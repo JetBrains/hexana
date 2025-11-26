@@ -25,8 +25,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.application.EDT
+import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.testFramework.LightVirtualFile
+import com.intellij.util.asSafely
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
@@ -412,6 +414,7 @@ private sealed interface WasmPanel : Panel {
                         val watFileName = wasmBinaryProvider.file.name.removeSuffix(".wasm") + ".wat"
                         val watPreviewFile = LightVirtualFile(watFileName, WatFileType.INSTANCE, success.wat)
                         val watTextEditor = wasmBinaryProvider.createTextEditor(watPreviewFile)
+                        watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
                         watPreviewFile.putUserData(WatNavigation.WAT_EDITOR, watTextEditor.editor)
                         editorPanel = watTextEditor.component
                     }
