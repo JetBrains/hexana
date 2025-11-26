@@ -9,21 +9,21 @@ import org.jetbrains.hexana.wasm.WasmParser
 import java.io.FileInputStream
 import kotlin.io.path.Path
 
-open class WasmTest: UsefulTestCase() {
-    val dataPath: String = "src/test/data/mcp/memory"
+abstract class WasmTest: UsefulTestCase() {
+    val dataPath: String = "src/test/data/mcp/"
 
-    fun loadTestDataFile(): String {
-        return FileInputStream(getPathToTestDataFile()).bufferedReader().use { it.readText() }
+    private fun loadTestDataFile(section: String): String {
+        return FileInputStream(getPathToTestDataFile(section)).bufferedReader().use { it.readText() }
     }
 
-    fun doTest(body: CommonByteBuffer.(WasmModule?) -> Unit) {
-        val bytes = wat2wasm(loadTestDataFile())
+    open fun doTest(section:String, body: CommonByteBuffer.(WasmModule?) -> Unit) {
+        val bytes = wat2wasm(loadTestDataFile(section))
         val commonByteBuffer = bytes.toCommonByteBuffer()
         val wasmModule = WasmParser().parse(commonByteBuffer)
         commonByteBuffer.body(wasmModule)
 
     }
-    protected fun getPathToTestDataFile(): String {
-        return Path("${dataPath}/${getTestName(true)}.wat").toAbsolutePath().toString()
+    protected fun getPathToTestDataFile(section: String): String {
+        return Path("${dataPath}/$section/${getTestName(true)}.wat").toAbsolutePath().toString()
     }
 }

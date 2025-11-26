@@ -63,8 +63,9 @@ import org.jetbrains.hexana.wasm.sections.WasmVecType
 
 
 internal fun CommonByteBuffer.listDataSections(wasmModule: WasmModule?): List<DataEntry> {
-
-    val data = with(wasmModule!!.dataSection!!) {
+    wasmModule ?: return emptyList()
+    val data = with(wasmModule.dataSection) {
+        this ?: return@with emptyList()
         scan()
     }
     return data.mapIndexedNotNull { index, record ->
@@ -346,12 +347,18 @@ data class GlobalRecord(val globalIdx: Int, val type: String, val mutability: Bo
 
 internal fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRecord> {
     wasmModule ?: return emptyList()
+    val importMemories = with(wasmModule.importSection) {
+        this ?: return@with emptyList()
+        getImportRecords().filter { it.type is WasmMemType }
+    }.mapIndexed { index, record ->
+        MemoryRecord(index, Limits((record.type as WasmMemType).limits)) }
+    val importBase = importMemories.size
     val memories = with(wasmModule.memorySection) {
         this ?: return@with emptyList()
         scan()
-    }
-
-    return memories.map { MemoryRecord(it.memidx, Limits(it.limits)) }
+    }.mapIndexed { index, record ->
+        MemoryRecord(importBase + index, Limits(record.limits)) }
+    return importMemories + memories
 }
 
 internal fun CommonByteBuffer.listMemoryByIndices(
@@ -378,7 +385,7 @@ internal class Limits<T>(private val internal: WasmLimits<T>){
     val max: T?
         get() = internal.max
     val hasMax: Boolean
-        get() = internal is WasmOpenI64Limits || internal is WasmOpenI32Limits
+        get() = internal !is WasmOpenI64Limits && internal !is WasmOpenI32Limits
     val range: String
         get() = "${internal.min}..${internal.max ?: "ε"}"
     val flag: String
