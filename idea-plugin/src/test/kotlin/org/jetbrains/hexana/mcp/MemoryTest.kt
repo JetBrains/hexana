@@ -42,5 +42,14 @@ class MemoryTest : WasmTest() {
         }
     }
 
+    fun testMem3() = doTest { wasmModule ->
+        listMemory(wasmModule).let { memories ->
+            assertEquals(3, memories.size)
+            assertEquals(0, memories[0].memoryIdx)
+            assertEquals(1, memories[1].memoryIdx)
+            assertEquals(2, memories[2].memoryIdx)
+        }
+    }
+
     private fun doTest(body: CommonByteBuffer.(WasmModule?) -> Unit) = doTest("memory", body)
 }
