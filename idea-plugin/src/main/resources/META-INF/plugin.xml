@@ -76,6 +76,7 @@
         <lang.parserDefinition language="wat" implementationClass="org.jetbrains.hexana.wat.psi.WatParserDefinition" />
         <lang.syntaxHighlighter language="wat" implementationClass="org.jetbrains.hexana.wat.WatSyntaxHighlighter"/>
         <fileEditor.fileSizeChecker implementation="org.jetbrains.hexana.wat.WatFileSizeChecker"/>
+        <fileEditor.fileSizeChecker implementation="org.jetbrains.hexana.WasmFileSizeChecker"/>
         <braceMatcher filetype="wat" implementationClass="org.jetbrains.hexana.wat.WatBraceMatcher"/>
         <lang.fileViewProviderFactory language="wat" implementationClass="org.jetbrains.hexana.wat.psi.WatFileViewProviderFactory"/>
         <problemHighlightFilter implementation="org.jetbrains.hexana.wat.WatProblemHighlightFilter"/>
