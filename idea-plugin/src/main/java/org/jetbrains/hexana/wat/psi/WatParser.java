@@ -70,6 +70,11 @@ public class WatParser implements PsiParser {
 
     @Override
     public @NotNull ASTNode parse(@NotNull IElementType root, @NotNull PsiBuilder b) {
+        doParse(root, b);
+        return b.getTreeBuilt();
+    }
+
+    public void doParse(@NotNull IElementType root, @NotNull PsiBuilder b) {
         PsiBuilder.Marker rootMark = b.mark();
         boolean collapseLazy = root instanceof WatFileElementType;
         ArrayList<Expr> exprStack = new ArrayList<>();
@@ -138,7 +143,6 @@ public class WatParser implements PsiParser {
         }
 
         rootMark.done(root);
-        return b.getTreeBuilt();
     }
 
     private static boolean idOrNum(@NonNull PsiBuilder b, @Nullable IElementType token) {
