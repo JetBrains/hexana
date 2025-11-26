@@ -119,6 +119,9 @@ tasks {
     withType<org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask>().configureEach {
         //jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5007")
 
+    withType<Test> {
+        jvmArgs("-Dpolyglotimpl.DisableMultiReleaseCheck=true")
+        classpath = classpath.filter { it.extension != "pom" }
     }
 
     patchPluginXml {
@@ -130,23 +133,6 @@ tasks {
                     .withEmptySections(false),
                 Changelog.OutputType.HTML
             )
-        }
-    }
-    test {
-        jvmArgs("-Dpolyglotimpl.DisableMultiReleaseCheck=true")
-        doFirst {
-            val testClasses = sourceSets.test.get().output.classesDirs.files
-            val mainClasses = sourceSets.main.get().output.classesDirs.files
-            val modulePath = (
-                    configurations.testRuntimeClasspath.get().files +
-                            testClasses +
-                            mainClasses
-                    )
-                .filterNot { it.name.endsWith(".pom") }
-                .joinToString(File.pathSeparator) { it.absolutePath }
-
-            println("Using module-path for tests:\n$modulePath")
-            classpath = classpath.filter { !it.name.endsWith(".pom") }
         }
     }
 }
