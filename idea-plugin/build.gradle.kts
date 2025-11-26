@@ -115,13 +115,14 @@ tasks {
         sourceCompatibility = "21"
         targetCompatibility = "21"
     }
-    // Enable remote debugger attach for runIde and debug against intellij sources.
-    withType<org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask>().configureEach {
-        //jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5007")
 
     withType<Test> {
         jvmArgs("-Dpolyglotimpl.DisableMultiReleaseCheck=true")
         classpath = classpath.filter { it.extension != "pom" }
+    }
+    // Enable remote debugger attach for runIde and debug against intellij sources.
+    withType<org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask>().configureEach {
+        //jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5007")
     }
 
     patchPluginXml {
