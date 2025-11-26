@@ -439,7 +439,7 @@ private sealed interface WasmPanel : Panel {
             }
 
             if (loading) {
-                ConvertingIndicator()
+                ConvertingIndicator(message = "0000 0 1001 01 10 01 converting ${wasmBinaryProvider.file.name}")
             } else {
                 Box(Modifier.fillMaxSize()) {
                     SwingPanel(
@@ -468,7 +468,7 @@ private sealed interface WasmPanel : Panel {
 }
 
 @Composable
-private fun ConvertingIndicator() {
+private fun ConvertingIndicator(message: String) {
     Column(
         modifier = Modifier
             .fillMaxSize(),
@@ -496,7 +496,7 @@ private fun ConvertingIndicator() {
         )
 
         Text(
-            "0000 0 1001 01 10 01 converting",
+            message,
             style = TextStyle(brush = brush, fontFamily = FontFamily.Monospace)
         )
     }
@@ -508,10 +508,10 @@ private fun BinaryProvider.resolvePanels(): Array<Panel> {
         is GenericBinaryProvider -> emptyArray()
         is WasmBinaryVirtualFileProvider -> {
             if (wasmModule == null) return emptyArray() else arrayOf(
+                WasmPanel.Wat(this),
                 WasmPanel.Imports(this),
                 WasmPanel.Exports(this),
                 WasmPanel.Data(this),
-                WasmPanel.Wat(this)
             )
         }
 
