@@ -35,6 +35,7 @@ import org.jetbrains.hexana.wasm.sections.WasmI32Type
 import org.jetbrains.hexana.wasm.sections.WasmI64Type
 import org.jetbrains.hexana.wasm.sections.WasmIndexHeapType
 import org.jetbrains.hexana.wasm.sections.WasmLimits
+import org.jetbrains.hexana.wasm.sections.WasmMemType
 import org.jetbrains.hexana.wasm.sections.WasmMemoryExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmNoExnHeapType
 import org.jetbrains.hexana.wasm.sections.WasmNoExternRefHeapType
