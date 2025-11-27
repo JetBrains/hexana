@@ -37,7 +37,6 @@ internal fun HexViewer(buf: ByteArray, showOffsets: Boolean = true) {
         val codePanelListState = rememberLazyListState()
 
         val separator = 4.dp
-        val half = (this@BoxWithConstraints.maxWidth - separator) / 2
         val bytesPerRow = 16
         val spacing = 8.dp
 
@@ -52,32 +51,29 @@ internal fun HexViewer(buf: ByteArray, showOffsets: Boolean = true) {
                             .width(offsetWidth)
                             .background(HexanaTheme.backgroundColor)
                             .padding(horizontal = 8.dp, vertical = 4.dp)
-                            .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
                     ) {
                         Text(" ", style = TextStyle(fontFamily = FontFamily.Monospace))
                     }
                 }
                 Box(
-                    modifier = Modifier.width(half).background(HexanaTheme.backgroundColor)
+                    modifier = Modifier.background(HexanaTheme.backgroundColor)
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                         .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
                 ) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(spacing)
                     ) {
-                        for (i in 0 until bytesPerRow) {
-                            Text(
-                                i.asHexString(),
-                                style = TextStyle(
-                                    color = HexanaTheme.textColor,
-                                    fontFamily = FontFamily.Monospace
-                                )
+                        Text(
+                            (0 until bytesPerRow).joinToString(" ") { it.asHexString() },
+                            style = TextStyle(
+                                color = HexanaTheme.textColor,
+                                fontFamily = FontFamily.Monospace
                             )
-                        }
+                        )
                     }
                 }
                 Box(
-                    modifier = Modifier.width(half)
+                    modifier = Modifier
                         .padding(horizontal = 8.dp, vertical = 4.dp).background(HexanaTheme.backgroundColor)
                         .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
                 ) {
@@ -112,7 +108,7 @@ internal fun HexViewer(buf: ByteArray, showOffsets: Boolean = true) {
                             }
 
                             Box(
-                                modifier = Modifier.width(half).background(HexanaTheme.backgroundColor)
+                                modifier = Modifier.background(HexanaTheme.backgroundColor)
                                     .padding(horizontal = 8.dp)
                             ) {
                                 Row(
@@ -134,7 +130,7 @@ internal fun HexViewer(buf: ByteArray, showOffsets: Boolean = true) {
                             }
                             Box(modifier = Modifier.width(separator).background(Color.Gray))
                             Box(
-                                modifier = Modifier.width(half).background(HexanaTheme.backgroundColor)
+                                modifier = Modifier.background(HexanaTheme.backgroundColor)
                                     .padding(horizontal = 8.dp)
                             ) {
                                 Row(
@@ -206,7 +202,7 @@ private fun Modifier.borderBottom(color: Color, width: Dp, verticalPadding: Dp):
     drawLine(
         color = color,
         start = Offset(0f, y),
-        end = Offset(size.width - 8.dp.toPx(), y),
+        end = Offset(size.width, y),
         strokeWidth = strokeWidthPx
     )
 }
