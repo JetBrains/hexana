@@ -3,6 +3,7 @@ package org.jetbrains.hexana.providers
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.sections.WasmDataRecord
+import org.jetbrains.hexana.wasm.sections.WasmExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 
 sealed interface BinaryProvider {
@@ -18,6 +19,13 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
         val importSection = wasmModule?.importSection ?: return emptyList()
         with (importSection) {
             return buffer.getImportRecords()
+        }
+    }
+
+    fun getExports(): List<WasmExportRecordEntry> {
+        val exportsSection = wasmModule?.exportSection ?: return emptyList()
+        with (exportsSection) {
+            return buffer.scan()
         }
     }
 

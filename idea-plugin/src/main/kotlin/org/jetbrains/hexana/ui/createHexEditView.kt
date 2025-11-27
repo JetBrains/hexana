@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +42,12 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
+import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmGlobalExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmMemoryExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmTableExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmTagExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmUnsupportedExportRecordEntry
 import org.jetbrains.hexana.wat.WatFileType
 import org.jetbrains.hexana.wat.WatNavigation
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -311,7 +318,25 @@ private sealed interface WasmPanel : Panel {
 
         @Composable
         override fun onRender() {
-            Text("[EXPORTS]", style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace))
+            val exports = remember(wasmBinaryProvider) {
+                wasmBinaryProvider.getExports()
+            }
+
+            LazyColumn {
+                items(exports.size) { exportIndex ->
+                    val export = exports[exportIndex]
+                    val exportKind = when (export) {
+                        is WasmFunctionExportRecordEntry -> "function"
+                        is WasmGlobalExportRecordEntry -> "global"
+                        is WasmMemoryExportRecordEntry -> "memory"
+                        is WasmTableExportRecordEntry -> "table"
+                        is WasmTagExportRecordEntry -> "tag"
+                        is WasmUnsupportedExportRecordEntry -> "unknown"
+                    }
+
+                    Text("[${exportKind}] ${export.name}", style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace))
+                }
+            }
         }
     }
 
@@ -488,10 +513,10 @@ private fun BinaryProvider.resolvePanels(): Array<Panel> {
         is GenericBinaryProvider -> emptyArray()
         is WasmBinaryVirtualFileProvider -> {
             if (wasmModule == null) return emptyArray() else arrayOf(
-                WasmPanel.Wat(this),
-                WasmPanel.Imports(this),
                 WasmPanel.Exports(this),
+                WasmPanel.Imports(this),
                 WasmPanel.Data(this),
+                WasmPanel.Wat(this),
             )
         }
 
