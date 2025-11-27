@@ -33,7 +33,7 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
             state.wasmToolsPath = value?.takeIf { it.isNotBlank() }
         }
     var useBuiltInWasmTools: Boolean?
-        get() = state.useBuiltInWasmTools
+        get() = true // state.useBuiltInWasmTools
         set(value) {
             state.useBuiltInWasmTools = value?:false
         }
