@@ -21,6 +21,7 @@ import com.intellij.codeInsight.hint.HintUtil
 import com.intellij.icons.AllIcons
 import com.intellij.notebook.editor.BackedVirtualFile
 import com.intellij.openapi.application.EDT
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
@@ -53,6 +54,8 @@ internal fun createHexEditView(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
 ) {
+    val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels()) }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         VerticalSplitPanel(northPanel = {
             val codePanelListState = rememberLazyListState()
@@ -198,7 +201,6 @@ internal fun createHexEditView(
                 }
             }
         }, southPanel = {
-            val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels()) }
 
             TabsPanel(panels) { expanded ->
                 if (expanded) {
@@ -394,6 +396,9 @@ private sealed interface WasmPanel : Panel {
                         HexanaLog.LOG.warn("Failed to convert WASM to WAT: ${it.conversionError.error}")
                         it.conversionError.error
                     } else {
+                        if (Logger.shouldRethrow(it)) {
+                            throw it
+                        }
                         HexanaLog.LOG.warn("Failed to convert WASM to WAT", it)
                         val details = it.message
                         if (details.isNullOrEmpty()) {
