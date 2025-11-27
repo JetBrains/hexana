@@ -298,7 +298,7 @@ private sealed interface WasmPanel : Panel {
 
         @Composable
         override fun onRender() {
-            val imports = remember { wasmBinaryProvider.getImports() }
+            val imports = remember(wasmBinaryProvider) { wasmBinaryProvider.getImports() }
 
             LazyColumn(state = rememberLazyListState(), modifier = Modifier.fillMaxSize()) {
                 items(imports.size) { idx ->
@@ -345,7 +345,7 @@ private sealed interface WasmPanel : Panel {
 
         @Composable
         override fun onRender() {
-            val dataRecords = remember { wasmBinaryProvider.getData() }
+            val dataRecords = remember(wasmBinaryProvider) { wasmBinaryProvider.getData() }
 
             LazyColumn(state = rememberLazyListState(), modifier = Modifier.fillMaxSize()) {
                 items(dataRecords.size) { dataRecordIndex ->
