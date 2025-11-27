@@ -65,6 +65,8 @@ internal fun HexViewer(buf: ByteArray, showOffsets: Boolean = true) {
                     ) {
                         Text(
                             (0 until bytesPerRow).joinToString(" ") { it.asHexString() },
+                            softWrap = false,
+                            maxLines = 1,
                             style = TextStyle(
                                 color = HexanaTheme.textColor,
                                 fontFamily = FontFamily.Monospace
@@ -79,6 +81,8 @@ internal fun HexViewer(buf: ByteArray, showOffsets: Boolean = true) {
                 ) {
                     Text(
                         "ASCII",
+                        softWrap = false,
+                        maxLines = 1,
                         style = TextStyle(
                             color = HexanaTheme.textColor,
                             fontFamily = FontFamily.Monospace
@@ -121,6 +125,8 @@ internal fun HexViewer(buf: ByteArray, showOffsets: Boolean = true) {
                                         .joinToString(" ") { (it.toInt() and 0xFF).asHexString() }
                                     Text(
                                         rowText,
+                                        softWrap = false,
+                                        maxLines = 1,
                                         style = TextStyle(
                                             color = HexanaTheme.hexTextColor,
                                             fontFamily = FontFamily.Monospace
@@ -141,6 +147,8 @@ internal fun HexViewer(buf: ByteArray, showOffsets: Boolean = true) {
                                     val str = buf.slice(start until end).asASCII()
                                     Text(
                                         str,
+                                        softWrap = false,
+                                        maxLines = 1,
                                         style = TextStyle(
                                             color = HexanaTheme.textColor,
                                             fontFamily = FontFamily.Monospace
