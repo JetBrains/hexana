@@ -36,6 +36,9 @@ class HexanaService(
     }
 
     private fun convertToWasm(file: File): WatConversionResult {
+        if (file.length() > 3 * 1024 * 1024) {
+            return WatConversionResult.Error("File is too large to convert")
+        }
         val settings = HexanaSettings.getInstance()
         return if (settings.useBuiltInWasmTools == true) {
             convertToWasmWithBuiltInTools(file)
