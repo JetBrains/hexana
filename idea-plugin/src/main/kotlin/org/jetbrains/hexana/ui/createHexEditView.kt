@@ -54,8 +54,6 @@ internal fun createHexEditView(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
 ) {
-    val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels()) }
-
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         VerticalSplitPanel(northPanel = {
             val codePanelListState = rememberLazyListState()
@@ -201,6 +199,7 @@ internal fun createHexEditView(
                 }
             }
         }, southPanel = {
+            val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels()) }
 
             TabsPanel(panels) { expanded ->
                 if (expanded) {
