@@ -2,6 +2,8 @@ package org.jetbrains.hexana
 
 import com.intellij.openapi.components.*
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.intellij.openapi.options.Configurable
+import com.intellij.openapi.options.ConfigurableProvider
 import com.intellij.openapi.options.DslConfigurableBase
 import com.intellij.openapi.options.SearchableConfigurable
 import com.intellij.openapi.ui.DialogPanel
@@ -44,6 +46,16 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
 class HexanaSettingsState : BaseState() {
     var wasmToolsPath: String? by string()
     var useBuiltInWasmTools: Boolean by property(false)
+}
+
+class HexanaConfigurableProvider : ConfigurableProvider() {
+    override fun createConfigurable(): Configurable {
+        return HexanaConfigurable()
+    }
+
+    override fun canCreateConfigurable(): Boolean {
+        return false
+    }
 }
 
 class HexanaConfigurable : DslConfigurableBase(), SearchableConfigurable {

@@ -51,7 +51,7 @@
                                  id="hexana.settings"
                                  bundle="messages.HexanaBundle"
                                  key="hexana.settings.displayName"
-                                 instance="org.jetbrains.hexana.HexanaConfigurable"  />
+                                 provider="org.jetbrains.hexana.HexanaConfigurableProvider"/>
 
         <fileType name="wasm"
                   implementationClass="org.jetbrains.hexana.WasmFileType"
