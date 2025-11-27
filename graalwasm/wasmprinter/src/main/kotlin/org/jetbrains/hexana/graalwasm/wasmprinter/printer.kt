@@ -1,5 +1,5 @@
 package org.jetbrains.hexana.graalwasm.wasmprinter
 
-fun printWat(bytes: ByteArray): String {
+fun printWat(bytes: ByteArray): WatWithWarnings {
     return WasmPrinter().print(bytes)
 }

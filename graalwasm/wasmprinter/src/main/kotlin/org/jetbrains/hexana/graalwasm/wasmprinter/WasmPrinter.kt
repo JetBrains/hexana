@@ -17,6 +17,7 @@ internal class WasmPrinter() {
     private val allocInput: Value
     private val printWat: Value
     private val out = ByteArrayOutputStream()
+    private val warning = ByteArrayOutputStream()
 
     init {
 
@@ -55,15 +56,20 @@ internal class WasmPrinter() {
     }
 
     private fun hostError(ptr: Int, len: Int) {
-        //throw Exception(memory.read(ptr, len).decodeToString())
+        memory.read(ptr, len).let {
+            warning.write(it)
+        }
     }
 
-    fun print(bytes: ByteArray): String {
+    fun print(bytes: ByteArray): WatWithWarnings {
         val ptr = allocInput.execute(bytes.size).asInt()
         memory.write(ptr, bytes)
 
         printWat.execute(ptr, bytes.size)
 
-        return out.toByteArray().decodeToString()
+        return WatWithWarnings(out.toByteArray().decodeToString(),
+            warning.toByteArray().decodeToString().takeIf { it.isNotEmpty() })
     }
 }
+
+data class WatWithWarnings(val wat: String, val warnings: String?)
