@@ -9,6 +9,7 @@ import com.intellij.openapi.fileEditor.FileEditorStateLevel
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,8 @@ class HexanaFileEditor(
 
     private val stateHolder = HexViewStateHolder()
 
+    private var myTextEditor: TextEditor? = null
+
     init {
         panel = JPanel(BorderLayout())
         // TODO: 🐛 if we will have the same code in init section without moving it to a separate method
@@ -45,8 +48,10 @@ class HexanaFileEditor(
             "wasm" -> object: WasmBinaryVirtualFileProvider(myFile) {
                 override suspend fun createTextEditor(file: VirtualFile): TextEditor {
                      return withContext(Dispatchers.EDT) {
-                        val textEditor = TextEditorProvider.getInstance().createEditor(myProject, file)
-                        textEditor as TextEditor
+                         val textEditor = TextEditorProvider.getInstance().createEditor(myProject, file)
+                         textEditor as TextEditor
+                         myTextEditor = textEditor
+                         textEditor
                     }
                 }
             }
@@ -102,6 +107,9 @@ class HexanaFileEditor(
     }
 
     override fun dispose() {
+        myTextEditor?.let {
+            Disposer.dispose(it)
+        }
     }
 }
 
