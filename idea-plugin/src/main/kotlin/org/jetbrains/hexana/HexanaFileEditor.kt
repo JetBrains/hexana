@@ -18,7 +18,7 @@ import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.createComposePanel
-import org.jetbrains.hexana.ui.createHexEditView
+import org.jetbrains.hexana.ui.BinaryEditorView
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
 import java.io.Serializable
@@ -59,7 +59,7 @@ class HexanaFileEditor(
         }
 
         val hexView = createComposePanel {
-            createHexEditView(binaryProvider, stateHolder)
+            BinaryEditorView(binaryProvider, stateHolder)
         }
         panel.add(hexView)
     }
