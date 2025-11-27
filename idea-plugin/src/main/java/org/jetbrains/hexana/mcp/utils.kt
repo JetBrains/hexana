@@ -220,7 +220,7 @@ internal fun CommonByteBuffer.functionsByIndices(
     wasmModule ?: return emptyList()
     val imports = importSymbols(wasmModule)
     val functions = listFunctions(wasmModule)
-    return  imports.filter { indices.contains(it.index) } + functions.filter { indices.contains(it.index) }
+    return imports.filter { indices.contains(it.index) } + functions.filter { indices.contains(it.index) }
 }
 
 internal fun CommonByteBuffer.importSymbols(
@@ -237,7 +237,7 @@ internal fun CommonByteBuffer.importSymbols(
             is WasmTypeIndexExternalType -> (record.type as WasmTypeIndexExternalType).toSignature(types)
             else -> null
         }
-        ImportFunctionEntry(index,record.prefix, record.name, signature)
+        ImportFunctionEntry(index, record.prefix, record.name, signature)
     }
     return signatures
 }
@@ -260,19 +260,22 @@ internal fun CommonByteBuffer.listTypes(
 private fun WasmTypeRecord.toMcpType(index: Int? = null): McpType = when (this) {
     is WasmArrayTypeRecord -> index?.let {
         McpArrayIndexed(index, this.fieldType.toMcpField())
-    } ?: McpArray( this.fieldType.toMcpField())
+    } ?: McpArray(this.fieldType.toMcpField())
+
     is WasmStructTypeRecord -> index?.let {
         McpStructIndexed(it, this.superTypes, this.fields.map { it.toMcpField() })
     } ?: McpStruct(this.superTypes, this.fields.map { it.toMcpField() })
+
     is WasmRecursiveTypeRecord -> index?.let {
-        McpRecursiveIndexed(it, this.entries.map{ it.toMcpType() })
-    } ?: McpRecursive(this.entries.map{ it.toMcpType() })
+        McpRecursiveIndexed(it, this.entries.map { it.toMcpType() })
+    } ?: McpRecursive(this.entries.map { it.toMcpType() })
+
     is WasmSectionFunctionTypeRecord -> index?.let {
-        McpFuncIndexed(it,this.params.map{it.toMcpType()}, this.retTypes.map{ it.toMcpType() })
-    } ?: McpFunc(this.params.map{it.toMcpType()}, this.retTypes.map{ it.toMcpType() })
+        McpFuncIndexed(it, this.params.map { it.toMcpType() }, this.retTypes.map { it.toMcpType() })
+    } ?: McpFunc(this.params.map { it.toMcpType() }, this.retTypes.map { it.toMcpType() })
 }
 
-private fun WasmFieldType.toMcpField() : McpField = McpField(storageType.toMcpType(), isMutable)
+private fun WasmFieldType.toMcpField(): McpField = McpField(storageType.toMcpType(), isMutable)
 private fun WasmValueType<*>.toMcpType(): McpType {
     return when (this) {
         is WasmF32Type -> McpVal("i32")
@@ -283,9 +286,13 @@ private fun WasmValueType<*>.toMcpType(): McpType {
         is WasmPactTypeI8 -> McpPacked("i8")
         is WasmPactTypeI16 -> McpPacked("i16")
         is WasmRefType -> {
-            when(code) {
+            when (code) {
                 is WasmNullableReferenceType,
-                is WasmNonNullableReferenceType -> McpRefWithNullability(code.heapType.toMcpType(), code is WasmNullableReferenceType)
+                is WasmNonNullableReferenceType -> McpRefWithNullability(
+                    code.heapType.toMcpType(),
+                    code is WasmNullableReferenceType
+                )
+
                 is WasmReferenceHeapType -> McpRef(code.heapType.toMcpType())
             }
         }
@@ -312,14 +319,14 @@ class McpArray(val elementType: McpField) : McpType("array")
 class McpStructIndexed(val typeidx: Int, val superTypes: List<UInt>, val fields: List<McpField>) : McpType("struct")
 class McpStruct(val superTypes: List<UInt>, val fields: List<McpField>) : McpType("struct")
 class McpField(val type: McpType, val mutable: Boolean)
-class McpRecursiveIndexed(val typeidx: Int, val entries: List<McpType>): McpType("rec")
-class McpRecursive(val entries: List<McpType>): McpType("rec")
-class McpFuncIndexed(val typeidx: Int, val params: List<McpType>, val retTypes: List<McpType>): McpType("func")
-class McpFunc(val params: List<McpType>, val retTypes: List<McpType>): McpType("func")
-class McpVal(val type: String): McpType("val")
-class McpPacked(val packType: String): McpType("packed")
-class McpRef(val refKind: String): McpType("ref")
-class McpRefWithNullability(val refKind: String, val nullable: Boolean): McpType("ref")
+class McpRecursiveIndexed(val typeidx: Int, val entries: List<McpType>) : McpType("rec")
+class McpRecursive(val entries: List<McpType>) : McpType("rec")
+class McpFuncIndexed(val typeidx: Int, val params: List<McpType>, val retTypes: List<McpType>) : McpType("func")
+class McpFunc(val params: List<McpType>, val retTypes: List<McpType>) : McpType("func")
+class McpVal(val type: String) : McpType("val")
+class McpPacked(val packType: String) : McpType("packed")
+class McpRef(val refKind: String) : McpType("ref")
+class McpRefWithNullability(val refKind: String, val nullable: Boolean) : McpType("ref")
 
 internal fun CommonByteBuffer.listTypesByIndices(
     wasmModule: WasmModule?,
@@ -410,7 +417,7 @@ internal fun CommonByteBuffer.listMemoryByIndices(
 
 internal data class MemoryRecord(val memoryIdx: Int, val limit: Limits<*>, val definedIn: String)
 
-internal class Limits<T>(private val internal: WasmLimits<T>){
+internal class Limits<T>(private val internal: WasmLimits<T>) {
     val addressType: String
         get() {
             when (internal.min) {
@@ -451,23 +458,23 @@ private class LocalSerializer : JsonSerializer<Local>() {
 
     private fun stringifyLocalType(value: Local): String =
         when (value) {
-            is LocalNum       -> "num:${byteToNumType(value.type)}"
-            is LocalPackI8    -> "pack:i8"
-            is LocalPackI16   -> "pack:i16"
-            is LocalVec       -> "vec:v128"
-            is LocalEq        -> "ref:eq${nullable(value)}"
-            is LocalAny       -> "ref:anyref${nullable(value)}"
-            is LocalNone      -> "ref:none${nullable(value)}"
-            is LocalNoExn     -> "ref:noexn${nullable(value)}"
-            is LocalNoFunc    -> "ref:nofunc${nullable(value)}"
-            is LocalNoExtern  -> "ref:noextern${nullable(value)}"
-            is LocalFunc      -> "ref:func${nullable(value)}"
-            is LocalStruct    -> "ref:struct${nullable(value)}"
-            is LocalI31       -> "ref:i31${nullable(value)}"
-            is LocalExn       -> "ref:exn${nullable(value)}"
-            is LocalExtern    -> "ref:extern${nullable(value)}"
-            is LocalArray     -> "ref:array${nullable(value)}"
-            is LocalIndex     -> "ref:index:${value.type}${nullable(value)}"
+            is LocalNum -> "num:${byteToNumType(value.type)}"
+            is LocalPackI8 -> "pack:i8"
+            is LocalPackI16 -> "pack:i16"
+            is LocalVec -> "vec:v128"
+            is LocalEq -> "ref:eq${nullable(value)}"
+            is LocalAny -> "ref:anyref${nullable(value)}"
+            is LocalNone -> "ref:none${nullable(value)}"
+            is LocalNoExn -> "ref:noexn${nullable(value)}"
+            is LocalNoFunc -> "ref:nofunc${nullable(value)}"
+            is LocalNoExtern -> "ref:noextern${nullable(value)}"
+            is LocalFunc -> "ref:func${nullable(value)}"
+            is LocalStruct -> "ref:struct${nullable(value)}"
+            is LocalI31 -> "ref:i31${nullable(value)}"
+            is LocalExn -> "ref:exn${nullable(value)}"
+            is LocalExtern -> "ref:extern${nullable(value)}"
+            is LocalArray -> "ref:array${nullable(value)}"
+            is LocalIndex -> "ref:index:${value.type}${nullable(value)}"
         }
 
     private fun nullable(v: Local): String =
@@ -562,7 +569,7 @@ data class ImportFunctionEntry(
     val name: String,
     @JsonProperty("signature")
     val signature: SerializationSignature?
-): FunctionEntry(index)
+) : FunctionEntry(index)
 
 data class GeneralFunctionEntry(
     @JsonProperty("funcidx")
