@@ -20,9 +20,12 @@ import androidx.compose.ui.unit.dp
 import com.intellij.codeInsight.hint.HintUtil
 import com.intellij.icons.AllIcons
 import com.intellij.notebook.editor.BackedVirtualFile
+import com.intellij.openapi.actionSystem.DataSink
+import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.ex.EditorEx
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
@@ -375,18 +378,20 @@ private sealed interface WasmPanel : Panel {
                         watTextEditor.editor.settings.isUseSoftWraps = false
                         watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
                         watPreviewFile.putUserData(WatNavigation.WAT_EDITOR, watTextEditor.editor)
-                        editorPanel = if (success.warning.isNullOrEmpty()) {
-                            watTextEditor.component
-                        } else {
+                        val panel = object: JPanel(BorderLayout()), UiDataProvider {
+                            override fun uiDataSnapshot(sink: DataSink) {
+                                sink[OpenFileDescriptor.NAVIGATE_IN_EDITOR] = watTextEditor.editor
+                            }
+                        }
+                        panel.add(watTextEditor.component)
+                        if (!success.warning.isNullOrEmpty()) {
                             // Standard editor notifications require editor composite which we don't have here.
                             // Show the warning manually.
                             val notification = EditorNotificationPanel(HintUtil.WARNING_COLOR_KEY, EditorNotificationPanel.Status.Warning)
                             notification.text = success.warning
-                            val panel = JPanel(BorderLayout())
                             panel.add(notification, BorderLayout.NORTH)
-                            panel.add(watTextEditor.component, BorderLayout.CENTER)
-                            panel
                         }
+                        editorPanel = panel
                     }
                     loading = false
                 }.onFailure {
