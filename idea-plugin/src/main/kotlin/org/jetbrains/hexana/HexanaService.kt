@@ -69,6 +69,7 @@ class HexanaService(
 
     private fun convertToWasmWithBuiltInTools(file: File): WatConversionResult = FileInputStream(file).use { wasmInputStream ->
         val wasmBytes = wasmInputStream.readAllBytes()
-        WatConversionResult.Success(printWat(wasmBytes))
+        val textWithStatus = printWat(wasmBytes)
+        WatConversionResult.Success(textWithStatus.wat, textWithStatus.warnings)
     }
 }
