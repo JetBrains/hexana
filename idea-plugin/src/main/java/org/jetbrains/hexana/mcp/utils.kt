@@ -430,6 +430,9 @@ internal class Limits<T>(private val internal: WasmLimits<T>){
 
 val objectMapper = jacksonObjectMapper().apply {
     registerModule(KotlinModule.Builder().build())
+    setSerializationInclusion(JsonInclude.Include.NON_NULL)
+    setSerializationInclusion(JsonInclude.Include.NON_EMPTY)
+    setSerializationInclusion(JsonInclude.Include.NON_ABSENT)
 }
 
 private class LocalSerializer : JsonSerializer<Local>() {

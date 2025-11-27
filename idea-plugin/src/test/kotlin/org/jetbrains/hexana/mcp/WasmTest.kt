@@ -35,4 +35,7 @@ abstract class WasmTest: UsefulTestCase() {
     internal inline fun doExportTest(crossinline body: (List<ExportRecord>) -> Unit) = doTest("exports") {
         listExports(it).let(body)
     }
+    internal inline fun doListDataSegments(crossinline body: (McpDataSegmentsReport) -> Unit) = doTest("listDataSegments") {
+        listDataSegments(it).let(body)
+    }
 }
