@@ -38,4 +38,7 @@ abstract class WasmTest: UsefulTestCase() {
     internal inline fun doListDataSegments(crossinline body: (McpDataSegmentsReport) -> Unit) = doTest("listDataSegments") {
         listDataSegments(it).let(body)
     }
+    internal inline fun doFunctionTest(crossinline body: (List<GeneralFunctionEntry>) -> Unit) = doTest("function") {
+        listFunctions(it).let(body)
+    }
 }

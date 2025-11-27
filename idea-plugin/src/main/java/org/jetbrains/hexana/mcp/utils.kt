@@ -18,6 +18,7 @@ import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.sections.WasmAnyRefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmArrayRefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmArrayTypeRecord
+import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordActive
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordActiveWithMemoryIndex
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordPassive
@@ -120,7 +121,7 @@ internal fun CommonByteBuffer.listExportedFunctions(wasmModule: WasmModule?): Li
         this ?: return@with emptyList()
         this@listExportedFunctions.scan()
     }
-    val imports = importSymbols(wasmModule)
+    val imports = importFunctions(wasmModule)
     val functions = listFunctions(wasmModule)
     return records
         .filter { it is WasmFunctionExportRecordEntry }
@@ -147,70 +148,101 @@ internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<Gener
         this ?: return@with emptyList()
         this@listFunctions.scan()
     }
-    val imports = importSymbols(wasmModule)
+    val exports = listExports(wasmModule)
+    val imports = importFunctions(wasmModule).mapIndexed { index, entry ->
+        GeneralFunctionEntry(
+            funcidx = index,
+            import = Import(
+                module = entry.module,
+                name = entry.name),
+            codeOffset = null,
+            signature = entry.signature,
+            exportedAs = exportedAs(exports, index),
+            definedIn = "import",
+            codeSize = null,
+            instructionCount = null)}
     val indexBase = imports.size
-    val signatures = records.mapIndexedNotNull { index, typeIndex ->
+    val functions = records.mapIndexedNotNull { index, typeIndex ->
         (types.getOrNull(typeIndex) as? WasmSectionFunctionTypeRecord)?.toSignature()?.let { signature ->
+            val funcidx = index + indexBase
             GeneralFunctionEntry(
-                index + indexBase,
-                codes.getOrNull(index)?.offset,
-                signature,
-                codes.getOrNull(index)?.locals?.map {
-                    when (it.type) {
-                        is WasmNumType -> LocalNum(it.local, it.type.code as Byte)
-                        is WasmVecType -> LocalVec(it.local)
-                        is WasmPactTypeI8 -> LocalPackI8(it.local)
-                        is WasmPactTypeI16 -> LocalPackI16(it.local)
-                        is WasmRefType -> {
-                            val referenceType = it.type.code as WasmReferenceType
-                            val heapType = referenceType.heapType
-                            when (heapType) {
-                                is WasmExnRefHeapType -> LocalExn(it.local, it.type.code is WasmNullableReferenceType)
-                                is WasmArrayRefHeapType -> LocalArray(
-                                    it.local,
-                                    it.type.code is WasmNullableReferenceType
-                                )
-
-                                is WasmFuncHeapType -> LocalFunc(it.local, it.type.code is WasmNullableReferenceType)
-                                is WasmStructRefHeapType -> LocalStruct(
-                                    it.local,
-                                    it.type.code is WasmNullableReferenceType
-                                )
-
-                                is WasmI31RefHeapType -> LocalI31(it.local, it.type.code is WasmNullableReferenceType)
-                                is WasmEqRefHeapType -> LocalEq(it.local, it.type.code is WasmNullableReferenceType)
-                                is WasmAnyRefHeapType -> LocalAny(it.local, it.type.code is WasmNullableReferenceType)
-                                is WasmExternRefHeapType -> LocalExtern(
-                                    it.local,
-                                    it.type.code is WasmNullableReferenceType
-                                )
-
-                                is WasmNoneHeapType -> LocalNone(it.local, it.type.code is WasmNullableReferenceType)
-                                is WasmNoExnHeapType -> LocalNoExn(it.local, it.type.code is WasmNullableReferenceType)
-                                is WasmNoFuncHeapType -> LocalNoFunc(
-                                    it.local,
-                                    it.type.code is WasmNullableReferenceType
-                                )
-
-                                is WasmNoExternRefHeapType -> LocalNoExtern(
-                                    it.local,
-                                    it.type.code is WasmNullableReferenceType
-                                )
-
-                                is WasmIndexHeapType -> LocalIndex(
-                                    it.local,
-                                    heapType.type,
-                                    it.type.code is WasmNullableReferenceType
-                                )
-                            }
-                        }
-                    }
-                },
-                codes.getOrNull(index)?.opCodes?.wat()
+                funcidx = funcidx,
+                import = null,
+                codeOffset = codes.getOrNull(index)?.offset,
+                signature = signature,
+                exportedAs = exportedAs(exports, funcidx),
+                definedIn = "function_section",
+                codeSize = codes.getOrNull(index)?.size?.toLong(),
+                instructionCount = codes.getOrNull(index)?.opCodes?.size?.toLong()
             )
         }
     }
-    return signatures
+    return imports + functions
+}
+
+private fun exportedAs(exports: List<ExportRecord>, index: Int):List<String> {
+    return exports.filter { record -> record.kind.toInt() == 0 && record.externIndex.toInt() == index }
+        .map { record -> record.name }
+}
+
+private fun serializeOpcodes(
+    codes: List<WasmCodeRecord>,
+    index: Int
+): String? = codes.getOrNull(index)?.opCodes?.wat()
+
+private fun serializeLocals(
+    codes: List<WasmCodeRecord>,
+    index: Int
+): List<Local>? = codes.getOrNull(index)?.locals?.map {
+    when (it.type) {
+        is WasmNumType -> LocalNum(it.local, it.type.code as Byte)
+        is WasmVecType -> LocalVec(it.local)
+        is WasmPactTypeI8 -> LocalPackI8(it.local)
+        is WasmPactTypeI16 -> LocalPackI16(it.local)
+        is WasmRefType -> {
+            val referenceType = it.type.code as WasmReferenceType
+            val heapType = referenceType.heapType
+            when (heapType) {
+                is WasmExnRefHeapType -> LocalExn(it.local, it.type.code is WasmNullableReferenceType)
+                is WasmArrayRefHeapType -> LocalArray(
+                    it.local,
+                    it.type.code is WasmNullableReferenceType
+                )
+
+                is WasmFuncHeapType -> LocalFunc(it.local, it.type.code is WasmNullableReferenceType)
+                is WasmStructRefHeapType -> LocalStruct(
+                    it.local,
+                    it.type.code is WasmNullableReferenceType
+                )
+
+                is WasmI31RefHeapType -> LocalI31(it.local, it.type.code is WasmNullableReferenceType)
+                is WasmEqRefHeapType -> LocalEq(it.local, it.type.code is WasmNullableReferenceType)
+                is WasmAnyRefHeapType -> LocalAny(it.local, it.type.code is WasmNullableReferenceType)
+                is WasmExternRefHeapType -> LocalExtern(
+                    it.local,
+                    it.type.code is WasmNullableReferenceType
+                )
+
+                is WasmNoneHeapType -> LocalNone(it.local, it.type.code is WasmNullableReferenceType)
+                is WasmNoExnHeapType -> LocalNoExn(it.local, it.type.code is WasmNullableReferenceType)
+                is WasmNoFuncHeapType -> LocalNoFunc(
+                    it.local,
+                    it.type.code is WasmNullableReferenceType
+                )
+
+                is WasmNoExternRefHeapType -> LocalNoExtern(
+                    it.local,
+                    it.type.code is WasmNullableReferenceType
+                )
+
+                is WasmIndexHeapType -> LocalIndex(
+                    it.local,
+                    heapType.type,
+                    it.type.code is WasmNullableReferenceType
+                )
+            }
+        }
+    }
 }
 
 internal fun CommonByteBuffer.functionsByIndices(
@@ -218,17 +250,17 @@ internal fun CommonByteBuffer.functionsByIndices(
     indices: List<Int>
 ): List<FunctionEntry> {
     wasmModule ?: return emptyList()
-    val imports = importSymbols(wasmModule)
+    val imports = importFunctions(wasmModule)
     val functions = listFunctions(wasmModule)
-    return imports.filter { indices.contains(it.index) } + functions.filter { indices.contains(it.index) }
+    return imports.filter { indices.contains(it.funcidx) } + functions.filter { indices.contains(it.funcidx) }
 }
 
-internal fun CommonByteBuffer.importSymbols(
+internal fun CommonByteBuffer.importFunctions(
     wasmModule: WasmModule?
 ): List<ImportFunctionEntry> {
     val records = with(wasmModule!!.importSection) {
         this ?: return@with emptyList()
-        this@importSymbols.getImportRecords()
+        this@importFunctions.getImportRecords()
     }
 
     val types = types(wasmModule)
@@ -559,30 +591,30 @@ data class DataEntry(
 
 data class WasmExportFunctionRecord(val name: String, val entry: FunctionEntry)
 
-sealed class FunctionEntry(open val index: Int)
+sealed class FunctionEntry(open val funcidx: Int)
 data class ImportFunctionEntry(
     @JsonProperty("funcidx")
-    override val index: Int,
+    override val funcidx: Int,
     @JsonProperty("module")
     val module: String,
     @JsonProperty("name")
     val name: String,
     @JsonProperty("signature")
     val signature: SerializationSignature?
-) : FunctionEntry(index)
+) : FunctionEntry(funcidx)
 
 data class GeneralFunctionEntry(
-    @JsonProperty("funcidx")
-    override val index: Int,
-    @JsonProperty("offset")
-    val offset: Long?,
-    @JsonProperty("signature")
+    override val funcidx: Int,
     val signature: SerializationSignature?,
-    @JsonProperty("locals")
-    val locals: List<Local>?,
-    @JsonProperty("code")
-    val code: String? = null
-) : FunctionEntry(index)
+    val import: Import?,
+    val exportedAs: List<String>,
+    val definedIn: String,
+    val codeOffset: Long?,
+    val codeSize: Long?,
+    val instructionCount: Long?,
+) : FunctionEntry(funcidx)
+
+data class Import (val module: String, val name: String)
 
 @JsonSerialize(using = LocalSerializer::class)
 sealed class Local(open val local: Int)

@@ -99,23 +99,127 @@ class HexanaToolset : McpToolset {
         }
         val buffer = file.contentsToCommonByteBuffer()
         val module = WasmParser().parse(buffer)
-        return objectMapper.writeValueAsString(buffer.importSymbols(module))
+        return objectMapper.writeValueAsString(buffer.importFunctions(module))
     }
 
     @McpTool("list_functions")
     @McpDescription("""
-        This tool analyzes the Type, Function, Code sections of a WebAssembly module.
-        It returns structured data describing every function, including:
-	    •	function_index — the index of the function in the module
-	    •	params — function parameter types
-	    •	results — function result types
-	    •	offset (optional) — byte offset of the function body
+    Extracts all functions from a WebAssembly module and returns them as a JSON array of FunctionEntry objects.
 
-        This is analogous to:
-	    •	wasm-tools print module.wasm --details
-	    •	wasm-objdump -x module.wasm | grep FUNC
-        but returns a structured JSON result for use by LLMs and developer tools.
-    """)
+    Supports both imported and internally defined functions:
+      • imported functions — declared in the Import Section, no code body
+      • internal functions — declared in the Function + Code Sections with locals and body
+      • exported functions — functions referenced by Export Section
+      • functions referenced by element/table segments (via funcidx)
+
+    Each FunctionEntry contains:
+      • funcidx: unified function index (imports first, then internal functions)
+      • definedIn: either "import" or "function_section"
+      • import: { module, name } if imported; null otherwise
+      • signature: { params: [...], return: [...] } using canonical WebAssembly type strings
+      • exportedAs: list of export names (possibly empty)
+      • codeOffset: byte offset of the function body in the Code Section (null for imports)
+      • codeSize: size of the function body in bytes (null for imports)
+      • instructionCount: number of decoded instructions (null for imports)
+
+    The 'funcidx' space corresponds to the Wasm binary grammar:
+        funcidx ::= import-funcidx*  followed by function-section-funcidx*
+
+    Import functions precede all internal functions.
+
+    ------------------------------------
+    EXAMPLES OF RETURNED FUNCTION ENTRIES
+    ------------------------------------
+
+    Example 1 — Imported function (no body):
+      (import "env" "abort" (func (param i32 i32 i32 i32)))
+
+    JSON:
+      {
+        "funcidx": 0,
+        "definedIn": "import",
+        "import": { "module": "env", "name": "abort" },
+        "signature": {
+          "params": ["i32","i32","i32","i32"],
+          "return": []
+        },
+        "locals": [],
+        "exportedAs": [],
+        "codeOffset": null,
+        "codeSize": null,
+        "instructionCount": null
+      }
+
+    Example 2 — Internal function with locals and small body:
+      (func (export "increment") (param i32) (result i32)
+        (local i32)
+        local.get 0
+        i32.const 1
+        i32.add)
+
+    JSON:
+      {
+        "funcidx": 1,
+        "definedIn": "function_section",
+        "import": null,
+        "signature": {
+          "params": ["i32"],
+          "return": ["i32"]
+        },
+        "locals": ["i32"],
+        "exportedAs": ["increment"],
+        "codeOffset": 340,
+        "codeSize": 24,
+        "instructionCount": 7
+      }
+
+    Example 3 — Internal function referenced by table/elem:
+      (table 5 funcref)
+      (elem (i32.const 0) 2 3 4)
+
+    JSON entry for funcidx = 3:
+      {
+        "funcidx": 3,
+        "definedIn": "function_section",
+        "import": null,
+        "signature": { "params": [], "return": [] },
+        "locals": [],
+        "exportedAs": [],
+        "codeOffset": 512,
+        "codeSize": 18,
+        "instructionCount": 2
+      }
+
+    -------------------------------------------------------
+    ALTERNATIVE VIA WASM COMMAND-LINE TOOLS (for reference)
+    -------------------------------------------------------
+
+    Using WABT (https://github.com/WebAssembly/wabt):
+      • Convert to text (shows func bodies):
+          wasm2wat module.wasm
+
+      • Show function imports/exports:
+          wasm-objdump -x module.wasm
+
+      • Show disassembly:
+          wasm-objdump -d module.wasm
+
+    Using wasm-tools (Bytecode Alliance):
+      • Inspect structured IR:
+          wasm-tools print module.wasm
+
+      • Dump raw sections including code and functions:
+          wasm-tools dump module.wasm
+
+      • Convert binary ↔ wat:
+          wasm-tools parse  foo.wat   -o foo.wasm
+          wasm-tools print  foo.wasm
+
+    This MCP tool provides a higher-level, IDE-friendly JSON representation that
+    unifies imported + internal functions, expands locals, links exports,
+    and adds a short decoded instruction preview suitable for analysis,
+    navigation, and LLM reasoning.
+""")
     @Suppress("unused")
     suspend fun listFunctions(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
