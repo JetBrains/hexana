@@ -30,6 +30,8 @@ import com.intellij.util.asSafely
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.HexanaBundle
+import org.jetbrains.hexana.HexanaLog
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
@@ -339,6 +341,10 @@ private sealed interface WasmPanel : Panel {
         }
     }
 
+    class ConversionException(
+        val conversionError : HexanaService.WatConversionResult.Error
+    ) : Exception()
+
     class Wat(override val wasmBinaryProvider: WasmBinaryVirtualFileProvider) : WasmPanel {
         override val description = "WAT"
 
@@ -356,8 +362,10 @@ private sealed interface WasmPanel : Panel {
                             VfsUtil.virtualToIoFile(wasmBinaryProvider.file)
                         )
                     }
-                    conversionResult as? HexanaService.WatConversionResult.Success
-                        ?: error("WAT conversion failed")
+                    if (conversionResult is HexanaService.WatConversionResult.Error) {
+                        throw ConversionException(conversionResult)
+                    }
+                    conversionResult as HexanaService.WatConversionResult.Success
                 }.onSuccess { success ->
                     withContext(Dispatchers.EDT) {
                         val watFileName = wasmBinaryProvider.file.name.removeSuffix(".wasm") + ".wat"
@@ -381,9 +389,23 @@ private sealed interface WasmPanel : Panel {
                     }
                     loading = false
                 }.onFailure {
-                    println("Failed to convert WASM to WAT: ${it.message}")
+                    val notification = EditorNotificationPanel(HintUtil.ERROR_COLOR_KEY, EditorNotificationPanel.Status.Error)
+                    notification.text = if (it is ConversionException) {
+                        HexanaLog.LOG.warn("Failed to convert WASM to WAT: ${it.conversionError.error}")
+                        it.conversionError.error
+                    } else {
+                        HexanaLog.LOG.warn("Failed to convert WASM to WAT", it)
+                        val details = it.message
+                        if (details.isNullOrEmpty()) {
+                            HexanaBundle.message("hexana.notification.wasm2watFailed")
+                        } else {
+                            HexanaBundle.message("hexana.notification.wasm2watFailed.details", details)
+                        }
+                    }
+                    val panel = JPanel(BorderLayout())
+                    panel.add(notification, BorderLayout.NORTH)
+                    editorPanel = panel
                     loading = false
-                    editorPanel = null
                 }
             }
 
