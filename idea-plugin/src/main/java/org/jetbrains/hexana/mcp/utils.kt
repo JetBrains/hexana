@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.core.JsonGenerator
 import com.fasterxml.jackson.databind.JsonSerializer
@@ -387,13 +388,15 @@ internal fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRe
         this ?: return@with emptyList()
         getImportRecords().filter { it.type is WasmMemType }
     }.mapIndexed { index, record ->
-        MemoryRecord(index, Limits((record.type as WasmMemType).limits)) }
+        MemoryRecord(index, Limits((record.type as WasmMemType).limits), "import")
+    }
     val importBase = importMemories.size
     val memories = with(wasmModule.memorySection) {
         this ?: return@with emptyList()
         scan()
     }.mapIndexed { index, record ->
-        MemoryRecord(importBase + index, Limits(record.limits)) }
+        MemoryRecord(importBase + index, Limits(record.limits), "memory_section")
+    }
     return importMemories + memories
 }
 
@@ -405,7 +408,7 @@ internal fun CommonByteBuffer.listMemoryByIndices(
     return listMemory(wasmModule).filter { indices.contains(it.memoryIdx) }
 }
 
-internal data class MemoryRecord(val memoryIdx: Int, val limit: Limits<*>)
+internal data class MemoryRecord(val memoryIdx: Int, val limit: Limits<*>, val definedIn: String)
 
 internal class Limits<T>(private val internal: WasmLimits<T>){
     val addressType: String
