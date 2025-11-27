@@ -1218,6 +1218,280 @@ class HexanaToolset : McpToolset {
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listTypesByIndices(wasmModule, indices))
     }
+
+    @McpTool("list_data_segments")
+    @McpDescription("""
+        Returns a detailed JSON report describing all data segments defined in a WebAssembly module. 
+        
+        Data segments represent raw byte arrays that the module declares in its Data Section. They are 
+        used to initialize linear memory (active mode) or stored for later use via bulk-memory operations 
+        (passive mode). Without a tool like this, users typically inspect WAT output manually or parse 
+        semi-structured textual dumps from CLI tools. This MCP tool provides a normalized, consistent, 
+        LLM-friendly structure that exposes segment modes, memory targeting, previews, offset expressions, 
+        and related context (memories, globals, exported symbols), making it suitable for static analysis, 
+        reverse engineering, and AI-assisted reasoning.
+        
+        This tool is especially useful for:
+        - discovering embedded strings, panic messages, lookup tables, vtables
+        - inspecting WASI FS objects or configuration blobs
+        - reconstructing memory initialization and startup behavior
+        - understanding how static data interacts with imported or declared memories
+        - correlating memory offsets with instruction-level analysis
+        - enabling LLMs to reason about memory structure without unsafe guessing
+        
+        ---
+        
+        ## Top-level JSON Structure (`McpDataSegmentsReport`)
+        
+        The report typically contains:
+        
+        - `segments`: a list of structured data segment records.
+        - `summary`: aggregated metadata about the segments.
+        - `memory`: a list of memory descriptors for the module.
+        - `globals`: a list of global descriptors for the module.
+        - `exported_symbols`: a list of exported symbols (for quick cross-reference).
+        
+        Exact field names and shapes follow the `McpDataSegmentsReport` Kotlin model, but this description 
+        explains the semantics used by the tool.
+        
+        ---
+        
+        ## segments[]
+        
+        Each entry in `segments` describes a single data segment:
+        
+        - `dataidx`  
+          Zero-based index of the segment in the Data Section.
+        
+        - `mode`  
+          One of:
+          - `"active"` — segment initializes a memory during instantiation.
+          - `"passive"` — segment is not applied automatically and must be used via `memory.init`.
+        
+        - `memory` (null for passive segments)  
+          Describes the target memory for active segments:
+          - `memidx`: resolved memory index across both imported and locally defined memories  
+            (imports come first, then memories from the Memory Section).
+          - `definedIn`: `"import"` or `"memory_section"`.
+          - `module` / `name`: present only for imported memories.
+          - `limits`: minimum and optional maximum in pages, e.g. `{ "min": 2, "max": 4 }`.
+        
+        - `offsetExpr`  
+          Stringified initializer expression for the memory offset. Examples:
+          - `"i32.const 0"`
+          - `"i32.add (i32.const 10) (global.get 0)"`
+          Null for passive segments.
+        
+        - `byteLength`  
+          Total number of bytes in the data segment.
+        
+        - `hexPreview`  
+          Short hexadecimal preview (typically the first 32 bytes), for example:
+          `"48 65 6C 6C 6F"`.
+        
+        - `utf8Preview`  
+          Short UTF-8 preview if:
+          - the first bytes decode strictly as UTF-8,
+          - at least ~80% of characters are printable,
+          - no null bytes are present.
+          Otherwise this field is `null`.
+        
+        - `rawAvailable`  
+          Indicates whether the full payload can be retrieved via the `get_data_segment` MCP tool.
+        
+        ---
+        
+        ## summary
+        
+        The `summary` object provides a compact high-level view over all segments and their usage. 
+        Exact field names depend on `McpDataSegmentsReport`, but typical values include:
+        
+        - `totalSegments`  
+          Number of data segments in the module.
+        
+        - `activeSegments` / `passiveSegments`  
+          Counts of active and passive segments.
+        
+        - `memories`  
+          Number of distinct memories referenced by active segments.
+        
+        - `totalBytes`  
+          Sum of `byteLength` across all segments.
+        
+        - `segmentsByMemory`  
+          Optional breakdown by `memidx` (how many segments / bytes per memory).
+        
+        - `globalsUsedForOffsets`  
+          Optional list of global indices referenced in offset expressions, possibly annotated with their 
+          import/module/name if known (e.g. globals like `__heap_base`).
+        
+        This allows an LLM or a human to quickly understand whether a module has many small segments, 
+        a few large ones, multiple memories, and whether initialization depends on imported globals.
+        
+        ---
+        
+        ## memory
+        
+        The `memory` field (if present in the report) describes the module’s memories as seen in the 
+        unified memory index space (imported memories first, then memories from the Memory Section).  
+        Each entry typically includes:
+        
+        - `memidx`  
+          Memory index.
+        
+        - `definedIn`  
+          Where this memory comes from:
+          - `"import"` — defined in the Import Section.
+          - `"memory_section"` — defined in the Memory Section.
+        
+        - `module`, `name`  
+          Only for imported memories, e.g. `"env"` / `"memory"`.
+        
+        - `limits`  
+          Minimum and optional maximum (in pages), e.g. `{ "min": 1, "max": 2 }`.
+        
+        - `exportedAs` (optional)  
+          Names under which this memory is exported, if any.
+        
+        This context makes it possible to interpret each segment’s `memory` reference and understand 
+        how many distinct memories the module uses.
+        
+        ---
+        
+        ## globals
+        
+        The `globals` field (if present) lists all globals in the module in global-index order 
+        (imported globals first, then locally defined ones). Each entry typically includes:
+        
+        - `globalidx`  
+          Global index.
+        
+        - `definedIn`  
+          `"import"` for imported globals or `"global_section"` for globals defined in the Global Section.
+        
+        - `module`, `name`  
+          For imported globals: their import module/field pair, e.g. `"env"` / `"__heap_base"`.
+        
+        - `type`  
+          Value type of the global (e.g. `"i32"`, `"i64"`, `"f32"`, `"f64"`, `"externref"`, `"funcref"`).
+        
+        - `mutability`  
+          Boolean indicating whether the global is mutable.
+        
+        - `initExpr`  
+          For locally defined globals, a stringified initializer expression 
+          (e.g. `"i32.const 1024"`, `"global.get 0"`). For imported globals this is typically `null`.
+        
+        - `exportedAs` (optional)  
+          Names under which the global is exported, if any.
+        
+        This allows the tool (and LLMs) to correlate offset expressions that use `global.get` with actual 
+        globals (such as `__data_end` or `__heap_base`) and better understand how data segments are placed.
+        
+        ---
+        
+        ## exported_symbols
+        
+        The `exported_symbols` field (if present) provides a convenient view of the module’s exported API.  
+        Depending on the `McpDataSegmentsReport` schema, each entry may include:
+        
+        - the exported name,  
+        - the kind of the export (`"func"`, `"global"`, `"memory"`, `"table"`),  
+        - the underlying index (e.g. `funcidx`, `globalidx`, `memidx`, `tableidx`).
+        
+        This field is useful to:
+        - quickly see which functions/globals/memories are part of the public API,
+        - cross-reference exported globals/memories with segments that depend on them,
+        - let LLMs connect static data to exported entrypoints.
+        
+        ---
+        
+        ## Example: Active Segment Targeting Imported Memory
+        
+        ```json
+        {
+          "segments": [
+            {
+              "dataidx": 0,
+              "mode": "active",
+              "memory": {
+                "memidx": 0,
+                "definedIn": "import",
+                "module": "env",
+                "name": "memory",
+                "limits": { "min": 2, "max": 4, addressType: "i32", hasMax: true, range: "2..4", flag: "0x00" }
+              },
+              "offsetExpr": "i32.const 1024",
+              "byteLength": 5,
+              "hexPreview": "48 65 6C 6C 6F",
+              "utf8Preview": "Hello",
+              "rawAvailable": true
+            }
+          ],
+          "summary": {
+            "totalSegments": 1,
+            "activeSegments": 1,
+            "passiveSegments": 0,
+            "memories": 1,
+          },
+          "memory": [
+            {
+              "memidx": 0,
+              "definedIn": "import",
+              "module": "env",
+              "name": "memory",
+              "limits": { "min": 2, "max": 4, addressType: "i32", hasMax: true, range: "2..4", flag: "0x00" }
+            }
+          ],
+          "globals": [],
+          "exported_symbols": []
+        }
+        ───────────────────────────────────────────────────────────────
+        🔧 Command-line equivalents for validation
+        Workarounds with CLI Tools (wasm-tools / WABT)
+
+        If this MCP tool is not available, similar information can be approximated via CLI,
+        but only in a manual, unstructured way:
+
+        Using wasm-tools
+        1.	Convert the module to WAT and search for data segments:
+            wasm-tools print module.wasm > module.wat
+        2.	For a more low-level view:
+            wasm-tools dump module.wasm --details | grep Data
+        This prints raw data segment info but does not:
+        •	resolve memory indices,
+        •	show UTF-8 previews,
+        •	or provide a summary or JSON structure.
+
+        Using WABT (wasm2wat)
+        wasm2wat module.wasm -o module.wat
+        Again, the user must manually parse (data ...) and relate them to memories, globals, and exports.
+
+        The list_data_segments MCP tool replaces these manual workflows with a structured JSON report
+        that IDEs and LLMs can consume directly.
+        
+        ───────────────────────────────────────────────────────────────
+        
+        Typical Use Cases
+            •	Inspect embedded assets (JSON configs, text resources, WASI filesystem entries).
+            •	Identify panic/error strings in Rust, C/C++, AssemblyScript, and other toolchains.
+            •	Reconstruct initialization sequences (__data_end, __heap_base, etc.).
+            •	Assist reverse engineering and static analysis workflows.
+            •	Analyze lookup tables, hash tables, jump tables, and binary struct regions.
+            •	Provide contextual information to disassembly tools by correlating memory accesses
+        with known static data segments.
+    """)
+    fun listDataSegments(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+    ): String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = file.contentsToCommonByteBuffer()
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.listDataSegments(wasmModule))
+    }
 }
 
 
