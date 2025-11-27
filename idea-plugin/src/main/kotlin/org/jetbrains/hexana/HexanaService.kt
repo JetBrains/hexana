@@ -21,7 +21,7 @@ class HexanaService(
     }
 
     sealed interface WatConversionResult {
-        class Success(val wat: String, val warn: String? = null) : WatConversionResult
+        class Success(val wat: String, val warning: String? = null) : WatConversionResult
         class Error(val error: String) : WatConversionResult
     }
 

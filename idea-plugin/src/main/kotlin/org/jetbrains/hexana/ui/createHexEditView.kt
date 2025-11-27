@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.intellij.codeInsight.hint.HintUtil
 import com.intellij.icons.AllIcons
 import com.intellij.notebook.editor.BackedVirtualFile
 import com.intellij.openapi.application.EDT
@@ -24,6 +25,7 @@ import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
+import com.intellij.ui.EditorNotificationPanel
 import com.intellij.util.asSafely
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -364,7 +366,18 @@ private sealed interface WasmPanel : Panel {
                         watTextEditor.editor.settings.isUseSoftWraps = false
                         watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
                         watPreviewFile.putUserData(WatNavigation.WAT_EDITOR, watTextEditor.editor)
-                        editorPanel = watTextEditor.component
+                        editorPanel = if (success.warning.isNullOrEmpty()) {
+                            watTextEditor.component
+                        } else {
+                            // Standard editor notifications require editor composite which we don't have here.
+                            // Show the warning manually.
+                            val notification = EditorNotificationPanel(HintUtil.WARNING_COLOR_KEY, EditorNotificationPanel.Status.Warning)
+                            notification.text = success.warning
+                            val panel = JPanel(BorderLayout())
+                            panel.add(notification, BorderLayout.NORTH)
+                            panel.add(watTextEditor.component, BorderLayout.CENTER)
+                            panel
+                        }
                     }
                     loading = false
                 }.onFailure {
