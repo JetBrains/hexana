@@ -18,9 +18,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.onClick
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,11 +46,17 @@ import com.intellij.icons.AllIcons
 import com.intellij.notebook.editor.BackedVirtualFile
 import com.intellij.openapi.actionSystem.DataSink
 import com.intellij.openapi.actionSystem.UiDataProvider
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
+import com.intellij.openapi.editor.colors.EditorColorsListener
+import com.intellij.openapi.editor.colors.EditorColorsManager
+import com.intellij.openapi.editor.colors.EditorColorsScheme
+import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.tree.IElementType
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.util.asSafely
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +77,10 @@ import org.jetbrains.hexana.wasm.sections.WasmTagExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmUnsupportedExportRecordEntry
 import org.jetbrains.hexana.wat.WatFileType
 import org.jetbrains.hexana.wat.WatNavigation
+import org.jetbrains.hexana.wat.WatSyntaxHighlighter
+import org.jetbrains.hexana.wat.psi.WatLexer
+import org.jetbrains.hexana.wat.psi.WatToken
+import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -203,7 +215,7 @@ internal sealed interface WasmPanel : Panel {
                 is WatConversionState.Loading -> ConvertingIndicator(message = "0000 0 1001 01 10 01 converting ${wasmBinaryProvider.file.name}")
 
                 is WatConversionState.ShowLiteEditor -> {
-                    Text("HERE TO BE LITE EDITOR")
+                    WatLiteEditor((wasmViewState as WatConversionState.ShowLiteEditor).wat)
                 }
                 is WatConversionState.ShowEditor -> {
                     WatEditorContainer((wasmViewState as WatConversionState.ShowEditor).wat, wasmBinaryProvider)
@@ -226,6 +238,68 @@ internal sealed interface WasmPanel : Panel {
                     }
                 }
             }
+        }
+    }
+}
+
+private data class TokenData(val tokenType: IElementType, val text: String)
+
+
+
+@Composable
+@ReadOnlyComposable
+fun TextAttributesKey.toComposeColor(): Color {
+    val globalScheme = EditorColorsManager.getInstance().globalScheme
+    val attributes = globalScheme.getAttributes(this)
+    val awtColor = attributes?.foregroundColor ?: globalScheme.defaultForeground
+    return Color(awtColor.rgb)
+}
+
+@Composable
+internal fun WatLiteEditor(watContent: String) {
+    val tokens by remember { derivedStateOf {
+        val result = mutableListOf<List<TokenData>>()
+        val lexer = WatLexer()
+        lexer.start(watContent, 0, watContent.length)
+        var tokenType: IElementType?
+        var currentTokens = mutableListOf<TokenData>()
+        while ((lexer.tokenType.also { tokenType = it }) != null) {
+            if (tokenType == WatToken.NEWLINE) {
+                result.add(currentTokens)
+                currentTokens = mutableListOf()
+            } else {
+                currentTokens.add(TokenData(tokenType!!, lexer.tokenText!!))
+            }
+            lexer.advance()
+        }
+
+        result
+    }}
+
+    val highlighter = WatSyntaxHighlighter()
+
+    LazyColumn {
+        items(tokens.size) { lineIndex ->
+            val tokensInLine = tokens[lineIndex]
+            Text(
+                text = buildAnnotatedString {
+                    tokensInLine.forEach { tokenData ->
+                        val colors = highlighter.getTokenHighlights(tokenData.tokenType)
+
+                        val colorResolved = colors.getOrNull(0)
+                        if (colorResolved != null) {
+                            withStyle(style = SpanStyle(color = colorResolved.toComposeColor())) {
+                                append(tokenData.text)
+                            }
+                        } else {
+                            append(tokenData.text)
+                        }
+
+                    }
+
+                    append(" ")
+                }
+            )
         }
     }
 }
@@ -330,17 +404,23 @@ internal class WasmViewModel(
 
     fun convert() {
         viewModelScope.launch(Dispatchers.IO + CoroutineName("Wasm to Wat conversion")) {
+            val virtualFile = VfsUtil.virtualToIoFile(wasmBinaryProvider.file)
             runCatching {
                 val conversionResult =
                     HexanaService.getInstance().convertWasmToWat(
-                        VfsUtil.virtualToIoFile(wasmBinaryProvider.file)
+                        virtualFile
                     )
                 if (conversionResult is HexanaService.WatConversionResult.Error) {
                     throw ConversionException(conversionResult)
                 }
                 conversionResult as HexanaService.WatConversionResult.Success
             }.onSuccess { success ->
-                _conversionState.value = WatConversionState.ShowEditor(success.wat)
+                _conversionState.value = if (virtualFile.length() > HexanaService.WAT_EDITOR_MAX_FILE_SIZE) {
+                    WatConversionState.ShowLiteEditor(success.wat)
+                } else {
+                    WatConversionState.ShowEditor(success.wat)
+                }
+
             }.onFailure { err ->
                 val errorMessage = when (err) {
                     is ConversionException -> err.conversionError.error
