@@ -2,13 +2,11 @@ package org.jetbrains.hexana.ui
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.onClick
-import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,7 +69,7 @@ internal fun BinaryEditorView(
         VerticalSplitPanel(northPanel = {
             HexViewer(binaryProvider.bytes)
         }, southPanel = {
-            val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels()) }
+            val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels(state)) }
 
             TabsPanel(panels) { expanded ->
                 if (expanded) {
@@ -253,16 +251,23 @@ private sealed interface WasmPanel : Panel {
         val conversionError : HexanaService.WatConversionResult.Error
     ) : Exception()
 
-    class Wat(override val wasmBinaryProvider: WasmBinaryVirtualFileProvider) : WasmPanel {
+    class Wat(
+        override val wasmBinaryProvider: WasmBinaryVirtualFileProvider,
+        val state: HexViewStateHolder
+    ) : WasmPanel {
         override val description = "WAT"
 
         @Composable
         override fun onRender() {
             var loading by remember { mutableStateOf(true) }
-            var editorPanel by remember { mutableStateOf<JComponent?>(null) }
+            var editorPanel by remember { state.watEditor }
 
             // Perform conversion once per file; create Swing components on EDT
             androidx.compose.runtime.LaunchedEffect(wasmBinaryProvider.file) {
+                if (editorPanel != null) {
+                    loading = false
+                    return@LaunchedEffect
+                }
                 loading = true
                 runCatching {
                     val conversionResult = withContext(Dispatchers.IO) {
@@ -387,7 +392,7 @@ private fun ConvertingIndicator(message: String) {
 
 }
 
-private fun BinaryProvider.resolvePanels(): Array<Panel> {
+private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel> {
     return when (this) {
         is GenericBinaryProvider -> emptyArray()
         is WasmBinaryVirtualFileProvider -> {
@@ -395,7 +400,7 @@ private fun BinaryProvider.resolvePanels(): Array<Panel> {
                 WasmPanel.Exports(this),
                 WasmPanel.Imports(this),
                 WasmPanel.Data(this),
-                WasmPanel.Wat(this),
+                WasmPanel.Wat(this, state),
             )
         }
 
