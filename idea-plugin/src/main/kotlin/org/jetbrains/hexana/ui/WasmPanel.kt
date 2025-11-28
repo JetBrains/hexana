@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,7 +20,8 @@ import androidx.compose.foundation.onClick
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,24 +38,26 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
-import com.intellij.codeInsight.hint.HintUtil
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.intellij.icons.AllIcons
 import com.intellij.notebook.editor.BackedVirtualFile
 import com.intellij.openapi.actionSystem.DataSink
 import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.EDT
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
-import com.intellij.ui.EditorNotificationPanel
 import com.intellij.util.asSafely
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
-import org.jetbrains.hexana.HexanaBundle
-import org.jetbrains.hexana.HexanaLog
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
@@ -67,8 +69,11 @@ import org.jetbrains.hexana.wasm.sections.WasmTagExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmUnsupportedExportRecordEntry
 import org.jetbrains.hexana.wat.WatFileType
 import org.jetbrains.hexana.wat.WatNavigation
+import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import java.awt.BorderLayout
+import javax.swing.JComponent
 import javax.swing.JPanel
 import kotlin.math.min
 
@@ -183,112 +188,90 @@ internal sealed interface WasmPanel : Panel {
         }
     }
 
-    class ConversionException(
-        val conversionError : HexanaService.WatConversionResult.Error
-    ) : Exception()
-
     class Wat(
         override val wasmBinaryProvider: WasmBinaryVirtualFileProvider,
-        val state: HexViewStateHolder
+        val state: HexViewStateHolder,
+        val wasmViewModel: WasmViewModel = WasmViewModel(wasmBinaryProvider)
     ) : WasmPanel {
         override val description = "WAT"
 
         @Composable
         override fun onRender() {
-            var loading by remember { mutableStateOf(true) }
-            var editorPanel by remember { state.watEditor }
+            val wasmViewState by wasmViewModel.conversionState.collectAsState()
 
-            // Perform conversion once per file; create Swing components on EDT
-            androidx.compose.runtime.LaunchedEffect(wasmBinaryProvider.file) {
-                if (editorPanel != null) {
-                    loading = false
-                    return@LaunchedEffect
-                }
-                loading = true
-                runCatching {
-                    val conversionResult = withContext(Dispatchers.IO) {
-                        HexanaService.getInstance().convertWasmToWat(
-                            VfsUtil.virtualToIoFile(wasmBinaryProvider.file)
-                        )
-                    }
-                    if (conversionResult is HexanaService.WatConversionResult.Error) {
-                        throw ConversionException(conversionResult)
-                    }
-                    conversionResult as HexanaService.WatConversionResult.Success
-                }.onSuccess { success ->
-                    withContext(Dispatchers.EDT) {
-                        val watFileName = wasmBinaryProvider.file.name.removeSuffix(".wasm") + ".wat"
-                        val watPreviewFile = LightWatFile(wasmBinaryProvider.file, watFileName, success.wat)
-                        val watTextEditor = wasmBinaryProvider.createTextEditor(watPreviewFile)
-                        watTextEditor.editor.settings.isUseSoftWraps = false
-                        watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
-                        watPreviewFile.putUserData(WatNavigation.WAT_EDITOR, watTextEditor.editor)
-                        val panel = object: JPanel(BorderLayout()), UiDataProvider {
-                            override fun uiDataSnapshot(sink: DataSink) {
-                                sink[OpenFileDescriptor.NAVIGATE_IN_EDITOR] = watTextEditor.editor
-                            }
-                        }
-                        panel.add(watTextEditor.component)
-                        if (!success.warning.isNullOrEmpty()) {
-                            // Standard editor notifications require editor composite which we don't have here.
-                            // Show the warning manually.
-                            val notification = EditorNotificationPanel(HintUtil.WARNING_COLOR_KEY, EditorNotificationPanel.Status.Warning)
-                            notification.text = success.warning
-                            panel.add(notification, BorderLayout.NORTH)
-                        }
-                        editorPanel = panel
-                    }
-                    loading = false
-                }.onFailure {
-                    val notification = EditorNotificationPanel(HintUtil.ERROR_COLOR_KEY, EditorNotificationPanel.Status.Error)
-                    notification.text = if (it is ConversionException) {
-                        HexanaLog.LOG.warn("Failed to convert WASM to WAT: ${it.conversionError.error}")
-                        it.conversionError.error
-                    } else {
-                        if (Logger.shouldRethrow(it)) {
-                            throw it
-                        }
-                        HexanaLog.LOG.warn("Failed to convert WASM to WAT", it)
-                        val details = it.message
-                        if (details.isNullOrEmpty()) {
-                            HexanaBundle.message("hexana.notification.wasm2watFailed")
-                        } else {
-                            HexanaBundle.message("hexana.notification.wasm2watFailed.details", details)
-                        }
-                    }
-                    val panel = JPanel(BorderLayout())
-                    panel.add(notification, BorderLayout.NORTH)
-                    editorPanel = panel
-                    loading = false
-                }
-            }
+            when (wasmViewState) {
+                is WatConversionState.Loading -> ConvertingIndicator(message = "0000 0 1001 01 10 01 converting ${wasmBinaryProvider.file.name}")
 
-            if (loading) {
-                ConvertingIndicator(message = "0000 0 1001 01 10 01 converting ${wasmBinaryProvider.file.name}")
-            } else {
-                Box(Modifier.fillMaxSize()) {
-                    SwingPanel(
+                is WatConversionState.ShowLiteEditor -> {
+                    Text("HERE TO BE LITE EDITOR")
+                }
+                is WatConversionState.ShowEditor -> {
+                    WatEditorContainer((wasmViewState as WatConversionState.ShowEditor).wat, wasmBinaryProvider)
+                }
+
+                is WatConversionState.Error -> {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .fillMaxHeight(),
-                        factory = {
-                            JPanel(BorderLayout())
-                        },
-                        update = { panel ->
-                            if (loading) return@SwingPanel
-                            panel.removeAll()
-                            val child = editorPanel
-                            if (child != null) {
-                                panel.add(child, BorderLayout.CENTER)
-                            }
-                            panel.revalidate()
-                            panel.repaint()
-                        }
-                    )
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            AllIconsKeys.General.Error,
+                            contentDescription = null,
+                            iconClass = AllIcons::class.java
+                        )
+                        Text((wasmViewState as WatConversionState.Error).error)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun WatEditorContainer(
+    watContent: String,
+    wasmBinaryProvider: WasmBinaryVirtualFileProvider,
+) {
+    val panelState by produceState<JComponent?>(initialValue = null, key1 = watContent) {
+        withContext(Dispatchers.EDT) {
+            val watFileName = wasmBinaryProvider.file.name.removeSuffix(".wasm") + ".wat"
+
+            val watPreviewFile = WasmPanel.LightWatFile(wasmBinaryProvider.file, watFileName, watContent)
+
+            val watTextEditor = wasmBinaryProvider.createTextEditor(watPreviewFile)
+            watTextEditor.editor.settings.isUseSoftWraps = false
+            watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
+            watPreviewFile.putUserData(WatNavigation.WAT_EDITOR, watTextEditor.editor)
+            val panel = object: JPanel(BorderLayout()), UiDataProvider {
+                override fun uiDataSnapshot(sink: DataSink) {
+                    sink[OpenFileDescriptor.NAVIGATE_IN_EDITOR] = watTextEditor.editor
                 }
             }
 
+            panel.add(watTextEditor.component)
+            value = panel
         }
+    }
+
+    if (panelState != null) {
+        SwingPanelEditor( panelState)
+    }
+}
+
+
+@Composable
+private fun SwingPanelEditor(editorPanel: JComponent?) {
+    if (editorPanel == null) return
+    Box(Modifier.fillMaxSize()) {
+        SwingPanel(
+            modifier = Modifier.fillMaxSize(),
+            factory = {
+                editorPanel
+            }
+        )
     }
 }
 
@@ -326,3 +309,49 @@ private fun ConvertingIndicator(message: String) {
         )
     }
 }
+
+sealed class WatConversionState {
+    object Loading : WatConversionState()
+    class ShowEditor(val wat: String) : WatConversionState()
+    class ShowLiteEditor(val wat: String) : WatConversionState()
+    class Error(val error: String) : WatConversionState()
+}
+
+internal class WasmViewModel(
+    private val wasmBinaryProvider: WasmBinaryVirtualFileProvider,
+) : ViewModel() {
+    private val _conversionState = MutableStateFlow<WatConversionState>(WatConversionState.Loading)
+
+    internal val conversionState = _conversionState.asStateFlow()
+
+    init {
+        convert()
+    }
+
+    fun convert() {
+        viewModelScope.launch(Dispatchers.IO + CoroutineName("Wasm to Wat conversion")) {
+            runCatching {
+                val conversionResult =
+                    HexanaService.getInstance().convertWasmToWat(
+                        VfsUtil.virtualToIoFile(wasmBinaryProvider.file)
+                    )
+                if (conversionResult is HexanaService.WatConversionResult.Error) {
+                    throw ConversionException(conversionResult)
+                }
+                conversionResult as HexanaService.WatConversionResult.Success
+            }.onSuccess { success ->
+                _conversionState.value = WatConversionState.ShowEditor(success.wat)
+            }.onFailure { err ->
+                val errorMessage = when (err) {
+                    is ConversionException -> err.conversionError.error
+                    else -> err.message ?: "Unknown error"
+                }
+                _conversionState.value = WatConversionState.Error(errorMessage)
+            }
+        }
+    }
+}
+
+private class ConversionException(
+    val conversionError : HexanaService.WatConversionResult.Error
+) : Exception()
