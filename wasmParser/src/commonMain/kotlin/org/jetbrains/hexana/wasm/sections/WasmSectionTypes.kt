@@ -193,8 +193,8 @@ data class WasmSectionFunctionTypeRecord(
 sealed class  WasmValueType<T>(open val code: T)
 
 sealed class WasmNumType(code: Byte) : WasmValueType<Byte>(code)
-object WasmF32Type : WasmNumType(0x7c)
-object WasmF64Type : WasmNumType(0x7d)
+object WasmF32Type : WasmNumType(0x7d)
+object WasmF64Type : WasmNumType(0x7c)
 object WasmI32Type : WasmNumType(0x7f)
 object WasmI64Type : WasmNumType(0x7e)
 object WasmVecType : WasmValueType<Byte>(0x7b)
