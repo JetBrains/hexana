@@ -14,8 +14,11 @@ import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
@@ -193,7 +196,19 @@ private sealed interface WasmPanel : Panel {
                         is WasmUnsupportedExportRecordEntry -> "unknown"
                     }
 
-                    Text("[${exportKind}] ${export.name}", style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace))
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(style = SpanStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace)) {
+                                append(export.name)
+                            }
+
+                            append(" ")
+
+                            withStyle(style = SpanStyle(color = Color.LightGray, fontFamily = FontFamily.Monospace)) {
+                                append("(; ${exportKind} ;)")
+                            }
+                        }
+                    )
                 }
             }
         }
