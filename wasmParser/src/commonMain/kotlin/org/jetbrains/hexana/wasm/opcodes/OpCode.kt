@@ -1078,7 +1078,7 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
 
 fun CommonByteBuffer.parseOpCodes(): List<OpCode<*>> {
     val opCodes = mutableListOf<OpCode<*>>()
-    while (true) {
+    while (remaining() != 0) {
         val opCode = get().toUByte()
         if (opCode == Flow.Terminal.code) {
             break
