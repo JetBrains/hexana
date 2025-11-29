@@ -866,11 +866,9 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
             position(position() - 1)
             Flow.Else(null,opCodes)
         }
-        0x06u -> null // try
-        0x07u -> null // catch
-        0x08u -> null // throw
-        0x09u -> null // rethrow
-        0x0Au -> null // throw_ref
+        0x06u,
+        0x07u -> ReservedOpCode(codeInt)
+        0x09u -> ReservedOpCode(codeInt)
         0x0Bu -> Flow.Terminal
         0x0Cu -> Flow.Br(consumeInt())
         0x0Du -> Flow.BrIf(consumeInt())
@@ -888,36 +886,17 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
             Flow.CallIndirect(value)
         }
         0x12u -> Flow.ReturnCall
-        0x13u -> null // return_call_indirect
-        0x14u -> null // call_ref
-        0x15u -> null // return_call_ref
-        0x16u -> null // reserved
-        0x17u -> null // reserved
-        0x18u -> null // delegate
-        0x19u -> null // catch_all
+        0x16u, 0x17u, 0x18u, 0x19u -> ReservedOpCode(codeInt)
         0x1Au -> Flow.Drop
         0x1Bu -> Flow.Select
-        0x1Cu -> null // select reference
-        0x1Du -> null // reserved
-        0x1Eu -> null // reserved
-        0x1Fu -> null // try_table
+        0x1Cu, 0x1Du, 0x1Eu -> ReservedOpCode(codeInt)
 
         0x20u -> Local.Get(consumeInt())
         0x21u -> Local.Set(consumeInt())
         0x22u -> Local.Tee(consumeInt())
         0x23u -> OpCodes.Global.Get(consumeInt())
         0x24u -> OpCodes.Global.Set(consumeInt())
-        0x25u -> null // table.get
-        0x26u -> null // table.set
-        0x27u -> null // reserved
-        0x28u -> I32.Load(consumeMemArg())
-        0x29u -> I64.Load(consumeMemArg())
-        0x2Au -> F32.Load(consumeMemArg())
-        0x2Bu -> F64.Load(consumeMemArg())
-        0x2Cu -> I32.Load8_S(consumeMemArg())
-        0x2Du -> I32.Load8_U(consumeMemArg())
-        0x2Eu -> I32.Load16_S(consumeMemArg())
-        0x2Fu -> I32.Load16_U(consumeMemArg())
+        0x27u -> ReservedOpCode(codeInt)
 
         0x30u -> I64.Load8_S(consumeMemArg())
         0x31u -> I64.Load8_U(consumeMemArg())
@@ -936,7 +915,6 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0x3Eu -> I64.Store32(consumeMemArg())
         0x3Fu -> null // memory.size
 
-        0x40u -> null // memory.grow
         0x41u -> I32.Const(consumeSignedInt())
         0x42u -> I64.Const(consumeSignedLong())
         0x43u -> F32.Const(consumeFloat())
@@ -1077,9 +1055,10 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0xC2u -> I64.Extend8S
         0xC3u -> I64.Extend16S
         0xC4u -> I64.Extend32S
+        0xC5u, 0xC6u,0xC7u, 0xC8u, 0xC9u, 0xCAu, 0xCBu, 0xCCu, 0xCDu, 0xCEu, 0xCFu -> ReservedOpCode(codeInt)
 
-        else -> null
-    } ?: OpCodeUnknown(code)
+        else -> throw UnsupportedOpsException(code, position())
+    }
 }
 
 fun CommonByteBuffer.parseOpCodes(): List<OpCode<*>> {
@@ -1095,3 +1074,6 @@ fun CommonByteBuffer.parseOpCodes(): List<OpCode<*>> {
     }
     return opCodes
 }
+
+class ReservedOpCode(val code: UInt) : OpCode<Unit>(Unit)
+class UnsupportedOpsException(val code: UByte, val position: Int):Exception("Unsupported opcode: ${code.toHexString()} @0x${position.toHexString()}")
