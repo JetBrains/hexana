@@ -7,7 +7,9 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes.Flow
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.I32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.I64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Local
+import org.jetbrains.hexana.wasm.sections.WasmValueType
 import org.jetbrains.hexana.wasm.sections.consumeArray
+import org.jetbrains.hexana.wasm.sections.valueType
 
 data class MemArg(val offset: Int, val align: Int)
 
@@ -23,7 +25,6 @@ private fun CommonByteBuffer.consumeMemArg(): MemArg {
 }
 
 private fun CommonByteBuffer.consumeBlock(): List<OpCode<*>> {
-    get() // consume blockType
     val blockOpCodes = parseOpCodes()
     return blockOpCodes
 }
@@ -108,25 +109,25 @@ object OpCodes {
             }
         }
 
-        class Block(value: List<OpCode<*>>) : OpCode<List<OpCode<*>>>(value) {
+        open class Block(val type: WasmValueType<*>?, value: List<OpCode<*>>) : OpCode<List<OpCode<*>>>(value) {
             companion object {
                 const val code: UByte = 0x02u
             }
         }
 
-        class Loop(value: List<OpCode<*>>) : OpCode<List<OpCode<*>>>(value) {
+        class Loop(type: WasmValueType<*>, value: List<OpCode<*>>) : Block(type, value) {
             companion object {
                 const val code: UByte = 0x03u
             }
         }
 
-        class If(value: List<OpCode<*>>) : OpCode<List<OpCode<*>>>(value) {
+        class If(type: WasmValueType<*>, value: List<OpCode<*>>) : Block(type, value) {
             companion object {
                 const val code: UByte = 0x04u
             }
         }
 
-        class Else(value: List<OpCode<*>>) : OpCode<List<OpCode<*>>>(value) {
+        class Else(type: WasmValueType<*>?, value: List<OpCode<*>>) :  Block(type, value){
             companion object {
                 const val code: UByte = 0x05u
             }
@@ -850,14 +851,20 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
     return when (codeInt) {
         0x00u -> Flow.Unreachable
         0x01u -> Flow.Nop
-        0x02u -> Flow.Block(consumeBlock())
-        0x03u -> Flow.Loop(consumeBlock())
-        0x04u -> Flow.If(consumeBlock())
+        0x02u -> {
+            Flow.Block(valueType(), consumeBlock())
+        }
+        0x03u -> {
+            Flow.Loop(valueType(),consumeBlock())
+        }
+        0x04u -> {
+            Flow.If(valueType(), consumeBlock())
+        }
         0x05u -> {
             val opCodes = parseOpCodes()
             // If and Else sections share terminal OpCode - that said, we just (sort of) give it back to parent If declaration
             position(position() - 1)
-            Flow.Else(opCodes)
+            Flow.Else(null,opCodes)
         }
         0x06u -> null // try
         0x07u -> null // catch
@@ -878,7 +885,6 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode<*> {
         0x10u -> Flow.Call(consumeInt())
         0x11u -> {
             val value = getULEB128().toInt()
-            get()
             Flow.CallIndirect(value)
         }
         0x12u -> Flow.ReturnCall

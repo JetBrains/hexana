@@ -378,7 +378,7 @@ class WasmParserTests {
                         1u,
                         emptyList(),
                         listOf(
-                            OpCodes.Flow.Loop(listOf(
+                            OpCodes.Flow.Loop(WasmI32Type,listOf(
                                 OpCodes.Global.Get(0),
                                 OpCodes.I32.Const(1),
                                 OpCodes.I32.Add,
@@ -925,12 +925,12 @@ class WasmParserTests {
                         1u,
                         listOf(),
                         listOf(
-                            OpCodes.Flow.Block(
+                            OpCodes.Flow.Block(WasmI32Type,
                                 listOf(
                                     OpCodes.Local.Get(0),
                                     OpCodes.I32.Const(100),
                                     OpCodes.I32.Eq,
-                                    OpCodes.Flow.If(listOf(
+                                    OpCodes.Flow.If(WasmI32Type,listOf(
                                         OpCodes.Flow.Br(1)
                                     )),
                                     OpCodes.Local.Get(0),
@@ -956,10 +956,10 @@ class WasmParserTests {
                         listOf(),
                         listOf(
                             OpCodes.I32.Const(0),
-                            OpCodes.Flow.If(listOf(
+                            OpCodes.Flow.If(WasmI32Type,listOf(
                                 OpCodes.I32.Const(1),
                                 OpCodes.Flow.Call(0),
-                                OpCodes.Flow.Else(listOf(
+                                OpCodes.Flow.Else(WasmI32Type, listOf(
                                     OpCodes.I32.Const(0),
                                     OpCodes.Flow.Call(0),
                                 ))
@@ -1051,14 +1051,14 @@ class WasmParserTests {
                         listOf(
                             OpCodes.I32.Const(0),
                             OpCodes.Local.Set(1),
-                            OpCodes.Flow.Block(listOf(
-                                OpCodes.Flow.Loop(listOf(
+                            OpCodes.Flow.Block(null,listOf(
+                                OpCodes.Flow.Loop(WasmI32Type,listOf(
                                     OpCodes.I32.Const(1),
-                                    OpCodes.Flow.If(listOf(
+                                    OpCodes.Flow.If(WasmI32Type,listOf(
                                         OpCodes.Local.Get(1),
                                         OpCodes.Local.Get(0),
                                         OpCodes.I32.Eq,
-                                        OpCodes.Flow.If(listOf(
+                                        OpCodes.Flow.If(WasmI32Type,listOf(
                                             OpCodes.Flow.Br(3)
                                         )),
                                         OpCodes.Local.Get(1),
