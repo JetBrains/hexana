@@ -34,4 +34,9 @@ class FunctionTest: WasmTest() {
         assertEquals(2, funcs.size)
         assertEquals(0, funcs[0].funcidx)
     }
+
+    fun test978() = doFunctionTest { funcs ->
+        assertEquals(2, funcs.size)
+        assertEquals(0, funcs[0].funcidx)
+    }
 }
