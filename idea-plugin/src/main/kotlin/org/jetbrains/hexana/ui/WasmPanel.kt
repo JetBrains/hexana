@@ -25,20 +25,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.intellij.icons.AllIcons
-import com.intellij.notebook.editor.BackedVirtualFile
-import com.intellij.openapi.actionSystem.DataSink
 import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
+import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.impl.EditorComponentImpl
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.vfs.VfsUtil
-import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.tree.IElementType
-import com.intellij.testFramework.LightVirtualFile
 import com.intellij.util.asSafely
 import com.intellij.util.ui.UIUtil
 import kotlinx.coroutines.CoroutineName
@@ -52,17 +49,16 @@ import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.wasm.sections.*
-import org.jetbrains.hexana.wat.WatFileType
-import org.jetbrains.hexana.wat.WatNavigation
+import org.jetbrains.hexana.wat.LightWatFile
+import org.jetbrains.hexana.wat.WatFileset
 import org.jetbrains.hexana.wat.WatSyntaxHighlighter
+import org.jetbrains.hexana.wat.createWatFileset
 import org.jetbrains.hexana.wat.psi.WatLexer
 import org.jetbrains.hexana.wat.psi.WatToken
 import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
-import java.awt.BorderLayout
 import javax.swing.JComponent
-import javax.swing.JPanel
 import kotlin.math.min
 
 
@@ -166,16 +162,6 @@ internal sealed interface WasmPanel : Panel {
         }
     }
 
-    class LightWatFile(
-        val originWasmFile: VirtualFile,
-        watFileName: String,
-        text: String,
-    ): LightVirtualFile(watFileName, WatFileType.INSTANCE, text), BackedVirtualFile {
-        override fun getOriginFile(): VirtualFile {
-            return originWasmFile
-        }
-    }
-
     class Wat(
         override val wasmBinaryProvider: WasmBinaryVirtualFileProvider,
         val state: HexViewStateHolder,
@@ -195,6 +181,10 @@ internal sealed interface WasmPanel : Panel {
                 }
                 is WatConversionState.ShowEditor -> {
                     WatEditorContainer((wasmViewState as WatConversionState.ShowEditor).wat, wasmBinaryProvider)
+                }
+
+                is WatConversionState.ShowMultifileEditor -> {
+                    WatMultifileEditorContainer(wasmViewState as WatConversionState.ShowMultifileEditor, wasmBinaryProvider)
                 }
 
                 is WatConversionState.Error -> {
@@ -289,25 +279,49 @@ internal fun WatEditorContainer(
         withContext(Dispatchers.EDT) {
             val watFileName = wasmBinaryProvider.file.name.removeSuffix(".wasm") + ".wat"
 
-            val watPreviewFile = WasmPanel.LightWatFile(wasmBinaryProvider.file, watFileName, watContent)
+            val watPreviewFile = LightWatFile(wasmBinaryProvider.file, watFileName, watContent)
 
             val watTextEditor = wasmBinaryProvider.createTextEditor(watPreviewFile)
             watTextEditor.editor.settings.isUseSoftWraps = false
             watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
-            watPreviewFile.putUserData(WatNavigation.WAT_EDITOR, watTextEditor.editor)
-            val panel = object: JPanel(BorderLayout()), UiDataProvider {
-                override fun uiDataSnapshot(sink: DataSink) {
-                    sink[OpenFileDescriptor.NAVIGATE_IN_EDITOR] = watTextEditor.editor
-                }
+            value = UiDataProvider.wrapComponent(watTextEditor.component) { sink ->
+                sink[OpenFileDescriptor.NAVIGATE_IN_EDITOR] = watTextEditor.editor
             }
-
-            panel.add(watTextEditor.component)
-            value = panel
         }
     }
 
     if (panelState != null) {
         SwingPanelEditor( panelState)
+    }
+}
+
+
+@Composable
+internal fun WatMultifileEditorContainer(
+    state: WatConversionState.ShowMultifileEditor,
+    wasmBinaryProvider: WasmBinaryVirtualFileProvider,
+) {
+    val panelState by produceState<JComponent?>(initialValue = null, key1 = state) {
+        withContext(Dispatchers.EDT) {
+            val preview = state.preview
+            val watPreviewFile = preview.currentFile
+            val watTextEditor = wasmBinaryProvider.createTextEditor(watPreviewFile)
+            preview.releaseClosedEditors() // release before assigning a new editor so that the current editor doesn't disappear
+            preview.editor = watTextEditor.editor
+            watTextEditor.editor.settings.isUseSoftWraps = false
+            watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
+            watTextEditor.editor.caretModel.moveToOffset(preview.fileOffset)
+            watTextEditor.editor.scrollingModel.scrollTo(watTextEditor.editor.offsetToLogicalPosition(preview.fileOffset), ScrollType.MAKE_VISIBLE)
+            value = UiDataProvider.wrapComponent(watTextEditor.component) { sink ->
+                sink[OpenFileDescriptor.NAVIGATE_IN_EDITOR] = watTextEditor.editor
+            }
+        }
+    }
+
+    if (panelState != null) {
+        key(panelState) {
+            SwingPanelEditor(panelState)
+        }
     }
 }
 
@@ -369,8 +383,11 @@ sealed class WatConversionState {
     object Loading : WatConversionState()
     class ShowEditor(val wat: String) : WatConversionState()
     class ShowLiteEditor(val wat: String) : WatConversionState()
+    class ShowMultifileEditor(val preview: WatFileset) : WatConversionState()
     class Error(val error: String) : WatConversionState()
 }
+
+const val useMultifileEditor = false
 
 internal class WasmViewModel(
     private val wasmBinaryProvider: WasmBinaryVirtualFileProvider,
@@ -396,7 +413,12 @@ internal class WasmViewModel(
                 }
                 conversionResult as HexanaService.WatConversionResult.Success
             }.onSuccess { success ->
-                _conversionState.value = if (virtualFile.length() > HexanaService.WAT_EDITOR_MAX_FILE_SIZE) {
+                _conversionState.value = if (useMultifileEditor) {
+                    val fileset = createWatFileset(wasmBinaryProvider.file, success.wat) { fileset ->
+                        _conversionState.value = WatConversionState.ShowMultifileEditor(fileset)
+                    }
+                    WatConversionState.ShowMultifileEditor(fileset)
+                } else if (virtualFile.length() > HexanaService.WAT_EDITOR_MAX_FILE_SIZE) {
                     WatConversionState.ShowLiteEditor(success.wat)
                 } else {
                     WatConversionState.ShowEditor(success.wat)

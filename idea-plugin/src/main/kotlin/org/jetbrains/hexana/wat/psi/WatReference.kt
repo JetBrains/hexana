@@ -3,13 +3,12 @@ package org.jetbrains.hexana.wat.psi
 import com.intellij.lang.tree.util.children
 import com.intellij.openapi.util.NlsSafe
 import com.intellij.openapi.util.TextRange
-import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiNameIdentifierOwner
-import com.intellij.psi.PsiReference
+import com.intellij.psi.*
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.elementType
+import org.jetbrains.hexana.wat.FileOffset
+import org.jetbrains.hexana.wat.WatFileset
 
 class WatReference(
     val nameOrIndex: WatPsiElement,
@@ -25,19 +24,19 @@ class WatReference(
     override fun resolve(): PsiElement? {
         val parent = nameOrIndex.parent
         if (parent.elementType == WatElementType.CALL) {
-            return resolveFunc(nameOrIndex.containingFile, nameOrIndex)
+            return findInFileset(WatElementType.FUNC, nameOrIndex) ?: resolveFunc(nameOrIndex.containingFile, nameOrIndex)
         }
         if (parent.elementType == WatElementType.FUNC && parent.parent.elementType == WatElementType.EXPORT) {
-            return resolveFunc(nameOrIndex.containingFile, nameOrIndex)
+            return findInFileset(WatElementType.FUNC, nameOrIndex) ?: resolveFunc(nameOrIndex.containingFile, nameOrIndex)
         }
         if (parent.elementType == WatElementType.ELEM) {
             val tableNameOrIndex = getElementTableNameOrIndex(parent) ?: return null
+            val table = findInFileset(WatElementType.TABLE, tableNameOrIndex) ?: resolveTable(nameOrIndex.containingFile, tableNameOrIndex)
             if (tableNameOrIndex == nameOrIndex) {
-                return resolveTable(nameOrIndex.containingFile, nameOrIndex)
+                return table
             }  else {
-                val table = resolveTable(nameOrIndex.containingFile, tableNameOrIndex)
                 if (table?.node?.findChildByType(WatToken.FUNCREF) != null) {
-                    return resolveFunc(nameOrIndex.containingFile, nameOrIndex)
+                    return findInFileset(WatElementType.FUNC, nameOrIndex) ?: resolveFunc(nameOrIndex.containingFile, nameOrIndex)
                 }
             }
             return null
@@ -46,15 +45,15 @@ class WatReference(
             val grandParent = parent.parent
             if (grandParent?.elementType == WatElementType.CALL_INDIRECT ||
                 PsiTreeUtil.getParentOfType(grandParent, WatFuncElement::class.java) != null) {
-                return resolveType(nameOrIndex.containingFile, nameOrIndex)
+                return findInFileset(WatElementType.TYPE, nameOrIndex) ?: resolveType(nameOrIndex.containingFile, nameOrIndex)
             }
             return null
         }
         if (parent.elementType == WatElementType.GLOBAL_GET || parent.elementType == WatElementType.GLOBAL_SET) {
-            return resolveGlobal(nameOrIndex.containingFile, nameOrIndex)
+            return findInFileset(WatElementType.GLOBAL, nameOrIndex) ?: resolveGlobal(nameOrIndex.containingFile, nameOrIndex)
         }
         if (parent.elementType == WatElementType.THROW || parent.elementType == WatElementType.CATCH) {
-            return resolveTag(nameOrIndex.containingFile, nameOrIndex)
+            return findInFileset(WatElementType.TAG, nameOrIndex) ?: resolveTag(nameOrIndex.containingFile, nameOrIndex)
         }
         val exprType = getExprToken(parent)
         if (exprType == WatToken.LOCAL_SET || exprType == WatToken.LOCAL_GET || exprType == WatToken.LOCAL_TEE) {
@@ -66,6 +65,34 @@ class WatReference(
             return resolveLabel(nameOrIndex)
         }
         return null
+    }
+
+    private fun findInFileset(targetElementType: IElementType, nameOrIndex: WatPsiElement): PsiElement? {
+        val psiFile = nameOrIndex.containingFile
+        val virtualFile = psiFile.virtualFile
+        val fileset = virtualFile.getUserData(WatFileset.KEY) ?: return null
+        return resolveByNameOrIndex(
+            psiFile,
+            nameOrIndex,
+            { _, name ->
+                val fileOffset = fileset.getByName(targetElementType, name)
+                getWatNameIdentifierOwner(fileOffset)
+            },
+            { _, index ->
+                val fileOffset = fileset.getByIndex(targetElementType, index)
+                getWatNameIdentifierOwner(fileOffset)
+            },
+        )
+    }
+
+    private fun getWatNameIdentifierOwner(
+        fileOffset: FileOffset?,
+    ): WatNameIdentifierOwner? {
+        fileOffset ?: return null
+        val psiFile = PsiManager.getInstance(nameOrIndex.project).findFile(fileOffset.file)
+        val element = psiFile?.findElementAt(fileOffset.offset)
+        val result = PsiTreeUtil.getParentOfType(element, WatNameIdentifierOwner::class.java, false)
+        return result
     }
 
     override fun getCanonicalText(): @NlsSafe String {
