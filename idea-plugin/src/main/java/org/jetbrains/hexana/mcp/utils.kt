@@ -140,14 +140,6 @@ internal fun CommonByteBuffer.listExportedFunctions(wasmModule: WasmModule?): Li
 internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<GeneralFunctionEntry> {
     wasmModule ?: return emptyList()
     val types = types(wasmModule)
-    val records = with(wasmModule.functionSection) {
-        this ?: return@with emptyList()
-        this@listFunctions.parseFunctions()
-    }
-    val codes = with(wasmModule.codeSection) {
-        this ?: return@with emptyList()
-        this@listFunctions.scan()
-    }
     val exports = listExports(wasmModule)
     val imports = importFunctions(wasmModule).mapIndexed { index, entry ->
         GeneralFunctionEntry(
@@ -161,6 +153,14 @@ internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<Gener
             definedIn = "import",
             codeSize = null,
             instructionCount = null)}
+    val records = with(wasmModule.functionSection) {
+        this ?: return@with emptyList()
+        this@listFunctions.parseFunctions()
+    }
+    val codes = with(wasmModule.codeSection) {
+        this ?: return@with emptyList()
+        this@listFunctions.scan()
+    }
     val indexBase = imports.size
     val functions = records.mapIndexedNotNull { index, typeIndex ->
         (types.getOrNull(typeIndex) as? WasmSectionFunctionTypeRecord)?.toSignature()?.let { signature ->
@@ -250,9 +250,8 @@ internal fun CommonByteBuffer.functionsByIndices(
     indices: List<Int>
 ): List<FunctionEntry> {
     wasmModule ?: return emptyList()
-    val imports = importFunctions(wasmModule)
     val functions = listFunctions(wasmModule)
-    return imports.filter { indices.contains(it.funcidx) } + functions.filter { indices.contains(it.funcidx) }
+    return functions.filter { indices.contains(it.funcidx) }
 }
 
 internal fun CommonByteBuffer.importFunctions(
