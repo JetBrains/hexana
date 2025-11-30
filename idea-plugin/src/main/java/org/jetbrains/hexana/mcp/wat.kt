@@ -3,6 +3,7 @@ package org.jetbrains.hexana.mcp
 import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
 
 fun List<OpCode<*>>.wat(): String {
     return this.joinToString("\n") { it.watString() }
@@ -176,6 +177,7 @@ private fun OpCode<*>.watString(): CharSequence {
         is OpCodes.F64.GT -> "f64.gt"
         is OpCodes.F64.LT -> "f64.lt"
         is OpCodes.F64.Abs -> "f64.abs"
+        is UnparsedOpCode -> "unparsed block: ${value.joinToString { "0x${it.toHexString()}" }}"
         else -> toString()
     }
 }
