@@ -9,7 +9,7 @@ fun List<OpCode<*>>.wat(): String {
     return this.joinToString("\n") { it.watString() }
 }
 
-private fun OpCode<*>.watString(): CharSequence {
+internal fun OpCode<*>.watString(): CharSequence {
     return when (this) {
         is OpCodes.Flow.Terminal -> "terminal"
         is OpCodes.Flow.Return -> "return"

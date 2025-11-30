@@ -1715,6 +1715,143 @@ class HexanaToolset : McpToolset {
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.localsForFunctions(indices, wasmModule))
     }
+
+    @McpTool("get_instructions_for_functions")
+    @McpDescription("""
+    Decodes and returns the full instruction stream for each function specified by funcidx.
+    Accepts a list of function indices and returns a JSON array of InstructionEntry objects,
+    each containing the fully decoded Wasm instructions for that function.
+
+    Supports:
+      • imported functions — always return empty instruction lists (no body exists)
+      • internal functions — instructions decoded from the Code Section
+      • all block structures (block, loop, if, else, end)
+      • control flow, arithmetic, memory ops, locals/global ops, call/call_indirect, etc.
+
+    Each InstructionEntry contains:
+      • funcidx: unified function index (imports first, then internal)
+      • instructions: full list of decoded instructions in canonical text form
+            e.g. ["local.get 0", "i32.const 1", "i32.add", "return"]
+
+    This tool is useful for:
+      • decompilation and reverse engineering
+      • control-flow reconstruction
+      • identifying branching, loops, traps, and call sites
+      • supporting LLM-assisted code understanding
+      • correlating instructions with memory offsets and globals
+      • mapping indirect calls to table entries
+
+    ---------------------------------------
+    EXAMPLES OF RETURNED INSTRUCTION ENTRIES
+    ---------------------------------------
+
+    Example 1 — Imported function (no instructions):
+
+      (import "env" "abort" (func (param i32 i32)))
+
+    JSON:
+      {
+        "funcidx": 0,
+        "instructions": [],
+      }
+
+    Example 2 — Simple function with locals and arithmetic:
+
+      (func (export "add1") (param i32) (result i32)
+        (local i32)
+        local.get 0
+        i32.const 1
+        i32.add)
+
+    JSON:
+      {
+        "funcidx": 1,
+        "instructions": [
+          "local.get 0",
+          "i32.const 1",
+          "i32.add",
+          "return"
+        ],
+      }
+
+    Example 3 — Function with control flow:
+
+      (func (param i32) (result i32)
+        local.get 0
+        i32.const 0
+        i32.eq
+        if (result i32)
+          i32.const 1
+        else
+          local.get 0
+        end)
+
+    JSON:
+      {
+        "funcidx": 2,
+        "instructions": [
+          "local.get 0",
+          "i32.const 0",
+          "i32.eq",
+          "if (result i32)",
+          "i32.const 1",
+          "else",
+          "local.get 0",
+          "end",
+          "return"
+        ],
+      }
+
+    ---------------------------------------------------------
+    ALTERNATIVE VIA WASM COMMAND-LINE TOOLS (for reference)
+    ---------------------------------------------------------
+
+    Using WABT (https://github.com/WebAssembly/wabt):
+      • Disassemble with instruction listing:
+          wasm-objdump -d module.wasm
+
+      • Convert to WAT (shows instructions in text syntax):
+          wasm2wat module.wasm
+
+      • Annotated text with offsets:
+          wasm2wat --enable-annotations module.wasm
+
+      • Raw dump of code section:
+          wasm-objdump -x module.wasm
+
+    Using wasm-tools (Bytecode Alliance):
+      • Structured text format with instructions:
+          wasm-tools print module.wasm
+
+      • Dump raw sections including encoded instructions:
+          wasm-tools dump module.wasm
+
+      • Encode/decode binary <-> wat:
+          wasm-tools parse  foo.wat  -o foo.wasm
+          wasm-tools print  foo.wasm
+
+    Command-line tools require manual inspection, and do not provide:
+      • unified funcidx ordering
+      • export linkage
+      • simple arrays of decoded instructions
+      • consistent formatting across all instructions
+      • metadata like codeOffset/codeSize in JSON
+
+    This MCP tool provides an IDE-friendly, analysis-ready JSON representation
+    tailored for LLM reasoning and structural understanding of function bodies.
+""")
+    fun getCodesForFunctions(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+        @McpDescription("List of function indices (funcidx) to retrieve details for") indices: List<Int>
+    ): String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = file.contentsToCommonByteBuffer()
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.codeForFunctions(indices, wasmModule))
+    }
 }
 
 

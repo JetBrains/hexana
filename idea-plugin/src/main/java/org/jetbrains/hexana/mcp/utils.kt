@@ -261,6 +261,22 @@ internal fun CommonByteBuffer.functionsByIndices(
     return functions.filter { indices.contains(it.funcidx) }
 }
 
+fun CommonByteBuffer.codeForFunctions(indices: List<Int>, wasmModule: WasmModule?): List<CodesByFunction> {
+    wasmModule ?: return emptyList()
+    wasmModule.codeSection ?: return emptyList()
+    val importFunctions = importFunctions(wasmModule)
+    val importBase = importFunctions.size
+    val imports = indices.filter { importBase <= it }.map { CodesByFunction(it, emptyList())}
+    return imports + with(wasmModule.codeSection!!) {
+        this@codeForFunctions.scanOpcodesForIndices(
+            indices.map { it - importBase }.filter { it > 0 }).map {
+                CodesByFunction(it.key, it.value.map { it.watString().toString() })
+        }
+    }
+}
+
+data class CodesByFunction(val funcidx: Int, val instructions: List<String>)
+
 fun CommonByteBuffer.localsForFunctions(indices: List<Int>, wasmModule: WasmModule?): List<LocalsByFunction> {
     wasmModule ?: return emptyList()
     wasmModule.codeSection ?: return emptyList()
