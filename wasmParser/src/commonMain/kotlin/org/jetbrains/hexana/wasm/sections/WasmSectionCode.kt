@@ -22,6 +22,30 @@ class WasmSectionCode(size: Int, offset: Int): WasmSection(size, offset) {
 
         return wasmCodeRecords
     }
+
+    fun CommonByteBuffer.scanCodeEntries(declaredFuncIdxs: List<Int>): Map<Int, WasmCodeRecord> {
+        val wasmCodeRecords = mutableMapOf<Int, WasmCodeRecord>()
+        position(offset)
+        consumeArray { idx ->
+            val current = position()
+            val funSize = getULEB128().toUInt()
+            if (idx in declaredFuncIdxs) {
+                position(current) // code entry reread funcSize.
+                wasmCodeRecords[idx] = consumeCodeEntry()
+            } else {
+                position(position() + funSize.toInt())
+            }
+        }
+        return wasmCodeRecords
+    }
+
+    fun CommonByteBuffer.scanOpcodesForIndices(declaredFuncIdxs: List<Int>): Map<Int, List<OpCode<*>>> {
+        return scanCodeEntries(declaredFuncIdxs).map { it.key to it.value.opCodes }.toMap()
+    }
+
+    fun CommonByteBuffer.scanLocalsEntries(declaredFuncIdxs: List<Int>): Map<Int, List<WasmCodeLocalRecord>> {
+        return scanCodeEntries(declaredFuncIdxs).map { it.key to it.value.locals }.toMap()
+    }
 }
 
 fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {

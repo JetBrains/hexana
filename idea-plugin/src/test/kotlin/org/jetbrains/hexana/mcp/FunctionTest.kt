@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.mcp
 
+import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.sections.WasmF64Type
+import org.jetbrains.hexana.wasm.sections.WasmI32Type
+
 class FunctionTest: WasmTest() {
     fun testFunc0() = doFunctionTest { funcs ->
         assertEquals(6, funcs.size)
@@ -38,5 +42,38 @@ class FunctionTest: WasmTest() {
     fun test978() = doFunctionTest { funcs ->
         assertEquals(2, funcs.size)
         assertEquals(0, funcs[0].funcidx)
+    }
+
+    fun testSimpleLocals() {
+        doOpcodeInFunctionTest(0) { ops ->
+            assertNotNull(ops)
+            assertEquals(8, ops!!.size)
+            assertEquals(OpCodes.Local.Get(0), ops[0])
+            assertEquals(OpCodes.Flow.Drop, ops[6])
+        }
+        doLocalsInFunctionTest(0) { locals ->
+            assertNotNull(locals)
+            assertEquals(4, locals!!.size)
+            assertEquals(1, locals[0].local)
+            assertEquals(WasmI32Type, locals[0].type)
+            assertEquals(1, locals[3].local)
+            assertEquals(WasmF64Type, locals[3].type)
+        }
+    }
+
+    fun testBaseTestWithImports() {
+        doOpcodeInFunctionTest(0) { ops ->
+            assertNotNull(ops)
+            assertEquals(3, ops!!.size)
+            assertEquals(OpCodes.Local.Get(0), ops[0])
+            assertEquals(OpCodes.Flow.Call(0), ops[2])
+        }
+        doLocalsInFunctionTest(0) { locals ->
+            assertNotNull(locals)
+            assertEquals(1, locals!!.size)
+            assertEquals(1, locals[0].local)
+            assertEquals(WasmI32Type, locals[0].type)
+        }
+
     }
 }

@@ -6,11 +6,13 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParser
+import org.jetbrains.hexana.wasm.opcodes.OpCode
+import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
 import java.io.FileInputStream
 import kotlin.io.path.Path
 
 abstract class WasmTest: UsefulTestCase() {
-    val dataPath: String = "src/test/data/mcp/"
+    open val dataPath: String = "src/test/data/mcp/"
 
     private fun loadTestDataFile(section: String): String {
         return FileInputStream(getPathToTestDataFile(section)).bufferedReader().use { it.readText() }
@@ -41,4 +43,17 @@ abstract class WasmTest: UsefulTestCase() {
     internal inline fun doFunctionTest(crossinline body: (List<GeneralFunctionEntry>) -> Unit) = doTest("function") {
         listFunctions(it).let(body)
     }
+
+    internal inline fun doOpcodeInFunctionTest(index: Int, crossinline body: (List<OpCode<*>>?) -> Unit) = doTest("function") { wasmModule ->
+        with(wasmModule!!.codeSection!!) {
+            body(scanOpcodesForIndices(listOf(index))[index])
+        }
+    }
+
+    internal inline fun doLocalsInFunctionTest(index: Int, crossinline body: (List<WasmCodeLocalRecord>?) -> Unit) = doTest("function") { wasmModule ->
+        with(wasmModule!!.codeSection!!) {
+            body(scanLocalsEntries(listOf(index))[index])
+        }
+    }
+
 }
