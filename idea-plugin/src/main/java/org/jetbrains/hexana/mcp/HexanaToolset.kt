@@ -1596,6 +1596,125 @@ class HexanaToolset : McpToolset {
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listDataSegments(wasmModule))
     }
+
+    @McpTool("get_locals_for_functions")
+    @McpDescription("""
+    Extracts local variable declarations for the selected functions in a WebAssembly module.
+    Accepts a list of function indices (funcidx) and returns a JSON array of LocalEntry objects,
+    each describing the locals of one function.
+
+    Supports both:
+      • internally defined functions — locals come from the Code Section
+      • imported functions — always return empty locals (no code body exists)
+
+    Each LocalEntry contains:
+      • funcidx: unified function index (imports first, then internal functions)
+      • locals: optional grouped declaration form for debugging:
+            [ { "count": N, "type": "i32" }, ... ]
+
+    This tool is useful for:
+      • reconstructing stack frames
+      • understanding variable layouts
+      • guiding disassembly and decompilation
+      • LLM reasoning about control-flow and register allocation
+      • correlating locals with get_local/set_local operations in code previews
+
+    -----------------------------------
+    EXAMPLES OF RETURNED LOCAL ENTRIES
+    -----------------------------------
+
+    Example 1 — Imported function (no locals):
+
+      (import "env" "abort" (func (param i32 i32 i32)))
+
+    JSON:
+      {
+        "funcidx": 0,
+        "locals": [],
+      }
+
+    Example 2 — Function with a single local:
+
+      (func (export "inc") (param i32) (result i32)
+        (local i32)
+        local.get 0
+        i32.const 1
+        i32.add)
+
+    JSON:
+      {
+        "funcidx": 1,
+        "locals": [
+            { "count": 1, "type" :"i32" }
+         ],
+      }
+
+    Example 3 — Function with grouped locals:
+
+      (func (param f32) (result f32)
+        (local f32 f32 i32)
+        local.get 0
+        local.get 1
+        f32.add)
+
+    JSON:
+      {
+        "funcidx": 2,
+        "locals": [
+          { "count": 2, "type": "f32" },
+          { "count": 1, "type": "i32" }
+        ],
+      }
+
+    -----------------------------------------------------------------
+    ALTERNATIVE VIA WASM COMMAND-LINE TOOLS (for reference / fallback)
+    -----------------------------------------------------------------
+
+    Using WABT (https://github.com/WebAssembly/wabt):
+
+      • Convert to WAT (locals shown explicitly):
+          wasm2wat module.wasm
+
+      Example WAT:
+          (func ${"$"}add (param i32 i32) (result i32)
+            (local i32 i32)
+            ...)
+
+      • Annotated text showing locals with offsets/metadata:
+          wasm2wat --enable-annotations module.wasm
+
+      • Raw dump of the code section (locals appear after the body header):
+          wasm-objdump -d module.wasm
+
+    Using wasm-tools (Bytecode Alliance):
+
+      • Structured, printable WAT:
+          wasm-tools print module.wasm
+
+      • Dump section headers, including local decl groups:
+          wasm-tools dump module.wasm
+
+      • Convert between wat <-> wasm:
+          wasm-tools parse   foo.wat  -o foo.wasm
+          wasm-tools print   foo.wasm
+
+    Command-line tools require manual reading of local groups and matching 
+    them to function indices. This MCP tool provides a higher-level,
+    IDE-friendly JSON representation of locals directly indexed by funcidx,
+    making it easy for analysis, navigation, and LLM reasoning.
+""")
+    fun getLocalsForFunctions(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+        @McpDescription("List of memory indices (memidx) to retrieve details for") indices: List<Int>
+    ): String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = file.contentsToCommonByteBuffer()
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.localsForFunctions(indices, wasmModule))
+    }
 }
 
 

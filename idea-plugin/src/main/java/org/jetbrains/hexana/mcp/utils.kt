@@ -15,9 +15,11 @@ import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
+import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.sections.WasmAnyRefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmArrayRefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmArrayTypeRecord
+import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordActive
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordActiveWithMemoryIndex
@@ -193,7 +195,12 @@ private fun serializeOpcodes(
 private fun serializeLocals(
     codes: List<WasmCodeRecord>,
     index: Int
-): List<Local>? = codes.getOrNull(index)?.locals?.map {
+): List<Local>? {
+    val locals = codes.getOrNull(index)?.locals
+    return locals.serializeLocals()
+}
+
+private fun List<WasmCodeLocalRecord>?.serializeLocals(): List<Local> = this?.map {
     when (it.type) {
         is WasmNumType -> LocalNum(it.local, it.type.code as Byte)
         is WasmVecType -> LocalVec(it.local)
@@ -243,7 +250,7 @@ private fun serializeLocals(
             }
         }
     }
-}
+} ?: emptyList()
 
 internal fun CommonByteBuffer.functionsByIndices(
     wasmModule: WasmModule?,
@@ -253,6 +260,24 @@ internal fun CommonByteBuffer.functionsByIndices(
     val functions = listFunctions(wasmModule)
     return functions.filter { indices.contains(it.funcidx) }
 }
+
+fun CommonByteBuffer.localsForFunctions(indices: List<Int>, wasmModule: WasmModule?): List<LocalsByFunction> {
+    wasmModule ?: return emptyList()
+    wasmModule.codeSection ?: return emptyList()
+    val importFunctions = importFunctions(wasmModule)
+    val importBase = importFunctions.size
+    val localsInImports = indices.filter { importBase < it }.map {
+        LocalsByFunction(it, emptyList())
+    }
+    return localsInImports +
+            with(wasmModule.codeSection!!) {
+                scanLocalsEntries(
+                    indices.map { it - importBase }.filter { it > 0 })
+                    .map { LocalsByFunction(it.key, it.value.serializeLocals()) }.toList()
+            }
+}
+
+data class LocalsByFunction(val funcidx: Int, val locals: List<Local>)
 
 internal fun CommonByteBuffer.importFunctions(
     wasmModule: WasmModule?
