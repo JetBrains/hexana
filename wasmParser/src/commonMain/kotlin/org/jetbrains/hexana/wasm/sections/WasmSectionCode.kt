@@ -30,7 +30,6 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
 
     val bodyStart = position()
     val locals = mutableListOf<WasmCodeLocalRecord>()
-    require(locals.size < 10)
     try {
         consumeLocals(locals)
         return WasmCodeRecord(pos.toLong(), funSize, locals, parseOpCodes())
