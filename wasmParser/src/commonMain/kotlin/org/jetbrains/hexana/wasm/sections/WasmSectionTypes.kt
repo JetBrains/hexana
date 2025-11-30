@@ -141,13 +141,13 @@ internal fun CommonByteBuffer.limits(): WasmLimits<*> {
     }
 }
 
-internal fun CommonByteBuffer.valueType(): WasmValueType<*> {
+fun CommonByteBuffer.valueType(): WasmValueType<*> {
     return when (get()) {
-        0x7c.toByte() -> WasmF32Type
-        0x7d.toByte() -> WasmF64Type
-        0x7e.toByte() -> WasmI64Type
-        0x7f.toByte() -> WasmI32Type
-        0x7b.toByte() -> WasmVecType
+        WasmF32Type.code ->  WasmF32Type
+        WasmF64Type.code ->  WasmF64Type
+        WasmI64Type.code -> WasmI64Type
+        WasmI32Type.code  -> WasmI32Type
+        WasmVecType.code -> WasmVecType
 
         else -> {
             position(position() - 1)
