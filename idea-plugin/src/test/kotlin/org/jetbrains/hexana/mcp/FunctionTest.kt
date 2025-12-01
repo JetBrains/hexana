@@ -48,7 +48,7 @@ class FunctionTest: WasmTest() {
         doOpcodeInFunctionTest(0) { ops ->
             assertNotNull(ops)
             assertEquals(8, ops!!.size)
-            assertEquals(OpCodes.Local.Get(0), ops[0])
+            assertEquals(OpCodes.Local.Get(0u), ops[0])
             assertEquals(OpCodes.Flow.Drop, ops[6])
         }
         doLocalsInFunctionTest(0) { locals ->
@@ -65,8 +65,8 @@ class FunctionTest: WasmTest() {
         doOpcodeInFunctionTest(0) { ops ->
             assertNotNull(ops)
             assertEquals(3, ops!!.size)
-            assertEquals(OpCodes.Local.Get(0), ops[0])
-            assertEquals(OpCodes.Flow.Call(0), ops[2])
+            assertEquals(OpCodes.Local.Get(0u), ops[0])
+            assertEquals(OpCodes.Flow.Call(0u), ops[2])
         }
         doLocalsInFunctionTest(0) { locals ->
             assertNotNull(locals)

@@ -168,8 +168,8 @@ class WasmParserTests {
                         1u,
                         emptyList(),
                         listOf(
-                            OpCodes.Local.Get(0),
-                            OpCodes.Local.Get(1),
+                            OpCodes.Local.Get(0u),
+                            OpCodes.Local.Get(1u),
                             OpCodes.I32.Shl,
                         )
                     )
@@ -189,7 +189,7 @@ class WasmParserTests {
                         1u,
                         emptyList(),
                         listOf(
-                            OpCodes.Local.Get(0),
+                            OpCodes.Local.Get(0u),
                             OpCodes.I32.PopCnt,
                         )
                     )
@@ -209,8 +209,8 @@ class WasmParserTests {
                         1u,
                         emptyList(),
                         listOf(
-                            OpCodes.Local.Get(0),
-                            OpCodes.Local.Get(1),
+                            OpCodes.Local.Get(0u),
+                            OpCodes.Local.Get(1u),
                             OpCodes.I32.Or,
                         )
                     )
@@ -230,8 +230,8 @@ class WasmParserTests {
                         1u,
                         emptyList(),
                         listOf(
-                            OpCodes.Local.Get(0),
-                            OpCodes.Local.Get(1),
+                            OpCodes.Local.Get(0u),
+                            OpCodes.Local.Get(1u),
                             OpCodes.I32.Xor,
                         )
                     )
@@ -253,7 +253,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.I32.Const(10),
                             OpCodes.I64.Extend_I32_S,
-                            OpCodes.Flow.Call(0),
+                            OpCodes.Flow.Call(0u),
                         )
                     )
                 )
@@ -272,8 +272,8 @@ class WasmParserTests {
                         1u,
                         emptyList(),
                         listOf(
-                            OpCodes.Local.Get(0),
-                            OpCodes.Local.Get(1),
+                            OpCodes.Local.Get(0u),
+                            OpCodes.Local.Get(1u),
                             OpCodes.I32.And,
                         )
                     )
@@ -293,8 +293,8 @@ class WasmParserTests {
                         1u,
                         emptyList(),
                         listOf(
-                            OpCodes.Local.Get(0),
-                            OpCodes.Local.Get(1),
+                            OpCodes.Local.Get(0u),
+                            OpCodes.Local.Get(1u),
                             OpCodes.I32.Rotl,
                         )
                     )
@@ -314,8 +314,8 @@ class WasmParserTests {
                         1u,
                         emptyList(),
                         listOf(
-                            OpCodes.Local.Get(0),
-                            OpCodes.Local.Get(1),
+                            OpCodes.Local.Get(0u),
+                            OpCodes.Local.Get(1u),
                             OpCodes.I32.Rotr,
                         )
                     )
@@ -335,7 +335,7 @@ class WasmParserTests {
                         1u,
                         emptyList(),
                         listOf(
-                            OpCodes.Flow.Call(0),
+                            OpCodes.Flow.Call(0u),
                         )
                     )
                 )
@@ -393,16 +393,16 @@ class WasmParserTests {
                         emptyList(),
                         listOf(
                             OpCodes.Flow.Loop(WasmI32Type,listOf(
-                                OpCodes.Global.Get(0),
+                                OpCodes.Global.Get(0u),
                                 OpCodes.I32.Const(1),
                                 OpCodes.I32.Add,
-                                OpCodes.Global.Set(0),
-                                OpCodes.Global.Get(0),
-                                OpCodes.Flow.Call(0),
-                                OpCodes.Global.Get(0),
+                                OpCodes.Global.Set(0u),
+                                OpCodes.Global.Get(0u),
+                                OpCodes.Flow.Call(0u),
+                                OpCodes.Global.Get(0u),
                                 OpCodes.I32.Const(10),
                                 OpCodes.I32.LTS,
-                                OpCodes.Flow.BrIf(0)
+                                OpCodes.Flow.BrIf(0u)
                             ))
                         )
                     )
@@ -425,7 +425,7 @@ class WasmParserTests {
                             OpCodes.I32.Const(10),
                             OpCodes.I32.Const(2),
                             OpCodes.I32.GEU,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -444,7 +444,7 @@ class WasmParserTests {
                         1u,
                         emptyList(),
                         listOf(
-                            OpCodes.Local.Get(0),
+                            OpCodes.Local.Get(0u),
                             OpCodes.I32.Clz
                         )
                     )
@@ -465,7 +465,7 @@ class WasmParserTests {
                         1u,
                         emptyList(),
                         listOf(
-                            OpCodes.Local.Get(0),
+                            OpCodes.Local.Get(0u),
                             OpCodes.I32.Ctz
                         )
                     )
@@ -486,7 +486,7 @@ class WasmParserTests {
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -506,9 +506,9 @@ class WasmParserTests {
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
-                            OpCodes.Global.Set(0),
-                            OpCodes.Global.Get(0),
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Global.Set(0u),
+                            OpCodes.Global.Get(0u),
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -530,7 +530,7 @@ class WasmParserTests {
                             OpCodes.I32.Const(10),
                             OpCodes.I32.Const(2),
                             OpCodes.I32.Eq,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -575,7 +575,7 @@ class WasmParserTests {
                             OpCodes.I32.Const(10),
                             OpCodes.I32.Const(3),
                             OpCodes.I32.RemU,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -619,7 +619,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.I64.Const(10L),
                             OpCodes.I32.WrapI64,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                     ))
                 )
             )
@@ -639,7 +639,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.F32.Const(10.5f),
                             OpCodes.F64.PromoteF32,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         ))
                 )
             )
@@ -659,7 +659,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.F32.Const(2.0f),
                             OpCodes.F32.Sqrt,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         ))
                 )
             )
@@ -681,7 +681,7 @@ class WasmParserTests {
                             OpCodes.I32.Const(10),
                             OpCodes.I32.Const(3),
                             OpCodes.I32.Add,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -703,7 +703,7 @@ class WasmParserTests {
                             OpCodes.I32.Const(10),
                             OpCodes.I32.Const(3),
                             OpCodes.I32.Mul,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -724,9 +724,9 @@ class WasmParserTests {
                         listOf(WasmCodeLocalRecord(1, WasmI32Type)),
                         listOf(
                             OpCodes.I32.Const(10),
-                            OpCodes.Local.Set(0),
-                            OpCodes.Local.Get(0),
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Local.Set(0u),
+                            OpCodes.Local.Get(0u),
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -749,7 +749,7 @@ class WasmParserTests {
                             OpCodes.I32.Const(10),
                             OpCodes.I32.Const(2),
                             OpCodes.I32.Ne,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -772,7 +772,7 @@ class WasmParserTests {
                             OpCodes.I32.Const(10),
                             OpCodes.I32.Const(20),
                             OpCodes.Flow.Drop,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -792,7 +792,7 @@ class WasmParserTests {
                     OpCodes.I32.Const(10),
                     OpCodes.I32.Const(2),
                     OpCodes.I32.GTU,
-                    OpCodes.Flow.Call(0)
+                    OpCodes.Flow.Call(0u)
                 )
             )
         )
@@ -812,7 +812,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.F32.Const(2.700000047683716f),
                             OpCodes.F32.Nearest,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -834,7 +834,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.F32.Const(-2.700000047683716f),
                             OpCodes.F32.Floor,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -856,7 +856,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.F32.Const(-0.0f),
                             OpCodes.I32.ReinterpretF32,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -879,7 +879,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.F32.Const(2.700000047683716f),
                             OpCodes.F32.Ceil,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -901,7 +901,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.F32.Const(-2.700000047683716f),
                             OpCodes.F32.Trunc,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -923,7 +923,7 @@ class WasmParserTests {
                             OpCodes.F32.Const(10f),
                             OpCodes.F32.Const(-2f),
                             OpCodes.F32.CopySign,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -944,14 +944,14 @@ class WasmParserTests {
                         listOf(
                             OpCodes.Flow.Block(WasmI32Type,
                                 listOf(
-                                    OpCodes.Local.Get(0),
+                                    OpCodes.Local.Get(0u),
                                     OpCodes.I32.Const(100),
                                     OpCodes.I32.Eq,
                                     OpCodes.Flow.If(WasmI32Type,listOf(
-                                        OpCodes.Flow.Br(1)
+                                        OpCodes.Flow.Br(1u)
                                     )),
-                                    OpCodes.Local.Get(0),
-                                    OpCodes.Flow.Call(0)
+                                    OpCodes.Local.Get(0u),
+                                    OpCodes.Flow.Call(0u)
                                 ),
                             )
                         )
@@ -975,10 +975,10 @@ class WasmParserTests {
                             OpCodes.I32.Const(0),
                             OpCodes.Flow.If(WasmI32Type,listOf(
                                 OpCodes.I32.Const(1),
-                                OpCodes.Flow.Call(0),
+                                OpCodes.Flow.Call(0u),
                                 OpCodes.Flow.Else(WasmI32Type, listOf(
                                     OpCodes.I32.Const(0),
-                                    OpCodes.Flow.Call(0),
+                                    OpCodes.Flow.Call(0u),
                                 ))
                             )),
                         )
@@ -1001,7 +1001,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.F64.Const(10.5),
                             OpCodes.F32.DemoteF64,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -1022,7 +1022,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.F32.Const(10.0f),
                             OpCodes.F32.Neg,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -1043,7 +1043,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.I32.Const(10),
                             OpCodes.F32.ConvertI32S,
-                            OpCodes.Flow.Call(0)
+                            OpCodes.Flow.Call(0u)
                         )
                     )
                 )
@@ -1067,22 +1067,22 @@ class WasmParserTests {
                         listOf(WasmCodeLocalRecord(1, WasmI32Type)),
                         listOf(
                             OpCodes.I32.Const(0),
-                            OpCodes.Local.Set(1),
+                            OpCodes.Local.Set(1u),
                             OpCodes.Flow.Block(null,listOf(
                                 OpCodes.Flow.Loop(WasmI32Type,listOf(
                                     OpCodes.I32.Const(1),
                                     OpCodes.Flow.If(WasmI32Type,listOf(
-                                        OpCodes.Local.Get(1),
-                                        OpCodes.Local.Get(0),
+                                        OpCodes.Local.Get(1u),
+                                        OpCodes.Local.Get(0u),
                                         OpCodes.I32.Eq,
                                         OpCodes.Flow.If(WasmI32Type,listOf(
-                                            OpCodes.Flow.Br(3)
+                                            OpCodes.Flow.Br(3u)
                                         )),
-                                        OpCodes.Local.Get(1),
+                                        OpCodes.Local.Get(1u),
                                         OpCodes.I32.Const(1),
                                         OpCodes.I32.Add,
-                                        OpCodes.Local.Set(1),
-                                        OpCodes.Flow.Br(1)
+                                        OpCodes.Local.Set(1u),
+                                        OpCodes.Flow.Br(1u)
                                     ))
                                 )
                             ))),

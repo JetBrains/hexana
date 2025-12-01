@@ -33,7 +33,7 @@ object OpCodes {
             const val code: UByte = 0x01u
         }
 
-        class Call(value: Int) : OpCodeWithValue<Int>(value) {
+        class Call(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x10u
             }
@@ -45,13 +45,13 @@ object OpCodes {
             }
         }
 
-        class Br(value: Int) : OpCodeWithValue<Int>(value) {
+        class Br(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x0Cu
             }
         }
 
-        class BrIf(value: Int) : OpCodeWithValue<Int>(value) {
+        class BrIf(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x0Du
             }
@@ -89,19 +89,19 @@ object OpCodes {
     }
 
     object Local {
-        class Get(value: Int) : OpCodeWithValue<Int>(value) {
+        class Get(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x20u
             }
         }
 
-        class Set(value: Int) : OpCodeWithValue<Int>(value) {
+        class Set(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x21u
             }
         }
 
-        class Tee(value: Int) : OpCodeWithValue<Int>(value) {
+        class Tee(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x22u
             }
@@ -109,13 +109,13 @@ object OpCodes {
     }
 
     object Global {
-        class Get(value: Int) : OpCodeWithValue<Int>(value) {
+        class Get(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x23u
             }
         }
 
-        class Set(value: Int) : OpCodeWithValue<Int>(value) {
+        class Set(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x24u
             }
@@ -800,31 +800,31 @@ object OpCodes {
     }
 
     object GC {
-        class StructNew(value: Int) : OpCodeWithValue<Int>(value) {
+        class StructNew(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x00u
             }
         }
 
-        class StructGet(typeIdIndex: Int, fieldIdIndex: Int) : OpCodeGCStruct(typeIdIndex, fieldIdIndex) {
+        class StructGet(typeIdIndex: UInt, fieldIdIndex: UInt) : OpCodeGCStruct(typeIdIndex, fieldIdIndex) {
             companion object {
                 const val code: UByte = 0x02u
             }
         }
 
-        class StructGetSignExtended(typeIdIndex: Int, fieldIdIndex: Int) : OpCodeGCStruct(typeIdIndex, fieldIdIndex) {
+        class StructGetSignExtended(typeIdIndex: UInt, fieldIdIndex: UInt) : OpCodeGCStruct(typeIdIndex, fieldIdIndex) {
             companion object {
                 const val code: UByte = 0x03u
             }
         }
 
-        class StructGetZeroExtended(typeIdIndex: Int, fieldIdIndex: Int) : OpCodeGCStruct(typeIdIndex, fieldIdIndex) {
+        class StructGetZeroExtended(typeIdIndex: UInt, fieldIdIndex: UInt) : OpCodeGCStruct(typeIdIndex, fieldIdIndex) {
             companion object {
                 const val code: UByte = 0x04u
             }
         }
 
-        class StructSet(typeIdIndex: Int, fieldIdIndex: Int) : OpCodeGCStruct(typeIdIndex, fieldIdIndex) {
+        class StructSet(typeIdIndex: UInt, fieldIdIndex: UInt) : OpCodeGCStruct(typeIdIndex, fieldIdIndex) {
             companion object {
                 const val code: UByte = 0x05u
             }
@@ -836,7 +836,7 @@ object OpCodes {
             }
         }
 
-        class ArrayGet(initValue: Int): OpCodeWithValue<Int>(initValue) {
+        class ArrayGet(initValue: UInt): OpCodeWithValue<UInt>(initValue) {
             companion object {
                 const val code: UByte = 0x0Bu
             }
@@ -870,7 +870,7 @@ object OpCodes {
 }
 
 
-open class OpCodeGCStruct(val typeIndex: Int, val fieldIndex: Int) : OpCode {
+open class OpCodeGCStruct(val typeIndex: UInt, val fieldIndex: UInt) : OpCode {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false
