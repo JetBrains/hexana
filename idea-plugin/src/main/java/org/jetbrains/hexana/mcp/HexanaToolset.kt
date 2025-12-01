@@ -2055,6 +2055,19 @@ class HexanaToolset : McpToolset {
         return objectMapper.writeValueAsString(buffer.listElementSegments(wasmModule))
 
     }
+
+    @McpTool("summarize_module")
+    fun summarizeModule(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+    ):String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = file.contentsToCommonByteBuffer()
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.moduleSummary(wasmModule))
+    }
 }
 
 
