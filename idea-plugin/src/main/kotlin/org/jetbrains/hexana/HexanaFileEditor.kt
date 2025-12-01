@@ -129,7 +129,8 @@ class HexanaFileEditor(
 }
 
 data class HexViewState(
-    val topFraction: Float = 0.6f
+    val topFraction: Float = 0.6f,
+    val tabIndex: Int = 0,
 ) : FileEditorState, Serializable {
     override fun canBeMergedWith(otherState: FileEditorState, level: FileEditorStateLevel): Boolean {
         return false
@@ -144,5 +145,9 @@ class HexViewStateHolder {
 
     fun setTopFraction(topFraction: Float) {
         currentState.value = currentState.value.copy(topFraction = topFraction.coerceIn(0f, 1f))
+    }
+
+    fun setSelectedTab(tabIndex: Int) {
+        currentState.value = currentState.value.copy(tabIndex = tabIndex)
     }
 }

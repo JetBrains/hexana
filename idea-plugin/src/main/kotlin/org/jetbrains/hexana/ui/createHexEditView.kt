@@ -7,6 +7,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
+import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
@@ -27,33 +28,41 @@ internal fun BinaryEditorView(
         }, southPanel = {
             val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels(state)) }
 
-            TabsPanel(panels) { expanded ->
+            TabsPanel(panels, state.currentState.value,  onExpand = { expanded ->
                 if (expanded) {
                     state.setTopFraction(0f)
                 } else {
                     state.setTopFraction(0.5f)
                 }
-            }
+            }, onTabSelect = { index: Int ->
+                state.setSelectedTab(index)
+            })
         })
 
     }
 }
 
 @Composable
-private fun TabsPanel(panels: List<Panel>, onExpand: (Boolean) -> Unit) {
+private fun TabsPanel(
+    panels: List<Panel>,
+    state: HexViewState,
+    onExpand: (Boolean) -> Unit,
+    onTabSelect: (Int) -> Unit,
+) {
     if (panels.isEmpty()) return
 
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
     var expanded by remember { mutableStateOf(false) }
 
-    val tabs by remember {
+    val tabs by remember(state.tabIndex) {
         derivedStateOf {
             panels.mapIndexed { index, panel ->
                 TabData.Default(
-                    selected = index == selectedTabIndex,
+                    selected = index == state.tabIndex,
                     content = { Text(text = panel.description) },
                     closable = false,
-                    onClick = { selectedTabIndex = index }
+                    onClick = {
+                        onTabSelect(index)
+                    }
                 )
             }
         }
@@ -92,7 +101,7 @@ private fun TabsPanel(panels: List<Panel>, onExpand: (Boolean) -> Unit) {
         Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
 
         Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-            panels.get(selectedTabIndex).onRender()
+            panels.get(state.tabIndex).onRender()
         }
     }
 }
