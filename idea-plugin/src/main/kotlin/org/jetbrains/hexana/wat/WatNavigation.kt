@@ -47,7 +47,7 @@ class LightWatFile(
     }
 }
 
-data class PreviewLocation(val fileIndex: Int, val fileOffset: Int)
+data class FileIndexLocation(val fileIndex: Int, val fileOffset: Int)
 
 class FileOffset(val file: VirtualFile, val offset: Int)
 
@@ -70,14 +70,14 @@ class WatElementIndex {
         }
     }
 
-    fun getByIndex(index: Int): PreviewLocation? {
+    fun getByIndex(index: Int): FileIndexLocation? {
         if (index in fileIndexes.indices) {
-            return PreviewLocation(fileIndexes.getInt(index), fileOffsets.getInt(index))
+            return FileIndexLocation(fileIndexes.getInt(index), fileOffsets.getInt(index))
         }
         return null
     }
 
-    fun getByName(name: String?): PreviewLocation? {
+    fun getByName(name: String?): FileIndexLocation? {
         name ?: return null
         val index = byName.getInt(name)
         return getByIndex(index)
@@ -93,12 +93,12 @@ class WatIndex {
         }.add(fileIndex, offset, name)
     }
 
-    fun getByIndex(elementType: IElementType, index: Int): PreviewLocation? {
+    fun getByIndex(elementType: IElementType, index: Int): FileIndexLocation? {
         val elementTypeIndex = byElementType[elementType] ?: return null
         return elementTypeIndex.getByIndex(index)
     }
 
-    fun getByName(elementType: IElementType, name: String?): PreviewLocation? {
+    fun getByName(elementType: IElementType, name: String?): FileIndexLocation? {
         val elementTypeIndex = byElementType[elementType] ?: return null
         return elementTypeIndex.getByName(name)
     }
@@ -183,9 +183,9 @@ fun createWatFileset(
 ): WatFileset {
     val watIndex = WatIndex()
     val watFiles = getWatFiles(wasmFile, watText, watIndex)
-    val preview = WatFileset(watFiles, fileIndex = 0,  watIndex = watIndex, onFileChange = onWatFileChange)
-    preview.install()
-    return preview
+    val fileset = WatFileset(watFiles, fileIndex = 0,  watIndex = watIndex, onFileChange = onWatFileChange)
+    fileset.install()
+    return fileset
 }
 
 val MODULE_LEVEL_NODES = TokenSet.create(

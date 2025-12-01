@@ -303,15 +303,15 @@ internal fun WatMultifileEditorContainer(
 ) {
     val panelState by produceState<JComponent?>(initialValue = null, key1 = state) {
         withContext(Dispatchers.EDT) {
-            val preview = state.preview
-            val watPreviewFile = preview.currentFile
-            val watTextEditor = wasmBinaryProvider.createTextEditor(watPreviewFile)
-            preview.releaseClosedEditors() // release before assigning a new editor so that the current editor doesn't disappear
-            preview.editor = watTextEditor.editor
+            val fileset = state.fileset
+            val currentFile = fileset.currentFile
+            val watTextEditor = wasmBinaryProvider.createTextEditor(currentFile)
+            fileset.releaseClosedEditors() // release before assigning a new editor so that the current editor doesn't disappear
+            fileset.editor = watTextEditor.editor
             watTextEditor.editor.settings.isUseSoftWraps = false
             watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
-            watTextEditor.editor.caretModel.moveToOffset(preview.fileOffset)
-            watTextEditor.editor.scrollingModel.scrollTo(watTextEditor.editor.offsetToLogicalPosition(preview.fileOffset), ScrollType.MAKE_VISIBLE)
+            watTextEditor.editor.caretModel.moveToOffset(fileset.fileOffset)
+            watTextEditor.editor.scrollingModel.scrollTo(watTextEditor.editor.offsetToLogicalPosition(fileset.fileOffset), ScrollType.MAKE_VISIBLE)
             value = UiDataProvider.wrapComponent(watTextEditor.component) { sink ->
                 sink[OpenFileDescriptor.NAVIGATE_IN_EDITOR] = watTextEditor.editor
             }
@@ -383,7 +383,7 @@ sealed class WatConversionState {
     object Loading : WatConversionState()
     class ShowEditor(val wat: String) : WatConversionState()
     class ShowLiteEditor(val wat: String) : WatConversionState()
-    class ShowMultifileEditor(val preview: WatFileset) : WatConversionState()
+    class ShowMultifileEditor(val fileset: WatFileset) : WatConversionState()
     class Error(val error: String) : WatConversionState()
 }
 
