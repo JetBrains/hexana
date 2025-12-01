@@ -2057,6 +2057,70 @@ class HexanaToolset : McpToolset {
     }
 
     @McpTool("summarize_module")
+    @McpDescription("""
+    Returns a compact numeric summary of the WebAssembly module.  
+    The output is a single JSON object containing high-level counts of the
+    module’s major components (functions, imports, exports, memories, tables, types, etc.).
+    
+    This tool is designed to give LLMs and developers a fast overview of the
+    module’s structure without inspecting individual sections.
+
+    ------------------------------------------------
+    FIELDS INCLUDED IN THE SUMMARY (all numeric)
+    ------------------------------------------------
+
+      • functions — total number of functions (imported + defined)
+      • exports — number of exported entities
+      • imports — object containing counts of imported:
+            - functions
+            - memories
+            - globals
+            - tables
+      • memories — number of memory objects defined or imported
+      • tables — number of table objects defined or imported
+      • types — number of type signatures in the Type Section
+
+    The summary reflects the unified module structure after merging imports,
+    definitions, and section representations.
+
+    ----------------------
+    EXAMPLE RETURN VALUE
+    ----------------------
+
+    {
+      "functions": 42,
+      "exports": 6,
+      "imports": {
+        "functions": 3,
+        "memories": 1,
+        "globals": 2,
+        "tables": 1
+      },
+      "memories": 1,
+      "tables": 1,
+      "types": 17
+    }
+
+    ----------------------------------------------------------
+    ALTERNATIVE VIA COMMAND-LINE TOOLS (manual reconstruction)
+    ----------------------------------------------------------
+
+    Using WABT (https://github.com/WebAssembly/wabt):
+      • Count functions manually:
+          wasm-objdump -x module.wasm   (shows imports, tables, memories, globals)
+      • Convert to WAT and count type entries:
+          wasm2wat module.wasm
+
+    Using wasm-tools (Bytecode Alliance):
+      • Count imports/exports/functions:
+          wasm-tools dump module.wasm
+      • Count types:
+          wasm-tools print module.wasm | grep "(type" -n
+
+    These steps require manually scanning several sections.
+    The summarize_module MCP tool provides a single JSON object
+    with precomputed counts, optimized for LLM reasoning and quick diagnostics.
+""")
     fun summarizeModule(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
     ):String {
