@@ -9,6 +9,7 @@ import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
 import org.jetbrains.hexana.wasm.sections.WasmElementSegment
+import org.jetbrains.hexana.wasm.sections.WasmTableEntry
 import java.io.FileInputStream
 import kotlin.io.path.Path
 
@@ -60,6 +61,12 @@ abstract class WasmTest: UsefulTestCase() {
     internal inline fun doElementTest(crossinline body: (List<WasmElementSegment>) -> Unit) = doTest("element") {wasmModule ->
         with(wasmModule!!.elementSection!!) {
             body(scanElements())
+        }
+    }
+
+    internal inline fun doTableTest(crossinline body: (List<WasmTableEntry>) -> Unit) = doTest("table") { wasmModule ->
+        with(wasmModule!!.tableSection!!) {
+            body(scanTable(wasmModule))
         }
     }
 
