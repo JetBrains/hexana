@@ -387,7 +387,7 @@ sealed class WatConversionState {
     class Error(val error: String) : WatConversionState()
 }
 
-const val useMultifileEditor = true
+const val useMultifileEditor = false
 
 internal class WasmViewModel(
     private val wasmBinaryProvider: WasmBinaryVirtualFileProvider,
