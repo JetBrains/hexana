@@ -1852,6 +1852,209 @@ class HexanaToolset : McpToolset {
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.codeForFunctions(indices, wasmModule))
     }
+
+    @McpTool("list_element_segments")
+    @McpDescription("""
+    Extracts all element segments from a WebAssembly module and returns them as a JSON
+    array of ElementSegmentEntry objects.
+
+    Element segments are used to initialize tables with function references, or to store
+    reference expressions for later use via bulk-memory instructions. This tool supports
+    all WebAssembly element segment kinds (0–7), including both legacy function-index
+    initializers and modern expression-based initializers.
+
+    -----------------------------------
+    SUPPORTED ELEMENT SEGMENT KINDS
+    -----------------------------------
+
+      • kind 0 – active segment for table 0 with offset expression (legacy raw funcidx form)
+      • kind 1 – passive segment (no table index, no offset expression)
+      • kind 2 – active segment for table X with offset expression
+      • kind 3 – declarative segment (never applied)
+      • kind 4 – passive, element expressions (always funcref)
+      • kind 5 – active for table 0, element expressions
+      • kind 6 – active for table X, element expressions
+      • kind 7 – declarative, element expressions
+
+    The returned ElementSegmentEntry contains:
+      • elemidx: sequential index of the element segment
+      • kind: numeric segment kind (0–7)
+      • mode: "active", "passive", or "declarative"
+      • tableIndex: target table index for active segments; null for passive/declarative
+      • offsetExpr: stringified offset expression for active segments; null otherwise
+      • elementType: reference type of elements (always "funcref" for kinds 4–7)
+      • elements: normalized list of element initializers:
+            Examples:
+              "func 3"
+              "ref.func 8"
+              "ref.null funcref"
+              "expr: <expression>"
+      • rawAvailable: whether full payload bytes can be fetched via a raw-data MCP tool
+      • exportedTables: list of export names of tables referenced by the segment (if any)
+
+    This tool resolves all table indices, element kinds, offset expressions, and function
+    references into a consistent LLM-friendly structure suitable for analyzing indirect
+    calls, vtables, dispatch logic, GC metadata, and table-driven code generation.
+
+    -------------------------------------------
+    EXAMPLES OF RETURNED ELEMENT SEGMENT ENTRIES
+    -------------------------------------------
+
+    Example 1 — Active (kind 0), table 0, raw function indices:
+      (table 5 funcref)
+      (elem (i32.const 0) 1 2 3)
+
+    JSON:
+      {
+        "elemidx": 0,
+        "kind": 0,
+        "mode": "active",
+        "tableIndex": 0,
+        "offsetExpr": "i32.const 0",
+        "elementType": "funcref",
+        "elements": ["func 1", "func 2", "func 3"]
+      }
+
+    Example 2 — Passive (kind 1), raw function indices:
+      (elem passive func 5 func 6)
+
+    JSON:
+      {
+        "elemidx": 1,
+        "kind": 1,
+        "mode": "passive",
+        "tableIndex": null,
+        "offsetExpr": null,
+        "elementType": "funcref",
+        "elements": ["func 5", "func 6"]
+      }
+
+    Example 3 — Active (kind 2), table 1, raw function indices:
+      (table 2 funcref)
+      (table 3 funcref)
+      (elem (table 1) (i32.const 32) func 8 func 9)
+
+    JSON:
+      {
+        "elemidx": 2,
+        "kind": 2,
+        "mode": "active",
+        "tableIndex": 1,
+        "offsetExpr": "i32.const 32",
+        "elementType": "funcref",
+        "elements": ["func 8", "func 9"]
+      }
+
+    Example 4 — Declarative (kind 3):
+      (elem declare func 0 func 1)
+
+    JSON:
+      {
+        "elemidx": 3,
+        "kind": 3,
+        "mode": "declarative",
+        "tableIndex": null,
+        "offsetExpr": null,
+        "elementType": "funcref",
+        "elements": ["func 0", "func 1"]
+      }
+
+    Example 5 — Passive with expressions (kind 4):
+      (elem passive (ref.func 3) (ref.null funcref))
+
+    JSON:
+      {
+        "elemidx": 4,
+        "kind": 4,
+        "mode": "passive",
+        "tableIndex": null,
+        "offsetExpr": null,
+        "elementType": "funcref",
+        "elements": ["ref.func 3", "ref.null funcref"]
+      }
+
+    Example 6 — Active with expressions, table 0 (kind 5):
+      (elem (i32.const 8) (ref.func 2) (ref.null funcref))
+
+    JSON:
+      {
+        "elemidx": 5,
+        "kind": 5,
+        "mode": "active",
+        "tableIndex": 0,
+        "offsetExpr": "i32.const 8",
+        "elementType": "funcref",
+        "elements": ["ref.func 2", "ref.null funcref"]
+      }
+
+    Example 7 — Active with expressions, table 1 (kind 6):
+      (elem (table 1) (i32.const 12) (ref.func 7))
+
+    JSON:
+      {
+        "elemidx": 6,
+        "kind": 6,
+        "mode": "active",
+        "tableIndex": 1,
+        "offsetExpr": "i32.const 12",
+        "elementType": "funcref",
+        "elements": ["ref.func 7"]
+      }
+
+    Example 8 — Declarative with expressions (kind 7):
+      (elem declare (ref.func 4) (ref.null funcref))
+
+    JSON:
+      {
+        "elemidx": 7,
+        "kind": 7,
+        "mode": "declarative",
+        "tableIndex": null,
+        "offsetExpr": null,
+        "elementType": "funcref",
+        "elements": ["ref.func 4", "ref.null funcref"]
+      }
+
+    ----------------------------------------------------
+    ALTERNATIVE VIA WASM COMMAND-LINE TOOLS (reference)
+    ----------------------------------------------------
+
+    Using WABT (https://github.com/WebAssembly/wabt):
+      • Convert to text (shows all element segments):
+          wasm2wat module.wasm
+
+      • Show raw section contents, including element section:
+          wasm-objdump -x module.wasm
+          wasm-objdump -s module.wasm
+
+    Using wasm-tools (Bytecode Alliance):
+      • Structured text form:
+          wasm-tools print module.wasm
+
+      • Dump raw binary representation of segments:
+          wasm-tools dump module.wasm
+
+      • Convert binary <-> wat:
+          wasm-tools parse foo.wat -o foo.wasm
+          wasm-tools print foo.wasm
+
+    These tools require manual reading of kind, table index, expressions, and raw function
+    references. The MCP tool provides a high-level, IDE-ready JSON representation with
+    normalized element initializers, decoded offset expressions, and consistent formatting
+    tailored for LLM-driven analysis.
+""")
+    fun listElementSegments(
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+    ):String {
+        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
+        if (file.fileType != WasmFileType.INSTANCE) {
+            return """{"error": "Not a .wasm file"}"""
+        }
+        val buffer = file.contentsToCommonByteBuffer()
+        val wasmModule = WasmParser().parse(buffer)
+        return objectMapper.writeValueAsString(buffer.listElementSegments(wasmModule))
+
+    }
 }
 
 
