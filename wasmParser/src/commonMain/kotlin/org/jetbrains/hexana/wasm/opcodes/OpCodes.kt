@@ -2,6 +2,7 @@ package org.jetbrains.hexana.wasm.opcodes
 
 import org.jetbrains.hexana.wasm.sections.WasmHeapType
 import org.jetbrains.hexana.wasm.sections.WasmValueType
+import kotlin.jvm.JvmInline
 
 object OpCodes {
     object Flow {
@@ -830,9 +831,53 @@ object OpCodes {
             }
         }
 
-        class RefCastNullable(initValue: Int) : OpCodeWithValue<Int>(initValue) {
+        class RefTest(initValue: HeapType) : OpCodeWithValue<HeapType>(initValue) {
+            companion object {
+                const val code: UByte = 0x14u
+            }
+        }
+
+        class RefCast(initValue: HeapType) : OpCodeWithValue<HeapType>(initValue) {
+            companion object {
+                const val code: UByte = 0x16u
+            }
+        }
+
+        object AnyConvertExtern : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x1Au
+        }
+
+        object ExternConvertAny : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x1Bu
+        }
+
+        class RefCastNullable(initValue: HeapType) : OpCodeWithValue<HeapType>(initValue) {
             companion object {
                 const val code: UByte = 0x17u
+            }
+        }
+
+        class BrOnCastFail(label: Int, srcType: UInt, dstType: UInt) : OpCodeGCBreak(label, srcType, dstType) {
+            companion object {
+                const val code: UByte = 0x19u
+            }
+        }
+
+        class ArrayNewDefault(initValue: UInt): OpCodeWithValue<UInt>(initValue) {
+            companion object {
+                const val code: UByte = 0x07u
+            }
+        }
+
+        class ArrayNewData(typeIndexDst: UInt, typeIndexSrc: UInt): OpCodeGCSrcDst(typeIndexDst, typeIndexSrc) {
+            companion object {
+                const val code: UByte = 0x09u
+            }
+        }
+
+        class ArrayCopy(typeIndexDst: UInt, typeIndexSrc: UInt): OpCodeGCSrcDst(typeIndexDst, typeIndexSrc) {
+            companion object {
+                const val code: UByte = 0x11u
             }
         }
 
@@ -840,6 +885,28 @@ object OpCodes {
             companion object {
                 const val code: UByte = 0x0Bu
             }
+        }
+
+        class ArrayGetSigned(initValue: UInt): OpCodeWithValue<UInt>(initValue) {
+            companion object {
+                const val code: UByte = 0x0Cu
+            }
+        }
+
+        class ArrayGetUnsigned(initValue: UInt): OpCodeWithValue<UInt>(initValue) {
+            companion object {
+                const val code: UByte = 0x0Du
+            }
+        }
+
+        class ArraySet(initValue: UInt) : OpCodeWithValue<UInt>(initValue) {
+            companion object {
+                const val code: UByte = 0x0Eu
+            }
+        }
+
+        object ArrayLength : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x0Fu
         }
     }
     object Ref {
@@ -853,7 +920,7 @@ object OpCodes {
             const val code: UByte = 0xD1u
         }
 
-        class Func(index: Int): OpCodeWithValue<Int>(index) {
+        class Func(index: UInt): OpCodeWithValue<UInt>(index) {
             companion object {
                 const val code: UByte = 0xD2u
             }
@@ -885,3 +952,40 @@ open class OpCodeGCStruct(val typeIndex: UInt, val fieldIndex: UInt) : OpCode {
         return result
     }
 }
+
+open class OpCodeGCSrcDst(val typeIndexDst: UInt, val typeIndexSrc: UInt) : OpCode {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as OpCodeGCSrcDst
+        return (this.typeIndexDst == other.typeIndexDst) && (this.typeIndexSrc == other.typeIndexSrc)
+    }
+
+    override fun hashCode(): Int {
+        var result = typeIndexDst.hashCode()
+        result = 31 * result + typeIndexSrc.hashCode()
+        return result
+    }
+}
+
+open class OpCodeGCBreak(val label: Int, val srcType: UInt, val dstType: UInt) : OpCode {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as OpCodeGCBreak
+        return (this.label == other.label) && (this.srcType == other.srcType) && (this.dstType == other.dstType)
+    }
+
+    override fun hashCode(): Int {
+        var result = label
+        result = 31 * result + srcType.hashCode()
+        result = 31 * result + dstType.hashCode()
+        return result
+    }
+}
+
+
+@JvmInline
+value class HeapType(val type: Int)

@@ -21,8 +21,8 @@ class ElementTest:WasmTest() {
         assertEquals(ExprWasmElementSegment.Passive(
             refType = WasmReferenceHeapType(WasmFuncHeapType),
                 exprs = listOf(
-                    listOf(Ref.Func(0)),
-                    listOf(Ref.Func(1)))),
+                    listOf(Ref.Func(0u)),
+                    listOf(Ref.Func(1u)))),
             elems[0]
         )
     }
@@ -31,8 +31,8 @@ class ElementTest:WasmTest() {
         assertEquals(ExprWasmElementSegment.Passive(
             refType = WasmReferenceHeapType(WasmFuncHeapType),
                 exprs = listOf(
-                    listOf(Ref.Func(0)),
-                    listOf(Ref.Func(1)))),
+                    listOf(Ref.Func(0u)),
+                    listOf(Ref.Func(1u)))),
             elems[0]
         )
     }

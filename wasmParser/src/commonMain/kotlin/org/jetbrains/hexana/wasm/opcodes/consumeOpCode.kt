@@ -234,9 +234,9 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode {
         0xD3u -> Ref.Eq
         0xD4u -> Ref.AsNonNull
 
-//        0xFBu -> {
-//            consumeGCOpCode(get().toUByte())
-//        }
+        0xFBu -> {
+            consumeGCOpCode(get().toUByte())
+        }
 
         else -> throw UnsupportedOpsException(code, position())
     }

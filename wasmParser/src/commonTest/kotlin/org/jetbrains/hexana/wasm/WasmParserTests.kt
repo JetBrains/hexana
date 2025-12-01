@@ -100,7 +100,6 @@ class WasmParserTests {
     }
 
     @Test
-    @Ignore
     fun parseTryCatch() = runTest {
         val buffer = resourceAsByteBuffer("kotlin/try.wasm")
         val wasmModule = WasmParser().parse(buffer)
