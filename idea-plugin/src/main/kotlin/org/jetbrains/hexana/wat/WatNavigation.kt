@@ -5,6 +5,7 @@ import com.intellij.lang.LighterASTNode
 import com.intellij.lang.impl.PsiBuilderImpl
 import com.intellij.notebook.editor.BackedVirtualFile
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.Ref
@@ -118,10 +119,18 @@ class WatFileset(
         }
     }
 
-    fun navigateToFile(file: VirtualFile, offset: Int): Boolean {
+    fun navigateToFile(file: VirtualFile, offset: Int, navigateIfFilesMatch: Boolean = false): Boolean {
         val currentEditor = editor ?: return false
         if (currentEditor.virtualFile == file) {
-            return false
+            if (navigateIfFilesMatch) {
+                currentEditor.caretModel.moveToOffset(offset)
+                currentEditor.scrollingModel.scrollToCaret(ScrollType.RELATIVE)
+                fileOffset = offset
+                return true
+            }
+            else {
+                return false
+            }
         }
         val index = files.indexOf(file)
         if (index == -1) {
@@ -161,7 +170,7 @@ fun createWatFileset(
 ): WatFileset {
     val watIndex = WatIndex()
     val watFiles = getWatFiles(wasmFile, watText, watIndex)
-    val fileset = WatFileset(watFiles, fileIndex = 0,  watIndex = watIndex, onFileChange = onWatFileChange)
+    val fileset = WatFileset(watFiles, fileIndex = watFiles.lastIndex,  watIndex = watIndex, onFileChange = onWatFileChange)
     fileset.install()
     return fileset
 }

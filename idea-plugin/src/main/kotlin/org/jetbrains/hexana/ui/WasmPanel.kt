@@ -184,7 +184,7 @@ internal sealed interface WasmPanel : Panel {
                 }
 
                 is WatConversionState.ShowMultifileEditor -> {
-                    WatMultifileEditorContainer(wasmViewState as WatConversionState.ShowMultifileEditor, wasmBinaryProvider)
+                    WatMultifileEditorContainer(state, wasmViewState as WatConversionState.ShowMultifileEditor, wasmBinaryProvider)
                 }
 
                 is WatConversionState.Error -> {
@@ -298,10 +298,11 @@ internal fun WatEditorContainer(
 
 @Composable
 internal fun WatMultifileEditorContainer(
+    hexViewState: HexViewStateHolder,
     state: WatConversionState.ShowMultifileEditor,
     wasmBinaryProvider: WasmBinaryVirtualFileProvider,
 ) {
-    val panelState by produceState<JComponent?>(initialValue = null, key1 = state) {
+    val panelState by produceState<JComponent?>(initialValue = null, key1 = state, key2 = hexViewState.currentState.value.fileIndex) {
         withContext(Dispatchers.EDT) {
             val fileset = state.fileset
             val currentFile = fileset.currentFile
@@ -310,7 +311,7 @@ internal fun WatMultifileEditorContainer(
             watTextEditor.editor.settings.isUseSoftWraps = false
             watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
             watTextEditor.editor.caretModel.moveToOffset(fileset.fileOffset)
-            watTextEditor.editor.scrollingModel.scrollTo(watTextEditor.editor.offsetToLogicalPosition(fileset.fileOffset), ScrollType.MAKE_VISIBLE)
+            watTextEditor.editor.scrollingModel.scrollTo(watTextEditor.editor.offsetToLogicalPosition(fileset.fileOffset), ScrollType.RELATIVE)
             value = UiDataProvider.wrapComponent(watTextEditor.component) { sink ->
                 sink[OpenFileDescriptor.NAVIGATE_IN_EDITOR] = watTextEditor.editor
             }
@@ -386,7 +387,7 @@ sealed class WatConversionState {
     class Error(val error: String) : WatConversionState()
 }
 
-const val useMultifileEditor = false
+const val useMultifileEditor = true
 
 internal class WasmViewModel(
     private val wasmBinaryProvider: WasmBinaryVirtualFileProvider,

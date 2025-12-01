@@ -19,6 +19,7 @@ import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.BinaryEditorView
+import org.jetbrains.hexana.wat.WatFileset
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
 import java.io.Serializable
@@ -86,10 +87,44 @@ class HexanaFileEditor(
     override fun setState(state: FileEditorState) {
         if (state is HexViewState) {
             stateHolder.currentState.value = state
+
+            val virtualFile = myTextEditor?.editor?.virtualFile
+            val fileset = virtualFile?.getUserData(WatFileset.KEY)
+            if (fileset != null) {
+                val f = fileset.files.getOrNull(state.fileIndex)
+                if (f != null) {
+                    fileset.navigateToFile(f, state.fileOffset, true)
+                }
+            }
+            else {
+                state.watFileEditorState?.let {
+                    myTextEditor?.setState(it)
+                }
+            }
         }
     }
 
     override fun getState(level: FileEditorStateLevel): FileEditorState {
+        val editor = myTextEditor?.editor
+        if (editor != null) {
+            val file = editor.virtualFile
+            val fileset = file.getUserData(WatFileset.KEY)
+            if (fileset != null) {
+                val fileIndex = fileset?.files?.indexOf(file) ?: 0
+                val fileOffset = editor.caretModel.offset
+                return stateHolder.currentState.value.copy(
+                    fileIndex = fileIndex,
+                    fileOffset = fileOffset,
+                )
+            }
+            else {
+                val watEditorState = myTextEditor?.getState(level)
+                return stateHolder.currentState.value.copy(
+                    watFileEditorState = watEditorState,
+                )
+            }
+        }
+
         return stateHolder.currentState.value
     }
 
@@ -131,8 +166,23 @@ class HexanaFileEditor(
 data class HexViewState(
     val topFraction: Float = 0.6f,
     val tabIndex: Int = 0,
+    val fileIndex: Int = 0,
+    val fileOffset: Int = 0,
+    val watFileEditorState: FileEditorState? = null
 ) : FileEditorState, Serializable {
     override fun canBeMergedWith(otherState: FileEditorState, level: FileEditorStateLevel): Boolean {
+        if (otherState is HexViewState) {
+
+            val result = level == FileEditorStateLevel.NAVIGATION &&
+                    topFraction == otherState.topFraction &&
+                    tabIndex == otherState.tabIndex &&
+                    fileIndex == otherState.fileIndex &&
+                    fileOffset == otherState.fileOffset &&
+                    (watFileEditorState == null && otherState.watFileEditorState == null ||
+                            otherState.watFileEditorState != null && watFileEditorState?.canBeMergedWith(otherState.watFileEditorState, level) == true)
+            return result
+
+        }
         return false
     }
 }
