@@ -573,6 +573,7 @@ class WasmParserTests {
     @Test
     @Ignore
     // Was broken after recent refactoring and I won't point fingers (but it's Vassily!)
+    // Vasily > All memory operations are fetch memargs incorrectly, this test should be enabled after fix of memargs consumption fix.
     fun `code load`() = runTest {
         assertFunctions(
             "snippets/load.wasm", listOf(
