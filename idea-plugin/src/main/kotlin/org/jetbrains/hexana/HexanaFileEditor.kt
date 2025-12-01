@@ -22,6 +22,7 @@ import org.jetbrains.hexana.ui.BinaryEditorView
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
 import java.io.Serializable
+import java.util.concurrent.CopyOnWriteArrayList
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -34,6 +35,8 @@ class HexanaFileEditor(
     private val stateHolder = HexViewStateHolder()
 
     private var myTextEditor: TextEditor? = null
+
+    private val myClosedTextEditors = CopyOnWriteArrayList<TextEditor>()
 
     init {
         panel = JPanel(BorderLayout())
@@ -48,6 +51,10 @@ class HexanaFileEditor(
             "wasm" -> object: WasmBinaryVirtualFileProvider(myFile) {
                 override suspend fun createTextEditor(file: VirtualFile): TextEditor {
                      return withContext(Dispatchers.EDT) {
+                         disposeClosedEditors()
+                         myTextEditor?.let {
+                             myClosedTextEditors.add(it)
+                         }
                          val textEditor = TextEditorProvider.getInstance().createEditor(myProject, file)
                          textEditor as TextEditor
                          myTextEditor = textEditor
@@ -107,9 +114,17 @@ class HexanaFileEditor(
     }
 
     override fun dispose() {
+        disposeClosedEditors()
         myTextEditor?.let {
             Disposer.dispose(it)
         }
+    }
+
+    private fun disposeClosedEditors() {
+        myClosedTextEditors.forEach {
+            Disposer.dispose(it)
+        }
+        myClosedTextEditors.clear()
     }
 }
 

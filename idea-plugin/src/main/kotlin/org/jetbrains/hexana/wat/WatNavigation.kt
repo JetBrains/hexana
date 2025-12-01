@@ -5,7 +5,6 @@ import com.intellij.lang.LighterASTNode
 import com.intellij.lang.impl.PsiBuilderImpl
 import com.intellij.notebook.editor.BackedVirtualFile
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.Ref
@@ -14,15 +13,9 @@ import com.intellij.psi.tree.IElementType
 import com.intellij.psi.tree.TokenSet
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.util.diff.FlyweightCapableTreeStructure
-import com.jetbrains.rd.util.CopyOnWriteArrayList
 import it.unimi.dsi.fastutil.ints.IntArrayList
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap
-import org.jetbrains.hexana.wat.psi.WatElementType
-import org.jetbrains.hexana.wat.psi.WatFileElementType
-import org.jetbrains.hexana.wat.psi.WatLexer
-import org.jetbrains.hexana.wat.psi.WatParser
-import org.jetbrains.hexana.wat.psi.WatToken
-import kotlin.sequences.emptySequence
+import org.jetbrains.hexana.wat.psi.*
 
 class WatNavigation {
     companion object {
@@ -117,27 +110,12 @@ class WatFileset(
         val KEY = Key.create<WatFileset>("hexana_wat_fileset")
     }
 
-    private val closedEditors = CopyOnWriteArrayList<Editor>()
-
     var editor: Editor? = null
-        set(value) {
-            field?.let {
-                closedEditors.add(it)
-            }
-            field = value
-        }
 
     fun install() {
         for (f in files) {
             f.putUserData(KEY, this)
         }
-    }
-
-    fun releaseClosedEditors() {
-        closedEditors.forEach {
-            EditorFactory.getInstance().releaseEditor(it)
-        }
-        closedEditors.clear()
     }
 
     fun navigateToFile(file: VirtualFile, offset: Int): Boolean {

@@ -306,7 +306,6 @@ internal fun WatMultifileEditorContainer(
             val fileset = state.fileset
             val currentFile = fileset.currentFile
             val watTextEditor = wasmBinaryProvider.createTextEditor(currentFile)
-            fileset.releaseClosedEditors() // release before assigning a new editor so that the current editor doesn't disappear
             fileset.editor = watTextEditor.editor
             watTextEditor.editor.settings.isUseSoftWraps = false
             watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
