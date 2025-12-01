@@ -190,6 +190,9 @@ data class HexViewState(
 class HexViewStateHolder {
     val currentState: MutableState<HexViewState> = mutableStateOf(HexViewState())
 
+    private val _hexScrollFlow = kotlinx.coroutines.flow.MutableSharedFlow<Long>(extraBufferCapacity = 64)
+    val hexScrollFlow: kotlinx.coroutines.flow.SharedFlow<Long> = _hexScrollFlow
+
     val topFraction: Float
         get() = currentState.value.topFraction
 
@@ -199,5 +202,10 @@ class HexViewStateHolder {
 
     fun setSelectedTab(tabIndex: Int) {
         currentState.value = currentState.value.copy(tabIndex = tabIndex)
+    }
+
+    fun scrollHexViewTo(offset: Long) {
+        // Positive = scroll down, Negative = scroll up
+        _hexScrollFlow.tryEmit(offset)
     }
 }

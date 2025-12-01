@@ -23,8 +23,10 @@ internal fun BinaryEditorView(
     state: HexViewStateHolder,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
+        var bytesPerRow by remember { mutableStateOf(16) }
+
         VerticalSplitPanel(state, northPanel = {
-            HexViewer(binaryProvider.bytes)
+            HexViewer(binaryProvider.bytes, state, bytesPerRow = bytesPerRow)
         }, southPanel = {
             val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels(state)) }
 
@@ -121,7 +123,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
             if (wasmModule == null) return emptyArray() else arrayOf(
                 WasmPanel.Exports(this),
                 WasmPanel.Imports(this),
-                WasmPanel.Data(this),
+                WasmPanel.Data(this, state),
                 WasmPanel.Wat(this, state),
             )
         }

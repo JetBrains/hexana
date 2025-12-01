@@ -124,7 +124,7 @@ internal sealed interface WasmPanel : Panel {
         }
     }
 
-    class Data(override val wasmBinaryProvider: WasmBinaryProvider) : WasmPanel {
+    class Data(override val wasmBinaryProvider: WasmBinaryProvider, val state: HexViewStateHolder) : WasmPanel {
         override val description = "Data"
 
         @OptIn(ExperimentalFoundationApi::class)
@@ -134,6 +134,7 @@ internal sealed interface WasmPanel : Panel {
             var selectedTabIndex by remember { mutableIntStateOf(0) }
             if (dataRecords.isEmpty()) return
 
+
             Row {
                 Column(modifier = Modifier.weight(0.3f).padding(4.dp)) {
                     LazyColumn {
@@ -141,22 +142,19 @@ internal sealed interface WasmPanel : Panel {
                             val dataRecord = dataRecords[dataRecordIndex]
                             val data = dataRecord.data
 
-                            val str = data.asASCII().substring(0, min(data.size, 16))
+                            val str = data.asASCII()
 
                             Text(
                                 str,
                                 style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
                                 lineHeight = TextUnit(1f, TextUnitType.Em), modifier = Modifier.onClick {
-                                    selectedTabIndex = dataRecordIndex
+                                    //selectedTabIndex = dataRecordIndex
+                                    state.scrollHexViewTo(dataRecord.offset)
                                 }.fillMaxWidth().padding(4.dp).background(
                                     if (dataRecordIndex % 2 == 0) Color(135, 135, 135, 255) else Color.Transparent                               )
                             )
                         }
                     }
-                }
-
-                Column(modifier = Modifier.weight(1f).padding(4.dp)) {
-                    HexViewer(dataRecords[selectedTabIndex].data, showOffsets = false)
                 }
             }
         }
