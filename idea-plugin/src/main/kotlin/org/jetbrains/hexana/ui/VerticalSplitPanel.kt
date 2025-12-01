@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -21,24 +22,27 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
+import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.jewel.ui.component.Divider
 import java.awt.Cursor
 
 
 @Composable
 fun VerticalSplitPanel(
+    state: HexViewStateHolder,
     northPanel: @Composable () -> Unit,
     southPanel: @Composable () -> Unit
 ) {
     var containerHeightPx by remember { mutableFloatStateOf(0f) }
-    var topFraction by remember { mutableFloatStateOf(0.6f) }
+
+    val weightRange = 0.0001f..0.9999f
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { containerHeightPx = it.height.toFloat() }
     ) {
-        Box(modifier = Modifier.fillMaxWidth().weight(topFraction)) {
+        Box(modifier = Modifier.fillMaxWidth().weight(state.topFraction.coerceIn(weightRange))) {
             northPanel()
         }
 
@@ -46,7 +50,7 @@ fun VerticalSplitPanel(
             onDrag = { deltaY ->
                 if (containerHeightPx > 0) {
                     val deltaRatio = deltaY / containerHeightPx
-                    topFraction = (topFraction + deltaRatio).coerceIn(0.1f, 0.9f)
+                    state.setTopFraction(state.topFraction + deltaRatio)
                 }
             }
         )
@@ -54,7 +58,7 @@ fun VerticalSplitPanel(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f - topFraction)
+                .weight((1f - state.topFraction).coerceIn(weightRange))
                 .background(HexanaTheme.backgroundColor),
             contentAlignment = Alignment.TopStart
         ) {

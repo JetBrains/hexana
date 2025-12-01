@@ -22,7 +22,7 @@ internal fun BinaryEditorView(
     state: HexViewStateHolder,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
-        VerticalSplitPanel(northPanel = {
+        VerticalSplitPanel(state, northPanel = {
             HexViewer(binaryProvider.bytes)
         }, southPanel = {
             val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels(state)) }

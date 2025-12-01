@@ -139,9 +139,10 @@ data class HexViewState(
 class HexViewStateHolder {
     val currentState: MutableState<HexViewState> = mutableStateOf(HexViewState())
 
-    val watEditor: MutableState<JComponent?> = mutableStateOf(null)
+    val topFraction: Float
+        get() = currentState.value.topFraction
 
     fun setTopFraction(topFraction: Float) {
-        currentState.value = currentState.value.copy(topFraction = topFraction)
+        currentState.value = currentState.value.copy(topFraction = topFraction.coerceIn(0f, 1f))
     }
 }
