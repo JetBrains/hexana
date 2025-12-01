@@ -2,6 +2,7 @@ package org.jetbrains.hexana.wasm.sections
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.opcodes.OpCode
+import org.jetbrains.hexana.wasm.opcodes.OpCodeWithValue
 import org.jetbrains.hexana.wasm.opcodes.UnsupportedOpsException
 import org.jetbrains.hexana.wasm.opcodes.parseOpCodes
 
@@ -39,7 +40,7 @@ class WasmSectionCode(size: Int, offset: Int): WasmSection(size, offset) {
         return wasmCodeRecords
     }
 
-    fun CommonByteBuffer.scanOpcodesForIndices(declaredFuncIdxs: List<Int>): Map<Int, List<OpCode<*>>> {
+    fun CommonByteBuffer.scanOpcodesForIndices(declaredFuncIdxs: List<Int>): Map<Int, List<OpCode>> {
         return scanCodeEntries(declaredFuncIdxs).map { it.key to it.value.opCodes }.toMap()
     }
 
@@ -82,7 +83,7 @@ fun CommonByteBuffer.consumeLocals(locals: MutableList<WasmCodeLocalRecord>) {
     }
 }
 
-class UnparsedOpCode(val e: Throwable, rawCodes: ByteArray): OpCode<ByteArray>(rawCodes)
+class UnparsedOpCode(val e: Throwable, rawCodes: ByteArray): OpCodeWithValue<ByteArray>(rawCodes)
 
 data class WasmCodeLocalRecord(val local: Int, val type: WasmValueType<*>)
-data class WasmCodeRecord(val offset: Long, val size: UInt, val locals: List<WasmCodeLocalRecord>, val opCodes: List<OpCode<*>>)
+data class WasmCodeRecord(val offset: Long, val size: UInt, val locals: List<WasmCodeLocalRecord>, val opCodes: List<OpCode>)

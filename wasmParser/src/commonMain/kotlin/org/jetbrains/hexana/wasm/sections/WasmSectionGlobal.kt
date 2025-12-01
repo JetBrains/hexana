@@ -21,4 +21,4 @@ class WasmSectionGlobal(size: Int, offset: Int): WasmSection(size, offset) {
     }
 }
 
-data class WasmGlobalRecord(val type: WasmGlobalType, val expression: List<OpCode<*>>)
+data class WasmGlobalRecord(val type: WasmGlobalType, val expression: List<OpCode>)

@@ -44,7 +44,7 @@ abstract class WasmTest: UsefulTestCase() {
         listFunctions(it).let(body)
     }
 
-    internal inline fun doOpcodeInFunctionTest(index: Int, crossinline body: (List<OpCode<*>>?) -> Unit) = doTest("function") { wasmModule ->
+    internal inline fun doOpcodeInFunctionTest(index: Int, crossinline body: (List<OpCode>?) -> Unit) = doTest("function") { wasmModule ->
         with(wasmModule!!.codeSection!!) {
             body(scanOpcodesForIndices(listOf(index))[index])
         }

@@ -40,7 +40,7 @@ class WasmSectionData(size: Int, offset: Int): WasmSection(size, offset) {
  * 5.5.14
  */
 sealed class WasmDataRecord(val type: UInt, open val offset: Long, open val data: ByteArray)
-data class WasmDataRecordActive(override val offset: Long, val expression: List<OpCode<*>>, override val data: ByteArray): WasmDataRecord(0x0u, offset, data) {
+data class WasmDataRecordActive(override val offset: Long, val expression: List<OpCode>, override val data: ByteArray): WasmDataRecord(0x0u, offset, data) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false
@@ -83,7 +83,7 @@ data class WasmDataRecordPassive(override val offset: Long, override val data: B
     }
 }
 
-data class WasmDataRecordActiveWithMemoryIndex(override val offset: Long, val memoryIndex: UInt, val expression: List<OpCode<*>>, override val data: ByteArray): WasmDataRecord(0x2u, offset, data) {
+data class WasmDataRecordActiveWithMemoryIndex(override val offset: Long, val memoryIndex: UInt, val expression: List<OpCode>, override val data: ByteArray): WasmDataRecord(0x2u, offset, data) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false

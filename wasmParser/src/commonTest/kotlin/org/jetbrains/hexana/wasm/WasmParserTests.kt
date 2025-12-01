@@ -100,6 +100,19 @@ class WasmParserTests {
     }
 
     @Test
+    @Ignore
+    fun parseTryCatch() = runTest {
+        val buffer = resourceAsByteBuffer("kotlin/try.wasm")
+        val wasmModule = WasmParser().parse(buffer)
+
+        assertNotNull(wasmModule)
+
+        with (wasmModule.codeSection!!) {
+            val code = buffer.scan()
+        }
+    }
+
+    @Test
     fun parseLongImports() = runTest {
         val buffer = resourceAsByteBuffer("string.wasm")
         val wasmModule = WasmParser().parse(buffer)
