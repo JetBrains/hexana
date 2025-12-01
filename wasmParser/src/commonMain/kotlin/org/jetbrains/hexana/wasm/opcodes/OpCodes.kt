@@ -332,6 +332,23 @@ object OpCodes {
         object ShrS : OpCodeWithValue<Unit>(Unit) {
             const val code: UByte = 0x75u
         }
+
+        // FC Multibyte Opcodes
+        object TruncSatF32S : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x00u
+        }
+
+        object TruncSatF32U : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x01u
+        }
+
+        object TruncSatF64S : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x02u
+        }
+
+        object TruncSatF64U : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x03u
+        }
     }
 
     object I64 {
@@ -562,6 +579,23 @@ object OpCodes {
 
         object Extend32S : OpCodeWithValue<Unit>(Unit) {
             const val code: UByte = 0xC4u
+        }
+
+        // FC Multibyte Opcodes
+        object TruncSatF32S : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x04u
+        }
+
+        object TruncSatF32U : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x05u
+        }
+
+        object TruncSatF64S : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x06u
+        }
+
+        object TruncSatF64U : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x06u
         }
     }
 

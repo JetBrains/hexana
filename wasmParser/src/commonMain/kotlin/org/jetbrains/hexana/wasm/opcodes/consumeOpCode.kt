@@ -239,6 +239,10 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode {
             consumeGCOpCode(get().toUByte())
         }
 
+        0xFCu -> {
+            consumeMultibyteOpCode(getULEB128())
+        }
+
         else -> throw UnsupportedOpsException(code, position())
     }
 }
