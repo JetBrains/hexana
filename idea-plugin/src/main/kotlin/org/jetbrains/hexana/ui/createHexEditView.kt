@@ -121,9 +121,9 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
         is GenericBinaryProvider -> emptyArray()
         is WasmBinaryVirtualFileProvider -> {
             if (wasmModule == null) return emptyArray() else arrayOf(
+                WasmPanel.Data(this, state),
                 WasmPanel.Exports(this),
                 WasmPanel.Imports(this),
-                WasmPanel.Data(this, state),
                 WasmPanel.Wat(this, state),
             )
         }

@@ -150,9 +150,7 @@ internal sealed interface WasmPanel : Panel {
                                 lineHeight = TextUnit(1f, TextUnitType.Em), modifier = Modifier.onClick {
                                     //selectedTabIndex = dataRecordIndex
                                     state.scrollHexViewTo(dataRecord.offset)
-                                }.fillMaxWidth().padding(4.dp).background(
-                                    if (dataRecordIndex % 2 == 0) Color(135, 135, 135, 255) else Color.Transparent                               )
-                            )
+                                }.fillMaxWidth().padding(4.dp)                            )
                         }
                     }
                 }
