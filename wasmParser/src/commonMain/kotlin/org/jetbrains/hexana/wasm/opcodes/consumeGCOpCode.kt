@@ -26,7 +26,7 @@ fun CommonByteBuffer.consumeGCOpCode(opcode: UByte): OpCode {
         0x1Au -> OpCodes.GC.AnyConvertExtern
         0x1Bu -> OpCodes.GC.ExternConvertAny
 
-        else -> throw UnsupportedOpsException(opcode.toUByte(), position())
+        else -> throw UnsupportedOpsException(opcode, position())
     }
 }
 

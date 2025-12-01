@@ -40,6 +40,13 @@ object OpCodes {
             }
         }
 
+        class CallRef(value: UInt) : OpCodeWithValue<UInt>(value) {
+            companion object {
+                const val code: UByte = 0x14u
+            }
+        }
+
+
         class CallIndirect(value: Int) : OpCodeWithValue<Int>(value) {
             companion object {
                 const val code: UByte = 0x11u

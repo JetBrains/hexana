@@ -52,6 +52,7 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode {
             Flow.CallIndirect(value)
         }
         0x12u -> Flow.ReturnCall
+        0x14u -> Flow.CallRef(consumeInt())
         0x16u, 0x17u, 0x18u, 0x19u -> ReservedOpCode(codeInt)
         0x1Au -> Flow.Drop
         0x1Bu -> Flow.Select
