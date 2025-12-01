@@ -7,7 +7,9 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes.Flow
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.I32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.I64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Local
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Ref
 import org.jetbrains.hexana.wasm.sections.consumeArray
+import org.jetbrains.hexana.wasm.sections.heapType
 import org.jetbrains.hexana.wasm.sections.valueType
 
 fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode {
@@ -226,6 +228,11 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode {
         0xC3u -> I64.Extend16S
         0xC4u -> I64.Extend32S
         0xC5u, 0xC6u, 0xC7u, 0xC8u, 0xC9u, 0xCAu, 0xCBu, 0xCCu, 0xCDu, 0xCEu, 0xCFu -> ReservedOpCode(codeInt)
+        0xD0u -> Ref.Null(heapType())
+        0xD1u -> Ref.IsNull
+        0xD2u -> Ref.Func(consumeInt())
+        0xD3u -> Ref.Eq
+        0xD4u -> Ref.AsNonNull
 
 //        0xFBu -> {
 //            consumeGCOpCode(get().toUByte())

@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.wasm.opcodes
 
+import org.jetbrains.hexana.wasm.sections.WasmHeapType
 import org.jetbrains.hexana.wasm.sections.WasmValueType
 
 object OpCodes {
@@ -839,6 +840,31 @@ object OpCodes {
             companion object {
                 const val code: UByte = 0x0Bu
             }
+        }
+    }
+    object Ref {
+        class Null(heapType: WasmHeapType): OpCodeWithValue<WasmHeapType>(heapType) {
+            companion object {
+                const val code: UByte = 0xD0u
+            }
+        }
+
+        object IsNull: OpCode {
+            const val code: UByte = 0xD1u
+        }
+
+        class Func(index: Int): OpCodeWithValue<Int>(index) {
+            companion object {
+                const val code: UByte = 0xD2u
+            }
+        }
+
+        object Eq: OpCode {
+            const val code: UByte = 0xD3u
+        }
+
+        object AsNonNull: OpCode {
+            const val code: UByte = 0xD4u
         }
     }
 }

@@ -7,7 +7,10 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes.Flow
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.I32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.I64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Local
+import org.jetbrains.hexana.wasm.sections.WasmHeapType
+import org.jetbrains.hexana.wasm.sections.WasmValueType
 import org.jetbrains.hexana.wasm.sections.consumeArray
+import org.jetbrains.hexana.wasm.sections.heapType
 import org.jetbrains.hexana.wasm.sections.valueType
 
 data class MemArg(val offset: Int, val align: Int)
