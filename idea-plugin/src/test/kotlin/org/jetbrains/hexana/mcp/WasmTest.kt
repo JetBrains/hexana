@@ -8,6 +8,7 @@ import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
+import org.jetbrains.hexana.wasm.sections.WasmElementSegment
 import java.io.FileInputStream
 import kotlin.io.path.Path
 
@@ -53,6 +54,12 @@ abstract class WasmTest: UsefulTestCase() {
     internal inline fun doLocalsInFunctionTest(index: Int, crossinline body: (List<WasmCodeLocalRecord>?) -> Unit) = doTest("function") { wasmModule ->
         with(wasmModule!!.codeSection!!) {
             body(scanLocalsEntries(listOf(index))[index])
+        }
+    }
+
+    internal inline fun doElementTest(crossinline body: (List<WasmElementSegment>) -> Unit) = doTest("element") {wasmModule ->
+        with(wasmModule!!.elementSection!!) {
+            body(scanElements())
         }
     }
 

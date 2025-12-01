@@ -158,18 +158,18 @@ fun CommonByteBuffer.valueType(): WasmValueType<*> {
 
 internal fun CommonByteBuffer.heapType(): WasmHeapType {
     return when (get()) {
-        0x69.toByte() -> WasmExnRefHeapType()
-        0x6a.toByte() -> WasmArrayRefHeapType()
-        0x6b.toByte() -> WasmStructRefHeapType()
-        0x6c.toByte() -> WasmI31RefHeapType()
-        0x6d.toByte() -> WasmEqRefHeapType()
-        0x6e.toByte() -> WasmAnyRefHeapType()
-        0x6f.toByte() -> WasmExternRefHeapType()
-        0x70.toByte() -> WasmFuncHeapType()
-        0x71.toByte() -> WasmNoneHeapType()
-        0x72.toByte() -> WasmNoExternRefHeapType()
-        0x73.toByte() -> WasmNoFuncHeapType()
-        0x74.toByte() -> WasmNoExnHeapType()
+        0x69.toByte() -> WasmExnRefHeapType
+        0x6a.toByte() -> WasmArrayRefHeapType
+        0x6b.toByte() -> WasmStructRefHeapType
+        0x6c.toByte() -> WasmI31RefHeapType
+        0x6d.toByte() -> WasmEqRefHeapType
+        0x6e.toByte() -> WasmAnyRefHeapType
+        0x6f.toByte() -> WasmExternRefHeapType
+        0x70.toByte() -> WasmFuncHeapType
+        0x71.toByte() -> WasmNoneHeapType
+        0x72.toByte() -> WasmNoExternRefHeapType
+        0x73.toByte() -> WasmNoFuncHeapType
+        0x74.toByte() -> WasmNoExnHeapType
         else -> {
             position(position() - 1)
             WasmIndexHeapType(getULEB128())
@@ -212,23 +212,47 @@ sealed class WasmReferenceType(val heapType: WasmHeapType)
  * spec 5.3.3
  */
 sealed class WasmHeapType(val type: Long)
-class WasmExnRefHeapType: WasmHeapType(0x69)
-class WasmArrayRefHeapType: WasmHeapType(0x6a)
-class WasmStructRefHeapType: WasmHeapType(0x6b)
-class WasmI31RefHeapType: WasmHeapType(0x6c)
-class WasmEqRefHeapType: WasmHeapType(0x6d)
-class WasmAnyRefHeapType: WasmHeapType(0x6e)
-class WasmExternRefHeapType: WasmHeapType(0x6f)
-class WasmFuncHeapType: WasmHeapType(0x70)
-class WasmNoneHeapType: WasmHeapType(0x71)
-class WasmNoExternRefHeapType: WasmHeapType(0x72)
-class WasmNoFuncHeapType: WasmHeapType(0x73)
-class WasmNoExnHeapType: WasmHeapType(0x74)
+object WasmExnRefHeapType: WasmHeapType(0x69)
+object WasmArrayRefHeapType: WasmHeapType(0x6a)
+object WasmStructRefHeapType: WasmHeapType(0x6b)
+object WasmI31RefHeapType: WasmHeapType(0x6c)
+object WasmEqRefHeapType: WasmHeapType(0x6d)
+object WasmAnyRefHeapType: WasmHeapType(0x6e)
+object WasmExternRefHeapType: WasmHeapType(0x6f)
+object WasmFuncHeapType: WasmHeapType(0x70)
+object WasmNoneHeapType: WasmHeapType(0x71)
+object WasmNoExternRefHeapType: WasmHeapType(0x72)
+object WasmNoFuncHeapType: WasmHeapType(0x73)
+object WasmNoExnHeapType: WasmHeapType(0x74)
 class WasmIndexHeapType(type: Long): WasmHeapType(type)
 
 /**
  * spec 5.3.4
  */
-class WasmNonNullableReferenceType(heapType: WasmHeapType): WasmReferenceType(heapType)
-class WasmNullableReferenceType(heapType: WasmHeapType): WasmReferenceType(heapType)
-class WasmReferenceHeapType(heapType: WasmHeapType): WasmReferenceType(heapType)
+class WasmNonNullableReferenceType(heapType: WasmHeapType): WasmReferenceType(heapType) {
+    override fun equals(other: Any?): Boolean {
+        return other is WasmNonNullableReferenceType && other.heapType == heapType
+    }
+
+    override fun hashCode(): Int {
+        return this::class.hashCode()
+    }
+}
+class WasmNullableReferenceType(heapType: WasmHeapType): WasmReferenceType(heapType) {
+    override fun equals(other: Any?): Boolean {
+        return other is WasmNullableReferenceType && other.heapType == heapType
+    }
+
+    override fun hashCode(): Int {
+        return this::class.hashCode()
+    }
+}
+class WasmReferenceHeapType(heapType: WasmHeapType): WasmReferenceType(heapType) {
+    override fun equals(other: Any?): Boolean {
+        return other is WasmReferenceHeapType && other.heapType == heapType
+    }
+
+    override fun hashCode(): Int {
+        return this::class.hashCode()
+    }
+}
