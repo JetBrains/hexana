@@ -213,7 +213,7 @@ internal fun CommonByteBuffer.listDataSegments(
     } else {
         emptyList()
     }
-    val listDataSections = listDataSections(wasmModule)
+    val listDataSections = listDataSectionInternal(wasmModule)
     val dataSegments0 = listDataSections.map { it.toMcpDataSegment(true) }
 
     val dataSegments1 = dataSegments0.slice(segmentRange.first until minOf(segmentRange.last, dataSegments0.size))

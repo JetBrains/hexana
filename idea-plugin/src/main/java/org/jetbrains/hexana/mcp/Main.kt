@@ -19,7 +19,9 @@ fun main() {
         with(buffer) {
             printJson("importedSymbols", wasmModule, CommonByteBuffer::importFunctions)
             //printJson(wasmModule, CommonByteBuffer::listFunctions)
-            printJson("listDataSections", wasmModule,CommonByteBuffer::listDataSections)
+            printJson("listDataSections", wasmModule) {
+                listDataSections(it, 0..10)
+            }
             printJson("listExports", wasmModule, CommonByteBuffer::listExports)
             //printJson("listExportedFunctions", wasmModule, CommonByteBuffer::listExportedFunctions)
 
@@ -27,7 +29,9 @@ fun main() {
             //    functionsByIndices(wasmModule, listOf(1, 2, 8))
             //}
             printJson("listTypes", wasmModule, CommonByteBuffer::listTypes)
-            printJson("listDataSegments", wasmModule, CommonByteBuffer::listDataSegments)
+            printJson("listDataSegments", wasmModule) {
+                listDataSegments(0..10, it!!, true, true, 0)
+            }
             printJson("listMemory", wasmModule, CommonByteBuffer::listMemory)
         }
 

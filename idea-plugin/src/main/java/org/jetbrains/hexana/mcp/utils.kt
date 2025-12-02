@@ -67,7 +67,8 @@ import org.jetbrains.hexana.wasm.sections.WasmValueType
 import org.jetbrains.hexana.wasm.sections.WasmVecType
 
 
-internal fun CommonByteBuffer.listDataSections(wasmModule: WasmModule?): List<DataEntry> {
+
+internal fun CommonByteBuffer.listDataSectionInternal(wasmModule: WasmModule?): List<DataEntry> {
     wasmModule ?: return emptyList()
     val data = with(wasmModule.dataSection) {
         this ?: return@with emptyList()

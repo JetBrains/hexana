@@ -235,26 +235,58 @@ class HexanaToolset : McpToolset {
 
     @McpTool("list_data")
     @McpDescription("""
-    Extracts all data segments from a WebAssembly module and returns them as a JSON array of DataEntry objects.
+    Extracts all raw data segments from a WebAssembly module and returns them as a JSON array 
+    of DataEntry objects. This tool exposes the Data Section in its most direct binary form and 
+    is useful when exact byte payloads are needed for debugging, binary inspection, resource 
+    extraction, or round-tripping tests.
+
+    ⚠ IMPORTANT PERFORMANCE NOTE
+    -----------------------------
+    Raw data segments can be extremely large in some modules (Skiko, Emscripten, wasm-bindgen, 
+    WASI binaries). Dumping every segment at once may produce extremely large JSON responses.  
+    It is recommended to:
+
+      1. Run `summarize_module` first to see how many data segments exist and how large they are.
+      2. Use range slicing (`from` + `to`) to fetch only a required slice of the data section.
+      3. Prefer `list_data_segments` if you need metadata (kinds, offset expressions, previews)
+         rather than the raw byte payload.
+
+    • entriesRange
+            Filter by entries index range:
+              { "from": N, "to": M }
+            Only segments with dataidx in this range will be returned.
+
+      If both are omitted, all segments are returned (not recommended for large modules).
+
+    Range Metadata in Response:
+      • from          – starting dataidx of this slice
+      • to            – ending dataidx of this slice
+      • returned      – number of segments included
+      • totalSegments – total number of data segments in the module
+      • truncated     – true if this slice does not include all segments
+
+    --------------------------------------------------------------------
+    DESCRIPTION OF RETURNED ENTRIES (DataEntry)
+    --------------------------------------------------------------------
 
     Supports all WebAssembly data segment kinds:
       • kind 0 – active segment for memory 0 with an offset expression
-      • kind 1 – passive segment (no memory index, no offset expression)
+      • kind 1 – passive segment (no memory index, no offset)
       • kind 2 – active segment for memory X with an offset expression
 
     Each DataEntry contains:
-      • index: sequential index of the segment
+      • index: zero-based segment index (dataidx)
       • kind: the numeric segment kind (0, 1, or 2)
       • offset: evaluated constant offset for active segments; 0 for passive
-      • data: base64-encoded raw bytes of the segment’s payload (decoded into ByteArray)
+      • data: base64-encoded raw bytes of the segment’s payload
       • memoryIndex: memory index for active segments (0 or X), null for passive
       • expression: textual representation of the offset expression, null for passive
 
-    The 'data' field corresponds to the b* byte list in the Wasm binary grammar:
+    This follows the WebAssembly binary grammar:
       data ::=
-        0:u32 e:expr b*:list(byte)            → active segment on memory 0
-      | 1:u32 b*:list(byte)                   → passive segment
-      | 2:u32 x:memidx e:expr b*:list(byte)   → active segment on memory x
+          0:u32 e:expr b*:list(byte)             → active segment on memory 0
+        | 1:u32 b*:list(byte)                    → passive segment
+        | 2:u32 x:memidx e:expr b*:list(byte)    → active segment on memory x
 
     ---------------------------
     EXAMPLES OF RETURNED VALUES
@@ -302,46 +334,75 @@ class HexanaToolset : McpToolset {
         "expression": "i32.const 16"
       }
 
+    -------------------------------
+    EXAMPLES OF RANGE-BASED USAGE
+    -------------------------------
+
+    Request:
+      { "from": 0, "to": 2 }
+
+    Response (simplified):
+      {
+        "entries": [ ... three DataEntry objects ... ],
+        "from": 0,
+        "to": 2,
+        "returned": 3,
+        "totalSegments": 57,
+        "truncated": true
+      }
+
+    Request next slice:
+      { "from": 3, "to": 5 }
+
     ----------------------------------------------------
-    ALTERNATIVE VIA WASM COMMAND-LINE TOOLS (for reference)
+    ALTERNATIVE VIA WASM COMMAND-LINE TOOLS (reference)
     ----------------------------------------------------
 
-    Using WABT (https://github.com/WebAssembly/wabt):
+    Using WABT:
       • Convert to text (shows data segments):
-          wasm2wat module.wasm
+            wasm2wat module.wasm
+      • Annotated text with extra offsets:
+            wasm2wat --enable-annotations module.wasm
+      • Raw dump of data payloads:
+            wasm-objdump -x module.wasm
+            wasm-objdump -s module.wasm    (shows data section only)
 
-      • Annotated text format with extra offsets:
-          wasm2wat --enable-annotations module.wasm
+    Using wasm-tools:
+      • IR view:
+            wasm-tools print module.wasm
+      • Raw binary dump:
+            wasm-tools dump module.wasm
+      • Convert between WAT and binary:
+            wasm-tools parse   foo.wat -o foo.wasm
+            wasm-tools print   foo.wasm
 
-      • Raw dump showing data payload bytes:
-          wasm-objdump -x module.wasm
-          wasm-objdump -s module.wasm    (shows data segments only)
-
-    Using wasm-tools (Bytecode Alliance):
-      • Inspect structured IR (shows segments):
-          wasm-tools print module.wasm
-
-      • Dump raw sections including data:
-          wasm-tools dump module.wasm
-
-      • Convert binary <-> wat:
-          wasm-tools parse     foo.wat   -o foo.wasm
-          wasm-tools print     foo.wasm
-
-    This MCP tool provides a higher-level, IDE-friendly JSON representation that
-    combines structural information (kind, memoryIndex), decoded offset expression,
-    and base64-encoded raw payload bytes suitable for analysis and testing.
-    """)
+    This MCP tool provides a high-level, IDE-friendly, index-sliced JSON representation of data 
+    segments—combining kind, memory index, offset expressions, and base64-encoded raw payload bytes—
+    suitable for analysis, automated testing, and LLM reasoning.
+    """
+    )
     fun listData(
-        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+        @McpDescription("""
+            Filter by segment index range:
+              { "from": N, "to": M }
+            Only segments with dataidx in this range will be returned.
+        """)
+        entriesRange: Map<String, Int>,
     ): String {
         val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
+        val range = run {
+            val from = entriesRange["from"] ?: return """{"error": "Invalid segmentRange no `from`"}"""
+            val to = entriesRange["to"] ?: return """{"error": "Invalid segmentRange no `to`"}"""
+            if (to < from) return """{"error": "Invalid segmentRange `to` must be >= `from`"}"""
+            from .. to
+        }
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
-        return objectMapper.writeValueAsString(buffer.listDataSections(wasmModule))
+        return objectMapper.writeValueAsString(buffer.listDataSections(wasmModule, range))
     }
 
     @McpTool("list_exports")
