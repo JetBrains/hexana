@@ -1,8 +1,5 @@
 package org.jetbrains.hexana
 
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.State
-import androidx.compose.runtime.mutableStateOf
 import com.intellij.openapi.actionSystem.DataKey
 import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.EDT
@@ -16,15 +13,12 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.BinaryEditorView
-import org.jetbrains.hexana.ui.WatConversionState
 import org.jetbrains.hexana.wat.WatFileset
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
@@ -200,60 +194,3 @@ data class HexViewState(
     }
 }
 
-class HexViewStateHolder {
-    val currentState: MutableState<HexViewState> = mutableStateOf(HexViewState())
-
-    private val _hexScrollFlow = kotlinx.coroutines.flow.MutableSharedFlow<Long>(extraBufferCapacity = 64)
-    val hexScrollFlow: kotlinx.coroutines.flow.SharedFlow<Long> = _hexScrollFlow
-
-    private val _cursorLineOffset: MutableState<Int> = mutableStateOf(-1)
-    val cursorLineOffset: State<Int> get() = _cursorLineOffset
-
-    private val _cursorPositionLine: MutableState<Int> = mutableStateOf(-1)
-    val cursorPositionLine: State<Int> get() = _cursorPositionLine
-
-    private val _hoverLineOffset: MutableState<Int> = mutableStateOf(-1)
-    val hoverLineOffset: State<Int> get() = _hoverLineOffset
-
-    private val _hoverLine: MutableState<Int> = mutableStateOf(-1)
-    val hoverLine: State<Int> get() = _hoverLine
-
-    private val _bytesPerRow: MutableState<Int> = mutableStateOf(16)
-    val bytesPerRow: State<Int> get() = _bytesPerRow
-
-    private val _conversionState = MutableStateFlow<WatConversionState?>(null)
-    internal val conversionStateFlow = _conversionState.asStateFlow()
-
-    val topFraction: Float
-        get() = currentState.value.topFraction
-
-    fun setTopFraction(topFraction: Float) {
-        currentState.value = currentState.value.copy(topFraction = topFraction.coerceIn(0f, 1f))
-    }
-
-    fun setSelectedTab(tabIndex: Int) {
-        currentState.value = currentState.value.copy(tabIndex = tabIndex)
-    }
-
-    fun scrollHexViewTo(offset: Long) {
-        _hexScrollFlow.tryEmit(offset)
-    }
-
-    fun setCursorPosition(line: Int, lineOffset: Int) {
-        _cursorLineOffset.value = lineOffset
-        _cursorPositionLine.value = line
-    }
-
-    fun startConversion(): Boolean {
-        return _conversionState.compareAndSet(null, WatConversionState.Loading)
-    }
-
-    fun setConversionState(state: WatConversionState) {
-        _conversionState.value = state
-    }
-
-    fun setHoverPosition(line: Int, lineOffset: Int) {
-        _hoverLineOffset.value = lineOffset
-        _hoverLine.value = line
-    }
-}
