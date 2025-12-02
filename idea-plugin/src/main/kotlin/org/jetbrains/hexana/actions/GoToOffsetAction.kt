@@ -31,6 +31,11 @@ class GoToOffsetAction : AnAction() {
         if (dialog.showAndGet()) {
             val address = dialog.offset.coerceIn(offsetRange)
             hexanaEditor.stateHolder.scrollHexViewTo(address)
+
+            val bytesPerRow = hexanaEditor.stateHolder.bytesPerRow.value
+            val line = (address / bytesPerRow).toInt()
+            val lineOffset  = address.rem(bytesPerRow).toInt()
+            hexanaEditor.stateHolder.setCursorPosition(line, lineOffset)
         }
     }
 }

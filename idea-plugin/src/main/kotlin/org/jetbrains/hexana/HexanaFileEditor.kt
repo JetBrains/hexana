@@ -2,10 +2,7 @@ package org.jetbrains.hexana
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.ui.geometry.Offset
 import com.intellij.openapi.actionSystem.DataKey
 import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.EDT
@@ -18,7 +15,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.ijent.spi.IjentDeployingStrategy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
@@ -207,11 +203,14 @@ class HexViewStateHolder {
     private val _hexScrollFlow = kotlinx.coroutines.flow.MutableSharedFlow<Long>(extraBufferCapacity = 64)
     val hexScrollFlow: kotlinx.coroutines.flow.SharedFlow<Long> = _hexScrollFlow
 
-    private val _cursorPositionLeft: MutableState<Int> = mutableStateOf(-1)
-    val cursorPositionLeft: State<Int> get() = _cursorPositionLeft
+    private val _cursorPositionLineOffset: MutableState<Int> = mutableStateOf(-1)
+    val cursorPositionLineOffset: State<Int> get() = _cursorPositionLineOffset
 
-    private val _cursorPositionTop: MutableState<Int> = mutableStateOf(-1)
-    val cursorPositionTop: State<Int> get() = _cursorPositionTop
+    private val _cursorPositionLine: MutableState<Int> = mutableStateOf(-1)
+    val cursorPositionLine: State<Int> get() = _cursorPositionLine
+
+    private val _bytesPerRow: MutableState<Int> = mutableStateOf(16)
+    val bytesPerRow: State<Int> get() = _bytesPerRow
 
     val topFraction: Float
         get() = currentState.value.topFraction
@@ -225,12 +224,11 @@ class HexViewStateHolder {
     }
 
     fun scrollHexViewTo(offset: Long) {
-        // Positive = scroll down, Negative = scroll up
         _hexScrollFlow.tryEmit(offset)
     }
 
-    fun setCursorPosition(left: Int, top: Int) {
-        _cursorPositionLeft.value = left
-        _cursorPositionTop.value = top
+    fun setCursorPosition(line: Int, lineOffset: Int) {
+        _cursorPositionLineOffset.value = lineOffset
+        _cursorPositionLine.value = line
     }
 }

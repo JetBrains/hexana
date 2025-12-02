@@ -37,9 +37,11 @@ import org.jetbrains.jewel.ui.component.Text
 import kotlin.math.min
 
 @Composable
-internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, bytesPerRow: Int = 16, showOffsets: Boolean = true) {
+internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: Boolean = true) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         val codePanelListState = rememberLazyListState()
+
+        val bytesPerRow by remember { state.bytesPerRow }
 
         val separator = 4.dp
         val spacing = 8.dp
@@ -140,9 +142,9 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, bytesPerRow: I
                                             buf.slice(start until end).forEachIndexed { byteIndex, byte ->
                                                 val byteText = (byte.toInt() and 0xFF).asHexString()
                                                 val style = if (
-                                                    rowIndex == state.cursorPositionLeft.value
+                                                    byteIndex == state.cursorPositionLineOffset.value
                                                     &&
-                                                    byteIndex == state.cursorPositionTop.value
+                                                    rowIndex == state.cursorPositionLine.value
                                                 ) {
                                                      SpanStyle(color = HexanaTheme.hexTextColor, background = Color.Yellow)
                                                  } else {
