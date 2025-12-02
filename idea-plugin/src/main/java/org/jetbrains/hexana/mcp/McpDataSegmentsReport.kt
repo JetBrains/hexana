@@ -189,7 +189,13 @@ internal fun GlobalRecord.toMcpGlobalReport(exports: List<ExportRecord>): McpGlo
 
 internal class McpSummary(val totalSegments: Int, val activeSegments: Int, val passiveSegments: Int, val memories: Int)
 
-internal fun CommonByteBuffer.listDataSegments(wasmModule: WasmModule?): McpDataSegmentsReport {
+internal fun CommonByteBuffer.listDataSegments(
+    segmentRange: IntRange,
+    wasmModule: WasmModule?,
+    includeExports: Boolean,
+    includeGlobals: Boolean,
+    minByteLength: Int?
+): McpDataSegmentsReport {
     wasmModule ?: return McpDataSegmentsReport(
         emptyList(), emptyList(),
         segments = emptyList(),
@@ -197,22 +203,29 @@ internal fun CommonByteBuffer.listDataSegments(wasmModule: WasmModule?): McpData
         exportedSymbols = emptyList(),
         summary = McpSummary(0, 0, 0, 0)
     )
-    val imports = with(wasmModule.importSection) {
-        this ?: return@with emptyList()
-        getImportRecords()
-    }
 
     val memory = listMemory(wasmModule)
     val mcpMempory = memory.map {
             record -> McpMemoryReport(record.memoryIdx, record.limit, record.definedIn)
     }
-    val exports = listExports(wasmModule)
+    val exports = if (includeExports) {
+        listExports(wasmModule)
+    } else {
+        emptyList()
+    }
     val listDataSections = listDataSections(wasmModule)
-    val dataSegments = listDataSections.map { it.toMcpDataSegment(listDataSections.size < 1000) }
+    val dataSegments0 = listDataSections.map { it.toMcpDataSegment(true) }
 
+    val dataSegments1 = dataSegments0.slice(segmentRange.first until minOf(segmentRange.last, dataSegments0.size))
 
-    val globals = listGlobals(wasmModule).map { it.toMcpGlobalReport(exports) }
-    val summary = McpSummary(dataSegments.size, dataSegments.count { it.mode == "active" }, dataSegments.count { it.mode == "passive" }, memory.size)
+    val dataSegments = dataSegments1.filter { it.byteLength >= (minByteLength ?: 0) }
+
+    val globals = if (includeGlobals) {
+        listGlobals(wasmModule).map { it.toMcpGlobalReport(exports) }
+    } else {
+        emptyList()
+    }
+    val summary = McpSummary(dataSegments0.size, dataSegments0.count { it.mode == "active" }, dataSegments0.count { it.mode == "passive" }, memory.size)
     return McpDataSegmentsReport(mcpMempory, globals, dataSegments, null, exports.map { it.name }, summary)
 }
 
