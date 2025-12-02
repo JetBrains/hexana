@@ -75,6 +75,9 @@ public class WatParserDefinition implements ParserDefinition {
         if (nodeType == WatElementType.TAG) {
             return new WatTagElement(node);
         }
+        if (nodeType == WatElementType.DATA) {
+            return new WatDataElement(node);
+        }
         if (nodeType == WatElementType.LOCAL) {
             return new WatLocalElement(node);
         }

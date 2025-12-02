@@ -15,6 +15,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.createComposePanel
@@ -53,9 +54,11 @@ class HexanaFileEditor(
         initPanel()
     }
 
+    var binaryProvider: BinaryProvider? = null
+
     fun initPanel() {
         val buf = myFile.contentsToByteArray()
-        val binaryProvider = when (myFile.extension) {
+        binaryProvider = when (myFile.extension) {
             "wasm" -> object: WasmBinaryVirtualFileProvider(myFile) {
                 override suspend fun createTextEditor(file: VirtualFile): TextEditor {
                      return withContext(Dispatchers.EDT) {
@@ -74,7 +77,7 @@ class HexanaFileEditor(
         }
 
         val hexView = createComposePanel {
-            BinaryEditorView(binaryProvider, stateHolder)
+            BinaryEditorView(binaryProvider!!, stateHolder)
         }
         panel.add(hexView)
     }

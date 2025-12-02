@@ -94,6 +94,7 @@
         </action>
         <action id="hexana.goToOffset" class="org.jetbrains.hexana.actions.GoToOffsetAction"
                 use-shortcut-of="GotoLine"/>
+        <action id="hexana.showElementInHexView" class="org.jetbrains.hexana.actions.ShowElementInHexViewAction"/>
     </actions>
 
 </idea-plugin>

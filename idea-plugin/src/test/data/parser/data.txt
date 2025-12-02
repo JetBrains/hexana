@@ -1,5 +1,5 @@
 Wat File
-  WatPsiElement(DATA)
+  WatDataElement(DATA)
     PsiElement(()('(')
     PsiElement(data)('data')
     PsiWhiteSpace(' ')

@@ -71,6 +71,18 @@ class HexViewStateHolder {
         _selection.value = HexSelection(HexPosition(startLine, startLineOffset), HexPosition(endLine, endLineOffset))
     }
 
+    fun setSelection(offsetRange: LongRange) {
+        val bytesPerRow = bytesPerRow.value
+
+        val startLine = (offsetRange.first / bytesPerRow).toInt()
+        val startLineOffset = (offsetRange.first % bytesPerRow).toInt()
+
+        val endLine = (offsetRange.last / bytesPerRow).toInt()
+        val endLineOffset = (offsetRange.last % bytesPerRow).toInt()
+
+        setSelection(startLine, startLineOffset, endLine, endLineOffset)
+    }
+
     fun startConversion(): Boolean {
         return _conversionState.compareAndSet(null, WatConversionState.Loading)
     }
