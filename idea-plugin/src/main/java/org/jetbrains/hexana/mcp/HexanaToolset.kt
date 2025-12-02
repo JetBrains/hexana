@@ -1116,8 +1116,8 @@ class HexanaToolset : McpToolset {
         val range = run {
             val from = segmentRange.get("from") ?: return """{"error": "Invalid segmentRange no `from`"}"""
             val to = segmentRange.get("to") ?: Int.MAX_VALUE
-            if (to < from) return """{"error": "Invalid segmentRange `to` must be >= `from`"}"""
-            to until from
+            if (from > to) return """{"error": "Invalid segmentRange `to` must be >= `from`"}"""
+            from until to
         }
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
