@@ -190,7 +190,11 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                                             byteIndex == state.hoverLineOffset.value &&
                                                     rowIndex == state.hoverLine.value
 
-                                        val isUnderCursor = false
+
+                                        val isUnderCursor =
+                                            byteIndex == state.cursorLineOffset.value &&
+                                                    rowIndex == state.cursorPositionLine.value
+
 
                                         val backgroundColor = if (isHover) {
                                             if (isUnderCursor) HexanaTheme.hexCellHoverActiveColor else HexanaTheme.hexCellHoverColor
