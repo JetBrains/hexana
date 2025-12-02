@@ -206,11 +206,17 @@ class HexViewStateHolder {
     private val _hexScrollFlow = kotlinx.coroutines.flow.MutableSharedFlow<Long>(extraBufferCapacity = 64)
     val hexScrollFlow: kotlinx.coroutines.flow.SharedFlow<Long> = _hexScrollFlow
 
-    private val _cursorPositionLineOffset: MutableState<Int> = mutableStateOf(-1)
-    val cursorPositionLineOffset: State<Int> get() = _cursorPositionLineOffset
+    private val _cursorLineOffset: MutableState<Int> = mutableStateOf(-1)
+    val cursorLineOffset: State<Int> get() = _cursorLineOffset
 
     private val _cursorPositionLine: MutableState<Int> = mutableStateOf(-1)
     val cursorPositionLine: State<Int> get() = _cursorPositionLine
+
+    private val _hoverLineOffset: MutableState<Int> = mutableStateOf(-1)
+    val hoverLineOffset: State<Int> get() = _hoverLineOffset
+
+    private val _hoverLine: MutableState<Int> = mutableStateOf(-1)
+    val hoverLine: State<Int> get() = _hoverLine
 
     private val _bytesPerRow: MutableState<Int> = mutableStateOf(16)
     val bytesPerRow: State<Int> get() = _bytesPerRow
@@ -234,7 +240,7 @@ class HexViewStateHolder {
     }
 
     fun setCursorPosition(line: Int, lineOffset: Int) {
-        _cursorPositionLineOffset.value = lineOffset
+        _cursorLineOffset.value = lineOffset
         _cursorPositionLine.value = line
     }
 
@@ -244,5 +250,10 @@ class HexViewStateHolder {
 
     fun setConversionState(state: WatConversionState) {
         _conversionState.value = state
+    }
+
+    fun setHoverPosition(line: Int, lineOffset: Int) {
+        _hoverLineOffset.value = lineOffset
+        _hoverLine.value = line
     }
 }

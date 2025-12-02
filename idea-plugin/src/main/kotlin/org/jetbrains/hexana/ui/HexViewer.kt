@@ -25,14 +25,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.jewel.foundation.modifier.onHover
 import org.jetbrains.jewel.ui.component.Text
 import kotlin.math.min
 
@@ -76,15 +74,21 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(spacing)
                     ) {
-                        Text(
-                            (0 until bytesPerRow).joinToString(" ") { it.asHexString() },
-                            softWrap = false,
-                            maxLines = 1,
-                            style = TextStyle(
-                                color = HexanaTheme.textColor,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        )
+                        (0 until bytesPerRow).forEach { byte ->
+                            Box(
+                                modifier = Modifier.padding(end = 2.dp)
+                            ) {
+                                Text(
+                                    byte.asHexString(),
+                                    softWrap = false,
+                                    maxLines = 1,
+                                    style = TextStyle(
+                                        color = HexanaTheme.textColor,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
                 Box(
@@ -134,32 +138,41 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                                     val start = rowIndex * bytesPerRow
                                     val end = min(start + bytesPerRow, buf.size)
 
-                                    Text(
-                                        softWrap = false,
-                                        maxLines = 1,
-                                        style = TextStyle(fontFamily = FontFamily.Monospace),
-                                        text = buildAnnotatedString {
-                                            buf.slice(start until end).forEachIndexed { byteIndex, byte ->
-                                                val byteText = (byte.toInt() and 0xFF).asHexString()
-                                                val style = if (
-                                                    byteIndex == state.cursorPositionLineOffset.value
-                                                    &&
+                                    buf.slice(start until end).forEachIndexed { byteIndex, byte ->
+                                        val byteText = (byte.toInt() and 0xFF).asHexString()
+                                        val isUnderCursor =
+                                            byteIndex == state.cursorLineOffset.value &&
                                                     rowIndex == state.cursorPositionLine.value
-                                                ) {
-                                                     SpanStyle(color = HexanaTheme.hexTextColor, background = Color.Yellow)
-                                                 } else {
-                                                     SpanStyle(color = HexanaTheme.hexTextColor)
-                                                 }
 
-                                                withStyle(
-                                                    style = style
-                                                ) {
-                                                    append(byteText)
+                                        val isHover =
+                                            byteIndex == state.hoverLineOffset.value &&
+                                                    rowIndex == state.hoverLine.value
+
+                                        val backgroundColor = if (isHover) {
+                                            if (isUnderCursor) HexanaTheme.hexCellHoverActiveColor else HexanaTheme.hexCellHoverColor
+                                        } else {
+                                            if (isUnderCursor) HexanaTheme.hexCellActiveColor else Color.Unspecified
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(end = 2.dp)
+                                                .background(backgroundColor)
+                                                .onHover { hovered ->
+                                                    if (hovered) state.setHoverPosition(rowIndex, byteIndex)
                                                 }
-
-                                                if (byteIndex < end - start - 1) append(" ")
-                                            }
-                                        })
+                                        ) {
+                                            Text(
+                                                byteText,
+                                                softWrap = false,
+                                                maxLines = 1,
+                                                style = TextStyle(
+                                                    fontFamily = FontFamily.Monospace,
+                                                    color = HexanaTheme.hexTextColor
+                                                )
+                                            )
+                                        }
+                                    }
                                 }
                             }
                             Box(modifier = Modifier.width(separator).background(Color.Gray))
@@ -172,16 +185,31 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                                 ) {
                                     val start = rowIndex * bytesPerRow
                                     val end = min(start + bytesPerRow, buf.size)
-                                    val str = buf.slice(start until end).asASCII()
-                                    Text(
-                                        str,
-                                        softWrap = false,
-                                        maxLines = 1,
-                                        style = TextStyle(
-                                            color = HexanaTheme.textColor,
-                                            fontFamily = FontFamily.Monospace
+                                    buf.slice(start until end).forEachIndexed { byteIndex, byte ->
+                                        val isHover =
+                                            byteIndex == state.hoverLineOffset.value &&
+                                                    rowIndex == state.hoverLine.value
+
+                                        val isUnderCursor = false
+
+                                        val backgroundColor = if (isHover) {
+                                            if (isUnderCursor) HexanaTheme.hexCellHoverActiveColor else HexanaTheme.hexCellHoverColor
+                                        } else {
+                                            if (isUnderCursor) HexanaTheme.hexCellActiveColor else Color.Unspecified
+                                        }
+
+                                        val text = byte.asASCII()
+                                        Text(
+                                            text ?: ".",
+                                            modifier = Modifier.background(backgroundColor),
+                                            softWrap = false,
+                                            maxLines = 1,
+                                            style = TextStyle(
+                                                color = HexanaTheme.textColor,
+                                                fontFamily = FontFamily.Monospace
+                                            )
                                         )
-                                    )
+                                    }
                                 }
                             }
                         }
@@ -224,11 +252,9 @@ internal fun ByteArray.asASCII(): String {
     }
 }
 
-private fun List<Byte>.asASCII(): String {
-    return joinToString("") {
-        val b = it.toInt() and 0xFF
-        if (b in 32..126) b.toChar().toString() else "."
-    }
+private fun Byte.asASCII(): String? {
+    val b = toInt() and 0xFF
+    return if (b in 32..126) b.toChar().toString() else null
 }
 
 private fun Modifier.borderBottom(color: Color, width: Dp, verticalPadding: Dp): Modifier = this.drawBehind {

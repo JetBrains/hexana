@@ -16,4 +16,16 @@ object HexanaTheme {
     val hexTextColor: Color
         @Composable
         get() = if (JewelTheme.isDark) Color.Gray else Color.DarkGray
+
+    val hexCellActiveColor: Color
+        @Composable
+        get() = Color.Yellow
+
+    val hexCellHoverActiveColor: Color
+        @Composable
+        get() = Color(197, 202, 252, 255)
+
+    val hexCellHoverColor: Color
+        @Composable
+        get() = Color(255, 175, 42, 255)
 }
