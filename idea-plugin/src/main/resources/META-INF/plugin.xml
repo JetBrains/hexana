@@ -92,6 +92,8 @@
         <action id="hexana.openInHexView" class="org.jetbrains.hexana.actions.OpenInHexViewAction">
             <add-to-group group-id="RevealGroup" anchor="last"/>
         </action>
+        <action id="hexana.goToAddress" class="org.jetbrains.hexana.actions.GoToAddressAction"
+                use-shortcut-of="GotoLine"/>
     </actions>
 
 </idea-plugin>

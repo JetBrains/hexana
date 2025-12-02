@@ -2,6 +2,8 @@ package org.jetbrains.hexana
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import com.intellij.openapi.actionSystem.DataKey
+import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
@@ -31,16 +33,23 @@ class HexanaFileEditor(
     val myProject: Project,
     val myFile: VirtualFile
 ) : FileEditor, UserDataHolderBase() {
-    val panel: JPanel
 
-    private val stateHolder = HexViewStateHolder()
+    companion object {
+        val KEY = DataKey.create<HexanaFileEditor>("hexana_file_editor")
+    }
+
+    val panel: JComponent
+
+    val stateHolder = HexViewStateHolder()
 
     private var myTextEditor: TextEditor? = null
 
     private val myClosedTextEditors = CopyOnWriteArrayList<TextEditor>()
 
     init {
-        panel = JPanel(BorderLayout())
+        panel = UiDataProvider.wrapComponent(JPanel(BorderLayout())) { sink ->
+            sink[KEY] = this
+        }
         // TODO: 🐛 if we will have the same code in init section without moving it to a separate method
         // all closure variables will be lost
         initPanel()
