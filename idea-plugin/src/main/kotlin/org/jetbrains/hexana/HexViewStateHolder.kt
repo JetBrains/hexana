@@ -9,23 +9,20 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.jetbrains.hexana.ui.WatConversionState
 
+
+class HexPosition(val line: Int, val lineOffset: Int)
+
 class HexViewStateHolder {
     val currentState: MutableState<HexViewState> = mutableStateOf(HexViewState())
 
     private val _hexScrollFlow = MutableSharedFlow<Long>(extraBufferCapacity = 64)
     val hexScrollFlow: SharedFlow<Long> = _hexScrollFlow
 
-    private val _cursorLineOffset: MutableState<Int> = mutableStateOf(-1)
-    val cursorLineOffset: State<Int> get() = _cursorLineOffset
+    private val _cursorPosition = mutableStateOf(HexPosition(-1, -1))
+    val cursorPosition: HexPosition get() = _cursorPosition.value
 
-    private val _cursorPositionLine: MutableState<Int> = mutableStateOf(-1)
-    val cursorPositionLine: State<Int> get() = _cursorPositionLine
-
-    private val _hoverLineOffset: MutableState<Int> = mutableStateOf(-1)
-    val hoverLineOffset: State<Int> get() = _hoverLineOffset
-
-    private val _hoverLine: MutableState<Int> = mutableStateOf(-1)
-    val hoverLine: State<Int> get() = _hoverLine
+    private val _hoverPosition = mutableStateOf(HexPosition(-1, -1))
+    val hoverPosition: HexPosition get() = _hoverPosition.value
 
     private val _bytesPerRow: MutableState<Int> = mutableStateOf(16)
     val bytesPerRow: State<Int> get() = _bytesPerRow
@@ -49,8 +46,11 @@ class HexViewStateHolder {
     }
 
     fun setCursorPosition(line: Int, lineOffset: Int) {
-        _cursorLineOffset.value = lineOffset
-        _cursorPositionLine.value = line
+        _cursorPosition.value = HexPosition(line, lineOffset)
+    }
+
+    fun setHoverPosition(line: Int, lineOffset: Int) {
+        _hoverPosition.value = HexPosition(line, lineOffset)
     }
 
     fun startConversion(): Boolean {
@@ -59,10 +59,5 @@ class HexViewStateHolder {
 
     fun setConversionState(state: WatConversionState) {
         _conversionState.value = state
-    }
-
-    fun setHoverPosition(line: Int, lineOffset: Int) {
-        _hoverLineOffset.value = lineOffset
-        _hoverLine.value = line
     }
 }

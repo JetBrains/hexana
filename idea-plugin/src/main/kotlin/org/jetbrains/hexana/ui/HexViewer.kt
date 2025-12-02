@@ -140,13 +140,10 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
 
                                     buf.slice(start until end).forEachIndexed { byteIndex, byte ->
                                         val byteText = (byte.toInt() and 0xFF).asHexString()
-                                        val isUnderCursor =
-                                            byteIndex == state.cursorLineOffset.value &&
-                                                    rowIndex == state.cursorPositionLine.value
+                                        val isUnderCursor = byteIndex == state.cursorPosition.lineOffset &&
+                                                    rowIndex == state.cursorPosition.line
 
-                                        val isHover =
-                                            byteIndex == state.hoverLineOffset.value &&
-                                                    rowIndex == state.hoverLine.value
+                                        val isHover = byteIndex == state.hoverPosition.lineOffset && rowIndex == state.hoverPosition.line
 
                                         val backgroundColor = if (isHover) {
                                             if (isUnderCursor) HexanaTheme.hexCellHoverActiveColor else HexanaTheme.hexCellHoverColor
@@ -186,14 +183,9 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                                     val start = rowIndex * bytesPerRow
                                     val end = min(start + bytesPerRow, buf.size)
                                     buf.slice(start until end).forEachIndexed { byteIndex, byte ->
-                                        val isHover =
-                                            byteIndex == state.hoverLineOffset.value &&
-                                                    rowIndex == state.hoverLine.value
-
-
-                                        val isUnderCursor =
-                                            byteIndex == state.cursorLineOffset.value &&
-                                                    rowIndex == state.cursorPositionLine.value
+                                        val isHover = byteIndex == state.hoverPosition.lineOffset && rowIndex == state.hoverPosition.line
+                                        val isUnderCursor = byteIndex == state.cursorPosition.lineOffset &&
+                                                rowIndex == state.cursorPosition.line
 
 
                                         val backgroundColor = if (isHover) {
