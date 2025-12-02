@@ -104,125 +104,125 @@ class HexanaToolset : McpToolset {
 
     @McpTool("list_functions")
     @McpDescription("""
-    Extracts all functions from a WebAssembly module and returns them as a JSON array of FunctionEntry objects.
+    Returns a paginated list of function metadata from a WebAssembly module.
+    This endpoint is designed for large modules where a full list of all functions
+    would be too large for LLM processing. The tool supports offset/limit pagination
+    and multiple detail modes to control the size of the response.
 
-    Supports both imported and internally defined functions:
-      • imported functions — declared in the Import Section, no code body
-      • internal functions — declared in the Function + Code Sections with locals and body
-      • exported functions — functions referenced by Export Section
-      • functions referenced by element/table segments (via funcidx)
+    ---------------------------------------
+    INPUT PARAMETERS
+    ---------------------------------------
+      • offset (optional, default = 0)
+          Starting index (funcidx) in the unified function index space.
+      
+      • limit (optional, default = 200)
+          Maximum number of function entries to return.
+          Recommended range: 50–500 depending on LLM capacity.
+      
+    ---------------------------------------
+    RETURN FORMAT
+    ---------------------------------------
 
-    Each FunctionEntry contains:
-      • funcidx: unified function index (imports first, then internal functions)
-      • definedIn: either "import" or "function_section"
-      • import: { module, name } if imported; null otherwise
-      • signature: { params: [...], return: [...] } using canonical WebAssembly type strings
-      • exportedAs: list of export names (possibly empty)
-      • codeOffset: byte offset of the function body in the Code Section (null for imports)
-      • codeSize: size of the function body in bytes (null for imports)
-      • instructionCount: number of decoded instructions (null for imports)
+    {
+      "functions": [ ... entries ... ],
+      "offset": <number>,
+      "limit": <number>,
+      "returned": <number>,
+      "total": <total number of functions>,
+      "nextOffset": <number or null>,
+      "mode": "summary" | "detailed" | "full",
+      "truncated": boolean
+    }
 
-    The 'funcidx' space corresponds to the Wasm binary grammar:
-        funcidx ::= import-funcidx*  followed by function-section-funcidx*
+    ---------------------------------------
+    FIELDS IN FUNCTION METADATA
+    ---------------------------------------
 
-    Import functions precede all internal functions.
+    All modes include:
+      • funcidx — unified function index
+      • definedIn — "import" or "function_section"
+      • signature — { params: [...], return: [...] }
+      • exportedAs — names under which the function is exported
 
-    ------------------------------------
-    EXAMPLES OF RETURNED FUNCTION ENTRIES
-    ------------------------------------
+    Additional fields in "detailed":
+      • localsCount — number of local variables
+      • codeSize — size of function body in bytes
+      • instructionCount — decoded instruction count (if available)
+      • preview — first 1–3 instructions (LLM-friendly)
+    
+    Additional fields in "full":
+      • locals — flat list of local types
+      • may include additional metadata provided by Hexana
+      • response may be truncated for safety
 
-    Example 1 — Imported function (no body):
-      (import "env" "abort" (func (param i32 i32 i32 i32)))
+    ---------------------------------------
+    EXAMPLE REQUEST
+    ---------------------------------------
 
-    JSON:
-      {
-        "funcidx": 0,
-        "definedIn": "import",
-        "import": { "module": "env", "name": "abort" },
-        "signature": {
-          "params": ["i32","i32","i32","i32"],
-          "return": []
+    {
+      "offset": 0,
+      "limit": 100,
+      "mode": "summary"
+    }
+
+    ---------------------------------------
+    EXAMPLE RESPONSE
+    ---------------------------------------
+
+    {
+      "functions": [
+        {
+          "funcidx": 0,
+          "definedIn": "import",
+          "signature": { "params": ["i32","i32"], "return": [] },
+          "exportedAs": []
         },
-        "locals": [],
-        "exportedAs": [],
-        "codeOffset": null,
-        "codeSize": null,
-        "instructionCount": null
-      }
+        {
+          "funcidx": 1,
+          "definedIn": "function_section",
+          "signature": { "params": ["i32"], "return": ["i32"] },
+          "exportedAs": ["increment"]
+        }
+      ],
+      "offset": 0,
+      "limit": 100,
+      "returned": 2,
+      "total": 42,
+      "nextOffset": 100,
+      "mode": "summary",
+      "truncated": false
+    }
 
-    Example 2 — Internal function with locals and small body:
-      (func (export "increment") (param i32) (result i32)
-        (local i32)
-        local.get 0
-        i32.const 1
-        i32.add)
-
-    JSON:
-      {
-        "funcidx": 1,
-        "definedIn": "function_section",
-        "import": null,
-        "signature": {
-          "params": ["i32"],
-          "return": ["i32"]
-        },
-        "locals": ["i32"],
-        "exportedAs": ["increment"],
-        "codeOffset": 340,
-        "codeSize": 24,
-        "instructionCount": 7
-      }
-
-    Example 3 — Internal function referenced by table/elem:
-      (table 5 funcref)
-      (elem (i32.const 0) 2 3 4)
-
-    JSON entry for funcidx = 3:
-      {
-        "funcidx": 3,
-        "definedIn": "function_section",
-        "import": null,
-        "signature": { "params": [], "return": [] },
-        "locals": [],
-        "exportedAs": [],
-        "codeOffset": 512,
-        "codeSize": 18,
-        "instructionCount": 2
-      }
-
-    -------------------------------------------------------
-    ALTERNATIVE VIA WASM COMMAND-LINE TOOLS (for reference)
-    -------------------------------------------------------
+    ---------------------------------------
+    ALTERNATIVE VIA WASM COMMAND-LINE TOOLS
+    ---------------------------------------
 
     Using WABT (https://github.com/WebAssembly/wabt):
-      • Convert to text (shows func bodies):
+      • List function imports:
+          wasm-objdump -x module.wasm | grep Import
+      • Count total functions:
+          wasm2wat module.wasm | grep "(func" -n
+      • Show signature list:
           wasm2wat module.wasm
 
-      • Show function imports/exports:
-          wasm-objdump -x module.wasm
-
-      • Show disassembly:
-          wasm-objdump -d module.wasm
-
     Using wasm-tools (Bytecode Alliance):
-      • Inspect structured IR:
+      • Print module structure:
           wasm-tools print module.wasm
-
-      • Dump raw sections including code and functions:
+      • Dump sections:
           wasm-tools dump module.wasm
+      • Count functions:
+          wasm-tools print module.wasm | grep "(func" -n
 
-      • Convert binary ↔ wat:
-          wasm-tools parse  foo.wat   -o foo.wasm
-          wasm-tools print  foo.wasm
-
-    This MCP tool provides a higher-level, IDE-friendly JSON representation that
-    unifies imported + internal functions, expands locals, links exports,
-    and adds a short decoded instruction preview suitable for analysis,
-    navigation, and LLM reasoning.
+    These approaches require manually correlating imports, definitions, signatures,
+    and export indices. The paginated list_functions_paginated MCP tool provides a 
+    safe, LLM-optimized, chunked directory of all functions with adjustable detail level.
 """)
     @Suppress("unused")
     suspend fun listFunctions(
-        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+        @McpDescription("Offset into the unified function index space") offset: Int = 0,
+        @McpDescription("Maximum number of entries to return") limit: Int = 200,
+
     ): String {
         val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
         if (file.fileType != WasmFileType.INSTANCE) {
@@ -230,7 +230,7 @@ class HexanaToolset : McpToolset {
         }
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
-        return objectMapper.writeValueAsString(buffer.listFunctions(wasmModule))
+        return objectMapper.writeValueAsString(buffer.listFunctions(wasmModule, offset, limit))
     }
 
     @McpTool("list_data")

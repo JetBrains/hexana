@@ -6,7 +6,7 @@ import org.jetbrains.hexana.wasm.sections.WasmTableExternalType
 
 fun CommonByteBuffer.moduleSummary(wasmModule: WasmModule?): ModuleSummary? {
     wasmModule ?: return null
-    val functions = listFunctions(wasmModule)
+    val functions = listFunctionsInternal(wasmModule)
     val importedFunctions = functions.filter { it.definedIn == "import" }.size
     val definedFunctions = functions.filter { it.definedIn == "function_section" }.size
 

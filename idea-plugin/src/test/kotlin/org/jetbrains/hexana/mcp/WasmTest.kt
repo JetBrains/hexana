@@ -43,7 +43,7 @@ abstract class WasmTest: UsefulTestCase() {
         listDataSegments(it).let(body)
     }
     internal inline fun doFunctionTest(crossinline body: (List<GeneralFunctionEntry>) -> Unit) = doTest("function") {
-        listFunctions(it).let(body)
+        listFunctionsInternal(it).let(body)
     }
 
     internal inline fun doOpcodeInFunctionTest(index: Int, crossinline body: (List<OpCode>?) -> Unit) = doTest("function") { wasmModule ->

@@ -15,7 +15,6 @@ import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
-import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.sections.WasmAnyRefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmArrayRefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmArrayTypeRecord
@@ -124,7 +123,7 @@ internal fun CommonByteBuffer.listExportedFunctions(wasmModule: WasmModule?): Li
         this@listExportedFunctions.scan()
     }
     val imports = importFunctions(wasmModule)
-    val functions = listFunctions(wasmModule)
+    val functions = listFunctionsInternal(wasmModule)
     return records
         .filter { it is WasmFunctionExportRecordEntry }
         .map { it as WasmFunctionExportRecordEntry }.mapNotNull {
@@ -139,7 +138,7 @@ internal fun CommonByteBuffer.listExportedFunctions(wasmModule: WasmModule?): Li
         }
 }
 
-internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<GeneralFunctionEntry> {
+internal fun CommonByteBuffer.listFunctionsInternal(wasmModule: WasmModule?): List<GeneralFunctionEntry> {
     wasmModule ?: return emptyList()
     val types = types(wasmModule)
     val exports = listExports(wasmModule)
@@ -157,11 +156,11 @@ internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<Gener
             instructionCount = null)}
     val records = with(wasmModule.functionSection) {
         this ?: return@with emptyList()
-        this@listFunctions.parseFunctions()
+        this@listFunctionsInternal.parseFunctions()
     }
     val codes = with(wasmModule.codeSection) {
         this ?: return@with emptyList()
-        this@listFunctions.scan()
+        this@listFunctionsInternal.scan()
     }
     val indexBase = imports.size
     val functions = records.mapIndexedNotNull { index, typeIndex ->
@@ -180,6 +179,11 @@ internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?): List<Gener
         }
     }
     return imports + functions
+}
+
+internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?, offset: Int, limit: Int): List<GeneralFunctionEntry> {
+    val listFunctionsInternal = listFunctionsInternal(wasmModule)
+    return listFunctionsInternal.slice(offset until minOf(listFunctionsInternal.size, offset + limit))
 }
 
 private fun exportedAs(exports: List<ExportRecord>, index: Int):List<String> {
@@ -257,7 +261,7 @@ internal fun CommonByteBuffer.functionsByIndices(
     indices: List<Int>
 ): List<FunctionEntry> {
     wasmModule ?: return emptyList()
-    val functions = listFunctions(wasmModule)
+    val functions = listFunctionsInternal(wasmModule)
     return functions.filter { indices.contains(it.funcidx) }
 }
 
