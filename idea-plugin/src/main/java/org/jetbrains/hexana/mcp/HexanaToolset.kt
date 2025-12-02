@@ -1323,8 +1323,6 @@ class HexanaToolset : McpToolset {
         return objectMapper.writeValueAsString(buffer.listTypesByIndices(wasmModule, indices))
     }
 
-    /*
-    TODO: disable it because it hangs Claude (HX-T-50)
     @McpTool("list_data_segments")
     @McpDescription("""
         Returns a detailed JSON report describing all data segments defined in a WebAssembly module. 
@@ -1597,7 +1595,7 @@ class HexanaToolset : McpToolset {
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
         return objectMapper.writeValueAsString(buffer.listDataSegments(wasmModule))
-    }*/
+    }
 
     @McpTool("get_locals_for_functions")
     @McpDescription("""
