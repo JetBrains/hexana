@@ -12,7 +12,7 @@ import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.HexanaFileEditor
 import javax.swing.JComponent
 
-class GoToAddressAction : AnAction() {
+class GoToOffsetAction : AnAction() {
 
     override fun getActionUpdateThread(): ActionUpdateThread {
         return ActionUpdateThread.BGT
@@ -27,19 +27,19 @@ class GoToAddressAction : AnAction() {
         val hexanaEditor = e.getData(HexanaFileEditor.KEY) ?: return
         val project = e.project ?: return
         val addressRange = 0..<hexanaEditor.file.length
-        val dialog = GoToAddressDialog(project, 0, addressRange)
+        val dialog = GoToOffsetDialog(project, 0, addressRange)
         if (dialog.showAndGet()) {
-            val address = dialog.address.coerceIn(addressRange)
+            val address = dialog.offset.coerceIn(addressRange)
             hexanaEditor.stateHolder.scrollHexViewTo(address)
         }
     }
 }
 
 
-class GoToAddressDialog(
+class GoToOffsetDialog(
     project: Project,
-    var address: Long,
-    val addressRange: LongRange
+    var offset: Long,
+    val offsetRange: LongRange
 ) : DialogWrapper(project, false) {
 
     val hexFormat = HexFormat {
@@ -54,16 +54,16 @@ class GoToAddressDialog(
         return panel {
             row {
                 textField()
-                    .label(HexanaBundle.message("action.hexana.goToAddress.address"))
-                    .comment("0 .. ${addressRange.last.toHexString(hexFormat)}")
+                    .label(HexanaBundle.message("action.hexana.goToOffset.offset"))
+                    .comment("0 .. ${offsetRange.last.toHexString(hexFormat)}")
                     .focused()
                     .bindText(
                         {
-                            address.toHexString(hexFormat)
+                            offset.toHexString(hexFormat)
                         },
                         { text ->
                             runCatching {
-                                address = text.hexToLong().coerceIn(addressRange)
+                                offset = text.hexToLong().coerceIn(offsetRange)
                             }
                         }
                     )
@@ -72,7 +72,7 @@ class GoToAddressDialog(
                             it.text.hexToLong()
                             null
                         } catch (_: Exception) {
-                            error(HexanaBundle.message("action.hexana.goToAddress.invalidAddress"))
+                            error(HexanaBundle.message("action.hexana.goToOffset.invalidOffset"))
                         }
                     }
             }

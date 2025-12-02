@@ -5,7 +5,7 @@
 ### Added
 
 - ability to open any file in hex view
-- action navigating to the given address
+- action navigating to the given offset
 
 ### Changed
 

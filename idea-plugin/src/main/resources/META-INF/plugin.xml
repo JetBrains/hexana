@@ -92,7 +92,7 @@
         <action id="hexana.openInHexView" class="org.jetbrains.hexana.actions.OpenInHexViewAction">
             <add-to-group group-id="RevealGroup" anchor="last"/>
         </action>
-        <action id="hexana.goToAddress" class="org.jetbrains.hexana.actions.GoToAddressAction"
+        <action id="hexana.goToOffset" class="org.jetbrains.hexana.actions.GoToOffsetAction"
                 use-shortcut-of="GotoLine"/>
     </actions>
 
