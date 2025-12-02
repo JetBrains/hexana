@@ -38,7 +38,8 @@ fun CommonByteBuffer.moduleSummary(wasmModule: WasmModule?): ModuleSummary? {
         importedGlobals + definedGlobals,
         tables,
         types,
-        ImportSummary(importedFunctions, importedMemories, importedTables, importedGlobals)
+        ImportSummary(importedFunctions, importedMemories, importedTables, importedGlobals),
+        position() + remaining()
     )
 }
 
@@ -49,7 +50,8 @@ data class ModuleSummary(
     val globals: Int,
     val tables: Int,
     val types: Int,
-    val imports: ImportSummary
+    val imports: ImportSummary,
+    val moduleSize: Int
 )
 
 data class ImportSummary(val functions: Int, val memories: Int, val tables: Int, val globals: Int)

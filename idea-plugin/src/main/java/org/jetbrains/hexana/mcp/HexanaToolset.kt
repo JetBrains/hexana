@@ -2081,6 +2081,7 @@ class HexanaToolset : McpToolset {
       • memories — number of memory objects defined or imported
       • tables — number of table objects defined or imported
       • types — number of type signatures in the Type Section
+      • module_size — size of the entire module in bytes
 
     The summary reflects the unified module structure after merging imports,
     definitions, and section representations.
@@ -2100,7 +2101,8 @@ class HexanaToolset : McpToolset {
       },
       "memories": 1,
       "tables": 1,
-      "types": 17
+      "types": 17,
+      "module_size": 123456
     }
 
     ----------------------------------------------------------
@@ -2118,6 +2120,10 @@ class HexanaToolset : McpToolset {
           wasm-tools dump module.wasm
       • Count types:
           wasm-tools print module.wasm | grep "(type" -n
+          
+    Unix utils:
+        du -b module.wasm
+        ls -al module.wasm | grep module.wasm
 
     These steps require manually scanning several sections.
     The summarize_module MCP tool provides a single JSON object
