@@ -26,10 +26,10 @@ class GoToOffsetAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val hexanaEditor = e.getData(HexanaFileEditor.KEY) ?: return
         val project = e.project ?: return
-        val addressRange = 0..<hexanaEditor.file.length
-        val dialog = GoToOffsetDialog(project, 0, addressRange)
+        val offsetRange = 0..<hexanaEditor.file.length
+        val dialog = GoToOffsetDialog(project, 0, offsetRange)
         if (dialog.showAndGet()) {
-            val address = dialog.offset.coerceIn(addressRange)
+            val address = dialog.offset.coerceIn(offsetRange)
             hexanaEditor.stateHolder.scrollHexViewTo(address)
         }
     }
