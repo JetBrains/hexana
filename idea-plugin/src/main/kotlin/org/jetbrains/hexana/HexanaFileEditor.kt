@@ -16,12 +16,15 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.BinaryEditorView
+import org.jetbrains.hexana.ui.WatConversionState
 import org.jetbrains.hexana.wat.WatFileset
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
@@ -212,6 +215,9 @@ class HexViewStateHolder {
     private val _bytesPerRow: MutableState<Int> = mutableStateOf(16)
     val bytesPerRow: State<Int> get() = _bytesPerRow
 
+    private val _conversionState = MutableStateFlow<WatConversionState?>(null)
+    internal val conversionStateFlow = _conversionState.asStateFlow()
+
     val topFraction: Float
         get() = currentState.value.topFraction
 
@@ -230,5 +236,13 @@ class HexViewStateHolder {
     fun setCursorPosition(line: Int, lineOffset: Int) {
         _cursorPositionLineOffset.value = lineOffset
         _cursorPositionLine.value = line
+    }
+
+    fun startConversion(): Boolean {
+        return _conversionState.compareAndSet(null, WatConversionState.Loading)
+    }
+
+    fun setConversionState(state: WatConversionState) {
+        _conversionState.value = state
     }
 }

@@ -2,7 +2,6 @@ package org.jetbrains.hexana.ui
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -40,8 +39,7 @@ import com.intellij.util.asSafely
 import com.intellij.util.ui.UIUtil
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
@@ -59,7 +57,6 @@ import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import javax.swing.JComponent
-import kotlin.math.min
 
 
 internal sealed interface WasmPanel : Panel {
@@ -161,7 +158,7 @@ internal sealed interface WasmPanel : Panel {
     class Wat(
         override val wasmBinaryProvider: WasmBinaryVirtualFileProvider,
         val state: HexViewStateHolder,
-        val wasmViewModel: WasmViewModel = WasmViewModel(wasmBinaryProvider)
+        val wasmViewModel: WasmViewModel = WasmViewModel(state, wasmBinaryProvider)
     ) : WasmPanel {
         override val description = "WAT"
 
@@ -170,7 +167,7 @@ internal sealed interface WasmPanel : Panel {
             val wasmViewState by wasmViewModel.conversionState.collectAsState()
 
             when (wasmViewState) {
-                is WatConversionState.Loading -> ConvertingIndicator(message = "0000 0 1001 01 10 01 converting ${wasmBinaryProvider.file.name}")
+                null, is WatConversionState.Loading -> ConvertingIndicator(message = "0000 0 1001 01 10 01 converting ${wasmBinaryProvider.file.name}")
 
                 is WatConversionState.ShowLiteEditor -> {
                     WatLiteEditor((wasmViewState as WatConversionState.ShowLiteEditor).wat)
@@ -370,56 +367,60 @@ sealed class WatConversionState {
 const val useMultifileEditor = false
 
 internal class WasmViewModel(
+    private val state: HexViewStateHolder,
     private val wasmBinaryProvider: WasmBinaryVirtualFileProvider,
 ) : ViewModel() {
-    private val _conversionState = MutableStateFlow<WatConversionState>(WatConversionState.Loading)
 
-    internal val conversionState = _conversionState.asStateFlow()
+    internal val conversionState: StateFlow<WatConversionState?> = state.conversionStateFlow
 
     init {
         convert()
     }
 
     fun convert() {
-        viewModelScope.launch(Dispatchers.IO + CoroutineName("Wasm to Wat conversion")) {
-            val virtualFile = VfsUtil.virtualToIoFile(wasmBinaryProvider.file)
-            runCatching {
-                val conversionResult =
-                    HexanaService.getInstance().convertWasmToWat(
-                        virtualFile
-                    )
-                if (conversionResult is HexanaService.WatConversionResult.Error) {
-                    throw ConversionException(conversionResult)
-                }
-                conversionResult as HexanaService.WatConversionResult.Success
-            }.onSuccess { success ->
-                _conversionState.value = if (useMultifileEditor) {
-                    val fileset = createWatFileset(wasmBinaryProvider.file, success.wat) { fileset ->
-                        _conversionState.value = WatConversionState.ShowMultifileEditor(fileset)
+        val wasmFile = wasmBinaryProvider.file
+        if (state.startConversion()) {
+            viewModelScope.launch(Dispatchers.IO + CoroutineName("Wasm to Wat conversion")) {
+                val virtualFile = VfsUtil.virtualToIoFile(wasmFile)
+                runCatching {
+                    val conversionResult =
+                        HexanaService.getInstance().convertWasmToWat(
+                            virtualFile
+                        )
+                    if (conversionResult is HexanaService.WatConversionResult.Error) {
+                        throw ConversionException(conversionResult)
                     }
-                    WatConversionState.ShowMultifileEditor(fileset)
-                } else if (virtualFile.length() > HexanaService.WAT_EDITOR_MAX_FILE_SIZE) {
-                    WatConversionState.ShowLiteEditor(success.wat)
-                } else {
-                    val name = wasmBinaryProvider.file.name.removeSuffix(".wasm") + ".wat"
-                    val file = LightWatFile(wasmBinaryProvider.file, name, success.wat)
-                    val editorComponent = withContext(Dispatchers.EDT) {
-                        val watTextEditor = wasmBinaryProvider.createTextEditor(file)
-                        watTextEditor.editor.settings.isUseSoftWraps = false
-                        watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
-                        UiDataProvider.wrapComponent(watTextEditor.component) { sink ->
-                            sink[OpenFileDescriptor.NAVIGATE_IN_EDITOR] = watTextEditor.editor
+                    conversionResult as HexanaService.WatConversionResult.Success
+                }.onSuccess { success ->
+                    val conversionState = if (useMultifileEditor) {
+                        val fileset = createWatFileset(wasmFile, success.wat) { fileset ->
+                            state.setConversionState(WatConversionState.ShowMultifileEditor(fileset))
                         }
+                        WatConversionState.ShowMultifileEditor(fileset)
+                    } else if (virtualFile.length() > HexanaService.WAT_EDITOR_MAX_FILE_SIZE) {
+                        WatConversionState.ShowLiteEditor(success.wat)
+                    } else {
+                        val name = wasmFile.name.removeSuffix(".wasm") + ".wat"
+                        val file = LightWatFile(wasmFile, name, success.wat)
+                        val editorComponent = withContext(Dispatchers.EDT) {
+                            val watTextEditor = wasmBinaryProvider.createTextEditor(file)
+                            watTextEditor.editor.settings.isUseSoftWraps = false
+                            watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
+                            UiDataProvider.wrapComponent(watTextEditor.component) { sink ->
+                                sink[OpenFileDescriptor.NAVIGATE_IN_EDITOR] = watTextEditor.editor
+                            }
+                        }
+                        WatConversionState.ShowEditor(editorComponent)
                     }
-                    WatConversionState.ShowEditor(editorComponent)
-                }
+                    state.setConversionState(conversionState)
 
-            }.onFailure { err ->
-                val errorMessage = when (err) {
-                    is ConversionException -> err.conversionError.error
-                    else -> err.message ?: "Unknown error"
+                }.onFailure { err ->
+                    val errorMessage = when (err) {
+                        is ConversionException -> err.conversionError.error
+                        else -> err.message ?: "Unknown error"
+                    }
+                    state.setConversionState(WatConversionState.Error(errorMessage))
                 }
-                _conversionState.value = WatConversionState.Error(errorMessage)
             }
         }
     }
