@@ -11,6 +11,17 @@ import org.jetbrains.hexana.ui.WatConversionState
 
 
 class HexPosition(val line: Int, val lineOffset: Int)
+class HexSelection(val start: HexPosition, val end: HexPosition) {
+    fun contains(line: Int, lineOffset: Int): Boolean {
+        return when {
+            line < start.line -> false
+            line == start.line -> lineOffset >= start.lineOffset
+            line == end.line -> lineOffset <= end.lineOffset
+            line > end.line -> false
+            else -> true
+        }
+    }
+}
 
 class HexViewStateHolder {
     val currentState: MutableState<HexViewState> = mutableStateOf(HexViewState())
@@ -23,6 +34,9 @@ class HexViewStateHolder {
 
     private val _hoverPosition = mutableStateOf(HexPosition(-1, -1))
     val hoverPosition: HexPosition get() = _hoverPosition.value
+
+    private val _selection = mutableStateOf(HexSelection(HexPosition(-1, -1), HexPosition(-1, -1)))
+    val selection: HexSelection get() = _selection.value
 
     private val _bytesPerRow: MutableState<Int> = mutableStateOf(16)
     val bytesPerRow: State<Int> get() = _bytesPerRow
@@ -51,6 +65,10 @@ class HexViewStateHolder {
 
     fun setHoverPosition(line: Int, lineOffset: Int) {
         _hoverPosition.value = HexPosition(line, lineOffset)
+    }
+
+    fun setSelection(startLine: Int, startLineOffset: Int, endLine: Int, endLineOffset: Int) {
+        _selection.value = HexSelection(HexPosition(startLine, startLineOffset), HexPosition(endLine, endLineOffset))
     }
 
     fun startConversion(): Boolean {

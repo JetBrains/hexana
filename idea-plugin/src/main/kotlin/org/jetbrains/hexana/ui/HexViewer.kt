@@ -151,10 +151,17 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                                             if (isUnderCursor) HexanaTheme.hexCellActiveColor else Color.Unspecified
                                         }
 
+                                        val selectionBackgroundColor = if (state.selection.contains(rowIndex, byteIndex)) {
+                                            Color(156, 183, 255, 255)
+                                        } else {
+                                            backgroundColor
+                                        }
+
+
                                         Box(
                                             modifier = Modifier
                                                 .padding(end = 2.dp)
-                                                .background(backgroundColor)
+                                                .background(selectionBackgroundColor)
                                                 .onHover { hovered ->
                                                     if (hovered) state.setHoverPosition(rowIndex, byteIndex)
                                                 }
@@ -194,10 +201,16 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                                             if (isUnderCursor) HexanaTheme.hexCellActiveColor else Color.Unspecified
                                         }
 
+                                        val selectionBackgroundColor = if (state.selection.contains(rowIndex, byteIndex)) {
+                                            Color(156, 183, 255, 255)
+                                        } else {
+                                            backgroundColor
+                                        }
+
                                         val text = byte.asASCII()
                                         Text(
                                             text ?: ".",
-                                            modifier = Modifier.background(backgroundColor),
+                                            modifier = Modifier.background(selectionBackgroundColor),
                                             softWrap = false,
                                             maxLines = 1,
                                             style = TextStyle(

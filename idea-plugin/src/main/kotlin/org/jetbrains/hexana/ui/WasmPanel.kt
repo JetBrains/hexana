@@ -139,7 +139,8 @@ internal sealed interface WasmPanel : Panel {
                             val dataRecord = dataRecords[dataRecordIndex]
                             val data = dataRecord.data
 
-                            val str = data.asASCII()
+//                            val str = data.asASCII()
+                            val str = "data record ${dataRecordIndex} (${dataRecord.data.size})"
 
                             Text(
                                 str,
@@ -147,6 +148,17 @@ internal sealed interface WasmPanel : Panel {
                                 lineHeight = TextUnit(1f, TextUnitType.Em), modifier = Modifier.onClick {
                                     //selectedTabIndex = dataRecordIndex
                                     state.scrollHexViewTo(dataRecord.offset)
+
+                                    val startLine = (dataRecord.offset / state.bytesPerRow.value).toInt()
+                                    val startLineOffset = (dataRecord.offset % state.bytesPerRow.value).toInt()
+
+                                    val endLine = ((dataRecord.offset + data.size) / state.bytesPerRow.value).toInt()
+                                    val endLineOffset = ((dataRecord.offset + data.size) % state.bytesPerRow.value).toInt()
+
+                                    state.setSelection(
+                                        startLine, startLineOffset,
+                                        endLine, endLineOffset
+                                    )
                                 }.fillMaxWidth().padding(4.dp)                            )
                         }
                     }
