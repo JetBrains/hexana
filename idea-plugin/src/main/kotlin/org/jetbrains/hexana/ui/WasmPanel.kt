@@ -2,6 +2,7 @@ package org.jetbrains.hexana.ui
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -54,6 +55,7 @@ import org.jetbrains.hexana.wat.createWatFileset
 import org.jetbrains.hexana.wat.psi.WatLexer
 import org.jetbrains.hexana.wat.psi.WatToken
 import org.jetbrains.jewel.ui.component.Icon
+import org.jetbrains.jewel.ui.component.Link
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import javax.swing.JComponent
@@ -128,25 +130,94 @@ internal sealed interface WasmPanel : Panel {
         @Composable
         override fun onRender() {
             val dataRecords = remember(wasmBinaryProvider) { wasmBinaryProvider.getData() }
-            var selectedTabIndex by remember { mutableIntStateOf(0) }
+
             if (dataRecords.isEmpty()) return
 
+            var sortBySizeAsc: Boolean? by remember { mutableStateOf(null) }
+            var selectedOriginalIndex: Int? by remember { mutableStateOf(null) }
 
-            Row {
-                Column(modifier = Modifier.weight(0.3f).padding(4.dp)) {
-                    LazyColumn {
-                        items(dataRecords.size) { dataRecordIndex ->
-                            val dataRecord = dataRecords[dataRecordIndex]
-                            val data = dataRecord.data
+            val viewRecords = remember(dataRecords, sortBySizeAsc) {
+                val base = dataRecords.withIndex().map { it.index to it.value }
+                when (sortBySizeAsc) {
+                    true -> base.sortedBy { (_, rec) -> rec.data.size }
+                    false -> base.sortedByDescending { (_, rec) -> rec.data.size }
+                    null -> base
+                }
+            }
 
-//                            val str = data.asASCII()
-                            val str = "data record ${dataRecordIndex} (${dataRecord.data.size})"
+            Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Data",
+                            style = TextStyle(
+                                color = HexanaTheme.textColor,
+                                fontFamily = FontFamily.Monospace
+                            ),
+                            modifier = Modifier.onClick {
+                                sortBySizeAsc = when (sortBySizeAsc) {
+                                    null -> true
+                                    true -> false
+                                    false -> null
+                                }
+                            }
+                        )
 
-                            Text(
-                                str,
-                                style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
-                                lineHeight = TextUnit(1f, TextUnitType.Em), modifier = Modifier.onClick {
-                                    //selectedTabIndex = dataRecordIndex
+
+                        val sortTitle = when (sortBySizeAsc) {
+                            true -> "smallest first"
+                            false -> "biggest first"
+                            null -> "by order"
+                        }
+
+                        Link(
+                            sortTitle,
+                            onClick = {
+                                sortBySizeAsc = when (sortBySizeAsc) {
+                                    null -> true
+                                    true -> false
+                                    false -> null
+                                }
+                            }
+                        )
+                    }
+                    Text(
+                        "Size",
+                        style = TextStyle(
+                            color = Color.LightGray,
+                            fontFamily = FontFamily.Monospace
+                        ),
+                        modifier = Modifier.width(80.dp))
+                }
+
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    items(viewRecords.size) { rowIndex ->
+                        val (originalIndex, dataRecord) = viewRecords[rowIndex]
+                        val name = "(data $#data${originalIndex})"
+                        val sizeLabel = "${dataRecord.data.size}"
+
+                        val selectedColor = if (rowIndex % 2 == 0) HexanaTheme.backgroundColor else lerp(
+                            HexanaTheme.backgroundColor,
+                            Color.White,
+                            0.05f
+                        )
+                        val isSelected = selectedOriginalIndex == originalIndex
+                        val rowBg = if (isSelected) lerp(selectedColor, HexanaTheme.hexCellHoverActiveColor, 0.6f) else selectedColor
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(rowBg)
+                                .onClick {
+                                    selectedOriginalIndex = originalIndex
                                     state.scrollHexViewTo(dataRecord.offset)
 
                                     val startLine = (dataRecord.offset / state.bytesPerRow.value).toInt()
@@ -159,7 +230,22 @@ internal sealed interface WasmPanel : Panel {
                                         startLine, startLineOffset,
                                         endLine, endLineOffset
                                     )
-                                }.fillMaxWidth().padding(4.dp)                            )
+                                }
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                name,
+                                style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
+                                lineHeight = TextUnit(1f, TextUnitType.Em),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                sizeLabel,
+                                style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
+                                lineHeight = TextUnit(1f, TextUnitType.Em),
+                                modifier = Modifier.width(80.dp)
+                            )
                         }
                     }
                 }
