@@ -17,8 +17,8 @@ class WasmSectionData(size: Int, offset: Int): WasmSection(size, offset) {
                 when (val recordType = getULEB128().toUInt()) {
                     0u -> {
                         val opCodes = this@scan.parseOpCodes()
-                        val expression = this@scan.fetchDataArray()
-                        add(WasmDataRecordActive(off, position() - off.toInt(), opCodes, expression))
+                        val data = this@scan.fetchDataArray()
+                        add(WasmDataRecordActive(off, position() - off.toInt(), opCodes, data))
                     }
                     1u -> {
                         val data = this@scan.fetchDataArray()
@@ -27,8 +27,8 @@ class WasmSectionData(size: Int, offset: Int): WasmSection(size, offset) {
                     2u -> {
                         val index = getULEB128().toUInt()
                         val opCodes = this@scan.parseOpCodes()
-                        val expression = this@scan.fetchDataArray()
-                        add(WasmDataRecordActiveWithMemoryIndex(off, position() - off.toInt(), index, opCodes, expression))
+                        val data = this@scan.fetchDataArray()
+                        add(WasmDataRecordActiveWithMemoryIndex(off, position() - off.toInt(), index, opCodes, data))
                     }
                     else -> throw IllegalArgumentException("Unknown data record type: $recordType")
                 }
