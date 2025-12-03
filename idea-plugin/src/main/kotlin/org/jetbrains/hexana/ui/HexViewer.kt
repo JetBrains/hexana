@@ -254,19 +254,12 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
 
 private fun Int.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
 
-internal fun ByteArray.asASCII(): String {
-    return joinToString("") {
-        val b = it.toInt() and 0xFF
-        if (b in 32..126) b.toChar().toString() else "."
-    }
-}
-
 private fun Byte.asASCII(): String? {
     val b = toInt() and 0xFF
     return if (b in 32..126) b.toChar().toString() else null
 }
 
-private fun Modifier.borderBottom(color: Color, width: Dp, verticalPadding: Dp): Modifier = this.drawBehind {
+fun Modifier.borderBottom(color: Color, width: Dp, verticalPadding: Dp): Modifier = this.drawBehind {
     val strokeWidthPx = width.toPx()
     val y = size.height + verticalPadding.toPx() - strokeWidthPx / 2
 

@@ -149,53 +149,59 @@ internal sealed interface WasmPanel : Panel {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                        .padding(vertical = 2.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    Box(modifier = Modifier.padding(end = 8.dp).weight(1f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "Data",
+                                style = TextStyle(
+                                    color = HexanaTheme.textColor,
+                                    fontFamily = FontFamily.Monospace
+                                ),
+                                modifier = Modifier.onClick {
+                                    sortBySizeAsc = when (sortBySizeAsc) {
+                                        null -> true
+                                        true -> false
+                                        false -> null
+                                    }
+                                }
+                            )
+
+
+                            val sortTitle = when (sortBySizeAsc) {
+                                true -> "smallest first"
+                                false -> "biggest first"
+                                null -> "by order"
+                            }
+
+                            Link(
+                                sortTitle,
+                                onClick = {
+                                    sortBySizeAsc = when (sortBySizeAsc) {
+                                        null -> true
+                                        true -> false
+                                        false -> null
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    Box(modifier = Modifier.padding(end = 8.dp).weight(1f)) {
                         Text(
-                            "Data",
+                            "Size",
                             style = TextStyle(
-                                color = HexanaTheme.textColor,
+                                color = Color.LightGray,
                                 fontFamily = FontFamily.Monospace
                             ),
-                            modifier = Modifier.onClick {
-                                sortBySizeAsc = when (sortBySizeAsc) {
-                                    null -> true
-                                    true -> false
-                                    false -> null
-                                }
-                            }
-                        )
-
-
-                        val sortTitle = when (sortBySizeAsc) {
-                            true -> "smallest first"
-                            false -> "biggest first"
-                            null -> "by order"
-                        }
-
-                        Link(
-                            sortTitle,
-                            onClick = {
-                                sortBySizeAsc = when (sortBySizeAsc) {
-                                    null -> true
-                                    true -> false
-                                    false -> null
-                                }
-                            }
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
                         )
                     }
-                    Text(
-                        "Size",
-                        style = TextStyle(
-                            color = Color.LightGray,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        modifier = Modifier.width(80.dp))
                 }
 
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
@@ -210,7 +216,11 @@ internal sealed interface WasmPanel : Panel {
                             0.05f
                         )
                         val isSelected = selectedOriginalIndex == originalIndex
-                        val rowBg = if (isSelected) lerp(selectedColor, HexanaTheme.hexCellHoverActiveColor, 0.6f) else selectedColor
+                        val rowBg = if (isSelected) lerp(
+                            selectedColor,
+                            HexanaTheme.hexCellHoverActiveColor,
+                            0.6f
+                        ) else selectedColor
 
                         Row(
                             modifier = Modifier
@@ -223,8 +233,10 @@ internal sealed interface WasmPanel : Panel {
                                     val startLine = (dataRecord.offset / state.bytesPerRow.value).toInt()
                                     val startLineOffset = (dataRecord.offset % state.bytesPerRow.value).toInt()
 
-                                    val endLine = ((dataRecord.offset + dataRecord.recordLength) / state.bytesPerRow.value).toInt()
-                                    val endLineOffset = ((dataRecord.offset + dataRecord.recordLength) % state.bytesPerRow.value).toInt()
+                                    val endLine =
+                                        ((dataRecord.offset + dataRecord.recordLength) / state.bytesPerRow.value).toInt()
+                                    val endLineOffset =
+                                        ((dataRecord.offset + dataRecord.recordLength) % state.bytesPerRow.value).toInt()
 
                                     state.setSelection(
                                         startLine, startLineOffset,
@@ -244,7 +256,7 @@ internal sealed interface WasmPanel : Panel {
                                 sizeLabel,
                                 style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
                                 lineHeight = TextUnit(1f, TextUnitType.Em),
-                                modifier = Modifier.width(80.dp)
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
