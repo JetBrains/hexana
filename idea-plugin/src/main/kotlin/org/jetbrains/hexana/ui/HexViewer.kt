@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.ui
 
 import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,10 +35,14 @@ import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.jewel.foundation.modifier.onHover
 import org.jetbrains.jewel.ui.component.Text
 import kotlin.math.min
+import java.awt.datatransfer.StringSelection
+import com.intellij.openapi.ide.CopyPasteManager
 
 @Composable
 internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: Boolean = true) {
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
+    BoxWithConstraints(modifier = Modifier
+        .fillMaxSize()
+        .background(HexanaTheme.backgroundColor)) {
         val codePanelListState = rememberLazyListState()
 
         val bytesPerRow by remember { state.bytesPerRow }
@@ -53,6 +59,7 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                 codePanelListState.animateScrollToItem(lineNo)
             }
         }
+
 
         Column(modifier = Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -107,6 +114,12 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                     )
                 }
             }
+            ContextMenuArea(items = {
+                listOf(
+                    ContextMenuItem("Copy as ASCII") { copySelection(buf, state, ::selectedAsASCII) },
+                    ContextMenuItem("Copy as Kotlin::listOf") { copySelection(buf, state, ::selectAsKotlinList) },
+                )
+            }) {
             Box {
                 LazyColumn(state = codePanelListState, modifier = Modifier.fillMaxSize()) {
                     items(count = rowCount) { rowIndex ->
@@ -248,11 +261,14 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                     )
                 }
             }
+            }
         }
     }
 }
 
 private fun Int.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
+private fun Byte.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
+private fun UByte.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
 
 private fun Byte.asASCII(): String? {
     val b = toInt() and 0xFF
@@ -269,4 +285,44 @@ fun Modifier.borderBottom(color: Color, width: Dp, verticalPadding: Dp): Modifie
         end = Offset(size.width, y),
         strokeWidth = strokeWidthPx
     )
+}
+
+private fun selectedAsASCII(buf: ByteArray, state: HexViewStateHolder): String? {
+    val sel = state.selection
+    if (sel.start.line < 0 || sel.end.line < 0) return null
+
+    val bytesPerRow = state.bytesPerRow.value
+
+    val startOffset = sel.start.line * bytesPerRow + sel.start.lineOffset
+    val endOffset = sel.end.line * bytesPerRow + sel.end.lineOffset
+
+    if (startOffset < 0 || endOffset < 0 || startOffset >= buf.size) return null
+    val last = min(endOffset, buf.lastIndex)
+    if (last < startOffset) return null
+
+    return (startOffset..last).joinToString("") { buf[it].asASCII() ?: "."}
+}
+
+private fun selectAsKotlinList(buf: ByteArray, state: HexViewStateHolder): String? {
+    val sel = state.selection
+    if (sel.start.line < 0 || sel.end.line < 0) return null
+
+    val bytesPerRow = state.bytesPerRow.value
+
+    val startOffset = sel.start.line * bytesPerRow + sel.start.lineOffset
+    val endOffset = sel.end.line * bytesPerRow + sel.end.lineOffset
+
+    if (startOffset < 0 || endOffset < 0 || startOffset >= buf.size) return null
+    val last = min(endOffset, buf.lastIndex)
+    if (last < startOffset) return null
+
+    val contents = (startOffset..last).joinToString { "0x" + buf[it].toUByte().asHexString() + "u"}
+    return "listOf(${contents})"
+}
+
+fun copySelection(buf: ByteArray, state: HexViewStateHolder, selectionBuilder: (ByteArray, HexViewStateHolder) -> String?) {
+    val text = selectionBuilder(buf, state)
+    if (!text.isNullOrEmpty()) {
+        CopyPasteManager.getInstance().setContents(StringSelection(text))
+    }
 }
