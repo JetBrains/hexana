@@ -1,10 +1,12 @@
 package org.jetbrains.hexana.actions
 
+import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.psi.util.PsiTreeUtil
+import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.HexanaFileEditor
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wat.psi.WatDataElement
@@ -29,7 +31,11 @@ class ShowElementInHexViewAction : AnAction() {
             e.presentation.isEnabledAndVisible = false
             return
         }
+        e.presentation.isVisible = true
         e.presentation.isEnabled = getOffsetProvider(wasmBinaryProvider, element) != null
+        if (e.place == ActionPlaces.EDITOR_POPUP) {
+            e.presentation.text = HexanaBundle.message("action.hexana.showElementInHexView.editorText")
+        }
     }
 
 

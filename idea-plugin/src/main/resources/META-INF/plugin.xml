@@ -94,7 +94,9 @@
         </action>
         <action id="hexana.goToOffset" class="org.jetbrains.hexana.actions.GoToOffsetAction"
                 use-shortcut-of="GotoLine"/>
-        <action id="hexana.showElementInHexView" class="org.jetbrains.hexana.actions.ShowElementInHexViewAction"/>
+        <action id="hexana.showElementInHexView" class="org.jetbrains.hexana.actions.ShowElementInHexViewAction">
+            <add-to-group group-id="RevealGroup" anchor="first"/>
+        </action>
     </actions>
 
 </idea-plugin>
