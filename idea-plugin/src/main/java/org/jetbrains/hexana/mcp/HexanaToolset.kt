@@ -478,101 +478,194 @@ class HexanaToolset : McpToolset {
     }
 
     @McpTool("list_exported_functions")
-    @McpDescription(
-        """
-    Extracts exported functions from a WebAssembly (.wasm) module and returns
-    them as JSON-serialized objects:
-
-        {
-          "name": string,
-          "entry": {
-            "funcidx": number,
-            "module": string,
-            "name": string,
-            signature: {
-              "params": List<String>,
-              "ret": List<String>
-            }
-          }
-        }
-        for re-imported functions, or 
-        {
-          "name": string,
-          "entry": {
-            "funcidx": number,
-            "offset": number,
-            signature: {
-              "params": [string],
-              "ret": [string]
-            },
-            "locals":[String],
-            "code": string
-          }
-        
-      • module   — the module path of the import ("env", "wasi_snapshot_preview1", etc.)
-      • name     — the imported function's name
-      • entry — description of the function entry point (imported or general)
-      • funcidx     — function index in the module
-      • offset    — code section offset (if available)
-      • signature — parameters / result types
-      • locals    — list of parsed local declarations
-      • code      — disassembled code or textual representation (optional)
-
-      This corresponds to wasm-objdump function metadata.
-
-    ───────────────────────────────────────────────────────────────
-    📘 Example response
-
-        {
-          "functions": [
-            {
-              "name": "add",
-              "entry": {
-                "index": 1,
-                "offset": 280,
-                "signature": { "params": ["i32", "i32"], "results": ["i32"] },
-                "locals": [],
-                "code": "(local.get 0) (local.get 1) (i32.add)"
-              }
-            },
-            {
-              "name": "log",
-              "entry": {
-                "module": "env",
-                "name": "log",
-                "signature": { "params": ["i32"], "results": [] }
-              }
-            }
-          ]
-        }
-
-    ───────────────────────────────────────────────────────────────
-    🔧 Command-line equivalents for validation
-
-      wasm-tools:
-        wasm-tools print module.wasm --details --exports
-
-      wasm-objdump:
-        wasm-objdump -x module.wasm | grep FUNC
-
-    ───────────────────────────────────────────────────────────────
-    📌 Notes
-    • This tool returns ONLY exported functions (not all functions).
-    • For imported functions re-exported by the module, ImportSignature is returned.
-    • For defined functions exported by the module, FunctionSignature is returned.
-    • The result format is explicitly designed for LLM reasoning and static tooling.
+    @McpDescription( """
+    Returns all exported functions from a WebAssembly module as a JSON array of 
+    WasmExportFunctionRecord objects. Each entry includes the export name and the 
+    resolved function signature (either an imported signature or a locally defined 
+    function signature with its type information).
+    
+    This tool makes it easy to introspect the module’s public API surface and to 
+    understand what callable functions are exposed to the embedding environment.
+    
+    Because some WASM binaries (Skiko, Emscripten, wasm-bindgen) may expose 
+    hundreds or thousands of functions, this tool supports index-space pagination.
+    
+    ---
+    
+    ## Pagination (Range-Based Slicing)
+    
+    Exports are indexed sequentially:
+    
+      exportidx 0 → first exported function  
+      exportidx 1 → second exported function  
+      exportidx 2 → third exported function  
+      ...
+    
+    Use the following optional parameters to retrieve only a slice:
+    
+      • from (optional, default: 0)
+            Starting export index (inclusive).
+    
+      • to (optional, default: last export)
+            Ending export index (inclusive).
+    
+    These indices refer *strictly* to the export list order and are not related to
+    funcidx numbering inside the function index space.
+    
+    Examples:
+        { "from": 0, "to": 9 }      → first 10 exported functions
+        { "from": 100, "to": 199 }  → exports 100–199
+        { "from": 20 }              → exports 20–end
+        { "to": 50 }                → exports 0–50
+    
+    The response may include pagination metadata:
+        • from
+        • to
+        • returned
+        • totalExports
+        • truncated
+    
+    ---
+    
+    ## Returned Structure (WasmExportFunctionRecord)
+    
+    Each record includes:
+    
+      • name  
+            The exported function name.
+    
+      • signature  
+            Either:
+              ImportSignature:
+                {
+                  "module": string,
+                  "name": string,
+                  "signature": {
+                      "params": [string],
+                      "return": [string]
+                  }
+                }
+    
+              or
+    
+              FunctionSignature:
+                {
+                  "index": number,
+                  "offset": number | null,
+                  "signature": {
+                      "params": [string],
+                      "return": [string]
+                  },
+                  "locals": [Local] | null,
+                  "code": string | null
+                }
+    
+    This unified representation lets LLMs handle both imported and local functions
+    without needing to inspect the Import Section manually.
+    
+    ---
+    
+    ## Examples
+    
+    ### Example 1 — Exporting a local function
+    
+    WAT:
+        (func ${'$'}double (param i32) (result i32)
+            local.get 0
+            i32.const 2
+            i32.mul)
+        (export "double" (func ${'$'}double))
+    
+    JSON:
+    {
+      "name": "double",
+      "signature": {
+        "index": 3,
+        "offset": 128,
+        "signature": { "params": ["i32"], "return": ["i32"] },
+        "locals": [],
+        "code": "local.get 0; i32.const 2; i32.mul"
+      }
+    }
+    
+    ---
+    
+    ### Example 2 — Exporting an imported function
+    
+    WAT:
+        (import "env" "log" (func (param i32)))
+        (export "log" (func 0))
+    
+    JSON:
+    {
+      "name": "log",
+      "signature": {
+        "module": "env",
+        "name": "log",
+        "signature": { "params": ["i32"], "return": [] }
+      }
+    }
+    
+    ---
+    
+    ## Example Pagination Usage
+    
+    Request:
+        { "from": 0, "to": 2 }
+    
+    Response (simplified):
+    {
+      "entries": [
+        { "name": "log", ... },
+        { "name": "double", ... },
+        { "name": "add", ... }
+      ],
+      "from": 0,
+      "to": 2,
+      "returned": 3,
+      "totalExports": 417,
+      "truncated": true
+    }
+    
+    ---
+    
+    ## Equivalent CLI Tools (Reference)
+    
+    Using WABT:
+        wasm-objdump -x module.wasm     → shows Export Section
+        wasm2wat module.wasm            → shows (export ...) declarations
+    
+    Using wasm-tools:
+        wasm-tools print module.wasm    → structured export list
+        wasm-tools dump module.wasm     → raw section dumps
+    
+    This MCP tool provides a normalized, LLM-friendly, paginated JSON view over the 
+    module’s exported functions, resolving both imported and locally defined function 
+    signatures in a unified representation.
     """
     )
     suspend fun listExportedFunctions(
-        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
+        @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+        @McpDescription("""
+            Filter by segment index range:
+              { "from": N, "to": M }
+            Only segments with dataidx in this range will be returned.
+        """)
+        entriesRange: Map<String, Int>
     ): String {
         val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
         if (file.fileType != WasmFileType.INSTANCE) {
             return """{"error": "Not a .wasm file"}"""
         }
+        val range = run {
+            val from = entriesRange["from"] ?: return """{"error": "Invalid segmentRange no `from`"}"""
+            val to = entriesRange["to"] ?: return """{"error": "Invalid segmentRange no `to`"}"""
+            if (to < from) return """{"error": "Invalid segmentRange `to` must be >= `from`"}"""
+            from .. to
+        }
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parse(buffer)
-        return objectMapper.writeValueAsString(buffer.listExportedFunctions(wasmModule))
+        return objectMapper.writeValueAsString(buffer.listExportedFunctions(wasmModule, range))
     }
 
     @McpTool("functions_for_indices")

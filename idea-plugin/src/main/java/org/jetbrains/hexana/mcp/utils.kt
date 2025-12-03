@@ -117,11 +117,11 @@ internal fun CommonByteBuffer.listExports(wasmModule: WasmModule?): List<ExportR
     }
 }
 
-internal fun CommonByteBuffer.listExportedFunctions(wasmModule: WasmModule?): List<WasmExportFunctionRecord> {
+internal fun CommonByteBuffer.listExportedInternal(wasmModule: WasmModule?): List<WasmExportFunctionRecord> {
     wasmModule ?: return emptyList()
     val records = with(wasmModule.exportSection) {
         this ?: return@with emptyList()
-        this@listExportedFunctions.scan()
+        scan()
     }
     val imports = importFunctions(wasmModule)
     val functions = listFunctionsInternal(wasmModule)
