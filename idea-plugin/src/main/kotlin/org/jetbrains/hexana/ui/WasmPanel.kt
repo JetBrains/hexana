@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.intellij.codeInsight.hint.HintUtil
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.ApplicationManager
@@ -36,6 +37,7 @@ import com.intellij.openapi.editor.impl.EditorComponentImpl
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.tree.IElementType
+import com.intellij.ui.EditorNotificationPanel
 import com.intellij.util.asSafely
 import com.intellij.util.ui.UIUtil
 import kotlinx.coroutines.CoroutineName
@@ -58,7 +60,9 @@ import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.Link
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
+import java.awt.BorderLayout
 import javax.swing.JComponent
+import javax.swing.JPanel
 
 
 internal sealed interface WasmPanel : Panel {
@@ -302,7 +306,8 @@ internal sealed interface WasmPanel : Panel {
                     WatLiteEditor((wasmViewState as WatConversionState.ShowLiteEditor).wat)
                 }
                 is WatConversionState.ShowEditor -> {
-                    WatEditorContainer((wasmViewState as WatConversionState.ShowEditor).editorComponent)
+                    val editor = wasmViewState as WatConversionState.ShowEditor
+                    WatEditorContainer(editor.editorComponent, editor.warningComponent)
                 }
 
                 is WatConversionState.ShowMultifileEditor -> {
@@ -395,9 +400,10 @@ internal fun WatLiteEditor(watContent: String) {
 @Composable
 internal fun WatEditorContainer(
     editorComponent: JComponent?,
+    warningComponent: JComponent?,
 ) {
     if (editorComponent != null) {
-        SwingPanelEditor(editorComponent)
+        SwingPanelEditor(editorComponent, warningComponent)
     }
 }
 
@@ -433,7 +439,7 @@ internal fun WatMultifileEditorContainer(
 
 
 @Composable
-private fun SwingPanelEditor(editorPanel: JComponent?) {
+private fun SwingPanelEditor(editorPanel: JComponent?, vararg additionalComponents: JComponent?) {
     if (editorPanel == null) return
     Box(Modifier.fillMaxSize()) {
         SwingPanel(
@@ -444,7 +450,10 @@ private fun SwingPanelEditor(editorPanel: JComponent?) {
                 }
             },
             factory = {
-                editorPanel
+                val panel = JPanel(BorderLayout())
+                panel.add(editorPanel, BorderLayout.CENTER)
+                additionalComponents.filterNotNull().forEach { panel.add(it, BorderLayout.NORTH) }
+                panel
             }
         )
     }
@@ -487,7 +496,7 @@ private fun ConvertingIndicator(message: String) {
 
 sealed class WatConversionState {
     object Loading : WatConversionState()
-    class ShowEditor(val editorComponent: JComponent) : WatConversionState()
+    class ShowEditor(val editorComponent: JComponent, val warningComponent: JComponent? = null) : WatConversionState()
     class ShowLiteEditor(val wat: String) : WatConversionState()
     class ShowMultifileEditor(val fileset: WatFileset) : WatConversionState()
     class Error(val error: String) : WatConversionState()
@@ -531,15 +540,30 @@ internal class WasmViewModel(
                     } else {
                         val name = wasmFile.name.removeSuffix(".wasm") + ".wat"
                         val file = LightWatFile(wasmFile, name, success.wat)
+
+                        var notification: JComponent? = null
+
                         val editorComponent = withContext(Dispatchers.EDT) {
                             val watTextEditor = wasmBinaryProvider.createTextEditor(file)
                             watTextEditor.editor.settings.isUseSoftWraps = false
                             watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
+
+                            if (success.warning != null) {
+                                notification = EditorNotificationPanel(
+                                    HintUtil.WARNING_COLOR_KEY,
+                                    EditorNotificationPanel.Status.Warning
+                                )
+
+                                notification.text = success.warning
+                            }
+
                             UiDataProvider.wrapComponent(watTextEditor.component) { sink ->
                                 sink[OpenFileDescriptor.NAVIGATE_IN_EDITOR] = watTextEditor.editor
                             }
                         }
-                        WatConversionState.ShowEditor(editorComponent)
+
+
+                        WatConversionState.ShowEditor(editorComponent, warningComponent = if (success.warning != null) notification else null)
                     }
                     state.setConversionState(conversionState)
 
