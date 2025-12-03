@@ -15,6 +15,7 @@ class HexSelection(val start: HexPosition, val end: HexPosition) {
     fun contains(line: Int, lineOffset: Int): Boolean {
         return when {
             line < start.line -> false
+            start.line == end.line -> line == start.line && lineOffset >= start.lineOffset && lineOffset <= end.lineOffset
             line == start.line -> lineOffset >= start.lineOffset
             line == end.line -> lineOffset <= end.lineOffset
             line > end.line -> false
