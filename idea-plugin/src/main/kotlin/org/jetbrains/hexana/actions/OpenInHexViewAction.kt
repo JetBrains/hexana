@@ -12,10 +12,17 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.isFile
 import com.intellij.util.FileContentUtilCore
 import org.jetbrains.hexana.BinaryFileType
+import org.jetbrains.hexana.HexanaFileEditor
 import java.util.concurrent.ConcurrentHashMap
 
 class OpenInHexViewAction : AnAction() {
     override fun update(e: AnActionEvent) {
+        val hexanaEditor = e.getData(HexanaFileEditor.KEY)
+        if (hexanaEditor != null) {
+            // already in hex view
+            e.presentation.isEnabledAndVisible = false
+            return
+        }
         val project = e.project
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
         val overrider = HexFileTypeOverrider.getInstance()
