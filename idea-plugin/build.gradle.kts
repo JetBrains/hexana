@@ -102,10 +102,6 @@ intellijPlatform {
         ideaVersion {
             sinceBuild = "252"
         }
-
-        changeNotes = """
-            Nothings
-        """.trimIndent()
     }
 }
 
@@ -127,9 +123,12 @@ tasks {
 
     patchPluginXml {
         changeNotes = provider {
+            val item = when (hexanaBuild) {
+                "release" -> changelog.get(version as String)
+                else -> changelog.getUnreleased()
+            }
             changelog.renderItem(
-                changelog
-                    .getUnreleased()
+                item
                     .withHeader(false)
                     .withEmptySections(false),
                 Changelog.OutputType.HTML
