@@ -1,27 +1,10 @@
 package org.jetbrains.hexana.ui
 
-import androidx.compose.foundation.VerticalScrollbar
-import androidx.compose.foundation.ContextMenuArea
-import androidx.compose.foundation.ContextMenuItem
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -31,13 +14,19 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.intellij.openapi.ide.CopyPasteManager
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.jewel.foundation.modifier.onHover
 import org.jetbrains.jewel.ui.component.Text
-import kotlin.math.min
 import java.awt.datatransfer.StringSelection
-import com.intellij.openapi.ide.CopyPasteManager
+import java.nio.ByteBuffer
+import java.nio.CharBuffer
+import java.nio.charset.CharsetDecoder
+import java.nio.charset.StandardCharsets
+import kotlin.math.min
 
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: Boolean = true) {
     BoxWithConstraints(modifier = Modifier
@@ -103,14 +92,22 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                         .padding(horizontal = 8.dp, vertical = 4.dp).background(HexanaTheme.backgroundColor)
                         .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
                 ) {
+                    val showAscii = state.showAscii
                     Text(
-                        "ASCII",
+                        if (showAscii) {
+                            "ASCII"
+                        } else {
+                            "UTF-8"
+                        },
                         softWrap = false,
                         maxLines = 1,
                         style = TextStyle(
                             color = HexanaTheme.textColor,
                             fontFamily = FontFamily.Monospace
-                        )
+                        ),
+                        modifier = Modifier.onClick {
+                            state.setShowAscii(!showAscii)
+                        }
                     )
                 }
             }
@@ -220,14 +217,18 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                                             backgroundColor
                                         }
 
-                                        val text = byte.asASCII()
+                                        val text = if (state.showAscii) {
+                                            byte.asASCII()
+                                        } else {
+                                            getUtf8CharacterAtIndex(buf, start + byteIndex)
+                                        }
                                         Text(
                                             text ?: ".",
                                             modifier = Modifier.background(selectionBackgroundColor),
                                             softWrap = false,
                                             maxLines = 1,
                                             style = TextStyle(
-                                                color = HexanaTheme.textColor,
+                                                color = if (text != null) HexanaTheme.textColor else HexanaTheme.hexCellHoverColor,
                                                 fontFamily = FontFamily.Monospace
                                             )
                                         )
@@ -325,4 +326,44 @@ fun copySelection(buf: ByteArray, state: HexViewStateHolder, selectionBuilder: (
     if (!text.isNullOrEmpty()) {
         CopyPasteManager.getInstance().setContents(StringSelection(text))
     }
+}
+
+
+fun getUtf8CharacterAtIndex(byteArray: ByteArray, index: Int): String? {
+    val firstByte = byteArray[index].toInt()
+    val length: Int = when {
+        (firstByte and 0b10000000) == 0b00000000 -> 1
+        (firstByte and 0b11100000) == 0b11000000 -> 2
+        (firstByte and 0b11110000) == 0b11100000 -> 3
+        (firstByte and 0b11111000) == 0b11110000 -> 4
+        else -> return null
+    }
+
+    if (index + length > byteArray.size) {
+        return null // Incomplete sequence
+    }
+
+    try {
+        val out = CharBuffer.allocate(2)
+        // Max size is 1 char for 1-3 byte sequences, and 2 chars (surrogate pair)
+        // for 4-byte sequences (Code Points U+10000 to U+10FFFF).
+        val decoder: CharsetDecoder = StandardCharsets.UTF_8.newDecoder()
+        decoder.decode(ByteBuffer.wrap(byteArray, index, length), out, true)
+        decoder.flush(out)
+
+        if (out.position() == 1) { // don't show surrogate pairs
+            out.flip()
+            val char = out.get(0)
+            return when {
+                Character.isISOControl(char) -> null
+                Character.isDefined(char) -> char.toString()
+                else -> null
+            }
+        }
+    } catch (_: Exception) {
+        // Decoding failed
+        return null
+    }
+
+    return null
 }

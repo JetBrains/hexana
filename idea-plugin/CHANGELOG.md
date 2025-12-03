@@ -4,6 +4,8 @@
 
 ### Added
 
+- UTF-8 text preview
+
 ### Changed
 
 ### Deprecated

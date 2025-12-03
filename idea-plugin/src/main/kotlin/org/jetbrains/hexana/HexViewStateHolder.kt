@@ -52,6 +52,9 @@ class HexViewStateHolder {
     private val _conversionState = MutableStateFlow<WatConversionState?>(null)
     internal val conversionStateFlow = _conversionState.asStateFlow()
 
+    private val _showAscii = mutableStateOf(true)
+    val showAscii: Boolean get() = _showAscii.value
+
     val topFraction: Float
         get() = currentState.value.topFraction
 
@@ -97,5 +100,9 @@ class HexViewStateHolder {
 
     fun setConversionState(state: WatConversionState) {
         _conversionState.value = state
+    }
+
+    fun setShowAscii(showAscii: Boolean) {
+        _showAscii.value = showAscii
     }
 }
