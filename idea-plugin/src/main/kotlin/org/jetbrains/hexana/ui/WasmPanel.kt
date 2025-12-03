@@ -139,8 +139,8 @@ internal sealed interface WasmPanel : Panel {
             val viewRecords = remember(dataRecords, sortBySizeAsc) {
                 val base = dataRecords.withIndex().map { it.index to it.value }
                 when (sortBySizeAsc) {
-                    true -> base.sortedBy { (_, rec) -> rec.data.size }
-                    false -> base.sortedByDescending { (_, rec) -> rec.data.size }
+                    true -> base.sortedBy { (_, rec) -> rec.recordLength }
+                    false -> base.sortedByDescending { (_, rec) -> rec.recordLength }
                     null -> base
                 }
             }
@@ -227,7 +227,7 @@ internal sealed interface WasmPanel : Panel {
                     items(viewRecords.size) { rowIndex ->
                         val (originalIndex, dataRecord) = viewRecords[rowIndex]
                         val name = "(data $#data${originalIndex})"
-                        val sizeLabel = "${dataRecord.data.size}"
+                        val sizeLabel = "${dataRecord.recordLength}"
 
                         val selectedColor = if (rowIndex % 2 == 0) HexanaTheme.backgroundColor else lerp(
                             HexanaTheme.backgroundColor,
