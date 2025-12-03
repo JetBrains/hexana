@@ -16,13 +16,19 @@ class WasmSectionData(size: Int, offset: Int): WasmSection(size, offset) {
                 val off = position().toLong()
                 when (val recordType = getULEB128().toUInt()) {
                     0u -> {
-                        add(WasmDataRecordActive(off, this@scan.parseOpCodes(), this@scan.fetchDataArray()))
+                        val opCodes = this@scan.parseOpCodes()
+                        val expression = this@scan.fetchDataArray()
+                        add(WasmDataRecordActive(off, position() - off.toInt(), opCodes, expression))
                     }
                     1u -> {
-                        add(WasmDataRecordPassive(off, this@scan.fetchDataArray()))
+                        val data = this@scan.fetchDataArray()
+                        add(WasmDataRecordPassive(off, position() - off.toInt(), data))
                     }
                     2u -> {
-                        add(WasmDataRecordActiveWithMemoryIndex(off, getULEB128().toUInt(), this@scan.parseOpCodes(), this@scan.fetchDataArray()))
+                        val index = getULEB128().toUInt()
+                        val opCodes = this@scan.parseOpCodes()
+                        val expression = this@scan.fetchDataArray()
+                        add(WasmDataRecordActiveWithMemoryIndex(off, position() - off.toInt(), index, opCodes, expression))
                     }
                     else -> throw IllegalArgumentException("Unknown data record type: $recordType")
                 }
@@ -39,8 +45,8 @@ class WasmSectionData(size: Int, offset: Int): WasmSection(size, offset) {
 /**
  * 5.5.14
  */
-sealed class WasmDataRecord(val type: UInt, open val offset: Long, open val data: ByteArray)
-data class WasmDataRecordActive(override val offset: Long, val expression: List<OpCode>, override val data: ByteArray): WasmDataRecord(0x0u, offset, data) {
+sealed class WasmDataRecord(val type: UInt, open val offset: Long, open val recordLength: Int, open val data: ByteArray)
+data class WasmDataRecordActive(override val offset: Long, override val recordLength: Int, val expression: List<OpCode>, override val data: ByteArray): WasmDataRecord(0x0u, offset, recordLength, data) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false
@@ -48,6 +54,7 @@ data class WasmDataRecordActive(override val offset: Long, val expression: List<
         other as WasmDataRecordActive
 
         if (offset != other.offset) return false
+        if (recordLength != other.recordLength) return false
         if (expression != other.expression) return false
         if (!data.contentEquals(other.data)) return false
 
@@ -56,6 +63,7 @@ data class WasmDataRecordActive(override val offset: Long, val expression: List<
 
     override fun hashCode(): Int {
         var result = offset.hashCode()
+        result = 31 * result + recordLength
         result = 31 * result + expression.hashCode()
         result = 31 * result + data.contentHashCode()
         return result
@@ -63,7 +71,7 @@ data class WasmDataRecordActive(override val offset: Long, val expression: List<
 
 }
 
-data class WasmDataRecordPassive(override val offset: Long, override val data: ByteArray): WasmDataRecord(0x1u, offset, data) {
+data class WasmDataRecordPassive(override val offset: Long, override val recordLength: Int, override val data: ByteArray): WasmDataRecord(0x1u, offset, recordLength, data) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false
@@ -71,6 +79,7 @@ data class WasmDataRecordPassive(override val offset: Long, override val data: B
         other as WasmDataRecordPassive
 
         if (offset != other.offset) return false
+        if (recordLength != other.recordLength) return false
         if (!data.contentEquals(other.data)) return false
 
         return true
@@ -78,12 +87,14 @@ data class WasmDataRecordPassive(override val offset: Long, override val data: B
 
     override fun hashCode(): Int {
         var result = offset.hashCode()
+        result = 31 * result + recordLength
         result = 31 * result + data.contentHashCode()
         return result
     }
+
 }
 
-data class WasmDataRecordActiveWithMemoryIndex(override val offset: Long, val memoryIndex: UInt, val expression: List<OpCode>, override val data: ByteArray): WasmDataRecord(0x2u, offset, data) {
+data class WasmDataRecordActiveWithMemoryIndex(override val offset: Long, override val recordLength: Int, val memoryIndex: UInt, val expression: List<OpCode>, override val data: ByteArray): WasmDataRecord(0x2u, offset, recordLength, data) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false
@@ -91,6 +102,7 @@ data class WasmDataRecordActiveWithMemoryIndex(override val offset: Long, val me
         other as WasmDataRecordActiveWithMemoryIndex
 
         if (offset != other.offset) return false
+        if (recordLength != other.recordLength) return false
         if (memoryIndex != other.memoryIndex) return false
         if (expression != other.expression) return false
         if (!data.contentEquals(other.data)) return false
@@ -100,10 +112,12 @@ data class WasmDataRecordActiveWithMemoryIndex(override val offset: Long, val me
 
     override fun hashCode(): Int {
         var result = offset.hashCode()
+        result = 31 * result + recordLength
         result = 31 * result + memoryIndex.hashCode()
         result = 31 * result + expression.hashCode()
         result = 31 * result + data.contentHashCode()
         return result
     }
+
 
 }
