@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 
@@ -12,4 +13,14 @@ internal fun CommonByteBuffer.listDataSections(wasmModule: WasmModule?, range: I
     return DataEntryMetadata(range.first, returned.last().index, returned, entries.size, entries.size > returned.size, nextOffset)
 }
 
-data class DataEntryMetadata(val from: Int, val to: Int, val returned: List<DataEntry>, val totalSegments: Int, val truncate: Boolean, val nextOffset: Int?)
+class DataEntryMetadata(from: Int,
+                        to: Int,
+                        returned: List<DataEntry>,
+                        @JsonProperty("total_segments") override val total: Int,
+                        truncate: Boolean,
+                        nextOffset: Int?
+) : McpMetadata<DataEntry>(from, to, returned,
+    total,
+    truncate, nextOffset
+)
+
