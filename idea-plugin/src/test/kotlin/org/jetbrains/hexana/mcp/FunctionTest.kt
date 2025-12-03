@@ -3,10 +3,8 @@ package org.jetbrains.hexana.mcp
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.WasmF64Type
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
-import org.junit.Ignore
 
 class FunctionTest: WasmTest() {
-    @Ignore
     fun testFunc0() = doFunctionTest { funcs ->
         assertEquals(6, funcs.size)
         assertNull(funcs[0].codeOffset)
@@ -36,13 +34,11 @@ class FunctionTest: WasmTest() {
         assertNull(funcs[5].import)
     }
 
-    @Ignore
     fun testFunc1() = doFunctionTest { funcs ->
         assertEquals(2, funcs.size)
         assertEquals(0, funcs[0].funcidx)
     }
 
-    @Ignore
     fun test978() = doFunctionTest { funcs ->
         assertEquals(2, funcs.size)
         assertEquals(0, funcs[0].funcidx)
