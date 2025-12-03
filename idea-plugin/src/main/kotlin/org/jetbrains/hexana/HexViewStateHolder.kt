@@ -3,6 +3,7 @@ package org.jetbrains.hexana
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -27,7 +28,13 @@ class HexSelection(val start: HexPosition, val end: HexPosition) {
 class HexViewStateHolder {
     val currentState: MutableState<HexViewState> = mutableStateOf(HexViewState())
 
-    private val _hexScrollFlow = MutableSharedFlow<Long>(extraBufferCapacity = 64)
+    // Keep the latest requested scroll offset so late collectors (e.g., HexViewer composed after
+    // the emission from a LaunchedEffect) still receive it.
+    private val _hexScrollFlow = MutableSharedFlow<Long>(
+        replay = 1,
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     val hexScrollFlow: SharedFlow<Long> = _hexScrollFlow
 
     private val _cursorPosition = mutableStateOf(HexPosition(-1, -1))

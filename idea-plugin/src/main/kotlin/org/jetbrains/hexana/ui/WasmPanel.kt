@@ -145,6 +145,25 @@ internal sealed interface WasmPanel : Panel {
                 }
             }
 
+            LaunchedEffect(viewRecords) {
+                if (selectedOriginalIndex == null && viewRecords.isNotEmpty()) {
+                    val (originalIndex, dataRecord) = viewRecords.first()
+                    selectedOriginalIndex = originalIndex
+                    state.scrollHexViewTo(dataRecord.offset)
+
+                    val startLine = (dataRecord.offset / state.bytesPerRow.value).toInt()
+                    val startLineOffset = (dataRecord.offset % state.bytesPerRow.value).toInt()
+
+                    val endLine = ((dataRecord.offset + dataRecord.recordLength) / state.bytesPerRow.value).toInt()
+                    val endLineOffset = ((dataRecord.offset + dataRecord.recordLength) % state.bytesPerRow.value).toInt()
+
+                    state.setSelection(
+                        startLine, startLineOffset,
+                        endLine, endLineOffset
+                    )
+                }
+            }
+
             Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
                 Row(
                     modifier = Modifier
