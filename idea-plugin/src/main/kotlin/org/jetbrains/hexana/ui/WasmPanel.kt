@@ -152,8 +152,8 @@ internal sealed interface WasmPanel : Panel {
                                     val startLine = (dataRecord.offset / state.bytesPerRow.value).toInt()
                                     val startLineOffset = (dataRecord.offset % state.bytesPerRow.value).toInt()
 
-                                    val endLine = ((dataRecord.offset + data.size) / state.bytesPerRow.value).toInt()
-                                    val endLineOffset = ((dataRecord.offset + data.size) % state.bytesPerRow.value).toInt()
+                                    val endLine = ((dataRecord.offset + dataRecord.recordLength) / state.bytesPerRow.value).toInt()
+                                    val endLineOffset = ((dataRecord.offset + dataRecord.recordLength) % state.bytesPerRow.value).toInt()
 
                                     state.setSelection(
                                         startLine, startLineOffset,
