@@ -219,12 +219,30 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testGlobalGetUnfolded() {
+        doTest($$"""
+            (module
+              (global (;TARGET;)$1 (mut i32) (i32.const 0))
+              (func $1
+                global.get <caret>$1))
+        """)
+    }
+
     fun testGlobalGetByIndex() {
         doTest($$"""
             (module
               (global (;TARGET;)$g1 (mut i32) (i32.const 0))
               (func $1
                 (global.get <caret>0)))
+        """)
+    }
+
+    fun testGlobalGetByIndexUnfolded() {
+        doTest($$"""
+            (module
+              (global (;TARGET;)$g1 (mut i32) (i32.const 0))
+              (func $1
+                global.get <caret>0))
         """)
     }
 

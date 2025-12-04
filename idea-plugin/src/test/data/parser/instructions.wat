@@ -13,5 +13,8 @@
 
     (call $1)
     call $1
+
+    (global.get $1)
+    global.get $1
   )
 )
