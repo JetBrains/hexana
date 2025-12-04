@@ -197,6 +197,14 @@ public class WatParser implements PsiParser {
                     }
                     m.done(WatElementType.UEXPR);
                 }
+                else if (token == WatToken.BR_ON_CAST) {
+                    PsiBuilder.Marker m = b.mark();
+                    b.advanceLexer();
+                    idOrNum(b, b.getTokenType());
+                    readRefType(b);
+                    readRefType(b);
+                    m.done(WatElementType.UEXPR);
+                }
                 else {
                     IElementType blockElementType = blocks.get(token);
                     if (blockElementType != null) {
@@ -223,25 +231,44 @@ public class WatParser implements PsiParser {
 
     private static void readResult(@NonNull PsiBuilder b) {
         if (b.getTokenType() == WatToken.OPEN_PAREN && b.lookAhead(1) == WatToken.RESULT) {
-            PsiBuilder.Marker mark = b.mark();
-            b.advanceLexer();
-            b.advanceLexer();
-            int openParenCount = 1;
-            while (openParenCount > 0) {
-                IElementType token = b.getTokenType();
-                if (token == null) {
-                    break;
-                }
-                else if (token == WatToken.OPEN_PAREN) {
-                    openParenCount++;
-                }
-                else if (token == WatToken.CLOSE_PAREN) {
-                    openParenCount--;
-                }
-                advanceLexer(b);
-            }
-            mark.done(WatElementType.SEXPR);
+            readBalancedSExpr(b);
         }
+    }
+
+    private static void readRefType(@NotNull PsiBuilder b) {
+        IElementType token = b.getTokenType();
+        if (token == WatToken.ANYREF || token == WatToken.EQREF ||
+                token == WatToken.I31REF || token == WatToken.STRUCTREF ||
+                token == WatToken.ARRAYREF || token == WatToken.FUNCREF ||
+                token == WatToken.EXNREF || token == WatToken.EXTERNREF ||
+                token == WatToken.NULLREF || token == WatToken.NULLFUNCREF ||
+                token == WatToken.NULLEXNREF || token == WatToken.NULLEXTERNREF) {
+            b.advanceLexer();
+            return;
+        }
+        if (token == WatToken.OPEN_PAREN && b.lookAhead(1) == WatToken.REF) {
+            readBalancedSExpr(b);
+        }
+    }
+
+    private static void readBalancedSExpr(@NonNull PsiBuilder b) {
+        PsiBuilder.Marker mark = b.mark();
+        b.advanceLexer(); // (
+        int openParenCount = 1;
+        while (openParenCount > 0) {
+            IElementType token = b.getTokenType();
+            if (token == null) {
+                break;
+            }
+            else if (token == WatToken.OPEN_PAREN) {
+                openParenCount++;
+            }
+            else if (token == WatToken.CLOSE_PAREN) {
+                openParenCount--;
+            }
+            advanceLexer(b);
+        }
+        mark.done(WatElementType.SEXPR);
     }
 
     private static void advanceLexer(@NonNull PsiBuilder b) {

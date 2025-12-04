@@ -40,5 +40,26 @@
 
     (br_on_non_null $L1)
     br_on_non_null $L1
+
+    (br_on_cast $L1 (ref $t1) (ref null $t2) (local.get 0))
+    br_on_cast $L1 (ref $t1) (ref null $t2)
+
+    (br_on_cast $L1 anyref eqref (local.get 0))
+    br_on_cast $L1 anyref eqref
+
+    (br_on_cast $L1 i31ref structref (local.get 0))
+    br_on_cast $L1 i31ref structref
+
+    (br_on_cast $L1 arrayref funcref (local.get 0))
+    br_on_cast $L1 arrayref funcref
+
+    (br_on_cast $L1 exnref externref (local.get 0))
+    br_on_cast $L1 exnref externref
+
+    (br_on_cast $L1 nullref nullfuncref (local.get 0))
+    br_on_cast $L1 nullref nullfuncref
+
+    (br_on_cast $L1 nullexnref nullexternref (local.get 0))
+    br_on_cast $L1 nullexnref nullexternref
   )
 )
