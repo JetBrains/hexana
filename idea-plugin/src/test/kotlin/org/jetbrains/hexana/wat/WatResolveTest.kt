@@ -41,12 +41,32 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testCallRefUnfolded() {
+        doTest($$"""
+            (module
+              (func $f0)
+              (func (;TARGET;)$f1 (param $x i64) (result i64)
+                call <caret>$f1))
+              (func $f2))
+        """)
+    }
+
     fun testCallRefByIndex() {
         doTest($$"""
             (module
               (import "env" "f0" (func $f0))
               (func (;TARGET;)$f1 (param $x i64) (result i64)
                 (call <caret>1 (local.get $x)))
+              (func $f2))
+        """)
+    }
+
+    fun testCallRefByIndexUnfolded() {
+        doTest($$"""
+            (module
+              (import "env" "f0" (func $f0))
+              (func (;TARGET;)$f1 (param $x i64) (result i64)
+                call <caret>1))
               (func $f2))
         """)
     }

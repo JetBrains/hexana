@@ -10,5 +10,8 @@
 
     (local.tee $var (i32.const 1))
     local.tee $var
+
+    (call $1)
+    call $1
   )
 )
