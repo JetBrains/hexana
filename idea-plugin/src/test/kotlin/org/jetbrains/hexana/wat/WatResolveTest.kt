@@ -309,12 +309,30 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testTagCatchUnfolded() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$1 (type $0) (param i32))
+              (func $1
+                catch <caret>$1))
+        """)
+    }
+
     fun testTagCatchByIndex() {
         doTest($$"""
             (module
               (tag (;TARGET;)$tag1 (type $0) (param i32))
               (func $1
                 (catch <caret>0)))
+        """)
+    }
+
+    fun testTagCatchByIndexUnfolded() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$tag1 (type $0) (param i32))
+              (func $1
+                catch <caret>0))
         """)
     }
 

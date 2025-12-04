@@ -22,5 +22,8 @@
 
     (throw $1 (i32.const 0))
     throw $1
+
+    (catch <caret>$1)
+    catch $1
   )
 )
