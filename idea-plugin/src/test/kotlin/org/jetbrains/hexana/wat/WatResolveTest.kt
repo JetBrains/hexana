@@ -971,6 +971,22 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testBrOnCastFailUnfolded() {
+        doTest($$"""
+            (module
+              (func $1
+                block (;TARGET;)$L1
+                  if $L2
+                    loop $L3
+                      br_on_cast_fail <caret>$L1 (ref $child_struct) anyref
+                    end
+                  end
+                end
+              )
+            )
+        """)
+    }
+
     fun testBrOnCastFailByIndex() {
         doTest($$"""
             (module
@@ -979,6 +995,22 @@ class WatResolveTest : BasePlatformTestCase() {
                   (if $L2
                     (loop $L3
                       (br_on_cast_fail <caret>2 (ref $child_struct))))))
+        """)
+    }
+
+    fun testBrOnCastFailByIndexUnfolded() {
+        doTest($$"""
+            (module
+              (func $1
+                block (;TARGET;)$L1
+                  if $L2
+                    loop $L3
+                      br_on_cast_fail <caret>2 (ref $child_struct) anyref
+                    end
+                  end
+                end
+              )
+            )
         """)
     }
 }

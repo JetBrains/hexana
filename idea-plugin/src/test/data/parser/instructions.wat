@@ -61,5 +61,8 @@
 
     (br_on_cast $L1 nullexnref nullexternref (local.get 0))
     br_on_cast $L1 nullexnref nullexternref
+
+    (br_on_cast_fail $L1 anyref anyref (local.get 0))
+    br_on_cast_fail $L1 anyref anyref
   )
 )

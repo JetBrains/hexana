@@ -197,7 +197,7 @@ public class WatParser implements PsiParser {
                     }
                     m.done(WatElementType.UEXPR);
                 }
-                else if (token == WatToken.BR_ON_CAST) {
+                else if (token == WatToken.BR_ON_CAST || token == WatToken.BR_ON_CAST_FAIL) {
                     PsiBuilder.Marker m = b.mark();
                     b.advanceLexer();
                     idOrNum(b, b.getTokenType());
