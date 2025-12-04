@@ -25,5 +25,8 @@
 
     (catch <caret>$1)
     catch $1
+
+    (br $L1)
+    br $L1
   )
 )
