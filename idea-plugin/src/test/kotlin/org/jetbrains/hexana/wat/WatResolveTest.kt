@@ -755,6 +755,22 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testBrTableUnfolded() {
+        doTest($$"""
+            (module
+              (func $1
+                if (;TARGET;)$L1
+                  block $L2
+                    loop $L3
+                      br_table $b3 $b2 <caret>$L1
+                    end
+                  end
+                end
+              )
+            )
+        """)
+    }
+
     fun testBrTableByIndex() {
         doTest($$"""
             (module
@@ -763,6 +779,22 @@ class WatResolveTest : BasePlatformTestCase() {
                   (block $L2
                     (loop $L3
                       (br_table 0 1 <caret>2 (local.get 0))))))
+        """)
+    }
+
+    fun testBrTableByIndexUnfolded() {
+        doTest($$"""
+            (module
+              (func $1
+                if (;TARGET;)$L1
+                  block $L2
+                    loop $L3
+                      br_table 0 1 <caret>2
+                    end
+                  end
+                end
+              )
+            )
         """)
     }
 

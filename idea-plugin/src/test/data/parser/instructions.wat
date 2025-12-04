@@ -31,5 +31,8 @@
 
     (br_if $L1)
     br_if $L1
+
+    (br_table $L1 $L2 $L3 (local.get 0))
+    br_table $L1 $L2 $L3
   )
 )

@@ -185,6 +185,16 @@ public class WatParser implements PsiParser {
                     idOrNum(b, b.getTokenType());
                     m.done(unfoldedElementType);
                 }
+                else if (token == WatToken.BR_TABLE) {
+                    PsiBuilder.Marker m = b.mark();
+                    b.advanceLexer();
+                    while (true) {
+                        if (!idOrNum(b, b.getTokenType())) {
+                            break;
+                        }
+                    }
+                    m.done(WatElementType.UEXPR);
+                }
                 else {
                     IElementType blockElementType = blocks.get(token);
                     if (blockElementType != null) {
