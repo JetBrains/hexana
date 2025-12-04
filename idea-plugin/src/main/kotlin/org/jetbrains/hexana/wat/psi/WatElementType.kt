@@ -37,6 +37,8 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val BLOCK = WatElementType("BLOCK")
         @JvmField val LOOP = WatElementType("LOOP")
         @JvmField val IF = WatElementType("IF")
+        @JvmField val THEN = WatElementType("THEN")
+        @JvmField val ELSE = WatElementType("ELSE")
     }
 }
 

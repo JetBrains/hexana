@@ -41,6 +41,8 @@ public class WatParser implements PsiParser {
         tokenMap.put(WatToken.BLOCK, WatElementType.BLOCK);
         tokenMap.put(WatToken.LOOP, WatElementType.LOOP);
         tokenMap.put(WatToken.IF, WatElementType.IF);
+        tokenMap.put(WatToken.THEN, WatElementType.THEN);
+        tokenMap.put(WatToken.ELSE, WatElementType.ELSE);
         tokenMap.put(WatElementType.FUNC_BODY, WatElementType.FUNC_BODY);
 
         uexpr1.put(WatToken.LOCAL_GET, WatElementType.UEXPR);
@@ -54,6 +56,7 @@ public class WatParser implements PsiParser {
 
         blocks.put(WatToken.BLOCK, WatElementType.BLOCK);
         blocks.put(WatToken.LOOP, WatElementType.LOOP);
+        blocks.put(WatToken.IF, WatElementType.IF);
     }
 
     private static class Expr {
@@ -155,6 +158,12 @@ public class WatParser implements PsiParser {
                     b.advanceLexer();
                     expr.done();
                 }
+            } else if (token == WatToken.ELSE) {
+                if (getLastTypeOrNull(unfoldedBlockStack) == WatElementType.THEN) {
+                    unfoldedBlockStack.removeLast().done();
+                }
+                unfoldedBlockStack.add(new Expr(b.mark(), WatElementType.ELSE));
+                b.advanceLexer();
             } else if (token == WatToken.END) {
                 if (unfoldedBlockStack.isEmpty()) {
                     b.advanceLexer();
@@ -162,6 +171,9 @@ public class WatParser implements PsiParser {
                     Expr expr = unfoldedBlockStack.removeLast();
                     b.advanceLexer();
                     expr.done();
+                    if ((expr.type == WatElementType.THEN || expr.type == WatElementType.ELSE) && getLastTypeOrNull(unfoldedBlockStack) == WatElementType.IF) {
+                        unfoldedBlockStack.removeLast().done();
+                    }
                 }
             } else {
                 IElementType unfoldedElementType = uexpr1.get(token);
@@ -174,15 +186,48 @@ public class WatParser implements PsiParser {
                 else {
                     IElementType blockElementType = blocks.get(token);
                     if (blockElementType != null) {
-                        PsiBuilder.Marker m = b.mark();
-                        unfoldedBlockStack.add(new Expr(m, blockElementType));
+                        unfoldedBlockStack.add(new Expr(b.mark(), blockElementType));
+                        b.advanceLexer();
+                        if (token == WatToken.IF) {
+                            idOrNum(b, b.getTokenType());
+                            readResult(b);
+                            unfoldedBlockStack.add(new Expr(b.mark(), WatElementType.THEN));
+                        }
+                    } else {
+                        advanceLexer(b);
                     }
-                    advanceLexer(b);
                 }
             }
         }
 
         rootMark.done(root);
+    }
+
+    private static @Nullable IElementType getLastTypeOrNull(@NotNull ArrayList<Expr> list) {
+        return list.isEmpty() ? null : list.getLast().type;
+    }
+
+    private static void readResult(@NonNull PsiBuilder b) {
+        if (b.getTokenType() == WatToken.OPEN_PAREN && b.lookAhead(1) == WatToken.RESULT) {
+            PsiBuilder.Marker mark = b.mark();
+            b.advanceLexer();
+            b.advanceLexer();
+            int openParenCount = 1;
+            while (openParenCount > 0) {
+                IElementType token = b.getTokenType();
+                if (token == null) {
+                    break;
+                }
+                else if (token == WatToken.OPEN_PAREN) {
+                    openParenCount++;
+                }
+                else if (token == WatToken.CLOSE_PAREN) {
+                    openParenCount--;
+                }
+                advanceLexer(b);
+            }
+            mark.done(WatElementType.SEXPR);
+        }
     }
 
     private static void advanceLexer(@NonNull PsiBuilder b) {
