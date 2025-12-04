@@ -54,6 +54,7 @@ public class WatParser implements PsiParser {
         uexpr1.put(WatToken.THROW, WatElementType.THROW);
         uexpr1.put(WatToken.CATCH, WatElementType.CATCH);
         uexpr1.put(WatToken.BR, WatElementType.UEXPR);
+        uexpr1.put(WatToken.BR_IF, WatElementType.UEXPR);
 
         blocks.put(WatToken.BLOCK, WatElementType.BLOCK);
         blocks.put(WatToken.LOOP, WatElementType.LOOP);

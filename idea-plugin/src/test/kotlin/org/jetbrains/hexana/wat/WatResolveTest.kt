@@ -701,6 +701,22 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testBrIfUnfolded() {
+        doTest($$"""
+            (module
+              (func $1
+                if (;TARGET;)$L1
+                  block $L2
+                    loop $L3
+                      br_if <caret>$L1
+                    end
+                  end
+                end
+              )
+            )
+        """)
+    }
+
     fun testBrIfByIndex() {
         doTest($$"""
             (module
@@ -709,6 +725,22 @@ class WatResolveTest : BasePlatformTestCase() {
                   (block $L2
                     (loop $L3
                       (br_if <caret>2)))))
+        """)
+    }
+
+    fun testBrIfByIndexUnfolded() {
+        doTest($$"""
+            (module
+              (func $1
+                if (;TARGET;)$L1
+                  block $L2
+                    loop $L3
+                      br_if <caret>2
+                    end
+                  end
+                end
+              )
+            )
         """)
     }
 

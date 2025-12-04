@@ -28,5 +28,8 @@
 
     (br $L1)
     br $L1
+
+    (br_if $L1)
+    br_if $L1
   )
 )
