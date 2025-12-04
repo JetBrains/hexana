@@ -75,4 +75,8 @@ class WatParserTest : ParsingTestCase("parser", "wat", true, WatParserDefinition
     fun testSexpr() {
         doTest()
     }
+
+    fun testInstructions() {
+        doTest()
+    }
 }

@@ -15,6 +15,7 @@ import java.util.Map;
 public class WatParser implements PsiParser {
 
     private final static Map<IElementType, IElementType> tokenMap = new HashMap<>();
+    private final static Map<IElementType, IElementType> uexpr1 = new HashMap<>();
 
     static {
         tokenMap.put(WatToken.MODULE, WatElementType.MODULE);
@@ -40,6 +41,10 @@ public class WatParser implements PsiParser {
         tokenMap.put(WatToken.LOOP, WatElementType.LOOP);
         tokenMap.put(WatToken.IF, WatElementType.IF);
         tokenMap.put(WatElementType.FUNC_BODY, WatElementType.FUNC_BODY);
+
+        uexpr1.put(WatToken.LOCAL_GET, WatElementType.UEXPR);
+        uexpr1.put(WatToken.LOCAL_SET, WatElementType.UEXPR);
+        uexpr1.put(WatToken.LOCAL_TEE, WatElementType.UEXPR);
     }
 
     private static class Expr {
@@ -124,6 +129,9 @@ public class WatParser implements PsiParser {
                         }
                     }
                 }
+                else if (next != WatToken.OPEN_PAREN && next != WatToken.CLOSE_PAREN) {
+                    advanceLexer(b);
+                }
             } else if (token == WatToken.CLOSE_PAREN) {
                 if (exprStack.isEmpty()) {
                     b.error("Unexpected token");
@@ -137,12 +145,27 @@ public class WatParser implements PsiParser {
                     b.advanceLexer();
                     expr.done();
                 }
-            } else if (!idOrNum(b, token)) {
-                b.advanceLexer();
+            } else {
+                IElementType unfoldedElementType = uexpr1.get(token);
+                if (unfoldedElementType != null) {
+                    PsiBuilder.Marker m = b.mark();
+                    b.advanceLexer();
+                    idOrNum(b, b.getTokenType());
+                    m.done(unfoldedElementType);
+                }
+                else {
+                    advanceLexer(b);
+                }
             }
         }
 
         rootMark.done(root);
+    }
+
+    private static void advanceLexer(@NonNull PsiBuilder b) {
+        if (!idOrNum(b, b.getTokenType())) {
+            b.advanceLexer();
+        }
     }
 
     private static boolean idOrNum(@NonNull PsiBuilder b, @Nullable IElementType token) {

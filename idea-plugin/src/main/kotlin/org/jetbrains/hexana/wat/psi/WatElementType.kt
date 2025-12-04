@@ -6,13 +6,12 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.tree.ILazyParseableElementType
-import io.ktor.server.application.Application
 import org.jetbrains.hexana.wat.WatLanguage
-import kotlin.math.log
 
 class WatElementType(val name: String) : IElementType(name, WatLanguage) {
     companion object {
         @JvmField val SEXPR = WatElementType("SEXPR")
+        @JvmField val UEXPR = WatElementType("UEXPR") // unfolded expression without parentheses
         @JvmField val MODULE = WatElementType("MODULE")
         @JvmField val TYPE = WatElementType("TYPE")
         @JvmField val IMPORT = WatElementType("IMPORT")

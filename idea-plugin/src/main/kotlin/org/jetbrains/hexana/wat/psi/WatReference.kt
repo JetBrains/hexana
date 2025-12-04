@@ -355,6 +355,10 @@ class WatReference(
             val withoutParen = expr.node.children().drop(1)
             return withoutParen.firstOrNull()?.elementType
         }
+        if (expr?.elementType == WatElementType.UEXPR) {
+            val children = expr.node.children()
+            return children.firstOrNull()?.elementType
+        }
         return null
     }
 }
