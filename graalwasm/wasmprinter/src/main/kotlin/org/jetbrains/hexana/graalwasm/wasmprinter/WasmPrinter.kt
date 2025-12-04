@@ -10,7 +10,7 @@ import org.jetbrains.hexana.graalwasm.initWasmContext
 import java.io.ByteArrayOutputStream
 import java.net.URL
 
-internal class WasmPrinter() {
+internal class WasmPrinter(val foldInstructions: Boolean = true, val nameUnnamed: Boolean = true) {
     private val context: Context = initWasmContext()
     private val module: Value
     private val memory: WasmModuleMemory
@@ -65,7 +65,10 @@ internal class WasmPrinter() {
         val ptr = allocInput.execute(bytes.size).asInt()
         memory.write(ptr, bytes)
 
-        printWat.execute(ptr, bytes.size)
+        val flagFoldInstructions = foldInstructions.let { if (it) 1 else 0 }
+        val flagNameUnnamed = nameUnnamed.let { if (it) 1 else 0 }
+
+        printWat.execute(ptr, bytes.size, flagFoldInstructions, flagNameUnnamed)
 
         return WatWithWarnings(out.toByteArray().decodeToString(),
             warning.toByteArray().decodeToString().takeIf { it.isNotEmpty() })
