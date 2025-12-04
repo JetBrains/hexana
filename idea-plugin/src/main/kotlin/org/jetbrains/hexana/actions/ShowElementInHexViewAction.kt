@@ -10,6 +10,7 @@ import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.HexanaFileEditor
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wat.psi.WatDataElement
+import org.jetbrains.hexana.wat.psi.WatFuncElement
 import org.jetbrains.hexana.wat.psi.WatModuleElement
 import org.jetbrains.hexana.wat.psi.WatNameIdentifierOwner
 
@@ -66,6 +67,11 @@ class ShowElementInHexViewAction : AnAction() {
                     return getDataOffsetInHex(wasmBinaryProvider, e)
                 }
             }
+            is WatFuncElement -> object : ElementOffsetProvider {
+                override fun getOffset(): LongRange? {
+                    return getFuncOffsetInHex(wasmBinaryProvider, e)
+                }
+            }
             else -> null
         }
     }
@@ -83,5 +89,20 @@ class ShowElementInHexViewAction : AnAction() {
         }
         val record = wasmBinaryProvider.getData().getOrNull(index) ?: return null
         return LongRange(record.offset, record.offset + record.recordLength - 1)
+    }
+
+    fun getFuncOffsetInHex(wasmBinaryProvider: WasmBinaryProvider, e: WatFuncElement): LongRange? {
+        val module = e.parent as? WatModuleElement ?: return null
+        var index = 0
+        for (child in module.children) {
+            if (child == e) {
+                break
+            }
+            if (child is WatFuncElement) {
+                index++
+            }
+        }
+        val record = wasmBinaryProvider.getCodeRecordByIndex(index) ?: return null
+        return LongRange(record.offset, record.offset + record.size.toInt() - 1)
     }
 }

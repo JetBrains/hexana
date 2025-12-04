@@ -1,5 +1,5 @@
 Wat File
-  WatPsiElement(IMPORT)
+  WatImportElement(IMPORT)
     PsiElement(()('(')
     PsiElement(import)('import')
     PsiWhiteSpace(' ')

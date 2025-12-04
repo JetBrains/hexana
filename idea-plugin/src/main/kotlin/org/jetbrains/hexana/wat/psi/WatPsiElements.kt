@@ -8,6 +8,7 @@ import com.intellij.psi.PsiNameIdentifierOwner
 import com.intellij.psi.PsiReference
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
+import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.hexana.wat.WatNavigation
 
 
@@ -79,6 +80,17 @@ class WatDataElement(node: ASTNode) : WatNameIdentifierOwner(node)
 class WatLocalElement(node: ASTNode) : WatNameIdentifierOwner(node), WatFunctionLocalElement
 
 class WatParamElement(node: ASTNode) : WatNameIdentifierOwner(node), WatFunctionLocalElement
+
+class WatImportElement(node: ASTNode) : WatNameIdentifierOwner(node) {
+    override fun getNameIdentifier(): PsiElement? {
+        val func = getFunc()
+        return func?.nameIdentifier
+    }
+
+    fun getFunc(): WatFuncElement? {
+        return PsiTreeUtil.findChildOfType(this, WatFuncElement::class.java)
+    }
+}
 
 open class WatLabelOwner(node: ASTNode) : WatNameIdentifierOwner(node), WatFunctionLocalElement
 

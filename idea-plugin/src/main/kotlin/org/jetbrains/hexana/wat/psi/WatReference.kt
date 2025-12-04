@@ -128,18 +128,10 @@ class WatReference(
     fun resolveFuncByName(file: PsiFile?, name: String): PsiElement? {
         val module = getModule(file) ?: return null
         for (e in module.children) {
-            if (e.elementType == WatElementType.IMPORT) {
-                val importedFunc = PsiTreeUtil.findChildOfType(e, WatFuncElement::class.java)
-                val nameElement = importedFunc?.nameIdentifier
-                if (nameElement?.textMatches(name) == true) {
-                    return importedFunc
-                }
-            }
-            if (e is WatFuncElement) {
-                val nameElement = e.nameIdentifier
-                if (nameElement?.textMatches(name) == true) {
-                    return e
-                }
+            val func = getDefinedOrImportedFunc(e)
+            val nameElement = func?.nameIdentifier
+            if (nameElement?.textMatches(name) == true) {
+                return func
             }
         }
         return null
@@ -149,23 +141,23 @@ class WatReference(
         val module = getModule(file) ?: return null
         var currentIndex = 0
         for (e in module.children) {
-            if (e.elementType == WatElementType.IMPORT) {
-                val importedFunc = PsiTreeUtil.findChildOfType(e, WatFuncElement::class.java)
-                if (importedFunc != null) {
-                    if (currentIndex == index) {
-                        return importedFunc
-                    }
-                    currentIndex++
-                }
-            }
-            else if (e is WatFuncElement) {
+            val func = getDefinedOrImportedFunc(e)
+            if (func != null) {
                 if (currentIndex == index) {
-                    return e
+                    return func
                 }
                 currentIndex++
             }
         }
         return null
+    }
+
+    private fun getDefinedOrImportedFunc(e: PsiElement): WatFuncElement? {
+        return  when (e) {
+            is WatImportElement -> e.getFunc()
+            is WatFuncElement -> e
+            else -> null
+        }
     }
 
     fun getElementTableNameOrIndex(elemOrTable: PsiElement?): WatPsiElement? {

@@ -96,6 +96,9 @@ public class WatParserDefinition implements ParserDefinition {
         if (nodeType == WatElementType.MODULE) {
             return new WatModuleElement(node);
         }
+        if (nodeType == WatElementType.IMPORT) {
+            return new WatImportElement(node);
+        }
         return new WatPsiElement(node);
     }
 

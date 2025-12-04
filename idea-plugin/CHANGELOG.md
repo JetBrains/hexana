@@ -5,6 +5,7 @@
 ### Added
 
 - UTF-8 text preview
+- navigation from function definition in wat to hex view 
 
 ### Changed
 
