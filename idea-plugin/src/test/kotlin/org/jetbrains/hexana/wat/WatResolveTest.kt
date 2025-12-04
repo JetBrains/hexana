@@ -863,6 +863,22 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testBrOnNonNullUnfolded() {
+        doTest($$"""
+            (module
+              (func $1
+                block (;TARGET;)$L1
+                  if $L2
+                    loop $L3
+                      br_on_non_null <caret>$L1
+                    end
+                  end
+                end
+              )
+            )
+        """)
+    }
+
     fun testBrOnNonNullByIndex() {
         doTest($$"""
             (module
@@ -871,6 +887,22 @@ class WatResolveTest : BasePlatformTestCase() {
                   (if $L2
                     (loop $L3
                       (br_on_non_null <caret>2)))))
+        """)
+    }
+
+    fun testBrOnNonNullByIndexUnfolded() {
+        doTest($$"""
+            (module
+              (func $1
+                block (;TARGET;)$L1
+                  if $L2
+                    loop $L3
+                      br_on_non_null <caret>2
+                    end
+                  end
+                end
+              )
+            )
         """)
     }
 
