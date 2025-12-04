@@ -273,12 +273,30 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testTagThrowUnfolded() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$1 (type $0) (param i32))
+              (func $1
+                throw <caret>$1)))
+        """)
+    }
+
     fun testTagThrowIndex() {
         doTest($$"""
             (module
               (tag (;TARGET;)$tag1 (type $0) (param i32))
               (func $1
                 (throw <caret>0 (i32.const 0))))
+        """)
+    }
+
+    fun testTagThrowIndexUnfolded() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$tag1 (type $0) (param i32))
+              (func $1
+                throw <caret>0)))
         """)
     }
 

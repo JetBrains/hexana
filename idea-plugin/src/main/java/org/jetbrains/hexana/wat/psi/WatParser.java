@@ -48,6 +48,7 @@ public class WatParser implements PsiParser {
         uexpr1.put(WatToken.CALL, WatElementType.CALL);
         uexpr1.put(WatToken.GLOBAL_GET, WatElementType.GLOBAL_GET);
         uexpr1.put(WatToken.GLOBAL_SET, WatElementType.GLOBAL_SET);
+        uexpr1.put(WatToken.THROW, WatElementType.THROW);
     }
 
     private static class Expr {

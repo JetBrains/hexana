@@ -19,5 +19,8 @@
 
     (global.set $1 (i32.const 1))
     global.set $1
+
+    (throw $1 (i32.const 0))
+    throw $1
   )
 )
