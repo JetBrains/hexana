@@ -16,5 +16,8 @@
 
     (global.get $1)
     global.get $1
+
+    (global.set $1 (i32.const 1))
+    global.set $1
   )
 )
