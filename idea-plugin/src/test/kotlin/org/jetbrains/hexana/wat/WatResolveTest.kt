@@ -490,9 +490,11 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (func $1)
                 block (;TARGET;)$L1
-                  (loop $L2
+                  loop $L2
                     (if $L3
-                      (br <caret>$L1)))
+                      (br <caret>$L1)
+                    )
+                  end
                 end
               )
             )
@@ -515,11 +517,11 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (func $1)
                 block (;TARGET;)$L1
-                  (loop $L2
+                  loop $L2
                     (if $L3
                       (br <caret>2)
                     )
-                  )
+                  end
                 end
               )
             )
@@ -537,6 +539,22 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testLoopUnfolded() {
+        doTest($$"""
+            (module
+              (func $1)
+                loop (;TARGET;)$L1
+                  block $L2
+                    (if $L3
+                      (br <caret>$L1)
+                    )
+                  end
+                end
+              )
+            )
+        """)
+    }
+
     fun testLoopByIndex() {
         doTest($$"""
             (module
@@ -545,6 +563,22 @@ class WatResolveTest : BasePlatformTestCase() {
                   (block $L2
                     (if $L3
                       (br <caret>2)))))
+        """)
+    }
+
+    fun testLoopByIndexUnfolded() {
+        doTest($$"""
+            (module
+              (func $1)
+                loop (;TARGET;)$L1
+                  block $L2
+                    (if $L3
+                      (br <caret>2)
+                    )
+                  end
+                end
+              )
+            )
         """)
     }
 

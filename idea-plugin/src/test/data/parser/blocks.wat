@@ -5,5 +5,11 @@
     block $B1
       nop
     end
+
+    (loop $L1
+      (nop))
+    loop $L1
+      nop
+    end
   )
 )

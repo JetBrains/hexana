@@ -16,6 +16,7 @@ public class WatParser implements PsiParser {
 
     private final static Map<IElementType, IElementType> tokenMap = new HashMap<>();
     private final static Map<IElementType, IElementType> uexpr1 = new HashMap<>();
+    private final static Map<IElementType, IElementType> blocks = new HashMap<>();
 
     static {
         tokenMap.put(WatToken.MODULE, WatElementType.MODULE);
@@ -50,6 +51,9 @@ public class WatParser implements PsiParser {
         uexpr1.put(WatToken.GLOBAL_SET, WatElementType.GLOBAL_SET);
         uexpr1.put(WatToken.THROW, WatElementType.THROW);
         uexpr1.put(WatToken.CATCH, WatElementType.CATCH);
+
+        blocks.put(WatToken.BLOCK, WatElementType.BLOCK);
+        blocks.put(WatToken.LOOP, WatElementType.LOOP);
     }
 
     private static class Expr {
@@ -168,9 +172,10 @@ public class WatParser implements PsiParser {
                     m.done(unfoldedElementType);
                 }
                 else {
-                    if (token == WatToken.BLOCK) {
+                    IElementType blockElementType = blocks.get(token);
+                    if (blockElementType != null) {
                         PsiBuilder.Marker m = b.mark();
-                        unfoldedBlockStack.add(new Expr(m, WatElementType.BLOCK));
+                        unfoldedBlockStack.add(new Expr(m, blockElementType));
                     }
                     advanceLexer(b);
                 }
