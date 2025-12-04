@@ -88,6 +88,7 @@ public class WatParser implements PsiParser {
         PsiBuilder.Marker rootMark = b.mark();
         boolean collapseLazy = root instanceof WatFileElementType;
         ArrayList<Expr> exprStack = new ArrayList<>();
+        ArrayList<Expr> unfoldedBlockStack = new ArrayList<>();
         while (true) {
             IElementType token = b.getTokenType();
             if (token == null) {
@@ -150,6 +151,14 @@ public class WatParser implements PsiParser {
                     b.advanceLexer();
                     expr.done();
                 }
+            } else if (token == WatToken.END) {
+                if (unfoldedBlockStack.isEmpty()) {
+                    b.advanceLexer();
+                } else {
+                    Expr expr = unfoldedBlockStack.removeLast();
+                    b.advanceLexer();
+                    expr.done();
+                }
             } else {
                 IElementType unfoldedElementType = uexpr1.get(token);
                 if (unfoldedElementType != null) {
@@ -159,6 +168,10 @@ public class WatParser implements PsiParser {
                     m.done(unfoldedElementType);
                 }
                 else {
+                    if (token == WatToken.BLOCK) {
+                        PsiBuilder.Marker m = b.mark();
+                        unfoldedBlockStack.add(new Expr(m, WatElementType.BLOCK));
+                    }
                     advanceLexer(b);
                 }
             }
