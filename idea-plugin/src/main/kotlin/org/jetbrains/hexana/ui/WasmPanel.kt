@@ -45,6 +45,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -298,6 +299,13 @@ internal sealed interface WasmPanel : Panel {
         @Composable
         override fun onRender() {
             val wasmViewState by wasmViewModel.conversionState.collectAsState()
+            state.setViewMode(HexViewMode.Wat)
+
+            DisposableEffect(Unit) {
+                onDispose {
+                    state.setViewMode(HexViewMode.Hex)
+                }
+            }
 
             when (wasmViewState) {
                 null, is WatConversionState.Loading -> ConvertingIndicator(message = "0000 0 1001 01 10 01 converting ${wasmBinaryProvider.file.name}")

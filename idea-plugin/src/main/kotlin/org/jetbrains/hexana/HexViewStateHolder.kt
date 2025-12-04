@@ -25,8 +25,21 @@ class HexSelection(val start: HexPosition, val end: HexPosition) {
     }
 }
 
+sealed class HexViewMode {
+    object Hex : HexViewMode()
+    object Wat : HexViewMode()
+}
+
 class HexViewStateHolder {
     val currentState: MutableState<HexViewState> = mutableStateOf(HexViewState())
+
+    private var _viewMode = mutableStateOf<HexViewMode>(HexViewMode.Hex)
+    val viewMode: HexViewMode get() = _viewMode.value
+    fun setViewMode(mode: HexViewMode) {
+        _viewMode.value = mode
+    }
+
+    var showSearchDialog = mutableStateOf(false)
 
     // Keep the latest requested scroll offset so late collectors (e.g., HexViewer composed after
     // the emission from a LaunchedEffect) still receive it.

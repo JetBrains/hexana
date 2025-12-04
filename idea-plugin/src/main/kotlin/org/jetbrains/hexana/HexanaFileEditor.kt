@@ -27,6 +27,10 @@ import java.io.Serializable
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.swing.JComponent
 import javax.swing.JPanel
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.IdeActions
+import com.intellij.openapi.keymap.KeymapUtil
+import com.intellij.openapi.project.DumbAwareAction
 
 class HexanaFileEditor(
     val myProject: Project,
@@ -80,6 +84,18 @@ class HexanaFileEditor(
             BinaryEditorView(binaryProvider!!, stateHolder)
         }
         panel.add(hexView)
+
+        val findShortcuts = KeymapUtil.getActiveKeymapShortcuts(IdeActions.ACTION_FIND)
+        val showSearchAction = object : DumbAwareAction() {
+            override fun update(actionEvent: AnActionEvent) {
+                actionEvent.presentation.isEnabledAndVisible = stateHolder.viewMode == HexViewMode.Hex
+            }
+            override fun actionPerformed(actionEvent: AnActionEvent) {
+                stateHolder.showSearchDialog.value = true
+            }
+        }
+
+        showSearchAction.registerCustomShortcutSet(findShortcuts, panel)
     }
 
     override fun getComponent(): JComponent {

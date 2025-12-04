@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.intellij.openapi.ide.CopyPasteManager
+import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.jewel.foundation.modifier.onHover
 import org.jetbrains.jewel.ui.component.Text
@@ -31,6 +32,9 @@ import kotlin.math.min
 internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: Boolean = true) {
     BoxWithConstraints(modifier = Modifier
         .fillMaxSize()
+        .onClick {
+            state.setViewMode(HexViewMode.Hex)
+        }
         .background(HexanaTheme.backgroundColor)) {
         val codePanelListState = rememberLazyListState()
 
@@ -51,6 +55,17 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
 
 
         Column(modifier = Modifier.fillMaxSize()) {
+//            if (state.showSearchDialog.value) {
+//                Row(Modifier.fillMaxWidth()) {
+//                    HexSearchField(
+//                        onClose = {
+//                            state.showSearchDialog.value = false
+//                        },
+//                        onSubmit = {},
+//                    )
+//                }
+//            }
+
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 if (showOffsets) {
                     Box(
