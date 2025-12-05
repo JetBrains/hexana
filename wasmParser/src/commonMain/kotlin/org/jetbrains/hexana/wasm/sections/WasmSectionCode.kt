@@ -50,14 +50,15 @@ class WasmSectionCode(size: Int, offset: Int): WasmSection(size, offset) {
 }
 
 fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
-    val pos = position()
+    val codeEntryStart = position()
     val funSize = getULEB128().toUInt()
 
     val bodyStart = position()
     val locals = mutableListOf<WasmCodeLocalRecord>()
     try {
         consumeLocals(locals)
-        return WasmCodeRecord(pos.toLong(), funSize, locals, parseOpCodes())
+        val opCodes = parseOpCodes()
+        return WasmCodeRecord(codeEntryStart.toLong(), (position() - codeEntryStart).toUInt(), locals, opCodes)
     } catch (e: UnsupportedOpsException) {
 
         position(bodyStart)
@@ -65,13 +66,13 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
         val raw = ByteArray(funSize.toInt())
         get(raw, 0, raw.size)
 
+        position(bodyStart + funSize.toInt())
         return WasmCodeRecord(
-                pos.toLong(),
-                funSize,
-                locals,
-            listOf(UnparsedOpCode(e, raw))).also {
-            position(bodyStart + funSize.toInt())
-        }
+            codeEntryStart.toLong(),
+            (position() - codeEntryStart).toUInt(),
+            locals,
+            listOf(UnparsedOpCode(e, raw))
+        )
     }
 }
 
