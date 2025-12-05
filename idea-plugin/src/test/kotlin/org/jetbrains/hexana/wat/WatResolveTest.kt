@@ -36,8 +36,10 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (func $f0)
               (func (;TARGET;)$f1 (param $x i64) (result i64)
-                (call <caret>$f1 (local.get $x)))
-              (func $f2))
+                (call <caret>$f1 (local.get $x))
+              )
+              (func $f2)
+            )
         """)
     }
 
@@ -46,8 +48,10 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (func $f0)
               (func (;TARGET;)$f1 (param $x i64) (result i64)
-                call <caret>$f1))
-              (func $f2))
+                call <caret>$f1)
+              )
+              (func $f2)
+            )
         """)
     }
 
@@ -56,8 +60,10 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (import "env" "f0" (func $f0))
               (func (;TARGET;)$f1 (param $x i64) (result i64)
-                (call <caret>1 (local.get $x)))
-              (func $f2))
+                (call <caret>1 (local.get $x))
+              )
+              (func $f2)
+            )
         """)
     }
 
@@ -66,7 +72,8 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (import "env" "f0" (func $f0))
               (func (;TARGET;)$f1 (param $x i64) (result i64)
-                call <caret>1))
+                call <caret>1
+              )
               (func $f2))
         """)
     }
@@ -78,7 +85,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (import "env" "f1" (func (;TARGET;)$f1))
               (import "env" "f2" (func $f2))
               (func $4
-                (call <caret>$f1)))
+                (call <caret>$f1)
+              )
+            )
         """)
     }
 
@@ -90,7 +99,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (import "env" "f1" (func (;TARGET;)$f1))
               (import "env" "f2" (func $f2))
               (func 
-                (call <caret>2)))
+                (call <caret>2)
+              )
+            )
         """)
     }
 
@@ -100,7 +111,8 @@ class WatResolveTest : BasePlatformTestCase() {
               (export "f" (func <caret>$1))
               (func $0)
               (func (;TARGET;)$1)
-              (func $2))
+              (func $2)
+            )
         """)
     }
 
@@ -110,7 +122,8 @@ class WatResolveTest : BasePlatformTestCase() {
               (export "f" (func <caret>1))
               (func $0)
               (func (;TARGET;)$f)
-              (func $2))
+              (func $2)
+            )
         """)
     }
 
@@ -120,7 +133,8 @@ class WatResolveTest : BasePlatformTestCase() {
               (table $t0 1 1 funcref)
               (table (;TARGET;)$t1 1 1 funcref)
               (table $t2 1 1 funcref)
-              (elem <caret>$t1 (i32.const 0) $f))
+              (elem <caret>$t1 (i32.const 0) $f)
+            )
         """)
     }
 
@@ -130,7 +144,8 @@ class WatResolveTest : BasePlatformTestCase() {
               (table $t0 1 1 funcref)
               (table (;TARGET;)$t1 1 1 funcref)
               (table $t2 1 1 funcref)
-              (elem <caret>1 (i32.const 0) $f))
+              (elem <caret>1 (i32.const 0) $f)
+            )
         """)
     }
 
@@ -141,7 +156,8 @@ class WatResolveTest : BasePlatformTestCase() {
               (elem $t0 (i32.const 0) $f0 <caret>$f1 $f2)
               (func $f0)
               (func (;TARGET;)$f1)
-              (func $f2))
+              (func $f2)
+            )
         """)
     }
 
@@ -152,7 +168,8 @@ class WatResolveTest : BasePlatformTestCase() {
               (elem $t0 (i32.const 0) $f0 <caret>1 $f2)
               (func $f0)
               (func (;TARGET;)$f1)
-              (func $f2))
+              (func $f2)
+            )
         """)
     }
 
@@ -161,7 +178,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (type (;TARGET;)$1 (func))
               (func $1
-                (call_indirect (type <caret>$1))))
+                (call_indirect (type <caret>$1))
+              )
+            )
         """)
     }
 
@@ -170,7 +189,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (type (;TARGET;)$t1 0 (func))
               (func $1
-                (call_indirect (type <caret>0))))
+                (call_indirect (type <caret>0))
+              )
+            )
         """)
     }
 
@@ -179,7 +200,8 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (type (;TARGET;)$1 (func))
               (func $1 (type <caret>$1)
-                ))
+              )
+            )
         """)
     }
 
@@ -188,7 +210,8 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (type (;TARGET;)$1 (func))
               (func $1 (type <caret>0)
-                ))
+              )
+            )
         """)
     }
 
@@ -197,7 +220,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (global (;TARGET;)$1 (mut i32) (i32.const 0))
               (func $1
-                (global.set <caret>$1 (i32.const 1))))
+                (global.set <caret>$1 (i32.const 1))
+              )
+            )
         """)
     }
 
@@ -206,7 +231,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (global (;TARGET;)$1 (mut i32) (i32.const 0))
               (func $1
-                global.set <caret>$1)))
+                global.set <caret>$1
+              )
+            )
         """)
     }
 
@@ -215,7 +242,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (global (;TARGET;)$g1 (mut i32) (i32.const 0))
               (func $1
-                (global.set <caret>0 (i32.const 1))))
+                (global.set <caret>0 (i32.const 1))
+              )
+            )
         """)
     }
 
@@ -224,7 +253,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (global (;TARGET;)$g1 (mut i32) (i32.const 0))
               (func $1
-                global.set <caret>0)))
+                global.set <caret>0
+              )
+            )
         """)
     }
 
@@ -233,7 +264,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (global (;TARGET;)$1 (mut i32) (i32.const 0))
               (func $1
-                (global.get <caret>$1)))
+                (global.get <caret>$1
+              )
+            )
         """)
     }
 
@@ -242,7 +275,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (global (;TARGET;)$1 (mut i32) (i32.const 0))
               (func $1
-                global.get <caret>$1))
+                global.get <caret>$1
+              )
+            )
         """)
     }
 
@@ -251,7 +286,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (global (;TARGET;)$g1 (mut i32) (i32.const 0))
               (func $1
-                (global.get <caret>0)))
+                (global.get <caret>0)
+              )
+            )
         """)
     }
 
@@ -260,7 +297,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (global (;TARGET;)$g1 (mut i32) (i32.const 0))
               (func $1
-                global.get <caret>0))
+                global.get <caret>0
+              )
+            )
         """)
     }
 
@@ -269,7 +308,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (tag (;TARGET;)$1 (type $0) (param i32))
               (func $1
-                (throw <caret>$1 (i32.const 0))))
+                (throw <caret>$1 (i32.const 0))
+              )
+            )
         """)
     }
 
@@ -278,7 +319,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (tag (;TARGET;)$1 (type $0) (param i32))
               (func $1
-                throw <caret>$1)))
+                throw <caret>$1
+              )
+            )
         """)
     }
 
@@ -287,7 +330,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (tag (;TARGET;)$tag1 (type $0) (param i32))
               (func $1
-                (throw <caret>0 (i32.const 0))))
+                (throw <caret>0 (i32.const 0))
+              )
+            )
         """)
     }
 
@@ -296,7 +341,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (tag (;TARGET;)$tag1 (type $0) (param i32))
               (func $1
-                throw <caret>0)))
+                throw <caret>0
+              )
+            )
         """)
     }
 
@@ -305,7 +352,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (tag (;TARGET;)$1 (type $0) (param i32))
               (func $1
-                (catch <caret>$1)))
+                (catch <caret>$1)
+              )
+            )
         """)
     }
 
@@ -314,7 +363,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (tag (;TARGET;)$1 (type $0) (param i32))
               (func $1
-                catch <caret>$1))
+                catch <caret>$1
+              )
+            )
         """)
     }
 
@@ -323,7 +374,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (tag (;TARGET;)$tag1 (type $0) (param i32))
               (func $1
-                (catch <caret>0)))
+                (catch <caret>0)
+              )
+            )
         """)
     }
 
@@ -332,7 +385,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (tag (;TARGET;)$tag1 (type $0) (param i32))
               (func $1
-                catch <caret>0))
+                catch <caret>0
+              )
+            )
         """)
     }
 
@@ -342,7 +397,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $1 
                 (local $0 i32)
                 (local (;TARGET;)$1 i32)
-                (local.set <caret>$1 (i32.const 10)))
+                (local.set <caret>$1 (i32.const 10))
+              )
+            )
         """)
     }
 
@@ -352,7 +409,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $1 
                 (local $0 i32)
                 (local (;TARGET;)$1 i32)
-                local.set <caret>$1))
+                local.set <caret>$1
+              )
+            )
         """)
     }
 
@@ -362,7 +421,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $1 (param $0 i32)
                 (local $l0 i32)
                 (local (;TARGET;)$l1 i32)
-                (local.set <caret>2 (i32.const 10)))
+                (local.set <caret>2 (i32.const 10))
+              )
+            )            
         """)
     }
 
@@ -372,7 +433,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $1 (param $0 i32)
                 (local $l0 i32)
                 (local (;TARGET;)$l1 i32)
-                local.set <caret>2))
+                local.set <caret>2
+              )
+            )
         """)
     }
 
@@ -382,7 +445,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $1 
                 (local $0 i32)
                 (local (;TARGET;)$1 i32)
-                (local.get <caret>$1 (i32.const 10)))
+                (local.get <caret>$1 (i32.const 10))
+              )
+            )
         """)
     }
 
@@ -392,7 +457,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $1 
                 (local $0 i32)
                 (local (;TARGET;)$1 i32)
-                local.get <caret>$1))
+                local.get <caret>$1
+              )
+            )
         """)
     }
 
@@ -402,7 +469,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $1 (param $0 i32)
                 (local $l0 i32)
                 (local (;TARGET;)$l1 i32)
-                (local.get <caret>2 (i32.const 10)))
+                (local.get <caret>2 (i32.const 10))
+              )
+            )
         """)
     }
 
@@ -412,7 +481,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $1 (param $0 i32)
                 (local $l0 i32)
                 (local (;TARGET;)$l1 i32)
-                local.get <caret>2))
+                local.get <caret>2
+              )
+            )
         """)
     }
 
@@ -422,7 +493,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $1 
                 (local $0 i32)
                 (local (;TARGET;)$1 i32)
-                (local.tee <caret>$1 (i32.const 10)))
+                (local.tee <caret>$1 (i32.const 10))
+              )
+            )
         """)
     }
 
@@ -432,7 +505,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $1 
                 (local $0 i32)
                 (local (;TARGET;)$1 i32)
-                local.tee <caret>$1))
+                local.tee <caret>$1
+              )
+            )
         """)
     }
 
@@ -442,7 +517,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $1 (param $0 i32)
                 (local $l0 i32)
                 (local (;TARGET;)$l1 i32)
-                (local.tee <caret>2 (i32.const 10)))
+                (local.tee <caret>2 (i32.const 10))
+              )
+            )
         """)
     }
 
@@ -452,7 +529,9 @@ class WatResolveTest : BasePlatformTestCase() {
               (func $1 (param $0 i32)
                 (local $l0 i32)
                 (local (;TARGET;)$l1 i32)
-                local.tee <caret>2))
+                local.tee <caret>2
+              )
+            )
         """)
     }
 
@@ -461,7 +540,9 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (func $1 (param $0 i32) (param (;TARGET;)$1 i32)
                 (local $2 i32)
-                (local.set <caret>$1 (i32.const 10)))
+                (local.set <caret>$1 (i32.const 10))
+              )
+            )
         """)
     }
 
@@ -470,25 +551,32 @@ class WatResolveTest : BasePlatformTestCase() {
             (module
               (func $1 (param $0 i32) (param (;TARGET;)$1 i32)
                 (local $2 i32)
-                (local.set <caret>1 (i32.const 10)))
+                (local.set <caret>1 (i32.const 10))
+              )
+            )
         """)
     }
 
     fun testBlock() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (block (;TARGET;)$L1
                   (loop $L2
                     (if $L3
-                      (br <caret>$L1)))))
+                      (br <caret>$L1)
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
     fun testBlockUnfolded() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 block (;TARGET;)$L1
                   loop $L2
                     (if $L3
@@ -504,18 +592,23 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBlockByIndex() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (block (;TARGET;)$L1
                   (loop $L2
                     (if $L3
-                      (br <caret>2)))))
+                      (br <caret>2)
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
     fun testBlockByIndexUnfolded() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 block (;TARGET;)$L1
                   loop $L2
                     (if $L3
@@ -531,18 +624,23 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testLoop() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (loop (;TARGET;)$L1
                   (block $L2
                     (if $L3
-                      (br <caret>$L1)))))
+                      (br <caret>$L1)
+                    )
+                  )
+                )
+              )
+            )  
         """)
     }
 
     fun testLoopUnfolded() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 loop (;TARGET;)$L1
                   block $L2
                     (if $L3
@@ -558,18 +656,23 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testLoopByIndex() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (loop (;TARGET;)$L1
                   (block $L2
                     (if $L3
-                      (br <caret>2)))))
+                      (br <caret>2)
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
     fun testLoopByIndexUnfolded() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 loop (;TARGET;)$L1
                   block $L2
                     (if $L3
@@ -585,11 +688,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testIf() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (if (;TARGET;)$L1
                   (block $L2
                     (loop $L3
-                      (br <caret>$L1)))))
+                      (br <caret>$L1)
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -612,18 +720,23 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testIfByIndex() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (if (;TARGET;)$L1
                   (block $L2
                     (loop $L3
-                      (br <caret>2)))))
+                      (br <caret>2)
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
     fun testIfByIndexUnfolded() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 if (;TARGET;)$L1
                   block $L2
                     loop $L3
@@ -639,11 +752,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBr() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (if (;TARGET;)$L1
                   (block $L2
                     (loop $L3
-                      (br <caret>$L1)))))
+                      (br <caret>$L1)
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -666,11 +784,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrByIndex() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (if (;TARGET;)$L1
                   (block $L2
                     (loop $L3
-                      (br <caret>2)))))
+                      (br <caret>2)
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -693,11 +816,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrIf() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (if (;TARGET;)$L1
                   (block $L2
                     (loop $L3
-                      (br_if <caret>$L1)))))
+                      (br_if <caret>$L1)
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -720,11 +848,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrIfByIndex() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (if (;TARGET;)$L1
                   (block $L2
                     (loop $L3
-                      (br_if <caret>2)))))
+                      (br_if <caret>2)
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -747,11 +880,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrTable() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (if (;TARGET;)$L1
                   (block $L2
                     (loop $L3
-                      (br_table $b3 $b2 <caret>$L1 (local.get 0))))))
+                      (br_table $b3 $b2 <caret>$L1 (local.get 0))
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -774,11 +912,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrTableByIndex() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (if (;TARGET;)$L1
                   (block $L2
                     (loop $L3
-                      (br_table 0 1 <caret>2 (local.get 0))))))
+                      (br_table 0 1 <caret>2 (local.get 0))
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -801,11 +944,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrOnNull() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (block (;TARGET;)$L1
                   (if $L2
                     (loop $L3
-                      (br_on_null <caret>$L1)))))
+                      (br_on_null <caret>$L1))
+                    )
+                  )
+                )
+              )
+            )  
         """)
     }
 
@@ -828,11 +976,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrOnNullByIndex() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (block (;TARGET;)$L1
                   (if $L2
                     (loop $L3
-                      (br_on_null <caret>2)))))
+                      (br_on_null <caret>2)
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -855,11 +1008,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrOnNonNull() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (block (;TARGET;)$L1
                   (if $L2
                     (loop $L3
-                      (br_on_non_null <caret>$L1)))))
+                      (br_on_non_null <caret>$L1)
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -882,11 +1040,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrOnNonNullByIndex() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (block (;TARGET;)$L1
                   (if $L2
                     (loop $L3
-                      (br_on_non_null <caret>2)))))
+                      (br_on_non_null <caret>2)
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -909,11 +1072,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrOnCast() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (block (;TARGET;)$L1
                   (if $L2
                     (loop $L3
-                      (br_on_cast <caret>$L1 (ref $child_struct))))))
+                      (br_on_cast <caret>$L1 (ref $child_struct))
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -936,11 +1104,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrOnCastByIndex() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (block (;TARGET;)$L1
                   (if $L2
                     (loop $L3
-                      (br_on_cast <caret>2 (ref $child_struct))))))
+                      (br_on_cast <caret>2 (ref $child_struct))
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -963,11 +1136,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrOnCastFail() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (block (;TARGET;)$L1
                   (if $L2
                     (loop $L3
-                      (br_on_cast_fail <caret>$L1 (ref $child_struct))))))
+                      (br_on_cast_fail <caret>$L1 (ref $child_struct))
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
@@ -990,11 +1168,16 @@ class WatResolveTest : BasePlatformTestCase() {
     fun testBrOnCastFailByIndex() {
         doTest($$"""
             (module
-              (func $1)
+              (func $1
                 (block (;TARGET;)$L1
                   (if $L2
                     (loop $L3
-                      (br_on_cast_fail <caret>2 (ref $child_struct))))))
+                      (br_on_cast_fail <caret>2 (ref $child_struct))
+                    )
+                  )
+                )
+              )
+            )
         """)
     }
 
