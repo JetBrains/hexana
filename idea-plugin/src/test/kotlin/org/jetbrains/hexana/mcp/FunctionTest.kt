@@ -25,12 +25,12 @@ class FunctionTest: WasmTest() {
         assertEquals(62L, funcs[3].codeOffset)
         assertEquals(4, funcs[4].funcidx)
         assertEquals(0L, funcs[4].instructionCount)
-        assertEquals(2L, funcs[4].codeSize)
+        assertEquals(3L, funcs[4].codeSize)
         assertEquals(5, funcs[5].funcidx)
         assertEquals(listOf("call_all"), funcs[5].exportedAs)
         assertEquals("function_section", funcs[5].definedIn)
         assertEquals(5L, funcs[5].instructionCount)
-        assertEquals(12L, funcs[5].codeSize)
+        assertEquals(13L, funcs[5].codeSize)
         assertNull(funcs[5].import)
     }
 
