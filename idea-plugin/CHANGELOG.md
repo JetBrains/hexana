@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+
+### Added
+
 - `summarize_module` — Returns a compact numeric summary (functions, imports, exports, memories, tables, types, module size)
 - `list_functions` — Paginated list of function metadata with offset/limit support
 - `list_exported_functions` — All exported functions with resolved signatures (paginated)
@@ -18,9 +21,6 @@
 - `list_data` — Raw base64-encoded data segment payloads (use with caution on large modules)
 - `list_element_segments` — All element segments (table initializers, funcref arrays)
 - `list_exports` — All exports (functions, memories, tables, globals) with kind/index
-
-### Added
-
 - UTF-8 text preview
 - navigation from function definition in wat to hex view 
 - unfolded syntax support
