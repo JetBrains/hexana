@@ -376,7 +376,7 @@ fun openInWat(binaryProvider: WasmBinaryProvider, state: HexViewStateHolder, byt
     val project = watEditor.project ?: return
     val psiFile = PsiManager.getInstance(project).findFile(watEditor.virtualFile) ?: return
 
-    val functionIndex = binaryProvider.getCodeRecordIndexAtByteOffset(byteOffset.toLong()) ?: return
+    val functionIndex = binaryProvider.getCodeRecordIndexAtByteOffset(byteOffset.toLong())
 
     val function = getDefinedFunctionByIndex(psiFile, functionIndex) ?: return
     watEditor.caretModel.moveToOffset(function.startOffset)
