@@ -7,6 +7,7 @@
 - UTF-8 text preview
 - navigation from function definition in wat to hex view 
 - unfolded syntax support
+- navigation from hex view to the function definition  
 
 ### Changed
 

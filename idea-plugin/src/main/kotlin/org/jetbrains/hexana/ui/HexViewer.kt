@@ -141,15 +141,23 @@ internal fun HexViewer(
                 }
             }
             ContextMenuArea(items = {
-                listOf(
+                val codeSection = (binaryProvider as? WasmBinaryProvider)?.wasmModule?.codeSection
+                listOfNotNull(
                     ContextMenuItem("Copy as ASCII") { copySelection(buf, state, ::selectedAsASCII) },
                     ContextMenuItem("Copy as Kotlin::listOf") { copySelection(buf, state, ::selectAsKotlinList) },
-                    if (binaryProvider is WasmBinaryProvider) {
-                        ContextMenuItem("Open in wat") { openInWat(binaryProvider, state) }
+                    if (codeSection != null) {
+                        val bytesPerRow = state.bytesPerRow.value
+                        val position = state.hoverPosition
+                        val byteOffset = position.line * bytesPerRow + position.lineOffset
+                        if (byteOffset in codeSection.offset until codeSection.offset + codeSection.size) {
+                            ContextMenuItem("Open in WAT") { openInWat(binaryProvider, state, byteOffset) }
+                        } else {
+                            null
+                        }
                     } else {
                         null
                     }
-                ).filterNotNull()
+                )
             }) {
             Box {
                 LazyColumn(state = codePanelListState, modifier = Modifier.fillMaxSize()) {
@@ -363,14 +371,11 @@ fun copySelection(buf: ByteArray, state: HexViewStateHolder, selectionBuilder: (
 }
 
 
-fun openInWat(binaryProvider: WasmBinaryProvider, state: HexViewStateHolder) {
+fun openInWat(binaryProvider: WasmBinaryProvider, state: HexViewStateHolder, byteOffset: Int) {
     val watEditor = state.editor ?: return
     val project = watEditor.project ?: return
     val psiFile = PsiManager.getInstance(project).findFile(watEditor.virtualFile) ?: return
 
-    val bytesPerRow = state.bytesPerRow.value
-    val position = state.hoverPosition
-    val byteOffset = position.line * bytesPerRow + position.lineOffset
     val functionIndex = binaryProvider.getCodeRecordIndexAtByteOffset(byteOffset.toLong()) ?: return
 
     val function = getDefinedFunctionByIndex(psiFile, functionIndex) ?: return
