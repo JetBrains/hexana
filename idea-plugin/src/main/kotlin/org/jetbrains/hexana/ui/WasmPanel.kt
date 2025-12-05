@@ -220,7 +220,7 @@ internal sealed interface WasmPanel : Panel {
                         Text(
                             "Size",
                             style = TextStyle(
-                                color = Color.LightGray,
+                                color = HexanaTheme.textColor,
                                 fontFamily = FontFamily.Monospace
                             ),
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
