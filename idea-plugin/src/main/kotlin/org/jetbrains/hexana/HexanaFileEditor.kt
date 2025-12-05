@@ -73,6 +73,7 @@ class HexanaFileEditor(
                          val textEditor = TextEditorProvider.getInstance().createEditor(myProject, file)
                          textEditor as TextEditor
                          myTextEditor = textEditor
+                         stateHolder.setEditor(textEditor.editor)
                          textEditor
                     }
                 }

@@ -14,9 +14,18 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.editor.ScrollType
+import com.intellij.openapi.editor.impl.EditorComponentImpl
 import com.intellij.openapi.ide.CopyPasteManager
+import com.intellij.psi.PsiManager
+import com.intellij.psi.util.startOffset
+import com.intellij.util.ui.UIUtil
 import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.wat.psi.getDefinedFunctionByIndex
 import org.jetbrains.jewel.foundation.modifier.onHover
 import org.jetbrains.jewel.ui.component.Text
 import java.awt.datatransfer.StringSelection
@@ -29,7 +38,12 @@ import kotlin.math.min
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: Boolean = true) {
+internal fun HexViewer(
+    binaryProvider: BinaryProvider,
+    state: HexViewStateHolder,
+    showOffsets: Boolean = true
+) {
+    val buf = binaryProvider.bytes
     BoxWithConstraints(modifier = Modifier
         .fillMaxSize()
         .onClick {
@@ -130,7 +144,12 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                 listOf(
                     ContextMenuItem("Copy as ASCII") { copySelection(buf, state, ::selectedAsASCII) },
                     ContextMenuItem("Copy as Kotlin::listOf") { copySelection(buf, state, ::selectAsKotlinList) },
-                )
+                    if (binaryProvider is WasmBinaryProvider) {
+                        ContextMenuItem("Open in wat") { openInWat(binaryProvider, state) }
+                    } else {
+                        null
+                    }
+                ).filterNotNull()
             }) {
             Box {
                 LazyColumn(state = codePanelListState, modifier = Modifier.fillMaxSize()) {
@@ -340,6 +359,26 @@ fun copySelection(buf: ByteArray, state: HexViewStateHolder, selectionBuilder: (
     val text = selectionBuilder(buf, state)
     if (!text.isNullOrEmpty()) {
         CopyPasteManager.getInstance().setContents(StringSelection(text))
+    }
+}
+
+
+fun openInWat(binaryProvider: WasmBinaryProvider, state: HexViewStateHolder) {
+    val watEditor = state.editor ?: return
+    val project = watEditor.project ?: return
+    val psiFile = PsiManager.getInstance(project).findFile(watEditor.virtualFile) ?: return
+
+    val bytesPerRow = state.bytesPerRow.value
+    val position = state.hoverPosition
+    val byteOffset = position.line * bytesPerRow + position.lineOffset
+    val functionIndex = binaryProvider.getCodeRecordIndexAtByteOffset(byteOffset.toLong()) ?: return
+
+    val function = getDefinedFunctionByIndex(psiFile, functionIndex) ?: return
+    watEditor.caretModel.moveToOffset(function.startOffset)
+    watEditor.scrollingModel.scrollToCaret(ScrollType.RELATIVE)
+    state.setSelectedTab(3)
+    ApplicationManager.getApplication().invokeLater {
+        UIUtil.findComponentOfType(watEditor.component, EditorComponentImpl::class.java)?.requestFocusInWindow()
     }
 }
 

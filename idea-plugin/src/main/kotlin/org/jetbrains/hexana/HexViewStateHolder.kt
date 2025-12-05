@@ -3,6 +3,7 @@ package org.jetbrains.hexana
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
+import com.intellij.openapi.editor.Editor
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,6 +72,9 @@ class HexViewStateHolder {
     val topFraction: Float
         get() = currentState.value.topFraction
 
+    private val _editor: MutableState<Editor?> = mutableStateOf(null)
+    internal val editor: Editor? get() = _editor.value
+
     fun setTopFraction(topFraction: Float) {
         currentState.value = currentState.value.copy(topFraction = topFraction.coerceIn(0f, 1f))
     }
@@ -117,5 +121,9 @@ class HexViewStateHolder {
 
     fun setShowAscii(showAscii: Boolean) {
         _showAscii.value = showAscii
+    }
+
+    fun setEditor(editor: Editor?) {
+        _editor.value = editor
     }
 }

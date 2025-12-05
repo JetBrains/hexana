@@ -44,4 +44,18 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
             return scanCodeEntries.get(index)
         }
     }
+
+    fun getCodeRecordIndexAtByteOffset(byteOffset: Long): Int? {
+        val codeSection = wasmModule?.codeSection ?: return null
+        with (codeSection) {
+            var index = 0;
+            for (record in buffer.scan()) {
+                if (record.offset <= byteOffset && byteOffset < record.offset + record.size.toLong()) {
+                    return index
+                }
+                index++
+            }
+        }
+        return -1
+    }
 }

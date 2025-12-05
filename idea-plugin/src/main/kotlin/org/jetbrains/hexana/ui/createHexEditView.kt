@@ -26,7 +26,7 @@ internal fun BinaryEditorView(
         var bytesPerRow by remember { mutableStateOf(16) }
 
         VerticalSplitPanel(state, northPanel = {
-            HexViewer(binaryProvider.bytes, state)
+            HexViewer(binaryProvider, state)
         }, southPanel = {
             val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels(state)) }
 
