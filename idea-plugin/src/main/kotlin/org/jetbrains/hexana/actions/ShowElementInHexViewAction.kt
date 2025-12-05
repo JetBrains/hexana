@@ -87,7 +87,7 @@ class ShowElementInHexViewAction : AnAction() {
                 index++
             }
         }
-        val record = wasmBinaryProvider.getData().getOrNull(index) ?: return null
+        val record = wasmBinaryProvider.data.getOrNull(index) ?: return null
         return LongRange(record.offset, record.offset + record.recordLength - 1)
     }
 

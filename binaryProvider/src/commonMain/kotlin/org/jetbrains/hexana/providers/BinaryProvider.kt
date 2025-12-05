@@ -16,46 +16,41 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
     private val buffer = bytes.toCommonByteBuffer()
     val wasmModule = WasmParser().parse(buffer)
 
-    fun getImports(): List<WasmImportRecord> {
-        val importSection = wasmModule?.importSection ?: return emptyList()
+    val imports: List<WasmImportRecord> by lazy {
+        val importSection = wasmModule?.importSection ?: return@lazy emptyList()
         with (importSection) {
-            return buffer.getImportRecords()
+            buffer.getImportRecords()
         }
     }
 
-    fun getExports(): List<WasmExportRecordEntry> {
-        val exportsSection = wasmModule?.exportSection ?: return emptyList()
+    val exports: List<WasmExportRecordEntry> by lazy {
+        val exportsSection = wasmModule?.exportSection ?: return@lazy emptyList()
         with (exportsSection) {
-            return buffer.scan()
+            buffer.scan()
         }
     }
 
-    fun getData(): List<WasmDataRecord> {
-        val dataSection = wasmModule?.dataSection ?: return emptyList()
+    val data: List<WasmDataRecord> by lazy {
+        val dataSection = wasmModule?.dataSection ?: return@lazy emptyList()
         with (dataSection) {
-            return buffer.scan()
+            buffer.scan()
+        }
+    }
+
+    val codeRecords: List<WasmCodeRecord> by lazy {
+        val functionSection = wasmModule?.codeSection ?: return@lazy emptyList()
+        with (functionSection) {
+            buffer.scan()
         }
     }
 
     fun getCodeRecordByIndex(index: Int): WasmCodeRecord? {
-        val functionSection = wasmModule?.codeSection ?: return null
-        with (functionSection) {
-            val scanCodeEntries = buffer.scanCodeEntries(listOf(index))
-            return scanCodeEntries.get(index)
-        }
+        return codeRecords.getOrNull(index)
     }
 
-    fun getCodeRecordIndexAtByteOffset(byteOffset: Long): Int? {
-        val codeSection = wasmModule?.codeSection ?: return null
-        with (codeSection) {
-            var index = 0;
-            for (record in buffer.scan()) {
-                if (record.offset <= byteOffset && byteOffset < record.offset + record.size.toLong()) {
-                    return index
-                }
-                index++
-            }
+    fun getCodeRecordIndexAtByteOffset(byteOffset: Long): Int {
+        return codeRecords.indexOfFirst { record ->
+            record.offset <= byteOffset && byteOffset < record.offset + record.size.toLong()
         }
-        return -1
     }
 }
