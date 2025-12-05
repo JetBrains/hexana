@@ -243,7 +243,7 @@ internal fun HexViewer(buf: ByteArray, state: HexViewStateHolder, showOffsets: B
                                             softWrap = false,
                                             maxLines = 1,
                                             style = TextStyle(
-                                                color = if (text != null) HexanaTheme.textColor else HexanaTheme.hexCellHoverColor,
+                                                color = if (text != null) HexanaTheme.textColor else HexanaTheme.hexTextColor,
                                                 fontFamily = FontFamily.Monospace
                                             )
                                         )
