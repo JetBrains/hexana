@@ -18,6 +18,8 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.impl.EditorComponentImpl
 import com.intellij.openapi.ide.CopyPasteManager
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.util.startOffset
 import com.intellij.util.ui.UIUtil
@@ -25,6 +27,7 @@ import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.wat.psi.getDataByIndex
 import org.jetbrains.hexana.wat.psi.getDefinedFunctionByIndex
 import org.jetbrains.jewel.foundation.modifier.onHover
 import org.jetbrains.jewel.ui.component.Text
@@ -69,17 +72,6 @@ internal fun HexViewer(
 
 
         Column(modifier = Modifier.fillMaxSize()) {
-//            if (state.showSearchDialog.value) {
-//                Row(Modifier.fillMaxWidth()) {
-//                    HexSearchField(
-//                        onClose = {
-//                            state.showSearchDialog.value = false
-//                        },
-//                        onSubmit = {},
-//                    )
-//                }
-//            }
-
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 if (showOffsets) {
                     Box(
@@ -141,18 +133,33 @@ internal fun HexViewer(
                 }
             }
             ContextMenuArea(items = {
-                val codeSection = (binaryProvider as? WasmBinaryProvider)?.wasmModule?.codeSection
+                val wasmModule = (binaryProvider as? WasmBinaryProvider)?.wasmModule
+                val codeSection = wasmModule?.codeSection
+                val dataSection = wasmModule?.dataSection
+                val codeSectionRange = codeSection?.let { it.offset until it.offset + it.size } ?: IntRange.EMPTY
+                val dataSectionRange = dataSection?.let { it.offset until it.offset + it.size } ?: IntRange.EMPTY
+                val bytesPerRow = state.bytesPerRow.value
+                val position = state.hoverPosition
+                val byteOffset = position.line * bytesPerRow + position.lineOffset
                 listOfNotNull(
                     ContextMenuItem("Copy as ASCII") { copySelection(buf, state, ::selectedAsASCII) },
                     ContextMenuItem("Copy as Kotlin::listOf") { copySelection(buf, state, ::selectAsKotlinList) },
-                    if (codeSection != null) {
-                        val bytesPerRow = state.bytesPerRow.value
-                        val position = state.hoverPosition
-                        val byteOffset = position.line * bytesPerRow + position.lineOffset
-                        if (byteOffset in codeSection.offset until codeSection.offset + codeSection.size) {
-                            ContextMenuItem("Open in WAT") { openInWat(binaryProvider, state, byteOffset) }
-                        } else {
-                            null
+                    if (binaryProvider is WasmBinaryProvider) {
+                        when (byteOffset) {
+                            in codeSectionRange -> ContextMenuItem("Open in function in WAT") {
+                                openInWat(state) { file ->
+                                    val functionIndex = binaryProvider.getCodeRecordIndexAtByteOffset(byteOffset.toLong())
+                                    getDefinedFunctionByIndex(file, functionIndex)
+                                }
+
+                            }
+                            in dataSectionRange -> ContextMenuItem("Open in data in WAT") {
+                                openInWat(state) { file ->
+                                    val index = binaryProvider.getDataRecordIndexAtByteOffset(byteOffset.toLong())
+                                    getDataByIndex(file, index)
+                                }
+                            }
+                            else -> null
                         }
                     } else {
                         null
@@ -371,15 +378,15 @@ fun copySelection(buf: ByteArray, state: HexViewStateHolder, selectionBuilder: (
 }
 
 
-fun openInWat(binaryProvider: WasmBinaryProvider, state: HexViewStateHolder, byteOffset: Int) {
+fun openInWat(state: HexViewStateHolder, findElement: (file: PsiFile) -> PsiElement?) {
     val watEditor = state.editor ?: return
     val project = watEditor.project ?: return
-    val psiFile = PsiManager.getInstance(project).findFile(watEditor.virtualFile) ?: return
+    val virtualFile = watEditor.virtualFile ?: return
+    val psiFile = PsiManager.getInstance(project).findFile(virtualFile) ?: return
 
-    val functionIndex = binaryProvider.getCodeRecordIndexAtByteOffset(byteOffset.toLong())
+    val element = findElement(psiFile) ?: return
 
-    val function = getDefinedFunctionByIndex(psiFile, functionIndex) ?: return
-    watEditor.caretModel.moveToOffset(function.startOffset)
+    watEditor.caretModel.moveToOffset(element.startOffset)
     watEditor.scrollingModel.scrollToCaret(ScrollType.RELATIVE)
     state.setSelectedTab(3)
     ApplicationManager.getApplication().invokeLater {
