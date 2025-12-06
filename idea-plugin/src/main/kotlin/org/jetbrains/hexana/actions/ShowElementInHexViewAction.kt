@@ -45,6 +45,9 @@ class ShowElementInHexViewAction : AnAction() {
         val wasmBinaryProvider = hexanaEditor.binaryProvider as? WasmBinaryProvider ?: return
         val element = findNamedElement(e) ?: return
         val range = getOffsetProvider(wasmBinaryProvider, element)?.getOffset() ?: return
+        if (hexanaEditor.stateHolder.topFraction < 0.1) {
+            hexanaEditor.stateHolder.setTopFraction(0.4f)
+        }
         hexanaEditor.stateHolder.setSelection(range)
         hexanaEditor.stateHolder.scrollHexViewTo(range.first)
     }
