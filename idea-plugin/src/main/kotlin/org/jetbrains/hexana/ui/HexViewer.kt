@@ -144,7 +144,7 @@ internal fun HexViewer(
                 listOfNotNull(
                     ContextMenuItem("Copy as ASCII") { copySelection(buf, state, ::selectedAsASCII) },
                     ContextMenuItem("Copy as Kotlin::listOf") { copySelection(buf, state, ::selectAsKotlinList) },
-                    if (binaryProvider is WasmBinaryProvider) {
+                    if (binaryProvider is WasmBinaryProvider && state.editor != null) {
                         when (byteOffset) {
                             in codeSectionRange -> ContextMenuItem("Open in function in WAT") {
                                 openInWat(state) { file ->
