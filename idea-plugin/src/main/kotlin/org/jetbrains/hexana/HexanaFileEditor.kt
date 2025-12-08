@@ -135,7 +135,7 @@ class HexanaFileEditor(
         val editor = myTextEditor?.editor
         if (editor != null) {
             val file = editor.virtualFile
-            val fileset = file.getUserData(WatFileset.KEY)
+            val fileset = file?.getUserData(WatFileset.KEY)
             if (fileset != null) {
                 val fileIndex = fileset?.files?.indexOf(file) ?: 0
                 val fileOffset = editor.caretModel.offset

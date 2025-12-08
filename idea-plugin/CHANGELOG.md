@@ -4,6 +4,20 @@
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## 0.3 - 2025-12-08
+
+### Added
+
 - `summarize_module` — Returns a compact numeric summary (functions, imports, exports, memories, tables, types, module size)
 - `list_functions` — Paginated list of function metadata with offset/limit support
 - `list_exported_functions` — All exported functions with resolved signatures (paginated)
@@ -25,16 +39,6 @@
 - navigation from function definition in wat to hex view 
 - unfolded syntax support
 - navigation from hex view to the function and data definition
-
-### Changed
-
-### Deprecated
-
-### Removed
-
-### Fixed
-
-### Security
 
 ## 0.2 - 2025-12-03
 

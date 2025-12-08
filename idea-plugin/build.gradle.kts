@@ -1,4 +1,5 @@
 import org.jetbrains.changelog.Changelog
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 
 plugins {
     id("java")
@@ -43,7 +44,10 @@ repositories {
 // Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
     intellijPlatform {
-        create("IC", "2025.2.3")
+        intellijIdea("2025.3") {
+            type = IntelliJPlatformType.IntellijIdeaCommunity
+            useInstaller = false
+        }
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
 
 
@@ -51,17 +55,7 @@ dependencies {
 
         // TODO: whenever composeUI() will be updated, we can safely remove direct dependencies to dekstop runtime
         // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
-        // composeUI()
-
-        bundledModules(
-            "intellij.libraries.skiko",
-            "intellij.libraries.compose.foundation.desktop",
-
-            "intellij.platform.compose",
-            "intellij.platform.jewel.foundation",
-            "intellij.platform.jewel.ui",
-            "intellij.platform.jewel.ideLafBridge"
-        )
+        composeUI()
     }
 
     implementation(project(":encdec"))
