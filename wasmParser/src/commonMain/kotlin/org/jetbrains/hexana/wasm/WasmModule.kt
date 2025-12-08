@@ -20,6 +20,7 @@ import org.jetbrains.hexana.wasm.sections.WasmSectionTypes
 import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 
 class WasmModule(
+    val sections: List<WasmSection>,
     val customSection: WasmSectionCustom? = null,
     val typesSection: WasmSectionTypes? = null,
     val importSection: WasmSectionImport? = null,
@@ -73,6 +74,7 @@ class WasmModule(
             }
 
             return WasmModule(
+                sections,
                 customSection,
                 typesSection,
                 importSection,
