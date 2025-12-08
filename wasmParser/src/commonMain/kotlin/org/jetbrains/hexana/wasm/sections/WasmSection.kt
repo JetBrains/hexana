@@ -17,6 +17,9 @@ sealed class WasmSection(
         get(nameBytes, 0, nameSize)
         return nameBytes.decodeToString()
     }
+
+    val sectionRange: IntRange get() = sectionOffset until sectionOffset + sectionSize
+    val contentRange: IntRange get() = contentOffset until contentOffset + contentSize
 }
 
 class WasmSectionUnresolved(
