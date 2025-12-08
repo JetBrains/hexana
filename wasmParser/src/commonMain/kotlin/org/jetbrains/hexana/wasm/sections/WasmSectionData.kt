@@ -4,13 +4,15 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.parseOpCodes
 
-class WasmSectionData(size: Int, offset: Int): WasmSection(size, offset) {
+class WasmSectionData(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
     companion object {
         const val SECTION_ID: Byte = 11
     }
 
+    constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
+
     fun CommonByteBuffer.scan(): List<WasmDataRecord> {
-        position(offset)
+        position(contentOffset)
         return buildList {
             consumeArray {
                 val off = position().toLong()

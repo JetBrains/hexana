@@ -5,13 +5,15 @@ import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.parseOpCodes
 
-class WasmSectionTable(size: Int, offset: Int): WasmSection(size, offset) {
+class WasmSectionTable(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
     companion object {
         const val SECTION_ID: Byte = 4
     }
 
+    constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
+
     fun CommonByteBuffer.scanTable(wasmModule: WasmModule): List<WasmTableEntry> {
-        position(offset)
+        position(contentOffset)
         val entries = mutableListOf<WasmTableEntry>()
         consumeArray {
             if (get() == 0x40.toByte()) {

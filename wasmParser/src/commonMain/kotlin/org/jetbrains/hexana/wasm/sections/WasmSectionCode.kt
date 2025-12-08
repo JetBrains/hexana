@@ -6,14 +6,16 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodeWithValue
 import org.jetbrains.hexana.wasm.opcodes.UnsupportedOpsException
 import org.jetbrains.hexana.wasm.opcodes.parseOpCodes
 
-class WasmSectionCode(size: Int, offset: Int): WasmSection(size, offset) {
+class WasmSectionCode(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
     companion object {
         const val SECTION_ID: Byte = 10
     }
 
+    constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
+
     fun CommonByteBuffer.scan(): List<WasmCodeRecord> {
         // https://webassembly.github.io/spec/core/binary/modules.html#binary-codesec
-        this.position(offset)
+        this.position(contentOffset)
 
         val wasmCodeRecords = mutableListOf<WasmCodeRecord>()
 
@@ -26,7 +28,7 @@ class WasmSectionCode(size: Int, offset: Int): WasmSection(size, offset) {
 
     fun CommonByteBuffer.scanCodeEntries(declaredFuncIdxs: List<Int>): Map<Int, WasmCodeRecord> {
         val wasmCodeRecords = mutableMapOf<Int, WasmCodeRecord>()
-        position(offset)
+        position(contentOffset)
         consumeArray { idx ->
             val current = position()
             val funSize = getULEB128().toUInt()

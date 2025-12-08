@@ -25,38 +25,31 @@ class WasmParser {
         val WASM_VERSION = byteArrayOf(0x01, 0x00, 0x00, 0x00)
 
         fun CommonByteBuffer.scanSection(): WasmSectionUnresolved {
+            val sectionOffset = position()
             val sectionId = get()
-            val sectionSize = getULEB128().toInt()
-
-            return WasmSectionUnresolved(sectionId, sectionSize, position())
+            val contentSize = getULEB128().toInt()
+            val contentOffset = position()
+            val sectionSize = contentSize + contentOffset - sectionOffset
+            return WasmSectionUnresolved(sectionId, sectionSize, sectionOffset, contentSize, contentOffset)
         }
 
         fun CommonByteBuffer.resolveSection(): WasmSection? {
             val unresolvedSection = scanSection()
             return when (unresolvedSection.id) {
-                WasmSectionCustom.SECTION_ID -> WasmSectionCustom(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionTypes.SECTION_ID -> WasmSectionTypes(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionImport.SECTION_ID -> WasmSectionImport(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionFunctions.SECTION_ID -> WasmSectionFunctions(
-                    unresolvedSection.size,
-                    unresolvedSection.offset
-                )
-                WasmSectionTable.SECTION_ID -> WasmSectionTable(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionMemory.SECTION_ID -> WasmSectionMemory(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionGlobal.SECTION_ID -> WasmSectionGlobal(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionExport.SECTION_ID -> WasmSectionExport(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionStart.SECTION_ID -> WasmSectionStart(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionElement.SECTION_ID -> WasmSectionElement(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionCode.SECTION_ID -> WasmSectionCode(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionData.SECTION_ID -> WasmSectionData(unresolvedSection.size, unresolvedSection.offset)
-                WasmSectionDataCount.SECTION_ID -> WasmSectionDataCount(
-                    unresolvedSection.size,
-                    unresolvedSection.offset
-                )
-                WasmSectionException.SECTION_ID -> WasmSectionException(
-                    unresolvedSection.size,
-                    unresolvedSection.offset
-                )
+                WasmSectionCustom.SECTION_ID -> WasmSectionCustom(unresolvedSection)
+                WasmSectionTypes.SECTION_ID -> WasmSectionTypes(unresolvedSection)
+                WasmSectionImport.SECTION_ID -> WasmSectionImport(unresolvedSection)
+                WasmSectionFunctions.SECTION_ID -> WasmSectionFunctions(unresolvedSection)
+                WasmSectionTable.SECTION_ID -> WasmSectionTable(unresolvedSection)
+                WasmSectionMemory.SECTION_ID -> WasmSectionMemory(unresolvedSection)
+                WasmSectionGlobal.SECTION_ID -> WasmSectionGlobal(unresolvedSection)
+                WasmSectionExport.SECTION_ID -> WasmSectionExport(unresolvedSection)
+                WasmSectionStart.SECTION_ID -> WasmSectionStart(unresolvedSection)
+                WasmSectionElement.SECTION_ID -> WasmSectionElement(unresolvedSection)
+                WasmSectionCode.SECTION_ID -> WasmSectionCode(unresolvedSection)
+                WasmSectionData.SECTION_ID -> WasmSectionData(unresolvedSection)
+                WasmSectionDataCount.SECTION_ID -> WasmSectionDataCount(unresolvedSection)
+                WasmSectionException.SECTION_ID -> WasmSectionException(unresolvedSection)
                 else -> null
             }
         }
@@ -81,7 +74,7 @@ class WasmParser {
         while (buffer.hasRemaining()) {
             val wasmSection = buffer.resolveSection() ?: throw Exception("Unprocess section")
             sections.add(wasmSection)
-            buffer.position(buffer.position() + wasmSection.size)
+            buffer.position(buffer.position() + wasmSection.contentSize)
         }
 
         val wasmModule = WasmModule.fromSections(sections)

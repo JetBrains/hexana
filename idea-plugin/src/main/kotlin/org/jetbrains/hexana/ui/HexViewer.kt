@@ -184,8 +184,8 @@ internal fun HexViewer(
                 val wasmModule = (binaryProvider as? WasmBinaryProvider)?.wasmModule
                 val codeSection = wasmModule?.codeSection
                 val dataSection = wasmModule?.dataSection
-                val codeSectionRange = codeSection?.let { it.offset until it.offset + it.size } ?: IntRange.EMPTY
-                val dataSectionRange = dataSection?.let { it.offset until it.offset + it.size } ?: IntRange.EMPTY
+                val codeSectionRange = codeSection?.let { it.contentOffset until it.contentOffset + it.contentSize } ?: IntRange.EMPTY
+                val dataSectionRange = dataSection?.let { it.contentOffset until it.contentOffset + it.contentSize } ?: IntRange.EMPTY
                 val bytesPerRow = state.bytesPerRow.value
                 val position = state.hoverPosition
                 val byteOffset = position.line * bytesPerRow + position.lineOffset

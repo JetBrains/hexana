@@ -3,13 +3,15 @@ package org.jetbrains.hexana.wasm.sections
 import org.jetbrains.hexana.io.CommonByteBuffer
 import kotlin.collections.emptyList
 
-class WasmSectionTypes(size: Int, offset: Int) : WasmSection(size, offset) {
+class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) : WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
     companion object {
         const val SECTION_ID: Byte = 1
     }
 
+    constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
+
     fun CommonByteBuffer.parseTypes(): List<WasmTypeRecord> {
-        position(offset)
+        position(contentOffset)
 
         val typeRecords = mutableListOf<WasmTypeRecord>()
 

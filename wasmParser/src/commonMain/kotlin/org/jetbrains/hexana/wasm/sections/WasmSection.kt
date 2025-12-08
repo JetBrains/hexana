@@ -3,7 +3,12 @@ package org.jetbrains.hexana.wasm.sections
 import org.jetbrains.hexana.io.CommonByteBuffer
 
 
-sealed class WasmSection(val size: Int, val offset: Int) {
+sealed class WasmSection(
+    val sectionSize: Int,
+    val sectionOffset: Int,
+    val contentSize: Int,
+    val contentOffset: Int
+) {
 
 
     fun CommonByteBuffer.consumeString(): String {
@@ -14,7 +19,13 @@ sealed class WasmSection(val size: Int, val offset: Int) {
     }
 }
 
-class WasmSectionUnresolved(val id: Byte, size: Int, offset: Int): WasmSection(size, offset)
+class WasmSectionUnresolved(
+    val id: Byte,
+    sectionSize: Int,
+    sectionOffset: Int,
+    contentSize: Int,
+    contentOffset: Int
+): WasmSection(sectionSize, sectionOffset, contentSize, contentOffset)
 
 internal fun CommonByteBuffer.consumeArray(block: (Int) -> Unit) {
     val vecCount = getULEB128().toInt()
