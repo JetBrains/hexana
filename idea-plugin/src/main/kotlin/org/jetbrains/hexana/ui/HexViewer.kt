@@ -119,8 +119,6 @@ internal fun HexViewer(
         }
 
 
-        var hexBoxSize by remember { mutableStateOf(IntSize.Zero) }
-
         Column(modifier = Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 if (showOffsets) {
@@ -242,9 +240,7 @@ internal fun HexViewer(
                     }
 
                     Box(
-                        modifier = Modifier.onGloballyPositioned { coords ->
-                            hexBoxSize = coords.size
-                        }
+                        modifier = Modifier
                             .pointerInput(Unit) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown()
@@ -255,7 +251,7 @@ internal fun HexViewer(
                                     }
 
                                     val startIndex = indexResolvedRelative + hexDataListState.firstVisibleItemIndex
-                                    val cellWidth = (hexBoxSize.width / bytesPerRow)
+                                    val cellWidth = (size.width / bytesPerRow)
                                     val startOffset = (down.position.x / cellWidth).toInt()
 
                                     drag(down.id) { change ->
