@@ -5,6 +5,7 @@ build/
 .idea/
 *.iml
 .gradle
+.junie
 out/
 .kotlin
 .intellijPlatform
