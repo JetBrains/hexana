@@ -12,7 +12,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.jetbrains.hexana.ui.WatConversionState
 
 
-class HexPosition(val line: Int, val lineOffset: Int)
+class HexPosition(val line: Int, val lineOffset: Int) {
+    fun getByteOffset(bytesPerRow: Int): Int {
+        return line * bytesPerRow + lineOffset
+    }
+}
 class HexSelection(val start: HexPosition, val end: HexPosition) {
     fun contains(line: Int, lineOffset: Int): Boolean {
         return when {
@@ -74,6 +78,9 @@ class HexViewStateHolder {
 
     private val _editor: MutableState<Editor?> = mutableStateOf(null)
     internal val editor: Editor? get() = _editor.value
+
+    private val _showStructurePopup = mutableStateOf(false)
+    val showStructurePopup: Boolean get() = _showStructurePopup.value
 
     fun setTopFraction(topFraction: Float) {
         currentState.value = currentState.value.copy(topFraction = topFraction.coerceIn(0f, 1f))
@@ -143,5 +150,9 @@ class HexViewStateHolder {
 
     fun setEditor(editor: Editor?) {
         _editor.value = editor
+    }
+
+    fun setShowStructurePopup(show: Boolean) {
+        _showStructurePopup.value = show
     }
 }

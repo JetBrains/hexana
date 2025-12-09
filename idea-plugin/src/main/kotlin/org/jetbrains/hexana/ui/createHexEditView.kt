@@ -6,6 +6,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.intellij.icons.AllIcons
 import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
@@ -41,6 +43,15 @@ internal fun BinaryEditorView(
             })
         })
 
+        if (state.showStructurePopup) {
+            Dialog({
+                state.setShowStructurePopup(false)
+            }, DialogProperties()) {
+                Box(modifier = Modifier.background(HexanaTheme.backgroundColor)) {
+                    StructureView(binaryProvider = binaryProvider, state = state)
+                }
+            }
+        }
     }
 }
 

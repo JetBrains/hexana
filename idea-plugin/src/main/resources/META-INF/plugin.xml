@@ -97,6 +97,9 @@
         <action id="hexana.showElementInHexView" class="org.jetbrains.hexana.actions.ShowElementInHexViewAction">
             <add-to-group group-id="RevealGroup" anchor="first"/>
         </action>
+
+        <action id="hexana.showStructurePopup" class="org.jetbrains.hexana.actions.ShowStructurePopupAction"
+                use-shortcut-of="FileStructurePopup"/>
     </actions>
 
 </idea-plugin>

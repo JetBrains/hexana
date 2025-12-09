@@ -4,6 +4,8 @@
 
 ### Added
 
+- structure view for WASM files
+
 ### Changed
 
 ### Deprecated
