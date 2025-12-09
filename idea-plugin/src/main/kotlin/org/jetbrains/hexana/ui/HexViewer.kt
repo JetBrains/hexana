@@ -1,21 +1,28 @@
 package org.jetbrains.hexana.ui
 
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.ScrollType
@@ -26,6 +33,7 @@ import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.util.startOffset
 import com.intellij.util.ui.UIUtil
+import kotlinx.coroutines.launch
 import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
@@ -42,6 +50,32 @@ import java.nio.charset.StandardCharsets
 import kotlin.math.min
 
 
+@Composable
+fun SyncLazyListStates(vararg states: LazyListState) {
+    states.forEach { source ->
+        val currentInfo by remember { derivedStateOf { source.firstVisibleItemIndex to source.firstVisibleItemScrollOffset } }
+
+        LaunchedEffect(source) {
+            snapshotFlow { currentInfo }
+                .collect { (index, offset) ->
+                    states.forEach { target ->
+                        if (target !== source) {
+                            // this is very important for animated scenarios - otherwise "Scroll Data Section into view" stops working
+                            if (!target.isScrollInProgress) {
+                                if (target.firstVisibleItemIndex != index || target.firstVisibleItemScrollOffset != offset) {
+                                    // launch is important so that the vertical scroll bar works properly :)
+                                    launch {
+                                        target.scrollToItem(index, offset)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun HexViewer(
@@ -52,16 +86,22 @@ internal fun HexViewer(
     val buf = binaryProvider.bytes
     val focusRequester = remember { FocusRequester() }
 
-    BoxWithConstraints(modifier = Modifier
-        .focusRequester(focusRequester)
-        .focusable(true)
-        .fillMaxSize()
-        .onClick {
-            state.setViewMode(HexViewMode.Hex)
-            focusRequester.requestFocus()
-        }
-        .background(HexanaTheme.backgroundColor)) {
-        val codePanelListState = rememberLazyListState()
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .focusable(true)
+            .fillMaxSize()
+            .onClick {
+                state.setViewMode(HexViewMode.Hex)
+                focusRequester.requestFocus()
+            }
+            .background(HexanaTheme.backgroundColor)) {
+        val offsetListState = rememberLazyListState()
+        val hexDataListState = rememberLazyListState()
+        val textDataListState = rememberLazyListState()
+
+        SyncLazyListStates(offsetListState, hexDataListState, textDataListState)
 
         val bytesPerRow by remember { state.bytesPerRow }
 
@@ -74,10 +114,12 @@ internal fun HexViewer(
         LaunchedEffect(state) {
             state.hexScrollFlow.collect { offset ->
                 val lineNo = (offset / bytesPerRow).toInt()
-                codePanelListState.animateScrollToItem(lineNo)
+                hexDataListState.animateScrollToItem(lineNo)
             }
         }
 
+
+        var hexBoxSize by remember { mutableStateOf(IntSize.Zero) }
 
         Column(modifier = Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -156,17 +198,20 @@ internal fun HexViewer(
                         when (byteOffset) {
                             in codeSectionRange -> ContextMenuItem("Open in function in WAT") {
                                 openInWat(state) { file ->
-                                    val functionIndex = binaryProvider.getCodeRecordIndexAtByteOffset(byteOffset.toLong())
+                                    val functionIndex =
+                                        binaryProvider.getCodeRecordIndexAtByteOffset(byteOffset.toLong())
                                     getDefinedFunctionByIndex(file, functionIndex)
                                 }
 
                             }
+
                             in dataSectionRange -> ContextMenuItem("Open in data in WAT") {
                                 openInWat(state) { file ->
                                     val index = binaryProvider.getDataRecordIndexAtByteOffset(byteOffset.toLong())
                                     getDataByIndex(file, index)
                                 }
                             }
+
                             else -> null
                         }
                     } else {
@@ -174,11 +219,10 @@ internal fun HexViewer(
                     }
                 )
             }) {
-            Box {
-                LazyColumn(state = codePanelListState, modifier = Modifier.fillMaxSize()) {
-                    items(count = rowCount) { rowIndex ->
-                        Row(Modifier.fillMaxWidth()) {
-                            if (showOffsets) {
+                Row {
+                    Box {
+                        LazyColumn(state = offsetListState) {
+                            items(count = rowCount) { rowIndex ->
                                 Box(
                                     modifier = Modifier
                                         .width(offsetWidth)
@@ -186,78 +230,122 @@ internal fun HexViewer(
                                         .padding(horizontal = 8.dp),
                                     contentAlignment = Alignment.CenterEnd
                                 ) {
-                                    Row {
-                                        Text(
-                                            (rowIndex * bytesPerRow).asHexString(padStart = 8),
-                                            style = TextStyle(fontFamily = FontFamily.Monospace)
-                                        )
+                                    Text(
+                                        (rowIndex * bytesPerRow).asHexString(padStart = 8),
+                                        softWrap = false,
+                                        style = TextStyle(fontFamily = FontFamily.Monospace)
+                                    )
+                                }
+                            }
+                        }
+
+                    }
+
+                    Box(
+                        modifier = Modifier.onGloballyPositioned { coords ->
+                            hexBoxSize = coords.size
+                        }
+                            .pointerInput(Unit) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+
+                                    val visibleItemsInfo = hexDataListState.layoutInfo.visibleItemsInfo
+                                    val indexResolvedRelative = visibleItemsInfo.indexOfLast {
+                                        it.offset <= down.position.y
+                                    }
+
+                                    val startIndex = indexResolvedRelative + hexDataListState.firstVisibleItemIndex
+                                    val cellWidth = (hexBoxSize.width / bytesPerRow)
+                                    val startOffset = (down.position.x / cellWidth).toInt()
+
+                                    drag(down.id) { change ->
+                                        val visibleItemsInfo = hexDataListState.layoutInfo.visibleItemsInfo
+                                        val indexResolvedRelative = visibleItemsInfo.indexOfLast {
+                                            it.offset <= change.position.y
+                                        }
+
+                                        val endIndex = indexResolvedRelative + hexDataListState.firstVisibleItemIndex
+                                        val endOffset = (change.position.x / cellWidth).toInt()
+
+                                        state.setSelection(startIndex, startOffset, endIndex, endOffset)
                                     }
                                 }
                             }
-
-                            Box(
-                                modifier = Modifier.background(HexanaTheme.backgroundColor)
-                                    .padding(horizontal = 8.dp)
-                            ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(spacing),
+                    ) {
+                        LazyColumn(state = hexDataListState) {
+                            items(count = rowCount) { rowIndex ->
+                                Box(
+                                    modifier = Modifier
+                                        .background(HexanaTheme.backgroundColor)
+                                        .padding(horizontal = 8.dp)
                                 ) {
-                                    val start = rowIndex * bytesPerRow
-                                    val end = min(start + bytesPerRow, buf.size)
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(spacing),
+                                    ) {
+                                        val start = rowIndex * bytesPerRow
+                                        val end = min(start + bytesPerRow, buf.size)
 
-                                    buf.slice(start until end).forEachIndexed { byteIndex, byte ->
-                                        val byteText = (byte.toInt() and 0xFF).asHexString()
-                                        val isUnderCursor = byteIndex == state.cursorPosition.lineOffset &&
+                                        buf.slice(start until end).forEachIndexed { byteIndex, byte ->
+                                            val byteText = (byte.toInt() and 0xFF).asHexString()
+                                            val isUnderCursor = byteIndex == state.cursorPosition.lineOffset &&
                                                     rowIndex == state.cursorPosition.line
 
-                                        val isHover = byteIndex == state.hoverPosition.lineOffset && rowIndex == state.hoverPosition.line
+                                            val isHover =
+                                                byteIndex == state.hoverPosition.lineOffset && rowIndex == state.hoverPosition.line
 
-                                        val backgroundColor = if (isHover) {
-                                            if (isUnderCursor) HexanaTheme.hexCellHoverActiveColor else HexanaTheme.hexCellHoverColor
-                                        } else {
-                                            if (isUnderCursor) HexanaTheme.hexCellActiveColor else Color.Unspecified
-                                        }
+                                            val backgroundColor = if (isHover) {
+                                                if (isUnderCursor) HexanaTheme.hexCellHoverActiveColor else HexanaTheme.hexCellHoverColor
+                                            } else {
+                                                if (isUnderCursor) HexanaTheme.hexCellActiveColor else Color.Unspecified
+                                            }
 
-                                        val selectionBackgroundColor = if (state.selection.contains(rowIndex, byteIndex)) {
-                                            Color(156, 183, 255, 255)
-                                        } else {
-                                            backgroundColor
-                                        }
-
-
-                                        Box(
-                                            modifier = Modifier
-                                                .padding(end = 2.dp)
-                                                .background(selectionBackgroundColor)
-                                                .onHover { hovered ->
-                                                    if (hovered) state.setHoverPosition(rowIndex, byteIndex)
+                                            val selectionBackgroundColor =
+                                                if (state.selection.contains(rowIndex, byteIndex)) {
+                                                    Color(156, 183, 255, 255)
+                                                } else {
+                                                    backgroundColor
                                                 }
-                                        ) {
-                                            Text(
-                                                byteText,
-                                                softWrap = false,
-                                                maxLines = 1,
-                                                style = TextStyle(
-                                                    fontFamily = FontFamily.Monospace,
-                                                    color = HexanaTheme.hexTextColor
+
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(end = 2.dp)
+                                                    .background(selectionBackgroundColor)
+                                                    .onHover { hovered ->
+                                                        if (hovered) state.setHoverPosition(rowIndex, byteIndex)
+                                                    }
+                                            ) {
+                                                Text(
+                                                    byteText,
+                                                    softWrap = false,
+                                                    maxLines = 1,
+                                                    style = TextStyle(
+                                                        fontFamily = FontFamily.Monospace,
+                                                        color = HexanaTheme.hexTextColor
+                                                    )
                                                 )
-                                            )
+                                            }
                                         }
                                     }
                                 }
                             }
-                            Box(modifier = Modifier.width(separator).background(Color.Gray))
-                            Box(
-                                modifier = Modifier.background(HexanaTheme.backgroundColor)
-                                    .padding(horizontal = 8.dp)
-                            ) {
+                        }
+                    }
+
+                    Box {
+                        LazyColumn(state = textDataListState) {
+                            items(count = rowCount) { rowIndex ->
                                 Row(
+                                    modifier = Modifier
+                                        .background(HexanaTheme.backgroundColor).fillMaxWidth()
+                                        .padding(horizontal = 8.dp),
                                     horizontalArrangement = Arrangement.Start
                                 ) {
                                     val start = rowIndex * bytesPerRow
                                     val end = min(start + bytesPerRow, buf.size)
                                     buf.slice(start until end).forEachIndexed { byteIndex, byte ->
-                                        val isHover = byteIndex == state.hoverPosition.lineOffset && rowIndex == state.hoverPosition.line
+                                        val isHover =
+                                            byteIndex == state.hoverPosition.lineOffset && rowIndex == state.hoverPosition.line
                                         val isUnderCursor = byteIndex == state.cursorPosition.lineOffset &&
                                                 rowIndex == state.cursorPosition.line
 
@@ -268,11 +356,12 @@ internal fun HexViewer(
                                             if (isUnderCursor) HexanaTheme.hexCellActiveColor else Color.Unspecified
                                         }
 
-                                        val selectionBackgroundColor = if (state.selection.contains(rowIndex, byteIndex)) {
-                                            Color(156, 183, 255, 255)
-                                        } else {
-                                            backgroundColor
-                                        }
+                                        val selectionBackgroundColor =
+                                            if (state.selection.contains(rowIndex, byteIndex)) {
+                                                Color(156, 183, 255, 255)
+                                            } else {
+                                                backgroundColor
+                                            }
 
                                         val text = if (state.showAscii) {
                                             byte.asASCII()
@@ -293,34 +382,36 @@ internal fun HexViewer(
                                 }
                             }
                         }
+
+
+                        // Show scrollbar only when content overflows the viewport
+                        val showScrollbar by remember(hexDataListState) {
+                            derivedStateOf {
+                                val layout = hexDataListState.layoutInfo
+                                val total = layout.totalItemsCount
+                                if (total == 0) return@derivedStateOf false
+                                val first = layout.visibleItemsInfo.firstOrNull()?.index ?: 0
+                                val last = layout.visibleItemsInfo.lastOrNull()?.index ?: -1
+                                // If not all items are visible, show scrollbar
+                                !(first == 0 && last >= total - 1)
+                            }
+                        }
+
+                        if (showScrollbar) {
+                            VerticalScrollbar(
+                                modifier = Modifier
+                                    .align(alignment = Alignment.CenterEnd)
+                                    .fillMaxHeight()
+                                    .background(Color.Gray),
+                                adapter = rememberScrollbarAdapter(scrollState = hexDataListState)
+                            )
+                        }
                     }
                 }
-
-                // Show scrollbar only when content overflows the viewport
-                val showScrollbar by remember(codePanelListState) {
-                    derivedStateOf {
-                        val layout = codePanelListState.layoutInfo
-                        val total = layout.totalItemsCount
-                        if (total == 0) return@derivedStateOf false
-                        val first = layout.visibleItemsInfo.firstOrNull()?.index ?: 0
-                        val last = layout.visibleItemsInfo.lastOrNull()?.index ?: -1
-                        // If not all items are visible, show scrollbar
-                        !(first == 0 && last >= total - 1)
-                    }
-                }
-
-                if (showScrollbar) {
-                    VerticalScrollbar(
-                        modifier = Modifier
-                            .align(alignment = Alignment.CenterEnd)
-                            .fillMaxHeight()
-                            .background(Color.Gray),
-                        adapter = rememberScrollbarAdapter(scrollState = codePanelListState)
-                    )
-                }
-            }
             }
         }
+
+
     }
 }
 
@@ -358,7 +449,7 @@ private fun selectedAsASCII(buf: ByteArray, state: HexViewStateHolder): String? 
     val last = min(endOffset, buf.lastIndex)
     if (last < startOffset) return null
 
-    return (startOffset..last).joinToString("") { buf[it].asASCII() ?: "."}
+    return (startOffset..last).joinToString("") { buf[it].asASCII() ?: "." }
 }
 
 private fun selectAsKotlinList(buf: ByteArray, state: HexViewStateHolder): String? {
@@ -374,11 +465,15 @@ private fun selectAsKotlinList(buf: ByteArray, state: HexViewStateHolder): Strin
     val last = min(endOffset, buf.lastIndex)
     if (last < startOffset) return null
 
-    val contents = (startOffset..last).joinToString { "0x" + buf[it].toUByte().asHexString() + "u"}
+    val contents = (startOffset..last).joinToString { "0x" + buf[it].toUByte().asHexString() + "u" }
     return "listOf(${contents})"
 }
 
-fun copySelection(buf: ByteArray, state: HexViewStateHolder, selectionBuilder: (ByteArray, HexViewStateHolder) -> String?) {
+fun copySelection(
+    buf: ByteArray,
+    state: HexViewStateHolder,
+    selectionBuilder: (ByteArray, HexViewStateHolder) -> String?
+) {
     val text = selectionBuilder(buf, state)
     if (!text.isNullOrEmpty()) {
         CopyPasteManager.getInstance().setContents(StringSelection(text))

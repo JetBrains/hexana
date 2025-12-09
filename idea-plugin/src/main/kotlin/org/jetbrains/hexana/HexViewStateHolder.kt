@@ -96,7 +96,25 @@ class HexViewStateHolder {
     }
 
     fun setSelection(startLine: Int, startLineOffset: Int, endLine: Int, endLineOffset: Int) {
-        _selection.value = HexSelection(HexPosition(startLine, startLineOffset), HexPosition(endLine, endLineOffset))
+        var startLineResolved = startLine
+        var startOffsetResolved = startLineOffset
+        var endLineResolved = endLine
+        var endOffsetResolved = endLineOffset
+
+        if (startLineResolved > endLineResolved) {
+            startLineResolved = endLine
+            endLineResolved = startLine
+
+            startOffsetResolved = endLineOffset
+            endOffsetResolved = startLineOffset
+        } else if (startLineResolved == endLineResolved) {
+            if (endOffsetResolved < startOffsetResolved) {
+                startOffsetResolved = endLineOffset
+                endOffsetResolved = startLineOffset
+            }
+        }
+
+        _selection.value = HexSelection(HexPosition(startLineResolved, startOffsetResolved), HexPosition(endLineResolved, endOffsetResolved))
     }
 
     fun setSelection(offsetRange: LongRange) {
