@@ -45,7 +45,7 @@ repositories {
 dependencies {
     intellijPlatform {
         intellijIdea("2025.3") {
-            type = IntelliJPlatformType.IntellijIdeaCommunity
+            type = IntelliJPlatformType.IntellijIdea
             useInstaller = false
         }
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
