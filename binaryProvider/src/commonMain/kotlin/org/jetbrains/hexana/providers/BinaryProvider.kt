@@ -55,9 +55,8 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
     }
 
     fun getDataRecordIndexAtByteOffset(byteOffset: Long): Int {
-        data.indexOfFirst { record ->
+        return data.indexOfFirst { record ->
             record.offset <= byteOffset && byteOffset < record.offset + record.recordLength.toLong()
         }
-        return 0
     }
 }

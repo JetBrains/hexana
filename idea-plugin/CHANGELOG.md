@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- navigation from hex view to the data definition in WAT
+
 ### Security
 
 ## 0.3 - 2025-12-08
