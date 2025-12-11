@@ -48,7 +48,7 @@ internal fun BinaryEditorView(
                 state.setShowStructurePopup(false)
             }, DialogProperties()) {
                 Box(modifier = Modifier.background(HexanaTheme.backgroundColor)) {
-                    StructureView(binaryProvider = binaryProvider, state = state)
+                    StructureViewTree(binaryProvider = binaryProvider, state = state)
                 }
             }
         }

@@ -37,7 +37,7 @@ import org.jetbrains.jewel.ui.theme.colorPalette
 import org.jetbrains.jewel.ui.theme.treeStyle
 
 @Composable
-fun StructureView(
+fun StructureViewList(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
 ) {
