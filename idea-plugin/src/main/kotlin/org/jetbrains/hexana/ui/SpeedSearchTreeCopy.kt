@@ -30,6 +30,10 @@ import org.jetbrains.jewel.ui.theme.treeStyle
 import kotlin.math.absoluteValue
 
 
+// Copy of SpeedSearchableTree which works with the tree and treeState
+// updated on speed-search
+
+
 @Composable
 @ExperimentalJewelApi
 @ApiStatus.Experimental
@@ -49,7 +53,7 @@ public fun <T> SpeedSearchScope.SpeedSearchableTree(
     val currentTree = rememberUpdatedState(tree)
     val currentNodeText = rememberUpdatedState(nodeText)
 
-    val currentTreeToList = remember {
+    val currentTreeToList = remember(treeState) {
         derivedStateOf { currentTree.value.toList(currentNodeText.value, treeState.openNodes) }
     }
 
@@ -77,7 +81,7 @@ public fun <T> SpeedSearchScope.SpeedSearchableTree(
         dispatcher,
     )
 
-    LaunchedEffect(dispatcher) {
+    LaunchedEffect(treeState, dispatcher) {
         val entriesState = MutableStateFlow(emptyList<String?>())
 
         val entriesFlow = snapshotFlow { currentTreeToList.value.first }
