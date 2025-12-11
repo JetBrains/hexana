@@ -79,8 +79,8 @@ fun StructureView(
                 }
                 val sectionNode = HexanaNode(name, section.sectionRange, isLeaf = false, childrenCount = childrenCount)
                 res.add(sectionNode)
-                if (sectionNode.range.contains(byteOffset) && (bestSelection == null || sectionNode.range.contains(
-                        bestSelection.range
+                if (sectionNode.range.contains(byteOffset) && (bestSelection == null || bestSelection.range.contains(
+                        sectionNode.range
                     ))
                 ) {
                     bestSelection = sectionNode
