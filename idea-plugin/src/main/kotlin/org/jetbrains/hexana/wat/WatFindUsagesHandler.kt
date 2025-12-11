@@ -66,27 +66,23 @@ private fun computeGlobalRefs(file: PsiFile): List<WatGlobalRef> {
     lexer.start(file.text)
     while (true) {
         var t = lexer.tokenType
-        if (t == WatToken.OPEN_PAREN) {
+        if (t == WatToken.GLOBAL_GET || t == WatToken.GLOBAL_SET) {
             lexer.advance()
             skipSpacesAndComments(lexer)
             t = lexer.tokenType
-            if (t == WatToken.GLOBAL_GET || t == WatToken.GLOBAL_SET) {
+            if (t == WatToken.IDENTIFIER) {
+                refs.add(WatGlobalRef(file, lexer.tokenStart, lexer.tokenEnd, lexer.tokenSequence.toString(), null))
                 lexer.advance()
-                skipSpacesAndComments(lexer)
-                t = lexer.tokenType
-                if (t == WatToken.IDENTIFIER) {
-                    refs.add(WatGlobalRef(file, lexer.tokenStart, lexer.tokenEnd, lexer.tokenSequence.toString(), null))
-                    lexer.advance()
-                }
-                else if (t == WatToken.NUMBER) {
-                    runCatching {
-                        val index = Integer.parseInt(lexer.tokenSequence.toString())
-                        refs.add(WatGlobalRef(file, lexer.tokenStart, lexer.tokenEnd, "", index))
-                    }
-                    lexer.advance()
-                }
             }
-        } else if (t == null) {
+            else if (t == WatToken.NUMBER) {
+                runCatching {
+                    val index = Integer.parseInt(lexer.tokenSequence.toString())
+                    refs.add(WatGlobalRef(file, lexer.tokenStart, lexer.tokenEnd, "", index))
+                }
+                lexer.advance()
+            }
+        }
+        else if (t == null) {
             break
         }
         lexer.advance()

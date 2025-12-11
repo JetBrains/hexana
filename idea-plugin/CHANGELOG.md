@@ -15,6 +15,7 @@
 ### Fixed
 
 - navigation from hex view to the data definition in WAT
+- global usages in unfolded WAT syntax
 
 ### Security
 
