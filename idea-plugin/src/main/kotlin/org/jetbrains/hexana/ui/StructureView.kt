@@ -337,7 +337,7 @@ fun StructureViewTree(
                 ) { element ->
 
                     Box {
-                        var textLayoutResult by remember(filteredTree) { mutableStateOf<TextLayoutResult?>(null) }
+                        var textLayoutResult by remember(element.data) { mutableStateOf<TextLayoutResult?>(null) }
                         Text(
                             element.data.name.highlightTextSearch(),
                             Modifier.padding(2.dp).highlightSpeedSearchMatches(textLayoutResult),
