@@ -59,6 +59,9 @@ class WatReference(
         if (exprType == WatToken.LOCAL_SET || exprType == WatToken.LOCAL_GET || exprType == WatToken.LOCAL_TEE) {
             return resolveLocal(nameOrIndex)
         }
+        if (exprType == WatToken.START) {
+            return findInFileset(WatElementType.FUNC, nameOrIndex) ?: resolveFunc(nameOrIndex.containingFile, nameOrIndex)
+        }
         if (exprType == WatToken.BR || exprType == WatToken.BR_IF || exprType == WatToken.BR_TABLE ||
             exprType == WatToken.BR_ON_NULL || exprType == WatToken.BR_ON_NON_NULL ||
             exprType == WatToken.BR_ON_CAST || exprType == WatToken.BR_ON_CAST_FAIL) {

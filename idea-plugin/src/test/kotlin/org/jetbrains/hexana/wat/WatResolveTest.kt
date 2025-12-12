@@ -1196,4 +1196,26 @@ class WatResolveTest : BasePlatformTestCase() {
             )
         """)
     }
+
+    fun testStart() {
+        doTest($$"""
+            (module
+              (func $f0)
+              (func (;TARGET;)$f1)
+              (func $f2)
+              (start <caret>$f1)
+            )
+        """)
+    }
+
+    fun testStartByIndex() {
+        doTest($$"""
+            (module
+              (func $f0)
+              (func (;TARGET;)$f1)
+              (func $f2)
+              (start <caret>1)
+            )
+        """)
+    }
 }
