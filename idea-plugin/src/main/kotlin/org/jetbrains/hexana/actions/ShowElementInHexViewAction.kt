@@ -9,6 +9,7 @@ import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.HexanaFileEditor
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.wasm.longRange
 import org.jetbrains.hexana.wat.psi.WatDataElement
 import org.jetbrains.hexana.wat.psi.WatFuncElement
 import org.jetbrains.hexana.wat.psi.WatModuleElement
@@ -91,7 +92,7 @@ class ShowElementInHexViewAction : AnAction() {
             }
         }
         val record = wasmBinaryProvider.data.getOrNull(index) ?: return null
-        return LongRange(record.offset, record.offset + record.recordLength - 1)
+        return record.longRange
     }
 
     fun getFuncOffsetInHex(wasmBinaryProvider: WasmBinaryProvider, e: WatFuncElement): LongRange? {
@@ -106,6 +107,6 @@ class ShowElementInHexViewAction : AnAction() {
             }
         }
         val record = wasmBinaryProvider.getCodeRecordByIndex(index) ?: return null
-        return LongRange(record.offset, record.offset + record.size.toInt() - 1)
+        return record.longRange
     }
 }

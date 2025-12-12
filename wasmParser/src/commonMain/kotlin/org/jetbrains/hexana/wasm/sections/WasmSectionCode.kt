@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.wasm.sections
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.wasm.WasmRange
+import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodeWithValue
 import org.jetbrains.hexana.wasm.opcodes.UnsupportedOpsException
@@ -12,6 +14,14 @@ class WasmSectionCode(sectionSize: Int, sectionOffset: Int, contentSize: Int, co
     }
 
     constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
+
+    override fun getRecordRanges(buffer: CommonByteBuffer): List<WasmNamedRange> {
+        return with (buffer) {
+            scan().mapIndexed { index, record ->
+                WasmNamedRange(record, "func $index")
+            }
+        }
+    }
 
     fun CommonByteBuffer.scan(): List<WasmCodeRecord> {
         // https://webassembly.github.io/spec/core/binary/modules.html#binary-codesec
@@ -60,7 +70,7 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
     try {
         consumeLocals(locals)
         val opCodes = parseOpCodes()
-        return WasmCodeRecord(codeEntryStart.toLong(), (position() - codeEntryStart).toUInt(), locals, opCodes)
+        return WasmCodeRecord(codeEntryStart, sizeFromOffset(codeEntryStart), locals, opCodes)
     } catch (e: UnsupportedOpsException) {
 
         position(bodyStart)
@@ -70,8 +80,8 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
 
         position(bodyStart + funSize.toInt())
         return WasmCodeRecord(
-            codeEntryStart.toLong(),
-            (position() - codeEntryStart).toUInt(),
+            codeEntryStart,
+            sizeFromOffset(codeEntryStart),
             locals,
             listOf(UnparsedOpCode(e, raw))
         )
@@ -89,4 +99,9 @@ fun CommonByteBuffer.consumeLocals(locals: MutableList<WasmCodeLocalRecord>) {
 class UnparsedOpCode(val e: Throwable, rawCodes: ByteArray): OpCodeWithValue<ByteArray>(rawCodes)
 
 data class WasmCodeLocalRecord(val local: Int, val type: WasmValueType<*>)
-data class WasmCodeRecord(val offset: Long, val size: UInt, val locals: List<WasmCodeLocalRecord>, val opCodes: List<OpCode>)
+data class WasmCodeRecord(
+    override val offset: Int,
+    override val size: Int,
+    val locals: List<WasmCodeLocalRecord>,
+    val opCodes: List<OpCode>,
+) : WasmRange

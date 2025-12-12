@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.wasm.sections
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.wasm.WasmNamedRange
+import org.jetbrains.hexana.wasm.WasmRange
 
 class WasmSectionImport(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
     companion object {
@@ -9,11 +11,24 @@ class WasmSectionImport(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
 
     constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
 
+    override fun getRecordRanges(buffer: CommonByteBuffer): List<WasmNamedRange> {
+        return with(buffer) {
+            getImportRecords().mapIndexed { index, record ->
+                val name = when {
+                    record.name.isBlank() -> "import $index"
+                    else -> "import $index: ${record.name}"
+                }
+                WasmNamedRange(record, name)
+            }
+        }
+    }
+
     fun CommonByteBuffer.getImportRecords(): MutableList<WasmImportRecord> {
         position(contentOffset)
 
         val records = mutableListOf<WasmImportRecord>()
         consumeArray {
+            val offset = position()
             val prefix = consumeString()
             val name = consumeString()
             val rawType = get()
@@ -32,7 +47,7 @@ class WasmSectionImport(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
                 else -> error("unknown import type: $rawType")
             }
             records.add(
-                WasmImportRecord(prefix, name, type)
+                WasmImportRecord(offset, sizeFromOffset(offset), prefix, name, type)
             )
         }
 
@@ -97,4 +112,10 @@ class WasmGlobalType(val valueType: WasmValueType<*>, val mutable: Boolean): Was
  * 0x03 gt:globaltype ⇒ global gt
  * 0x04 jt:tagtype ⇒ tag jt.
  */
-data class WasmImportRecord(val prefix: String, val name: String, val type: WasmExternalType)
+data class WasmImportRecord(
+    override val offset: Int,
+    override val size: Int,
+    val prefix: String,
+    val name: String,
+    val type: WasmExternalType
+) : WasmRange

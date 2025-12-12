@@ -1,13 +1,14 @@
 package org.jetbrains.hexana.wasm.sections
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.wasm.WasmNamedRange
 
 
 sealed class WasmSection(
     val sectionSize: Int,
     val sectionOffset: Int,
     val contentSize: Int,
-    val contentOffset: Int
+    val contentOffset: Int,
 ) {
 
 
@@ -20,6 +21,10 @@ sealed class WasmSection(
 
     val sectionRange: IntRange get() = sectionOffset until sectionOffset + sectionSize
     val contentRange: IntRange get() = contentOffset until contentOffset + contentSize
+
+    open fun getRecordRanges(buffer: CommonByteBuffer): List<WasmNamedRange> {
+        return emptyList()
+    }
 }
 
 class WasmSectionUnresolved(
@@ -34,3 +39,5 @@ internal fun CommonByteBuffer.consumeArray(block: (Int) -> Unit) {
     val vecCount = getULEB128().toInt()
     repeat(vecCount, block)
 }
+
+internal fun CommonByteBuffer.sizeFromOffset(offset: Int): Int = position() - offset

@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.wasm.sections
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.wasm.WasmNamedRange
+import org.jetbrains.hexana.wasm.WasmRange
 
 class WasmSectionMemory(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
     companion object {
@@ -9,14 +11,29 @@ class WasmSectionMemory(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
 
     constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
 
+    override fun getRecordRanges(buffer: CommonByteBuffer): List<WasmNamedRange> {
+        return with (buffer) {
+            scan().mapIndexed { index, record ->
+                WasmNamedRange(record, "memory $index")
+            }
+        }
+    }
+
     fun CommonByteBuffer.scan():List<WasmMemoryRecord> {
         position(contentOffset)
         val records = mutableListOf<WasmMemoryRecord>()
         consumeArray { memidx ->
-            records.add(WasmMemoryRecord(memidx, limits()))
+            val offset = position()
+            val limits = limits()
+            records.add(WasmMemoryRecord(offset, sizeFromOffset(offset), memidx, limits))
         }
         return records
     }
 }
 
-data class WasmMemoryRecord(val memidx:Int, val limits: WasmLimits<*>)
+data class WasmMemoryRecord(
+    override val offset: Int,
+    override val size: Int,
+    val memidx:Int,
+    val limits: WasmLimits<*>
+) : WasmRange

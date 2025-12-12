@@ -66,7 +66,7 @@ abstract class WasmTest: UsefulTestCase() {
 
     internal inline fun doTableTest(crossinline body: (List<WasmTableEntry>) -> Unit) = doTest("table") { wasmModule ->
         with(wasmModule!!.tableSection!!) {
-            body(scanTable(wasmModule))
+            body(scanTable())
         }
     }
 

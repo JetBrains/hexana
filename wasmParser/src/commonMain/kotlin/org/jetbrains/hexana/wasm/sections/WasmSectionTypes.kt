@@ -1,7 +1,8 @@
 package org.jetbrains.hexana.wasm.sections
 
 import org.jetbrains.hexana.io.CommonByteBuffer
-import kotlin.collections.emptyList
+import org.jetbrains.hexana.wasm.WasmNamedRange
+import org.jetbrains.hexana.wasm.WasmRange
 
 class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) : WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
     companion object {
@@ -10,12 +11,21 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
 
     constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
 
+    override fun getRecordRanges(buffer: CommonByteBuffer): List<WasmNamedRange> {
+        return with (buffer) {
+            parseTypes().mapIndexed { index, record ->
+                WasmNamedRange(record, "type $index")
+            }
+        }
+    }
+
     fun CommonByteBuffer.parseTypes(): List<WasmTypeRecord> {
         position(contentOffset)
 
         val typeRecords = mutableListOf<WasmTypeRecord>()
 
         consumeArray {
+            val offset = position()
             val type = get().toUByte()
             when (type) {
                 0x4E.toUByte() -> {
@@ -23,7 +33,7 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
                 }
                 else -> {
                     position(position() - 1)
-                    typeRecords.add(subtype())
+                    typeRecords.add(subtype(offset))
                 }
             }
         }
@@ -33,10 +43,14 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
 
     private fun CommonByteBuffer.recType(): WasmTypeRecord {
         val subtype = mutableListOf<WasmTypeRecord>()
-        consumeArray { subtype.add(subtype()) }
-        return WasmRecursiveTypeRecord(subtype)
+        val offset = position()
+        consumeArray {
+            val offset = position()
+            subtype.add(subtype(offset))
+        }
+        return WasmRecursiveTypeRecord(offset, sizeFromOffset(offset), subtype)
     }
-    private fun CommonByteBuffer.subtype():WasmTypeRecord {
+    private fun CommonByteBuffer.subtype(offset: Int):WasmTypeRecord {
         val subType = get()
         return when (subType) {
             0x4f.toByte(),
@@ -46,36 +60,37 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
                     val subType = getULEB128().toUInt()
                     superTypers.add(subType)
                 }
-                compType(superTypers.toList(), subType.toUByte() == 0x4f.toUByte())
+                compType(offset, superTypers.toList(), subType.toUByte() == 0x4f.toUByte())
             }
 
             else -> {
                 position(position() - 1)
-                compType(emptyList(), true)
+                compType(offset, emptyList(), true)
             }
         }
     }
 
-    private fun CommonByteBuffer.compType(superTypers: List<UInt>, isFinal: Boolean): WasmTypeRecord {
+    private fun CommonByteBuffer.compType(offset: Int, superTypers: List<UInt>, isFinal: Boolean): WasmTypeRecord {
         return when (get()) {
-            0x5e.toByte() -> arrayType()
-            0x5f.toByte() -> structType(superTypers, isFinal)
-            0x60.toByte() -> funcType()
+            0x5e.toByte() -> arrayType(offset)
+            0x5f.toByte() -> structType(offset, superTypers, isFinal)
+            0x60.toByte() -> funcType(offset)
             else -> error("unknown type id: 0x${get().toHexString()}")
         }
     }
 
-    private fun CommonByteBuffer.arrayType(): WasmTypeRecord {
-        return WasmArrayTypeRecord(fieldType())
+    private fun CommonByteBuffer.arrayType(offset: Int): WasmTypeRecord {
+        val fieldType = fieldType()
+        return WasmArrayTypeRecord(offset, sizeFromOffset(offset), fieldType)
     }
-    private fun CommonByteBuffer.structType(superTypers: List<UInt>, isFinal: Boolean): WasmTypeRecord {
+    private fun CommonByteBuffer.structType(offset: Int, superTypers: List<UInt>, isFinal: Boolean): WasmTypeRecord {
         val fields = mutableListOf<WasmFieldType>()
         consumeArray {
             fields.add(fieldType())
         }
-        return WasmStructTypeRecord(superTypers, fields, isFinal)
+        return WasmStructTypeRecord(offset, sizeFromOffset(offset), superTypers, fields, isFinal)
     }
-    private fun CommonByteBuffer.funcType(): WasmTypeRecord {
+    private fun CommonByteBuffer.funcType(offset: Int): WasmTypeRecord {
         val params = mutableListOf<WasmValueType<*>>()
         consumeArray {
             params.add(valueType())
@@ -85,8 +100,7 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
         consumeArray {
             retTypes.add(valueType())
         }
-
-        return WasmSectionFunctionTypeRecord(params, retTypes)
+        return WasmSectionFunctionTypeRecord(offset, sizeFromOffset(offset), params, retTypes)
     }
 
     private fun CommonByteBuffer.fieldType(): WasmFieldType {
@@ -179,18 +193,36 @@ internal fun CommonByteBuffer.heapType(): WasmHeapType {
     }
 }
 
-sealed class WasmTypeRecord
+sealed interface WasmTypeRecord : WasmRange
 
 data class WasmFieldType(val storageType: WasmValueType<*>, val isMutable: Boolean)
 
-data class WasmRecursiveTypeRecord(val entries: List<WasmTypeRecord>): WasmTypeRecord()
-data class WasmArrayTypeRecord(val fieldType: WasmFieldType ): WasmTypeRecord()
-data class WasmStructTypeRecord(val superTypes: List<UInt>, val fields: List<WasmFieldType>, val isFinal: Boolean): WasmTypeRecord()
+data class WasmRecursiveTypeRecord(
+    override val offset: Int,
+    override val size: Int,
+    val entries: List<WasmTypeRecord>
+) : WasmTypeRecord
+
+data class WasmArrayTypeRecord(
+    override val offset: Int,
+    override val size: Int,
+    val fieldType: WasmFieldType
+) : WasmTypeRecord
+
+data class WasmStructTypeRecord(
+    override val offset: Int,
+    override val size: Int,
+    val superTypes: List<UInt>,
+    val fields: List<WasmFieldType>,
+    val isFinal: Boolean
+) : WasmTypeRecord
 
 data class WasmSectionFunctionTypeRecord(
+    override val offset: Int,
+    override val size: Int,
     val params: List<WasmValueType<*>>,
     val retTypes: List<WasmValueType<*>>
-): WasmTypeRecord()
+) : WasmTypeRecord
 
 sealed class  WasmValueType<T>(open val code: T)
 

@@ -2,10 +2,12 @@ package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmParser
+import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmDataRecord
 import org.jetbrains.hexana.wasm.sections.WasmExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
+import org.jetbrains.hexana.wasm.sections.WasmSection
 
 sealed interface BinaryProvider {
     val bytes: ByteArray
@@ -57,6 +59,15 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
     fun getDataRecordIndexAtByteOffset(byteOffset: Long): Int {
         return data.indexOfFirst { record ->
             record.offset <= byteOffset && byteOffset < record.offset + record.recordLength.toLong()
+        }
+    }
+
+    fun getRecords(section: WasmSection): List<WasmNamedRange> {
+        return try {
+            section.getRecordRanges(buffer)
+        } catch (_: Exception) {
+            // we throw exception on unknown op-codes
+            emptyList()
         }
     }
 }

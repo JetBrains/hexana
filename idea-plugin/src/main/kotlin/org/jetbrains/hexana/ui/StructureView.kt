@@ -13,15 +13,15 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.wasm.intRange
 import org.jetbrains.hexana.wasm.sections.WasmSection
-import org.jetbrains.hexana.wasm.sections.WasmSectionCode
-import org.jetbrains.hexana.wasm.sections.WasmSectionData
 import org.jetbrains.jewel.foundation.lazy.SelectableLazyListState
 import org.jetbrains.jewel.foundation.lazy.SelectionMode
 import org.jetbrains.jewel.foundation.lazy.tree.Tree
@@ -55,69 +55,28 @@ fun StructureViewList(
                 state.hoverPosition.getByteOffset(state.bytesPerRow.value)
             }
             var bestSelection: HexanaNode? = null
-
-            val wasmModule = (binaryProvider as? WasmBinaryProvider)?.wasmModule
-            val sections = wasmModule?.sections ?: emptyList()
-            val res = mutableListOf<HexanaNode>()
-            for (section in sections) {
-                val name = section.getName()
-                val childrenCount = when (section) {
-                    is WasmSectionCode -> {
-                        ((binaryProvider as? WasmBinaryProvider)?.codeRecords ?: emptyList()).size
+            val nodes = mutableListOf<HexanaNode>()
+            if (binaryProvider is WasmBinaryProvider) {
+                val sections = binaryProvider.wasmModule?.sections ?: emptyList()
+                for (section in sections) {
+                    val name = section.getName()
+                    val records = binaryProvider.getRecords(section)
+                    val sectionNode = HexanaNode(name, section.sectionRange, isLeaf = false, childrenCount = records.size)
+                    nodes.add(sectionNode)
+                    if (sectionNode.range.contains(byteOffset) &&
+                        (bestSelection == null || bestSelection.range.contains(sectionNode.range))) {
+                        bestSelection = sectionNode
                     }
-
-                    is WasmSectionData -> {
-                        ((binaryProvider as? WasmBinaryProvider)?.data ?: emptyList()).size
-                    }
-
-                    else -> {
-                        0
-                    }
-                }
-                val sectionNode = HexanaNode(name, section.sectionRange, isLeaf = false, childrenCount = childrenCount)
-                res.add(sectionNode)
-                if (sectionNode.range.contains(byteOffset) && (bestSelection == null || bestSelection.range.contains(
-                        sectionNode.range
-                    ))
-                ) {
-                    bestSelection = sectionNode
-                }
-                when (section) {
-                    is WasmSectionCode -> {
-                        val records = (binaryProvider as? WasmBinaryProvider)?.codeRecords ?: emptyList()
-                        records.forEachIndexed { index, record ->
-                            val node = HexanaNode(
-                                "func $index",
-                                record.offset.toInt() until record.offset.toInt() + record.size.toInt(),
-                            )
-                            res.add(node)
-                            if (byteOffset in node.range && bestSelection?.range?.contains(node.range) ?: true) {
-                                bestSelection = node
-                            }
+                    records.forEach { record ->
+                        val node = HexanaNode(record.name, record.range.intRange)
+                        nodes.add(node)
+                        if (byteOffset in node.range && bestSelection?.range?.contains(node.range) ?: true) {
+                            bestSelection = node
                         }
-                    }
-
-                    is WasmSectionData -> {
-                        val records = (binaryProvider as? WasmBinaryProvider)?.data ?: emptyList()
-                        records.forEachIndexed { index, record ->
-                            val node = HexanaNode(
-                                "data $index",
-                                record.offset.toInt() until record.offset.toInt() + record.recordLength,
-                            )
-                            res.add(node)
-                            if (byteOffset in node.range && bestSelection?.range?.contains(node.range) ?: true) {
-                                bestSelection = node
-                            }
-                        }
-                    }
-
-                    else -> {
-
                     }
                 }
             }
-            itemToSelect = bestSelection
-            res
+            nodes
         }
     }
 
@@ -394,6 +353,8 @@ fun StructureViewTree(
                             element.data.name.highlightTextSearch(),
                             Modifier.padding(2.dp).highlightSpeedSearchMatches(textLayoutResult),
                             onTextLayout = { textLayoutResult = it },
+                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 1,
                         )
                     }
                 }
@@ -424,39 +385,10 @@ private fun buildWasmStructureTree(binaryProvider: BinaryProvider) = buildTree {
     if (wasmModule != null) {
         for (section in wasmModule.sections) {
             val name = section.getName()
-            when (section) {
-                is WasmSectionCode -> {
-                    addNode(HexanaNode(name, section.sectionRange, isLeaf = false)) {
-                        val records = binaryProvider.codeRecords
-                        records.mapIndexed { index, record ->
-                            val recordName = "func $index"
-                            addLeaf(
-                                HexanaNode(
-                                    recordName,
-                                    record.offset.toInt() until record.offset.toInt() + record.size.toInt()
-                                )
-                            )
-                        }
-                    }
-                }
-
-                is WasmSectionData -> {
-                    addNode(HexanaNode(name, section.sectionRange, isLeaf = false)) {
-                        val records = binaryProvider.data
-                        records.mapIndexed { index, record ->
-                            val recordName = "data $index"
-                            addLeaf(
-                                HexanaNode(
-                                    recordName,
-                                    record.offset.toInt() until record.offset.toInt() + record.recordLength
-                                )
-                            )
-                        }
-                    }
-                }
-
-                else -> {
-                    addNode(HexanaNode(name, section.sectionRange, isLeaf = false))
+            addNode(HexanaNode(name, section.sectionRange, isLeaf = false)) {
+                val records = binaryProvider.getRecords(section)
+                records.forEach { record ->
+                    addLeaf(HexanaNode(record.name, record.range.intRange))
                 }
             }
         }

@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.wasm.sections
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.wasm.WasmRange
+import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.parseOpCodes
 
@@ -11,26 +13,34 @@ class WasmSectionData(sectionSize: Int, sectionOffset: Int, contentSize: Int, co
 
     constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
 
+    override fun getRecordRanges(buffer: CommonByteBuffer): List<WasmNamedRange> {
+        return with (buffer) {
+            scan().mapIndexed { index, record ->
+                WasmNamedRange(record, "data $index")
+            }
+        }
+    }
+
     fun CommonByteBuffer.scan(): List<WasmDataRecord> {
         position(contentOffset)
         return buildList {
             consumeArray {
-                val off = position().toLong()
+                val off = position()
                 when (val recordType = getULEB128().toUInt()) {
                     0u -> {
                         val opCodes = this@scan.parseOpCodes()
                         val data = this@scan.fetchDataArray()
-                        add(WasmDataRecordActive(off, position() - off.toInt(), opCodes, data))
+                        add(WasmDataRecordActive(off, sizeFromOffset(off), opCodes, data))
                     }
                     1u -> {
                         val data = this@scan.fetchDataArray()
-                        add(WasmDataRecordPassive(off, position() - off.toInt(), data))
+                        add(WasmDataRecordPassive(off, sizeFromOffset(off), data))
                     }
                     2u -> {
                         val index = getULEB128().toUInt()
                         val opCodes = this@scan.parseOpCodes()
                         val data = this@scan.fetchDataArray()
-                        add(WasmDataRecordActiveWithMemoryIndex(off, position() - off.toInt(), index, opCodes, data))
+                        add(WasmDataRecordActiveWithMemoryIndex(off, sizeFromOffset(off), index, opCodes, data))
                     }
                     else -> throw IllegalArgumentException("Unknown data record type: $recordType")
                 }
@@ -47,8 +57,18 @@ class WasmSectionData(sectionSize: Int, sectionOffset: Int, contentSize: Int, co
 /**
  * 5.5.14
  */
-sealed class WasmDataRecord(val type: UInt, open val offset: Long, open val recordLength: Int, open val data: ByteArray)
-data class WasmDataRecordActive(override val offset: Long, override val recordLength: Int, val expression: List<OpCode>, override val data: ByteArray): WasmDataRecord(0x0u, offset, recordLength, data) {
+sealed class WasmDataRecord(
+    val type: UInt,
+    override val offset: Int,
+    override val size: Int,
+    open val data: ByteArray
+) : WasmRange {
+
+    open val recordLength: Int = size
+
+}
+
+data class WasmDataRecordActive(override val offset: Int, override val recordLength: Int, val expression: List<OpCode>, override val data: ByteArray): WasmDataRecord(0x0u, offset, recordLength, data) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false
@@ -73,7 +93,7 @@ data class WasmDataRecordActive(override val offset: Long, override val recordLe
 
 }
 
-data class WasmDataRecordPassive(override val offset: Long, override val recordLength: Int, override val data: ByteArray): WasmDataRecord(0x1u, offset, recordLength, data) {
+data class WasmDataRecordPassive(override val offset: Int, override val recordLength: Int, override val data: ByteArray): WasmDataRecord(0x1u, offset, recordLength, data) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false
@@ -96,7 +116,7 @@ data class WasmDataRecordPassive(override val offset: Long, override val recordL
 
 }
 
-data class WasmDataRecordActiveWithMemoryIndex(override val offset: Long, override val recordLength: Int, val memoryIndex: UInt, val expression: List<OpCode>, override val data: ByteArray): WasmDataRecord(0x2u, offset, recordLength, data) {
+data class WasmDataRecordActiveWithMemoryIndex(override val offset: Int, override val recordLength: Int, val memoryIndex: UInt, val expression: List<OpCode>, override val data: ByteArray): WasmDataRecord(0x2u, offset, recordLength, data) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false

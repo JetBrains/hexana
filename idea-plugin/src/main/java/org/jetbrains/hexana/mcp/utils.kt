@@ -79,16 +79,16 @@ internal fun CommonByteBuffer.listDataSectionInternal(wasmModule: WasmModule?): 
             is WasmDataRecordActive -> DataEntry(
                 0,
                 index,
-                record.offset,
+                record.offset.toLong(),
                 record.data,
                 expression = record.expression.wat()
             )
 
-            is WasmDataRecordPassive -> DataEntry(1, index, record.offset, record.data)
+            is WasmDataRecordPassive -> DataEntry(1, index, record.offset.toLong(), record.data)
             is WasmDataRecordActiveWithMemoryIndex -> DataEntry(
                 2,
                 index,
-                record.offset,
+                record.offset.toLong(),
                 record.data,
                 record.memoryIndex,
                 record.expression.wat()
@@ -170,7 +170,7 @@ internal fun CommonByteBuffer.listFunctionsInternal(wasmModule: WasmModule?): Li
             GeneralFunctionEntry(
                 funcidx = funcidx,
                 import = null,
-                codeOffset = codes.getOrNull(index)?.offset,
+                codeOffset = codes.getOrNull(index)?.offset?.toLong(),
                 signature = signature,
                 exportedAs = exportedAs(exports, funcidx),
                 definedIn = "function_section",

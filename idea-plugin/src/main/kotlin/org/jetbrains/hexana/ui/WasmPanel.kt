@@ -252,15 +252,15 @@ internal sealed interface WasmPanel : Panel {
                                 .background(rowBg)
                                 .onClick {
                                     selectedOriginalIndex = originalIndex
-                                    state.scrollHexViewTo(dataRecord.offset)
+                                    state.scrollHexViewTo(dataRecord.offset.toLong())
 
-                                    val startLine = (dataRecord.offset / state.bytesPerRow.value).toInt()
-                                    val startLineOffset = (dataRecord.offset % state.bytesPerRow.value).toInt()
+                                    val startLine = (dataRecord.offset / state.bytesPerRow.value)
+                                    val startLineOffset = (dataRecord.offset % state.bytesPerRow.value)
 
                                     val endLine =
-                                        ((dataRecord.offset + dataRecord.recordLength) / state.bytesPerRow.value).toInt()
+                                        ((dataRecord.offset + dataRecord.recordLength) / state.bytesPerRow.value)
                                     val endLineOffset =
-                                        ((dataRecord.offset + dataRecord.recordLength) % state.bytesPerRow.value).toInt() - 1
+                                        ((dataRecord.offset + dataRecord.recordLength) % state.bytesPerRow.value) - 1
 
                                     state.setSelection(
                                         startLine, startLineOffset,

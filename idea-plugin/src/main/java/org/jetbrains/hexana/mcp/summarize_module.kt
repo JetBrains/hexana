@@ -27,7 +27,7 @@ fun CommonByteBuffer.moduleSummary(wasmModule: WasmModule?): ModuleSummary? {
 
     val tables = with(wasmModule.tableSection) {
         this ?: return@with emptyList()
-        scanTable(wasmModule)
+        scanTable()
     }.size
 
     val exports = listExports(wasmModule)
