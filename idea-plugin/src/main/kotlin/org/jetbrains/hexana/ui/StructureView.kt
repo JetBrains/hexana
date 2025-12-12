@@ -59,9 +59,8 @@ fun StructureViewList(
             if (binaryProvider is WasmBinaryProvider) {
                 val sections = binaryProvider.wasmModule?.sections ?: emptyList()
                 for (section in sections) {
-                    val name = section.getName()
                     val records = binaryProvider.getRecords(section)
-                    val sectionNode = HexanaNode(name, section.sectionRange, isLeaf = false, childrenCount = records.size)
+                    val sectionNode = HexanaNode(section.name, section.sectionRange, isLeaf = false, childrenCount = records.size)
                     nodes.add(sectionNode)
                     if (sectionNode.range.contains(byteOffset) &&
                         (bestSelection == null || bestSelection.range.contains(sectionNode.range))) {
@@ -219,16 +218,6 @@ data class HexanaNode(
 )
 
 
-fun WasmSection.getName(): String {
-    val className = javaClass.simpleName
-    return if (className.startsWith("WasmSection")) {
-        className.removePrefix("WasmSection")
-    } else {
-        "Unknown"
-    }
-}
-
-
 fun IntRange.contains(other: IntRange): Boolean {
     return other.first in this && other.last in this
 }
@@ -384,8 +373,7 @@ private fun buildWasmStructureTree(binaryProvider: BinaryProvider) = buildTree {
     val wasmModule = (binaryProvider as? WasmBinaryProvider)?.wasmModule
     if (wasmModule != null) {
         for (section in wasmModule.sections) {
-            val name = section.getName()
-            addNode(HexanaNode(name, section.sectionRange, isLeaf = false)) {
+            addNode(HexanaNode(section.name, section.sectionRange, isLeaf = false)) {
                 val records = binaryProvider.getRecords(section)
                 records.forEach { record ->
                     addLeaf(HexanaNode(record.name, record.range.intRange))

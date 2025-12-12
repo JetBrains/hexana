@@ -6,7 +6,9 @@ import org.jetbrains.hexana.wasm.WasmRange
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.parseOpCodes
 
-class WasmSectionGlobal(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
+class WasmSectionGlobal(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) :
+    WasmSection("Globals", sectionSize, sectionOffset, contentSize, contentOffset) {
+
     companion object {
         const val SECTION_ID: Byte = 6
     }

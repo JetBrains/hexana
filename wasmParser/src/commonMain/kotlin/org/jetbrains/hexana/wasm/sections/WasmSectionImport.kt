@@ -4,7 +4,9 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmRange
 
-class WasmSectionImport(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
+class WasmSectionImport(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) :
+    WasmSection("Imports", sectionSize, sectionOffset, contentSize, contentOffset) {
+
     companion object {
         const val SECTION_ID: Byte = 2
     }

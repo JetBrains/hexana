@@ -6,7 +6,8 @@ import org.jetbrains.hexana.wasm.WasmRange
 
 
 class WasmSectionExport(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) :
-    WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
+    WasmSection("Exports", sectionSize, sectionOffset, contentSize, contentOffset) {
+
     companion object {
         const val SECTION_ID: Byte = 7
     }

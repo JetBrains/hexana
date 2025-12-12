@@ -8,7 +8,9 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodeWithValue
 import org.jetbrains.hexana.wasm.opcodes.UnsupportedOpsException
 import org.jetbrains.hexana.wasm.opcodes.parseOpCodes
 
-class WasmSectionCode(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
+class WasmSectionCode(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) :
+    WasmSection("Code", sectionSize, sectionOffset, contentSize, contentOffset) {
+
     companion object {
         const val SECTION_ID: Byte = 10
     }

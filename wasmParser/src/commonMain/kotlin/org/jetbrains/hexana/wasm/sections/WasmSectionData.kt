@@ -6,7 +6,9 @@ import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.parseOpCodes
 
-class WasmSectionData(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
+class WasmSectionData(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) :
+    WasmSection("Data", sectionSize, sectionOffset, contentSize, contentOffset) {
+
     companion object {
         const val SECTION_ID: Byte = 11
     }

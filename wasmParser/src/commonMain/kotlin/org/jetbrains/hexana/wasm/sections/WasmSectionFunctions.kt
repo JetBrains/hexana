@@ -3,7 +3,9 @@ package org.jetbrains.hexana.wasm.sections
 import org.jetbrains.hexana.io.CommonByteBuffer
 
 
-class WasmSectionFunctions(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection(sectionSize, sectionOffset, contentSize, contentOffset) {
+class WasmSectionFunctions(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) :
+    WasmSection("Functions", sectionSize, sectionOffset, contentSize, contentOffset) {
+
     companion object {
         const val SECTION_ID: Byte = 3
     }

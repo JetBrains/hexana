@@ -5,6 +5,7 @@ import org.jetbrains.hexana.wasm.WasmNamedRange
 
 
 sealed class WasmSection(
+    val name: String,
     val sectionSize: Int,
     val sectionOffset: Int,
     val contentSize: Int,
@@ -33,7 +34,7 @@ class WasmSectionUnresolved(
     sectionOffset: Int,
     contentSize: Int,
     contentOffset: Int
-): WasmSection(sectionSize, sectionOffset, contentSize, contentOffset)
+): WasmSection("Unknown", sectionSize, sectionOffset, contentSize, contentOffset)
 
 internal fun CommonByteBuffer.consumeArray(block: (Int) -> Unit) {
     val vecCount = getULEB128().toInt()
