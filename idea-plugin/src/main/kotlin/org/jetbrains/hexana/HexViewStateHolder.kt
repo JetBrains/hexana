@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import org.jetbrains.hexana.ui.WatConversionState
+import org.jetbrains.hexana.ui.panel.WatConversionState
 
 
 class HexPosition(val line: Int, val lineOffset: Int) {
