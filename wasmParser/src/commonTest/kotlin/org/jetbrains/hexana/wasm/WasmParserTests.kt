@@ -124,6 +124,7 @@ class WasmParserTests {
 
             assertEquals(
                 WasmImportRecord(
+                34, 515,
                     "abcdefghijklmnopqrstuvwxyz0123456789_0_abcdefghijklmnopqrstuvwxyz0123456789_1_abcdefghijklmnopqrstuvwxyz0123456789_2_abcdefghijklmnopqrstuvwxyz0123456789_2_abcdefghijklmnopqrstuvwxyz0123456789_3_abcdefghijklmnopqrstuvwxyz0123456789_4_abcdefghijklmnopqrstuvwxyz0123456789_5_abcdefghijklmnopqrstuvwxyz0123456789_6_abcdefghijklmnopqrstuvwxyz0123456789_7_abcdefghijklmnopqrstuvwxyz0123456789_8_abcdefghijklmnopqrstuvwxyz0123456789_9_abcdefghijklmnopqrstuvwxyz0123456789_10_abcdefghijklmnopqrstuvwxyz0123456789_11_",
                     "x",
                     WasmTypeIndexExternalType(0)
@@ -132,6 +133,7 @@ class WasmParserTests {
 
             assertEquals(
                 WasmImportRecord(
+                549, 11,
                     "string",
                     "a",
                     WasmTypeIndexExternalType(0)
@@ -140,6 +142,7 @@ class WasmParserTests {
 
             assertEquals(
                 WasmImportRecord(
+                560, 6,
                     "a",
                     "b",
                     WasmTypeIndexExternalType(0)
@@ -148,6 +151,7 @@ class WasmParserTests {
 
             assertEquals(
                 WasmImportRecord(
+                    566, 12,
                     "env",
                     "abort",
                     WasmTypeIndexExternalType(3)
@@ -161,10 +165,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/leftshift.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(WasmI32Type, WasmI32Type), listOf(WasmI32Type)),
+                    signature = WasmSectionFunctionTypeRecord(11, 6,listOf(WasmI32Type, WasmI32Type), listOf(WasmI32Type)),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Local.Get(0u),
@@ -182,10 +186,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/popcnt.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(WasmI32Type), listOf(WasmI32Type)),
+                    signature = WasmSectionFunctionTypeRecord(11, 5,listOf(WasmI32Type), listOf(WasmI32Type)),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Local.Get(0u),
@@ -202,10 +206,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/or.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(WasmI32Type, WasmI32Type), listOf(WasmI32Type)),
+                    signature = WasmSectionFunctionTypeRecord(11, 6, listOf(WasmI32Type, WasmI32Type), listOf(WasmI32Type)),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Local.Get(0u),
@@ -223,10 +227,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/xor.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(WasmI32Type, WasmI32Type), listOf(WasmI32Type)),
+                    signature = WasmSectionFunctionTypeRecord(11, 6, listOf(WasmI32Type, WasmI32Type), listOf(WasmI32Type)),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Local.Get(0u),
@@ -244,10 +248,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/extend.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -265,10 +269,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/and.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(WasmI32Type, WasmI32Type), listOf(WasmI32Type)),
+                    signature = WasmSectionFunctionTypeRecord(11, 6, listOf(WasmI32Type, WasmI32Type), listOf(WasmI32Type)),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Local.Get(0u),
@@ -286,10 +290,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/leftrotate.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(WasmI32Type, WasmI32Type), listOf(WasmI32Type)),
+                    signature = WasmSectionFunctionTypeRecord(11, 6, listOf(WasmI32Type, WasmI32Type), listOf(WasmI32Type)),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Local.Get(0u),
@@ -307,10 +311,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/rightrotate.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(WasmI32Type, WasmI32Type), listOf(WasmI32Type)),
+                    signature = WasmSectionFunctionTypeRecord(11, 6,listOf(WasmI32Type, WasmI32Type), listOf(WasmI32Type)),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Local.Get(0u),
@@ -328,10 +332,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/call.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(11, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Flow.Call(0u),
@@ -347,10 +351,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/unreachable.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(11, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Flow.Unreachable,
@@ -366,10 +370,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/nop.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(11, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Flow.Nop,
@@ -385,10 +389,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/br.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Flow.Loop(WasmI32Type,listOf(
@@ -415,10 +419,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/geu.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -437,10 +441,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/clz.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(WasmI32Type), listOf(WasmI32Type)),
+                    signature = WasmSectionFunctionTypeRecord(11, 5,listOf(WasmI32Type), listOf(WasmI32Type)),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Local.Get(0u),
@@ -458,10 +462,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/ctz.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(WasmI32Type), listOf(WasmI32Type)),
+                    signature = WasmSectionFunctionTypeRecord(11, 5,listOf(WasmI32Type), listOf(WasmI32Type)),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.Local.Get(0u),
@@ -478,10 +482,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/const.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -498,10 +502,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/globalset.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -520,10 +524,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/equal.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -543,10 +547,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/return.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf(WasmI32Type)),
+                    signature = WasmSectionFunctionTypeRecord(11, 4,listOf(), listOf(WasmI32Type)),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -565,10 +569,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/remainder.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -590,10 +594,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/load.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(WasmI32Type), listOf(WasmI32Type)),
+                    signature = WasmSectionFunctionTypeRecord(0, 0,listOf(WasmI32Type), listOf(WasmI32Type)),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(0),
@@ -610,10 +614,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/wrap.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.I64.Const(10L),
@@ -630,10 +634,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/promote.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.F32.Const(10.5f),
@@ -650,10 +654,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/sqrt.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.F32.Const(2.0f),
@@ -671,10 +675,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/addition.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -693,10 +697,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/multiplication.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -716,10 +720,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/local.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         listOf(WasmCodeLocalRecord(1, WasmI32Type)),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -739,10 +743,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/ne.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         listOf(),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -762,10 +766,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/drop.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         listOf(),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -782,10 +786,10 @@ class WasmParserTests {
     @Test
     fun `code gt`() = runTest {
         FunctionRecord(
-            signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+            signature = WasmSectionFunctionTypeRecord(0, 0,listOf(), listOf()),
             body = WasmCodeRecord(
                 0,
-                1u,
+                1,
                 listOf(),
                 listOf(
                     OpCodes.I32.Const(10),
@@ -803,10 +807,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/nearest.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         listOf(),
                         listOf(
                             OpCodes.F32.Const(2.700000047683716f),
@@ -825,10 +829,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/floor.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15,3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         listOf(),
                         listOf(
                             OpCodes.F32.Const(-2.700000047683716f),
@@ -847,10 +851,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/reinterpret.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         listOf(),
                         listOf(
                             OpCodes.F32.Const(-0.0f),
@@ -870,10 +874,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/ceil.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         listOf(),
                         listOf(
                             OpCodes.F32.Const(2.700000047683716f),
@@ -892,10 +896,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/truncf2f.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         listOf(),
                         listOf(
                             OpCodes.F32.Const(-2.700000047683716f),
@@ -913,10 +917,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/copy.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         listOf(),
                         listOf(
                             OpCodes.F32.Const(10f),
@@ -935,10 +939,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/block.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(WasmI32Type), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(11, 4,listOf(WasmI32Type), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         listOf(),
                         listOf(
                             OpCodes.Flow.Block(WasmI32Type,
@@ -965,10 +969,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/ifelse.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         listOf(),
                         listOf(
                             OpCodes.I32.Const(0),
@@ -992,10 +996,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/demote.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.F64.Const(10.5),
@@ -1013,10 +1017,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/negate.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.F32.Const(10.0f),
@@ -1034,10 +1038,10 @@ class WasmParserTests {
         assertFunctions(
             "snippets/convert.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(listOf(), listOf()),
+                    signature = WasmSectionFunctionTypeRecord(15, 3,listOf(), listOf()),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(10),
@@ -1057,12 +1061,13 @@ class WasmParserTests {
             "loop.wasm", listOf(
                 FunctionRecord(
                     signature = WasmSectionFunctionTypeRecord(
+                    11, 5,
                     listOf(WasmI32Type),
                     listOf(WasmI32Type)
                     ),
                     body = WasmCodeRecord(
                         0,
-                        1u,
+                        1,
                         listOf(WasmCodeLocalRecord(1, WasmI32Type)),
                         listOf(
                             OpCodes.I32.Const(0),
