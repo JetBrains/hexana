@@ -4,8 +4,6 @@
 
 ### Added
 
-- structure view for WASM files
-
 ### Changed
 
 ### Deprecated
@@ -14,10 +12,19 @@
 
 ### Fixed
 
+### Security
+
+## 0.4 - 2025-12-15
+
+### Added
+
+- "Structure view" for WASM files
+- Basic Text Selection for Hex View
+
+### Fixed
+
 - navigation from hex view to the data definition in WAT
 - global usages in unfolded WAT syntax
-
-### Security
 
 ## 0.3 - 2025-12-08
 
