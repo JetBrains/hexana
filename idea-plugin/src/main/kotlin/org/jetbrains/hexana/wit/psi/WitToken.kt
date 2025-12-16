@@ -22,6 +22,7 @@ class WitToken(val name: String) : IElementType(name, WitLanguage) {
         @JvmField val EQUALS = WitToken("equals")
         @JvmField val AT = WitToken("at")
         @JvmField val UNDERSCORE = WitToken("underscore")
+        @JvmField val SLASH = WitToken("slash")
         @JvmField val ARROW = WitToken("arrow")
         @JvmField val IDENTIFIER = WitToken("identifier")
         @JvmField val NUMBER = WitToken("number")

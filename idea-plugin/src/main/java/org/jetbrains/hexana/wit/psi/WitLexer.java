@@ -44,7 +44,7 @@ public class WitLexer extends LexerBase {
             case '\r', '\n' -> readToken1(WitToken.NEWLINE);
             case '/' -> {
                 if (!readComment()) {
-                    readToken1(TokenType.BAD_CHARACTER);
+                    readToken1(WitToken.SLASH);
                 }
             }
             case '.' -> readToken1(WitToken.DOT);
