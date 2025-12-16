@@ -75,6 +75,8 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testRuntimeOnly("org.graalvm.polyglot:wasm:25.0.0")
     testRuntimeOnly("org.graalvm.polyglot:polyglot:25.0.0")
+
+    implementation("com.google.code.gson:gson:2.13.1")
 }
 
 changelog {

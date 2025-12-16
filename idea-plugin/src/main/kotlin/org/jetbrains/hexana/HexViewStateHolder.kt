@@ -4,6 +4,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.project.Project
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,7 +36,9 @@ sealed class HexViewMode {
     object Wat : HexViewMode()
 }
 
-class HexViewStateHolder {
+class HexViewStateHolder(
+    val project: Project,
+) {
     val currentState: MutableState<HexViewState> = mutableStateOf(HexViewState())
 
     private var _viewMode = mutableStateOf<HexViewMode>(HexViewMode.Hex)

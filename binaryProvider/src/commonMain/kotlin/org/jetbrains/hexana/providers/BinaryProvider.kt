@@ -18,6 +18,8 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
     private val buffer = bytes.toCommonByteBuffer()
     val wasmModule = WasmParser().parse(buffer)
 
+    open val sourceLocationProvider: HexanaSourceLocationProvider = HexanaSourceLocationProvider.EMPTY
+
     val imports: List<WasmImportRecord> by lazy {
         val importSection = wasmModule?.importSection ?: return@lazy emptyList()
         with (importSection) {
@@ -71,3 +73,21 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
         }
     }
 }
+
+
+interface HexanaSourceLocationProvider {
+
+    companion object {
+        val EMPTY = object : HexanaSourceLocationProvider {
+            override fun getSourceLocationForOffset(byteOffset: Int): HexanaSourceLocation? = null
+        }
+    }
+
+    fun getSourceLocationForOffset(byteOffset: Int): HexanaSourceLocation?
+}
+
+data class HexanaSourceLocation(
+    val filePath: String,
+    val line: Int,
+    val column: Int,
+)

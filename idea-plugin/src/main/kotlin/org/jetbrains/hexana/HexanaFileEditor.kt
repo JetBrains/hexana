@@ -31,6 +31,15 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.openapi.keymap.KeymapUtil
 import com.intellij.openapi.project.DumbAwareAction
+import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.vfs.toNioPathOrNull
+import kotlinx.coroutines.launch
+import org.jetbrains.hexana.providers.HexanaSourceLocation
+import org.jetbrains.hexana.providers.HexanaSourceLocationProvider
+import org.jetbrains.hexana.sourcemap.parseSourceMap
+import java.nio.file.InvalidPathException
+import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicReference
 
 class HexanaFileEditor(
     val myProject: Project,
@@ -43,7 +52,7 @@ class HexanaFileEditor(
 
     val panel: JComponent
 
-    val stateHolder = HexViewStateHolder()
+    val stateHolder = HexViewStateHolder(myProject)
 
     private var myTextEditor: TextEditor? = null
 
@@ -63,19 +72,27 @@ class HexanaFileEditor(
     fun initPanel() {
         val buf = myFile.contentsToByteArray()
         binaryProvider = when (myFile.extension) {
-            "wasm" -> object: WasmBinaryVirtualFileProvider(myFile) {
-                override suspend fun createTextEditor(file: VirtualFile): TextEditor {
-                     return withContext(Dispatchers.EDT) {
-                         disposeClosedEditors()
-                         myTextEditor?.let {
-                             myClosedTextEditors.add(it)
-                         }
-                         val textEditor = TextEditorProvider.getInstance().createEditor(myProject, file)
-                         textEditor as TextEditor
-                         myTextEditor = textEditor
-                         stateHolder.setEditor(textEditor.editor)
-                         textEditor
+            "wasm" -> {
+                val ref = AtomicReference(HexanaSourceLocationProvider.EMPTY)
+                initSourceLocationProvider(ref)
+
+                object: WasmBinaryVirtualFileProvider(myFile) {
+                    override suspend fun createTextEditor(file: VirtualFile): TextEditor {
+                        return withContext(Dispatchers.EDT) {
+                            disposeClosedEditors()
+                            myTextEditor?.let {
+                                myClosedTextEditors.add(it)
+                            }
+                            val textEditor = TextEditorProvider.getInstance().createEditor(myProject, file)
+                            textEditor as TextEditor
+                            myTextEditor = textEditor
+                            stateHolder.setEditor(textEditor.editor)
+                            textEditor
+                        }
                     }
+
+                    override val sourceLocationProvider: HexanaSourceLocationProvider
+                        get() = ref.get()
                 }
             }
             else -> GenericBinaryProvider(buf)
@@ -214,3 +231,39 @@ data class HexViewState(
     }
 }
 
+
+
+private fun HexanaFileEditor.initSourceLocationProvider(ref: AtomicReference<HexanaSourceLocationProvider>) {
+    HexanaService.getInstance().coroutineScope.launch(Dispatchers.IO) {
+        val sourceMap = myFile.parent.findChild("${myFile.name}.map")
+        if (sourceMap?.exists() != true) {
+            return@launch
+        }
+        val sourceMapPath = sourceMap.toNioPathOrNull()
+        val sourceLocationProvider = parseSourceMap(sourceMapPath, VfsUtil.loadText(sourceMap))
+        val resolvedPaths = hashSetOf<String>()
+        for (path in sourceLocationProvider.sources) {
+            try {
+                val mappingPath = Path.of(path)
+                val ioPath = if (mappingPath.isAbsolute) {
+                    mappingPath
+                } else {
+                    sourceMapPath?.resolveSibling(path)
+                }
+                if (ioPath != null && VfsUtil.findFile(ioPath, true) != null) {
+                    resolvedPaths.add(ioPath.toString())
+                }
+            } catch (_: InvalidPathException) {
+            }
+        }
+
+        val filteringLocationProvider = object : HexanaSourceLocationProvider {
+            override fun getSourceLocationForOffset(byteOffset: Int): HexanaSourceLocation? {
+                val result = sourceLocationProvider.getSourceLocationForOffset(byteOffset)
+                return result?.takeIf { it.filePath in resolvedPaths }
+            }
+
+        }
+        ref.set(filteringLocationProvider)
+    }
+}

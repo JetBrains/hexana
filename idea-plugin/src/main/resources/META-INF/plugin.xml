@@ -86,6 +86,7 @@
         <!-- actionConfigurationCustomizer implementation="org.jetbrains.hexana.mcp.McpServerCustomizer"/-->
         <actionConfigurationCustomizer implementation="org.jetbrains.hexana.graalvm.GraalInstallationCustomizer"/>
         <mcpServer.mcpToolset implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
+        <notificationGroup id="hexana" displayType="BALLOON" bundle="messages.HexanaBundle" key="notifications.groupKey"/>
     </extensions>
 
     <actions>

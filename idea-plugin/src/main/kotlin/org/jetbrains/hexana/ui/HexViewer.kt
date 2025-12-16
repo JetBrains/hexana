@@ -18,25 +18,34 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.intellij.notification.Notification
+import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.EDT
+import com.intellij.openapi.application.readAction
 import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.impl.EditorComponentImpl
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.ide.CopyPasteManager
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.util.startOffset
 import com.intellij.util.ui.UIUtil
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.HexanaBundle
+import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.HexanaSourceLocationProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wat.psi.getDataByIndex
 import org.jetbrains.hexana.wat.psi.getDefinedFunctionByIndex
@@ -47,6 +56,7 @@ import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.charset.CharsetDecoder
 import java.nio.charset.StandardCharsets
+import java.nio.file.Path
 import kotlin.math.min
 
 
@@ -181,41 +191,7 @@ internal fun HexViewer(
                 }
             }
             ContextMenuArea(items = {
-                val wasmModule = (binaryProvider as? WasmBinaryProvider)?.wasmModule
-                val codeSection = wasmModule?.codeSection
-                val dataSection = wasmModule?.dataSection
-                val codeSectionRange = codeSection?.contentRange ?: IntRange.EMPTY
-                val dataSectionRange = dataSection?.contentRange ?: IntRange.EMPTY
-                val bytesPerRow = state.bytesPerRow.value
-                val position = state.hoverPosition
-                val byteOffset = position.line * bytesPerRow + position.lineOffset
-                listOfNotNull(
-                    ContextMenuItem("Copy as ASCII") { copySelection(buf, state, ::selectedAsASCII) },
-                    ContextMenuItem("Copy as Kotlin::listOf") { copySelection(buf, state, ::selectAsKotlinList) },
-                    if (binaryProvider is WasmBinaryProvider && state.editor != null) {
-                        when (byteOffset) {
-                            in codeSectionRange -> ContextMenuItem("Open in function in WAT") {
-                                openInWat(state) { file ->
-                                    val functionIndex =
-                                        binaryProvider.getCodeRecordIndexAtByteOffset(byteOffset.toLong())
-                                    getDefinedFunctionByIndex(file, functionIndex)
-                                }
-
-                            }
-
-                            in dataSectionRange -> ContextMenuItem("Open in data in WAT") {
-                                openInWat(state) { file ->
-                                    val index = binaryProvider.getDataRecordIndexAtByteOffset(byteOffset.toLong())
-                                    getDataByIndex(file, index)
-                                }
-                            }
-
-                            else -> null
-                        }
-                    } else {
-                        null
-                    }
-                )
+                getContextActions(buf, state, binaryProvider)
             }) {
                 Row {
                     Box {
@@ -410,6 +386,80 @@ internal fun HexViewer(
 
     }
 }
+
+private fun getContextActions(
+    buf: ByteArray,
+    state: HexViewStateHolder,
+    binaryProvider: BinaryProvider,
+): List<ContextMenuItem> {
+    val wasmModule = (binaryProvider as? WasmBinaryProvider)?.wasmModule
+    val codeSection = wasmModule?.codeSection
+    val dataSection = wasmModule?.dataSection
+    val codeSectionRange = codeSection?.contentRange ?: IntRange.EMPTY
+    val dataSectionRange = dataSection?.contentRange ?: IntRange.EMPTY
+    val bytesPerRow = state.bytesPerRow.value
+    val position = state.hoverPosition
+    val byteOffset = position.line * bytesPerRow + position.lineOffset
+
+    val result = mutableListOf<ContextMenuItem>()
+    result.add(ContextMenuItem("Copy as ASCII") { copySelection(buf, state, ::selectedAsASCII) })
+    result.add(ContextMenuItem("Copy as Kotlin::listOf") { copySelection(buf, state, ::selectAsKotlinList) })
+
+    if (binaryProvider is WasmBinaryProvider && state.editor != null) {
+        when (byteOffset) {
+            in codeSectionRange -> {
+                result.add(ContextMenuItem("Open in function in WAT") {
+                    openInWat(state) { file ->
+                        val functionIndex =
+                            binaryProvider.getCodeRecordIndexAtByteOffset(byteOffset.toLong())
+                        getDefinedFunctionByIndex(file, functionIndex)
+                    }
+                })
+            }
+
+            in dataSectionRange -> {
+                result.add(ContextMenuItem("Open in data in WAT") {
+                    openInWat(state) { file ->
+                        val index = binaryProvider.getDataRecordIndexAtByteOffset(byteOffset.toLong())
+                        getDataByIndex(file, index)
+                    }
+                })
+            }
+        }
+    }
+
+    val locationProvider = (binaryProvider as? WasmBinaryProvider)?.sourceLocationProvider ?: HexanaSourceLocationProvider.EMPTY
+    if (byteOffset in codeSectionRange) {
+        val sourceLocation = locationProvider.getSourceLocationForOffset(byteOffset)
+        if (sourceLocation != null) {
+            result.add(ContextMenuItem("Open in sources") {
+                HexanaService.getInstance().coroutineScope.launch(Dispatchers.IO) {
+                    val virtualFile = readAction {
+                        try {
+                            VfsUtil.findFile(Path.of(sourceLocation.filePath), true)
+                        }
+                        catch (_: Exception) {
+                            null
+                        }
+                    }
+
+                    if (virtualFile != null) {
+                        withContext(Dispatchers.EDT) {
+                            val descriptor = OpenFileDescriptor(state.project, virtualFile, sourceLocation.line, sourceLocation.column)
+                            descriptor.navigate(true)
+                        }
+                    }
+                    else {
+                        val message = HexanaBundle.message("notifications.fileNotFound", sourceLocation.filePath)
+                        Notification(HexanaService.NOTIFICATION_GROUP, message, NotificationType.WARNING).notify(state.project)
+                    }
+                }
+            })
+        }
+    }
+    return result
+}
+
 
 private fun Int.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
 private fun Byte.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()

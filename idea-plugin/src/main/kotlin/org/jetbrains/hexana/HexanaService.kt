@@ -20,6 +20,8 @@ class HexanaService(
         fun getInstance(): HexanaService = service()
 
         const val WAT_EDITOR_MAX_FILE_SIZE = 3 * 1024 * 1024
+
+        const val NOTIFICATION_GROUP = "hexana"
     }
 
     sealed interface WatConversionResult {
