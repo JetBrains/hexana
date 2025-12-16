@@ -24,6 +24,7 @@ class WitToken(val name: String) : IElementType(name, WitLanguage) {
         @JvmField val UNDERSCORE = WitToken("underscore")
         @JvmField val ARROW = WitToken("arrow")
         @JvmField val IDENTIFIER = WitToken("identifier")
+        @JvmField val NUMBER = WitToken("number")
 
         @JvmField val ASYNC = WitToken("async")
         @JvmField val BLOB = WitToken("blob")

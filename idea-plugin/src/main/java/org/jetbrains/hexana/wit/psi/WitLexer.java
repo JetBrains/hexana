@@ -66,7 +66,10 @@ public class WitLexer extends LexerBase {
                 }
             }
             default -> {
-                if (c == '%' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z') {
+                if (isDigit(c)) {
+                    readNumber();
+                }
+                else if (c == '%' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z') {
                     readIdentifier();
                     if ('a' <= c && c <= 'z') {
                         WitToken keyword = keywords.get(myBuffer.subSequence(myTokenStart, myOffset).toString());
@@ -185,8 +188,27 @@ public class WitLexer extends LexerBase {
         myToken = WitToken.IDENTIFIER;
     }
 
+    private void readNumber() {
+        myTokenStart = myOffset;
+        while (myOffset < myEndOffset) {
+            char c = myBuffer.charAt(myOffset);
+            if (isDigit(c)) {
+                myOffset++;
+            }
+            else {
+                break;
+            }
+        }
+        myTokenEnd = myOffset;
+        myToken = WitToken.NUMBER;
+    }
+
     private boolean isValidIdChar(char c) {
-        return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9';
+        return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || isDigit(c);
+    }
+
+    private static boolean isDigit(char c) {
+        return '0' <= c && c <= '9';
     }
 
     private void readToken1(@NotNull IElementType token) {
