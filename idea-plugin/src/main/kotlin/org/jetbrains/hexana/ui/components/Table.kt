@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.borderBottom
-import org.jetbrains.jewel.foundation.modifier.onHover
 import org.jetbrains.jewel.ui.component.Text
 import kotlin.math.floor
 import kotlin.math.log10
@@ -72,7 +71,7 @@ fun Table(columns: List<TableColumn>, dataCount: Int, onRow: (id: Int) -> Unit =
     }
 
     val textMeasurer = rememberTextMeasurer()
-    val widthMonospace = textMeasurer.measureWidthMonospace(dataCount, 2)
+    val idColumnMinWidth = textMeasurer.measureWidthMonospace(dataCount, 4)
 
 
     Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -93,7 +92,7 @@ fun Table(columns: List<TableColumn>, dataCount: Int, onRow: (id: Int) -> Unit =
             Box(modifier = Modifier
             .padding(horizontal = 4.dp)
             .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
-            .widthIn(min = widthMonospace)
+            .widthIn(min = idColumnMinWidth)
                 .onClick {
                     if (sortIndex == -1) {
                         sortAsc = !sortAsc
@@ -191,7 +190,7 @@ fun Table(columns: List<TableColumn>, dataCount: Int, onRow: (id: Int) -> Unit =
                     },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(modifier = Modifier.padding(horizontal = 4.dp).widthIn(min = widthMonospace)) {
+                    Box(modifier = Modifier.padding(horizontal = 4.dp).widthIn(min = idColumnMinWidth)) {
                         Text(
                             id.toString(),
                             style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
