@@ -42,6 +42,24 @@ public class WitLexer extends LexerBase {
                     readToken1(TokenType.BAD_CHARACTER);
                 }
             }
+            case '.' -> readToken1(WitToken.DOT);
+            case ',' -> readToken1(WitToken.COMMA);
+            case ':' -> readToken1(WitToken.COLON);
+            case ';' -> readToken1(WitToken.SEMI);
+            case '<' -> readToken1(WitToken.LESS_THAN);
+            case '>' -> readToken1(WitToken.GREATER_THAN);
+            case '{' -> readToken1(WitToken.OPEN_BRACE);
+            case '}' -> readToken1(WitToken.CLOSE_BRACE);
+            case '(' -> readToken1(WitToken.OPEN_PAREN);
+            case ')' -> readToken1(WitToken.CLOSE_PAREN);
+            case '=' -> readToken1(WitToken.EQUALS);
+            case '@' -> readToken1(WitToken.AT);
+            case '_' -> readToken1(WitToken.UNDERSCORE);
+            case '-' -> {
+                if (!readArrow()) {
+                    readToken1(TokenType.BAD_CHARACTER);
+                }
+            }
             default -> readToken1(TokenType.BAD_CHARACTER);
 
         }
@@ -109,6 +127,18 @@ public class WitLexer extends LexerBase {
         }
         myTokenEnd = myOffset;
         myToken = WitToken.BLOCK_COMMENT;
+    }
+
+
+    private boolean readArrow() {
+        if (getChar(1) == '>') {
+            myTokenStart = myOffset;
+            myOffset += 2;
+            myTokenEnd = myOffset;
+            myToken = WitToken.ARROW;
+            return true;
+        }
+        return false;
     }
 
 

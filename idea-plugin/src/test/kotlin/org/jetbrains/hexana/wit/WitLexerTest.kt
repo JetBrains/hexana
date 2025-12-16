@@ -26,4 +26,8 @@ class WitLexerTest : LexerTestCase() {
     fun testComments() {
         doTest()
     }
+
+    fun testPunctuation() {
+        doTest()
+    }
 }
