@@ -96,6 +96,7 @@
 
         <lang.parserDefinition language="wit" implementationClass="org.jetbrains.hexana.wit.psi.WitParserDefinition" />
         <lang.syntaxHighlighter language="wit" implementationClass="org.jetbrains.hexana.wit.WitSyntaxHighlighter"/>
+        <braceMatcher filetype="wit" implementationClass="org.jetbrains.hexana.wit.WitBraceMatcher"/>
     </extensions>
 
     <actions>
