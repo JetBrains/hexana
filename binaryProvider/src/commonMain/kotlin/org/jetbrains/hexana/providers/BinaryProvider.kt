@@ -67,7 +67,7 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
     fun getRecords(section: WasmSection): List<WasmNamedRange> {
         return try {
             section.getRecordRanges(buffer)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             // we throw exception on unknown op-codes
             emptyList()
         }
