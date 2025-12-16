@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.rememberTextMeasurer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.components.Table
+import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
@@ -40,12 +41,12 @@ internal fun WasmPanelExports(wasmBinaryProvider: WasmBinaryProvider) {
                     is WasmUnsupportedExportRecordEntry -> "unknown"
                 }
 
-                exportKind
+                TableCellValue(exportKind)
             },
 
             TableColumn("Name", modifier = Modifier.fillMaxWidth()) { index ->
                 val export = exports[index]
-                export.name
+                TableCellValue(export.name)
             }
         ), exports.size
     )

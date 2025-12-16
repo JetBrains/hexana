@@ -6,6 +6,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.components.Table
+import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
 
 @Composable
@@ -15,7 +16,7 @@ internal fun WasmPanelImports(wasmBinaryProvider: WasmBinaryProvider) {
     Table(listOf(
         TableColumn("Data", modifier = Modifier.fillMaxWidth()) { index ->
             val importRecord = imports[index].name
-            importRecord
+            TableCellValue(importRecord)
         },
 
     ), imports.size)

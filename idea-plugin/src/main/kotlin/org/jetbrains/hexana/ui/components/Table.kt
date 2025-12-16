@@ -38,7 +38,8 @@ import org.jetbrains.jewel.ui.component.Text
 import kotlin.math.floor
 import kotlin.math.log10
 
-class TableColumn(val title: String, val modifier: Modifier = Modifier, val dataProvider: (index: Int) -> String)
+class TableCellValue<T>(val value: T, val representation: String = value.toString())
+class TableColumn(val title: String, val modifier: Modifier = Modifier, val dataProvider: (index: Int) -> TableCellValue<*>)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -63,9 +64,25 @@ fun Table(columns: List<TableColumn>, dataCount: Int, onRow: (id: Int) -> Unit =
             }
         } else {
             if (sortAsc) {
-                base.sortedBy { (_, data) -> data[sortIndex] }
+                base.sortedWith { a, b ->
+                    val valueA = a.second[sortIndex].value
+                    val valueB = b.second[sortIndex].value
+                    when {
+                        valueA is Int && valueB is Int -> valueA.compareTo(valueB)
+                        valueA is String && valueB is String -> valueA.compareTo(valueB)
+                        else -> 0
+                    }
+                }
             } else {
-                base.sortedByDescending { (_, data) -> data[sortIndex] }
+                base.sortedWith { a, b ->
+                    val valueA = a.second[sortIndex].value
+                    val valueB = b.second[sortIndex].value
+                    when {
+                        valueA is Int && valueB is Int -> valueB.compareTo(valueA)
+                        valueA is String && valueB is String -> valueB.compareTo(valueA)
+                        else -> 0
+                    }
+                }
             }
         }
     }
@@ -199,7 +216,7 @@ fun Table(columns: List<TableColumn>, dataCount: Int, onRow: (id: Int) -> Unit =
                     }
 
                     columns.forEachIndexed { index, column ->
-                        val text = data[index]
+                        val text = data[index].representation
                         Box(modifier = Modifier.padding(horizontal = 4.dp).then(column.modifier)) {
                             Text(
                                 text,
