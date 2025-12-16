@@ -34,4 +34,8 @@ class WitLexerTest : LexerTestCase() {
     fun testIdentifiers() {
         doTest()
     }
+
+    fun testKeywords() {
+        doTest()
+    }
 }

@@ -24,5 +24,39 @@ class WitToken(val name: String) : IElementType(name, WitLanguage) {
         @JvmField val UNDERSCORE = WitToken("underscore")
         @JvmField val ARROW = WitToken("arrow")
         @JvmField val IDENTIFIER = WitToken("identifier")
+
+        @JvmField val ASYNC = WitToken("async")
+        @JvmField val BLOB = WitToken("blob")
+        @JvmField val BORROW = WitToken("borrow")
+        @JvmField val CONSTRUCTOR = WitToken("constructor")
+        @JvmField val ENUM = WitToken("enum")
+        @JvmField val EXPORT = WitToken("export")
+        @JvmField val FLAGS = WitToken("flags")
+        @JvmField val FUNC = WitToken("func")
+        @JvmField val FUTURE = WitToken("future")
+        @JvmField val IMPORT = WitToken("import")
+        @JvmField val INCLUDE = WitToken("include")
+        @JvmField val INTERFACE = WitToken("interface")
+        @JvmField val LIST = WitToken("list")
+        @JvmField val OPTION = WitToken("option")
+        @JvmField val PACKAGE = WitToken("package")
+        @JvmField val RECORD = WitToken("record")
+        @JvmField val RESOURCE = WitToken("resource")
+        @JvmField val RESTRICTED = WitToken("restricted")
+        @JvmField val RESULT = WitToken("result")
+        @JvmField val STATIC = WitToken("static")
+        @JvmField val STREAM = WitToken("stream")
+        @JvmField val TUPLE = WitToken("tuple")
+        @JvmField val TYPE = WitToken("type")
+        @JvmField val USE = WitToken("use")
+        @JvmField val VARIANT = WitToken("variant")
+        @JvmField val WORLD = WitToken("world")
+
+        @JvmField
+        val KEYWORDS = arrayOf<WitToken>(
+            ASYNC, BLOB, BORROW, CONSTRUCTOR, ENUM, EXPORT, FLAGS, FUNC, FUTURE,
+            IMPORT, INCLUDE, INTERFACE, LIST, OPTION, PACKAGE, RECORD, RESOURCE,
+            RESTRICTED, RESULT, STATIC, STREAM, TUPLE, TYPE, USE, VARIANT, WORLD,
+        )
     }
 }

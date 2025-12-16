@@ -6,7 +6,12 @@ import com.intellij.psi.tree.IElementType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class WitLexer extends LexerBase {
+
+    private final static Map<String, WitToken> keywords = createKeywordsMap();
 
     private CharSequence myBuffer;
     private int myOffset;
@@ -63,6 +68,12 @@ public class WitLexer extends LexerBase {
             default -> {
                 if (c == '%' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z') {
                     readIdentifier();
+                    if ('a' <= c && c <= 'z') {
+                        WitToken keyword = keywords.get(myBuffer.subSequence(myTokenStart, myOffset).toString());
+                        if (keyword != null) {
+                            myToken = keyword;
+                        }
+                    }
                 }
                 else {
                     readToken1(TokenType.BAD_CHARACTER);
@@ -221,5 +232,14 @@ public class WitLexer extends LexerBase {
     @Override
     public int getBufferEnd() {
         return myEndOffset;
+    }
+
+
+    private static Map<String, WitToken> createKeywordsMap() {
+        Map<String, WitToken> result = new HashMap<>();
+        for (WitToken token : WitToken.KEYWORDS) {
+            result.put(token.getName(), token);
+        }
+        return result;
     }
 }
