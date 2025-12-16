@@ -30,4 +30,8 @@ class WitLexerTest : LexerTestCase() {
     fun testPunctuation() {
         doTest()
     }
+
+    fun testIdentifiers() {
+        doTest()
+    }
 }

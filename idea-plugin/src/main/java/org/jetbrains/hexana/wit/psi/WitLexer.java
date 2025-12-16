@@ -60,7 +60,14 @@ public class WitLexer extends LexerBase {
                     readToken1(TokenType.BAD_CHARACTER);
                 }
             }
-            default -> readToken1(TokenType.BAD_CHARACTER);
+            default -> {
+                if (c == '%' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z') {
+                    readIdentifier();
+                }
+                else {
+                    readToken1(TokenType.BAD_CHARACTER);
+                }
+            }
 
         }
     }
@@ -141,6 +148,35 @@ public class WitLexer extends LexerBase {
         return false;
     }
 
+
+    private void readIdentifier() {
+        myTokenStart = myOffset;
+        myOffset++;
+        while (myOffset < myEndOffset) {
+            char c = myBuffer.charAt(myOffset);
+            if (c == '-') {
+                char next = getChar(1);
+                if (isValidIdChar(next)) {
+                    myOffset+=2;
+                }
+                else {
+                    break;
+                }
+            }
+            else if (isValidIdChar(c)) {
+                myOffset++;
+            }
+            else {
+                break;
+            }
+        }
+        myTokenEnd = myOffset;
+        myToken = WitToken.IDENTIFIER;
+    }
+
+    private boolean isValidIdChar(char c) {
+        return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9';
+    }
 
     private void readToken1(@NotNull IElementType token) {
         myTokenStart = myOffset;
