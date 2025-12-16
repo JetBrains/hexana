@@ -69,6 +69,12 @@
                   language="wat"
                   extensions="wat" />
 
+        <fileType name="wit"
+                  implementationClass="org.jetbrains.hexana.wit.WitFileType"
+                  fieldName="INSTANCE"
+                  language="wit"
+                  extensions="wit" />
+
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
         <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>
         <fileTypeOverrider implementation="org.jetbrains.hexana.actions.HexFileTypeOverrider"/>
@@ -87,6 +93,9 @@
         <actionConfigurationCustomizer implementation="org.jetbrains.hexana.graalvm.GraalInstallationCustomizer"/>
         <mcpServer.mcpToolset implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
         <notificationGroup id="hexana" displayType="BALLOON" bundle="messages.HexanaBundle" key="notifications.groupKey"/>
+
+        <lang.parserDefinition language="wit" implementationClass="org.jetbrains.hexana.wit.psi.WitParserDefinition" />
+        <lang.syntaxHighlighter language="wit" implementationClass="org.jetbrains.hexana.wit.WitSyntaxHighlighter"/>
     </extensions>
 
     <actions>

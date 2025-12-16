@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.wit.psi
 
 import com.intellij.psi.tree.IElementType
+import com.intellij.psi.tree.TokenSet
 import org.jetbrains.hexana.wit.WitLanguage
 
 class WitToken(val name: String) : IElementType(name, WitLanguage) {
@@ -9,6 +10,7 @@ class WitToken(val name: String) : IElementType(name, WitLanguage) {
         @JvmField val NEWLINE = WitToken("newline")
         @JvmField val LINE_COMMENT = WitToken("line_comment")
         @JvmField val BLOCK_COMMENT = WitToken("block_comment")
+
         @JvmField val DOT = WitToken("dot")
         @JvmField val COMMA = WitToken("comma")
         @JvmField val COLON = WitToken("colon")
@@ -24,6 +26,7 @@ class WitToken(val name: String) : IElementType(name, WitLanguage) {
         @JvmField val UNDERSCORE = WitToken("underscore")
         @JvmField val SLASH = WitToken("slash")
         @JvmField val ARROW = WitToken("arrow")
+
         @JvmField val IDENTIFIER = WitToken("identifier")
         @JvmField val NUMBER = WitToken("number")
 
@@ -55,10 +58,16 @@ class WitToken(val name: String) : IElementType(name, WitLanguage) {
         @JvmField val WORLD = WitToken("world")
 
         @JvmField
-        val KEYWORDS = arrayOf<WitToken>(
+        val KEYWORDS = arrayOf(
             ASYNC, BLOB, BORROW, CONSTRUCTOR, ENUM, EXPORT, FLAGS, FUNC, FUTURE,
             IMPORT, INCLUDE, INTERFACE, LIST, OPTION, PACKAGE, RECORD, RESOURCE,
             RESTRICTED, RESULT, STATIC, STREAM, TUPLE, TYPE, USE, VARIANT, WORLD,
         )
+
+        @JvmField
+        val COMMENTS_SET = TokenSet.create(LINE_COMMENT, BLOCK_COMMENT)
+
+        @JvmField
+        val WHITESPACES_SET = TokenSet.create(WHITESPACE, NEWLINE)
     }
 }
