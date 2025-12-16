@@ -23,7 +23,7 @@ object HexanaTheme {
 
     val hexCellHoverActiveColor: Color
         @Composable
-        get() = Color(197, 202, 252, 255)
+        get() = Color(98, 100, 124, 255)
 
     val hexCellHoverColor: Color
         @Composable

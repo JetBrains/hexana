@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,8 +16,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
@@ -29,19 +34,22 @@ import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.borderBottom
+import org.jetbrains.jewel.foundation.modifier.onHover
 import org.jetbrains.jewel.ui.component.Text
 import kotlin.math.floor
 import kotlin.math.log10
 
-
 class TableColumn(val title: String, val modifier: Modifier = Modifier, val dataProvider: (index: Int) -> String)
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
-fun Table(columns: List<TableColumn>, dataCount: Int) {
+fun Table(columns: List<TableColumn>, dataCount: Int, onRow: (id: Int) -> Unit = {}) {
 
     var sortAsc: Boolean by remember { mutableStateOf(true) }
     var sortIndex: Int by remember { mutableStateOf(-1) }
+
+    var selectedOriginalIndex: Int? by remember { mutableStateOf(null) }
+    var hoveredOriginalIndex: Int? by remember { mutableStateOf(null) }
 
     val viewData = remember(columns, dataCount, sortIndex, sortAsc) {
         val base = (0 until dataCount).map { index ->
@@ -157,12 +165,30 @@ fun Table(columns: List<TableColumn>, dataCount: Int) {
             }
         }
 
-        LazyColumn(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).onPointerEvent(PointerEventType.Exit) { hoveredOriginalIndex = null }) {
             items(dataCount) { rowIndex ->
                 val (id, data) = viewData[rowIndex]
 
+                val rowBackgroundColor = if (hoveredOriginalIndex == id) {
+                    Color(201, 255, 255, 100).compositeOver(HexanaTheme.hexCellHoverActiveColor)
+                } else if (selectedOriginalIndex == id) {
+                    HexanaTheme.hexCellHoverActiveColor
+                } else {
+                    Color.Unspecified
+                }
+
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                    .fillMaxWidth()
+                    .background(rowBackgroundColor)
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                    .onPointerEvent(PointerEventType.Enter) {
+                        hoveredOriginalIndex = id
+                    }
+                    .onClick {
+                        selectedOriginalIndex = id
+                        onRow(id)
+                    },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(modifier = Modifier.padding(horizontal = 4.dp).widthIn(min = widthMonospace)) {
