@@ -25,15 +25,10 @@ internal fun WasmPanelExports(wasmBinaryProvider: WasmBinaryProvider) {
 
     val textMeasurer = rememberTextMeasurer()
 
-    val minWidthIdColumnModifier = textMeasurer.measureWidthMonospace(exports.size, 2)
     val minWidthKindColumnModifier = textMeasurer.measureWidthMonospace("function")
 
     Table(
         listOf(
-            TableColumn("ID", modifier = Modifier.widthIn(min = minWidthIdColumnModifier)) { index ->
-                index.toString()
-            },
-
             TableColumn("Kind", modifier = Modifier.widthIn(min = minWidthKindColumnModifier)) { index ->
                 val export = exports[index]
                 val exportKind = when (export) {
