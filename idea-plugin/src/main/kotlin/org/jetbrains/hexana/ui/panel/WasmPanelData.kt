@@ -28,8 +28,30 @@ import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.borderBottom
+import org.jetbrains.hexana.ui.components.Table
+import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.jewel.ui.component.Link
 import org.jetbrains.jewel.ui.component.Text
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun WasmPanelDataNew(wasmBinaryProvider: WasmBinaryProvider, state: HexViewStateHolder) {
+    val dataRecords = remember(wasmBinaryProvider) { wasmBinaryProvider.data }
+
+    if (dataRecords.isEmpty()) return
+
+    Table(listOf(
+        TableColumn("ID") { index ->
+            index.toString()
+        },
+        TableColumn("Data") { index ->
+            "(data $#data${index})"
+        },
+        TableColumn("Size") { index ->
+            dataRecords[index].recordLength.toString()
+        }
+    ), dataRecords.size)
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -38,9 +60,9 @@ internal fun WasmPanelData(wasmBinaryProvider: WasmBinaryProvider, state: HexVie
 
     if (dataRecords.isEmpty()) return
 
-    var sortBySizeAsc: Boolean? by remember { mutableStateOf(null) }
     var selectedOriginalIndex: Int? by remember { mutableStateOf(null) }
 
+    var sortBySizeAsc: Boolean? by remember { mutableStateOf(null) }
     val viewRecords = remember(dataRecords, sortBySizeAsc) {
         val base = dataRecords.withIndex().map { it.index to it.value }
         when (sortBySizeAsc) {

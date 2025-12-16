@@ -1,22 +1,21 @@
 package org.jetbrains.hexana.ui.panel
 
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.rememberTextMeasurer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.ui.HexanaTheme
+import org.jetbrains.hexana.ui.components.Table
+import org.jetbrains.hexana.ui.components.TableColumn
+import org.jetbrains.hexana.ui.components.measureWidthMonospace
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmGlobalExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmMemoryExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmTableExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmTagExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmUnsupportedExportRecordEntry
-import org.jetbrains.jewel.ui.component.Text
 
 @Composable
 internal fun WasmPanelExports(wasmBinaryProvider: WasmBinaryProvider) {
@@ -24,41 +23,35 @@ internal fun WasmPanelExports(wasmBinaryProvider: WasmBinaryProvider) {
         wasmBinaryProvider.exports
     }
 
-    LazyColumn {
-        items(exports.size) { exportIndex ->
-            val export = exports[exportIndex]
-            val exportKind = when (export) {
-                is WasmFunctionExportRecordEntry -> "function"
-                is WasmGlobalExportRecordEntry -> "global"
-                is WasmMemoryExportRecordEntry -> "memory"
-                is WasmTableExportRecordEntry -> "table"
-                is WasmTagExportRecordEntry -> "tag"
-                is WasmUnsupportedExportRecordEntry -> "unknown"
-            }
+    val textMeasurer = rememberTextMeasurer()
 
-            Text(
-                text = buildAnnotatedString {
-                    withStyle(
-                        style = SpanStyle(
-                            color = HexanaTheme.textColor,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    ) {
-                        append(export.name)
-                    }
+    val minWidthIdColumnModifier = textMeasurer.measureWidthMonospace(exports.size, 2)
+    val minWidthKindColumnModifier = textMeasurer.measureWidthMonospace("function")
 
-                    append(" ")
+    Table(
+        listOf(
+            TableColumn("ID", modifier = Modifier.widthIn(min = minWidthIdColumnModifier)) { index ->
+                index.toString()
+            },
 
-                    withStyle(
-                        style = SpanStyle(
-                            color = Color.LightGray,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    ) {
-                        append("(; ${exportKind} ;)")
-                    }
+            TableColumn("Kind", modifier = Modifier.widthIn(min = minWidthKindColumnModifier)) { index ->
+                val export = exports[index]
+                val exportKind = when (export) {
+                    is WasmFunctionExportRecordEntry -> "function"
+                    is WasmGlobalExportRecordEntry -> "global"
+                    is WasmMemoryExportRecordEntry -> "memory"
+                    is WasmTableExportRecordEntry -> "table"
+                    is WasmTagExportRecordEntry -> "tag"
+                    is WasmUnsupportedExportRecordEntry -> "unknown"
                 }
-            )
-        }
-    }
+
+                exportKind
+            },
+
+            TableColumn("Name", modifier = Modifier.fillMaxWidth()) { index ->
+                val export = exports[index]
+                export.name
+            }
+        ), exports.size
+    )
 }
