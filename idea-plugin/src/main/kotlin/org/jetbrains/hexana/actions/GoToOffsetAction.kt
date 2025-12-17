@@ -27,12 +27,15 @@ class GoToOffsetAction : AnAction() {
         val hexanaEditor = e.getData(HexanaFileEditor.KEY) ?: return
         val project = e.project ?: return
         val offsetRange = 0..<hexanaEditor.file.length
-        val dialog = GoToOffsetDialog(project, 0, offsetRange)
+
+        val bytesPerRow = hexanaEditor.stateHolder.bytesPerRow.value
+        val position = hexanaEditor.stateHolder.hoverPosition
+        val currentOffset = position.getByteOffset(bytesPerRow)
+        val dialog = GoToOffsetDialog(project, currentOffset.toLong().coerceIn(offsetRange), offsetRange)
         if (dialog.showAndGet()) {
             val address = dialog.offset.coerceIn(offsetRange)
             hexanaEditor.stateHolder.scrollHexViewTo(address)
 
-            val bytesPerRow = hexanaEditor.stateHolder.bytesPerRow.value
             val line = (address / bytesPerRow).toInt()
             val lineOffset  = address.rem(bytesPerRow).toInt()
             hexanaEditor.stateHolder.setCursorPosition(line, lineOffset)
