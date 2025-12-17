@@ -42,8 +42,8 @@ class WasmParserTests {
         }
 
         assertEquals(listOf(
-            WasmCustomRecord("name", ""),
-            WasmCustomRecord("sourceMappingURL", "skiko.wasm.map")
+            WasmCustomRecord(9536682, 6, "name", ""),
+            WasmCustomRecord(11656457, 32, "sourceMappingURL", "skiko.wasm.map")
         ), customRecords)
 
         with (wasmModule) {
