@@ -220,6 +220,7 @@ internal fun HexViewer(
                             .pointerInput(Unit) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown()
+                                    state.resetSelection()
 
                                     val visibleItemsInfo = hexDataListState.layoutInfo.visibleItemsInfo
                                     val indexResolvedRelative = visibleItemsInfo.indexOfLast {

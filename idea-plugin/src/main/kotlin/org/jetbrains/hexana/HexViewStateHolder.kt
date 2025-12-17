@@ -105,6 +105,10 @@ class HexViewStateHolder(
         _hoverPosition.value = HexPosition(line, lineOffset)
     }
 
+    fun resetSelection() {
+        _selection.value = HexSelection(HexPosition(-1, -1), HexPosition(-1, -1))
+    }
+
     fun setSelection(startLine: Int, startLineOffset: Int, endLine: Int, endLineOffset: Int) {
         var startLineResolved = startLine
         var startOffsetResolved = startLineOffset
