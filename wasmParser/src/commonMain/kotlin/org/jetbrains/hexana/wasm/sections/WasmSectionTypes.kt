@@ -242,7 +242,9 @@ object WasmPactTypeI8 : WasmPactType(0x78)
 class WasmRefType(code: WasmReferenceType) : WasmValueType<WasmReferenceType>(code)
 
 class WasmTagType(val index: WasmTypeIndexExternalType) : WasmExternalType(0x4)
-sealed class WasmReferenceType(val heapType: WasmHeapType)
+sealed interface WasmReferenceType {
+    val heapType: WasmHeapType
+}
 
 /**
  * spec 5.3.3
@@ -265,7 +267,7 @@ class WasmIndexHeapType(type: Long): WasmHeapType(type)
 /**
  * spec 5.3.4
  */
-class WasmNonNullableReferenceType(heapType: WasmHeapType): WasmReferenceType(heapType) {
+class WasmNonNullableReferenceType(override val heapType: WasmHeapType): WasmReferenceType {
     override fun equals(other: Any?): Boolean {
         return other is WasmNonNullableReferenceType && other.heapType == heapType
     }
@@ -274,7 +276,8 @@ class WasmNonNullableReferenceType(heapType: WasmHeapType): WasmReferenceType(he
         return this::class.hashCode()
     }
 }
-class WasmNullableReferenceType(heapType: WasmHeapType): WasmReferenceType(heapType) {
+
+class WasmNullableReferenceType(override val heapType: WasmHeapType): WasmReferenceType {
     override fun equals(other: Any?): Boolean {
         return other is WasmNullableReferenceType && other.heapType == heapType
     }
@@ -283,7 +286,8 @@ class WasmNullableReferenceType(heapType: WasmHeapType): WasmReferenceType(heapT
         return this::class.hashCode()
     }
 }
-class WasmReferenceHeapType(heapType: WasmHeapType): WasmReferenceType(heapType) {
+
+class WasmReferenceHeapType(override val heapType: WasmHeapType): WasmReferenceType {
     override fun equals(other: Any?): Boolean {
         return other is WasmReferenceHeapType && other.heapType == heapType
     }
