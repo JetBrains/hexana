@@ -7,6 +7,7 @@ import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
+import org.jetbrains.hexana.wasm.sections.WasmCustomRecord
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 import org.jetbrains.hexana.wasm.sections.WasmOpenI32Limits
@@ -16,11 +17,35 @@ import kotlin.test.Test
 import kotlin.test.Ignore
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class WasmParserTests {
+
+    @Test
+    fun parseCustomSections() = runTest {
+        val buffer = resourceAsByteBuffer("maps/skiko.wasm")
+        val wasmModule = WasmParser().parse(buffer)
+
+        assertNotNull(wasmModule)
+
+        assertEquals(2, wasmModule.customSections.size)
+
+        val customRecords = mutableListOf<WasmCustomRecord>()
+        wasmModule.customSections.forEach { customSection ->
+            with(customSection) {
+                customRecords.add(buffer.getCustomRecord())
+            }
+        }
+
+        assertEquals(listOf(
+            WasmCustomRecord("name", ""),
+            WasmCustomRecord("sourceMappingURL", "skiko.wasm.map")
+        ), customRecords)
+    }
 
     @Test
     fun parseSkikoSections() = runTest {
@@ -29,7 +54,7 @@ class WasmParserTests {
 
         assertNotNull(wasmModule)
 
-        assertNull(wasmModule.customSection)
+        assertTrue(wasmModule.customSections.isEmpty())
         assertEquals(2796, wasmModule.typesSection?.contentSize)
         assertEquals(4265, wasmModule.importSection!!.contentSize)
         assertEquals(14363, wasmModule.functionSection?.contentSize)

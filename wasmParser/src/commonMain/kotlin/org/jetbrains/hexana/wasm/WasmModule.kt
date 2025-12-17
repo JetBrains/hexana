@@ -21,7 +21,7 @@ import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 
 class WasmModule(
     val sections: List<WasmSection>,
-    val customSection: WasmSectionCustom? = null,
+    val customSections: List<WasmSectionCustom> = emptyList(),
     val typesSection: WasmSectionTypes? = null,
     val importSection: WasmSectionImport? = null,
     val functionSection: WasmSectionFunctions? = null,
@@ -38,7 +38,7 @@ class WasmModule(
 ) {
     companion object {
         fun fromSections(sections: List<WasmSection>): WasmModule {
-            var customSection: WasmSectionCustom? = null
+            var customSections = mutableListOf<WasmSectionCustom>()
             var typesSection: WasmSectionTypes? = null
             var importSection: WasmSectionImport? = null
             var functionSection: WasmSectionFunctions? = null
@@ -55,7 +55,7 @@ class WasmModule(
 
             sections.forEach { section ->
                 when (section) {
-                    is WasmSectionCustom -> customSection = section
+                    is WasmSectionCustom -> customSections.add(section)
                     is WasmSectionTypes -> typesSection = section
                     is WasmSectionImport -> importSection = section
                     is WasmSectionFunctions -> functionSection = section
@@ -75,7 +75,7 @@ class WasmModule(
 
             return WasmModule(
                 sections,
-                customSection,
+                customSections,
                 typesSection,
                 importSection,
                 functionSection,
