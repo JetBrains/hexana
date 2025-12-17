@@ -4,6 +4,8 @@
 
 ### Added
 
+- basic WIT files highlighting
+
 ### Changed
 
 ### Deprecated
