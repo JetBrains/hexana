@@ -15,6 +15,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.panel.Panel
+import org.jetbrains.hexana.ui.panel.WasmPanelCustom
 import org.jetbrains.hexana.ui.panel.WasmPanelData
 import org.jetbrains.hexana.ui.panel.WasmPanelExports
 import org.jetbrains.hexana.ui.panel.WasmPanelImports
@@ -133,6 +134,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Data") { WasmPanelData(this, state) },
                 Panel("Exports") { WasmPanelExports(this) },
                 Panel("Imports") { WasmPanelImports(this) },
+                Panel("Custom") { WasmPanelCustom(this) },
                 Panel("Wat") { WasmPanelWat(this, state) },
             )
         }
