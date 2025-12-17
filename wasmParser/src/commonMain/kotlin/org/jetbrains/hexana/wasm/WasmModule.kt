@@ -113,6 +113,31 @@ class WasmModule(
             FunctionRecord(signature, body)
         }
     }
+
+    fun CommonByteBuffer.getCustomPayloadByName(name: String): String? {
+        customSections.forEach { customSection ->
+            with(customSection) {
+                val customRecord = getCustomRecord()
+                if (customRecord.name == name) return customRecord.payload
+            }
+        }
+        return null
+    }
+
+    fun CommonByteBuffer.getCustomPayloadsByName(name: String): List<String> {
+        val customRecords = mutableListOf<String>()
+
+        customSections.forEach { customSection ->
+            with(customSection) {
+                val customRecord = getCustomRecord()
+                if (customRecord.name == name) {
+                    customRecords.add(customRecord.payload)
+                }
+            }
+        }
+
+        return customRecords
+    }
 }
 
 data class FunctionRecord(val signature: WasmSectionFunctionTypeRecord, val body: WasmCodeRecord)

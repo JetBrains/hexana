@@ -45,6 +45,14 @@ class WasmParserTests {
             WasmCustomRecord("name", ""),
             WasmCustomRecord("sourceMappingURL", "skiko.wasm.map")
         ), customRecords)
+
+        with (wasmModule) {
+            assertEquals("skiko.wasm.map", buffer.getCustomPayloadByName("sourceMappingURL"))
+            assertNull(buffer.getCustomPayloadByName("non-existent-sourceMappingURL"))
+
+            assertContentEquals(listOf("skiko.wasm.map"), buffer.getCustomPayloadsByName("sourceMappingURL"))
+            assertTrue(buffer.getCustomPayloadsByName("non-existent-sourceMappingURL").isEmpty())
+        }
     }
 
     @Test
