@@ -67,7 +67,7 @@ class GoToOffsetDialog(
                     .focused()
                     .bindText(
                         {
-                            offset.toHexString(hexFormat)
+                            "0x${offset.toHexString(hexFormat)}"
                         },
                         { text ->
                             runCatching {
