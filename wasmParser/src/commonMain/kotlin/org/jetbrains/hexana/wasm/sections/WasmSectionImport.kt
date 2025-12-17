@@ -45,7 +45,10 @@ class WasmSectionImport(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
                 0x03.toByte() -> {
                     WasmGlobalType(valueType(), get() != 0x00.toByte())
                 }
-                0x04.toByte() -> WasmTagType(WasmTypeIndexExternalType(getULEB128()))
+                0x04.toByte() -> {
+                    get() // 0x00 prefix
+                    WasmTagType(WasmTypeIndexExternalType(getULEB128()))
+                }
                 else -> error("unknown import type: $rawType")
             }
             records.add(

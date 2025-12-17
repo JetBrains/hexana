@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- tag type import parsing
+
 ### Security
 
 ## 0.4 - 2025-12-15

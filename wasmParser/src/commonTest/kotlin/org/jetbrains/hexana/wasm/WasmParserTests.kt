@@ -1144,6 +1144,17 @@ class WasmParserTests {
         }
     }
 
+
+    @Test
+    fun parseTagTypeImport() = runTest {
+        val buffer = resourceAsByteBuffer("kotlin/hello.wasm") ?: error("Failed to read test file")
+        val wasmModule = WasmParser().parse(buffer) ?: error("Failed to parse wasm")
+
+        with(wasmModule.importSection!!) {
+            val importRecords = buffer.getImportRecords()
+            assertEquals(690, importRecords.size)
+        }
+    }
 }
 
 
