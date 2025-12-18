@@ -74,7 +74,7 @@ class WasmParser {
         while (buffer.hasRemaining()) {
             val wasmSection = buffer.resolveSection() ?: throw Exception("Unprocess section")
             sections.add(wasmSection)
-            buffer.position(buffer.position() + wasmSection.contentSize)
+            buffer.position(wasmSection.sectionOffset + wasmSection.sectionSize)
         }
 
         val wasmModule = WasmModule.fromSections(sections)
