@@ -114,30 +114,20 @@ class WasmModule(
         }
     }
 
-    fun CommonByteBuffer.getCustomPayloadByName(name: String): String? {
-        customSections.forEach { customSection ->
-            with(customSection) {
-                val customRecord = getCustomRecord()
-                if (customRecord.name == name) return customRecord.payload
-            }
-        }
-
-        return null
+    fun CommonByteBuffer.readContent(section: WasmSection, size: Int): ByteArray {
+        val sz = size.coerceAtMost(section.contentSize)
+        val bytes = ByteArray(sz)
+        position(section.contentOffset)
+        get(bytes, 0, sz)
+        return bytes
     }
 
-    fun CommonByteBuffer.getCustomPayloadsByName(name: String): List<String> {
-        val customRecords = mutableListOf<String>()
+    fun getCustomSectionByName(name: String): WasmSectionCustom? {
+        return customSections.find { it.name == name }
+    }
 
-        customSections.forEach { customSection ->
-            with(customSection) {
-                val customRecord = getCustomRecord()
-                if (customRecord.name == name) {
-                    customRecords.add(customRecord.payload)
-                }
-            }
-        }
-
-        return customRecords
+    fun getCustomSectionsByName(name: String): List<WasmSectionCustom> {
+        return customSections.filter { it.name == name }
     }
 }
 

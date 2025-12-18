@@ -7,7 +7,6 @@ import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
-import org.jetbrains.hexana.wasm.sections.WasmCustomRecord
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 import org.jetbrains.hexana.wasm.sections.WasmOpenI32Limits
@@ -33,24 +32,19 @@ class WasmParserTests {
 
         assertEquals(2, wasmModule.customSections.size)
 
-        val customRecords = mutableListOf<WasmCustomRecord>()
-        wasmModule.customSections.forEach { customSection ->
-            with(customSection) {
-                customRecords.add(buffer.getCustomRecord())
-            }
-        }
-
-        assertEquals(listOf(
-            WasmCustomRecord("name", ""),
-            WasmCustomRecord("sourceMappingURL", "skiko.wasm.map")
-        ), customRecords)
-
         with (wasmModule) {
-            assertEquals("skiko.wasm.map", buffer.getCustomPayloadByName("sourceMappingURL"))
-            assertNull(buffer.getCustomPayloadByName("non-existent-sourceMappingURL"))
+            val sourceMappingSection = getCustomSectionByName("sourceMappingURL")
+            assertNotNull(sourceMappingSection)
+            val payload = with (sourceMappingSection) {
+                buffer.position(sourceMappingSection.contentOffset)
+                buffer.consumeString()
+            }
+            assertEquals("skiko.wasm.map", payload)
 
-            assertContentEquals(listOf("skiko.wasm.map"), buffer.getCustomPayloadsByName("sourceMappingURL"))
-            assertTrue(buffer.getCustomPayloadsByName("non-existent-sourceMappingURL").isEmpty())
+            assertNull(getCustomSectionByName("non-existent-sourceMappingURL"))
+
+            assertEquals(listOf(sourceMappingSection), getCustomSectionsByName("sourceMappingURL"))
+            assertTrue(getCustomSectionsByName("non-existent-sourceMappingURL").isEmpty())
         }
     }
 

@@ -466,7 +466,7 @@ private fun Int.asHexString(padStart: Int = 2) = toString(16).padStart(padStart,
 private fun Byte.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
 private fun UByte.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
 
-private fun Byte.asASCII(): String? {
+fun Byte.asASCII(): String? {
     val b = toInt() and 0xFF
     return if (b in 32..126) b.toChar().toString() else null
 }

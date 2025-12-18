@@ -4,7 +4,6 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
-import org.jetbrains.hexana.wasm.sections.WasmCustomRecord
 import org.jetbrains.hexana.wasm.sections.WasmDataRecord
 import org.jetbrains.hexana.wasm.sections.WasmExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
@@ -33,20 +32,6 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
         with (exportsSection) {
             buffer.scan()
         }
-    }
-
-    val customRecords: List<WasmCustomRecord> by lazy {
-        val customSections = wasmModule?.customSections ?: return@lazy emptyList()
-
-        val res = mutableListOf<WasmCustomRecord>()
-
-        customSections.forEach { customSection ->
-            with (customSection) {
-                res.add(buffer.getCustomRecord())
-            }
-        }
-
-        res
     }
 
     val data: List<WasmDataRecord> by lazy {
@@ -85,6 +70,15 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
         } catch (_: Throwable) {
             // we throw exception on unknown op-codes
             emptyList()
+        }
+    }
+
+    fun readContent(section: WasmSection, size: Int): ByteArray {
+        if (wasmModule == null) {
+            return ByteArray(0)
+        }
+        return with (wasmModule) {
+            buffer.readContent(section, size)
         }
     }
 }
