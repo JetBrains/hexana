@@ -9,7 +9,6 @@ import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
-import org.jetbrains.hexana.wasm.sections.WasmNameMapItem
 import org.jetbrains.hexana.wasm.sections.WasmOpenI32Limits
 import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
@@ -71,26 +70,23 @@ class WasmParserTests {
                 assertEquals("<compose-multiplatform-core.compose.mpp:demo>", nameSection.moduleSubsection?.moduleName)
                 assertNotNull(nameSection.functionSubsection)
                 assertEquals(63783, nameSection.functionSubsection.namemap.size)
-                assertEquals(WasmNameMapItem(8390, "kotlinx.serialization.internal.TripleSerializer\$descriptor\$lambda.invoke"), nameSection.functionSubsection.namemap[7777])
+                assertEquals("kotlinx.serialization.internal.TripleSerializer\$descriptor\$lambda.invoke", nameSection.functionSubsection.namemap[8390])
 
                 assertNotNull(nameSection.localsSection)
                 assertEquals(63783, nameSection.localsSection.namemap.size)
-                assertEquals(listOf(
-                    WasmNameMapItem(0, "<this>"),
-                    WasmNameMapItem(1, "\$entryIterator")
-                ), nameSection.localsSection.namemap[300].value)
+                assertEquals(mapOf(0 to "<this>", 1 to  "\$entryIterator"), nameSection.localsSection.namemap[913])
 
                 assertNotNull(nameSection.typesSection)
                 assertEquals(56187,nameSection.typesSection.namemap.size)
-                assertEquals(WasmNameMapItem(30, "<classVTable>"),nameSection.typesSection.namemap[30])
+                assertEquals("<classVTable>",nameSection.typesSection.namemap[30])
 
                 assertNotNull(nameSection.globalsNameSection)
                 assertEquals(35865, nameSection.globalsNameSection.namemap.size)
-                assertEquals(WasmNameMapItem(1983, "<classITable>"), nameSection.globalsNameSection.namemap[1983])
+                assertEquals("<classITable>", nameSection.globalsNameSection.namemap[1983])
 
                 assertNotNull(nameSection.fieldsNameSection)
                 assertEquals(28907, nameSection.fieldsNameSection.namemap.size)
-                assertEquals(WasmNameMapItem(2007, "androidx.lifecycle.Event_ON_ANY_instance"), nameSection.globalsNameSection.namemap[2007])
+                assertEquals("androidx.lifecycle.Event_ON_ANY_instance", nameSection.globalsNameSection.namemap[2007])
             }
         }
     }
