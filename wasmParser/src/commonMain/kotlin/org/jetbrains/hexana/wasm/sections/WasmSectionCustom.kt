@@ -92,22 +92,22 @@ class WasmSectionCustom(
         }
     }
 
-    private fun CommonByteBuffer.consumeNamespace(): List<WasmNameMapItem> {
-        val items = mutableListOf<WasmNameMapItem>()
+    private fun CommonByteBuffer.consumeNamespace(): Map<Int, String> {
+        val items = mutableMapOf<Int, String>()
         consumeArray {
             val id = getULEB128().toInt()
             val name = consumeString()
-            items.add(WasmNameMapItem(id, name))
+            items[id] = name
         }
         return items
     }
 
-    private fun CommonByteBuffer.consumeIndirectNamespace(): List<WasmIndirectNameMapItem> {
-        val items = mutableListOf<WasmIndirectNameMapItem>()
+    private fun CommonByteBuffer.consumeIndirectNamespace(): IndirectNameMapItem {
+        val items = mutableMapOf<Int, Map<Int, String>>()
 
         consumeArray {
             val id = getULEB128().toInt()
-            items.add(WasmIndirectNameMapItem(id, consumeNamespace()))
+            items[id] = consumeNamespace()
         }
 
         return items
@@ -119,17 +119,17 @@ class WasmSectionCustom(
 sealed interface WasmNameSubsection
 class WasmModuleNameSection(val moduleName: String) : WasmNameSubsection
 
-class WasmFunctionsNameSection(val namemap: List<WasmNameMapItem>) : WasmNameSubsection
-class WasmLocalsNameSection(val namemap: List<WasmIndirectNameMapItem>) : WasmNameSubsection
-class WasmLabelsNameSection(val namemap: List<WasmIndirectNameMapItem>) : WasmNameSubsection
-class WasmTypesNameSection(val namemap: List<WasmNameMapItem>) : WasmNameSubsection
-class WasmTablesNameSection(val namemap: List<WasmNameMapItem>) : WasmNameSubsection
-class WasmMemoriesNameSection(val namemap: List<WasmNameMapItem>): WasmNameSubsection
-class WasmGlobalsNameSection(val namemap: List<WasmNameMapItem>) : WasmNameSubsection
-class WasmElemsNameSection(val namemap: List<WasmNameMapItem>) : WasmNameSubsection
-class WasmDataSegmentsNameSection(val namemap: List<WasmNameMapItem>) : WasmNameSubsection
-class WasmFieldsNameSection(val namemap: List<WasmIndirectNameMapItem>) : WasmNameSubsection
-class WasmTagsNameSection(val namemap: List<WasmNameMapItem>) : WasmNameSubsection
+class WasmFunctionsNameSection(val namemap: Map<Int, String>) : WasmNameSubsection
+class WasmLocalsNameSection(val namemap: IndirectNameMapItem) : WasmNameSubsection
+class WasmLabelsNameSection(val namemap: IndirectNameMapItem) : WasmNameSubsection
+class WasmTypesNameSection(val namemap: Map<Int, String>) : WasmNameSubsection
+class WasmTablesNameSection(val namemap: Map<Int, String>) : WasmNameSubsection
+class WasmMemoriesNameSection(val namemap: Map<Int, String>): WasmNameSubsection
+class WasmGlobalsNameSection(val namemap: Map<Int, String>) : WasmNameSubsection
+class WasmElemsNameSection(val namemap: Map<Int, String>) : WasmNameSubsection
+class WasmDataSegmentsNameSection(val namemap: Map<Int, String>) : WasmNameSubsection
+class WasmFieldsNameSection(val namemap: IndirectNameMapItem) : WasmNameSubsection
+class WasmTagsNameSection(val namemap: Map<Int, String>) : WasmNameSubsection
 
 class WasmNameSection(
     val moduleSubsection: WasmModuleNameSection? = null,
@@ -146,8 +146,7 @@ class WasmNameSection(
     val tagsNameSection: WasmTagsNameSection? = null,
 )
 
-data class WasmNameMapItem(val id: Int, val name: String)
-data class WasmIndirectNameMapItem(val id: Int, val value: List<WasmNameMapItem>)
+private typealias IndirectNameMapItem = Map<Int, Map<Int, String>>
 
 private fun getSectionDisplayName(rawName: String): String {
     return rawName.ifBlank {
