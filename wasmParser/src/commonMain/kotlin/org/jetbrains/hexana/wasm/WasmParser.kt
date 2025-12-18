@@ -36,7 +36,20 @@ class WasmParser {
         fun CommonByteBuffer.resolveSection(): WasmSection? {
             val unresolvedSection = scanSection()
             return when (unresolvedSection.id) {
-                WasmSectionCustom.SECTION_ID -> WasmSectionCustom(unresolvedSection)
+                WasmSectionCustom.SECTION_ID -> {
+                    val name = with (unresolvedSection) {
+                        position(unresolvedSection.contentOffset)
+                        consumeString()
+                    }
+                    with (unresolvedSection) {
+                        // A custom section (unlike other sections) has a name.
+                        // Don't include it in the section content.
+                        val offsetAfterName = position()
+                        val nameSize = offsetAfterName - contentOffset
+                        val sizeWithoutName = contentSize - nameSize
+                        WasmSectionCustom(name, sectionSize, sectionOffset, sizeWithoutName, offsetAfterName)
+                    }
+                }
                 WasmSectionTypes.SECTION_ID -> WasmSectionTypes(unresolvedSection)
                 WasmSectionImport.SECTION_ID -> WasmSectionImport(unresolvedSection)
                 WasmSectionFunctions.SECTION_ID -> WasmSectionFunctions(unresolvedSection)

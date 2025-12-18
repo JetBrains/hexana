@@ -2,14 +2,25 @@ package org.jetbrains.hexana.wasm.sections
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 
-class WasmSectionCustom(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int):
-    WasmSection("Custom", sectionSize, sectionOffset, contentSize, contentOffset) {
+class WasmSectionCustom(
+    /**
+     * [rawName] is the name written in the binary
+     */
+    val rawName: String,
+    sectionSize: Int,
+    sectionOffset: Int,
+    contentSize: Int,
+    contentOffset: Int,
+): WasmSection(getSectionDisplayName(rawName), sectionSize, sectionOffset, contentSize, contentOffset) {
 
     companion object {
         const val SECTION_ID: Byte = 0
     }
 
-    constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
+    constructor(
+        rawName: String,
+        s: WasmSectionUnresolved,
+    ): this(rawName, s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
 
     fun CommonByteBuffer.getCustomRecord(): WasmCustomRecord {
         position(contentOffset)
@@ -22,3 +33,10 @@ class WasmSectionCustom(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
 
 
 data class WasmCustomRecord(val name: String, val payload: String)
+
+private fun getSectionDisplayName(rawName: String): String {
+    if (rawName.isBlank()) {
+        return "Custom"
+    }
+    return rawName
+}
