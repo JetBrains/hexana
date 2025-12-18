@@ -9,6 +9,7 @@ import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
+import org.jetbrains.hexana.wasm.sections.WasmNameMapItem
 import org.jetbrains.hexana.wasm.sections.WasmOpenI32Limits
 import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
@@ -24,7 +25,7 @@ import kotlin.test.assertTrue
 class WasmParserTests {
 
     @Test
-    fun parseCustomSections() = runTest {
+    fun parseCustomSectionsBasic() = runTest {
         val buffer = resourceAsByteBuffer("maps/skiko.wasm")
         val wasmModule = WasmParser().parse(buffer)
 
@@ -45,8 +46,55 @@ class WasmParserTests {
 
             assertEquals(listOf(sourceMappingSection), getCustomSectionsByName("sourceMappingURL"))
             assertTrue(getCustomSectionsByName("non-existent-sourceMappingURL").isEmpty())
+
+            val customSection = getCustomSectionByName("name")
+            assertNotNull(customSection)
+            with (customSection) {
+                buffer.parseAsNameSection()
+            }
         }
     }
+
+    @Test
+    fun parseCustomNameSectionKotlin() = runTest {
+        val buffer = resourceAsByteBuffer("mpp-demo.wasm")
+        val wasmModule = WasmParser().parse(buffer)
+
+        assertNotNull(wasmModule)
+        assertEquals(2, wasmModule.customSections.size)
+
+        with (wasmModule) {
+            val customSection = getCustomSectionByName("name")
+            assertNotNull(customSection)
+            with (customSection) {
+                val nameSection = buffer.parseAsNameSection()
+                assertEquals("<compose-multiplatform-core.compose.mpp:demo>", nameSection.moduleSubsection?.moduleName)
+                assertNotNull(nameSection.functionSubsection)
+                assertEquals(63783, nameSection.functionSubsection.namemap.size)
+                assertEquals(WasmNameMapItem(8390, "kotlinx.serialization.internal.TripleSerializer\$descriptor\$lambda.invoke"), nameSection.functionSubsection.namemap[7777])
+
+                assertNotNull(nameSection.localsSection)
+                assertEquals(63783, nameSection.localsSection.namemap.size)
+                assertEquals(listOf(
+                    WasmNameMapItem(0, "<this>"),
+                    WasmNameMapItem(1, "\$entryIterator")
+                ), nameSection.localsSection.namemap[300].value)
+
+                assertNotNull(nameSection.typesSection)
+                assertEquals(56187,nameSection.typesSection.namemap.size)
+                assertEquals(WasmNameMapItem(30, "<classVTable>"),nameSection.typesSection.namemap[30])
+
+                assertNotNull(nameSection.globalsNameSection)
+                assertEquals(35865, nameSection.globalsNameSection.namemap.size)
+                assertEquals(WasmNameMapItem(1983, "<classITable>"), nameSection.globalsNameSection.namemap[1983])
+
+                assertNotNull(nameSection.fieldsNameSection)
+                assertEquals(28907, nameSection.fieldsNameSection.namemap.size)
+                assertEquals(WasmNameMapItem(2007, "androidx.lifecycle.Event_ON_ANY_instance"), nameSection.globalsNameSection.namemap[2007])
+            }
+        }
+    }
+
 
     @Test
     fun parseSkikoSections() = runTest {
