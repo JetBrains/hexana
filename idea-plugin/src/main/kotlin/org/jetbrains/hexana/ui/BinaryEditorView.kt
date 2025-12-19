@@ -5,21 +5,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.intellij.icons.AllIcons
 import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
-import org.jetbrains.hexana.ui.panel.Panel
-import org.jetbrains.hexana.ui.panel.WasmPanelCustom
-import org.jetbrains.hexana.ui.panel.WasmPanelData
-import org.jetbrains.hexana.ui.panel.WasmPanelExports
-import org.jetbrains.hexana.ui.panel.WasmPanelImports
-import org.jetbrains.hexana.ui.panel.WasmPanelWat
+import org.jetbrains.hexana.ui.panel.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -29,12 +23,13 @@ import org.jetbrains.jewel.ui.theme.defaultTabStyle
 internal fun BinaryEditorView(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
+    hexFocusRequester: FocusRequester,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         var bytesPerRow by remember { mutableStateOf(16) }
 
         VerticalSplitPanel(state, northPanel = {
-            HexViewer(binaryProvider, state)
+            HexViewer(binaryProvider, state, focusRequester = hexFocusRequester)
         }, southPanel = {
             val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels(state)) }
 

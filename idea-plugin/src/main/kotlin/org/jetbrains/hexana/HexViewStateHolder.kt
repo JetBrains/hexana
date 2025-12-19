@@ -48,6 +48,8 @@ class HexViewStateHolder(
     }
 
     var showSearchDialog = mutableStateOf(false)
+    private val _searchReverse: MutableState<Boolean> = mutableStateOf(false)
+    internal val searchReverse: Boolean get() = _searchReverse.value
 
     // Keep the latest requested scroll offset so late collectors (e.g., HexViewer composed after
     // the emission from a LaunchedEffect) still receive it.
@@ -95,6 +97,12 @@ class HexViewStateHolder(
     }
 
     fun setCursorPosition(line: Int, lineOffset: Int) {
+        _cursorPosition.value = HexPosition(line, lineOffset)
+    }
+
+    fun setCursorPosition(offset: Long, bytesPerRow: Int) {
+        val line = (offset / bytesPerRow).toInt()
+        val lineOffset  = offset.rem(bytesPerRow).toInt()
         _cursorPosition.value = HexPosition(line, lineOffset)
     }
 
@@ -154,5 +162,9 @@ class HexViewStateHolder(
 
     fun setEditor(editor: Editor?) {
         _editor.value = editor
+    }
+
+    fun setSearchReverse(doSearchReverse: Boolean) {
+        _searchReverse.value = doSearchReverse
     }
 }

@@ -1,5 +1,8 @@
 package org.jetbrains.hexana
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
 import com.intellij.openapi.actionSystem.DataKey
 import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.EDT
@@ -11,35 +14,29 @@ import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.toNioPathOrNull
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
-import org.jetbrains.hexana.providers.BinaryProvider
-import org.jetbrains.hexana.providers.GenericBinaryProvider
-import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
-import org.jetbrains.hexana.ui.createComposePanel
+import org.jetbrains.hexana.providers.*
+import org.jetbrains.hexana.sourcemap.parseSourceMap
 import org.jetbrains.hexana.ui.BinaryEditorView
+import org.jetbrains.hexana.ui.HexSearchField
+import org.jetbrains.hexana.ui.createComposePanel
+import org.jetbrains.hexana.ui.setupSearchActions
 import org.jetbrains.hexana.wat.WatFileset
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
 import java.io.Serializable
-import java.util.concurrent.CopyOnWriteArrayList
-import javax.swing.JComponent
-import javax.swing.JPanel
-import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.IdeActions
-import com.intellij.openapi.keymap.KeymapUtil
-import com.intellij.openapi.project.DumbAwareAction
-import com.intellij.openapi.vfs.VfsUtil
-import com.intellij.openapi.vfs.toNioPathOrNull
-import kotlinx.coroutines.launch
-import org.jetbrains.hexana.providers.HexanaSourceLocation
-import org.jetbrains.hexana.providers.HexanaSourceLocationProvider
-import org.jetbrains.hexana.sourcemap.parseSourceMap
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicReference
+import javax.swing.JComponent
+import javax.swing.JPanel
 
 class HexanaFileEditor(
     val myProject: Project,
@@ -99,21 +96,17 @@ class HexanaFileEditor(
         }
 
         val hexView = createComposePanel {
-            BinaryEditorView(binaryProvider!!, stateHolder)
+            val hexFocusRequester = remember { FocusRequester() }
+            Column {
+                if (stateHolder.showSearchDialog.value) {
+                    HexSearchField(binaryProvider!!, stateHolder, hexFocusRequester)
+                }
+                BinaryEditorView(binaryProvider!!, stateHolder, hexFocusRequester)
+            }
         }
         panel.add(hexView)
 
-        val findShortcuts = KeymapUtil.getActiveKeymapShortcuts(IdeActions.ACTION_FIND)
-        val showSearchAction = object : DumbAwareAction() {
-            override fun update(actionEvent: AnActionEvent) {
-                actionEvent.presentation.isEnabledAndVisible = stateHolder.viewMode == HexViewMode.Hex
-            }
-            override fun actionPerformed(actionEvent: AnActionEvent) {
-                stateHolder.showSearchDialog.value = true
-            }
-        }
-
-        showSearchAction.registerCustomShortcutSet(findShortcuts, panel)
+        setupSearchActions(hexView, stateHolder)
     }
 
     override fun getComponent(): JComponent {

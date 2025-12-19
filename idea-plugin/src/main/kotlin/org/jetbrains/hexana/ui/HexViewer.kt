@@ -91,10 +91,10 @@ fun SyncLazyListStates(vararg states: LazyListState) {
 internal fun HexViewer(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
-    showOffsets: Boolean = true
+    showOffsets: Boolean = true,
+    focusRequester: FocusRequester
 ) {
     val buf = binaryProvider.bytes
-    val focusRequester = remember { FocusRequester() }
 
 
     BoxWithConstraints(
