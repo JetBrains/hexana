@@ -7,6 +7,7 @@ import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmDataRecord
 import org.jetbrains.hexana.wasm.sections.WasmExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
+import org.jetbrains.hexana.wasm.sections.WasmNameSection
 import org.jetbrains.hexana.wasm.sections.WasmSection
 
 sealed interface BinaryProvider {
@@ -38,6 +39,16 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
         val dataSection = wasmModule?.dataSection ?: return@lazy emptyList()
         with (dataSection) {
             buffer.scan()
+        }
+    }
+
+    val nameSection: WasmNameSection? by lazy {
+        if (wasmModule == null) return@lazy null
+        with (wasmModule) {
+            val customSection = getCustomSectionByName("name") ?: return@lazy null
+            with (customSection) {
+                buffer.parseAsNameSection()
+            }
         }
     }
 
