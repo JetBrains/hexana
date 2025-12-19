@@ -16,12 +16,12 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.intRange
-import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.jewel.foundation.lazy.SelectableLazyListState
 import org.jetbrains.jewel.foundation.lazy.SelectionMode
 import org.jetbrains.jewel.foundation.lazy.tree.Tree
@@ -40,6 +40,7 @@ import org.jetbrains.jewel.ui.theme.treeStyle
 fun StructureViewList(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
+    closeFlow: MutableSharedFlow<Unit?>,
 ) {
     val focusRequester = remember { FocusRequester() }
 
@@ -89,7 +90,7 @@ fun StructureViewList(
             )
             state.scrollHexViewTo(item.range.first.toLong())
         }
-        state.setShowStructurePopup(false)
+        closeFlow.tryEmit(Unit)
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -227,6 +228,7 @@ fun IntRange.contains(other: IntRange): Boolean {
 fun StructureViewTree(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
+    closeFlow: MutableSharedFlow<Unit?>,
 ) {
     val focusRequester = remember { FocusRequester() }
     var tree by remember { mutableStateOf<Tree<HexanaNode>?>(null) }
@@ -265,7 +267,7 @@ fun StructureViewTree(
             )
             state.scrollHexViewTo(item.range.first.toLong())
         }
-        state.setShowStructurePopup(false)
+        closeFlow.tryEmit(Unit)
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -288,7 +290,7 @@ fun StructureViewTree(
             SpeedSearchArea(
                 modifier = Modifier
                     .border(1.dp, borderColor, RoundedCornerShape(2.dp))
-                    .size(300.dp, 300.dp),
+                    .fillMaxSize(),
             ) {
 
                 val filteredTree by remember(speedSearchState.searchText) {
@@ -312,7 +314,13 @@ fun StructureViewTree(
                 SpeedSearchableTree(
                     modifier = Modifier
                         .onPreviewKeyEvent {
-                            if (it.type == KeyEventType.KeyUp && it.key == Key.Enter) {
+                            if (it.type == KeyEventType.KeyDown && it.key == Key.Escape && !speedSearchState.isVisible) {
+                                // When speed search is visible, escape clears the search term and hides the search input.
+                                // When speed search is not visible, escape closes the popup.
+                                onItemChosen(null)
+                                true
+                            }
+                            else if (it.type == KeyEventType.KeyUp && it.key == Key.Enter) {
                                 // TreeState.selectedKeys contains ids instead of nodes like it is done
                                 // in the selectable list.
                                 // We need to look up the node by the selected id.

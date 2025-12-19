@@ -48,16 +48,6 @@ internal fun BinaryEditorView(
                 state.setSelectedTab(index)
             })
         })
-
-        if (state.showStructurePopup) {
-            Dialog({
-                state.setShowStructurePopup(false)
-            }, DialogProperties()) {
-                Box(modifier = Modifier.background(HexanaTheme.backgroundColor)) {
-                    StructureViewTree(binaryProvider = binaryProvider, state = state)
-                }
-            }
-        }
     }
 }
 

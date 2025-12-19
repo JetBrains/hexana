@@ -82,9 +82,6 @@ class HexViewStateHolder(
     private val _editor: MutableState<Editor?> = mutableStateOf(null)
     internal val editor: Editor? get() = _editor.value
 
-    private val _showStructurePopup = mutableStateOf(false)
-    val showStructurePopup: Boolean get() = _showStructurePopup.value
-
     fun setTopFraction(topFraction: Float) {
         currentState.value = currentState.value.copy(topFraction = topFraction.coerceIn(0f, 1f))
     }
@@ -157,9 +154,5 @@ class HexViewStateHolder(
 
     fun setEditor(editor: Editor?) {
         _editor.value = editor
-    }
-
-    fun setShowStructurePopup(show: Boolean) {
-        _showStructurePopup.value = show
     }
 }
