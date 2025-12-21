@@ -47,45 +47,55 @@ class WasmSectionExport(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
     }
 }
 
-sealed class WasmExportRecordEntry(
-    open val name: String,
-    open val externType: Byte
-) : WasmRange
+sealed interface WasmExportRecordEntry: WasmRange {
+    val name: String
+    val externType: Byte
+}
 
 data class WasmFunctionExportRecordEntry(
     override val offset: Int,
     override val size: Int,
     override val name: String,
     val index: UInt
-) : WasmExportRecordEntry(name, 0)
+) : WasmExportRecordEntry {
+    override val externType: Byte = 1
+}
 
 data class WasmTableExportRecordEntry(
     override val offset: Int,
     override val size: Int,
     override val name: String,
     val index: UInt
-) : WasmExportRecordEntry(name, 1)
+) : WasmExportRecordEntry {
+    override val externType: Byte = 1
+}
 
 data class WasmMemoryExportRecordEntry(
     override val offset: Int,
     override val size: Int,
     override val name: String,
     val index: UInt
-) : WasmExportRecordEntry(name, 2)
+) : WasmExportRecordEntry {
+    override val externType: Byte = 2
+}
 
 data class WasmGlobalExportRecordEntry(
     override val offset: Int,
     override val size: Int,
     override val name: String,
     val index: UInt
-) : WasmExportRecordEntry(name, 3)
+) : WasmExportRecordEntry {
+    override val externType: Byte = 3
+}
 
 data class WasmTagExportRecordEntry(
     override val offset: Int,
     override val size: Int,
     override val name: String,
     val index: UInt
-) : WasmExportRecordEntry(name, 4)
+) : WasmExportRecordEntry {
+    override val externType: Byte = 4
+}
 
 data class WasmUnsupportedExportRecordEntry(
     override val offset: Int,
@@ -93,4 +103,4 @@ data class WasmUnsupportedExportRecordEntry(
     override val name: String,
     override val externType: Byte,
     val index: UInt
-) : WasmExportRecordEntry(name, externType)
+) : WasmExportRecordEntry
