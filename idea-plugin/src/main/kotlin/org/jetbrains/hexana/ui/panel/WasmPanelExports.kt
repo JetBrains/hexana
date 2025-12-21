@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.rememberTextMeasurer
+import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
@@ -19,7 +20,7 @@ import org.jetbrains.hexana.wasm.sections.WasmTagExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmUnsupportedExportRecordEntry
 
 @Composable
-internal fun WasmPanelExports(wasmBinaryProvider: WasmBinaryProvider) {
+internal fun WasmPanelExports(wasmBinaryProvider: WasmBinaryProvider, state: HexViewStateHolder) {
     val exports = remember(wasmBinaryProvider) {
         wasmBinaryProvider.exports
     }
@@ -49,5 +50,8 @@ internal fun WasmPanelExports(wasmBinaryProvider: WasmBinaryProvider) {
                 TableCellValue(export.name)
             }
         ), exports.size
-    )
+    ) { rowIndex ->
+        val exportRecord = exports[rowIndex] ?: return@Table
+        state.scrollHexViewTo(exportRecord.offset, exportRecord.size)
+    }
 }

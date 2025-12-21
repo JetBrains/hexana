@@ -117,8 +117,8 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
         is WasmBinaryVirtualFileProvider -> {
             if (wasmModule == null) return emptyArray() else arrayOf(
                 Panel("Data") { WasmPanelData(this, state) },
-                Panel("Exports") { WasmPanelExports(this) },
-                Panel("Imports") { WasmPanelImports(this) },
+                Panel("Exports") { WasmPanelExports(this, state) },
+                Panel("Imports") { WasmPanelImports(this, state) },
                 Panel("Custom") { WasmPanelCustom(this) },
                 Panel("Wat") { WasmPanelWat(this, state) },
             )

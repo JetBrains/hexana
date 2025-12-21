@@ -40,20 +40,6 @@ internal fun WasmPanelData(wasmBinaryProvider: WasmBinaryProvider, state: HexVie
         }
     ), dataRecords.size) {
         val dataRecord = dataRecords[it]
-        state.scrollHexViewTo(dataRecord.offset.toLong())
-
-        val startLine = (dataRecord.offset / state.bytesPerRow.value)
-        val startLineOffset = (dataRecord.offset % state.bytesPerRow.value)
-
-        val endLine =
-            ((dataRecord.offset + dataRecord.recordLength) / state.bytesPerRow.value)
-        val endLineOffset =
-            ((dataRecord.offset + dataRecord.recordLength) % state.bytesPerRow.value) - 1
-
-        state.setSelection(
-            startLine, startLineOffset,
-            endLine, endLineOffset
-        )
+        state.scrollHexViewTo(dataRecord.offset, dataRecord.recordLength)
     }
 }
-
