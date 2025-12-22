@@ -9,6 +9,7 @@ import org.jetbrains.hexana.wasm.sections.WasmExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 import org.jetbrains.hexana.wasm.sections.WasmNameSection
 import org.jetbrains.hexana.wasm.sections.WasmSection
+import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
 
 sealed interface BinaryProvider {
     val bytes: ByteArray
@@ -57,6 +58,25 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
         with (functionSection) {
             buffer.scan()
         }
+    }
+
+    val functions: List<WasmTypeRecord> by lazy {
+        wasmModule ?: return@lazy emptyList()
+        val functionSection = wasmModule.functionSection ?: return@lazy emptyList()
+        val typesSection = wasmModule.typesSection ?: return@lazy emptyList()
+
+        val funs = with(functionSection) {
+             buffer.parseFunctions()
+        }
+
+        val types = with(typesSection) {
+            buffer.parseTypes()
+        }
+
+        // TODO: Investigate when this can be a case and how this is better to be approached
+        val signatures = funs.mapNotNull { types.getOrNull(it) }
+
+        signatures
     }
 
     fun getCodeRecordByIndex(index: Int): WasmCodeRecord? {

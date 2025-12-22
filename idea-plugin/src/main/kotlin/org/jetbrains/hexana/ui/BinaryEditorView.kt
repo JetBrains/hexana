@@ -13,7 +13,13 @@ import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
-import org.jetbrains.hexana.ui.panel.*
+import org.jetbrains.hexana.ui.panel.Panel
+import org.jetbrains.hexana.ui.panel.WasmPanelFunctions
+import org.jetbrains.hexana.ui.panel.WasmPanelCustom
+import org.jetbrains.hexana.ui.panel.WasmPanelData
+import org.jetbrains.hexana.ui.panel.WasmPanelExports
+import org.jetbrains.hexana.ui.panel.WasmPanelImports
+import org.jetbrains.hexana.ui.panel.WasmPanelWat
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -119,6 +125,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Data") { WasmPanelData(this, state) },
                 Panel("Exports") { WasmPanelExports(this, state) },
                 Panel("Imports") { WasmPanelImports(this, state) },
+                Panel("Functions") { WasmPanelFunctions(this) },
                 Panel("Custom") { WasmPanelCustom(this) },
                 Panel("Wat") { WasmPanelWat(this, state) },
             )

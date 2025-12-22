@@ -167,6 +167,11 @@ class WasmParserTests {
             val importRecords = buffer.getImportRecords()
             assertContentEquals(expectedImports, importRecords.map { "${it.prefix}::${it.name}"})
         }
+
+        with(wasmModule) {
+            val funs = buffer.scanFunctions()
+            assertEquals(14142, funs.size)
+        }
     }
 
     @Test
