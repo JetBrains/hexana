@@ -58,7 +58,7 @@ data class WasmFunctionExportRecordEntry(
     override val name: String,
     val index: UInt
 ) : WasmExportRecordEntry {
-    override val externType: Byte = 1
+    override val externType: Byte = 0
 }
 
 data class WasmTableExportRecordEntry(
