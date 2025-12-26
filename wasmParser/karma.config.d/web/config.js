@@ -3,13 +3,9 @@ const {basePath} = config;
 
 const resourcesPath = path.resolve(basePath, "kotlin", "**", "*.wasm");
 
-// karma use minimatch and glob libraries that actually ignore windows path conventions
-// so, we have to sort of "undo" path to make tests work on Windows
-const resourcePathNormalized = resourcesPath.replace(/\\/g, '/');
-
 config.files.push(
     {
-        pattern: resourcePathNormalized,
+        pattern: resourcesPath,
         included: false,
         served: true,
         watched: false,
@@ -20,7 +16,6 @@ config.files.push(
 config.proxies = {
     "/kotlin": "/base/kotlin/",
 }
-
 
 function configLaunchers(config) {
     config.customLaunchers = {

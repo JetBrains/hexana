@@ -17,5 +17,8 @@ private val defaultFetchInit: RequestInit = js("{}")
 actual suspend fun resourceAsByteBuffer(resourcePath: String): CommonByteBuffer {
     val response: Response = window.fetch("/kotlin/${resourcePath}", defaultFetchInit).await()
     val buffer: ArrayBuffer = response.arrayBuffer().await()
+    if (response.status != 200.toShort()) {
+        error("unexpected $resourcePath response: ${response.status} ${response.statusText}")
+    }
     return buffer.toCommonByteBuffer()
 }
