@@ -73,7 +73,7 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
         consumeLocals(locals)
         val opCodes = parseOpCodes()
         return WasmCodeRecord(codeEntryStart, sizeFromOffset(codeEntryStart), locals, opCodes)
-    } catch (e: UnsupportedOpsException) {
+    } catch (e: Exception) {
 
         position(bodyStart)
 
