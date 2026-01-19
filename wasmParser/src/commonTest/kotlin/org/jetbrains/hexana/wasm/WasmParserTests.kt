@@ -26,9 +26,10 @@ class WasmParserTests {
     @Test
     fun parseCustomSectionsBasic() = runTest {
         val buffer = resourceAsByteBuffer("maps/skiko.wasm")
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmParseResult = WasmParser().parse(buffer)
 
-        assertNotNull(wasmModule)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule
 
         assertEquals(2, wasmModule.customSections.size)
 
@@ -57,9 +58,11 @@ class WasmParserTests {
     @Test
     fun parseCustomNameSectionKotlin() = runTest {
         val buffer = resourceAsByteBuffer("mpp-demo.wasm")
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmParseResult = WasmParser().parse(buffer)
 
-        assertNotNull(wasmModule)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule
+
         assertEquals(2, wasmModule.customSections.size)
 
         with (wasmModule) {
@@ -95,9 +98,11 @@ class WasmParserTests {
     @Test
     fun parseSkikoSections() = runTest {
         val buffer = resourceAsByteBuffer("skiko.wasm")
-        val wasmModule = WasmParser().parse(buffer)
 
-        assertNotNull(wasmModule)
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule
 
         assertTrue(wasmModule.customSections.isEmpty())
         assertEquals(2796, wasmModule.typesSection?.contentSize)
@@ -177,9 +182,11 @@ class WasmParserTests {
     @Test
     fun parseTryCatch() = runTest {
         val buffer = resourceAsByteBuffer("kotlin/try.wasm")
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmParseResult = WasmParser().parse(buffer)
 
-        assertNotNull(wasmModule)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule
+
 
         with (wasmModule.codeSection!!) {
             val code = buffer.scan()
@@ -189,8 +196,11 @@ class WasmParserTests {
     @Test
     fun parseLongImports() = runTest {
         val buffer = resourceAsByteBuffer("string.wasm")
-        val wasmModule = WasmParser().parse(buffer)
-        assertNotNull(wasmModule)
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule
+
 
         with(wasmModule.importSection!!) {
             val importRecords = buffer.getImportRecords()
@@ -1131,7 +1141,7 @@ class WasmParserTests {
 
 
     @Test
-    fun `loop`() = runTest {
+    fun loop() = runTest {
         assertFunctions(
             "loop.wasm", listOf(
                 FunctionRecord(
@@ -1183,8 +1193,12 @@ class WasmParserTests {
      */
     @Test
     fun `HX-T-22`() = runTest {
-        val buffer = resourceAsByteBuffer("string.wasm") ?: error("Failed to read test file")
-        val wasmModule = WasmParser().parse(buffer) ?: error("Failed to parse wasm")
+        val buffer = resourceAsByteBuffer("string.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule
+
         with(wasmModule.globalSection) {
             this ?: error("Failed to parse global section")
             val globals = buffer.scan()
@@ -1201,6 +1215,15 @@ class WasmParserTests {
         }
     }
 
+    @Test
+    fun `HX-1-Component-Wasm`() = runTest {
+        // https://github.com/JetBrains/hexana/issues/1
+        val buffer = resourceAsByteBuffer("component/add.component.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseFailure>(wasmParseResult)
+    }
+
     /**
      * > wasm-objdump -x string.wasm | grep -A 20 "Memory"
      * Memory[1]:
@@ -1208,8 +1231,13 @@ class WasmParserTests {
      */
     @Test
     fun `HX-T-23`() = runTest {
-        val buffer = resourceAsByteBuffer("string.wasm") ?: error("Failed to read test file")
-        val wasmModule = WasmParser().parse(buffer) ?: error("Failed to parse wasm")
+        val buffer = resourceAsByteBuffer("string.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule
+
+
         with(wasmModule.memorySection) {
             this ?: error("Failed to parse global section")
             val memory = buffer.scan()
@@ -1222,8 +1250,12 @@ class WasmParserTests {
 
     @Test
     fun parseTagTypeImport() = runTest {
-        val buffer = resourceAsByteBuffer("kotlin/hello.wasm") ?: error("Failed to read test file")
-        val wasmModule = WasmParser().parse(buffer) ?: error("Failed to parse wasm")
+        val buffer = resourceAsByteBuffer("kotlin/hello.wasm")
+
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule
 
         with(wasmModule.importSection!!) {
             val importRecords = buffer.getImportRecords()
@@ -1241,9 +1273,12 @@ private fun assertFunction(actual: FunctionRecord, expected: FunctionRecord) {
 
 private suspend fun assertFunctions(resourcePath: String, expected: List<FunctionRecord>) {
     val buffer = resourceAsByteBuffer(resourcePath)
-    val wasmModule = WasmParser().parse(buffer)
+    val wasmParseResult = WasmParser().parse(buffer)
 
-    val functions = with(wasmModule!!) {
+    assertIs<WasmParseSuccess>(wasmParseResult)
+    val wasmModule = wasmParseResult.wasmModule
+
+    val functions = with(wasmModule) {
         buffer.scanFunctions()
     }
 

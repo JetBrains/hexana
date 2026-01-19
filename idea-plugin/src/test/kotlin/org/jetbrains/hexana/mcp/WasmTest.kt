@@ -5,6 +5,7 @@ import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
+import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
@@ -23,8 +24,8 @@ abstract class WasmTest: UsefulTestCase() {
     open fun doTest(section:String, body: CommonByteBuffer.(WasmModule?) -> Unit) {
         val bytes = wat2wasm(loadTestDataFile(section))
         val commonByteBuffer = bytes.toCommonByteBuffer()
-        val wasmModule = WasmParser().parse(commonByteBuffer)
-        commonByteBuffer.body(wasmModule)
+        val wasmParseResult = WasmParser().parse(commonByteBuffer)
+        commonByteBuffer.body((wasmParseResult as WasmParseSuccess).wasmModule)
 
     }
     protected fun getPathToTestDataFile(section: String): String {

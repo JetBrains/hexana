@@ -3,6 +3,7 @@ package org.jetbrains.hexana.providers
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.WasmNamedRange
+import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmDataRecord
 import org.jetbrains.hexana.wasm.sections.WasmExportRecordEntry
@@ -18,7 +19,12 @@ sealed interface BinaryProvider {
 class GenericBinaryProvider(override val bytes: ByteArray) : BinaryProvider
 open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
     private val buffer = bytes.toCommonByteBuffer()
-    val wasmModule = WasmParser().parse(buffer)
+    val wasmModule = when (val parseResult = WasmParser().parse(buffer)) {
+        is WasmParseSuccess -> parseResult.wasmModule
+        else -> null
+    }
+
+    fun canProvideWasmModule() = wasmModule != null
 
     open val sourceLocationProvider: HexanaSourceLocationProvider = HexanaSourceLocationProvider.EMPTY
 
@@ -59,6 +65,8 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
             buffer.scan()
         }
     }
+
+
 
     val functions: List<WasmTypeRecord> by lazy {
         wasmModule ?: return@lazy emptyList()

@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
+import com.intellij.ide.BrowserUtil
 import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
@@ -32,8 +33,6 @@ internal fun BinaryEditorView(
     hexFocusRequester: FocusRequester,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
-        var bytesPerRow by remember { mutableStateOf(16) }
-
         VerticalSplitPanel(state, northPanel = {
             HexViewer(binaryProvider, state, focusRequester = hexFocusRequester)
         }, southPanel = {
@@ -121,14 +120,31 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
     return when (this) {
         is GenericBinaryProvider -> emptyArray()
         is WasmBinaryVirtualFileProvider -> {
-            if (wasmModule == null) return emptyArray() else arrayOf(
+            if (canProvideWasmModule()) arrayOf(
                 Panel("Data") { WasmPanelData(this, state) },
                 Panel("Exports") { WasmPanelExports(this, state) },
                 Panel("Imports") { WasmPanelImports(this, state) },
                 Panel("Functions") { WasmPanelFunctions(this) },
                 Panel("Custom") { WasmPanelCustom(this) },
                 Panel("Wat") { WasmPanelWat(this, state) },
-            )
+            ) else {
+                arrayOf(
+                    Panel("Something is wrong :(") {
+                        Box {
+                            Row {
+                                Column {
+                                    Text("Hexana does not know how to parse this file  ")
+                                }
+                                Column {
+                                    Link("report an issue", onClick = {
+                                        BrowserUtil.browse("https://github.com/JetBrains/hexana/issues")
+                                    })
+                                }
+                            }
+                        }
+                    }
+                )
+            }
         }
 
         else -> emptyArray()

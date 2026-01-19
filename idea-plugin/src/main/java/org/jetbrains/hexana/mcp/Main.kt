@@ -13,34 +13,34 @@ fun main() {
     //val file = File("/Users/user/ws/Hexana/wasm/src/commonTest/resources/string.wasm")
     //val file = File("/Users/user/ws/Hexana/wasm/src/commonTest/resources/string.wasm")
     val file = File("/Users/user/ws/Hexana/wasmParser/src/commonTest/resources/skiko.wasm")
-    FileInputStream(file).use {
-        val buffer = it.channel.map(FileChannel.MapMode.READ_ONLY, 0, it.channel.size()).toCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
-        with(buffer) {
-            printJson("importedSymbols", wasmModule, CommonByteBuffer::importFunctions)
-            //printJson(wasmModule, CommonByteBuffer::listFunctions)
-            printJson("listDataSections", wasmModule) {
-                listDataSections(it, 0..10)
-            }
-            printJson("listExports", wasmModule, CommonByteBuffer::listExports)
-            //printJson("listExportedFunctions", wasmModule, CommonByteBuffer::listExportedFunctions)
-
-            //printJson("functionsByIndex (1,2,8)", wasmModule) {
-            //    functionsByIndices(wasmModule, listOf(1, 2, 8))
-            //}
-            printJson("listTypes", wasmModule, CommonByteBuffer::listTypes)
-            printJson("listDataSegments", wasmModule) {
-                listDataSegments(0..10, it!!, true, true, 0)
-            }
-            printJson("listMemory", wasmModule, CommonByteBuffer::listMemory)
-        }
-
-
-
-
-
-
-    }
+//    FileInputStream(file).use {
+//        val buffer = it.channel.map(FileChannel.MapMode.READ_ONLY, 0, it.channel.size()).toCommonByteBuffer()
+//        val wasmModule = WasmParser().parse(buffer)
+//        with(buffer) {
+//            printJson("importedSymbols", wasmModule, CommonByteBuffer::importFunctions)
+//            //printJson(wasmModule, CommonByteBuffer::listFunctions)
+//            printJson("listDataSections", wasmModule) {
+//                listDataSections(it, 0..10)
+//            }
+//            printJson("listExports", wasmModule, CommonByteBuffer::listExports)
+//            //printJson("listExportedFunctions", wasmModule, CommonByteBuffer::listExportedFunctions)
+//
+//            //printJson("functionsByIndex (1,2,8)", wasmModule) {
+//            //    functionsByIndices(wasmModule, listOf(1, 2, 8))
+//            //}
+//            printJson("listTypes", wasmModule, CommonByteBuffer::listTypes)
+//            printJson("listDataSegments", wasmModule) {
+//                listDataSegments(0..10, it!!, true, true, 0)
+//            }
+//            printJson("listMemory", wasmModule, CommonByteBuffer::listMemory)
+//        }
+//
+//
+//
+//
+//
+//
+//    }
 }
 inline fun <T> CommonByteBuffer.printJson(msg:String? = "", wasmModule: WasmModule?, body: CommonByteBuffer.(WasmModule?) -> T) {
     val str = objectMapper.writeValueAsString(body(wasmModule))

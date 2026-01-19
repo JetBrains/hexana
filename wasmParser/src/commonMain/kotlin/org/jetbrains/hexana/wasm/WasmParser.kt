@@ -68,8 +68,8 @@ class WasmParser {
         }
     }
 
-    fun parse(buffer: CommonByteBuffer): WasmModule? {
-        if (buffer.remaining() < 4) return null
+    fun parse(buffer: CommonByteBuffer): WasmParseResult {
+        if (buffer.remaining() < 4) return WasmParseFailure()
 
         val header = ByteArray(4)
         buffer.get(header, 0, 4)
@@ -81,7 +81,7 @@ class WasmParser {
 
         val isValidVersion = version.contentEquals(WASM_VERSION)
 
-        if (!isWasmHeader || !isValidVersion) return null
+        if (!isWasmHeader || !isValidVersion) return WasmParseFailure()
 
         val sections = mutableListOf<WasmSection>()
         while (buffer.hasRemaining()) {
@@ -92,6 +92,10 @@ class WasmParser {
 
         val wasmModule = WasmModule.fromSections(sections)
 
-        return wasmModule
+        return WasmParseSuccess(wasmModule)
     }
 }
+
+sealed interface WasmParseResult
+class WasmParseSuccess(val wasmModule: WasmModule) : WasmParseResult
+class WasmParseFailure : WasmParseResult

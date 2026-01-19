@@ -7,7 +7,10 @@ import com.intellij.mcpserver.toolsets.Constants
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.WasmFileType
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.wasm.WasmModule
+import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
 
 private val logger: Logger = Logger.getInstance(HexanaToolset::class.java)
@@ -98,7 +101,7 @@ class HexanaToolset : McpToolset {
             return notWasmError
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val module = WasmParser().parse(buffer)
+        val module = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.importFunctions(module))
     }
 
@@ -229,7 +232,7 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listFunctions(wasmModule, offset, limit))
     }
 
@@ -401,7 +404,7 @@ class HexanaToolset : McpToolset {
             from .. to
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listDataSections(wasmModule, range))
     }
 
@@ -473,7 +476,7 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listExports(wasmModule))
     }
 
@@ -664,7 +667,7 @@ class HexanaToolset : McpToolset {
             from .. to
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listExportedFunctions(wasmModule, range))
     }
 
@@ -793,7 +796,7 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.functionsByIndices(wasmModule, indices))
     }
 
@@ -878,7 +881,7 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listGlobals(wasmModule))
     }
 
@@ -993,7 +996,7 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listMemory(wasmModule))
     }
 
@@ -1093,7 +1096,7 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listGlobalsByIndices(wasmModule, indices))
     }
 
@@ -1274,7 +1277,7 @@ class HexanaToolset : McpToolset {
             from until to
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(
             buffer.listDataSegments(
                 range,
@@ -1407,7 +1410,7 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listMemoryByIndices(wasmModule, indices))
     }
 
@@ -1548,7 +1551,7 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listTypes(wasmModule))
     }
 
@@ -1662,7 +1665,7 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listTypesByIndices(wasmModule, indices))
     }
 
@@ -1781,7 +1784,7 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.localsForFunctions(indices, wasmModule))
     }
 
@@ -1918,7 +1921,7 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.codeForFunctions(indices, wasmModule))
     }
 
@@ -2120,7 +2123,7 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listElementSegments(wasmModule))
 
     }
@@ -2204,10 +2207,17 @@ class HexanaToolset : McpToolset {
             return """{"error": "Not a .wasm file"}"""
         }
         val buffer = file.contentsToCommonByteBuffer()
-        val wasmModule = WasmParser().parse(buffer)
+        val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.moduleSummary(wasmModule))
     }
 }
 
 
 private fun VirtualFile.contentsToCommonByteBuffer() = contentsToByteArray().toCommonByteBuffer()
+
+private fun WasmParser.parseOrNull(buffer: CommonByteBuffer): WasmModule? {
+    return when (val parseResult = parse(buffer)) {
+        is WasmParseSuccess -> parseResult.wasmModule
+        else -> null
+    }
+}
