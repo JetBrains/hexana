@@ -4,8 +4,6 @@
 
 ### Added
 
-- basic WIT files highlighting
-
 ### Changed
 
 ### Deprecated
@@ -14,9 +12,21 @@
 
 ### Fixed
 
-- tag type import parsing
-
 ### Security
+
+## 0.5 - 2026-01-19
+
+### Added
+
+- basic WIT files highlighting
+- UX improvement for table views
+- table view for function and custom sections
+- [Introduce Basic Search capability in Binary View](https://github.com/JetBrains/hexana/issues/3)
+
+### Fixed
+
+- [tag type import parsing](https://github.com/JetBrains/hexana/issues/4)
+- [Non-Standard WASM parsing should not lead to failure](https://github.com/JetBrains/hexana/issues/1)
 
 ## 0.4 - 2025-12-15
 
