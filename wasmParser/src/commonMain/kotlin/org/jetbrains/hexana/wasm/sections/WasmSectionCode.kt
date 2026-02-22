@@ -65,22 +65,30 @@ class WasmSectionCode(sectionSize: Int, sectionOffset: Int, contentSize: Int, co
 
 fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
     val codeEntryStart = position()
-    val funSize = getULEB128().toUInt()
-
-    val bodyStart = position()
     val locals = mutableListOf<WasmCodeLocalRecord>()
     try {
-        consumeLocals(locals)
-        val opCodes = parseOpCodes()
-        return WasmCodeRecord(codeEntryStart, sizeFromOffset(codeEntryStart), locals, opCodes)
+        val funSize = getULEB128().toUInt()
+        val bodyStart = position()
+        try {
+            consumeLocals(locals)
+            val opCodes = parseOpCodes()
+            return WasmCodeRecord(codeEntryStart, sizeFromOffset(codeEntryStart), locals, opCodes)
+        } catch (e: Exception) {
+            position(bodyStart)
+            val bytesToRead = minOf(funSize.toInt(), remaining())
+            val raw = ByteArray(bytesToRead)
+            get(raw, 0, raw.size)
+            position(bodyStart + bytesToRead)
+            return WasmCodeRecord(
+                codeEntryStart,
+                sizeFromOffset(codeEntryStart),
+                locals,
+                listOf(UnparsedOpCode(e, raw))
+            )
+        }
     } catch (e: Exception) {
-
-        position(bodyStart)
-
-        val raw = ByteArray(funSize.toInt())
-        get(raw, 0, raw.size)
-
-        position(bodyStart + funSize.toInt())
+        val raw = ByteArray(remaining())
+        if (raw.isNotEmpty()) get(raw, 0, raw.size)
         return WasmCodeRecord(
             codeEntryStart,
             sizeFromOffset(codeEntryStart),

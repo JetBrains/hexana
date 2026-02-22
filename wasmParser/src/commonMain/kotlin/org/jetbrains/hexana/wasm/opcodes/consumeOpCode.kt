@@ -12,9 +12,8 @@ import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.heapType
 import org.jetbrains.hexana.wasm.sections.valueType
 
-fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode {
-    val codeInt = code.toUInt()
-    return when (codeInt) {
+fun CommonByteBuffer.consumeOpCode(code: UInt): OpCode {
+    return when (code) {
         0x00u -> Flow.Unreachable
         0x01u -> Flow.Nop
         0x02u -> {
@@ -33,8 +32,8 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode {
             Flow.Else(null,opCodes)
         }
         0x06u,
-        0x07u -> ReservedOpCode(codeInt)
-        0x09u -> ReservedOpCode(codeInt)
+        0x07u -> ReservedOpCode(code)
+        0x09u -> ReservedOpCode(code)
         0x0Bu -> Flow.Terminal
         0x0Cu -> Flow.Br(consumeInt())
         0x0Du -> Flow.BrIf(consumeInt())
@@ -53,40 +52,40 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode {
         }
         0x12u -> Flow.ReturnCall
         0x14u -> Flow.CallRef(consumeInt())
-        0x16u, 0x17u, 0x18u, 0x19u -> ReservedOpCode(codeInt)
+        0x16u, 0x17u, 0x18u, 0x19u -> ReservedOpCode(code)
         0x1Au -> Flow.Drop
         0x1Bu -> Flow.Select
-        0x1Cu, 0x1Du, 0x1Eu -> ReservedOpCode(codeInt)
+        0x1Cu, 0x1Du, 0x1Eu -> ReservedOpCode(code)
 
         0x20u -> Local.Get(consumeInt())
         0x21u -> Local.Set(consumeInt())
         0x22u -> Local.Tee(consumeInt())
         0x23u -> OpCodes.Global.Get(consumeInt())
         0x24u -> OpCodes.Global.Set(consumeInt())
-        0x27u -> ReservedOpCode(codeInt)
-        //0x28u -> I32.Load(consumeMemArg())
-        //0x29u -> I64.Load(consumeMemArg(),)
-        //0x2Au -> F32.Load(consumeMemArg())
-        //0x2Bu -> F64.Load(consumeMemArg())
-        //0x2Cu -> I32.Load8_S(consumeMemArg())
-        //0x2Du -> I32.Load8_U(consumeMemArg())
-        //0x2Eu -> I32.Load16_S(consumeMemArg())
-        //0x2Fu -> I32.Load16_U(consumeMemArg())
+        0x27u -> ReservedOpCode(code)
+        0x28u -> I32.Load(consumeMemArg())
+        0x29u -> I64.Load(consumeMemArg(),)
+        0x2Au -> F32.Load(consumeMemArg())
+        0x2Bu -> F64.Load(consumeMemArg())
+        0x2Cu -> I32.Load8_S(consumeMemArg())
+        0x2Du -> I32.Load8_U(consumeMemArg())
+        0x2Eu -> I32.Load16_S(consumeMemArg())
+        0x2Fu -> I32.Load16_U(consumeMemArg())
 
-        //0x30u -> I64.Load8_S(consumeMemArg())
-        //0x31u -> I64.Load8_U(consumeMemArg())
-        //0x32u -> I64.Load16_S(consumeMemArg())
-        //0x33u -> I64.Load16_U(consumeMemArg())
-        //0x34u -> I64.Load32_S(consumeMemArg())
-        //0x35u -> I64.Load32_U(consumeMemArg())
-        //0x36u -> I32.Store(consumeMemArg())
-        //0x37u -> I64.Store(consumeMemArg())
-        //0x38u -> F32.Store(consumeMemArg())
-        //0x3Au -> I32.Store8(consumeMemArg())
-        //0x3Bu -> I32.Store16(consumeMemArg())
-        //0x3Cu -> I64.Store8(consumeMemArg())
-        //0x3Du -> I64.Store16(consumeMemArg())
-        //0x3Eu -> I64.Store32(consumeMemArg())
+        0x30u -> I64.Load8_S(consumeMemArg())
+        0x31u -> I64.Load8_U(consumeMemArg())
+        0x32u -> I64.Load16_S(consumeMemArg())
+        0x33u -> I64.Load16_U(consumeMemArg())
+        0x34u -> I64.Load32_S(consumeMemArg())
+        0x35u -> I64.Load32_U(consumeMemArg())
+        0x36u -> I32.Store(consumeMemArg())
+        0x37u -> I64.Store(consumeMemArg())
+        0x38u -> F32.Store(consumeMemArg())
+        0x3Au -> I32.Store8(consumeMemArg())
+        0x3Bu -> I32.Store16(consumeMemArg())
+        0x3Cu -> I64.Store8(consumeMemArg())
+        0x3Du -> I64.Store16(consumeMemArg())
+        0x3Eu -> I64.Store32(consumeMemArg())
 
         0x41u -> I32.Const(consumeSignedInt())
         0x42u -> I64.Const(consumeSignedLong())
@@ -228,13 +227,16 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode {
         0xC2u -> I64.Extend8S
         0xC3u -> I64.Extend16S
         0xC4u -> I64.Extend32S
-        0xC5u, 0xC6u, 0xC7u, 0xC8u, 0xC9u, 0xCAu, 0xCBu, 0xCCu, 0xCDu, 0xCEu, 0xCFu -> ReservedOpCode(codeInt)
+        0xC5u, 0xC6u, 0xC7u, 0xC8u, 0xC9u, 0xCAu, 0xCBu, 0xCCu, 0xCDu, 0xCEu, 0xCFu -> ReservedOpCode(code)
         0xD0u -> Ref.Null(heapType())
         0xD1u -> Ref.IsNull
         0xD2u -> Ref.Func(consumeInt())
         0xD3u -> Ref.Eq
         0xD4u -> Ref.AsNonNull
+        in 0xFB00u..0xFBFFu -> consumeGCOpCode(code)
+        in 0xFC00u..0xFFFFu -> consumeMultibyteOpCode(code.toLong())
 
+/*
         0xFBu -> {
             consumeGCOpCode(get().toUByte())
         }
@@ -242,7 +244,7 @@ fun CommonByteBuffer.consumeOpCode(code: UByte): OpCode {
         0xFCu -> {
             consumeMultibyteOpCode(getULEB128())
         }
-
+*/
         else -> throw UnsupportedOpsException(code, position())
     }
 }
@@ -255,9 +257,15 @@ private fun CommonByteBuffer.consumeBlock(): List<OpCode> {
 fun CommonByteBuffer.parseOpCodes(): List<OpCode> {
     val opCodes = mutableListOf<OpCode>()
     while (remaining() != 0) {
-        val opCode = get().toUByte()
-        if (opCode == Flow.Terminal.code) {
+        val byte = get().toUByte()
+        if (byte == Flow.Terminal.code) {
             break
+        }
+        val opCode = if (byte in 0xFCu..0xFFu) {
+            position(position() - 1)
+            getULEB128().toUInt()
+        } else {
+            byte.toUInt()
         }
 
         val op = consumeOpCode(opCode)

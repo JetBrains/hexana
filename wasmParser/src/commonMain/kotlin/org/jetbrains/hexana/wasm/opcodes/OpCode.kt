@@ -35,4 +35,4 @@ open class OpCodeWithValue<T : Any>(val value: T) : OpCode {
 }
 
 class ReservedOpCode(val code: UInt) : OpCodeWithValue<Unit>(Unit)
-class UnsupportedOpsException(val code: UByte, val position: Int):Exception("Unsupported opcode: ${code.toHexString()} @0x${position.toHexString()}")
+class UnsupportedOpsException(val code: UInt, val position: Int):Exception("Unsupported opcode: ${code.toHexString()} @0x${position.toHexString()}")
