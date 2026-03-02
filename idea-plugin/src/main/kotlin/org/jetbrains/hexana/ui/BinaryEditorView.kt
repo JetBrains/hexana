@@ -12,8 +12,10 @@ import com.intellij.ide.BrowserUtil
 import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
+import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.panel.Panel
 import org.jetbrains.hexana.ui.panel.WasmPanelFunctions
 import org.jetbrains.hexana.ui.panel.WasmPanelCustom
@@ -21,6 +23,8 @@ import org.jetbrains.hexana.ui.panel.WasmPanelData
 import org.jetbrains.hexana.ui.panel.WasmPanelExports
 import org.jetbrains.hexana.ui.panel.WasmPanelImports
 import org.jetbrains.hexana.ui.panel.WasmPanelWat
+import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelExports
+import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelImports
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -128,25 +132,37 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Custom") { WasmPanelCustom(this) },
                 Panel("Wat") { WasmPanelWat(this, state) },
             ) else {
-                arrayOf(
-                    Panel("Something is wrong :(") {
-                        Box {
-                            Row {
-                                Column {
-                                    Text("Hexana does not know how to parse this file  ")
-                                }
-                                Column {
-                                    Link("report an issue", onClick = {
-                                        BrowserUtil.browse("https://github.com/JetBrains/hexana/issues")
-                                    })
-                                }
-                            }
-                        }
-                    }
-                )
+                errorPanel(state)
+            }
+        }
+        is WasmComponentBinaryVirtualFileProvider -> {
+            if (canProvideWasmModule()) arrayOf(
+                Panel("Exports") { WasmComponentPanelExports(this, state) },
+                Panel("Imports") { WasmComponentPanelImports(this, state) },
+                Panel("Wat") { WasmPanelWat(this, state) },
+            ) else {
+                errorPanel(state)
             }
         }
 
         else -> emptyArray()
     }
 }
+
+private fun BinaryVirtualFileProvider.errorPanel(state: HexViewStateHolder): Array<Panel> = arrayOf(
+    Panel("Something is wrong :(") {
+        Box {
+            Row {
+                Column {
+                    Text("Hexana does not know how to parse this file  ")
+                }
+                Column {
+                    Link("report an issue", onClick = {
+                        BrowserUtil.browse("https://github.com/JetBrains/hexana/issues")
+                    })
+                }
+            }
+        }
+    },
+    Panel("Wat") { WasmPanelWat(this, state) },
+)

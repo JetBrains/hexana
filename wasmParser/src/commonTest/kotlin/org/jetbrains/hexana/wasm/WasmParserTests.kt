@@ -3,6 +3,14 @@ package org.jetbrains.hexana.wasm
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.hexana.tests.IgnoreJsTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
+import org.jetbrains.hexana.wasm.components.ComponentFunctionType
+import org.jetbrains.hexana.wasm.components.ComponentInstanceExpression
+import org.jetbrains.hexana.wasm.components.ComponentPrimitiveU32Type
+import org.jetbrains.hexana.wasm.components.ComponentPrimitiveValueType
+import org.jetbrains.hexana.wasm.components.CoreWasmComponent
+import org.jetbrains.hexana.wasm.components.ModuleInstanceCoreExpression
+import org.jetbrains.hexana.wasm.components.WasmComponent
+import org.jetbrains.hexana.wasm.components.WasmComponentTypesSection
 import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
@@ -12,6 +20,7 @@ import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 import org.jetbrains.hexana.wasm.sections.WasmOpenI32Limits
 import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
+import org.jetbrains.hexana.wasm.sections.consumeString
 import kotlin.test.Test
 import kotlin.test.Ignore
 import kotlin.test.assertContentEquals
@@ -102,7 +111,7 @@ class WasmParserTests {
         val wasmParseResult = WasmParser().parse(buffer)
 
         assertIs<WasmParseSuccess>(wasmParseResult)
-        val wasmModule = wasmParseResult.wasmModule
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
 
         assertTrue(wasmModule.customSections.isEmpty())
         assertEquals(2796, wasmModule.typesSection?.contentSize)
@@ -168,7 +177,7 @@ class WasmParserTests {
         )
 
 
-        with (wasmModule.importSection) {
+        with (wasmModule.importSection!!) {
             val importRecords = buffer.getImportRecords()
             assertContentEquals(expectedImports, importRecords.map { "${it.prefix}::${it.name}"})
         }
@@ -185,7 +194,7 @@ class WasmParserTests {
         val wasmParseResult = WasmParser().parse(buffer)
 
         assertIs<WasmParseSuccess>(wasmParseResult)
-        val wasmModule = wasmParseResult.wasmModule
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
 
 
         with (wasmModule.codeSection!!) {
@@ -199,7 +208,7 @@ class WasmParserTests {
         val wasmParseResult = WasmParser().parse(buffer)
 
         assertIs<WasmParseSuccess>(wasmParseResult)
-        val wasmModule = wasmParseResult.wasmModule
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
 
 
         with(wasmModule.importSection!!) {
@@ -1197,7 +1206,7 @@ class WasmParserTests {
         val wasmParseResult = WasmParser().parse(buffer)
 
         assertIs<WasmParseSuccess>(wasmParseResult)
-        val wasmModule = wasmParseResult.wasmModule
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
 
         with(wasmModule.globalSection) {
             this ?: error("Failed to parse global section")
@@ -1221,7 +1230,161 @@ class WasmParserTests {
         val buffer = resourceAsByteBuffer("component/add.component.wasm")
         val wasmParseResult = WasmParser().parse(buffer)
 
-        assertIs<WasmParseFailure>(wasmParseResult)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as WasmComponent
+        assertEquals(0, wasmModule.unresolvedSections.size)
+        assertEquals(9, wasmModule.sections.size)
+        assertEquals(1, wasmModule.customSections.size)
+        assertEquals("producers", wasmModule.customSections[0].name)
+        val coreInstanceExpressions = wasmModule.coreInstanceSection.flatMap {
+            with(it) {
+                buffer.parseCoreInstances()
+            }
+        }
+        assertEquals(1, coreInstanceExpressions.size)
+        assertEquals(0u, (coreInstanceExpressions[0] as ModuleInstanceCoreExpression).moduleIndex)
+        assertEquals(0, (coreInstanceExpressions[0] as ModuleInstanceCoreExpression).instantiateArgs.size)
+        val instanceExpressions = wasmModule.instanceSection.flatMap {
+            with(it) {
+                buffer.parseInstances()
+            }
+        }
+        assertEquals(1, instanceExpressions.size)
+        val componentInstanceExpression = instanceExpressions[0] as ComponentInstanceExpression
+        assertEquals(0u, componentInstanceExpression.index)
+        assertEquals(1, componentInstanceExpression.args.size)
+        val arg = componentInstanceExpression.args[0]
+        assertEquals("import-func-add", arg.name)
+        assertEquals(0u, arg.instanceIndex)
+
+        val typeSection = wasmModule.typesSection
+        assertNotNull(typeSection)
+        val types = with(wasmModule.typesSection!!) {
+            buffer.scanTypes()
+        }
+
+        assertEquals(1, types.size)
+        val type = types[0]
+        assertIs<ComponentFunctionType>(type)
+        assertEquals(2, type.params.size)
+        assertIs<ComponentPrimitiveValueType>(type.params[0].value)
+        assertIs<ComponentPrimitiveU32Type>((type.params[0].value as ComponentPrimitiveValueType).type)
+        assertEquals("x", type.params[0].label)
+        assertIs<ComponentPrimitiveValueType>(type.params[1].value)
+        assertIs<ComponentPrimitiveU32Type>((type.params[1].value as ComponentPrimitiveValueType).type)
+        assertEquals("y", type.params[1].label)
+        assertIs<ComponentPrimitiveValueType>(type.ret)
+        assertIs<ComponentPrimitiveU32Type>((type.ret as ComponentPrimitiveValueType).type)
+
+        val moduleSection = wasmModule.moduleSection
+        assertNotNull(moduleSection)
+
+        val componentSection = wasmModule.componentSection
+        assertNotNull(componentSection)
+
+        val aliasSection = wasmModule.aliasSection
+        assertNotNull(aliasSection)
+
+        val cannonSection = wasmModule.cannonSection
+        assertNotNull(cannonSection)
+
+        val valueSection = wasmModule.valueSection
+        assertEquals(0,valueSection.size)
+
+        val coreTypeSection = wasmModule.coreTypesSection
+        assertEquals(0, coreTypeSection.size)
+    }
+
+    @Test
+    fun `HX-1-Component-Wasm 1`() = runTest {
+        // https://github.com/JetBrains/hexana/issues/1
+        val buffer = resourceAsByteBuffer("component/auth.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as WasmComponent
+        assertEquals(0, wasmModule.unresolvedSections.size)
+        assertEquals(73, wasmModule.sections.size)
+        assertEquals(2, wasmModule.customSections.size)
+        assertEquals("component-name", wasmModule.customSections[0].name)
+        assertEquals("producers", wasmModule.customSections[1].name)
+    }
+
+    @Test
+    fun `HX-1-Component-Wasm 2`() = runTest {
+        val buffer = resourceAsByteBuffer("component/greeter.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as WasmComponent
+        assertEquals(0, wasmModule.unresolvedSections.size)
+        assertEquals(69, wasmModule.sections.size)
+        assertEquals(2, wasmModule.customSections.size)
+        assertEquals("component-name", wasmModule.customSections[0].name)
+        assertEquals("producers", wasmModule.customSections[1].name)
+    }
+
+    @Test
+    fun `HX-1-Component-Wasm greater_wasm`() = runTest {
+        val buffer = resourceAsByteBuffer("component/greeter.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as WasmComponent
+        assertEquals(0, wasmModule.unresolvedSections.size)
+        assertEquals(69, wasmModule.sections.size)
+        assertEquals(2, wasmModule.customSections.size)
+        assertEquals("component-name", wasmModule.customSections[0].name)
+        assertEquals("producers", wasmModule.customSections[1].name)
+    }
+
+    @Test
+    fun `HX-1-Component-Wasm http-gateway_wasm`() = runTest {
+        val buffer = resourceAsByteBuffer("component/http-gateway.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as WasmComponent
+        assertEquals(0, wasmModule.unresolvedSections.size)
+        assertEquals(131, wasmModule.sections.size)
+        assertEquals(2, wasmModule.customSections.size)
+        assertEquals("component-name", wasmModule.customSections[0].name)
+        assertEquals("producers", wasmModule.customSections[1].name)
+    }
+
+    @Test
+    fun `HX-1-Component-Wasm logger_wasm`() = runTest {
+        val buffer = resourceAsByteBuffer("component/logger.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as WasmComponent
+        assertEquals(0, wasmModule.unresolvedSections.size)
+        assertEquals(67, wasmModule.sections.size)
+        assertEquals(2, wasmModule.customSections.size)
+        assertEquals("component-name", wasmModule.customSections[0].name)
+        assertEquals("producers", wasmModule.customSections[1].name)
+    }
+
+    @Test
+    fun `HX-1-Component-Wasm composed_wasm`() = runTest {
+        val buffer = resourceAsByteBuffer("component/composed.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as WasmComponent
+        assertEquals(0, wasmModule.unresolvedSections.size)
+        assertEquals(41, wasmModule.sections.size)
+        assertEquals(2, wasmModule.customSections.size)
+        assertEquals("component-name", wasmModule.customSections[0].name)
+        assertEquals("producers", wasmModule.customSections[1].name)
+
+
+        val types = wasmModule.sections.filterIsInstance<WasmComponentTypesSection>().flatMap {
+            with(it) {
+                buffer.scanTypes()
+            }
+        }
     }
 
     /**
@@ -1235,7 +1398,7 @@ class WasmParserTests {
         val wasmParseResult = WasmParser().parse(buffer)
 
         assertIs<WasmParseSuccess>(wasmParseResult)
-        val wasmModule = wasmParseResult.wasmModule
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
 
 
         with(wasmModule.memorySection) {
@@ -1255,7 +1418,7 @@ class WasmParserTests {
         val wasmParseResult = WasmParser().parse(buffer)
 
         assertIs<WasmParseSuccess>(wasmParseResult)
-        val wasmModule = wasmParseResult.wasmModule
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
 
         with(wasmModule.importSection!!) {
             val importRecords = buffer.getImportRecords()
@@ -1276,7 +1439,7 @@ private suspend fun assertFunctions(resourcePath: String, expected: List<Functio
     val wasmParseResult = WasmParser().parse(buffer)
 
     assertIs<WasmParseSuccess>(wasmParseResult)
-    val wasmModule = wasmParseResult.wasmModule
+    val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
 
     val functions = with(wasmModule) {
         buffer.scanFunctions()

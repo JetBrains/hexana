@@ -42,7 +42,7 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaService
-import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
+import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.wat.LightWatFile
 import org.jetbrains.hexana.wat.WatFileset
 import org.jetbrains.hexana.wat.WatSyntaxHighlighter
@@ -59,7 +59,7 @@ import javax.swing.JPanel
 
 @Composable
 internal fun WasmPanelWat(
-    wasmBinaryProvider: WasmBinaryVirtualFileProvider,
+    wasmBinaryProvider: BinaryVirtualFileProvider,
     state: HexViewStateHolder,
     wasmViewModel: WasmViewModel = WasmViewModel(state, wasmBinaryProvider)
 ) {
@@ -189,7 +189,7 @@ internal fun WatEditorContainer(
 internal fun WatMultifileEditorContainer(
     hexViewState: HexViewStateHolder,
     state: WatConversionState.ShowMultifileEditor,
-    wasmBinaryProvider: WasmBinaryVirtualFileProvider,
+    wasmBinaryProvider: BinaryVirtualFileProvider,
 ) {
     val panelState by produceState<JComponent?>(
         initialValue = null,
@@ -290,7 +290,7 @@ const val useMultifileEditor = false
 
 internal class WasmViewModel(
     private val state: HexViewStateHolder,
-    private val wasmBinaryProvider: WasmBinaryVirtualFileProvider,
+    private val wasmBinaryProvider: BinaryVirtualFileProvider,
 ) : ViewModel() {
 
     internal val conversionState: StateFlow<WatConversionState?> = state.conversionStateFlow

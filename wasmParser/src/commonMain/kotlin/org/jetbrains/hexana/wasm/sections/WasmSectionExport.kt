@@ -30,21 +30,27 @@ class WasmSectionExport(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
         position(contentOffset)
         val records = mutableListOf<WasmExportRecordEntry>()
         consumeArray {
-            val offset = position()
-            val name = consumeString()
-            val externIndex = get()
-            val index = getULEB128().toUInt()
-            when (externIndex.toInt()) {
-                0 -> records.add(WasmFunctionExportRecordEntry(offset, sizeFromOffset(offset), name, index))
-                1 -> records.add(WasmTableExportRecordEntry(offset, sizeFromOffset(offset), name, index))
-                2 -> records.add(WasmMemoryExportRecordEntry(offset, sizeFromOffset(offset), name, index))
-                3 -> records.add(WasmGlobalExportRecordEntry(offset, sizeFromOffset(offset), name, index))
-                4 -> records.add(WasmTagExportRecordEntry(offset, sizeFromOffset(offset), name, index))
-                else -> records.add(WasmUnsupportedExportRecordEntry(offset, sizeFromOffset(offset), name, externIndex, index))
-            }
+            val entry = exportRecord()
+            records.add(entry)
         }
         return records
     }
+}
+
+fun CommonByteBuffer.exportRecord(): WasmExportRecordEntry {
+    val offset = position()
+    val name = consumeString()
+    val externIndex = get()
+    val index = getULEB128().toUInt()
+    val entry = when (externIndex.toInt()) {
+        0 -> WasmFunctionExportRecordEntry(offset, sizeFromOffset(offset), name, index)
+        1 -> WasmTableExportRecordEntry(offset, sizeFromOffset(offset), name, index)
+        2 -> WasmMemoryExportRecordEntry(offset, sizeFromOffset(offset), name, index)
+        3 -> WasmGlobalExportRecordEntry(offset, sizeFromOffset(offset), name, index)
+        4 -> WasmTagExportRecordEntry(offset, sizeFromOffset(offset), name, index)
+        else -> WasmUnsupportedExportRecordEntry(offset, sizeFromOffset(offset), name, externIndex, index)
+    }
+    return entry
 }
 
 sealed interface WasmExportRecordEntry: WasmRange {

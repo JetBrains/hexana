@@ -5,8 +5,8 @@ import org.jetbrains.hexana.wasm.WasmRange
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodeWithValue
-import org.jetbrains.hexana.wasm.opcodes.UnsupportedOpsException
 import org.jetbrains.hexana.wasm.opcodes.parseOpCodes
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser.valueType
 
 class WasmSectionCode(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) :
     WasmSection("Code", sectionSize, sectionOffset, contentSize, contentOffset) {

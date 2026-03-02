@@ -5,6 +5,7 @@ import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmRange
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.parseOpCodes
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser.referenceType
 
 class WasmSectionElement(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) :
     WasmSection("Elements", sectionSize, sectionOffset, contentSize, contentOffset) {

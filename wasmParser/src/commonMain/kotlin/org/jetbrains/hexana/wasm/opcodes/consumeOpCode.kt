@@ -9,8 +9,8 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes.I64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Local
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Ref
 import org.jetbrains.hexana.wasm.sections.consumeArray
-import org.jetbrains.hexana.wasm.sections.heapType
-import org.jetbrains.hexana.wasm.sections.valueType
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser.heapType
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser.valueType
 
 fun CommonByteBuffer.consumeOpCode(code: UInt): OpCode {
     return when (code) {
@@ -237,15 +237,6 @@ fun CommonByteBuffer.consumeOpCode(code: UInt): OpCode {
         in 0xFB00u..0xFBFFu -> consumeGCOpCode(code)
         in 0xFC00u..0xFFFFu -> consumeMultibyteOpCode(code.toLong())
 
-/*
-        0xFBu -> {
-            consumeGCOpCode(get().toUByte())
-        }
-
-        0xFCu -> {
-            consumeMultibyteOpCode(getULEB128())
-        }
-*/
         else -> throw UnsupportedOpsException(code, position())
     }
 }

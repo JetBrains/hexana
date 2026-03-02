@@ -29,4 +29,14 @@ private class JvmByteBuffer(val buffer: ByteBuffer) : CommonByteBuffer {
     override fun getDoubleLE(): Double {
         return buffer.order(ByteOrder.LITTLE_ENDIAN).getDouble()
     }
+
+    override fun limit(): Int {
+        return buffer.limit()
+    }
+
+    override fun slice(range: IntRange): CommonByteBuffer {
+        return buffer.slice(range.first, range.last).toCommonByteBuffer()
+    }
 }
+
+fun CommonByteBuffer.toByteBuffer(): ByteBuffer = (this as JvmByteBuffer).buffer

@@ -3,6 +3,9 @@ package org.jetbrains.hexana.wasm.sections
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmRange
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser.limits
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser.referenceType
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser.valueType
 
 class WasmSectionImport(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) :
     WasmSection("Imports", sectionSize, sectionOffset, contentSize, contentOffset) {
@@ -30,35 +33,43 @@ class WasmSectionImport(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
 
         val records = mutableListOf<WasmImportRecord>()
         consumeArray {
-            val offset = position()
-            val prefix = consumeString()
-            val name = consumeString()
-            val rawType = get()
-            val type = when (rawType) {
-                0x00.toByte() -> WasmTypeIndexExternalType(getULEB128())
-                0x01.toByte() -> {
-                    val refType = referenceType()
-                    val limits = limits()
-                    WasmTableExternalType(refType, limits)
-                }
-                0x02.toByte() -> WasmMemType(limits())
-                0x03.toByte() -> {
-                    WasmGlobalType(valueType(), get() != 0x00.toByte())
-                }
-                0x04.toByte() -> {
-                    get() // 0x00 prefix
-                    WasmTagType(WasmTypeIndexExternalType(getULEB128()))
-                }
-                else -> error("unknown import type: $rawType")
-            }
             records.add(
-                WasmImportRecord(offset, sizeFromOffset(offset), prefix, name, type)
+                importRecord()
             )
         }
 
         return records
     }
 
+}
+
+fun CommonByteBuffer.importRecord(): WasmImportRecord {
+    val offset = position()
+    val prefix = consumeString()
+    val name = consumeString()
+    val rawType = get()
+    val type = when (rawType) {
+        0x00.toByte() -> WasmTypeIndexExternalType(getULEB128())
+        0x01.toByte() -> {
+            val refType = referenceType()
+            val limits = limits()
+            WasmTableExternalType(refType, limits)
+        }
+
+        0x02.toByte() -> WasmMemType(limits())
+        0x03.toByte() -> {
+            WasmGlobalType(valueType(), get() != 0x00.toByte())
+        }
+
+        0x04.toByte() -> {
+            get() // 0x00 prefix
+            WasmTagType(WasmTypeIndexExternalType(getULEB128()))
+        }
+
+        else -> error("unknown import type: $rawType")
+    }
+    val element = WasmImportRecord(offset, sizeFromOffset(offset), prefix, name, type)
+    return element
 }
 
 sealed class WasmExternalType(val type: Byte)

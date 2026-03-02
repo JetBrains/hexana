@@ -56,4 +56,13 @@ private class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer 
         position(cursorPosition + 8)
         return res
     }
+
+    override fun limit(): Int {
+        return buffer.byteLength
+    }
+
+    override fun slice(range: IntRange): CommonByteBuffer {
+        return WebByteBuffer(buffer.slice(range.first, range.last))
+
+    }
 }

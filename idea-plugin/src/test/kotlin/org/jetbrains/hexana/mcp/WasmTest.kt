@@ -25,7 +25,7 @@ abstract class WasmTest: UsefulTestCase() {
         val bytes = wat2wasm(loadTestDataFile(section))
         val commonByteBuffer = bytes.toCommonByteBuffer()
         val wasmParseResult = WasmParser().parse(commonByteBuffer)
-        commonByteBuffer.body((wasmParseResult as WasmParseSuccess).wasmModule)
+        commonByteBuffer.body((wasmParseResult as WasmParseSuccess).wasmModule as? WasmModule)
 
     }
     protected fun getPathToTestDataFile(section: String): String {

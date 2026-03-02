@@ -1,9 +1,13 @@
 package org.jetbrains.hexana.providers
 
-import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
+import org.jetbrains.hexana.wasm.components.WasmComponent
+import org.jetbrains.hexana.wasm.components.WasmComponentExport
+import org.jetbrains.hexana.wasm.components.WasmComponentImport
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmDataRecord
 import org.jetbrains.hexana.wasm.sections.WasmExportRecordEntry
@@ -13,14 +17,68 @@ import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
 
 sealed interface BinaryProvider {
-    val bytes: ByteArray
+    val bytes: CommonByteBuffer
 }
 
-class GenericBinaryProvider(override val bytes: ByteArray) : BinaryProvider
-open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
-    private val buffer = bytes.toCommonByteBuffer()
-    val wasmModule = when (val parseResult = WasmParser().parse(buffer)) {
-        is WasmParseSuccess -> parseResult.wasmModule
+object WasmBinaryProviderSelector {
+    fun select(bytes: CommonByteBuffer): BinaryProviderType {
+        try {
+            val byteArray = ByteArray(8)
+            bytes.get(byteArray, 0, byteArray.size)
+            bytes.position(0)
+            if (byteArray[0] != 0x00.toByte() || byteArray[1] != 0x61.toByte() || byteArray[2] != 0x73.toByte() || byteArray[3] != 0x6d.toByte()) {
+                return BinaryProviderType.Generic
+            }
+            when(byteArray[4].toInt().and(0xFF) to byteArray[5].toInt().and(0xFF) ) {
+                0x01.toByte().toInt() to 0x00.toByte().toInt() -> return BinaryProviderType.Wasm
+                0x0d.toByte().toInt() to 0x00.toByte().toInt() -> return BinaryProviderType.WasmComponent
+                else -> return BinaryProviderType.Generic
+            }
+
+        } catch (e: Exception) {
+            return BinaryProviderType.Generic
+        }
+    }
+}
+
+sealed class BinaryProviderType {
+    object Wasm : BinaryProviderType()
+    object WasmComponent : BinaryProviderType()
+    object Generic : BinaryProviderType()
+}
+
+class GenericBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProvider
+open class WasmComponentBinaryProvider(override val bytes: CommonByteBuffer): BinaryProvider {
+    val wasmModule = when (val parseResult = WasmParser().parse(bytes)) {
+        is WasmParseSuccess -> parseResult.wasmModule as? WasmComponent
+        else -> null
+    }
+
+    fun canProvideWasmModule() = wasmModule != null
+    open val sourceLocationProvider: HexanaSourceLocationProvider = HexanaSourceLocationProvider.EMPTY
+
+    val imports: List<WasmComponentImport> by lazy {
+        val importSections = wasmModule?.importSection ?: return@lazy emptyList()
+        importSections.flatMap {
+            with(it) {
+                bytes.scan()
+            }
+        }
+    }
+
+    val exports: List<WasmComponentExport> by lazy {
+        val exportSections = wasmModule?.exportSection ?: return@lazy emptyList()
+        exportSections.flatMap {
+            with(it) {
+                bytes.scan()
+            }
+        }
+    }
+}
+
+open class WasmBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProvider {
+    val wasmModule = when (val parseResult = WasmParser().parse(bytes)) {
+        is WasmParseSuccess -> parseResult.wasmModule as? WasmModule
         else -> null
     }
 
@@ -31,21 +89,21 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
     val imports: List<WasmImportRecord> by lazy {
         val importSection = wasmModule?.importSection ?: return@lazy emptyList()
         with (importSection) {
-            buffer.getImportRecords()
+            bytes.getImportRecords()
         }
     }
 
     val exports: List<WasmExportRecordEntry> by lazy {
         val exportsSection = wasmModule?.exportSection ?: return@lazy emptyList()
         with (exportsSection) {
-            buffer.scan()
+            bytes.scan()
         }
     }
 
     val data: List<WasmDataRecord> by lazy {
         val dataSection = wasmModule?.dataSection ?: return@lazy emptyList()
         with (dataSection) {
-            buffer.scan()
+            bytes.scan()
         }
     }
 
@@ -54,7 +112,7 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
         with (wasmModule) {
             val customSection = getCustomSectionByName("name") ?: return@lazy null
             with (customSection) {
-                buffer.parseAsNameSection()
+                bytes.parseAsNameSection()
             }
         }
     }
@@ -62,7 +120,7 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
     val codeRecords: List<WasmCodeRecord> by lazy {
         val functionSection = wasmModule?.codeSection ?: return@lazy emptyList()
         with (functionSection) {
-            buffer.scan()
+            bytes.scan()
         }
     }
 
@@ -74,11 +132,11 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
         val typesSection = wasmModule.typesSection ?: return@lazy emptyList()
 
         val funs = with(functionSection) {
-             buffer.parseFunctions()
+             bytes.parseFunctions()
         }
 
         val types = with(typesSection) {
-            buffer.parseTypes()
+            bytes.parseTypes()
         }
 
         // TODO: Investigate when this can be a case and how this is better to be approached
@@ -105,7 +163,7 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
 
     fun getRecords(section: WasmSection): List<WasmNamedRange> {
         return try {
-            section.getRecordRanges(buffer)
+            section.getRecordRanges(bytes)
         } catch (_: Throwable) {
             // we throw exception on unknown op-codes
             emptyList()
@@ -117,7 +175,7 @@ open class WasmBinaryProvider(override val bytes: ByteArray) : BinaryProvider {
             return ByteArray(0)
         }
         return with (wasmModule) {
-            buffer.readContent(section, size)
+            bytes.readContent(section, size)
         }
     }
 }

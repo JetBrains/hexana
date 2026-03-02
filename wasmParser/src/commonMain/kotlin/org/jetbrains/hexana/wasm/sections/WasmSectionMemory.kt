@@ -3,6 +3,7 @@ package org.jetbrains.hexana.wasm.sections
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmRange
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser.limits
 
 class WasmSectionMemory(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) :
     WasmSection("Memory", sectionSize, sectionOffset, contentSize, contentOffset) {

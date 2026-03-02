@@ -2218,7 +2218,7 @@ private fun VirtualFile.contentsToCommonByteBuffer() = contentsToByteArray().toC
 
 private fun WasmParser.parseOrNull(buffer: CommonByteBuffer): WasmModule? {
     return when (val parseResult = parse(buffer)) {
-        is WasmParseSuccess -> parseResult.wasmModule
+        is WasmParseSuccess -> parseResult.wasmModule as? WasmModule
         else -> null
     }
 }

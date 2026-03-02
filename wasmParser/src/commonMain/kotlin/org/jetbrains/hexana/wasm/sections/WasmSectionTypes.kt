@@ -3,6 +3,9 @@ package org.jetbrains.hexana.wasm.sections
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmRange
+import org.jetbrains.hexana.wasm.components.WasmComponentCoreType
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser.recType
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser.subtype
 
 class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) :
     WasmSection("Types", sectionSize, sectionOffset, contentSize, contentOffset) {
@@ -43,7 +46,10 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
         return typeRecords
     }
 
-    private fun CommonByteBuffer.recType(): WasmTypeRecord {
+}
+
+object StandardTypesParser {
+    fun CommonByteBuffer.recType(): WasmTypeRecord {
         val subtype = mutableListOf<WasmTypeRecord>()
         val offset = position()
         consumeArray {
@@ -52,7 +58,8 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
         }
         return WasmRecursiveTypeRecord(offset, sizeFromOffset(offset), subtype)
     }
-    private fun CommonByteBuffer.subtype(offset: Int):WasmTypeRecord {
+
+    fun CommonByteBuffer.subtype(offset: Int):WasmTypeRecord {
         val subType = get()
         return when (subType) {
             0x4f.toByte(),
@@ -72,7 +79,7 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
         }
     }
 
-    private fun CommonByteBuffer.compType(offset: Int, superTypers: List<UInt>, isFinal: Boolean): WasmTypeRecord {
+    fun CommonByteBuffer.compType(offset: Int, superTypers: List<UInt>, isFinal: Boolean): WasmTypeRecord {
         return when (get()) {
             0x5e.toByte() -> arrayType(offset)
             0x5f.toByte() -> structType(offset, superTypers, isFinal)
@@ -125,77 +132,75 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
             else -> null
         }
     }
-}
+    fun CommonByteBuffer.referenceType(): WasmReferenceType {
+        return when (get()) {
+            0x63.toByte() -> {
+                WasmNullableReferenceType(heapType())
+            }
 
-internal fun CommonByteBuffer.referenceType(): WasmReferenceType {
-    return when (get()) {
-        0x63.toByte() -> {
-            WasmNullableReferenceType(heapType())
+            0x64.toByte() -> {
+                WasmNonNullableReferenceType(heapType())
+            }
+
+            else -> {
+                position(position() - 1)
+                WasmReferenceHeapType(heapType())
+            }
         }
+    }
 
-        0x64.toByte() -> {
-            WasmNonNullableReferenceType(heapType())
-        }
-
-        else -> {
-            position(position() - 1)
-            WasmReferenceHeapType(heapType())
+    /**
+     * 5.3.9 Limits
+     */
+    fun CommonByteBuffer.limits(): WasmLimits<*> {
+        val limitType = get()
+        return when (limitType) {
+            0x00.toByte() -> WasmOpenI32Limits(getULEB128().toInt())
+            0x01.toByte() -> WasmFixedI32Limits(getULEB128().toInt(), getULEB128().toInt())
+            0x04.toByte() -> WasmOpenI64Limits(getULEB128())
+            0x05.toByte() -> WasmFixedI64Limits(getULEB128(), getULEB128())
+            else -> error("unknown limits type")
         }
     }
 
-}
+    fun CommonByteBuffer.valueType(): WasmValueType<*> {
+        return when (get()) {
+            WasmF32Type.code ->  WasmF32Type
+            WasmF64Type.code ->  WasmF64Type
+            WasmI64Type.code -> WasmI64Type
+            WasmI32Type.code  -> WasmI32Type
+            WasmVecType.code -> WasmVecType
 
-/**
- * 5.3.9 Limits
- */
-internal fun CommonByteBuffer.limits(): WasmLimits<*> {
-    val limitType = get()
-    return when (limitType) {
-        0x00.toByte() -> WasmOpenI32Limits(getULEB128().toInt())
-        0x01.toByte() -> WasmFixedI32Limits(getULEB128().toInt(), getULEB128().toInt())
-        0x04.toByte() -> WasmOpenI64Limits(getULEB128())
-        0x05.toByte() -> WasmFixedI64Limits(getULEB128(), getULEB128())
-        else -> error("unknown limits type")
-    }
-}
-
-fun CommonByteBuffer.valueType(): WasmValueType<*> {
-    return when (get()) {
-        WasmF32Type.code ->  WasmF32Type
-        WasmF64Type.code ->  WasmF64Type
-        WasmI64Type.code -> WasmI64Type
-        WasmI32Type.code  -> WasmI32Type
-        WasmVecType.code -> WasmVecType
-
-        else -> {
-            position(position() - 1)
-            WasmRefType(referenceType())
+            else -> {
+                position(position() - 1)
+                WasmRefType(referenceType())
+            }
         }
     }
-}
 
-internal fun CommonByteBuffer.heapType(): WasmHeapType {
-    return when (get()) {
-        0x69.toByte() -> WasmExnRefHeapType
-        0x6a.toByte() -> WasmArrayRefHeapType
-        0x6b.toByte() -> WasmStructRefHeapType
-        0x6c.toByte() -> WasmI31RefHeapType
-        0x6d.toByte() -> WasmEqRefHeapType
-        0x6e.toByte() -> WasmAnyRefHeapType
-        0x6f.toByte() -> WasmExternRefHeapType
-        0x70.toByte() -> WasmFuncHeapType
-        0x71.toByte() -> WasmNoneHeapType
-        0x72.toByte() -> WasmNoExternRefHeapType
-        0x73.toByte() -> WasmNoFuncHeapType
-        0x74.toByte() -> WasmNoExnHeapType
-        else -> {
-            position(position() - 1)
-            WasmIndexHeapType(getULEB128())
+    fun CommonByteBuffer.heapType(): WasmHeapType {
+        return when (get()) {
+            0x69.toByte() -> WasmExnRefHeapType
+            0x6a.toByte() -> WasmArrayRefHeapType
+            0x6b.toByte() -> WasmStructRefHeapType
+            0x6c.toByte() -> WasmI31RefHeapType
+            0x6d.toByte() -> WasmEqRefHeapType
+            0x6e.toByte() -> WasmAnyRefHeapType
+            0x6f.toByte() -> WasmExternRefHeapType
+            0x70.toByte() -> WasmFuncHeapType
+            0x71.toByte() -> WasmNoneHeapType
+            0x72.toByte() -> WasmNoExternRefHeapType
+            0x73.toByte() -> WasmNoFuncHeapType
+            0x74.toByte() -> WasmNoExnHeapType
+            else -> {
+                position(position() - 1)
+                WasmIndexHeapType(getULEB128())
+            }
         }
     }
 }
 
-sealed interface WasmTypeRecord : WasmRange
+sealed interface WasmTypeRecord : WasmRange, WasmComponentCoreType
 
 data class WasmFieldType(val storageType: WasmValueType<*>, val isMutable: Boolean)
 

@@ -44,6 +44,8 @@ import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.HexanaService
+import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.toByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.HexanaSourceLocationProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -52,7 +54,6 @@ import org.jetbrains.hexana.wat.psi.getDefinedFunctionByIndex
 import org.jetbrains.jewel.foundation.modifier.onHover
 import org.jetbrains.jewel.ui.component.Text
 import java.awt.datatransfer.StringSelection
-import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.charset.CharsetDecoder
 import java.nio.charset.StandardCharsets
@@ -118,7 +119,7 @@ internal fun HexViewer(
         val separator = 4.dp
         val spacing = 8.dp
 
-        val rowCount = (buf.size + bytesPerRow - 1) / bytesPerRow
+        val rowCount = (buf.limit() + bytesPerRow - 1) / bytesPerRow
         val offsetWidth = 96.dp
 
         LaunchedEffect(state) {
@@ -256,9 +257,11 @@ internal fun HexViewer(
                                         horizontalArrangement = Arrangement.spacedBy(spacing),
                                     ) {
                                         val start = rowIndex * bytesPerRow
-                                        val end = min(start + bytesPerRow, buf.size)
+                                        val end = min(start + bytesPerRow, buf.limit())
 
-                                        buf.slice(start until end).forEachIndexed { byteIndex, byte ->
+                                        (start until end).forEach { byteIndex ->
+                                            buf.position(byteIndex)
+                                            val byte = buf.get()
                                             val byteText = (byte.toInt() and 0xFF).asHexString()
                                             val isUnderCursor = byteIndex == state.cursorPosition.lineOffset &&
                                                     rowIndex == state.cursorPosition.line
@@ -315,8 +318,9 @@ internal fun HexViewer(
                                     horizontalArrangement = Arrangement.Start
                                 ) {
                                     val start = rowIndex * bytesPerRow
-                                    val end = min(start + bytesPerRow, buf.size)
-                                    buf.slice(start until end).forEachIndexed { byteIndex, byte ->
+                                    val end = min(start + bytesPerRow, buf.limit())
+                                    (start until end).forEachIndexed { byteIndex, _ ->
+                                        buf.position(start + byteIndex)
                                         val isHover =
                                             byteIndex == state.hoverPosition.lineOffset && rowIndex == state.hoverPosition.line
                                         val isUnderCursor = byteIndex == state.cursorPosition.lineOffset &&
@@ -337,7 +341,7 @@ internal fun HexViewer(
                                             }
 
                                         val text = if (state.showAscii) {
-                                            byte.asASCII()
+                                            buf.get().asASCII()
                                         } else {
                                             getUtf8CharacterAtIndex(buf, start + byteIndex)
                                         }
@@ -389,7 +393,7 @@ internal fun HexViewer(
 }
 
 private fun getContextActions(
-    buf: ByteArray,
+    buf: CommonByteBuffer,
     state: HexViewStateHolder,
     binaryProvider: BinaryProvider,
 ): List<ContextMenuItem> {
@@ -483,7 +487,7 @@ fun Modifier.borderBottom(color: Color, width: Dp, verticalPadding: Dp): Modifie
     )
 }
 
-private fun selectedAsASCII(buf: ByteArray, state: HexViewStateHolder): String? {
+private fun selectedAsASCII(buf: CommonByteBuffer, state: HexViewStateHolder): String? {
     val sel = state.selection
     if (sel.start.line < 0 || sel.end.line < 0) return null
 
@@ -492,14 +496,15 @@ private fun selectedAsASCII(buf: ByteArray, state: HexViewStateHolder): String? 
     val startOffset = sel.start.line * bytesPerRow + sel.start.lineOffset
     val endOffset = sel.end.line * bytesPerRow + sel.end.lineOffset
 
-    if (startOffset < 0 || endOffset < 0 || startOffset >= buf.size) return null
+    if (startOffset < 0 || endOffset < 0 || startOffset >= buf.limit()) return null
     val last = min(endOffset, buf.lastIndex)
     if (last < startOffset) return null
 
-    return (startOffset..last).joinToString("") { buf[it].asASCII() ?: "." }
+    buf.position(startOffset)
+    return (startOffset..last).joinToString("") { buf.get().asASCII() ?: "." }
 }
 
-private fun selectAsKotlinList(buf: ByteArray, state: HexViewStateHolder): String? {
+private fun selectAsKotlinList(buf: CommonByteBuffer, state: HexViewStateHolder): String? {
     val sel = state.selection
     if (sel.start.line < 0 || sel.end.line < 0) return null
 
@@ -508,20 +513,26 @@ private fun selectAsKotlinList(buf: ByteArray, state: HexViewStateHolder): Strin
     val startOffset = sel.start.line * bytesPerRow + sel.start.lineOffset
     val endOffset = sel.end.line * bytesPerRow + sel.end.lineOffset
 
-    if (startOffset < 0 || endOffset < 0 || startOffset >= buf.size) return null
+    if (startOffset < 0 || endOffset < 0 || startOffset >= buf.limit()) return null
     val last = min(endOffset, buf.lastIndex)
     if (last < startOffset) return null
 
-    val contents = (startOffset..last).joinToString { "0x" + buf[it].toUByte().asHexString() + "u" }
+    buf.position(startOffset)
+    val contents = (startOffset..last).joinToString { "0x" + buf.get().toUByte().asHexString() + "u" }
     return "listOf(${contents})"
 }
 
 fun copySelection(
-    buf: ByteArray,
+    buf: CommonByteBuffer,
     state: HexViewStateHolder,
-    selectionBuilder: (ByteArray, HexViewStateHolder) -> String?
+    selectionBuilder: (CommonByteBuffer, HexViewStateHolder) -> String?
 ) {
-    val text = selectionBuilder(buf, state)
+    val position = buf.position()
+    val text =  try {
+        selectionBuilder(buf, state)
+    } finally {
+        buf.position(position)
+    }
     if (!text.isNullOrEmpty()) {
         CopyPasteManager.getInstance().setContents(StringSelection(text))
     }
@@ -545,41 +556,49 @@ fun openInWat(state: HexViewStateHolder, findElement: (file: PsiFile) -> PsiElem
 }
 
 
-fun getUtf8CharacterAtIndex(byteArray: ByteArray, index: Int): String? {
-    val firstByte = byteArray[index].toInt()
-    val length: Int = when {
-        (firstByte and 0b10000000) == 0b00000000 -> 1
-        (firstByte and 0b11100000) == 0b11000000 -> 2
-        (firstByte and 0b11110000) == 0b11100000 -> 3
-        (firstByte and 0b11111000) == 0b11110000 -> 4
-        else -> return null
-    }
-
-    if (index + length > byteArray.size) {
-        return null // Incomplete sequence
-    }
-
+fun getUtf8CharacterAtIndex(buf: CommonByteBuffer, index: Int): String? {
+    val bufferPosition = buf.position()
+    buf.position(index)
     try {
-        val out = CharBuffer.allocate(2)
-        // Max size is 1 char for 1-3 byte sequences, and 2 chars (surrogate pair)
-        // for 4-byte sequences (Code Points U+10000 to U+10FFFF).
-        val decoder: CharsetDecoder = StandardCharsets.UTF_8.newDecoder()
-        decoder.decode(ByteBuffer.wrap(byteArray, index, length), out, true)
-        decoder.flush(out)
-
-        if (out.position() == 1) { // don't show surrogate pairs
-            out.flip()
-            val char = out.get(0)
-            return when {
-                Character.isISOControl(char) -> null
-                Character.isDefined(char) -> char.toString()
-                else -> null
-            }
+        val firstByte = buf.get().toInt()
+        val length: Int = when {
+            (firstByte and 0b10000000) == 0b00000000 -> 1
+            (firstByte and 0b11100000) == 0b11000000 -> 2
+            (firstByte and 0b11110000) == 0b11100000 -> 3
+            (firstByte and 0b11111000) == 0b11110000 -> 4
+            else -> return null
         }
-    } catch (_: Exception) {
-        // Decoding failed
-        return null
-    }
 
-    return null
+        if (index + length > buf.limit()) {
+            return null // Incomplete sequence
+        }
+
+        try {
+            val out = CharBuffer.allocate(2)
+            // Max size is 1 char for 1-3 byte sequences, and 2 chars (surrogate pair)
+            // for 4-byte sequences (Code Points U+10000 to U+10FFFF).
+            val decoder: CharsetDecoder = StandardCharsets.UTF_8.newDecoder()
+            buf.position(index)
+            decoder.decode(buf.toByteBuffer().slice(index, length), out, true)
+            decoder.flush(out)
+
+            if (out.position() == 1) { // don't show surrogate pairs
+                out.flip()
+                val char = out.get(0)
+                return when {
+                    Character.isISOControl(char) -> null
+                    Character.isDefined(char) -> char.toString()
+                    else -> null
+                }
+            }
+        } catch (_: Exception) {
+            // Decoding failed
+            return null
+        }
+
+        return null
+
+    } finally {
+        buf.position(bufferPosition)
+    }
 }

@@ -9,6 +9,14 @@ interface CommonByteBuffer {
     fun hasRemaining(): Boolean
     fun getFloatLE(): Float
     fun getDoubleLE(): Double
+    fun limit(): Int
+    fun slice(range: IntRange): CommonByteBuffer
+
+    val lastIndex: Int
+        get() = limit() - 1
+
+    val indices: IntRange
+        get() = IntRange(0, lastIndex)
 
     fun getULEB128(): Long {
         var result = 0L
@@ -44,6 +52,32 @@ interface CommonByteBuffer {
         }
 
         return result
+    }
+
+    fun uint32(): UInt {
+        return getULEB128().also {
+            require(it <= UInt.MAX_VALUE.toLong()) { "Value exceeds UInt range" }
+        }.toUInt()
+    }
+
+    fun sint32(): Int {
+        return getSLEB128().also {
+            require(it <= Int.MAX_VALUE) { "Value exceeds Int range" }
+            require(it >= Int.MIN_VALUE) { "Value below Int range" }
+        }.toInt()
+    }
+
+    fun uint64(): ULong {
+        return getULEB128().also {
+            require(it.toULong() <= ULong.MAX_VALUE) { "Value exceeds ULong range" }
+        }.toULong()
+    }
+
+    fun sint64(): Long {
+        return getSLEB128().also {
+            require(it <= Long.MAX_VALUE) { "Value exceeds Long range" }
+            require(it >= Long.MIN_VALUE) { "Value below Long range" }
+        }
     }
 }
 
