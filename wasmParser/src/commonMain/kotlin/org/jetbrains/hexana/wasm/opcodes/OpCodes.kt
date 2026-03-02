@@ -116,6 +116,14 @@ object OpCodes {
         }
     }
 
+    object Memory {
+        class Grow(value: Long) : OpCodeWithValue<Long>(value) {
+            companion object {
+                const val code: UByte = 0x40u
+            }
+        }
+    }
+
     object Global {
         class Get(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {

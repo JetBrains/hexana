@@ -87,6 +87,7 @@ fun CommonByteBuffer.consumeOpCode(code: UInt): OpCode {
         0x3Du -> I64.Store16(consumeMemArg())
         0x3Eu -> I64.Store32(consumeMemArg())
 
+        0x40u -> OpCodes.Memory.Grow(getULEB128())
         0x41u -> I32.Const(consumeSignedInt())
         0x42u -> I64.Const(consumeSignedLong())
         0x43u -> F32.Const(consumeFloat())
