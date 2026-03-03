@@ -6,14 +6,17 @@ import com.intellij.openapi.editor.highlighter.HighlighterIterator
 import com.intellij.openapi.fileTypes.FileType
 import com.intellij.psi.PsiFile
 import com.intellij.psi.tree.IElementType
-import org.jetbrains.hexana.wit.psi.WitToken
+import org.jetbrains.hexana.wit.psi.WitElementTypes.CLOSE_BRACE
+import org.jetbrains.hexana.wit.psi.WitElementTypes.CLOSE_PAREN
+import org.jetbrains.hexana.wit.psi.WitElementTypes.OPEN_BRACE
+import org.jetbrains.hexana.wit.psi.WitElementTypes.OPEN_PAREN
 
 class WitBraceMatcher : BraceMatcher {
     override fun getBraceTokenGroupId(token: IElementType): Int {
-        if (token == WitToken.OPEN_PAREN || token == WitToken.CLOSE_PAREN) {
+        if (token == OPEN_PAREN || token == CLOSE_PAREN) {
             return 1
         }
-        if (token == WitToken.OPEN_BRACE || token == WitToken.CLOSE_BRACE) {
+        if (token == OPEN_BRACE || token == CLOSE_BRACE) {
             return 1
         }
         return BraceMatchingUtil.UNDEFINED_TOKEN_GROUP
@@ -24,7 +27,7 @@ class WitBraceMatcher : BraceMatcher {
         text: CharSequence,
         fileType: FileType
     ): Boolean {
-        return iterator.tokenType == WitToken.OPEN_PAREN || iterator.tokenType == WitToken.OPEN_BRACE
+        return iterator.tokenType == OPEN_PAREN || iterator.tokenType == OPEN_BRACE
     }
 
     override fun isRBraceToken(
@@ -32,7 +35,7 @@ class WitBraceMatcher : BraceMatcher {
         text: CharSequence,
         fileType: FileType
     ): Boolean {
-        return iterator.tokenType == WitToken.CLOSE_PAREN || iterator.tokenType == WitToken.CLOSE_BRACE
+        return iterator.tokenType == CLOSE_PAREN || iterator.tokenType == CLOSE_BRACE
     }
 
     override fun isPairBraces(
@@ -56,10 +59,10 @@ class WitBraceMatcher : BraceMatcher {
 
     override fun getOppositeBraceTokenType(token: IElementType): IElementType? {
         return when (token) {
-            WitToken.OPEN_PAREN -> WitToken.CLOSE_PAREN
-            WitToken.CLOSE_PAREN -> WitToken.OPEN_PAREN
-            WitToken.OPEN_BRACE -> WitToken.CLOSE_BRACE
-            WitToken.CLOSE_BRACE -> WitToken.OPEN_BRACE
+            OPEN_PAREN -> CLOSE_PAREN
+            CLOSE_PAREN -> OPEN_PAREN
+            OPEN_BRACE -> CLOSE_BRACE
+            CLOSE_BRACE -> OPEN_BRACE
             else -> null
         }
     }

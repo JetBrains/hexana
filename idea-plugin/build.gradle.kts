@@ -144,3 +144,12 @@ configurations.matching { it.name.endsWith("RuntimeClasspath") }.configureEach {
     exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-swing")
     exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-jdk8")
 }
+
+sourceSets {
+    main {
+        java {
+            srcDir("src/main/java")
+            srcDir("src/main/gen")
+        }
+    }
+}

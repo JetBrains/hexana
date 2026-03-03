@@ -30,13 +30,13 @@ public class WitParserDefinition  implements ParserDefinition {
 
     @Override
     public @NotNull TokenSet getWhitespaceTokens() {
-        return WitToken.WHITESPACES_SET;
+        return TokenSet.WHITE_SPACE;
     }
 
     @NotNull
     @Override
     public TokenSet getCommentTokens() {
-        return WitToken.COMMENTS_SET;
+        return WitElements.COMMENTS_SET;
     }
 
     @NotNull
