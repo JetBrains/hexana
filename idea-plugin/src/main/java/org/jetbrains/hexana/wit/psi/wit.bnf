@@ -64,7 +64,7 @@
     VARIANT = "variant"
     WORLD = "world"
     
-    IDENTIFIER="regexp:(%?)[[:jletterdigit:]_]+"
+    IDENTIFIER="regexp:(%?)[[:jletterdigit:]_][[:jletterdigit:]_-]*"
   ]
 }
 

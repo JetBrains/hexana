@@ -29,7 +29,7 @@ LINE_COMMENT="//".*
 BLOCK_COMMENT="/"\*([^*]|\*+[^*/])*(\*+"/")?
 NUMBER=-?(0|[1-9]([0-9]|_)*)
 SEMVER=(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?
-IDENTIFIER=(%?)[[:jletterdigit:]_]+
+IDENTIFIER=(%?)[[:jletterdigit:]_][[:jletterdigit:]_-]*
 
 %%
 <YYINITIAL> {
