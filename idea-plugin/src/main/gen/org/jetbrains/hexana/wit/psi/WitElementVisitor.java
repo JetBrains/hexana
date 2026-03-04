@@ -19,7 +19,7 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitEnumItems(@NotNull WitEnumItems o) {
+  public void visitEnumItem(@NotNull WitEnumItem o) {
     visitPsiElement(o);
   }
 
@@ -140,6 +140,10 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitResultList(@NotNull WitResultList o) {
+    visitPsiElement(o);
+  }
+
+  public void visitSemver(@NotNull WitSemver o) {
     visitPsiElement(o);
   }
 

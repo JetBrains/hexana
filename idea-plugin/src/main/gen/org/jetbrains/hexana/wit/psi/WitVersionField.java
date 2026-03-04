@@ -8,6 +8,6 @@ import com.intellij.psi.PsiElement;
 public interface WitVersionField extends PsiElement {
 
   @NotNull
-  PsiElement getSemver();
+  WitSemver getSemver();
 
 }

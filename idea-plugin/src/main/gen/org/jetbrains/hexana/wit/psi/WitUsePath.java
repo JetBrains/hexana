@@ -8,6 +8,6 @@ import com.intellij.psi.PsiElement;
 public interface WitUsePath extends PsiElement {
 
   @Nullable
-  PsiElement getSemver();
+  WitSemver getSemver();
 
 }

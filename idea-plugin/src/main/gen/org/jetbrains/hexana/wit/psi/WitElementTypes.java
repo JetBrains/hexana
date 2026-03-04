@@ -11,7 +11,7 @@ public interface WitElementTypes {
   IElementType DEPRECATED_GATE = new WitElementType("DEPRECATED_GATE");
   IElementType ENUM_CASE = new WitElementType("ENUM_CASE");
   IElementType ENUM_CASES = new WitElementType("ENUM_CASES");
-  IElementType ENUM_ITEMS = new WitElementType("ENUM_ITEMS");
+  IElementType ENUM_ITEM = new WitElementType("ENUM_ITEM");
   IElementType EXPORT_ITEM = new WitElementType("EXPORT_ITEM");
   IElementType EXTERN_TYPE = new WitElementType("EXTERN_TYPE");
   IElementType FEATURE_FIELD = new WitElementType("FEATURE_FIELD");
@@ -42,6 +42,7 @@ public interface WitElementTypes {
   IElementType RESOURCE_METHOD = new WitElementType("RESOURCE_METHOD");
   IElementType RESULT_ITEM = new WitElementType("RESULT_ITEM");
   IElementType RESULT_LIST = new WitElementType("RESULT_LIST");
+  IElementType SEMVER = new WitElementType("SEMVER");
   IElementType SINCE_GATE = new WitElementType("SINCE_GATE");
   IElementType STREAM_ITEM = new WitElementType("STREAM_ITEM");
   IElementType TOPLEVEL_USE_ITEM = new WitElementType("TOPLEVEL_USE_ITEM");
@@ -97,7 +98,6 @@ public interface WitElementTypes {
   IElementType RESTRICTED = new WitToken("restricted");
   IElementType RESULT = new WitToken("result");
   IElementType SEMI = new WitToken(";");
-  IElementType SEMVER = new WitToken("SEMVER");
   IElementType SLASH = new WitToken("/");
   IElementType STATIC = new WitToken("static");
   IElementType STREAM = new WitToken("stream");
@@ -121,8 +121,8 @@ public interface WitElementTypes {
       else if (type == ENUM_CASES) {
         return new WitEnumCasesImpl(node);
       }
-      else if (type == ENUM_ITEMS) {
-        return new WitEnumItemsImpl(node);
+      else if (type == ENUM_ITEM) {
+        return new WitEnumItemImpl(node);
       }
       else if (type == EXPORT_ITEM) {
         return new WitExportItemImpl(node);
@@ -213,6 +213,9 @@ public interface WitElementTypes {
       }
       else if (type == RESULT_LIST) {
         return new WitResultListImpl(node);
+      }
+      else if (type == SEMVER) {
+        return new WitSemverImpl(node);
       }
       else if (type == SINCE_GATE) {
         return new WitSinceGateImpl(node);

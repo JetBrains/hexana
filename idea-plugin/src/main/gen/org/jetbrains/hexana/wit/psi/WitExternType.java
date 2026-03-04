@@ -8,7 +8,7 @@ import com.intellij.psi.PsiElement;
 public interface WitExternType extends PsiElement {
 
   @NotNull
-  List<WitEnumItems> getEnumItemsList();
+  List<WitEnumItem> getEnumItemList();
 
   @NotNull
   List<WitFlagsItems> getFlagsItemsList();

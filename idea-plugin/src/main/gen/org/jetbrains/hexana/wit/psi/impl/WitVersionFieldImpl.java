@@ -29,8 +29,8 @@ public class WitVersionFieldImpl extends ASTWrapperPsiElement implements WitVers
 
   @Override
   @NotNull
-  public PsiElement getSemver() {
-    return findNotNullChildByType(SEMVER);
+  public WitSemver getSemver() {
+    return findNotNullChildByClass(WitSemver.class);
   }
 
 }

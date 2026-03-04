@@ -29,8 +29,8 @@ public class WitUsePathImpl extends ASTWrapperPsiElement implements WitUsePath {
 
   @Override
   @Nullable
-  public PsiElement getSemver() {
-    return findChildByType(SEMVER);
+  public WitSemver getSemver() {
+    return findChildByClass(WitSemver.class);
   }
 
 }

@@ -29,8 +29,8 @@ public class WitPackageNameImpl extends ASTWrapperPsiElement implements WitPacka
 
   @Override
   @Nullable
-  public PsiElement getSemver() {
-    return findChildByType(SEMVER);
+  public WitSemver getSemver() {
+    return findChildByClass(WitSemver.class);
   }
 
 }

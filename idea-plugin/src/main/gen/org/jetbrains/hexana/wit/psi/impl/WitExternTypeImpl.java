@@ -29,8 +29,8 @@ public class WitExternTypeImpl extends ASTWrapperPsiElement implements WitExtern
 
   @Override
   @NotNull
-  public List<WitEnumItems> getEnumItemsList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitEnumItems.class);
+  public List<WitEnumItem> getEnumItemList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitEnumItem.class);
   }
 
   @Override
