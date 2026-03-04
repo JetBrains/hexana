@@ -98,6 +98,7 @@
         <lang.syntaxHighlighter language="wit" implementationClass="org.jetbrains.hexana.wit.WitSyntaxHighlighter"/>
         <braceMatcher filetype="wit" implementationClass="org.jetbrains.hexana.wit.WitBraceMatcher"/>
         <lang.foldingBuilder language="wit" implementationClass="org.jetbrains.hexana.wit.WitFoldingBuilder"/>
+        <breadcrumbsInfoProvider implementation="org.jetbrains.hexana.wit.WitBreadcrumbsProvider"/>
     </extensions>
 
     <actions>
