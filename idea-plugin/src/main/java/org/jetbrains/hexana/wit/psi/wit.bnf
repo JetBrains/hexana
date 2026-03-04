@@ -144,15 +144,13 @@ private typedef-item ::= resource-item
 
 func-item ::= IDENTIFIER ':' func-type ';'
 
-func-type ::= ASYNC? FUNC param-list result-list
+func-type ::= ASYNC? FUNC param-list result-list?
 
-param-list ::= '(' named-type-list ')'
+param-list ::= '(' named-type-list? ')'
 
-result-list ::= ϵ
-              | '->' ty
+result-list ::= '->' ty
 
-named-type-list ::= ϵ
-                  | named-type ( ',' named-type )*
+named-type-list ::= named-type ( ',' named-type )*
 
 named-type ::= IDENTIFIER ':' ty
 
@@ -160,8 +158,7 @@ use-item ::= USE use-path '.' '{' use-names-list '}' ';'
 
 use-names-list ::= use-names-item (',' use-names-item)* ','?
 
-use-names-item ::= IDENTIFIER
-                 | IDENTIFIER 'as' IDENTIFIER
+use-names-item ::= IDENTIFIER 'as' IDENTIFIER | IDENTIFIER
 
 type-item ::= TYPE IDENTIFIER '=' ty ';'
 
@@ -179,8 +176,7 @@ variant-items ::= VARIANT IDENTIFIER '{' variant-cases '}'
 
 variant-cases ::= variant-case (',' variant-case)* ','?
 
-variant-case ::= IDENTIFIER
-               | IDENTIFIER '(' ty ')'
+variant-case ::= IDENTIFIER '(' ty ')' | IDENTIFIER
 
 enum-item ::= ENUM IDENTIFIER '{' enum-cases '}'
 

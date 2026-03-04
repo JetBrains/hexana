@@ -34,9 +34,9 @@ public class WitFuncTypeImpl extends ASTWrapperPsiElement implements WitFuncType
   }
 
   @Override
-  @NotNull
+  @Nullable
   public WitResultList getResultList() {
-    return findNotNullChildByClass(WitResultList.class);
+    return findChildByClass(WitResultList.class);
   }
 
 }

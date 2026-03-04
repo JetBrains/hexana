@@ -28,9 +28,9 @@ public class WitResultListImpl extends ASTWrapperPsiElement implements WitResult
   }
 
   @Override
-  @Nullable
+  @NotNull
   public WitTy getTy() {
-    return findChildByClass(WitTy.class);
+    return findNotNullChildByClass(WitTy.class);
   }
 
 }

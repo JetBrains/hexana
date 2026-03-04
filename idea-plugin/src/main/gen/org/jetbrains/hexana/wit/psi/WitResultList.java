@@ -7,7 +7,7 @@ import com.intellij.psi.PsiElement;
 
 public interface WitResultList extends PsiElement {
 
-  @Nullable
+  @NotNull
   WitTy getTy();
 
 }

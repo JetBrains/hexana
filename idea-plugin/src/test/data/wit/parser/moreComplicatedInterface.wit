@@ -1,0 +1,14 @@
+package wasi:filesystem;
+
+interface types {
+    use wasi:clocks/wall-clock.{datetime};
+
+    record stat {
+      ino: u64,
+      size: u64,
+      mtime: datetime,
+      // ...
+    }
+
+    stat-file: func(path: string) -> result<stat>;
+}

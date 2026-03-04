@@ -28,9 +28,9 @@ public class WitParamListImpl extends ASTWrapperPsiElement implements WitParamLi
   }
 
   @Override
-  @NotNull
+  @Nullable
   public WitNamedTypeList getNamedTypeList() {
-    return findNotNullChildByClass(WitNamedTypeList.class);
+    return findChildByClass(WitNamedTypeList.class);
   }
 
 }

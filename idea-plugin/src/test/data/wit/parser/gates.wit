@@ -1,0 +1,76 @@
+package local:demo;
+
+interface foo {
+    a: func();
+
+    @since(version = 0.2.1)
+    b: func();
+
+    @since(version = 0.2.2)
+    c: func();
+
+    @unstable(feature = fancier-foo)
+    d: func();
+
+    @since(version = 0.2.0)
+    @deprecated(version = 0.2.2)
+    e: func();
+}
+
+@since(version = 1.0.2)
+interface i {
+    foo: func();  // error: no gate
+
+    @since(version = 1.0.1)
+    bar: func();  // also error: weaker gate
+}
+
+
+@since(version = 0.1.0)
+interface calc {
+    @since(version = 0.1.0)
+    variant calc-error {
+      integer-overflow,
+      integer-underflow,
+      unexpected,
+    }
+
+    @since(version = 0.1.0)
+    add: func(x: s32, y: s32) -> result<s32, calc-error>;
+}
+
+@since(version = 0.1.0)
+interface calc2 {
+    @since(version = 0.1.0)
+    variant calc-error {
+      integer-overflow,
+      integer-underflow,
+      unexpected,
+    }
+
+    @since(version = 0.1.0)
+    add: func(x: s32, y: s32) -> result<s32, calc-error>;
+
+    /// By convention, feature flags should be prefixed with package name to reduce chance of collisions
+    ///
+    /// see: https://github.com/WebAssembly/WASI/blob/main/Contributing.md#filing-changes-to-existing-phase-3-proposals
+    @unstable(feature = fgates-calc-minus)
+    sub: func(x: s32, y: s32) -> result<s32, calc-error>;
+}
+
+
+@since(version = 0.1.0)
+interface calc3 {
+    @since(version = 0.1.0)
+    variant calc-error {
+      integer-overflow,
+      integer-underflow,
+      unexpected,
+    }
+
+    @since(version = 0.1.0)
+    add-one: func(x: s32) -> result<s32, calc-error>;
+
+    @since(version = 0.1.1)
+    add: func(x: s32, y: s32) -> result<s32, calc-error>;
+}

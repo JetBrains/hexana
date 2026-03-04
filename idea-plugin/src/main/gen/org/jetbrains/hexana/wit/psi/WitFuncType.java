@@ -10,7 +10,7 @@ public interface WitFuncType extends PsiElement {
   @NotNull
   WitParamList getParamList();
 
-  @NotNull
+  @Nullable
   WitResultList getResultList();
 
 }

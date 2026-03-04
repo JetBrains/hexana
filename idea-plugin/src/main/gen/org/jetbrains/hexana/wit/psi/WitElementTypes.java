@@ -107,7 +107,6 @@ public interface WitElementTypes {
   IElementType USE = new WitToken("use");
   IElementType VARIANT = new WitToken("variant");
   IElementType WORLD = new WitToken("world");
-  IElementType Ε = new WitToken("ϵ");
 
   class Factory {
     public static PsiElement createElement(ASTNode node) {

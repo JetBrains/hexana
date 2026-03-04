@@ -7,7 +7,7 @@ import com.intellij.psi.PsiElement;
 
 public interface WitParamList extends PsiElement {
 
-  @NotNull
+  @Nullable
   WitNamedTypeList getNamedTypeList();
 
 }

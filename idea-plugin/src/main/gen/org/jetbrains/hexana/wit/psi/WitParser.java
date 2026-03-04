@@ -284,7 +284,7 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // ASYNC? FUNC param-list result-list
+  // ASYNC? FUNC param-list result-list?
   public static boolean func_type(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "func_type")) return false;
     if (!nextTokenIs(b, "<func type>", ASYNC, FUNC)) return false;
@@ -293,7 +293,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     r = func_type_0(b, l + 1);
     r = r && consumeToken(b, FUNC);
     r = r && param_list(b, l + 1);
-    r = r && result_list(b, l + 1);
+    r = r && func_type_3(b, l + 1);
     exit_section_(b, l, m, r, false, null);
     return r;
   }
@@ -302,6 +302,13 @@ public class WitParser implements PsiParser, LightPsiParser {
   private static boolean func_type_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "func_type_0")) return false;
     consumeToken(b, ASYNC);
+    return true;
+  }
+
+  // result-list?
+  private static boolean func_type_3(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "func_type_3")) return false;
+    result_list(b, l + 1);
     return true;
   }
 
@@ -601,44 +608,32 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // ϵ
-  //                   | named-type ( ',' named-type )*
+  // named-type ( ',' named-type )*
   public static boolean named_type_list(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "named_type_list")) return false;
-    if (!nextTokenIs(b, "<named type list>", IDENTIFIER, Ε)) return false;
-    boolean r;
-    Marker m = enter_section_(b, l, _NONE_, NAMED_TYPE_LIST, "<named type list>");
-    r = consumeToken(b, Ε);
-    if (!r) r = named_type_list_1(b, l + 1);
-    exit_section_(b, l, m, r, false, null);
-    return r;
-  }
-
-  // named-type ( ',' named-type )*
-  private static boolean named_type_list_1(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "named_type_list_1")) return false;
+    if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = named_type(b, l + 1);
-    r = r && named_type_list_1_1(b, l + 1);
-    exit_section_(b, m, null, r);
+    r = r && named_type_list_1(b, l + 1);
+    exit_section_(b, m, NAMED_TYPE_LIST, r);
     return r;
   }
 
   // ( ',' named-type )*
-  private static boolean named_type_list_1_1(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "named_type_list_1_1")) return false;
+  private static boolean named_type_list_1(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "named_type_list_1")) return false;
     while (true) {
       int c = current_position_(b);
-      if (!named_type_list_1_1_0(b, l + 1)) break;
-      if (!empty_element_parsed_guard_(b, "named_type_list_1_1", c)) break;
+      if (!named_type_list_1_0(b, l + 1)) break;
+      if (!empty_element_parsed_guard_(b, "named_type_list_1", c)) break;
     }
     return true;
   }
 
   // ',' named-type
-  private static boolean named_type_list_1_1_0(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "named_type_list_1_1_0")) return false;
+  private static boolean named_type_list_1_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "named_type_list_1_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeToken(b, COMMA);
@@ -874,17 +869,24 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // '(' named-type-list ')'
+  // '(' named-type-list? ')'
   public static boolean param_list(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "param_list")) return false;
     if (!nextTokenIs(b, OPEN_PAREN)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeToken(b, OPEN_PAREN);
-    r = r && named_type_list(b, l + 1);
+    r = r && param_list_1(b, l + 1);
     r = r && consumeToken(b, CLOSE_PAREN);
     exit_section_(b, m, PARAM_LIST, r);
     return r;
+  }
+
+  // named-type-list?
+  private static boolean param_list_1(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "param_list_1")) return false;
+    named_type_list(b, l + 1);
+    return true;
   }
 
   /* ********************************************************** */
@@ -1091,27 +1093,15 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // ϵ
-  //               | '->' ty
+  // '->' ty
   public static boolean result_list(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "result_list")) return false;
-    if (!nextTokenIs(b, "<result list>", ARROW, Ε)) return false;
-    boolean r;
-    Marker m = enter_section_(b, l, _NONE_, RESULT_LIST, "<result list>");
-    r = consumeToken(b, Ε);
-    if (!r) r = result_list_1(b, l + 1);
-    exit_section_(b, l, m, r, false, null);
-    return r;
-  }
-
-  // '->' ty
-  private static boolean result_list_1(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "result_list_1")) return false;
+    if (!nextTokenIs(b, ARROW)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeToken(b, ARROW);
     r = r && ty(b, l + 1);
-    exit_section_(b, m, null, r);
+    exit_section_(b, m, RESULT_LIST, r);
     return r;
   }
 
@@ -1586,22 +1576,21 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // IDENTIFIER
-  //                  | IDENTIFIER 'as' IDENTIFIER
+  // IDENTIFIER 'as' IDENTIFIER | IDENTIFIER
   public static boolean use_names_item(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "use_names_item")) return false;
     if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
     Marker m = enter_section_(b);
-    r = consumeToken(b, IDENTIFIER);
-    if (!r) r = use_names_item_1(b, l + 1);
+    r = use_names_item_0(b, l + 1);
+    if (!r) r = consumeToken(b, IDENTIFIER);
     exit_section_(b, m, USE_NAMES_ITEM, r);
     return r;
   }
 
   // IDENTIFIER 'as' IDENTIFIER
-  private static boolean use_names_item_1(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "use_names_item_1")) return false;
+  private static boolean use_names_item_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "use_names_item_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeToken(b, IDENTIFIER);
@@ -1818,22 +1807,21 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // IDENTIFIER
-  //                | IDENTIFIER '(' ty ')'
+  // IDENTIFIER '(' ty ')' | IDENTIFIER
   public static boolean variant_case(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "variant_case")) return false;
     if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
     Marker m = enter_section_(b);
-    r = consumeToken(b, IDENTIFIER);
-    if (!r) r = variant_case_1(b, l + 1);
+    r = variant_case_0(b, l + 1);
+    if (!r) r = consumeToken(b, IDENTIFIER);
     exit_section_(b, m, VARIANT_CASE, r);
     return r;
   }
 
   // IDENTIFIER '(' ty ')'
-  private static boolean variant_case_1(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "variant_case_1")) return false;
+  private static boolean variant_case_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "variant_case_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, IDENTIFIER, OPEN_PAREN);
