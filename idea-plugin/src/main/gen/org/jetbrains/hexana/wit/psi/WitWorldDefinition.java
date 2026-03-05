@@ -5,7 +5,7 @@ import java.util.List;
 import org.jetbrains.annotations.*;
 import com.intellij.psi.PsiElement;
 
-public interface WitWorldDefinition extends PsiElement {
+public interface WitWorldDefinition extends WitPackageItem {
 
   @NotNull
   List<WitExportDefinition> getExportDefinitionList();

@@ -12,6 +12,7 @@ import org.jetbrains.hexana.wit.WitFileType;
 import org.jetbrains.hexana.wit.psi.WitElementTypes;
 import org.jetbrains.hexana.wit.psi.WitHandle;
 import org.jetbrains.hexana.wit.psi.WitPsiFile;
+import org.jetbrains.hexana.wit.psi.WitUsePath;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -27,3 +28,4 @@ public class WitHandleManipulator extends AbstractElementManipulator<WitHandle> 
         return (WitPsiFile) psiFileFactory.createFileFromText("dummy.wit", WitFileType.INSTANCE, text);
     }
 }
+

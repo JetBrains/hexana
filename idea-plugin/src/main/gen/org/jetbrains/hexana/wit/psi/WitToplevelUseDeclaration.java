@@ -5,7 +5,7 @@ import java.util.List;
 import org.jetbrains.annotations.*;
 import com.intellij.psi.PsiElement;
 
-public interface WitToplevelUseDeclaration extends PsiElement {
+public interface WitToplevelUseDeclaration extends WitPackageItem {
 
   @NotNull
   WitUsePath getUsePath();

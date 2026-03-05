@@ -31,6 +31,7 @@ public interface WitElementTypes {
   IElementType NESTED_PACKAGE_DEFINITION = new WitElementType("NESTED_PACKAGE_DEFINITION");
   IElementType OPTION_ITEM = new WitElementType("OPTION_ITEM");
   IElementType PACKAGE_DEFINITION = new WitElementType("PACKAGE_DEFINITION");
+  IElementType PACKAGE_ITEM = new WitElementType("PACKAGE_ITEM");
   IElementType PACKAGE_NAME = new WitElementType("PACKAGE_NAME");
   IElementType PARAM_LIST = new WitElementType("PARAM_LIST");
   IElementType RECORD_DEFINITION = new WitElementType("RECORD_DEFINITION");

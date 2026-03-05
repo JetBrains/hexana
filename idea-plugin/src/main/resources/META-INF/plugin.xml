@@ -102,6 +102,8 @@
         <highlightVisitor implementation="org.jetbrains.hexana.wit.WitSemanticKeywordHighlighter" order="first"/>
         <lang.elementManipulator forClass="org.jetbrains.hexana.wit.psi.WitHandle"
                                  implementationClass="org.jetbrains.hexana.wit.psi.impl.WitHandleManipulator"/>
+        <lang.elementManipulator forClass="org.jetbrains.hexana.wit.psi.WitUsePath"
+                                 implementationClass="org.jetbrains.hexana.wit.psi.impl.WitUsePathManipulator"/>
     </extensions>
 
     <actions>

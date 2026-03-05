@@ -75,7 +75,7 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitInterfaceDefinition(@NotNull WitInterfaceDefinition o) {
-    visitPsiElement(o);
+    visitPackageItem(o);
   }
 
   public void visitListDefinition(@NotNull WitListDefinition o) {
@@ -100,6 +100,12 @@ public class WitElementVisitor extends PsiElementVisitor {
 
   public void visitPackageDefinition(@NotNull WitPackageDefinition o) {
     visitPsiElement(o);
+  }
+
+  public void visitPackageItem(@NotNull WitPackageItem o) {
+    visitNavigatablePsiElement(o);
+    // visitPsiNamedElement(o);
+    // visitPsiNameIdentifierOwner(o);
   }
 
   public void visitPackageName(@NotNull WitPackageName o) {
@@ -147,7 +153,7 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitToplevelUseDeclaration(@NotNull WitToplevelUseDeclaration o) {
-    visitPsiElement(o);
+    visitPackageItem(o);
   }
 
   public void visitTupleDefinition(@NotNull WitTupleDefinition o) {
@@ -209,7 +215,7 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitWorldDefinition(@NotNull WitWorldDefinition o) {
-    visitPsiElement(o);
+    visitPackageItem(o);
   }
 
   public void visitNavigatablePsiElement(@NotNull NavigatablePsiElement o) {

@@ -68,9 +68,10 @@
 
   extends("resource-definition|variant-definition|record-definition|flags-definition|enum-definition|type-definition")=type-declaration
   extends("unstable-gate|since-gate|deprecated-gate")=gate-item
+  extends("toplevel-use-declaration|interface-definition|world-definition")=package-item
 }
 
-wit ::= (package-definition)? (package-items | nested-package-definition)*
+wit ::= (package-definition)? (package-item | nested-package-definition)*
 
 semver ::= NUMBER !<<white_space>> DOT !<<white_space>> NUMBER
      DOT !<<white_space>> NUMBER
@@ -79,9 +80,18 @@ semver ::= NUMBER !<<white_space>> DOT !<<white_space>> NUMBER
 
 package-definition ::= package-decl ';' { pin = 2 }
 
-nested-package-definition ::= package-decl '{' package-items* '}' { pin = 2 }
+nested-package-definition ::= package-decl '{' package-item* '}' { pin = 2 }
 
-private package-items ::= toplevel-use-declaration | interface-definition | world-definition
+package-item ::= toplevel-use-declaration | interface-definition | world-definition  {
+    methods=[
+        getName
+        getNameIdentifier
+        setName
+        getTextOffset
+    ]
+    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+    "com.intellij.psi.PsiNameIdentifierOwner"]
+}
 
 private gate ::= gate-item+
 gate-item ::= unstable-gate
@@ -104,7 +114,12 @@ private package-decl ::= PACKAGE package-name
 toplevel-use-declaration ::= USE use-path ('as' IDENTIFIER)? ';'
 
 use-path ::= ( IDENTIFIER !<<white_space>> ':' !<<white_space>> )+ IDENTIFIER ( !<<white_space>> '/' !<<white_space>> IDENTIFIER )+ (!<<white_space>> '@' !<<white_space>> semver)?
- | IDENTIFIER
+ | IDENTIFIER  {
+  mixin = "org.jetbrains.hexana.wit.psi.WitUsePathMixin"
+  methods=[
+    getIdentifier
+  ]
+}
 
 world-definition ::= gate? WORLD IDENTIFIER '{' world-items* '}'
 

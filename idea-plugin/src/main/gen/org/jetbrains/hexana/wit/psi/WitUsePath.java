@@ -10,4 +10,6 @@ public interface WitUsePath extends PsiElement {
   @Nullable
   WitSemver getSemver();
 
+  @Nullable PsiElement getIdentifier();
+
 }

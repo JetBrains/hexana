@@ -5,7 +5,7 @@ import java.util.List;
 import org.jetbrains.annotations.*;
 import com.intellij.psi.PsiElement;
 
-public interface WitInterfaceDefinition extends PsiElement {
+public interface WitInterfaceDefinition extends WitPackageItem {
 
   @NotNull
   List<WitFuncItem> getFuncItemList();

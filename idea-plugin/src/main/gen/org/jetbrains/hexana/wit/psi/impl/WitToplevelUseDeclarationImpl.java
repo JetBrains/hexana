@@ -8,15 +8,15 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementVisitor;
 import com.intellij.psi.util.PsiTreeUtil;
 import static org.jetbrains.hexana.wit.psi.WitElementTypes.*;
-import com.intellij.extapi.psi.ASTWrapperPsiElement;
 import org.jetbrains.hexana.wit.psi.*;
 
-public class WitToplevelUseDeclarationImpl extends ASTWrapperPsiElement implements WitToplevelUseDeclaration {
+public class WitToplevelUseDeclarationImpl extends WitPackageItemImpl implements WitToplevelUseDeclaration {
 
   public WitToplevelUseDeclarationImpl(@NotNull ASTNode node) {
     super(node);
   }
 
+  @Override
   public void accept(@NotNull WitElementVisitor visitor) {
     visitor.visitToplevelUseDeclaration(this);
   }

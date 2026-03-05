@@ -37,6 +37,7 @@ public class WitParser implements PsiParser, LightPsiParser {
 
   public static final TokenSet[] EXTENDS_SETS_ = new TokenSet[] {
     create_token_set_(DEPRECATED_GATE, GATE_ITEM, SINCE_GATE, UNSTABLE_GATE),
+    create_token_set_(INTERFACE_DEFINITION, PACKAGE_ITEM, TOPLEVEL_USE_DECLARATION, WORLD_DEFINITION),
     create_token_set_(ENUM_DEFINITION, FLAGS_DEFINITION, RECORD_DEFINITION, RESOURCE_DEFINITION,
       TYPE_DECLARATION, TYPE_DEFINITION, VARIANT_DEFINITION),
   };
@@ -667,7 +668,7 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // package-decl '{' package-items* '}'
+  // package-decl '{' package-item* '}'
   public static boolean nested_package_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "nested_package_definition")) return false;
     if (!nextTokenIs(b, PACKAGE)) return false;
@@ -682,12 +683,12 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r || p;
   }
 
-  // package-items*
+  // package-item*
   private static boolean nested_package_definition_2(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "nested_package_definition_2")) return false;
     while (true) {
       int c = current_position_(b);
-      if (!package_items(b, l + 1)) break;
+      if (!package_item(b, l + 1)) break;
       if (!empty_element_parsed_guard_(b, "nested_package_definition_2", c)) break;
     }
     return true;
@@ -735,12 +736,14 @@ public class WitParser implements PsiParser, LightPsiParser {
 
   /* ********************************************************** */
   // toplevel-use-declaration | interface-definition | world-definition
-  static boolean package_items(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "package_items")) return false;
+  public static boolean package_item(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "package_item")) return false;
     boolean r;
+    Marker m = enter_section_(b, l, _COLLAPSE_, PACKAGE_ITEM, "<package item>");
     r = toplevel_use_declaration(b, l + 1);
     if (!r) r = interface_definition(b, l + 1);
     if (!r) r = world_definition(b, l + 1);
+    exit_section_(b, l, m, r, false, null);
     return r;
   }
 
@@ -1928,7 +1931,7 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // (package-definition)? (package-items | nested-package-definition)*
+  // (package-definition)? (package-item | nested-package-definition)*
   static boolean wit(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "wit")) return false;
     boolean r;
@@ -1956,7 +1959,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // (package-items | nested-package-definition)*
+  // (package-item | nested-package-definition)*
   private static boolean wit_1(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "wit_1")) return false;
     while (true) {
@@ -1967,11 +1970,11 @@ public class WitParser implements PsiParser, LightPsiParser {
     return true;
   }
 
-  // package-items | nested-package-definition
+  // package-item | nested-package-definition
   private static boolean wit_1_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "wit_1_0")) return false;
     boolean r;
-    r = package_items(b, l + 1);
+    r = package_item(b, l + 1);
     if (!r) r = nested_package_definition(b, l + 1);
     return r;
   }
