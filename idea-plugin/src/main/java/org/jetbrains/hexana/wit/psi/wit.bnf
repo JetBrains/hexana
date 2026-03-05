@@ -143,7 +143,9 @@ include-declaration ::= INCLUDE use-path ';'
 
 include-names-list ::= include-names-item (',' include-names-item)*
 
-include-names-item ::= IDENTIFIER 'as' IDENTIFIER
+include-names-item ::= IDENTIFIER 'as' IDENTIFIER {
+    mixin="org.jetbrains.hexana.wit.psi.WitIncludeNamesItemMixin"
+}
 
 interface-definition ::= gate? INTERFACE IDENTIFIER '{' interface-items* '}'
 
@@ -185,7 +187,9 @@ use-declaration ::= USE use-path '.' '{' use-names-list '}' ';'
 
 use-names-list ::= use-names-item (',' use-names-item)* ','?
 
-use-names-item ::= IDENTIFIER 'as' IDENTIFIER | IDENTIFIER
+use-names-item ::= IDENTIFIER 'as' IDENTIFIER | IDENTIFIER {
+    mixin="org.jetbrains.hexana.wit.psi.WitUseNamesItemMixin"
+}
 
 type-definition ::= TYPE IDENTIFIER '=' type-usage ';'
 

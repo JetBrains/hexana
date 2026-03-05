@@ -24,17 +24,6 @@ open class WitUsePathMixin(node: ASTNode): WitPsiElement(node), ContributedRefer
 
 class WitPathReference(element: WitUsePath): PsiReferenceBase<WitUsePath>(element) {
     override fun resolve(): PsiElement? {
-        element.parents(withSelf = false)
-            .forEach {
-                if (it is WitNestedPackageDefinition) {
-                    it.packageItemList.singleOrNull { it.name == element.text }
-                        ?.let { return it }
-                }
-                else if (it is WitPsiFile) {
-                    it.children.filterIsInstance<WitPackageItem>().singleOrNull { it.name == element.text }
-                        ?.let { return it }
-                }
-            }
-       return null
+       return WitResolver.resolveWitPath(element, element.text)
     }
 }
