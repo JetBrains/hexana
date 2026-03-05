@@ -29,8 +29,8 @@ public class WitNestedPackageDefinitionImpl extends ASTWrapperPsiElement impleme
 
   @Override
   @NotNull
-  public List<WitInterfaceItem> getInterfaceItemList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitInterfaceItem.class);
+  public List<WitInterfaceDefinition> getInterfaceDefinitionList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitInterfaceDefinition.class);
   }
 
   @Override
@@ -41,14 +41,14 @@ public class WitNestedPackageDefinitionImpl extends ASTWrapperPsiElement impleme
 
   @Override
   @NotNull
-  public List<WitToplevelUseItem> getToplevelUseItemList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitToplevelUseItem.class);
+  public List<WitToplevelUseDeclaration> getToplevelUseDeclarationList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitToplevelUseDeclaration.class);
   }
 
   @Override
   @NotNull
-  public List<WitWorldItem> getWorldItemList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitWorldItem.class);
+  public List<WitWorldDefinition> getWorldDefinitionList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitWorldDefinition.class);
   }
 
 }

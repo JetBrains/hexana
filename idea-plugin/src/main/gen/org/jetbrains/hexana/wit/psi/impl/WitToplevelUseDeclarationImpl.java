@@ -11,14 +11,14 @@ import static org.jetbrains.hexana.wit.psi.WitElementTypes.*;
 import com.intellij.extapi.psi.ASTWrapperPsiElement;
 import org.jetbrains.hexana.wit.psi.*;
 
-public class WitVariantItemsImpl extends ASTWrapperPsiElement implements WitVariantItems {
+public class WitToplevelUseDeclarationImpl extends ASTWrapperPsiElement implements WitToplevelUseDeclaration {
 
-  public WitVariantItemsImpl(@NotNull ASTNode node) {
+  public WitToplevelUseDeclarationImpl(@NotNull ASTNode node) {
     super(node);
   }
 
   public void accept(@NotNull WitElementVisitor visitor) {
-    visitor.visitVariantItems(this);
+    visitor.visitToplevelUseDeclaration(this);
   }
 
   @Override
@@ -29,14 +29,14 @@ public class WitVariantItemsImpl extends ASTWrapperPsiElement implements WitVari
 
   @Override
   @NotNull
-  public WitVariantCases getVariantCases() {
-    return findNotNullChildByClass(WitVariantCases.class);
+  public WitUsePath getUsePath() {
+    return findNotNullChildByClass(WitUsePath.class);
   }
 
   @Override
-  @NotNull
+  @Nullable
   public PsiElement getIdentifier() {
-    return findNotNullChildByType(IDENTIFIER);
+    return findChildByType(IDENTIFIER);
   }
 
 }

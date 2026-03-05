@@ -8,15 +8,15 @@ import com.intellij.psi.PsiElement;
 public interface WitNestedPackageDefinition extends PsiElement {
 
   @NotNull
-  List<WitInterfaceItem> getInterfaceItemList();
+  List<WitInterfaceDefinition> getInterfaceDefinitionList();
 
   @NotNull
   WitPackageName getPackageName();
 
   @NotNull
-  List<WitToplevelUseItem> getToplevelUseItemList();
+  List<WitToplevelUseDeclaration> getToplevelUseDeclarationList();
 
   @NotNull
-  List<WitWorldItem> getWorldItemList();
+  List<WitWorldDefinition> getWorldDefinitionList();
 
 }

@@ -78,7 +78,7 @@ package-definition ::= package-decl ';' { pin = 2 }
 
 nested-package-definition ::= package-decl '{' package-items* '}' { pin = 2 }
 
-private package-items ::= toplevel-use-item | interface-item | world-item
+private package-items ::= toplevel-use-declaration | interface-definition | world-definition
 
 gate ::= gate-item*
 private gate-item ::= unstable-gate
@@ -98,49 +98,49 @@ package-name ::= (IDENTIFIER !<<white_space>> ':' !<<white_space>>)+ IDENTIFIER 
 
 private package-decl ::= PACKAGE package-name
 
-toplevel-use-item ::= USE use-path ('as' IDENTIFIER)? ';'
+toplevel-use-declaration ::= USE use-path ('as' IDENTIFIER)? ';'
 
 use-path ::= ( IDENTIFIER !<<white_space>> ':' !<<white_space>> )+ IDENTIFIER ( !<<white_space>> '/' !<<white_space>> IDENTIFIER )+ (!<<white_space>> '@' !<<white_space>> semver)?
  | IDENTIFIER
 
-world-item ::= gate WORLD IDENTIFIER '{' world-items* '}'
+world-definition ::= gate WORLD IDENTIFIER '{' world-items* '}'
 
-private world-items ::= gate world-definition
+private world-items ::= gate world-item-definition
 
-private world-definition ::= export-item
-                   | import-item
-                   | use-item
-                   | typedef-item
-                   | include-item
+private world-item-definition ::= export-definition
+                   | import-definition
+                   | use-declaration
+                   | type-declaration
+                   | include-declaration
 
-export-item ::= EXPORT IDENTIFIER ':' extern-type
+export-definition ::= EXPORT IDENTIFIER ':' extern-type
               | EXPORT use-path ';'
-import-item ::= IMPORT IDENTIFIER ':' extern-type
+import-definition ::= IMPORT IDENTIFIER ':' extern-type
               | IMPORT use-path ';'
 
 extern-type ::= func-type ';' | INTERFACE '{' interface-items* '}'
 
-include-item ::= INCLUDE use-path ';'
+include-declaration ::= INCLUDE use-path ';'
                | INCLUDE use-path 'with' '{' include-names-list '}'
 
 include-names-list ::= include-names-item (',' include-names-item)*
 
 include-names-item ::= IDENTIFIER 'as' IDENTIFIER
 
-interface-item ::= gate INTERFACE IDENTIFIER '{' interface-items* '}'
+interface-definition ::= gate INTERFACE IDENTIFIER '{' interface-items* '}'
 
-private interface-items ::= gate interface-definition
+private interface-items ::= gate interface-item-definition
 
-private interface-definition ::= typedef-item
-                       | use-item
+private interface-item-definition ::= type-definition
+                       | use-declaration
                        | func-item
 
-private typedef-item ::= resource-item
-               | variant-items
-               | record-item
-               | flags-items
-               | enum-item
-               | type-item
+private type-declaration ::= resource-definition
+               | variant-definition
+               | record-definition
+               | flags-definition
+               | enum-definition
+               | type-definition
 
 func-item ::= IDENTIFIER ':' func-type ';'
 
@@ -154,36 +154,36 @@ named-type-list ::= named-type ( ',' named-type )*
 
 named-type ::= IDENTIFIER ':' ty
 
-use-item ::= USE use-path '.' '{' use-names-list '}' ';'
+use-declaration ::= USE use-path '.' '{' use-names-list '}' ';'
 
 use-names-list ::= use-names-item (',' use-names-item)* ','?
 
 use-names-item ::= IDENTIFIER 'as' IDENTIFIER | IDENTIFIER
 
-type-item ::= TYPE IDENTIFIER '=' ty ';'
+type-definition ::= TYPE IDENTIFIER '=' ty ';'
 
-record-item ::= RECORD IDENTIFIER '{' record-fields '}'
+record-definition ::= RECORD IDENTIFIER '{' record-fields '}'
 
 record-fields ::= record-field (',' record-field)* ','?
 
 record-field ::= IDENTIFIER ':' ty
 
-flags-items ::= FLAGS IDENTIFIER '{' flags-fields '}'
+flags-definition ::= FLAGS IDENTIFIER '{' flags-fields '}'
 
 flags-fields ::= IDENTIFIER (',' IDENTIFIER)* ','?
 
-variant-items ::= VARIANT IDENTIFIER '{' variant-cases '}'
+variant-definition ::= VARIANT IDENTIFIER '{' variant-cases '}'
 
 variant-cases ::= variant-case (',' variant-case)* ','?
 
 variant-case ::= IDENTIFIER '(' ty ')' | IDENTIFIER
 
-enum-item ::= ENUM IDENTIFIER '{' enum-cases '}'
+enum-definition ::= ENUM IDENTIFIER '{' enum-cases '}'
 
 enum-case ::= IDENTIFIER
 enum-cases ::= enum-case (',' enum-case)* ','?
 
-resource-item ::= RESOURCE IDENTIFIER ';'
+resource-definition ::= RESOURCE IDENTIFIER ';'
                 | RESOURCE IDENTIFIER '{' resource-method* '}'
 
 resource-method ::= func-item

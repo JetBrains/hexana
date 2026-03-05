@@ -11,14 +11,14 @@ import static org.jetbrains.hexana.wit.psi.WitElementTypes.*;
 import com.intellij.extapi.psi.ASTWrapperPsiElement;
 import org.jetbrains.hexana.wit.psi.*;
 
-public class WitEnumItemImpl extends ASTWrapperPsiElement implements WitEnumItem {
+public class WitInterfaceDefinitionImpl extends ASTWrapperPsiElement implements WitInterfaceDefinition {
 
-  public WitEnumItemImpl(@NotNull ASTNode node) {
+  public WitInterfaceDefinitionImpl(@NotNull ASTNode node) {
     super(node);
   }
 
   public void accept(@NotNull WitElementVisitor visitor) {
-    visitor.visitEnumItem(this);
+    visitor.visitInterfaceDefinition(this);
   }
 
   @Override
@@ -29,8 +29,26 @@ public class WitEnumItemImpl extends ASTWrapperPsiElement implements WitEnumItem
 
   @Override
   @NotNull
-  public WitEnumCases getEnumCases() {
-    return findNotNullChildByClass(WitEnumCases.class);
+  public List<WitFuncItem> getFuncItemList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitFuncItem.class);
+  }
+
+  @Override
+  @NotNull
+  public List<WitGate> getGateList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitGate.class);
+  }
+
+  @Override
+  @NotNull
+  public List<WitTypeDefinition> getTypeDefinitionList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitTypeDefinition.class);
+  }
+
+  @Override
+  @NotNull
+  public List<WitUseDeclaration> getUseDeclarationList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitUseDeclaration.class);
   }
 
   @Override

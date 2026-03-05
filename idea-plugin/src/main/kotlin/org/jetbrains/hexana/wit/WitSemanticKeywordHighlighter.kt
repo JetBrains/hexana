@@ -33,7 +33,7 @@ class WitSemanticKeywordHighlighter : HighlightVisitor, DumbAware {
             .filterTypes {
                 it == WitElementTypes.TY ||
                 it == WitElementTypes.USE_NAMES_ITEM ||
-                it == WitElementTypes.TOPLEVEL_USE_ITEM ||
+                it == WitElementTypes.TOPLEVEL_USE_DECLARATION ||
                 it == WitElementTypes.INCLUDE_NAMES_ITEM ||
                 it == WitElementTypes.SINCE_GATE ||
                 it == WitElementTypes.UNSTABLE_GATE ||

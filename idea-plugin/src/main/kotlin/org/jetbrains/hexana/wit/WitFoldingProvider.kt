@@ -37,13 +37,13 @@ class WitFoldingBuilder : FoldingBuilder, DumbAware {
 
     companion object {
         private val COLLAPSIBLES = TokenSet.create(
-            WitElementTypes.INTERFACE_ITEM,
-            WitElementTypes.ENUM_ITEM,
-            WitElementTypes.WORLD_ITEM,
+            WitElementTypes.INTERFACE_DEFINITION,
+            WitElementTypes.ENUM_DEFINITION,
+            WitElementTypes.WORLD_DEFINITION,
             WitElementTypes.NESTED_PACKAGE_DEFINITION,
-            WitElementTypes.FLAGS_ITEMS,
-            WitElementTypes.RECORD_ITEM,
-            WitElementTypes.VARIANT_ITEMS,
+            WitElementTypes.FLAGS_DEFINITION,
+            WitElementTypes.RECORD_DEFINITION,
+            WitElementTypes.VARIANT_DEFINITION,
         )
 
         private fun collectDescriptorsRecursively(

@@ -106,35 +106,35 @@ public class WitParser implements PsiParser, LightPsiParser {
 
   /* ********************************************************** */
   // ENUM IDENTIFIER '{' enum-cases '}'
-  public static boolean enum_item(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "enum_item")) return false;
+  public static boolean enum_definition(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "enum_definition")) return false;
     if (!nextTokenIs(b, ENUM)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, ENUM, IDENTIFIER, OPEN_BRACE);
     r = r && enum_cases(b, l + 1);
     r = r && consumeToken(b, CLOSE_BRACE);
-    exit_section_(b, m, ENUM_ITEM, r);
+    exit_section_(b, m, ENUM_DEFINITION, r);
     return r;
   }
 
   /* ********************************************************** */
   // EXPORT IDENTIFIER ':' extern-type
   //               | EXPORT use-path ';'
-  public static boolean export_item(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "export_item")) return false;
+  public static boolean export_definition(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "export_definition")) return false;
     if (!nextTokenIs(b, EXPORT)) return false;
     boolean r;
     Marker m = enter_section_(b);
-    r = export_item_0(b, l + 1);
-    if (!r) r = export_item_1(b, l + 1);
-    exit_section_(b, m, EXPORT_ITEM, r);
+    r = export_definition_0(b, l + 1);
+    if (!r) r = export_definition_1(b, l + 1);
+    exit_section_(b, m, EXPORT_DEFINITION, r);
     return r;
   }
 
   // EXPORT IDENTIFIER ':' extern-type
-  private static boolean export_item_0(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "export_item_0")) return false;
+  private static boolean export_definition_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "export_definition_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, EXPORT, IDENTIFIER, COLON);
@@ -144,8 +144,8 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   // EXPORT use-path ';'
-  private static boolean export_item_1(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "export_item_1")) return false;
+  private static boolean export_definition_1(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "export_definition_1")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeToken(b, EXPORT);
@@ -214,6 +214,20 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
+  // FLAGS IDENTIFIER '{' flags-fields '}'
+  public static boolean flags_definition(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "flags_definition")) return false;
+    if (!nextTokenIs(b, FLAGS)) return false;
+    boolean r;
+    Marker m = enter_section_(b);
+    r = consumeTokens(b, 0, FLAGS, IDENTIFIER, OPEN_BRACE);
+    r = r && flags_fields(b, l + 1);
+    r = r && consumeToken(b, CLOSE_BRACE);
+    exit_section_(b, m, FLAGS_DEFINITION, r);
+    return r;
+  }
+
+  /* ********************************************************** */
   // IDENTIFIER (',' IDENTIFIER)* ','?
   public static boolean flags_fields(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "flags_fields")) return false;
@@ -253,20 +267,6 @@ public class WitParser implements PsiParser, LightPsiParser {
     if (!recursion_guard_(b, l, "flags_fields_2")) return false;
     consumeToken(b, COMMA);
     return true;
-  }
-
-  /* ********************************************************** */
-  // FLAGS IDENTIFIER '{' flags-fields '}'
-  public static boolean flags_items(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "flags_items")) return false;
-    if (!nextTokenIs(b, FLAGS)) return false;
-    boolean r;
-    Marker m = enter_section_(b);
-    r = consumeTokens(b, 0, FLAGS, IDENTIFIER, OPEN_BRACE);
-    r = r && flags_fields(b, l + 1);
-    r = r && consumeToken(b, CLOSE_BRACE);
-    exit_section_(b, m, FLAGS_ITEMS, r);
-    return r;
   }
 
   /* ********************************************************** */
@@ -380,20 +380,20 @@ public class WitParser implements PsiParser, LightPsiParser {
   /* ********************************************************** */
   // IMPORT IDENTIFIER ':' extern-type
   //               | IMPORT use-path ';'
-  public static boolean import_item(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "import_item")) return false;
+  public static boolean import_definition(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "import_definition")) return false;
     if (!nextTokenIs(b, IMPORT)) return false;
     boolean r;
     Marker m = enter_section_(b);
-    r = import_item_0(b, l + 1);
-    if (!r) r = import_item_1(b, l + 1);
-    exit_section_(b, m, IMPORT_ITEM, r);
+    r = import_definition_0(b, l + 1);
+    if (!r) r = import_definition_1(b, l + 1);
+    exit_section_(b, m, IMPORT_DEFINITION, r);
     return r;
   }
 
   // IMPORT IDENTIFIER ':' extern-type
-  private static boolean import_item_0(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "import_item_0")) return false;
+  private static boolean import_definition_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "import_definition_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, IMPORT, IDENTIFIER, COLON);
@@ -403,8 +403,8 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   // IMPORT use-path ';'
-  private static boolean import_item_1(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "import_item_1")) return false;
+  private static boolean import_definition_1(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "import_definition_1")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeToken(b, IMPORT);
@@ -417,20 +417,20 @@ public class WitParser implements PsiParser, LightPsiParser {
   /* ********************************************************** */
   // INCLUDE use-path ';'
   //                | INCLUDE use-path 'with' '{' include-names-list '}'
-  public static boolean include_item(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "include_item")) return false;
+  public static boolean include_declaration(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "include_declaration")) return false;
     if (!nextTokenIs(b, INCLUDE)) return false;
     boolean r;
     Marker m = enter_section_(b);
-    r = include_item_0(b, l + 1);
-    if (!r) r = include_item_1(b, l + 1);
-    exit_section_(b, m, INCLUDE_ITEM, r);
+    r = include_declaration_0(b, l + 1);
+    if (!r) r = include_declaration_1(b, l + 1);
+    exit_section_(b, m, INCLUDE_DECLARATION, r);
     return r;
   }
 
   // INCLUDE use-path ';'
-  private static boolean include_item_0(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "include_item_0")) return false;
+  private static boolean include_declaration_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "include_declaration_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeToken(b, INCLUDE);
@@ -441,8 +441,8 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   // INCLUDE use-path 'with' '{' include-names-list '}'
-  private static boolean include_item_1(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "include_item_1")) return false;
+  private static boolean include_declaration_1(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "include_declaration_1")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeToken(b, INCLUDE);
@@ -505,51 +505,51 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // typedef-item
-  //                        | use-item
-  //                        | func-item
-  static boolean interface_definition(PsiBuilder b, int l) {
+  // gate INTERFACE IDENTIFIER '{' interface-items* '}'
+  public static boolean interface_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "interface_definition")) return false;
     boolean r;
-    r = typedef_item(b, l + 1);
-    if (!r) r = use_item(b, l + 1);
-    if (!r) r = func_item(b, l + 1);
-    return r;
-  }
-
-  /* ********************************************************** */
-  // gate INTERFACE IDENTIFIER '{' interface-items* '}'
-  public static boolean interface_item(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "interface_item")) return false;
-    boolean r;
-    Marker m = enter_section_(b, l, _NONE_, INTERFACE_ITEM, "<interface item>");
+    Marker m = enter_section_(b, l, _NONE_, INTERFACE_DEFINITION, "<interface definition>");
     r = gate(b, l + 1);
     r = r && consumeTokens(b, 0, INTERFACE, IDENTIFIER, OPEN_BRACE);
-    r = r && interface_item_4(b, l + 1);
+    r = r && interface_definition_4(b, l + 1);
     r = r && consumeToken(b, CLOSE_BRACE);
     exit_section_(b, l, m, r, false, null);
     return r;
   }
 
   // interface-items*
-  private static boolean interface_item_4(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "interface_item_4")) return false;
+  private static boolean interface_definition_4(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "interface_definition_4")) return false;
     while (true) {
       int c = current_position_(b);
       if (!interface_items(b, l + 1)) break;
-      if (!empty_element_parsed_guard_(b, "interface_item_4", c)) break;
+      if (!empty_element_parsed_guard_(b, "interface_definition_4", c)) break;
     }
     return true;
   }
 
   /* ********************************************************** */
-  // gate interface-definition
+  // type-definition
+  //                        | use-declaration
+  //                        | func-item
+  static boolean interface_item_definition(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "interface_item_definition")) return false;
+    boolean r;
+    r = type_definition(b, l + 1);
+    if (!r) r = use_declaration(b, l + 1);
+    if (!r) r = func_item(b, l + 1);
+    return r;
+  }
+
+  /* ********************************************************** */
+  // gate interface-item-definition
   static boolean interface_items(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "interface_items")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = gate(b, l + 1);
-    r = r && interface_definition(b, l + 1);
+    r = r && interface_item_definition(b, l + 1);
     exit_section_(b, m, null, r);
     return r;
   }
@@ -710,13 +710,13 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // toplevel-use-item | interface-item | world-item
+  // toplevel-use-declaration | interface-definition | world-definition
   static boolean package_items(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "package_items")) return false;
     boolean r;
-    r = toplevel_use_item(b, l + 1);
-    if (!r) r = interface_item(b, l + 1);
-    if (!r) r = world_item(b, l + 1);
+    r = toplevel_use_declaration(b, l + 1);
+    if (!r) r = interface_definition(b, l + 1);
+    if (!r) r = world_definition(b, l + 1);
     return r;
   }
 
@@ -890,6 +890,20 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
+  // RECORD IDENTIFIER '{' record-fields '}'
+  public static boolean record_definition(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "record_definition")) return false;
+    if (!nextTokenIs(b, RECORD)) return false;
+    boolean r;
+    Marker m = enter_section_(b);
+    r = consumeTokens(b, 0, RECORD, IDENTIFIER, OPEN_BRACE);
+    r = r && record_fields(b, l + 1);
+    r = r && consumeToken(b, CLOSE_BRACE);
+    exit_section_(b, m, RECORD_DEFINITION, r);
+    return r;
+  }
+
+  /* ********************************************************** */
   // IDENTIFIER ':' ty
   public static boolean record_field(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "record_field")) return false;
@@ -946,52 +960,38 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // RECORD IDENTIFIER '{' record-fields '}'
-  public static boolean record_item(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "record_item")) return false;
-    if (!nextTokenIs(b, RECORD)) return false;
-    boolean r;
-    Marker m = enter_section_(b);
-    r = consumeTokens(b, 0, RECORD, IDENTIFIER, OPEN_BRACE);
-    r = r && record_fields(b, l + 1);
-    r = r && consumeToken(b, CLOSE_BRACE);
-    exit_section_(b, m, RECORD_ITEM, r);
-    return r;
-  }
-
-  /* ********************************************************** */
   // RESOURCE IDENTIFIER ';'
   //                 | RESOURCE IDENTIFIER '{' resource-method* '}'
-  public static boolean resource_item(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "resource_item")) return false;
+  public static boolean resource_definition(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "resource_definition")) return false;
     if (!nextTokenIs(b, RESOURCE)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = parseTokens(b, 0, RESOURCE, IDENTIFIER, SEMI);
-    if (!r) r = resource_item_1(b, l + 1);
-    exit_section_(b, m, RESOURCE_ITEM, r);
+    if (!r) r = resource_definition_1(b, l + 1);
+    exit_section_(b, m, RESOURCE_DEFINITION, r);
     return r;
   }
 
   // RESOURCE IDENTIFIER '{' resource-method* '}'
-  private static boolean resource_item_1(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "resource_item_1")) return false;
+  private static boolean resource_definition_1(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "resource_definition_1")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, RESOURCE, IDENTIFIER, OPEN_BRACE);
-    r = r && resource_item_1_3(b, l + 1);
+    r = r && resource_definition_1_3(b, l + 1);
     r = r && consumeToken(b, CLOSE_BRACE);
     exit_section_(b, m, null, r);
     return r;
   }
 
   // resource-method*
-  private static boolean resource_item_1_3(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "resource_item_1_3")) return false;
+  private static boolean resource_definition_1_3(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "resource_definition_1_3")) return false;
     while (true) {
       int c = current_position_(b);
       if (!resource_method(b, l + 1)) break;
-      if (!empty_element_parsed_guard_(b, "resource_item_1_3", c)) break;
+      if (!empty_element_parsed_guard_(b, "resource_definition_1_3", c)) break;
     }
     return true;
   }
@@ -1369,29 +1369,29 @@ public class WitParser implements PsiParser, LightPsiParser {
 
   /* ********************************************************** */
   // USE use-path ('as' IDENTIFIER)? ';'
-  public static boolean toplevel_use_item(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "toplevel_use_item")) return false;
+  public static boolean toplevel_use_declaration(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "toplevel_use_declaration")) return false;
     if (!nextTokenIs(b, USE)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeToken(b, USE);
     r = r && use_path(b, l + 1);
-    r = r && toplevel_use_item_2(b, l + 1);
+    r = r && toplevel_use_declaration_2(b, l + 1);
     r = r && consumeToken(b, SEMI);
-    exit_section_(b, m, TOPLEVEL_USE_ITEM, r);
+    exit_section_(b, m, TOPLEVEL_USE_DECLARATION, r);
     return r;
   }
 
   // ('as' IDENTIFIER)?
-  private static boolean toplevel_use_item_2(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "toplevel_use_item_2")) return false;
-    toplevel_use_item_2_0(b, l + 1);
+  private static boolean toplevel_use_declaration_2(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "toplevel_use_declaration_2")) return false;
+    toplevel_use_declaration_2_0(b, l + 1);
     return true;
   }
 
   // 'as' IDENTIFIER
-  private static boolean toplevel_use_item_2_0(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "toplevel_use_item_2_0")) return false;
+  private static boolean toplevel_use_declaration_2_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "toplevel_use_declaration_2_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeToken(b, "as");
@@ -1501,35 +1501,35 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
+  // resource-definition
+  //                | variant-definition
+  //                | record-definition
+  //                | flags-definition
+  //                | enum-definition
+  //                | type-definition
+  static boolean type_declaration(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "type_declaration")) return false;
+    boolean r;
+    r = resource_definition(b, l + 1);
+    if (!r) r = variant_definition(b, l + 1);
+    if (!r) r = record_definition(b, l + 1);
+    if (!r) r = flags_definition(b, l + 1);
+    if (!r) r = enum_definition(b, l + 1);
+    if (!r) r = type_definition(b, l + 1);
+    return r;
+  }
+
+  /* ********************************************************** */
   // TYPE IDENTIFIER '=' ty ';'
-  public static boolean type_item(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "type_item")) return false;
+  public static boolean type_definition(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "type_definition")) return false;
     if (!nextTokenIs(b, TYPE)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, TYPE, IDENTIFIER, EQUALS);
     r = r && ty(b, l + 1);
     r = r && consumeToken(b, SEMI);
-    exit_section_(b, m, TYPE_ITEM, r);
-    return r;
-  }
-
-  /* ********************************************************** */
-  // resource-item
-  //                | variant-items
-  //                | record-item
-  //                | flags-items
-  //                | enum-item
-  //                | type-item
-  static boolean typedef_item(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "typedef_item")) return false;
-    boolean r;
-    r = resource_item(b, l + 1);
-    if (!r) r = variant_items(b, l + 1);
-    if (!r) r = record_item(b, l + 1);
-    if (!r) r = flags_items(b, l + 1);
-    if (!r) r = enum_item(b, l + 1);
-    if (!r) r = type_item(b, l + 1);
+    exit_section_(b, m, TYPE_DEFINITION, r);
     return r;
   }
 
@@ -1561,8 +1561,8 @@ public class WitParser implements PsiParser, LightPsiParser {
 
   /* ********************************************************** */
   // USE use-path '.' '{' use-names-list '}' ';'
-  public static boolean use_item(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "use_item")) return false;
+  public static boolean use_declaration(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "use_declaration")) return false;
     if (!nextTokenIs(b, USE)) return false;
     boolean r;
     Marker m = enter_section_(b);
@@ -1571,7 +1571,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     r = r && consumeTokens(b, 0, DOT, OPEN_BRACE);
     r = r && use_names_list(b, l + 1);
     r = r && consumeTokens(b, 0, CLOSE_BRACE, SEMI);
-    exit_section_(b, m, USE_ITEM, r);
+    exit_section_(b, m, USE_DECLARATION, r);
     return r;
   }
 
@@ -1876,15 +1876,15 @@ public class WitParser implements PsiParser, LightPsiParser {
 
   /* ********************************************************** */
   // VARIANT IDENTIFIER '{' variant-cases '}'
-  public static boolean variant_items(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "variant_items")) return false;
+  public static boolean variant_definition(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "variant_definition")) return false;
     if (!nextTokenIs(b, VARIANT)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, VARIANT, IDENTIFIER, OPEN_BRACE);
     r = r && variant_cases(b, l + 1);
     r = r && consumeToken(b, CLOSE_BRACE);
-    exit_section_(b, m, VARIANT_ITEMS, r);
+    exit_section_(b, m, VARIANT_DEFINITION, r);
     return r;
   }
 
@@ -1951,55 +1951,55 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // export-item
-  //                    | import-item
-  //                    | use-item
-  //                    | typedef-item
-  //                    | include-item
-  static boolean world_definition(PsiBuilder b, int l) {
+  // gate WORLD IDENTIFIER '{' world-items* '}'
+  public static boolean world_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "world_definition")) return false;
     boolean r;
-    r = export_item(b, l + 1);
-    if (!r) r = import_item(b, l + 1);
-    if (!r) r = use_item(b, l + 1);
-    if (!r) r = typedef_item(b, l + 1);
-    if (!r) r = include_item(b, l + 1);
-    return r;
-  }
-
-  /* ********************************************************** */
-  // gate WORLD IDENTIFIER '{' world-items* '}'
-  public static boolean world_item(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "world_item")) return false;
-    boolean r;
-    Marker m = enter_section_(b, l, _NONE_, WORLD_ITEM, "<world item>");
+    Marker m = enter_section_(b, l, _NONE_, WORLD_DEFINITION, "<world definition>");
     r = gate(b, l + 1);
     r = r && consumeTokens(b, 0, WORLD, IDENTIFIER, OPEN_BRACE);
-    r = r && world_item_4(b, l + 1);
+    r = r && world_definition_4(b, l + 1);
     r = r && consumeToken(b, CLOSE_BRACE);
     exit_section_(b, l, m, r, false, null);
     return r;
   }
 
   // world-items*
-  private static boolean world_item_4(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "world_item_4")) return false;
+  private static boolean world_definition_4(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "world_definition_4")) return false;
     while (true) {
       int c = current_position_(b);
       if (!world_items(b, l + 1)) break;
-      if (!empty_element_parsed_guard_(b, "world_item_4", c)) break;
+      if (!empty_element_parsed_guard_(b, "world_definition_4", c)) break;
     }
     return true;
   }
 
   /* ********************************************************** */
-  // gate world-definition
+  // export-definition
+  //                    | import-definition
+  //                    | use-declaration
+  //                    | type-declaration
+  //                    | include-declaration
+  static boolean world_item_definition(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "world_item_definition")) return false;
+    boolean r;
+    r = export_definition(b, l + 1);
+    if (!r) r = import_definition(b, l + 1);
+    if (!r) r = use_declaration(b, l + 1);
+    if (!r) r = type_declaration(b, l + 1);
+    if (!r) r = include_declaration(b, l + 1);
+    return r;
+  }
+
+  /* ********************************************************** */
+  // gate world-item-definition
   static boolean world_items(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "world_items")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = gate(b, l + 1);
-    r = r && world_definition(b, l + 1);
+    r = r && world_item_definition(b, l + 1);
     exit_section_(b, m, null, r);
     return r;
   }

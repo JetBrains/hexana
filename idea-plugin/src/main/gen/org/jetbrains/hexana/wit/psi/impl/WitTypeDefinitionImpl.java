@@ -11,14 +11,14 @@ import static org.jetbrains.hexana.wit.psi.WitElementTypes.*;
 import com.intellij.extapi.psi.ASTWrapperPsiElement;
 import org.jetbrains.hexana.wit.psi.*;
 
-public class WitFlagsItemsImpl extends ASTWrapperPsiElement implements WitFlagsItems {
+public class WitTypeDefinitionImpl extends ASTWrapperPsiElement implements WitTypeDefinition {
 
-  public WitFlagsItemsImpl(@NotNull ASTNode node) {
+  public WitTypeDefinitionImpl(@NotNull ASTNode node) {
     super(node);
   }
 
   public void accept(@NotNull WitElementVisitor visitor) {
-    visitor.visitFlagsItems(this);
+    visitor.visitTypeDefinition(this);
   }
 
   @Override
@@ -29,8 +29,8 @@ public class WitFlagsItemsImpl extends ASTWrapperPsiElement implements WitFlagsI
 
   @Override
   @NotNull
-  public WitFlagsFields getFlagsFields() {
-    return findNotNullChildByClass(WitFlagsFields.class);
+  public WitTy getTy() {
+    return findNotNullChildByClass(WitTy.class);
   }
 
   @Override

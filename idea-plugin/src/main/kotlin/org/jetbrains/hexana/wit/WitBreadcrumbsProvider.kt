@@ -27,7 +27,7 @@ class WitBreadcrumbsProvider : BreadcrumbsProvider {
 
 private val LANGUAGES = arrayOf<Language>(WitLanguage)
 private val BREADCRUMBABLE = TokenSet.create(
-    WitElementTypes.INTERFACE_ITEM, WitElementTypes.RECORD_ITEM,
-    WitElementTypes.VARIANT_ITEMS, WitElementTypes.WORLD_ITEM,
-    WitElementTypes.FLAGS_ITEMS, WitElementTypes.ENUM_ITEM
+    WitElementTypes.INTERFACE_DEFINITION, WitElementTypes.RECORD_DEFINITION,
+    WitElementTypes.VARIANT_DEFINITION, WitElementTypes.WORLD_DEFINITION,
+    WitElementTypes.FLAGS_DEFINITION, WitElementTypes.ENUM_DEFINITION
 )

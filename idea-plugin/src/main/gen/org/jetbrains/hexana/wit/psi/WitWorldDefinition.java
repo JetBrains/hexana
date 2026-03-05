@@ -7,19 +7,40 @@ import com.intellij.psi.PsiElement;
 
 public interface WitWorldDefinition extends PsiElement {
 
-  @Nullable
-  WitExportItem getExportItem();
+  @NotNull
+  List<WitEnumDefinition> getEnumDefinitionList();
 
-  @Nullable
-  WitImportItem getImportItem();
+  @NotNull
+  List<WitExportDefinition> getExportDefinitionList();
 
-  @Nullable
-  WitIncludeItem getIncludeItem();
+  @NotNull
+  List<WitFlagsDefinition> getFlagsDefinitionList();
 
-  @Nullable
-  WitTypedefItem getTypedefItem();
+  @NotNull
+  List<WitGate> getGateList();
 
-  @Nullable
-  WitUseItem getUseItem();
+  @NotNull
+  List<WitImportDefinition> getImportDefinitionList();
+
+  @NotNull
+  List<WitIncludeDeclaration> getIncludeDeclarationList();
+
+  @NotNull
+  List<WitRecordDefinition> getRecordDefinitionList();
+
+  @NotNull
+  List<WitResourceDefinition> getResourceDefinitionList();
+
+  @NotNull
+  List<WitTypeDefinition> getTypeDefinitionList();
+
+  @NotNull
+  List<WitUseDeclaration> getUseDeclarationList();
+
+  @NotNull
+  List<WitVariantDefinition> getVariantDefinitionList();
+
+  @NotNull
+  PsiElement getIdentifier();
 
 }

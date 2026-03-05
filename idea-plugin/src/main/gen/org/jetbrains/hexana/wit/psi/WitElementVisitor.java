@@ -19,11 +19,11 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitEnumItem(@NotNull WitEnumItem o) {
+  public void visitEnumDefinition(@NotNull WitEnumDefinition o) {
     visitPsiElement(o);
   }
 
-  public void visitExportItem(@NotNull WitExportItem o) {
+  public void visitExportDefinition(@NotNull WitExportDefinition o) {
     visitPsiElement(o);
   }
 
@@ -35,11 +35,11 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitFlagsFields(@NotNull WitFlagsFields o) {
+  public void visitFlagsDefinition(@NotNull WitFlagsDefinition o) {
     visitPsiElement(o);
   }
 
-  public void visitFlagsItems(@NotNull WitFlagsItems o) {
+  public void visitFlagsFields(@NotNull WitFlagsFields o) {
     visitPsiElement(o);
   }
 
@@ -63,11 +63,11 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitImportItem(@NotNull WitImportItem o) {
+  public void visitImportDefinition(@NotNull WitImportDefinition o) {
     visitPsiElement(o);
   }
 
-  public void visitIncludeItem(@NotNull WitIncludeItem o) {
+  public void visitIncludeDeclaration(@NotNull WitIncludeDeclaration o) {
     visitPsiElement(o);
   }
 
@@ -79,7 +79,7 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitInterfaceItem(@NotNull WitInterfaceItem o) {
+  public void visitInterfaceDefinition(@NotNull WitInterfaceDefinition o) {
     visitPsiElement(o);
   }
 
@@ -115,6 +115,10 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
+  public void visitRecordDefinition(@NotNull WitRecordDefinition o) {
+    visitPsiElement(o);
+  }
+
   public void visitRecordField(@NotNull WitRecordField o) {
     visitPsiElement(o);
   }
@@ -123,11 +127,7 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitRecordItem(@NotNull WitRecordItem o) {
-    visitPsiElement(o);
-  }
-
-  public void visitResourceItem(@NotNull WitResourceItem o) {
+  public void visitResourceDefinition(@NotNull WitResourceDefinition o) {
     visitPsiElement(o);
   }
 
@@ -155,7 +155,7 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitToplevelUseItem(@NotNull WitToplevelUseItem o) {
+  public void visitToplevelUseDeclaration(@NotNull WitToplevelUseDeclaration o) {
     visitPsiElement(o);
   }
 
@@ -171,7 +171,7 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitTypeItem(@NotNull WitTypeItem o) {
+  public void visitTypeDefinition(@NotNull WitTypeDefinition o) {
     visitPsiElement(o);
   }
 
@@ -183,7 +183,7 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitUseItem(@NotNull WitUseItem o) {
+  public void visitUseDeclaration(@NotNull WitUseDeclaration o) {
     visitPsiElement(o);
   }
 
@@ -207,7 +207,7 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitVariantItems(@NotNull WitVariantItems o) {
+  public void visitVariantDefinition(@NotNull WitVariantDefinition o) {
     visitPsiElement(o);
   }
 
@@ -215,7 +215,7 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitWorldItem(@NotNull WitWorldItem o) {
+  public void visitWorldDefinition(@NotNull WitWorldDefinition o) {
     visitPsiElement(o);
   }
 

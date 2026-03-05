@@ -7,13 +7,19 @@ import com.intellij.psi.PsiElement;
 
 public interface WitInterfaceDefinition extends PsiElement {
 
-  @Nullable
-  WitFuncItem getFuncItem();
+  @NotNull
+  List<WitFuncItem> getFuncItemList();
 
-  @Nullable
-  WitTypedefItem getTypedefItem();
+  @NotNull
+  List<WitGate> getGateList();
 
-  @Nullable
-  WitUseItem getUseItem();
+  @NotNull
+  List<WitTypeDefinition> getTypeDefinitionList();
+
+  @NotNull
+  List<WitUseDeclaration> getUseDeclarationList();
+
+  @NotNull
+  PsiElement getIdentifier();
 
 }

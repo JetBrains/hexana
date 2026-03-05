@@ -11,22 +11,22 @@ public interface WitElementTypes {
   IElementType DEPRECATED_GATE = new WitElementType("DEPRECATED_GATE");
   IElementType ENUM_CASE = new WitElementType("ENUM_CASE");
   IElementType ENUM_CASES = new WitElementType("ENUM_CASES");
-  IElementType ENUM_ITEM = new WitElementType("ENUM_ITEM");
-  IElementType EXPORT_ITEM = new WitElementType("EXPORT_ITEM");
+  IElementType ENUM_DEFINITION = new WitElementType("ENUM_DEFINITION");
+  IElementType EXPORT_DEFINITION = new WitElementType("EXPORT_DEFINITION");
   IElementType EXTERN_TYPE = new WitElementType("EXTERN_TYPE");
   IElementType FEATURE_FIELD = new WitElementType("FEATURE_FIELD");
+  IElementType FLAGS_DEFINITION = new WitElementType("FLAGS_DEFINITION");
   IElementType FLAGS_FIELDS = new WitElementType("FLAGS_FIELDS");
-  IElementType FLAGS_ITEMS = new WitElementType("FLAGS_ITEMS");
   IElementType FUNC_ITEM = new WitElementType("FUNC_ITEM");
   IElementType FUNC_TYPE = new WitElementType("FUNC_TYPE");
   IElementType FUTURE_ITEM = new WitElementType("FUTURE_ITEM");
   IElementType GATE = new WitElementType("GATE");
   IElementType HANDLE = new WitElementType("HANDLE");
-  IElementType IMPORT_ITEM = new WitElementType("IMPORT_ITEM");
-  IElementType INCLUDE_ITEM = new WitElementType("INCLUDE_ITEM");
+  IElementType IMPORT_DEFINITION = new WitElementType("IMPORT_DEFINITION");
+  IElementType INCLUDE_DECLARATION = new WitElementType("INCLUDE_DECLARATION");
   IElementType INCLUDE_NAMES_ITEM = new WitElementType("INCLUDE_NAMES_ITEM");
   IElementType INCLUDE_NAMES_LIST = new WitElementType("INCLUDE_NAMES_LIST");
-  IElementType INTERFACE_ITEM = new WitElementType("INTERFACE_ITEM");
+  IElementType INTERFACE_DEFINITION = new WitElementType("INTERFACE_DEFINITION");
   IElementType LIST_DEFINITION = new WitElementType("LIST_DEFINITION");
   IElementType NAMED_TYPE = new WitElementType("NAMED_TYPE");
   IElementType NAMED_TYPE_LIST = new WitElementType("NAMED_TYPE_LIST");
@@ -35,32 +35,32 @@ public interface WitElementTypes {
   IElementType PACKAGE_DEFINITION = new WitElementType("PACKAGE_DEFINITION");
   IElementType PACKAGE_NAME = new WitElementType("PACKAGE_NAME");
   IElementType PARAM_LIST = new WitElementType("PARAM_LIST");
+  IElementType RECORD_DEFINITION = new WitElementType("RECORD_DEFINITION");
   IElementType RECORD_FIELD = new WitElementType("RECORD_FIELD");
   IElementType RECORD_FIELDS = new WitElementType("RECORD_FIELDS");
-  IElementType RECORD_ITEM = new WitElementType("RECORD_ITEM");
-  IElementType RESOURCE_ITEM = new WitElementType("RESOURCE_ITEM");
+  IElementType RESOURCE_DEFINITION = new WitElementType("RESOURCE_DEFINITION");
   IElementType RESOURCE_METHOD = new WitElementType("RESOURCE_METHOD");
   IElementType RESULT_ITEM = new WitElementType("RESULT_ITEM");
   IElementType RESULT_LIST = new WitElementType("RESULT_LIST");
   IElementType SEMVER = new WitElementType("SEMVER");
   IElementType SINCE_GATE = new WitElementType("SINCE_GATE");
   IElementType STREAM_ITEM = new WitElementType("STREAM_ITEM");
-  IElementType TOPLEVEL_USE_ITEM = new WitElementType("TOPLEVEL_USE_ITEM");
+  IElementType TOPLEVEL_USE_DECLARATION = new WitElementType("TOPLEVEL_USE_DECLARATION");
   IElementType TUPLE_DEFINITION = new WitElementType("TUPLE_DEFINITION");
   IElementType TUPLE_LIST = new WitElementType("TUPLE_LIST");
   IElementType TY = new WitElementType("TY");
-  IElementType TYPE_ITEM = new WitElementType("TYPE_ITEM");
+  IElementType TYPE_DEFINITION = new WitElementType("TYPE_DEFINITION");
   IElementType UINT = new WitElementType("UINT");
   IElementType UNSTABLE_GATE = new WitElementType("UNSTABLE_GATE");
-  IElementType USE_ITEM = new WitElementType("USE_ITEM");
+  IElementType USE_DECLARATION = new WitElementType("USE_DECLARATION");
   IElementType USE_NAMES_ITEM = new WitElementType("USE_NAMES_ITEM");
   IElementType USE_NAMES_LIST = new WitElementType("USE_NAMES_LIST");
   IElementType USE_PATH = new WitElementType("USE_PATH");
   IElementType VARIANT_CASE = new WitElementType("VARIANT_CASE");
   IElementType VARIANT_CASES = new WitElementType("VARIANT_CASES");
-  IElementType VARIANT_ITEMS = new WitElementType("VARIANT_ITEMS");
+  IElementType VARIANT_DEFINITION = new WitElementType("VARIANT_DEFINITION");
   IElementType VERSION_FIELD = new WitElementType("VERSION_FIELD");
-  IElementType WORLD_ITEM = new WitElementType("WORLD_ITEM");
+  IElementType WORLD_DEFINITION = new WitElementType("WORLD_DEFINITION");
 
   IElementType ARROW = new WitToken("->");
   IElementType ASYNC = new WitToken("async");
@@ -120,11 +120,11 @@ public interface WitElementTypes {
       else if (type == ENUM_CASES) {
         return new WitEnumCasesImpl(node);
       }
-      else if (type == ENUM_ITEM) {
-        return new WitEnumItemImpl(node);
+      else if (type == ENUM_DEFINITION) {
+        return new WitEnumDefinitionImpl(node);
       }
-      else if (type == EXPORT_ITEM) {
-        return new WitExportItemImpl(node);
+      else if (type == EXPORT_DEFINITION) {
+        return new WitExportDefinitionImpl(node);
       }
       else if (type == EXTERN_TYPE) {
         return new WitExternTypeImpl(node);
@@ -132,11 +132,11 @@ public interface WitElementTypes {
       else if (type == FEATURE_FIELD) {
         return new WitFeatureFieldImpl(node);
       }
+      else if (type == FLAGS_DEFINITION) {
+        return new WitFlagsDefinitionImpl(node);
+      }
       else if (type == FLAGS_FIELDS) {
         return new WitFlagsFieldsImpl(node);
-      }
-      else if (type == FLAGS_ITEMS) {
-        return new WitFlagsItemsImpl(node);
       }
       else if (type == FUNC_ITEM) {
         return new WitFuncItemImpl(node);
@@ -153,11 +153,11 @@ public interface WitElementTypes {
       else if (type == HANDLE) {
         return new WitHandleImpl(node);
       }
-      else if (type == IMPORT_ITEM) {
-        return new WitImportItemImpl(node);
+      else if (type == IMPORT_DEFINITION) {
+        return new WitImportDefinitionImpl(node);
       }
-      else if (type == INCLUDE_ITEM) {
-        return new WitIncludeItemImpl(node);
+      else if (type == INCLUDE_DECLARATION) {
+        return new WitIncludeDeclarationImpl(node);
       }
       else if (type == INCLUDE_NAMES_ITEM) {
         return new WitIncludeNamesItemImpl(node);
@@ -165,8 +165,8 @@ public interface WitElementTypes {
       else if (type == INCLUDE_NAMES_LIST) {
         return new WitIncludeNamesListImpl(node);
       }
-      else if (type == INTERFACE_ITEM) {
-        return new WitInterfaceItemImpl(node);
+      else if (type == INTERFACE_DEFINITION) {
+        return new WitInterfaceDefinitionImpl(node);
       }
       else if (type == LIST_DEFINITION) {
         return new WitListDefinitionImpl(node);
@@ -192,17 +192,17 @@ public interface WitElementTypes {
       else if (type == PARAM_LIST) {
         return new WitParamListImpl(node);
       }
+      else if (type == RECORD_DEFINITION) {
+        return new WitRecordDefinitionImpl(node);
+      }
       else if (type == RECORD_FIELD) {
         return new WitRecordFieldImpl(node);
       }
       else if (type == RECORD_FIELDS) {
         return new WitRecordFieldsImpl(node);
       }
-      else if (type == RECORD_ITEM) {
-        return new WitRecordItemImpl(node);
-      }
-      else if (type == RESOURCE_ITEM) {
-        return new WitResourceItemImpl(node);
+      else if (type == RESOURCE_DEFINITION) {
+        return new WitResourceDefinitionImpl(node);
       }
       else if (type == RESOURCE_METHOD) {
         return new WitResourceMethodImpl(node);
@@ -222,8 +222,8 @@ public interface WitElementTypes {
       else if (type == STREAM_ITEM) {
         return new WitStreamItemImpl(node);
       }
-      else if (type == TOPLEVEL_USE_ITEM) {
-        return new WitToplevelUseItemImpl(node);
+      else if (type == TOPLEVEL_USE_DECLARATION) {
+        return new WitToplevelUseDeclarationImpl(node);
       }
       else if (type == TUPLE_DEFINITION) {
         return new WitTupleDefinitionImpl(node);
@@ -234,8 +234,8 @@ public interface WitElementTypes {
       else if (type == TY) {
         return new WitTyImpl(node);
       }
-      else if (type == TYPE_ITEM) {
-        return new WitTypeItemImpl(node);
+      else if (type == TYPE_DEFINITION) {
+        return new WitTypeDefinitionImpl(node);
       }
       else if (type == UINT) {
         return new WitUintImpl(node);
@@ -243,8 +243,8 @@ public interface WitElementTypes {
       else if (type == UNSTABLE_GATE) {
         return new WitUnstableGateImpl(node);
       }
-      else if (type == USE_ITEM) {
-        return new WitUseItemImpl(node);
+      else if (type == USE_DECLARATION) {
+        return new WitUseDeclarationImpl(node);
       }
       else if (type == USE_NAMES_ITEM) {
         return new WitUseNamesItemImpl(node);
@@ -261,14 +261,14 @@ public interface WitElementTypes {
       else if (type == VARIANT_CASES) {
         return new WitVariantCasesImpl(node);
       }
-      else if (type == VARIANT_ITEMS) {
-        return new WitVariantItemsImpl(node);
+      else if (type == VARIANT_DEFINITION) {
+        return new WitVariantDefinitionImpl(node);
       }
       else if (type == VERSION_FIELD) {
         return new WitVersionFieldImpl(node);
       }
-      else if (type == WORLD_ITEM) {
-        return new WitWorldItemImpl(node);
+      else if (type == WORLD_DEFINITION) {
+        return new WitWorldDefinitionImpl(node);
       }
       throw new AssertionError("Unknown element type: " + type);
     }
