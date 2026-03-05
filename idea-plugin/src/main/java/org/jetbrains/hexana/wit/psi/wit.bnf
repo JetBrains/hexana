@@ -131,7 +131,7 @@ interface-definition ::= gate INTERFACE IDENTIFIER '{' interface-items* '}'
 
 private interface-items ::= gate interface-item-definition
 
-private interface-item-definition ::= type-definition
+private interface-item-definition ::= type-declaration
                        | use-declaration
                        | func-item
 

@@ -8,6 +8,12 @@ import com.intellij.psi.PsiElement;
 public interface WitExternType extends PsiElement {
 
   @NotNull
+  List<WitEnumDefinition> getEnumDefinitionList();
+
+  @NotNull
+  List<WitFlagsDefinition> getFlagsDefinitionList();
+
+  @NotNull
   List<WitFuncItem> getFuncItemList();
 
   @Nullable
@@ -17,9 +23,18 @@ public interface WitExternType extends PsiElement {
   List<WitGate> getGateList();
 
   @NotNull
+  List<WitRecordDefinition> getRecordDefinitionList();
+
+  @NotNull
+  List<WitResourceDefinition> getResourceDefinitionList();
+
+  @NotNull
   List<WitTypeDefinition> getTypeDefinitionList();
 
   @NotNull
   List<WitUseDeclaration> getUseDeclarationList();
+
+  @NotNull
+  List<WitVariantDefinition> getVariantDefinitionList();
 
 }

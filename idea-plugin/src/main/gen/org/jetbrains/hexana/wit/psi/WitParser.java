@@ -530,13 +530,13 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // type-definition
+  // type-declaration
   //                        | use-declaration
   //                        | func-item
   static boolean interface_item_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "interface_item_definition")) return false;
     boolean r;
-    r = type_definition(b, l + 1);
+    r = type_declaration(b, l + 1);
     if (!r) r = use_declaration(b, l + 1);
     if (!r) r = func_item(b, l + 1);
     return r;

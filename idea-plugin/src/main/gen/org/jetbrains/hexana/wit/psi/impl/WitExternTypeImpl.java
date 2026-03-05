@@ -29,6 +29,18 @@ public class WitExternTypeImpl extends ASTWrapperPsiElement implements WitExtern
 
   @Override
   @NotNull
+  public List<WitEnumDefinition> getEnumDefinitionList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitEnumDefinition.class);
+  }
+
+  @Override
+  @NotNull
+  public List<WitFlagsDefinition> getFlagsDefinitionList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitFlagsDefinition.class);
+  }
+
+  @Override
+  @NotNull
   public List<WitFuncItem> getFuncItemList() {
     return PsiTreeUtil.getChildrenOfTypeAsList(this, WitFuncItem.class);
   }
@@ -47,6 +59,18 @@ public class WitExternTypeImpl extends ASTWrapperPsiElement implements WitExtern
 
   @Override
   @NotNull
+  public List<WitRecordDefinition> getRecordDefinitionList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitRecordDefinition.class);
+  }
+
+  @Override
+  @NotNull
+  public List<WitResourceDefinition> getResourceDefinitionList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitResourceDefinition.class);
+  }
+
+  @Override
+  @NotNull
   public List<WitTypeDefinition> getTypeDefinitionList() {
     return PsiTreeUtil.getChildrenOfTypeAsList(this, WitTypeDefinition.class);
   }
@@ -55,6 +79,12 @@ public class WitExternTypeImpl extends ASTWrapperPsiElement implements WitExtern
   @NotNull
   public List<WitUseDeclaration> getUseDeclarationList() {
     return PsiTreeUtil.getChildrenOfTypeAsList(this, WitUseDeclaration.class);
+  }
+
+  @Override
+  @NotNull
+  public List<WitVariantDefinition> getVariantDefinitionList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitVariantDefinition.class);
   }
 
 }
