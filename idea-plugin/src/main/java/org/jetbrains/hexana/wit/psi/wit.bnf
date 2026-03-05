@@ -65,6 +65,9 @@
     
     IDENTIFIER="regexp:(%?)[[:jletterdigit:]_][[:jletterdigit:]_-]*"
   ]
+
+  extends("resource-definition|variant-definition|record-definition|flags-definition|enum-definition|type-definition")=type-declaration
+  extends("unstable-gate|since-gate|deprecated-gate")=gate-item
 }
 
 wit ::= (package-definition)? (package-items | nested-package-definition)*
@@ -81,7 +84,7 @@ nested-package-definition ::= package-decl '{' package-items* '}' { pin = 2 }
 private package-items ::= toplevel-use-declaration | interface-definition | world-definition
 
 private gate ::= gate-item+
-private gate-item ::= unstable-gate
+gate-item ::= unstable-gate
             | since-gate
             | deprecated-gate
 
@@ -135,12 +138,21 @@ private interface-item-definition ::= type-declaration
                        | use-declaration
                        | func-item
 
-private type-declaration ::= resource-definition
+type-declaration ::= resource-definition
                | variant-definition
                | record-definition
                | flags-definition
                | enum-definition
-               | type-definition
+               | type-definition {
+                    methods=[
+                        getName
+                        getNameIdentifier
+                        setName
+                        getTextOffset
+                    ]
+                    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+                    "com.intellij.psi.PsiNameIdentifierOwner"]
+               }
 
 func-item ::= IDENTIFIER ':' func-type ';'
 
@@ -224,4 +236,6 @@ future-item ::= FUTURE '<' type-usage '>' | FUTURE
 
 stream-item ::= STREAM '<' type-usage '>' | STREAM
 
-handle ::= IDENTIFIER | BORROW '<' IDENTIFIER '>'
+handle ::= IDENTIFIER | BORROW '<' IDENTIFIER '>' {
+    mixin = "org.jetbrains.hexana.wit.psi.WitHandleMixin"
+}

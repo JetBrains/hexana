@@ -5,7 +5,7 @@ import java.util.List;
 import org.jetbrains.annotations.*;
 import com.intellij.psi.PsiElement;
 
-public interface WitEnumDefinition extends PsiElement {
+public interface WitEnumDefinition extends WitTypeDeclaration {
 
   @NotNull
   List<WitEnumCase> getEnumCaseList();

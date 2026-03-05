@@ -5,7 +5,7 @@ import java.util.List;
 import org.jetbrains.annotations.*;
 import com.intellij.psi.PsiElement;
 
-public interface WitResourceDefinition extends PsiElement {
+public interface WitResourceDefinition extends WitTypeDeclaration {
 
   @NotNull
   List<WitResourceMethod> getResourceMethodList();

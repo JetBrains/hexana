@@ -7,13 +7,4 @@ import com.intellij.psi.PsiElement;
 
 public interface WitGateItem extends PsiElement {
 
-  @Nullable
-  WitDeprecatedGate getDeprecatedGate();
-
-  @Nullable
-  WitSinceGate getSinceGate();
-
-  @Nullable
-  WitUnstableGate getUnstableGate();
-
 }

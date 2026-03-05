@@ -8,37 +8,16 @@ import com.intellij.psi.PsiElement;
 public interface WitInterfaceDefinition extends PsiElement {
 
   @NotNull
-  List<WitDeprecatedGate> getDeprecatedGateList();
-
-  @NotNull
-  List<WitEnumDefinition> getEnumDefinitionList();
-
-  @NotNull
-  List<WitFlagsDefinition> getFlagsDefinitionList();
-
-  @NotNull
   List<WitFuncItem> getFuncItemList();
 
   @NotNull
-  List<WitRecordDefinition> getRecordDefinitionList();
+  List<WitGateItem> getGateItemList();
 
   @NotNull
-  List<WitResourceDefinition> getResourceDefinitionList();
-
-  @NotNull
-  List<WitSinceGate> getSinceGateList();
-
-  @NotNull
-  List<WitTypeDefinition> getTypeDefinitionList();
-
-  @NotNull
-  List<WitUnstableGate> getUnstableGateList();
+  List<WitTypeDeclaration> getTypeDeclarationList();
 
   @NotNull
   List<WitUseDeclaration> getUseDeclarationList();
-
-  @NotNull
-  List<WitVariantDefinition> getVariantDefinitionList();
 
   @NotNull
   PsiElement getIdentifier();

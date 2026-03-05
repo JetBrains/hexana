@@ -21,7 +21,7 @@ public class WitParser implements PsiParser, LightPsiParser {
 
   public void parseLight(IElementType t, PsiBuilder b) {
     boolean r;
-    b = adapt_builder_(t, b, this, null);
+    b = adapt_builder_(t, b, this, EXTENDS_SETS_);
     Marker m = enter_section_(b, 0, _COLLAPSE_, null);
     r = parse_root_(t, b);
     exit_section_(b, 0, m, t, r, true, TRUE_CONDITION);
@@ -34,6 +34,12 @@ public class WitParser implements PsiParser, LightPsiParser {
   static boolean parse_root_(IElementType t, PsiBuilder b, int l) {
     return wit(b, l + 1);
   }
+
+  public static final TokenSet[] EXTENDS_SETS_ = new TokenSet[] {
+    create_token_set_(DEPRECATED_GATE, GATE_ITEM, SINCE_GATE, UNSTABLE_GATE),
+    create_token_set_(ENUM_DEFINITION, FLAGS_DEFINITION, RECORD_DEFINITION, RESOURCE_DEFINITION,
+      TYPE_DECLARATION, TYPE_DEFINITION, VARIANT_DEFINITION),
+  };
 
   /* ********************************************************** */
   // '@deprecated' '(' version-field ')'
@@ -357,12 +363,14 @@ public class WitParser implements PsiParser, LightPsiParser {
   // unstable-gate
   //             | since-gate
   //             | deprecated-gate
-  static boolean gate_item(PsiBuilder b, int l) {
+  public static boolean gate_item(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "gate_item")) return false;
     boolean r;
+    Marker m = enter_section_(b, l, _COLLAPSE_, GATE_ITEM, "<gate item>");
     r = unstable_gate(b, l + 1);
     if (!r) r = since_gate(b, l + 1);
     if (!r) r = deprecated_gate(b, l + 1);
+    exit_section_(b, l, m, r, false, null);
     return r;
   }
 
@@ -1479,15 +1487,17 @@ public class WitParser implements PsiParser, LightPsiParser {
   //                | flags-definition
   //                | enum-definition
   //                | type-definition
-  static boolean type_declaration(PsiBuilder b, int l) {
+  public static boolean type_declaration(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "type_declaration")) return false;
     boolean r;
+    Marker m = enter_section_(b, l, _COLLAPSE_, TYPE_DECLARATION, "<type declaration>");
     r = resource_definition(b, l + 1);
     if (!r) r = variant_definition(b, l + 1);
     if (!r) r = record_definition(b, l + 1);
     if (!r) r = flags_definition(b, l + 1);
     if (!r) r = enum_definition(b, l + 1);
     if (!r) r = type_definition(b, l + 1);
+    exit_section_(b, l, m, r, false, null);
     return r;
   }
 

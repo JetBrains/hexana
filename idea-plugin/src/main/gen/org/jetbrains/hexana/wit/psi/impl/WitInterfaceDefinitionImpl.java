@@ -29,68 +29,26 @@ public class WitInterfaceDefinitionImpl extends ASTWrapperPsiElement implements 
 
   @Override
   @NotNull
-  public List<WitDeprecatedGate> getDeprecatedGateList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitDeprecatedGate.class);
-  }
-
-  @Override
-  @NotNull
-  public List<WitEnumDefinition> getEnumDefinitionList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitEnumDefinition.class);
-  }
-
-  @Override
-  @NotNull
-  public List<WitFlagsDefinition> getFlagsDefinitionList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitFlagsDefinition.class);
-  }
-
-  @Override
-  @NotNull
   public List<WitFuncItem> getFuncItemList() {
     return PsiTreeUtil.getChildrenOfTypeAsList(this, WitFuncItem.class);
   }
 
   @Override
   @NotNull
-  public List<WitRecordDefinition> getRecordDefinitionList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitRecordDefinition.class);
+  public List<WitGateItem> getGateItemList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitGateItem.class);
   }
 
   @Override
   @NotNull
-  public List<WitResourceDefinition> getResourceDefinitionList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitResourceDefinition.class);
-  }
-
-  @Override
-  @NotNull
-  public List<WitSinceGate> getSinceGateList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitSinceGate.class);
-  }
-
-  @Override
-  @NotNull
-  public List<WitTypeDefinition> getTypeDefinitionList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitTypeDefinition.class);
-  }
-
-  @Override
-  @NotNull
-  public List<WitUnstableGate> getUnstableGateList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitUnstableGate.class);
+  public List<WitTypeDeclaration> getTypeDeclarationList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitTypeDeclaration.class);
   }
 
   @Override
   @NotNull
   public List<WitUseDeclaration> getUseDeclarationList() {
     return PsiTreeUtil.getChildrenOfTypeAsList(this, WitUseDeclaration.class);
-  }
-
-  @Override
-  @NotNull
-  public List<WitVariantDefinition> getVariantDefinitionList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitVariantDefinition.class);
   }
 
   @Override

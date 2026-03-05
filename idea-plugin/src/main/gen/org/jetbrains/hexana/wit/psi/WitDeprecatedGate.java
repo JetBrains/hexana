@@ -5,7 +5,7 @@ import java.util.List;
 import org.jetbrains.annotations.*;
 import com.intellij.psi.PsiElement;
 
-public interface WitDeprecatedGate extends PsiElement {
+public interface WitDeprecatedGate extends WitGateItem {
 
   @NotNull
   WitVersionField getVersionField();

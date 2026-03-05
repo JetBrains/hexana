@@ -18,6 +18,7 @@ public interface WitElementTypes {
   IElementType FUNC_ITEM = new WitElementType("FUNC_ITEM");
   IElementType FUNC_TYPE = new WitElementType("FUNC_TYPE");
   IElementType FUTURE_ITEM = new WitElementType("FUTURE_ITEM");
+  IElementType GATE_ITEM = new WitElementType("GATE_ITEM");
   IElementType HANDLE = new WitElementType("HANDLE");
   IElementType IMPORT_DEFINITION = new WitElementType("IMPORT_DEFINITION");
   IElementType INCLUDE_DECLARATION = new WitElementType("INCLUDE_DECLARATION");
@@ -44,6 +45,7 @@ public interface WitElementTypes {
   IElementType TOPLEVEL_USE_DECLARATION = new WitElementType("TOPLEVEL_USE_DECLARATION");
   IElementType TUPLE_DEFINITION = new WitElementType("TUPLE_DEFINITION");
   IElementType TUPLE_LIST = new WitElementType("TUPLE_LIST");
+  IElementType TYPE_DECLARATION = new WitElementType("TYPE_DECLARATION");
   IElementType TYPE_DEFINITION = new WitElementType("TYPE_DEFINITION");
   IElementType TYPE_USAGE = new WitElementType("TYPE_USAGE");
   IElementType UINT = new WitElementType("UINT");

@@ -5,7 +5,7 @@ import java.util.List;
 import org.jetbrains.annotations.*;
 import com.intellij.psi.PsiElement;
 
-public interface WitRecordDefinition extends PsiElement {
+public interface WitRecordDefinition extends WitTypeDeclaration {
 
   @NotNull
   List<WitRecordField> getRecordFieldList();

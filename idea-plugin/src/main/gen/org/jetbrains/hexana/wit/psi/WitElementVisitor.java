@@ -4,11 +4,14 @@ package org.jetbrains.hexana.wit.psi;
 import org.jetbrains.annotations.*;
 import com.intellij.psi.PsiElementVisitor;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.NavigatablePsiElement;
+import com.intellij.psi.PsiNamedElement;
+import com.intellij.psi.PsiNameIdentifierOwner;
 
 public class WitElementVisitor extends PsiElementVisitor {
 
   public void visitDeprecatedGate(@NotNull WitDeprecatedGate o) {
-    visitPsiElement(o);
+    visitGateItem(o);
   }
 
   public void visitEnumCase(@NotNull WitEnumCase o) {
@@ -16,7 +19,7 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitEnumDefinition(@NotNull WitEnumDefinition o) {
-    visitPsiElement(o);
+    visitTypeDeclaration(o);
   }
 
   public void visitExportDefinition(@NotNull WitExportDefinition o) {
@@ -32,7 +35,7 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitFlagsDefinition(@NotNull WitFlagsDefinition o) {
-    visitPsiElement(o);
+    visitTypeDeclaration(o);
   }
 
   public void visitFuncItem(@NotNull WitFuncItem o) {
@@ -44,6 +47,10 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitFutureItem(@NotNull WitFutureItem o) {
+    visitPsiElement(o);
+  }
+
+  public void visitGateItem(@NotNull WitGateItem o) {
     visitPsiElement(o);
   }
 
@@ -104,7 +111,7 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitRecordDefinition(@NotNull WitRecordDefinition o) {
-    visitPsiElement(o);
+    visitTypeDeclaration(o);
   }
 
   public void visitRecordField(@NotNull WitRecordField o) {
@@ -112,7 +119,7 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitResourceDefinition(@NotNull WitResourceDefinition o) {
-    visitPsiElement(o);
+    visitTypeDeclaration(o);
   }
 
   public void visitResourceMethod(@NotNull WitResourceMethod o) {
@@ -132,7 +139,7 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitSinceGate(@NotNull WitSinceGate o) {
-    visitPsiElement(o);
+    visitGateItem(o);
   }
 
   public void visitStreamItem(@NotNull WitStreamItem o) {
@@ -151,8 +158,14 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
+  public void visitTypeDeclaration(@NotNull WitTypeDeclaration o) {
+    visitNavigatablePsiElement(o);
+    // visitPsiNamedElement(o);
+    // visitPsiNameIdentifierOwner(o);
+  }
+
   public void visitTypeDefinition(@NotNull WitTypeDefinition o) {
-    visitPsiElement(o);
+    visitTypeDeclaration(o);
   }
 
   public void visitTypeUsage(@NotNull WitTypeUsage o) {
@@ -164,7 +177,7 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitUnstableGate(@NotNull WitUnstableGate o) {
-    visitPsiElement(o);
+    visitGateItem(o);
   }
 
   public void visitUseDeclaration(@NotNull WitUseDeclaration o) {
@@ -188,7 +201,7 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitVariantDefinition(@NotNull WitVariantDefinition o) {
-    visitPsiElement(o);
+    visitTypeDeclaration(o);
   }
 
   public void visitVersionField(@NotNull WitVersionField o) {
@@ -197,6 +210,10 @@ public class WitElementVisitor extends PsiElementVisitor {
 
   public void visitWorldDefinition(@NotNull WitWorldDefinition o) {
     visitPsiElement(o);
+  }
+
+  public void visitNavigatablePsiElement(@NotNull NavigatablePsiElement o) {
+    visitElement(o);
   }
 
   public void visitPsiElement(@NotNull PsiElement o) {
