@@ -47,7 +47,7 @@ public class WitParserDefinition  implements ParserDefinition {
 
     @Override
     public @NotNull PsiElement createElement(ASTNode node) {
-        return new WitPsiElement(node);
+        return WitElementTypes.Factory.createElement(node);
     }
 
     @Override
