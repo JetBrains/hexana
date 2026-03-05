@@ -8,7 +8,7 @@ import com.intellij.psi.PsiElement;
 public interface WitNamedType extends PsiElement {
 
   @NotNull
-  WitTy getTy();
+  WitTypeUsage getTypeUsage();
 
   @NotNull
   PsiElement getIdentifier();

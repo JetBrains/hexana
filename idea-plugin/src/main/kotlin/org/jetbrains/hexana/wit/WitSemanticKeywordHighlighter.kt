@@ -31,7 +31,7 @@ class WitSemanticKeywordHighlighter : HighlightVisitor, DumbAware {
     ): Boolean {
         SyntaxTraverser.astTraverser(psiFile.node)
             .filterTypes {
-                it == WitElementTypes.TY ||
+                it == WitElementTypes.TYPE_USAGE ||
                 it == WitElementTypes.USE_NAMES_ITEM ||
                 it == WitElementTypes.TOPLEVEL_USE_DECLARATION ||
                 it == WitElementTypes.INCLUDE_NAMES_ITEM ||
@@ -47,7 +47,7 @@ class WitSemanticKeywordHighlighter : HighlightVisitor, DumbAware {
                                 TextRange(it.textRange.startOffset, paren.textRange.startOffset)))
                         }
                     }
-                    WitElementTypes.TY -> {
+                    WitElementTypes.TYPE_USAGE -> {
                         it.children().singleOrNull()?.let {
                             if (it.elementType == WitElementTypes.IDENTIFIER) {
                                 holder.add(highlightKeyword(it, DefaultLanguageHighlighterColors.KEYWORD))

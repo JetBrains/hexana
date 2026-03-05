@@ -8,6 +8,6 @@ import com.intellij.psi.PsiElement;
 public interface WitFutureItem extends PsiElement {
 
   @Nullable
-  WitTy getTy();
+  WitTypeUsage getTypeUsage();
 
 }

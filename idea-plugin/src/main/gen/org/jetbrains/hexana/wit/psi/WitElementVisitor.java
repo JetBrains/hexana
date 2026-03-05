@@ -15,10 +15,6 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitEnumCases(@NotNull WitEnumCases o) {
-    visitPsiElement(o);
-  }
-
   public void visitEnumDefinition(@NotNull WitEnumDefinition o) {
     visitPsiElement(o);
   }
@@ -36,10 +32,6 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitFlagsDefinition(@NotNull WitFlagsDefinition o) {
-    visitPsiElement(o);
-  }
-
-  public void visitFlagsFields(@NotNull WitFlagsFields o) {
     visitPsiElement(o);
   }
 
@@ -123,10 +115,6 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitRecordFields(@NotNull WitRecordFields o) {
-    visitPsiElement(o);
-  }
-
   public void visitResourceDefinition(@NotNull WitResourceDefinition o) {
     visitPsiElement(o);
   }
@@ -167,11 +155,11 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitTy(@NotNull WitTy o) {
+  public void visitTypeDefinition(@NotNull WitTypeDefinition o) {
     visitPsiElement(o);
   }
 
-  public void visitTypeDefinition(@NotNull WitTypeDefinition o) {
+  public void visitTypeUsage(@NotNull WitTypeUsage o) {
     visitPsiElement(o);
   }
 
@@ -200,10 +188,6 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitVariantCase(@NotNull WitVariantCase o) {
-    visitPsiElement(o);
-  }
-
-  public void visitVariantCases(@NotNull WitVariantCases o) {
     visitPsiElement(o);
   }
 

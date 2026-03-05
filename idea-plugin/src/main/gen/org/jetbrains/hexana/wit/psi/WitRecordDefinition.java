@@ -8,7 +8,7 @@ import com.intellij.psi.PsiElement;
 public interface WitRecordDefinition extends PsiElement {
 
   @NotNull
-  WitRecordFields getRecordFields();
+  List<WitRecordField> getRecordFieldList();
 
   @NotNull
   PsiElement getIdentifier();

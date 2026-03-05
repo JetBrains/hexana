@@ -8,6 +8,6 @@ import com.intellij.psi.PsiElement;
 public interface WitStreamItem extends PsiElement {
 
   @Nullable
-  WitTy getTy();
+  WitTypeUsage getTypeUsage();
 
 }

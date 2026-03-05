@@ -8,7 +8,7 @@ import com.intellij.psi.PsiElement;
 public interface WitListDefinition extends PsiElement {
 
   @NotNull
-  WitTy getTy();
+  WitTypeUsage getTypeUsage();
 
   @Nullable
   WitUint getUint();

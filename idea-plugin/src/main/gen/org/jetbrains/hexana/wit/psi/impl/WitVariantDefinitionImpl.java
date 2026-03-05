@@ -29,8 +29,8 @@ public class WitVariantDefinitionImpl extends ASTWrapperPsiElement implements Wi
 
   @Override
   @NotNull
-  public WitVariantCases getVariantCases() {
-    return findNotNullChildByClass(WitVariantCases.class);
+  public List<WitVariantCase> getVariantCaseList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitVariantCase.class);
   }
 
   @Override

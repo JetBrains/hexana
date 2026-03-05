@@ -29,8 +29,8 @@ public class WitListDefinitionImpl extends ASTWrapperPsiElement implements WitLi
 
   @Override
   @NotNull
-  public WitTy getTy() {
-    return findNotNullChildByClass(WitTy.class);
+  public WitTypeUsage getTypeUsage() {
+    return findNotNullChildByClass(WitTypeUsage.class);
   }
 
   @Override

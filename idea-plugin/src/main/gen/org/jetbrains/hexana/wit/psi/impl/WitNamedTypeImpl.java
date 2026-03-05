@@ -29,8 +29,8 @@ public class WitNamedTypeImpl extends ASTWrapperPsiElement implements WitNamedTy
 
   @Override
   @NotNull
-  public WitTy getTy() {
-    return findNotNullChildByClass(WitTy.class);
+  public WitTypeUsage getTypeUsage() {
+    return findNotNullChildByClass(WitTypeUsage.class);
   }
 
   @Override

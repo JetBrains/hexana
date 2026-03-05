@@ -29,8 +29,8 @@ public class WitResultItemImpl extends ASTWrapperPsiElement implements WitResult
 
   @Override
   @NotNull
-  public List<WitTy> getTyList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitTy.class);
+  public List<WitTypeUsage> getTypeUsageList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitTypeUsage.class);
   }
 
 }

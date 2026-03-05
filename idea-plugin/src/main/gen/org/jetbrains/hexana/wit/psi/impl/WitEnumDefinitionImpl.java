@@ -29,8 +29,8 @@ public class WitEnumDefinitionImpl extends ASTWrapperPsiElement implements WitEn
 
   @Override
   @NotNull
-  public WitEnumCases getEnumCases() {
-    return findNotNullChildByClass(WitEnumCases.class);
+  public List<WitEnumCase> getEnumCaseList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitEnumCase.class);
   }
 
   @Override

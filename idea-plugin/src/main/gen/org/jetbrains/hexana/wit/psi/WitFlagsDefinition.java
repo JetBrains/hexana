@@ -7,10 +7,4 @@ import com.intellij.psi.PsiElement;
 
 public interface WitFlagsDefinition extends PsiElement {
 
-  @NotNull
-  WitFlagsFields getFlagsFields();
-
-  @NotNull
-  PsiElement getIdentifier();
-
 }

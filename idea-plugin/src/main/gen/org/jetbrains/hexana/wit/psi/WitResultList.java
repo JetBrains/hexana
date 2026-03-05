@@ -8,6 +8,6 @@ import com.intellij.psi.PsiElement;
 public interface WitResultList extends PsiElement {
 
   @NotNull
-  WitTy getTy();
+  WitTypeUsage getTypeUsage();
 
 }

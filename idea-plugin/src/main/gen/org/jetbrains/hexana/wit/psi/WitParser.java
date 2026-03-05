@@ -63,7 +63,7 @@ public class WitParser implements PsiParser, LightPsiParser {
 
   /* ********************************************************** */
   // enum-case (',' enum-case)* ','?
-  public static boolean enum_cases(PsiBuilder b, int l) {
+  static boolean enum_cases(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "enum_cases")) return false;
     if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
@@ -71,7 +71,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     r = enum_case(b, l + 1);
     r = r && enum_cases_1(b, l + 1);
     r = r && enum_cases_2(b, l + 1);
-    exit_section_(b, m, ENUM_CASES, r);
+    exit_section_(b, m, null, r);
     return r;
   }
 
@@ -229,7 +229,7 @@ public class WitParser implements PsiParser, LightPsiParser {
 
   /* ********************************************************** */
   // IDENTIFIER (',' IDENTIFIER)* ','?
-  public static boolean flags_fields(PsiBuilder b, int l) {
+  static boolean flags_fields(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "flags_fields")) return false;
     if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
@@ -237,7 +237,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     r = consumeToken(b, IDENTIFIER);
     r = r && flags_fields_1(b, l + 1);
     r = r && flags_fields_2(b, l + 1);
-    exit_section_(b, m, FLAGS_FIELDS, r);
+    exit_section_(b, m, null, r);
     return r;
   }
 
@@ -313,7 +313,7 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // FUTURE '<' ty '>' | FUTURE
+  // FUTURE '<' type-usage '>' | FUTURE
   public static boolean future_item(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "future_item")) return false;
     if (!nextTokenIs(b, FUTURE)) return false;
@@ -325,13 +325,13 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // FUTURE '<' ty '>'
+  // FUTURE '<' type-usage '>'
   private static boolean future_item_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "future_item_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, FUTURE, LESS_THAN);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     r = r && consumeToken(b, GREATER_THAN);
     exit_section_(b, m, null, r);
     return r;
@@ -555,8 +555,8 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // LIST '<' ty '>'
-  //        | LIST '<' ty ',' uint '>'
+  // LIST '<' type-usage '>'
+  //        | LIST '<' type-usage ',' uint '>'
   public static boolean list_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "list_definition")) return false;
     if (!nextTokenIs(b, LIST)) return false;
@@ -568,25 +568,25 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // LIST '<' ty '>'
+  // LIST '<' type-usage '>'
   private static boolean list_definition_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "list_definition_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, LIST, LESS_THAN);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     r = r && consumeToken(b, GREATER_THAN);
     exit_section_(b, m, null, r);
     return r;
   }
 
-  // LIST '<' ty ',' uint '>'
+  // LIST '<' type-usage ',' uint '>'
   private static boolean list_definition_1(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "list_definition_1")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, LIST, LESS_THAN);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     r = r && consumeToken(b, COMMA);
     r = r && uint(b, l + 1);
     r = r && consumeToken(b, GREATER_THAN);
@@ -595,14 +595,14 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // IDENTIFIER ':' ty
+  // IDENTIFIER ':' type-usage
   public static boolean named_type(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "named_type")) return false;
     if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, IDENTIFIER, COLON);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     exit_section_(b, m, NAMED_TYPE, r);
     return r;
   }
@@ -670,14 +670,14 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // OPTION '<' ty '>'
+  // OPTION '<' type-usage '>'
   public static boolean option_item(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "option_item")) return false;
     if (!nextTokenIs(b, OPTION)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, OPTION, LESS_THAN);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     r = r && consumeToken(b, GREATER_THAN);
     exit_section_(b, m, OPTION_ITEM, r);
     return r;
@@ -904,21 +904,21 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // IDENTIFIER ':' ty
+  // IDENTIFIER ':' type-usage
   public static boolean record_field(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "record_field")) return false;
     if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, IDENTIFIER, COLON);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     exit_section_(b, m, RECORD_FIELD, r);
     return r;
   }
 
   /* ********************************************************** */
   // record-field (',' record-field)* ','?
-  public static boolean record_fields(PsiBuilder b, int l) {
+  static boolean record_fields(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "record_fields")) return false;
     if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
@@ -926,7 +926,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     r = record_field(b, l + 1);
     r = r && record_fields_1(b, l + 1);
     r = r && record_fields_2(b, l + 1);
-    exit_section_(b, m, RECORD_FIELDS, r);
+    exit_section_(b, m, null, r);
     return r;
   }
 
@@ -1037,9 +1037,9 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // RESULT '<' ty ',' ty '>'
-  //          | RESULT '<' '_' ',' ty '>'
-  //          | RESULT '<' ty '>'
+  // RESULT '<' type-usage ',' type-usage '>'
+  //          | RESULT '<' '_' ',' type-usage '>'
+  //          | RESULT '<' type-usage '>'
   //          | RESULT
   public static boolean result_item(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "result_item")) return false;
@@ -1054,53 +1054,53 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // RESULT '<' ty ',' ty '>'
+  // RESULT '<' type-usage ',' type-usage '>'
   private static boolean result_item_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "result_item_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, RESULT, LESS_THAN);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     r = r && consumeToken(b, COMMA);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     r = r && consumeToken(b, GREATER_THAN);
     exit_section_(b, m, null, r);
     return r;
   }
 
-  // RESULT '<' '_' ',' ty '>'
+  // RESULT '<' '_' ',' type-usage '>'
   private static boolean result_item_1(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "result_item_1")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, RESULT, LESS_THAN, UNDERSCORE, COMMA);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     r = r && consumeToken(b, GREATER_THAN);
     exit_section_(b, m, null, r);
     return r;
   }
 
-  // RESULT '<' ty '>'
+  // RESULT '<' type-usage '>'
   private static boolean result_item_2(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "result_item_2")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, RESULT, LESS_THAN);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     r = r && consumeToken(b, GREATER_THAN);
     exit_section_(b, m, null, r);
     return r;
   }
 
   /* ********************************************************** */
-  // '->' ty
+  // '->' type-usage
   public static boolean result_list(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "result_list")) return false;
     if (!nextTokenIs(b, ARROW)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeToken(b, ARROW);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     exit_section_(b, m, RESULT_LIST, r);
     return r;
   }
@@ -1343,7 +1343,7 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // STREAM '<' ty '>' | STREAM
+  // STREAM '<' type-usage '>' | STREAM
   public static boolean stream_item(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "stream_item")) return false;
     if (!nextTokenIs(b, STREAM)) return false;
@@ -1355,13 +1355,13 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // STREAM '<' ty '>'
+  // STREAM '<' type-usage '>'
   private static boolean stream_item_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "stream_item_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, STREAM, LESS_THAN);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     r = r && consumeToken(b, GREATER_THAN);
     exit_section_(b, m, null, r);
     return r;
@@ -1415,19 +1415,19 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // ty (',' ty)* ','?
+  // type-usage (',' type-usage)* ','?
   public static boolean tuple_list(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "tuple_list")) return false;
     boolean r;
     Marker m = enter_section_(b, l, _NONE_, TUPLE_LIST, "<tuple list>");
-    r = ty(b, l + 1);
+    r = type_usage(b, l + 1);
     r = r && tuple_list_1(b, l + 1);
     r = r && tuple_list_2(b, l + 1);
     exit_section_(b, l, m, r, false, null);
     return r;
   }
 
-  // (',' ty)*
+  // (',' type-usage)*
   private static boolean tuple_list_1(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "tuple_list_1")) return false;
     while (true) {
@@ -1438,13 +1438,13 @@ public class WitParser implements PsiParser, LightPsiParser {
     return true;
   }
 
-  // ',' ty
+  // ',' type-usage
   private static boolean tuple_list_1_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "tuple_list_1_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeToken(b, COMMA);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     exit_section_(b, m, null, r);
     return r;
   }
@@ -1454,50 +1454,6 @@ public class WitParser implements PsiParser, LightPsiParser {
     if (!recursion_guard_(b, l, "tuple_list_2")) return false;
     consumeToken(b, COMMA);
     return true;
-  }
-
-  /* ********************************************************** */
-  // 'u8' | 'u16' | 'u32' | 'u64'
-  //      | 's8' | 's16' | 's32' | 's64'
-  //      | 'f32' | 'f64'
-  //      | 'char'
-  //      | 'bool'
-  //      | 'string'
-  //      | tuple-definition
-  //      | list-definition
-  //      | option-item
-  //      | result-item
-  //      | handle
-  //      | future-item
-  //      | stream-item
-  //      | IDENTIFIER
-  public static boolean ty(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "ty")) return false;
-    boolean r;
-    Marker m = enter_section_(b, l, _NONE_, TY, "<ty>");
-    r = consumeToken(b, "u8");
-    if (!r) r = consumeToken(b, "u16");
-    if (!r) r = consumeToken(b, "u32");
-    if (!r) r = consumeToken(b, "u64");
-    if (!r) r = consumeToken(b, "s8");
-    if (!r) r = consumeToken(b, "s16");
-    if (!r) r = consumeToken(b, "s32");
-    if (!r) r = consumeToken(b, "s64");
-    if (!r) r = consumeToken(b, "f32");
-    if (!r) r = consumeToken(b, "f64");
-    if (!r) r = consumeToken(b, "char");
-    if (!r) r = consumeToken(b, "bool");
-    if (!r) r = consumeToken(b, "string");
-    if (!r) r = tuple_definition(b, l + 1);
-    if (!r) r = list_definition(b, l + 1);
-    if (!r) r = option_item(b, l + 1);
-    if (!r) r = result_item(b, l + 1);
-    if (!r) r = handle(b, l + 1);
-    if (!r) r = future_item(b, l + 1);
-    if (!r) r = stream_item(b, l + 1);
-    if (!r) r = consumeToken(b, IDENTIFIER);
-    exit_section_(b, l, m, r, false, null);
-    return r;
   }
 
   /* ********************************************************** */
@@ -1520,16 +1476,60 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // TYPE IDENTIFIER '=' ty ';'
+  // TYPE IDENTIFIER '=' type-usage ';'
   public static boolean type_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "type_definition")) return false;
     if (!nextTokenIs(b, TYPE)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, TYPE, IDENTIFIER, EQUALS);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     r = r && consumeToken(b, SEMI);
     exit_section_(b, m, TYPE_DEFINITION, r);
+    return r;
+  }
+
+  /* ********************************************************** */
+  // 'u8' | 'u16' | 'u32' | 'u64'
+  //      | 's8' | 's16' | 's32' | 's64'
+  //      | 'f32' | 'f64'
+  //      | 'char'
+  //      | 'bool'
+  //      | 'string'
+  //      | tuple-definition
+  //      | list-definition
+  //      | option-item
+  //      | result-item
+  //      | handle
+  //      | future-item
+  //      | stream-item
+  //      | IDENTIFIER
+  public static boolean type_usage(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "type_usage")) return false;
+    boolean r;
+    Marker m = enter_section_(b, l, _NONE_, TYPE_USAGE, "<type usage>");
+    r = consumeToken(b, "u8");
+    if (!r) r = consumeToken(b, "u16");
+    if (!r) r = consumeToken(b, "u32");
+    if (!r) r = consumeToken(b, "u64");
+    if (!r) r = consumeToken(b, "s8");
+    if (!r) r = consumeToken(b, "s16");
+    if (!r) r = consumeToken(b, "s32");
+    if (!r) r = consumeToken(b, "s64");
+    if (!r) r = consumeToken(b, "f32");
+    if (!r) r = consumeToken(b, "f64");
+    if (!r) r = consumeToken(b, "char");
+    if (!r) r = consumeToken(b, "bool");
+    if (!r) r = consumeToken(b, "string");
+    if (!r) r = tuple_definition(b, l + 1);
+    if (!r) r = list_definition(b, l + 1);
+    if (!r) r = option_item(b, l + 1);
+    if (!r) r = result_item(b, l + 1);
+    if (!r) r = handle(b, l + 1);
+    if (!r) r = future_item(b, l + 1);
+    if (!r) r = stream_item(b, l + 1);
+    if (!r) r = consumeToken(b, IDENTIFIER);
+    exit_section_(b, l, m, r, false, null);
     return r;
   }
 
@@ -1807,7 +1807,7 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // IDENTIFIER '(' ty ')' | IDENTIFIER
+  // IDENTIFIER '(' type-usage ')' | IDENTIFIER
   public static boolean variant_case(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "variant_case")) return false;
     if (!nextTokenIs(b, IDENTIFIER)) return false;
@@ -1819,13 +1819,13 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // IDENTIFIER '(' ty ')'
+  // IDENTIFIER '(' type-usage ')'
   private static boolean variant_case_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "variant_case_0")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, IDENTIFIER, OPEN_PAREN);
-    r = r && ty(b, l + 1);
+    r = r && type_usage(b, l + 1);
     r = r && consumeToken(b, CLOSE_PAREN);
     exit_section_(b, m, null, r);
     return r;
@@ -1833,7 +1833,7 @@ public class WitParser implements PsiParser, LightPsiParser {
 
   /* ********************************************************** */
   // variant-case (',' variant-case)* ','?
-  public static boolean variant_cases(PsiBuilder b, int l) {
+  static boolean variant_cases(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "variant_cases")) return false;
     if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
@@ -1841,7 +1841,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     r = variant_case(b, l + 1);
     r = r && variant_cases_1(b, l + 1);
     r = r && variant_cases_2(b, l + 1);
-    exit_section_(b, m, VARIANT_CASES, r);
+    exit_section_(b, m, null, r);
     return r;
   }
 

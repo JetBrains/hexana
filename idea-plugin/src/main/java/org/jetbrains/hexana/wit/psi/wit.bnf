@@ -148,11 +148,11 @@ func-type ::= ASYNC? FUNC param-list result-list?
 
 param-list ::= '(' named-type-list? ')'
 
-result-list ::= '->' ty
+result-list ::= '->' type-usage
 
 named-type-list ::= named-type ( ',' named-type )*
 
-named-type ::= IDENTIFIER ':' ty
+named-type ::= IDENTIFIER ':' type-usage
 
 use-declaration ::= USE use-path '.' '{' use-names-list '}' ';'
 
@@ -160,28 +160,28 @@ use-names-list ::= use-names-item (',' use-names-item)* ','?
 
 use-names-item ::= IDENTIFIER 'as' IDENTIFIER | IDENTIFIER
 
-type-definition ::= TYPE IDENTIFIER '=' ty ';'
+type-definition ::= TYPE IDENTIFIER '=' type-usage ';'
 
 record-definition ::= RECORD IDENTIFIER '{' record-fields '}'
 
-record-fields ::= record-field (',' record-field)* ','?
+private record-fields ::= record-field (',' record-field)* ','?
 
-record-field ::= IDENTIFIER ':' ty
+record-field ::= IDENTIFIER ':' type-usage
 
 flags-definition ::= FLAGS IDENTIFIER '{' flags-fields '}'
 
-flags-fields ::= IDENTIFIER (',' IDENTIFIER)* ','?
+private flags-fields ::= IDENTIFIER (',' IDENTIFIER)* ','?
 
 variant-definition ::= VARIANT IDENTIFIER '{' variant-cases '}'
 
-variant-cases ::= variant-case (',' variant-case)* ','?
+private variant-cases ::= variant-case (',' variant-case)* ','?
 
-variant-case ::= IDENTIFIER '(' ty ')' | IDENTIFIER
+variant-case ::= IDENTIFIER '(' type-usage ')' | IDENTIFIER
 
 enum-definition ::= ENUM IDENTIFIER '{' enum-cases '}'
 
 enum-case ::= IDENTIFIER
-enum-cases ::= enum-case (',' enum-case)* ','?
+private enum-cases ::= enum-case (',' enum-case)* ','?
 
 resource-definition ::= RESOURCE IDENTIFIER ';'
                 | RESOURCE IDENTIFIER '{' resource-method* '}'
@@ -190,7 +190,7 @@ resource-method ::= func-item
                   | IDENTIFIER ':' STATIC func-type ';'
                   | CONSTRUCTOR param-list ';'
 
-ty ::= 'u8' | 'u16' | 'u32' | 'u64'
+type-usage ::= 'u8' | 'u16' | 'u32' | 'u64'
      | 's8' | 's16' | 's32' | 's64'
      | 'f32' | 'f64'
      | 'char'
@@ -206,22 +206,22 @@ ty ::= 'u8' | 'u16' | 'u32' | 'u64'
      | IDENTIFIER
 
 tuple-definition ::= TUPLE '<' tuple-list '>'
-tuple-list ::= ty (',' ty)* ','?
+tuple-list ::= type-usage (',' type-usage)* ','?
 
-list-definition ::= LIST '<' ty '>'
-       | LIST '<' ty ',' uint '>'
+list-definition ::= LIST '<' type-usage '>'
+       | LIST '<' type-usage ',' uint '>'
 
 uint ::= NUMBER
 
-option-item ::= OPTION '<' ty '>'
+option-item ::= OPTION '<' type-usage '>'
 
-result-item ::= RESULT '<' ty ',' ty '>'
-         | RESULT '<' '_' ',' ty '>'
-         | RESULT '<' ty '>'
+result-item ::= RESULT '<' type-usage ',' type-usage '>'
+         | RESULT '<' '_' ',' type-usage '>'
+         | RESULT '<' type-usage '>'
          | RESULT
 
-future-item ::= FUTURE '<' ty '>' | FUTURE
+future-item ::= FUTURE '<' type-usage '>' | FUTURE
 
-stream-item ::= STREAM '<' ty '>' | STREAM
+stream-item ::= STREAM '<' type-usage '>' | STREAM
 
 handle ::= IDENTIFIER | BORROW '<' IDENTIFIER '>'

@@ -29,8 +29,8 @@ public class WitRecordFieldImpl extends ASTWrapperPsiElement implements WitRecor
 
   @Override
   @NotNull
-  public WitTy getTy() {
-    return findNotNullChildByClass(WitTy.class);
+  public WitTypeUsage getTypeUsage() {
+    return findNotNullChildByClass(WitTypeUsage.class);
   }
 
   @Override

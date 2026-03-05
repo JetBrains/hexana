@@ -29,8 +29,8 @@ public class WitVariantCaseImpl extends ASTWrapperPsiElement implements WitVaria
 
   @Override
   @Nullable
-  public WitTy getTy() {
-    return findChildByClass(WitTy.class);
+  public WitTypeUsage getTypeUsage() {
+    return findChildByClass(WitTypeUsage.class);
   }
 
   @Override

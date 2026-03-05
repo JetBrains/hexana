@@ -8,6 +8,6 @@ import com.intellij.psi.PsiElement;
 public interface WitOptionItem extends PsiElement {
 
   @NotNull
-  WitTy getTy();
+  WitTypeUsage getTypeUsage();
 
 }

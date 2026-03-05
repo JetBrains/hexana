@@ -29,8 +29,8 @@ public class WitRecordDefinitionImpl extends ASTWrapperPsiElement implements Wit
 
   @Override
   @NotNull
-  public WitRecordFields getRecordFields() {
-    return findNotNullChildByClass(WitRecordFields.class);
+  public List<WitRecordField> getRecordFieldList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitRecordField.class);
   }
 
   @Override

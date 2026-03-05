@@ -29,8 +29,8 @@ public class WitFutureItemImpl extends ASTWrapperPsiElement implements WitFuture
 
   @Override
   @Nullable
-  public WitTy getTy() {
-    return findChildByClass(WitTy.class);
+  public WitTypeUsage getTypeUsage() {
+    return findChildByClass(WitTypeUsage.class);
   }
 
 }

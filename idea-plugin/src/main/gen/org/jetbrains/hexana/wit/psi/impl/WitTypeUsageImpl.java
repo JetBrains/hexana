@@ -11,14 +11,14 @@ import static org.jetbrains.hexana.wit.psi.WitElementTypes.*;
 import com.intellij.extapi.psi.ASTWrapperPsiElement;
 import org.jetbrains.hexana.wit.psi.*;
 
-public class WitTyImpl extends ASTWrapperPsiElement implements WitTy {
+public class WitTypeUsageImpl extends ASTWrapperPsiElement implements WitTypeUsage {
 
-  public WitTyImpl(@NotNull ASTNode node) {
+  public WitTypeUsageImpl(@NotNull ASTNode node) {
     super(node);
   }
 
   public void accept(@NotNull WitElementVisitor visitor) {
-    visitor.visitTy(this);
+    visitor.visitTypeUsage(this);
   }
 
   @Override

@@ -10,13 +10,11 @@ public interface WitElementTypes {
 
   IElementType DEPRECATED_GATE = new WitElementType("DEPRECATED_GATE");
   IElementType ENUM_CASE = new WitElementType("ENUM_CASE");
-  IElementType ENUM_CASES = new WitElementType("ENUM_CASES");
   IElementType ENUM_DEFINITION = new WitElementType("ENUM_DEFINITION");
   IElementType EXPORT_DEFINITION = new WitElementType("EXPORT_DEFINITION");
   IElementType EXTERN_TYPE = new WitElementType("EXTERN_TYPE");
   IElementType FEATURE_FIELD = new WitElementType("FEATURE_FIELD");
   IElementType FLAGS_DEFINITION = new WitElementType("FLAGS_DEFINITION");
-  IElementType FLAGS_FIELDS = new WitElementType("FLAGS_FIELDS");
   IElementType FUNC_ITEM = new WitElementType("FUNC_ITEM");
   IElementType FUNC_TYPE = new WitElementType("FUNC_TYPE");
   IElementType FUTURE_ITEM = new WitElementType("FUTURE_ITEM");
@@ -37,7 +35,6 @@ public interface WitElementTypes {
   IElementType PARAM_LIST = new WitElementType("PARAM_LIST");
   IElementType RECORD_DEFINITION = new WitElementType("RECORD_DEFINITION");
   IElementType RECORD_FIELD = new WitElementType("RECORD_FIELD");
-  IElementType RECORD_FIELDS = new WitElementType("RECORD_FIELDS");
   IElementType RESOURCE_DEFINITION = new WitElementType("RESOURCE_DEFINITION");
   IElementType RESOURCE_METHOD = new WitElementType("RESOURCE_METHOD");
   IElementType RESULT_ITEM = new WitElementType("RESULT_ITEM");
@@ -48,8 +45,8 @@ public interface WitElementTypes {
   IElementType TOPLEVEL_USE_DECLARATION = new WitElementType("TOPLEVEL_USE_DECLARATION");
   IElementType TUPLE_DEFINITION = new WitElementType("TUPLE_DEFINITION");
   IElementType TUPLE_LIST = new WitElementType("TUPLE_LIST");
-  IElementType TY = new WitElementType("TY");
   IElementType TYPE_DEFINITION = new WitElementType("TYPE_DEFINITION");
+  IElementType TYPE_USAGE = new WitElementType("TYPE_USAGE");
   IElementType UINT = new WitElementType("UINT");
   IElementType UNSTABLE_GATE = new WitElementType("UNSTABLE_GATE");
   IElementType USE_DECLARATION = new WitElementType("USE_DECLARATION");
@@ -57,7 +54,6 @@ public interface WitElementTypes {
   IElementType USE_NAMES_LIST = new WitElementType("USE_NAMES_LIST");
   IElementType USE_PATH = new WitElementType("USE_PATH");
   IElementType VARIANT_CASE = new WitElementType("VARIANT_CASE");
-  IElementType VARIANT_CASES = new WitElementType("VARIANT_CASES");
   IElementType VARIANT_DEFINITION = new WitElementType("VARIANT_DEFINITION");
   IElementType VERSION_FIELD = new WitElementType("VERSION_FIELD");
   IElementType WORLD_DEFINITION = new WitElementType("WORLD_DEFINITION");
@@ -117,9 +113,6 @@ public interface WitElementTypes {
       else if (type == ENUM_CASE) {
         return new WitEnumCaseImpl(node);
       }
-      else if (type == ENUM_CASES) {
-        return new WitEnumCasesImpl(node);
-      }
       else if (type == ENUM_DEFINITION) {
         return new WitEnumDefinitionImpl(node);
       }
@@ -134,9 +127,6 @@ public interface WitElementTypes {
       }
       else if (type == FLAGS_DEFINITION) {
         return new WitFlagsDefinitionImpl(node);
-      }
-      else if (type == FLAGS_FIELDS) {
-        return new WitFlagsFieldsImpl(node);
       }
       else if (type == FUNC_ITEM) {
         return new WitFuncItemImpl(node);
@@ -198,9 +188,6 @@ public interface WitElementTypes {
       else if (type == RECORD_FIELD) {
         return new WitRecordFieldImpl(node);
       }
-      else if (type == RECORD_FIELDS) {
-        return new WitRecordFieldsImpl(node);
-      }
       else if (type == RESOURCE_DEFINITION) {
         return new WitResourceDefinitionImpl(node);
       }
@@ -231,11 +218,11 @@ public interface WitElementTypes {
       else if (type == TUPLE_LIST) {
         return new WitTupleListImpl(node);
       }
-      else if (type == TY) {
-        return new WitTyImpl(node);
-      }
       else if (type == TYPE_DEFINITION) {
         return new WitTypeDefinitionImpl(node);
+      }
+      else if (type == TYPE_USAGE) {
+        return new WitTypeUsageImpl(node);
       }
       else if (type == UINT) {
         return new WitUintImpl(node);
@@ -257,9 +244,6 @@ public interface WitElementTypes {
       }
       else if (type == VARIANT_CASE) {
         return new WitVariantCaseImpl(node);
-      }
-      else if (type == VARIANT_CASES) {
-        return new WitVariantCasesImpl(node);
       }
       else if (type == VARIANT_DEFINITION) {
         return new WitVariantDefinitionImpl(node);

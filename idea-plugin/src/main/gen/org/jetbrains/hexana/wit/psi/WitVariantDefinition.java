@@ -8,7 +8,7 @@ import com.intellij.psi.PsiElement;
 public interface WitVariantDefinition extends PsiElement {
 
   @NotNull
-  WitVariantCases getVariantCases();
+  List<WitVariantCase> getVariantCaseList();
 
   @NotNull
   PsiElement getIdentifier();

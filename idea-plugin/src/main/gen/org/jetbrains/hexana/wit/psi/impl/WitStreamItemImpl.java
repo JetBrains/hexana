@@ -29,8 +29,8 @@ public class WitStreamItemImpl extends ASTWrapperPsiElement implements WitStream
 
   @Override
   @Nullable
-  public WitTy getTy() {
-    return findChildByClass(WitTy.class);
+  public WitTypeUsage getTypeUsage() {
+    return findChildByClass(WitTypeUsage.class);
   }
 
 }

@@ -8,6 +8,6 @@ import com.intellij.psi.PsiElement;
 public interface WitTupleList extends PsiElement {
 
   @NotNull
-  List<WitTy> getTyList();
+  List<WitTypeUsage> getTypeUsageList();
 
 }

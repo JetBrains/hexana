@@ -29,8 +29,8 @@ public class WitOptionItemImpl extends ASTWrapperPsiElement implements WitOption
 
   @Override
   @NotNull
-  public WitTy getTy() {
-    return findNotNullChildByClass(WitTy.class);
+  public WitTypeUsage getTypeUsage() {
+    return findNotNullChildByClass(WitTypeUsage.class);
   }
 
 }

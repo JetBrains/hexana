@@ -27,16 +27,4 @@ public class WitFlagsDefinitionImpl extends ASTWrapperPsiElement implements WitF
     else super.accept(visitor);
   }
 
-  @Override
-  @NotNull
-  public WitFlagsFields getFlagsFields() {
-    return findNotNullChildByClass(WitFlagsFields.class);
-  }
-
-  @Override
-  @NotNull
-  public PsiElement getIdentifier() {
-    return findNotNullChildByType(IDENTIFIER);
-  }
-
 }

@@ -8,7 +8,7 @@ import com.intellij.psi.PsiElement;
 public interface WitVariantCase extends PsiElement {
 
   @Nullable
-  WitTy getTy();
+  WitTypeUsage getTypeUsage();
 
   @NotNull
   PsiElement getIdentifier();

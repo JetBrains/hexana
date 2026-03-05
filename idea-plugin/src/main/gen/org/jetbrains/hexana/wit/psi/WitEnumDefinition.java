@@ -8,7 +8,7 @@ import com.intellij.psi.PsiElement;
 public interface WitEnumDefinition extends PsiElement {
 
   @NotNull
-  WitEnumCases getEnumCases();
+  List<WitEnumCase> getEnumCaseList();
 
   @NotNull
   PsiElement getIdentifier();
