@@ -9,12 +9,10 @@ import com.intellij.psi.SyntaxTraverser;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.hexana.wit.WitFileType;
-import org.jetbrains.hexana.wit.psi.WitElementTypes;
-import org.jetbrains.hexana.wit.psi.WitHandle;
-import org.jetbrains.hexana.wit.psi.WitPsiFile;
-import org.jetbrains.hexana.wit.psi.WitUsePath;
+import org.jetbrains.hexana.wit.psi.*;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+
 
 public class WitHandleManipulator extends AbstractElementManipulator<WitHandle> {
     @Override

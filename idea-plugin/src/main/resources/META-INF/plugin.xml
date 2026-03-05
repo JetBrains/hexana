@@ -104,6 +104,10 @@
                                  implementationClass="org.jetbrains.hexana.wit.psi.impl.WitHandleManipulator"/>
         <lang.elementManipulator forClass="org.jetbrains.hexana.wit.psi.WitUsePath"
                                  implementationClass="org.jetbrains.hexana.wit.psi.impl.WitUsePathManipulator"/>
+        <lang.elementManipulator forClass="org.jetbrains.hexana.wit.psi.WitUseNamesItem"
+                                 implementationClass="org.jetbrains.hexana.wit.psi.impl.WitUseNamesItemManipulator"/>
+        <lang.elementManipulator forClass="org.jetbrains.hexana.wit.psi.WitIncludeNamesItem"
+                                 implementationClass="org.jetbrains.hexana.wit.psi.impl.WitIncludeNamesItemManipulator"/>
     </extensions>
 
     <actions>
