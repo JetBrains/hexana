@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.wit.psi.impl
 
 import com.intellij.psi.PsiElement
+import com.intellij.psi.SyntaxTraverser
+import com.intellij.psi.util.elementType
 import org.jetbrains.hexana.wit.psi.WitElementTypes
 import org.jetbrains.hexana.wit.psi.WitTypeDeclaration
 
@@ -22,9 +24,10 @@ object WitPsiImplUtil {
 
     @JvmStatic
     fun setName(typeDeclaration: WitTypeDeclaration, newName: String): WitTypeDeclaration {
-        /*val identifierNode = typeDeclaration.node.findChildByType(WitElementTypes.IDENTIFIER) ?: return typeDeclaration
-        val newIdentifierNode = identifierNode.replace(WitElementTypes.Factory.createIdentifier(newName))
-        return typeDeclaration.replace(WitElementTypes.createTypeDeclaration(newIdentifierNode))*/
-        return typeDeclaration //todo
+        val name = typeDeclaration.nameIdentifier ?: return typeDeclaration
+        val file = WitHandleManipulator.createDummyFile(typeDeclaration.project, "package $newName;")
+        val id = SyntaxTraverser.psiTraverser(file).bfsTraversal().find { it.elementType == WitElementTypes.IDENTIFIER }
+        name.replace(id!!)
+        return typeDeclaration
     }
 }

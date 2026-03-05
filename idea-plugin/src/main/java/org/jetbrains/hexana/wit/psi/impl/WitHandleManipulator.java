@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.wit.psi.impl;
 
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.AbstractElementManipulator;
 import com.intellij.psi.ElementManipulator;
@@ -17,8 +18,12 @@ import org.jspecify.annotations.Nullable;
 public class WitHandleManipulator extends AbstractElementManipulator<WitHandle> {
     @Override
     public @Nullable WitHandle handleContentChange(@NonNull WitHandle element, @NotNull TextRange range, String newContent) throws IncorrectOperationException {
-        PsiFileFactory psiFileFactory = PsiFileFactory.getInstance(element.getProject());
-        WitPsiFile file = (WitPsiFile) psiFileFactory.createFileFromText("dummy.wit", WitFileType.INSTANCE, "package foo; type X = " + newContent + ";");
+        WitPsiFile file = createDummyFile(element.getProject(), "package foo; type X = " + newContent + ";");
         return (WitHandle) SyntaxTraverser.psiTraverser(file).filterTypes(type -> type == WitElementTypes.HANDLE).bfsTraversal().single();
+    }
+
+    public static @NonNull WitPsiFile createDummyFile(@NonNull Project project, String text) {
+        PsiFileFactory psiFileFactory = PsiFileFactory.getInstance(project);
+        return (WitPsiFile) psiFileFactory.createFileFromText("dummy.wit", WitFileType.INSTANCE, text);
     }
 }
