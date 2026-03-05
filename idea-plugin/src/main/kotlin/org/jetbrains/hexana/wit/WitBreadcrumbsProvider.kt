@@ -6,12 +6,6 @@ import com.intellij.psi.tree.TokenSet
 import com.intellij.psi.util.elementType
 import com.intellij.ui.breadcrumbs.BreadcrumbsProvider
 import org.jetbrains.hexana.wit.psi.WitElementTypes
-import org.jetbrains.hexana.wit.psi.WitEnumItem
-import org.jetbrains.hexana.wit.psi.WitFlagsItems
-import org.jetbrains.hexana.wit.psi.WitInterfaceItem
-import org.jetbrains.hexana.wit.psi.WitRecordItem
-import org.jetbrains.hexana.wit.psi.WitVariantItems
-import org.jetbrains.hexana.wit.psi.WitWorldItem
 
 class WitBreadcrumbsProvider : BreadcrumbsProvider {
     override fun getLanguages(): Array<Language> {
