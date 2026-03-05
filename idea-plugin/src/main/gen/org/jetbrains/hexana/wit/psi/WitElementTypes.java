@@ -18,7 +18,6 @@ public interface WitElementTypes {
   IElementType FUNC_ITEM = new WitElementType("FUNC_ITEM");
   IElementType FUNC_TYPE = new WitElementType("FUNC_TYPE");
   IElementType FUTURE_ITEM = new WitElementType("FUTURE_ITEM");
-  IElementType GATE = new WitElementType("GATE");
   IElementType HANDLE = new WitElementType("HANDLE");
   IElementType IMPORT_DEFINITION = new WitElementType("IMPORT_DEFINITION");
   IElementType INCLUDE_DECLARATION = new WitElementType("INCLUDE_DECLARATION");
@@ -136,9 +135,6 @@ public interface WitElementTypes {
       }
       else if (type == FUTURE_ITEM) {
         return new WitFutureItemImpl(node);
-      }
-      else if (type == GATE) {
-        return new WitGateImpl(node);
       }
       else if (type == HANDLE) {
         return new WitHandleImpl(node);

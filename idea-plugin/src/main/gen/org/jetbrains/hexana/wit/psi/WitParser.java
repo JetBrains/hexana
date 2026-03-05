@@ -338,17 +338,19 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // gate-item*
-  public static boolean gate(PsiBuilder b, int l) {
+  // gate-item+
+  static boolean gate(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "gate")) return false;
-    Marker m = enter_section_(b, l, _NONE_, GATE, "<gate>");
-    while (true) {
+    boolean r;
+    Marker m = enter_section_(b);
+    r = gate_item(b, l + 1);
+    while (r) {
       int c = current_position_(b);
       if (!gate_item(b, l + 1)) break;
       if (!empty_element_parsed_guard_(b, "gate", c)) break;
     }
-    exit_section_(b, l, m, true, false, null);
-    return true;
+    exit_section_(b, m, null, r);
+    return r;
   }
 
   /* ********************************************************** */
@@ -505,17 +507,24 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // gate INTERFACE IDENTIFIER '{' interface-items* '}'
+  // gate? INTERFACE IDENTIFIER '{' interface-items* '}'
   public static boolean interface_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "interface_definition")) return false;
     boolean r;
     Marker m = enter_section_(b, l, _NONE_, INTERFACE_DEFINITION, "<interface definition>");
-    r = gate(b, l + 1);
+    r = interface_definition_0(b, l + 1);
     r = r && consumeTokens(b, 0, INTERFACE, IDENTIFIER, OPEN_BRACE);
     r = r && interface_definition_4(b, l + 1);
     r = r && consumeToken(b, CLOSE_BRACE);
     exit_section_(b, l, m, r, false, null);
     return r;
+  }
+
+  // gate?
+  private static boolean interface_definition_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "interface_definition_0")) return false;
+    gate(b, l + 1);
+    return true;
   }
 
   // interface-items*
@@ -543,15 +552,22 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // gate interface-item-definition
+  // gate? interface-item-definition
   static boolean interface_items(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "interface_items")) return false;
     boolean r;
     Marker m = enter_section_(b);
-    r = gate(b, l + 1);
+    r = interface_items_0(b, l + 1);
     r = r && interface_item_definition(b, l + 1);
     exit_section_(b, m, null, r);
     return r;
+  }
+
+  // gate?
+  private static boolean interface_items_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "interface_items_0")) return false;
+    gate(b, l + 1);
+    return true;
   }
 
   /* ********************************************************** */
@@ -1951,17 +1967,24 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // gate WORLD IDENTIFIER '{' world-items* '}'
+  // gate? WORLD IDENTIFIER '{' world-items* '}'
   public static boolean world_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "world_definition")) return false;
     boolean r;
     Marker m = enter_section_(b, l, _NONE_, WORLD_DEFINITION, "<world definition>");
-    r = gate(b, l + 1);
+    r = world_definition_0(b, l + 1);
     r = r && consumeTokens(b, 0, WORLD, IDENTIFIER, OPEN_BRACE);
     r = r && world_definition_4(b, l + 1);
     r = r && consumeToken(b, CLOSE_BRACE);
     exit_section_(b, l, m, r, false, null);
     return r;
+  }
+
+  // gate?
+  private static boolean world_definition_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "world_definition_0")) return false;
+    gate(b, l + 1);
+    return true;
   }
 
   // world-items*
@@ -1993,15 +2016,22 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // gate world-item-definition
+  // gate? world-item-definition
   static boolean world_items(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "world_items")) return false;
     boolean r;
     Marker m = enter_section_(b);
-    r = gate(b, l + 1);
+    r = world_items_0(b, l + 1);
     r = r && world_item_definition(b, l + 1);
     exit_section_(b, m, null, r);
     return r;
+  }
+
+  // gate?
+  private static boolean world_items_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "world_items_0")) return false;
+    gate(b, l + 1);
+    return true;
   }
 
 }

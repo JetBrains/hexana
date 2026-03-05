@@ -8,6 +8,9 @@ import com.intellij.psi.PsiElement;
 public interface WitWorldDefinition extends PsiElement {
 
   @NotNull
+  List<WitDeprecatedGate> getDeprecatedGateList();
+
+  @NotNull
   List<WitEnumDefinition> getEnumDefinitionList();
 
   @NotNull
@@ -15,9 +18,6 @@ public interface WitWorldDefinition extends PsiElement {
 
   @NotNull
   List<WitFlagsDefinition> getFlagsDefinitionList();
-
-  @NotNull
-  List<WitGate> getGateList();
 
   @NotNull
   List<WitImportDefinition> getImportDefinitionList();
@@ -32,7 +32,13 @@ public interface WitWorldDefinition extends PsiElement {
   List<WitResourceDefinition> getResourceDefinitionList();
 
   @NotNull
+  List<WitSinceGate> getSinceGateList();
+
+  @NotNull
   List<WitTypeDefinition> getTypeDefinitionList();
+
+  @NotNull
+  List<WitUnstableGate> getUnstableGateList();
 
   @NotNull
   List<WitUseDeclaration> getUseDeclarationList();

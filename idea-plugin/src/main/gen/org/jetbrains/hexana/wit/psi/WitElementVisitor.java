@@ -47,10 +47,6 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitPsiElement(o);
   }
 
-  public void visitGate(@NotNull WitGate o) {
-    visitPsiElement(o);
-  }
-
   public void visitHandle(@NotNull WitHandle o) {
     visitPsiElement(o);
   }

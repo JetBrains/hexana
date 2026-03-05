@@ -29,6 +29,12 @@ public class WitInterfaceDefinitionImpl extends ASTWrapperPsiElement implements 
 
   @Override
   @NotNull
+  public List<WitDeprecatedGate> getDeprecatedGateList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitDeprecatedGate.class);
+  }
+
+  @Override
+  @NotNull
   public List<WitEnumDefinition> getEnumDefinitionList() {
     return PsiTreeUtil.getChildrenOfTypeAsList(this, WitEnumDefinition.class);
   }
@@ -47,12 +53,6 @@ public class WitInterfaceDefinitionImpl extends ASTWrapperPsiElement implements 
 
   @Override
   @NotNull
-  public List<WitGate> getGateList() {
-    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitGate.class);
-  }
-
-  @Override
-  @NotNull
   public List<WitRecordDefinition> getRecordDefinitionList() {
     return PsiTreeUtil.getChildrenOfTypeAsList(this, WitRecordDefinition.class);
   }
@@ -65,8 +65,20 @@ public class WitInterfaceDefinitionImpl extends ASTWrapperPsiElement implements 
 
   @Override
   @NotNull
+  public List<WitSinceGate> getSinceGateList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitSinceGate.class);
+  }
+
+  @Override
+  @NotNull
   public List<WitTypeDefinition> getTypeDefinitionList() {
     return PsiTreeUtil.getChildrenOfTypeAsList(this, WitTypeDefinition.class);
+  }
+
+  @Override
+  @NotNull
+  public List<WitUnstableGate> getUnstableGateList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitUnstableGate.class);
   }
 
   @Override
