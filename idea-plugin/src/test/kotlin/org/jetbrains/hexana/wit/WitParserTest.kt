@@ -37,4 +37,6 @@ class WitParserTest : ParsingTestCase("wit/parser", "wit", true, WitParserDefini
     fun testGates() { doTest() }
 
     fun testMonotonicClockIssue() { doTest() }
+    fun testFilesystemTypesIssue() { doTest() }
+    fun testFilesystemTypes30Issue() { doTest() }
 }

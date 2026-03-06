@@ -13,6 +13,9 @@ public interface WitResourceMethod extends PsiElement {
   @Nullable
   WitFuncType getFuncType();
 
+  @NotNull
+  List<WitGateItem> getGateItemList();
+
   @Nullable
   WitParamList getParamList();
 

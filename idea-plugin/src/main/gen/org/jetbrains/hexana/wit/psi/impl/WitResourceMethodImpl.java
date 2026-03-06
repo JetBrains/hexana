@@ -40,6 +40,12 @@ public class WitResourceMethodImpl extends ASTWrapperPsiElement implements WitRe
   }
 
   @Override
+  @NotNull
+  public List<WitGateItem> getGateItemList() {
+    return PsiTreeUtil.getChildrenOfTypeAsList(this, WitGateItem.class);
+  }
+
+  @Override
   @Nullable
   public WitParamList getParamList() {
     return findChildByClass(WitParamList.class);

@@ -179,7 +179,7 @@ param-list ::= '(' named-type-list? ')'
 
 result-list ::= '->' type-usage
 
-named-type-list ::= named-type ( ',' named-type )*
+named-type-list ::= named-type ( ',' named-type )* ','?
 
 named-type ::= IDENTIFIER ':' type-usage
 
@@ -217,9 +217,9 @@ private enum-cases ::= enum-case (',' enum-case)* ','?
 resource-definition ::= RESOURCE IDENTIFIER ';'
                 | RESOURCE IDENTIFIER '{' resource-method* '}'
 
-resource-method ::= func-item
+resource-method ::= gate? (func-item
                   | IDENTIFIER ':' STATIC func-type ';'
-                  | CONSTRUCTOR param-list ';'
+                  | CONSTRUCTOR param-list ';')
 
 type-usage ::= 'u8' | 'u16' | 'u32' | 'u64'
      | 's8' | 's16' | 's32' | 's64'
