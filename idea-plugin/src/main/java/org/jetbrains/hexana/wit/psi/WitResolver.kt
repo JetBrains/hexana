@@ -36,11 +36,30 @@ object WitResolver {
         }
         val container = resolveWitPath(path, path.text) ?: return null
         if (container is WitInterfaceDefinition) {
-            return container.typeDeclarationList.find { it.name == name }
+            return resolveHandle(container, name)
+        }
+        return null
+    }
+
+    fun resolveHandle(
+        handle: PsiElement,
+        name: String
+    ): PsiElement? {
+        val container = handle.parentOfType<WitInterfaceDefinition>()
+        if (container != null) {
+            return (container.typeDeclarationList.find { it.name == name }
                 ?: container.funcItemList.find { it.identifier.text == name }
                 ?: container.useDeclarationList.flatMap {
                     it.useNamesList.useNamesItemList
-                }.find { it.lastChild.text == name }
+                }.find { it.lastChild.text == name })
+        }
+        val externType = handle.parentOfType<WitExternType>()
+        if (externType != null) {
+            return (externType.typeDeclarationList.find { it.name == name }
+                ?: externType.funcItemList.find { it.identifier.text == name }
+                ?: externType.useDeclarationList.flatMap {
+                    it.useNamesList.useNamesItemList
+                }.find { it.lastChild.text == name })
         }
         return null
     }

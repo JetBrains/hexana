@@ -19,8 +19,6 @@ open class WitHandleMixin(node: ASTNode): WitPsiElement(node), ContributedRefere
 
 class WitHandleReference(element: WitHandle): PsiReferenceBase<WitHandle>(element) {
     override fun resolve(): PsiElement? {
-        return element.parentOfType<WitInterfaceDefinition>()
-            ?.typeDeclarationList
-            ?.find { it.name == element.text }
+        return WitResolver.resolveHandle(element, element.text)
     }
 }
