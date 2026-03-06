@@ -75,8 +75,8 @@ wit ::= (package-definition)? (package-item | nested-package-definition)*
 
 semver ::= NUMBER !<<white_space>> DOT !<<white_space>> NUMBER
      DOT !<<white_space>> NUMBER
-     ('-' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)*)*)?
-     ('+' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)*)*)?
+     ('-' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)+)*)?
+     ('+' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)+)*)?
 
 package-definition ::= package-decl ';' { pin = 2 }
 

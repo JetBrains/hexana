@@ -1162,8 +1162,8 @@ public class WitParser implements PsiParser, LightPsiParser {
   /* ********************************************************** */
   // NUMBER !<<white_space>> DOT !<<white_space>> NUMBER
   //      DOT !<<white_space>> NUMBER
-  //      ('-' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)*)*)?
-  //      ('+' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)*)*)?
+  //      ('-' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)+)*)?
+  //      ('+' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)+)*)?
   public static boolean semver(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "semver")) return false;
     if (!nextTokenIs(b, NUMBER)) return false;
@@ -1212,14 +1212,14 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // ('-' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)*)*)?
+  // ('-' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)+)*)?
   private static boolean semver_8(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "semver_8")) return false;
     semver_8_0(b, l + 1);
     return true;
   }
 
-  // '-' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)*)*
+  // '-' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)+)*
   private static boolean semver_8_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "semver_8_0")) return false;
     boolean r;
@@ -1255,7 +1255,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // (DOT (NUMBER | IDENTIFIER)*)*
+  // (DOT (NUMBER | IDENTIFIER)+)*
   private static boolean semver_8_0_2(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "semver_8_0_2")) return false;
     while (true) {
@@ -1266,7 +1266,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     return true;
   }
 
-  // DOT (NUMBER | IDENTIFIER)*
+  // DOT (NUMBER | IDENTIFIER)+
   private static boolean semver_8_0_2_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "semver_8_0_2_0")) return false;
     boolean r;
@@ -1277,15 +1277,19 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // (NUMBER | IDENTIFIER)*
+  // (NUMBER | IDENTIFIER)+
   private static boolean semver_8_0_2_0_1(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "semver_8_0_2_0_1")) return false;
-    while (true) {
+    boolean r;
+    Marker m = enter_section_(b);
+    r = semver_8_0_2_0_1_0(b, l + 1);
+    while (r) {
       int c = current_position_(b);
       if (!semver_8_0_2_0_1_0(b, l + 1)) break;
       if (!empty_element_parsed_guard_(b, "semver_8_0_2_0_1", c)) break;
     }
-    return true;
+    exit_section_(b, m, null, r);
+    return r;
   }
 
   // NUMBER | IDENTIFIER
@@ -1297,14 +1301,14 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // ('+' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)*)*)?
+  // ('+' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)+)*)?
   private static boolean semver_9(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "semver_9")) return false;
     semver_9_0(b, l + 1);
     return true;
   }
 
-  // '+' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)*)*
+  // '+' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)+)*
   private static boolean semver_9_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "semver_9_0")) return false;
     boolean r;
@@ -1340,7 +1344,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // (DOT (NUMBER | IDENTIFIER)*)*
+  // (DOT (NUMBER | IDENTIFIER)+)*
   private static boolean semver_9_0_2(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "semver_9_0_2")) return false;
     while (true) {
@@ -1351,7 +1355,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     return true;
   }
 
-  // DOT (NUMBER | IDENTIFIER)*
+  // DOT (NUMBER | IDENTIFIER)+
   private static boolean semver_9_0_2_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "semver_9_0_2_0")) return false;
     boolean r;
@@ -1362,15 +1366,19 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // (NUMBER | IDENTIFIER)*
+  // (NUMBER | IDENTIFIER)+
   private static boolean semver_9_0_2_0_1(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "semver_9_0_2_0_1")) return false;
-    while (true) {
+    boolean r;
+    Marker m = enter_section_(b);
+    r = semver_9_0_2_0_1_0(b, l + 1);
+    while (r) {
       int c = current_position_(b);
       if (!semver_9_0_2_0_1_0(b, l + 1)) break;
       if (!empty_element_parsed_guard_(b, "semver_9_0_2_0_1", c)) break;
     }
-    return true;
+    exit_section_(b, m, null, r);
+    return r;
   }
 
   // NUMBER | IDENTIFIER
