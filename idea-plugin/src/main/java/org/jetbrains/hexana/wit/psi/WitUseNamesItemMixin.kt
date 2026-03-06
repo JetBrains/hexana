@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.wit.psi
 
 import com.intellij.lang.ASTNode
+import com.intellij.openapi.util.TextRange
 import com.intellij.psi.ContributedReferenceHost
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
@@ -16,6 +17,10 @@ open class WitUseNamesItemMixin(node: ASTNode): WitPsiElement(node), Contributed
 
 class WitUseNamesItemReference(element: WitUseNamesItem): PsiReferenceBase<WitUseNamesItem>(element) {
     override fun resolve(): PsiElement? {
-        return WitResolver.resolveWitInterfaceMemberByRef(element, element.text)
+        return WitResolver.resolveWitInterfaceMemberByRef(element, element.firstChild.text)
+    }
+
+    override fun getRangeInElement(): TextRange {
+        return element.firstChild.textRangeInParent
     }
 }

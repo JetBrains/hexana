@@ -22,13 +22,25 @@ object WitResolver {
         return null
     }
 
-    fun resolveWitInterfaceMemberByRef(context: PsiElement, name: String): WitTypeDeclaration? {
-        var path: PsiElement? = context.parentOfTypes(WitUsePath::class, WitImportDefinition::class)
-        if (path is WitImportDefinition) { path = path.usePath }
-        if (path !is WitUsePath) return null
+    fun resolveWitInterfaceMemberByRef(context: PsiElement, name: String): PsiElement? {
+        val parent: PsiElement? = context.parentOfTypes(WitUseDeclaration::class,
+            WitIncludeDeclaration::class)
+        val path = when (parent) {
+            is WitIncludeDeclaration -> {
+                parent.usePath
+            }
+            is WitUseDeclaration -> {
+                parent.usePath
+            }
+            else -> return null
+        }
         val container = resolveWitPath(path, path.text) ?: return null
         if (container is WitInterfaceDefinition) {
             return container.typeDeclarationList.find { it.name == name }
+                ?: container.funcItemList.find { it.identifier.text == name }
+                ?: container.useDeclarationList.flatMap {
+                    it.useNamesList.useNamesItemList
+                }.find { it.lastChild.text == name }
         }
         return null
     }
