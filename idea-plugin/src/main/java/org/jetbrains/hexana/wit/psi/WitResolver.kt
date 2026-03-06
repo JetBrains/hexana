@@ -45,7 +45,7 @@ object WitResolver {
         handle: PsiElement,
         name: String
     ): PsiElement? {
-        val container = handle.parentOfType<WitInterfaceDefinition>()
+        val container = handle.parentOfType<WitInterfaceDefinition>(true)
         if (container != null) {
             return (container.typeDeclarationList.find { it.name == name }
                 ?: container.funcItemList.find { it.identifier.text == name }
@@ -53,7 +53,7 @@ object WitResolver {
                     it.useNamesList.useNamesItemList
                 }.find { it.lastChild.text == name })
         }
-        val externType = handle.parentOfType<WitExternType>()
+        val externType = handle.parentOfType<WitExternType>(true)
         if (externType != null) {
             return (externType.typeDeclarationList.find { it.name == name }
                 ?: externType.funcItemList.find { it.identifier.text == name }
