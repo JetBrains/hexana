@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.wit.psi
 
 import com.intellij.lang.ASTNode
+import com.intellij.openapi.util.NlsSafe
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.ContributedReferenceHost
 import com.intellij.psi.PsiElement
@@ -12,6 +13,14 @@ open class WitUseNamesItemMixin(node: ASTNode): WitPsiElement(node), Contributed
     override fun getReferences(): Array<out PsiReference?> {
         val identifier = this.findChildByType<PsiElement>(WitElementTypes.IDENTIFIER)
         return if (identifier != null) arrayOf(WitUseNamesItemReference(this)) else emptyArray()
+    }
+
+    override fun setName(name: @NlsSafe String): PsiElement? {
+        return null;
+    }
+
+    override fun getNameIdentifier(): PsiElement? {
+        return lastChild;
     }
 }
 

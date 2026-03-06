@@ -145,6 +145,14 @@ include-names-list ::= include-names-item (',' include-names-item)*
 
 include-names-item ::= IDENTIFIER 'as' IDENTIFIER {
     mixin="org.jetbrains.hexana.wit.psi.WitIncludeNamesItemMixin"
+    methods=[
+        getName
+        getNameIdentifier
+        setName
+        getTextOffset
+    ]
+    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+    "com.intellij.psi.PsiNameIdentifierOwner"]
 }
 
 interface-definition ::= gate? INTERFACE IDENTIFIER '{' interface-items* '}'
@@ -189,6 +197,14 @@ use-names-list ::= use-names-item (',' use-names-item)* ','?
 
 use-names-item ::= IDENTIFIER 'as' IDENTIFIER | IDENTIFIER {
     mixin="org.jetbrains.hexana.wit.psi.WitUseNamesItemMixin"
+    methods=[
+        getName
+        getNameIdentifier
+        setName
+        getTextOffset
+    ]
+    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+    "com.intellij.psi.PsiNameIdentifierOwner"]
 }
 
 type-definition ::= TYPE IDENTIFIER '=' type-usage ';'

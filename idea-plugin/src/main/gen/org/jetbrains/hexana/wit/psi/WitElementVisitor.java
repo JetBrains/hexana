@@ -67,7 +67,9 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitIncludeNamesItem(@NotNull WitIncludeNamesItem o) {
-    visitPsiElement(o);
+    visitNavigatablePsiElement(o);
+    // visitPsiNamedElement(o);
+    // visitPsiNameIdentifierOwner(o);
   }
 
   public void visitIncludeNamesList(@NotNull WitIncludeNamesList o) {
@@ -191,7 +193,9 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitUseNamesItem(@NotNull WitUseNamesItem o) {
-    visitPsiElement(o);
+    visitNavigatablePsiElement(o);
+    // visitPsiNamedElement(o);
+    // visitPsiNameIdentifierOwner(o);
   }
 
   public void visitUseNamesList(@NotNull WitUseNamesList o) {
