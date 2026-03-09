@@ -108,6 +108,7 @@
                                  implementationClass="org.jetbrains.hexana.wit.psi.impl.WitUseNamesItemManipulator"/>
         <lang.elementManipulator forClass="org.jetbrains.hexana.wit.psi.WitIncludeNamesItem"
                                  implementationClass="org.jetbrains.hexana.wit.psi.impl.WitIncludeNamesItemManipulator"/>
+        <fileBasedIndex implementation="org.jetbrains.hexana.wit.WitComponentIndex"/>
     </extensions>
 
     <actions>
