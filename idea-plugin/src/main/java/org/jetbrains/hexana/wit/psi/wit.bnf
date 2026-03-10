@@ -121,9 +121,13 @@ use-path ::= ( IDENTIFIER !<<white_space>> ':' !<<white_space>> )+ IDENTIFIER ( 
   ]
 }
 
-world-definition ::= gate? WORLD IDENTIFIER '{' world-items* '}'
+world-definition ::= gate? WORLD IDENTIFIER '{' world-items* '}' {
+    pin=2
+}
 
-private world-items ::= gate? world-item-definition
+private world-items ::= gate? world-item-definition {
+    recoverWhile = world_recovery
+}
 
 private world-item-definition ::= export-definition
                    | import-definition
@@ -136,7 +140,8 @@ export-definition ::= EXPORT IDENTIFIER ':' extern-type
 import-definition ::= IMPORT IDENTIFIER ':' extern-type
               | IMPORT use-path ';'
 
-extern-type ::= func-type ';' | INTERFACE '{' interface-items* '}'
+private extern-interface ::= INTERFACE '{' interface-items* '}' { pin=1 }
+extern-type ::= func-type ';' | extern-interface
 
 include-declaration ::= INCLUDE use-path ';'
                | INCLUDE use-path 'with' '{' include-names-list '}'
@@ -155,9 +160,13 @@ include-names-item ::= IDENTIFIER 'as' IDENTIFIER {
     "com.intellij.psi.PsiNameIdentifierOwner"]
 }
 
-interface-definition ::= gate? INTERFACE IDENTIFIER '{' interface-items* '}'
+interface-definition ::= gate? INTERFACE IDENTIFIER '{' interface-items* '}' {
+    pin=2
+}
 
-private interface-items ::= gate? interface-item-definition
+private interface-items ::= gate? interface-item-definition {
+    recoverWhile = interface_recovery
+}
 
 private interface-item-definition ::= type-declaration
                        | use-declaration
@@ -274,3 +283,6 @@ stream-item ::= STREAM '<' type-usage '>' | STREAM
 handle ::= IDENTIFIER | BORROW '<' IDENTIFIER '>' {
     mixin = "org.jetbrains.hexana.wit.psi.WitHandleMixin"
 }
+
+private world_recovery ::= !( '}' | '@' | ';' | EXPORT | IMPORT | USE | TYPE | INCLUDE )
+private interface_recovery ::= !( '}' | '@' | ';' | ENUM | FLAGS | RECORD | RESOURCE | TYPE | VARIANT | USE | (IDENTIFIER ':') )

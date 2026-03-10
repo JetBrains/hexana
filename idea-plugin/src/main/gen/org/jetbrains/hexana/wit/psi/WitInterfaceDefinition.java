@@ -19,7 +19,7 @@ public interface WitInterfaceDefinition extends WitPackageItem {
   @NotNull
   List<WitUseDeclaration> getUseDeclarationList();
 
-  @NotNull
+  @Nullable
   PsiElement getIdentifier();
 
 }

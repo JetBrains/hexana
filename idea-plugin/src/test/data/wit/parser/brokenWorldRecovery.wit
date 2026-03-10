@@ -1,0 +1,5 @@
+package local:demo;
+
+world union-my-world-b {
+    import a: func();
+    import b: func();

@@ -10,6 +10,7 @@ import com.intellij.psi.util.PsiTreeUtil;
 import static org.jetbrains.hexana.wit.psi.WitElementTypes.*;
 import org.jetbrains.hexana.wit.psi.WitUseNamesItemMixin;
 import org.jetbrains.hexana.wit.psi.*;
+import com.intellij.openapi.util.NlsSafe;
 
 public class WitUseNamesItemImpl extends WitUseNamesItemMixin implements WitUseNamesItem {
 

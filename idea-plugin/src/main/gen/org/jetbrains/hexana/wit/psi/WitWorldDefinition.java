@@ -25,7 +25,7 @@ public interface WitWorldDefinition extends WitPackageItem {
   @NotNull
   List<WitUseDeclaration> getUseDeclarationList();
 
-  @NotNull
+  @Nullable
   PsiElement getIdentifier();
 
 }

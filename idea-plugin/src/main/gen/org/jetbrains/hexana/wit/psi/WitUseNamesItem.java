@@ -7,6 +7,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.NavigatablePsiElement;
 import com.intellij.psi.PsiNamedElement;
 import com.intellij.psi.PsiNameIdentifierOwner;
+import com.intellij.openapi.util.NlsSafe;
 
 public interface WitUseNamesItem extends NavigatablePsiElement, PsiNamedElement, PsiNameIdentifierOwner {
 
@@ -14,13 +15,9 @@ public interface WitUseNamesItem extends NavigatablePsiElement, PsiNamedElement,
   //matching getName(WitUseNamesItem, ...)
   //methods are not found in WitPsiImplUtil
 
-  //WARNING: getNameIdentifier(...) is skipped
-  //matching getNameIdentifier(WitUseNamesItem, ...)
-  //methods are not found in WitPsiImplUtil
+  @Nullable PsiElement getNameIdentifier();
 
-  //WARNING: setName(...) is skipped
-  //matching setName(WitUseNamesItem, ...)
-  //methods are not found in WitPsiImplUtil
+  @Nullable PsiElement setName(@NlsSafe @NotNull String name);
 
   //WARNING: getTextOffset(...) is skipped
   //matching getTextOffset(WitUseNamesItem, ...)

@@ -64,9 +64,9 @@ public class WitWorldDefinitionImpl extends WitPackageItemImpl implements WitWor
   }
 
   @Override
-  @NotNull
+  @Nullable
   public PsiElement getIdentifier() {
-    return findNotNullChildByType(IDENTIFIER);
+    return findChildByType(IDENTIFIER);
   }
 
 }
