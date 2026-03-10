@@ -14,28 +14,31 @@ object WitResolver {
     fun resolveWitPath(context: PsiElement, name: String): PsiElement? {
         val packageName = if (name.contains("/")) (name.substringBeforeLast("/") + name.indexOfLast { it == '@' }.let {
             if (it == -1) "" else name.substring(it)
-        }) else context.containingFile?.children?.filterIsInstance<WitPackageDefinition>()?.firstOrNull()?.packageName?.text ?: return null
+        }) else context.containingFile?.children?.filterIsInstance<WitPackageDefinition>()?.firstOrNull()?.packageName?.text
 
         val interfaceName = name.substringAfterLast("/").substringBeforeLast("@")
 
-        val defs = mutableListOf<PsiElement>()
-        WitComponentIndex.processPackageDeclarations(packageName, GlobalSearchScope.allScope(context.project),
-            { file, decl ->
-                val pkg = decl.singleOrNull { it.type == WitDeclarationType.PACKAGE }
-                if (pkg != null) {
-                    file.findPsiFile(context.project)?.children?.singleOrNull {
-                        it is WitPackageDefinition && it.packageName.text == packageName
-                    }?.let {
-                        findPackageItemByName(it.parent, interfaceName)?.let {
-                            defs.add(it)
+        if (packageName != null) {
+            val defs = mutableListOf<PsiElement>()
+            WitComponentIndex.processPackageDeclarations(
+                packageName, GlobalSearchScope.allScope(context.project),
+                { file, decl ->
+                    val pkg = decl.singleOrNull { it.type == WitDeclarationType.PACKAGE }
+                    if (pkg != null) {
+                        file.findPsiFile(context.project)?.children?.singleOrNull {
+                            it is WitPackageDefinition && it.packageName.text == packageName
+                        }?.let {
+                            findPackageItemByName(it.parent, interfaceName)?.let {
+                                defs.add(it)
+                            }
                         }
                     }
-                }
-                return@processPackageDeclarations true
-            })
+                    return@processPackageDeclarations true
+                })
 
-        if (defs.isNotEmpty()) {
-            return defs.first()
+            if (defs.isNotEmpty()) {
+                return defs.first()
+            }
         }
 
         context.parents(withSelf = true)
