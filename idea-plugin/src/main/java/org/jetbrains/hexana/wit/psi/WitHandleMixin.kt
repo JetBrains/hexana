@@ -5,7 +5,6 @@ import com.intellij.psi.ContributedReferenceHost
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
 import com.intellij.psi.PsiReferenceBase
-import com.intellij.psi.util.parentOfType
 
 open class WitHandleMixin(node: ASTNode): WitPsiElement(node), ContributedReferenceHost, WitHandle {
     override fun getReferences(): Array<out PsiReference?> {
@@ -17,8 +16,9 @@ open class WitHandleMixin(node: ASTNode): WitPsiElement(node), ContributedRefere
     }
 }
 
-class WitHandleReference(element: WitHandle): PsiReferenceBase<WitHandle>(element) {
+class WitHandleReference(element: WitHandle): PsiReferenceBase<WitHandle>(element,
+     element.identifier.textRangeInParent) {
     override fun resolve(): PsiElement? {
-        return WitResolver.resolveHandle(element, element.text)
+        return WitResolver.resolveHandle(element, element.identifier.text)
     }
 }
