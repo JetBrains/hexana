@@ -45,6 +45,12 @@ object WitResolver {
             .forEach {
                 findPackageItemByName(it, name)?.let { return it }
             }
+
+        context.containingFile.parent?.files?.firstOrNull {
+            it.name == "$name.wit"
+        }?.let {
+            findPackageItemByName(it, name)?.let { return it }
+        }
         return null
     }
 
