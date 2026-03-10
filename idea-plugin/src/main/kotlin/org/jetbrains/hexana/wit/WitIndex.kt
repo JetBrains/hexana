@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.wit
 
+import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.util.indexing.*
 import com.intellij.util.indexing.impl.CollectionDataExternalizer
 import com.intellij.util.io.DataExternalizer
@@ -37,6 +38,14 @@ class WitComponentIndex: FileBasedIndexExtension<String, Collection<WitDeclarati
         }
     }
 
+    companion object {
+        fun processPackageDeclarations(
+            packageName: String,
+            scope: GlobalSearchScope,
+            processor: FileBasedIndex.ValueProcessor<Collection<WitDeclaration>>
+        ): Boolean =
+            FileBasedIndex.getInstance().processValues(WitIndexId, packageName, null, processor, scope)
+    }
     override fun getInputFilter() = FileBasedIndex.InputFilter { it.fileType == WitFileType.INSTANCE }
 
     override fun dependsOnFileContent() = true

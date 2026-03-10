@@ -1,24 +1,61 @@
 package org.jetbrains.hexana.wit.psi
 
+import com.intellij.openapi.vfs.findPsiFile
 import com.intellij.psi.PsiElement
+import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.parentOfType
 import com.intellij.psi.util.parentOfTypes
 import com.intellij.psi.util.parents
+import org.jetbrains.hexana.wit.WitComponentIndex
+import org.jetbrains.hexana.wit.WitDeclarationType
 import kotlin.sequences.forEach
 
 object WitResolver {
-    fun resolveWitPath(context: PsiElement, name: String): WitPackageItem? {
+    fun resolveWitPath(context: PsiElement, name: String): PsiElement? {
+        val packageName = if (name.contains("/")) (name.substringBeforeLast("/") + name.indexOfLast { it == '@' }.let {
+            if (it == -1) "" else name.substring(it)
+        }) else context.containingFile?.children?.filterIsInstance<WitPackageDefinition>()?.firstOrNull()?.packageName?.text ?: return null
+
+        val interfaceName = name.substringAfterLast("/").substringBeforeLast("@")
+
+        val defs = mutableListOf<PsiElement>()
+        WitComponentIndex.processPackageDeclarations(packageName, GlobalSearchScope.allScope(context.project),
+            { file, decl ->
+                val pkg = decl.singleOrNull { it.type == WitDeclarationType.PACKAGE }
+                if (pkg != null) {
+                    file.findPsiFile(context.project)?.children?.singleOrNull {
+                        it is WitPackageDefinition && it.packageName.text == packageName
+                    }?.let {
+                        findPackageItemByName(it.parent, interfaceName)?.let {
+                            defs.add(it)
+                        }
+                    }
+                }
+                return@processPackageDeclarations true
+            })
+
+        if (defs.isNotEmpty()) {
+            return defs.first()
+        }
+
         context.parents(withSelf = true)
             .forEach {
-                if (it is WitNestedPackageDefinition) {
-                    it.packageItemList.singleOrNull { it.name == name }
-                        ?.let { return it }
-                }
-                else if (it is WitPsiFile) {
-                    it.children.filterIsInstance<WitPackageItem>().singleOrNull { it.name == name }
-                        ?.let { return it }
-                }
+                findPackageItemByName(it, name)?.let { return it }
             }
+        return null
+    }
+
+    private fun findPackageItemByName(
+        element: PsiElement,
+        name: String
+    ): WitPackageItem? {
+        if (element is WitNestedPackageDefinition) {
+            element.packageItemList.singleOrNull { it.name == name }
+                ?.let { return it }
+        } else if (element is WitPsiFile) {
+            element.children.filterIsInstance<WitPackageItem>().singleOrNull { it.name == name }
+                ?.let { return it }
+        }
         return null
     }
 
