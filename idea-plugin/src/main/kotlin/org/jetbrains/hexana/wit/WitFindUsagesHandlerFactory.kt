@@ -19,13 +19,6 @@ class WitFindUsagesHandlerFactory: FindUsagesHandlerFactory() {
         element: PsiElement,
         forHighlightUsages: Boolean
     ): FindUsagesHandler {
-        return object : FindUsagesHandler(element) {
-            override fun findReferencesToHighlight(
-                target: PsiElement,
-                searchScope: SearchScope
-            ): @Unmodifiable Collection<PsiReference?> {
-                return ReferencesSearch.search(target, searchScope).findAll()
-            }
-        }
+        return object : FindUsagesHandler(element) {}
     }
 }

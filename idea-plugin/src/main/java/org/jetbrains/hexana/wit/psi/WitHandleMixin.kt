@@ -1,12 +1,11 @@
 package org.jetbrains.hexana.wit.psi
 
 import com.intellij.lang.ASTNode
-import com.intellij.psi.ContributedReferenceHost
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
 import com.intellij.psi.PsiReferenceBase
 
-open class WitHandleMixin(node: ASTNode): WitPsiElement(node), ContributedReferenceHost, WitHandle {
+open class WitHandleMixin(node: ASTNode): WitPsiElement(node), WitHandle {
     override fun getReference(): PsiReference? {
         return WitHandleReference(this)
     }
