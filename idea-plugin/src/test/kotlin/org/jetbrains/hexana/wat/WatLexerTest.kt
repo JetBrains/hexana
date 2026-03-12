@@ -51,7 +51,7 @@ class WatLexerTest : LexerTestCase() {
 
     fun testTrailingSpaces() {
         val fileName = getPathToTestDataFile(".wat")
-        val fileText = FileUtil.loadFile(File(fileName))
+        val fileText = FileUtil.loadFile(File(fileName), true)
         doTest(fileText)
     }
 }
