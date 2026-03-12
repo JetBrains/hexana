@@ -13,8 +13,8 @@ open class WitUsePathMixin(node: ASTNode): WitPsiElement(node), ContributedRefer
         return findChildByClass(WitSemver::class.java)
     }
 
-    override fun getReferences(): Array<out PsiReference?> {
-        return if (identifier != null) arrayOf(WitPathReference(this)) else emptyArray()
+    override fun getReference(): PsiReference? {
+        return if (identifier != null) WitPathReference(this) else null
     }
 
     override fun getIdentifier(): PsiElement? {

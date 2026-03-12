@@ -7,8 +7,8 @@ import com.intellij.psi.PsiReference
 import com.intellij.psi.PsiReferenceBase
 
 open class WitHandleMixin(node: ASTNode): WitPsiElement(node), ContributedReferenceHost, WitHandle {
-    override fun getReferences(): Array<out PsiReference?> {
-        return arrayOf(WitHandleReference(this))
+    override fun getReference(): PsiReference? {
+        return WitHandleReference(this)
     }
 
     override fun getIdentifier(): PsiElement {

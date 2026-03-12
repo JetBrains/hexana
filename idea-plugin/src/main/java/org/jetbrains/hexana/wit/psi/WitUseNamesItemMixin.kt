@@ -10,9 +10,9 @@ import com.intellij.psi.PsiReferenceBase
 import com.intellij.psi.util.parentOfType
 
 open class WitUseNamesItemMixin(node: ASTNode): WitPsiElement(node), ContributedReferenceHost, WitUseNamesItem {
-    override fun getReferences(): Array<out PsiReference?> {
+    override fun getReference(): PsiReference? {
         val identifier = this.findChildByType<PsiElement>(WitElementTypes.IDENTIFIER)
-        return if (identifier != null) arrayOf(WitUseNamesItemReference(this)) else emptyArray()
+        return if (identifier != null) WitUseNamesItemReference(this) else null
     }
 
     override fun setName(name: @NlsSafe String): PsiElement? {
