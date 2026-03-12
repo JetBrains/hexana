@@ -8,10 +8,10 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementVisitor;
 import com.intellij.psi.util.PsiTreeUtil;
 import static org.jetbrains.hexana.wit.psi.WitElementTypes.*;
-import com.intellij.extapi.psi.ASTWrapperPsiElement;
+import org.jetbrains.hexana.wit.psi.WitPsiElement;
 import org.jetbrains.hexana.wit.psi.*;
 
-public class WitParamListImpl extends ASTWrapperPsiElement implements WitParamList {
+public class WitParamListImpl extends WitPsiElement implements WitParamList {
 
   public WitParamListImpl(@NotNull ASTNode node) {
     super(node);

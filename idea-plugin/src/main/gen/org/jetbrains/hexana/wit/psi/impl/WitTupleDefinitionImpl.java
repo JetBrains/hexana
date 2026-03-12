@@ -8,10 +8,10 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementVisitor;
 import com.intellij.psi.util.PsiTreeUtil;
 import static org.jetbrains.hexana.wit.psi.WitElementTypes.*;
-import com.intellij.extapi.psi.ASTWrapperPsiElement;
+import org.jetbrains.hexana.wit.psi.WitPsiElement;
 import org.jetbrains.hexana.wit.psi.*;
 
-public class WitTupleDefinitionImpl extends ASTWrapperPsiElement implements WitTupleDefinition {
+public class WitTupleDefinitionImpl extends WitPsiElement implements WitTupleDefinition {
 
   public WitTupleDefinitionImpl(@NotNull ASTNode node) {
     super(node);

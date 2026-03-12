@@ -13,7 +13,7 @@
     tokenTypeClass = 'org.jetbrains.hexana.wit.psi.WitToken'
 
   //implements("value") = "org.jetbrains.hexana.wit.psi.WitElement"
-  //extends("value") = "org.jetbrains.hexana.wit.psi.impl.WitElementImpl"
+  extends = "org.jetbrains.hexana.wit.psi.WitPsiElement"
 
   tokens = [
     SLASH='/'

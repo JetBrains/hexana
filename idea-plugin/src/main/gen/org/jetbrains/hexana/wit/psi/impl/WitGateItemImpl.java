@@ -8,10 +8,10 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementVisitor;
 import com.intellij.psi.util.PsiTreeUtil;
 import static org.jetbrains.hexana.wit.psi.WitElementTypes.*;
-import com.intellij.extapi.psi.ASTWrapperPsiElement;
+import org.jetbrains.hexana.wit.psi.WitPsiElement;
 import org.jetbrains.hexana.wit.psi.*;
 
-public abstract class WitGateItemImpl extends ASTWrapperPsiElement implements WitGateItem {
+public abstract class WitGateItemImpl extends WitPsiElement implements WitGateItem {
 
   public WitGateItemImpl(@NotNull ASTNode node) {
     super(node);

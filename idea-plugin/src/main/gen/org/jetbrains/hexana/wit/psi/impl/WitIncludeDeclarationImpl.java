@@ -8,10 +8,10 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementVisitor;
 import com.intellij.psi.util.PsiTreeUtil;
 import static org.jetbrains.hexana.wit.psi.WitElementTypes.*;
-import com.intellij.extapi.psi.ASTWrapperPsiElement;
+import org.jetbrains.hexana.wit.psi.WitPsiElement;
 import org.jetbrains.hexana.wit.psi.*;
 
-public class WitIncludeDeclarationImpl extends ASTWrapperPsiElement implements WitIncludeDeclaration {
+public class WitIncludeDeclarationImpl extends WitPsiElement implements WitIncludeDeclaration {
 
   public WitIncludeDeclarationImpl(@NotNull ASTNode node) {
     super(node);
