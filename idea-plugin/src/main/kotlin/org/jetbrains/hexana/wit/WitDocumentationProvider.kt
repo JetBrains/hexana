@@ -64,8 +64,23 @@ class WitDocumentationTarget(private val element: PsiElement): DocumentationTarg
         while (prevSibling is PsiComment || prevSibling is PsiWhiteSpace) {
             if (prevSibling is PsiComment) {
                 val text = prevSibling.text.trimStart(' ', '/', '*').trimEnd(' ', '/', '*', '\r', '\n')
-                if (text.isEmpty()) commentText.insert(0, "\n\n")
-                else commentText.insert(0, "$text ")
+                when {
+                    text.isEmpty() -> {
+                        commentText.insert(0, "\n\n")
+                    }
+                    text.startsWith('#') -> {
+                        val header = "*${text.trimStart('#', ' ')}*"
+                        if (commentText.startsWith("\n")) {
+                            commentText.insert(0, header)
+                        } else commentText.insert(0, "$header\n\n")
+                    }
+                    text.startsWith('-') -> {
+                        commentText.insert(0, "\n$text")
+                    }
+                    else -> {
+                        commentText.insert(0, "$text ")
+                    }
+                }
             }
             prevSibling = prevSibling.prevSibling
         }
