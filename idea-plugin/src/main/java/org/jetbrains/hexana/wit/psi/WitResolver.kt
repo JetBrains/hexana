@@ -97,7 +97,9 @@ object WitResolver {
                 ?: container.funcItemList.find { it.identifier.text == name }
                 ?: container.useDeclarationList.flatMap {
                     it.useNamesList.useNamesItemList
-                }.find { it.lastChild.text == name })
+                }.find { it.lastChild.text == name }?.let {
+                    it.references.singleOrNull()?.resolve() ?: it
+                })
         }
         val externType = handle.parentOfType<WitExternType>(true)
         if (externType != null) {
@@ -105,7 +107,9 @@ object WitResolver {
                 ?: externType.funcItemList.find { it.identifier.text == name }
                 ?: externType.useDeclarationList.flatMap {
                     it.useNamesList.useNamesItemList
-                }.find { it.lastChild.text == name })
+                }.find { it.lastChild.text == name }?.let {
+                    it.references.singleOrNull()?.resolve() ?: it
+                })
         }
         return null
     }
