@@ -8,10 +8,11 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementVisitor;
 import com.intellij.psi.util.PsiTreeUtil;
 import static org.jetbrains.hexana.wit.psi.WitElementTypes.*;
-import org.jetbrains.hexana.wit.psi.WitPsiElement;
+import org.jetbrains.hexana.wit.psi.WitFuncItemMixin;
 import org.jetbrains.hexana.wit.psi.*;
+import com.intellij.openapi.util.NlsSafe;
 
-public class WitFuncItemImpl extends WitPsiElement implements WitFuncItem {
+public class WitFuncItemImpl extends WitFuncItemMixin implements WitFuncItem {
 
   public WitFuncItemImpl(@NotNull ASTNode node) {
     super(node);

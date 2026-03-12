@@ -188,7 +188,17 @@ type-declaration ::= resource-definition
                     "com.intellij.psi.PsiNameIdentifierOwner"]
                }
 
-func-item ::= IDENTIFIER ':' func-type ';'
+func-item ::= IDENTIFIER ':' func-type ';'  {
+   methods=[
+       getName
+       getNameIdentifier
+       setName
+       getTextOffset
+   ]
+   mixin="org.jetbrains.hexana.wit.psi.WitFuncItemMixin"
+   implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+   "com.intellij.psi.PsiNameIdentifierOwner"]
+}
 
 func-type ::= ASYNC? FUNC param-list result-list?
 

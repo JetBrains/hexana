@@ -1,0 +1,27 @@
+package org.jetbrains.hexana.wit.psi
+
+import com.intellij.lang.ASTNode
+import com.intellij.openapi.util.NlsSafe
+import com.intellij.psi.PsiElement
+
+open class WitFuncItemMixin(node: ASTNode): WitPsiElement(node), WitFuncItem {
+    override fun setName(name: @NlsSafe String): PsiElement? {
+        return null;
+    }
+
+    override fun getFuncType(): WitFuncType {
+        return findNotNullChildByClass(WitFuncType::class.java)
+    }
+
+    override fun getIdentifier(): PsiElement {
+        return findNotNullChildByType(WitElementTypes.IDENTIFIER)
+    }
+
+    override fun getNameIdentifier(): PsiElement? {
+        return findNotNullChildByType(WitElementTypes.IDENTIFIER)
+    }
+
+    override fun getName(): String? {
+        return nameIdentifier?.text
+    }
+}

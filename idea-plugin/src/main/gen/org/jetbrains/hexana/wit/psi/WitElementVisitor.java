@@ -39,7 +39,9 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitFuncItem(@NotNull WitFuncItem o) {
-    visitPsiElement(o);
+    visitNavigatablePsiElement(o);
+    // visitPsiNamedElement(o);
+    // visitPsiNameIdentifierOwner(o);
   }
 
   public void visitFuncType(@NotNull WitFuncType o) {
