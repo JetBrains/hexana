@@ -110,6 +110,7 @@
                                  implementationClass="org.jetbrains.hexana.wit.psi.impl.WitIncludeNamesItemManipulator"/>
         <fileBasedIndex implementation="org.jetbrains.hexana.wit.WitComponentIndex"/>
         <platform.backend.documentation.psiTargetProvider implementation="org.jetbrains.hexana.wit.WitDocumentationProvider"/>
+        <findUsagesHandlerFactory id="wit" implementation="org.jetbrains.hexana.wit.WitFindUsagesHandlerFactory"/>
     </extensions>
 
     <actions>
