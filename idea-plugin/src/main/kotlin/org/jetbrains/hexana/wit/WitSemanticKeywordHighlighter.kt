@@ -34,6 +34,7 @@ class WitSemanticKeywordHighlighter : HighlightVisitor, DumbAware {
 
         analyzer = object: WitElementVisitor() {
             override fun visitTypeUsage(o: WitTypeUsage) {
+                if (o.firstChild is WitHandle) return
                 val childLeafs = o.childLeafs().iterator()
                 if (!childLeafs.hasNext()) return
                 val firstLeaf = childLeafs.next()
