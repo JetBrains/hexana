@@ -10,9 +10,6 @@ public interface WitResourceMethod extends PsiElement {
   @Nullable
   WitFuncItem getFuncItem();
 
-  @Nullable
-  WitFuncType getFuncType();
-
   @NotNull
   List<WitGateItem> getGateItemList();
 
@@ -20,6 +17,6 @@ public interface WitResourceMethod extends PsiElement {
   WitParamList getParamList();
 
   @Nullable
-  PsiElement getIdentifier();
+  WitStaticFuncItem getStaticFuncItem();
 
 }

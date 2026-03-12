@@ -17,9 +17,7 @@ public interface WitFuncItem extends NavigatablePsiElement, PsiNamedElement, Psi
   @NotNull
   PsiElement getIdentifier();
 
-  //WARNING: getName(...) is skipped
-  //matching getName(WitFuncItem, ...)
-  //methods are not found in WitPsiImplUtil
+  @Nullable String getName();
 
   @Nullable PsiElement getNameIdentifier();
 

@@ -252,8 +252,20 @@ private enum-cases ::= enum-case (',' enum-case)* ','?
 resource-definition ::= RESOURCE IDENTIFIER ';'
                 | RESOURCE IDENTIFIER '{' resource-method* '}'
 
+static-func-item ::= IDENTIFIER ':' STATIC func-type ';'  {
+   methods=[
+       getName
+       getNameIdentifier
+       setName
+       getTextOffset
+   ]
+   mixin="org.jetbrains.hexana.wit.psi.WitStaticFuncItemMixin"
+   implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+   "com.intellij.psi.PsiNameIdentifierOwner"]
+}
+
 resource-method ::= gate? (func-item
-                  | IDENTIFIER ':' STATIC func-type ';'
+                  | static-func-item
                   | CONSTRUCTOR param-list ';')
 
 type-usage ::= 'u8' | 'u16' | 'u32' | 'u64'

@@ -34,12 +34,6 @@ public class WitResourceMethodImpl extends WitPsiElement implements WitResourceM
   }
 
   @Override
-  @Nullable
-  public WitFuncType getFuncType() {
-    return findChildByClass(WitFuncType.class);
-  }
-
-  @Override
   @NotNull
   public List<WitGateItem> getGateItemList() {
     return PsiTreeUtil.getChildrenOfTypeAsList(this, WitGateItem.class);
@@ -53,8 +47,8 @@ public class WitResourceMethodImpl extends WitPsiElement implements WitResourceM
 
   @Override
   @Nullable
-  public PsiElement getIdentifier() {
-    return findChildByType(IDENTIFIER);
+  public WitStaticFuncItem getStaticFuncItem() {
+    return findChildByClass(WitStaticFuncItem.class);
   }
 
 }

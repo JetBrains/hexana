@@ -1078,7 +1078,7 @@ public class WitParser implements PsiParser, LightPsiParser {
 
   /* ********************************************************** */
   // gate? (func-item
-  //                   | IDENTIFIER ':' STATIC func-type ';'
+  //                   | static-func-item
   //                   | CONSTRUCTOR param-list ';')
   public static boolean resource_method(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "resource_method")) return false;
@@ -1098,27 +1098,15 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   // func-item
-  //                   | IDENTIFIER ':' STATIC func-type ';'
+  //                   | static-func-item
   //                   | CONSTRUCTOR param-list ';'
   private static boolean resource_method_1(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "resource_method_1")) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = func_item(b, l + 1);
-    if (!r) r = resource_method_1_1(b, l + 1);
+    if (!r) r = static_func_item(b, l + 1);
     if (!r) r = resource_method_1_2(b, l + 1);
-    exit_section_(b, m, null, r);
-    return r;
-  }
-
-  // IDENTIFIER ':' STATIC func-type ';'
-  private static boolean resource_method_1_1(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "resource_method_1_1")) return false;
-    boolean r;
-    Marker m = enter_section_(b);
-    r = consumeTokens(b, 0, IDENTIFIER, COLON, STATIC);
-    r = r && func_type(b, l + 1);
-    r = r && consumeToken(b, SEMI);
     exit_section_(b, m, null, r);
     return r;
   }
@@ -1446,6 +1434,20 @@ public class WitParser implements PsiParser, LightPsiParser {
     r = r && version_field(b, l + 1);
     r = r && consumeToken(b, CLOSE_PAREN);
     exit_section_(b, l, m, r, false, null);
+    return r;
+  }
+
+  /* ********************************************************** */
+  // IDENTIFIER ':' STATIC func-type ';'
+  public static boolean static_func_item(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "static_func_item")) return false;
+    if (!nextTokenIs(b, IDENTIFIER)) return false;
+    boolean r;
+    Marker m = enter_section_(b);
+    r = consumeTokens(b, 0, IDENTIFIER, COLON, STATIC);
+    r = r && func_type(b, l + 1);
+    r = r && consumeToken(b, SEMI);
+    exit_section_(b, m, STATIC_FUNC_ITEM, r);
     return r;
   }
 

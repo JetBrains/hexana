@@ -42,6 +42,7 @@ public interface WitElementTypes {
   IElementType RESULT_LIST = new WitElementType("RESULT_LIST");
   IElementType SEMVER = new WitElementType("SEMVER");
   IElementType SINCE_GATE = new WitElementType("SINCE_GATE");
+  IElementType STATIC_FUNC_ITEM = new WitElementType("STATIC_FUNC_ITEM");
   IElementType STREAM_ITEM = new WitElementType("STREAM_ITEM");
   IElementType TOPLEVEL_USE_DECLARATION = new WitElementType("TOPLEVEL_USE_DECLARATION");
   IElementType TUPLE_DEFINITION = new WitElementType("TUPLE_DEFINITION");
@@ -204,6 +205,9 @@ public interface WitElementTypes {
       }
       else if (type == SINCE_GATE) {
         return new WitSinceGateImpl(node);
+      }
+      else if (type == STATIC_FUNC_ITEM) {
+        return new WitStaticFuncItemImpl(node);
       }
       else if (type == STREAM_ITEM) {
         return new WitStreamItemImpl(node);

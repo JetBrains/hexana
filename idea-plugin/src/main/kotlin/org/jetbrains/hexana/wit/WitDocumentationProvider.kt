@@ -16,8 +16,10 @@ import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.createSmartPointer
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.util.elementType
+import org.jetbrains.hexana.wit.psi.WitFuncItem
 import org.jetbrains.hexana.wit.psi.WitGateItem
 import org.jetbrains.hexana.wit.psi.WitInterfaceDefinition
+import org.jetbrains.hexana.wit.psi.WitStaticFuncItem
 import java.util.Locale
 import java.util.Locale.getDefault
 
@@ -50,7 +52,7 @@ class WitDocumentationTarget(private val element: PsiElement): DocumentationTarg
         return doc(true)
     }
 
-    private fun doc(justFirstLine: Boolean = false): String = createPresentation(element) + "\n" + fetchDocumentation(element, justFirstLine)
+    private fun doc(justFirstLine: Boolean = false): String = createPresentation(element) + ".\n" + fetchDocumentation(element, justFirstLine)
 
     private fun fetchDocumentation(element: PsiElement, justFirstLine: Boolean = false): String {
         var prevSibling = element.prevSibling
@@ -66,6 +68,9 @@ class WitDocumentationTarget(private val element: PsiElement): DocumentationTarg
                 else commentText.insert(0, "$text ")
             }
             prevSibling = prevSibling.prevSibling
+        }
+        if (commentText.isEmpty() && (element is WitFuncItem || element is WitStaticFuncItem)) {
+            return fetchDocumentation(element.parent, justFirstLine)
         }
         if (justFirstLine) {
             return commentText.toString().split("\n").first()

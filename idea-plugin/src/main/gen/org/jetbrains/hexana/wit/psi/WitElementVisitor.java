@@ -152,6 +152,12 @@ public class WitElementVisitor extends PsiElementVisitor {
     visitGateItem(o);
   }
 
+  public void visitStaticFuncItem(@NotNull WitStaticFuncItem o) {
+    visitNavigatablePsiElement(o);
+    // visitPsiNamedElement(o);
+    // visitPsiNameIdentifierOwner(o);
+  }
+
   public void visitStreamItem(@NotNull WitStreamItem o) {
     visitPsiElement(o);
   }
