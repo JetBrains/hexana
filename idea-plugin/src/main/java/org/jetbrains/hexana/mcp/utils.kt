@@ -306,7 +306,7 @@ internal fun CommonByteBuffer.importFunctions(
     val records = with(wasmModule!!.importSection) {
         this ?: return@with emptyList()
         this@importFunctions.getImportRecords()
-    }
+    }.filter { it.type is WasmTypeIndexExternalType }
 
     val types = types(wasmModule)
     val signatures = records.mapIndexed { index, record ->
