@@ -293,18 +293,25 @@ data class CodesByFunction(val funcidx: Int, val instructions: List<String>)
 
 fun CommonByteBuffer.localsForFunctions(indices: List<Int>, wasmModule: WasmModule?): List<LocalsByFunction> {
     wasmModule ?: return emptyList()
-    wasmModule.codeSection ?: return emptyList()
     val importFunctions = importFunctions(wasmModule)
     val importBase = importFunctions.size
-    val localsInImports = indices.filter { importBase < it }.map {
-        LocalsByFunction(it, emptyList())
-    }
-    return localsInImports +
-            with(wasmModule.codeSection!!) {
-                scanLocalsEntries(
-                    indices.map { it - importBase }.filter { it > 0 })
-                    .map { LocalsByFunction(it.key, it.value.serializeLocals()) }.toList()
+    val localsByFunction = indices
+        .filter { it < importBase }
+        .associateWith { emptyList<Local>() }
+        .toMutableMap()
+
+    val declaredFunctionIndices = indices.filter { it >= importBase }.map { it - importBase }
+    wasmModule.codeSection?.let { codeSection ->
+        with(codeSection) {
+            scanLocalsEntries(declaredFunctionIndices).forEach { (declaredIndex, locals) ->
+                localsByFunction[declaredIndex + importBase] = locals.serializeLocals()
             }
+        }
+    }
+
+    return indices.distinct().mapNotNull { funcidx ->
+        localsByFunction[funcidx]?.let { LocalsByFunction(funcidx, it) }
+    }
 }
 
 data class LocalsByFunction(val funcidx: Int, val locals: List<Local>)
