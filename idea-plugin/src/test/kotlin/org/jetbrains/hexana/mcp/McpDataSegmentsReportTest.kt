@@ -1,7 +1,5 @@
 package org.jetbrains.hexana.mcp
 
-import org.junit.Ignore
-
 class McpDataSegmentsReportTest: WasmTest() {
     fun testSegment0() = doListDataSegments { report ->
         assertEquals(1, report.segments.size)
@@ -18,5 +16,44 @@ class McpDataSegmentsReportTest: WasmTest() {
         assertEquals(1, report.summary.activeSegments)
         assertEquals(0, report.summary.passiveSegments)
         assertEquals(1, report.summary.memories)
+    }
+
+    fun testSegmentRangeUsesHalfOpenBounds() = doTest("listDataSegments") { wasmModule ->
+        val firstOnly = listDataSegments(
+            segmentRange = 0 until 1,
+            wasmModule = wasmModule,
+            includeExports = false,
+            includeGlobals = false,
+            minByteLength = 0,
+        )
+        assertEquals(1, firstOnly.segments.size)
+        assertEquals("First", firstOnly.segments.single().utf8Preview)
+        assertEquals(2, firstOnly.summary.totalSegments)
+
+        val secondOnly = listDataSegments(
+            segmentRange = 1 until 2,
+            wasmModule = wasmModule,
+            includeExports = false,
+            includeGlobals = false,
+            minByteLength = 0,
+        )
+        assertEquals(1, secondOnly.segments.size)
+        assertEquals("Second", secondOnly.segments.single().utf8Preview)
+        assertEquals(2, secondOnly.summary.totalSegments)
+    }
+
+    fun testSegmentRangeExplicitBoundsMatchHalfOpenContract() = doTest("listDataSegments") { wasmModule ->
+        val report = listDataSegments(
+            segmentStartInclusive = 0,
+            segmentEndExclusive = 1,
+            wasmModule = wasmModule,
+            includeExports = false,
+            includeGlobals = false,
+            minByteLength = 0,
+        )
+
+        assertEquals(1, report.segments.size)
+        assertEquals("First", report.segments.single().utf8Preview)
+        assertEquals(2, report.summary.totalSegments)
     }
 }

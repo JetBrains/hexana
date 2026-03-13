@@ -196,6 +196,19 @@ internal fun CommonByteBuffer.listDataSegments(
     includeGlobals: Boolean,
     minByteLength: Int?
 ): McpDataSegmentsReport {
+    val start = segmentRange.first
+    val endExclusive = if (segmentRange.isEmpty()) start else segmentRange.last + 1
+    return listDataSegments(start, endExclusive, wasmModule, includeExports, includeGlobals, minByteLength)
+}
+
+internal fun CommonByteBuffer.listDataSegments(
+    segmentStartInclusive: Int,
+    segmentEndExclusive: Int,
+    wasmModule: WasmModule?,
+    includeExports: Boolean,
+    includeGlobals: Boolean,
+    minByteLength: Int?
+): McpDataSegmentsReport {
     wasmModule ?: return McpDataSegmentsReport(
         emptyList(), emptyList(),
         segments = emptyList(),
@@ -216,7 +229,13 @@ internal fun CommonByteBuffer.listDataSegments(
     val listDataSections = listDataSectionInternal(wasmModule)
     val dataSegments0 = listDataSections.map { it.toMcpDataSegment(true) }
 
-    val dataSegments1 = dataSegments0.slice(segmentRange.first until minOf(segmentRange.last, dataSegments0.size))
+    val start = segmentStartInclusive.coerceAtLeast(0)
+    val endExclusive = segmentEndExclusive.coerceAtLeast(start).coerceAtMost(dataSegments0.size)
+    val dataSegments1 = if (start >= endExclusive) {
+        emptyList()
+    } else {
+        dataSegments0.subList(start, endExclusive)
+    }
 
     val dataSegments = dataSegments1.filter { it.byteLength >= (minByteLength ?: 0) }
 
@@ -228,6 +247,3 @@ internal fun CommonByteBuffer.listDataSegments(
     val summary = McpSummary(dataSegments0.size, dataSegments0.count { it.mode == "active" }, dataSegments0.count { it.mode == "passive" }, memory.size)
     return McpDataSegmentsReport(mcpMempory, globals, dataSegments, null, exports.map { it.name }, summary)
 }
-
-
-

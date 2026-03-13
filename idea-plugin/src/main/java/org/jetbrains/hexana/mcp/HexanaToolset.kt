@@ -1274,13 +1274,14 @@ class HexanaToolset : McpToolset {
             val from = segmentRange.get("from") ?: return """{"error": "Invalid segmentRange no `from`"}"""
             val to = segmentRange.get("to") ?: Int.MAX_VALUE
             if (from > to) return """{"error": "Invalid segmentRange `to` must be >= `from`"}"""
-            from until to
+            from to to
         }
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(
             buffer.listDataSegments(
-                range,
+                segmentStartInclusive = range.first,
+                segmentEndExclusive = range.second,
                 wasmModule,
                 includeExports,
                 includeGlobals,
