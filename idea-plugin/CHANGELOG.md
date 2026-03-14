@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- [Parse Component Model binary format (component sections, instances, type definitions)](https://github.com/JetBrains/hexana/issues/64)
+- [Display component structure in the explorer tree (imports, exports, interfaces, worlds)](https://github.com/JetBrains/hexana/issues/63)
 
 ### Changed
 
