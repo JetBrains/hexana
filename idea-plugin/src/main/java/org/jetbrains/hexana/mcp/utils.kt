@@ -387,7 +387,9 @@ private fun WasmHeapType.toMcpType(): String = when (this) {
     is WasmExternRefHeapType -> "extern"
     is WasmNoneHeapType -> "none"
     is WasmNoExnHeapType -> "noexn"
-    else -> error("Unknown heap type: $this")
+    is WasmIndexHeapType -> "index"
+    is WasmNoFuncHeapType -> "nofunc"
+    is WasmNoExternRefHeapType -> "noextern"
 }
 
 sealed class McpType(val kind: String)
