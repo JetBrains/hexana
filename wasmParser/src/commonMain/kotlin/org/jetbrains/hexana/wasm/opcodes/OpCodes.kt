@@ -39,10 +39,21 @@ object OpCodes {
                 const val code: UByte = 0x10u
             }
         }
+        class ReturnCallIndirect(value0: UInt, value1: UInt) : OpCodeWithTwoValue<UInt, UInt>(value0, value1) {
+            companion object {
+                const val code: UByte = 0x13u
+            }
+        }
 
         class CallRef(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x14u
+            }
+        }
+
+        class ReturnCallRef(value: UInt) : OpCodeWithValue<UInt>(value) {
+            companion object {
+                const val code: UByte = 0x15u
             }
         }
 
@@ -94,6 +105,28 @@ object OpCodes {
                 const val code: UByte = 0x05u
             }
         }
+
+        class BrOnNull(value: UInt): OpCodeWithValue<UInt>(value) {
+            companion object {
+                const val code: UByte = 0xD5u
+            }
+        }
+
+        class BrOnNonNull(value: UInt): OpCodeWithValue<UInt>(value) {
+            companion object {
+                const val code: UByte = 0xD6u
+            }
+        }
+
+        class Trow(tagIndx: UInt) : OpCodeWithValue<UInt>(tagIndx) {
+            companion object {
+                const val code: UByte = 0x08u
+            }
+        }
+
+        object ThrowRef: OpCode {
+            const val code: UByte = 0x0Au
+        }
     }
 
     object Local {
@@ -117,7 +150,12 @@ object OpCodes {
     }
 
     object Memory {
-        class Grow(value: Long) : OpCodeWithValue<Long>(value) {
+        class Size(value: UInt) : OpCodeWithValue<UInt>(value) {
+            companion object {
+                const val code: UByte = 0x3Fu
+            }
+        }
+        class Grow(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x40u
             }
@@ -134,6 +172,20 @@ object OpCodes {
         class Set(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x24u
+            }
+        }
+    }
+
+    object Table {
+        class Get(value: UInt) : OpCodeWithValue<UInt>(value) {
+            companion object {
+                const val code: UByte = 0x25u
+            }
+        }
+
+        class Set(value: UInt) : OpCodeWithValue<UInt>(value) {
+            companion object {
+                const val code: UByte = 0x26u
             }
         }
     }
@@ -738,6 +790,12 @@ object OpCodes {
             }
         }
 
+        class Store(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+            companion object {
+                val code: UByte = 0x39u
+            }
+        }
+
         object EQ : OpCodeWithValue<Unit>(Unit) {
             const val code: UByte = 0x61u
         }
@@ -915,6 +973,12 @@ object OpCodes {
         class ArrayNewDefault(initValue: UInt): OpCodeWithValue<UInt>(initValue) {
             companion object {
                 const val code: UByte = 0x07u
+            }
+        }
+
+        class ArrayNewFixed(typeIndex: UInt, size: UInt): OpCodeWithTwoValue<UInt, UInt>(typeIndex, size) {
+            companion object {
+                const val code: UByte = 0x08u
             }
         }
 

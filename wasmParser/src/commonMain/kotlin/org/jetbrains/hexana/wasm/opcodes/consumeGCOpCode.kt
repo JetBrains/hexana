@@ -10,6 +10,7 @@ fun CommonByteBuffer.consumeGCOpCode(opcode: UInt): OpCode {
         0xFB04u -> OpCodes.GC.StructGetZeroExtended(consumeInt(), consumeInt())
         0xFB05u -> OpCodes.GC.StructSet(consumeInt(), consumeInt())
         0xFB07u -> OpCodes.GC.ArrayNewDefault(consumeInt())
+        0xFB08u -> OpCodes.GC.ArrayNewFixed(consumeInt(), consumeInt())
         0xFB09u -> OpCodes.GC.ArrayNewData(consumeInt(), consumeInt())
         0xFB11u -> OpCodes.GC.ArrayCopy(consumeInt(), consumeInt())
         0xFB0Bu -> OpCodes.GC.ArrayGet(consumeInt())
