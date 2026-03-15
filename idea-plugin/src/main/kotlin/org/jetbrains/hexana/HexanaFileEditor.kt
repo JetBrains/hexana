@@ -68,61 +68,76 @@ class HexanaFileEditor(
     var binaryProvider: BinaryProvider? = null
 
     fun initPanel() {
-
-        val buf = file.toMappedBuffer() ?: return
+        val inMemoryBuffer = myFile.getUserData(HexanaBinaryVirtualFile.BUFFER_KEY)
+        val commonBuffer = if (inMemoryBuffer != null) {
+            stateHolder.displayBaseOffset = myFile.getUserData(HexanaBinaryVirtualFile.BASE_OFFSET_KEY) ?: 0
+            inMemoryBuffer
+        } else {
+            file.toMappedBuffer()?.toCommonByteBuffer() ?: return
+        }
 
         binaryProvider = when (myFile.extension) {
             "wasm" -> {
-                val ref = AtomicReference(HexanaSourceLocationProvider.EMPTY)
-                initSourceLocationProvider(ref)
-
-                when (WasmBinaryProviderSelector.select(buf.toCommonByteBuffer())) {
-                    BinaryProviderType.Wasm -> {
-                        object: WasmBinaryVirtualFileProvider(myFile) {
-                            override suspend fun createTextEditor(file: VirtualFile): TextEditor {
-                                return withContext(Dispatchers.EDT) {
-                                    disposeClosedEditors()
-                                    myTextEditor?.let {
-                                        myClosedTextEditors.add(it)
-                                    }
-                                    val textEditor = TextEditorProvider.getInstance().createEditor(myProject, file)
-                                    textEditor as TextEditor
-                                    myTextEditor = textEditor
-                                    stateHolder.setEditor(textEditor.editor)
-                                    textEditor
-                                }
-                            }
-
-                            override val sourceLocationProvider: HexanaSourceLocationProvider
-                                get() = ref.get()
-                        }
+                if (inMemoryBuffer != null) {
+                    when (WasmBinaryProviderSelector.select(commonBuffer)) {
+                        BinaryProviderType.Wasm -> WasmBinaryProvider(commonBuffer)
+                        BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(commonBuffer)
+                        BinaryProviderType.Generic -> GenericBinaryProvider(commonBuffer)
                     }
-                    BinaryProviderType.WasmComponent -> {
-                        object: WasmComponentBinaryVirtualFileProvider(myFile) {
-                            override suspend fun createTextEditor(file: VirtualFile): TextEditor {
-                                return withContext(Dispatchers.EDT) {
-                                    disposeClosedEditors()
-                                    myTextEditor?.let {
-                                        myClosedTextEditors.add(it)
-                                    }
-                                    val textEditor = TextEditorProvider.getInstance().createEditor(myProject, file)
-                                    textEditor as TextEditor
-                                    myTextEditor = textEditor
-                                    stateHolder.setEditor(textEditor.editor)
-                                    textEditor
-                                }
-                            }
+                } else {
+                    val ref = AtomicReference(HexanaSourceLocationProvider.EMPTY)
+                    initSourceLocationProvider(ref)
 
-                            override val sourceLocationProvider: HexanaSourceLocationProvider
-                                get() = ref.get()
+                    when (WasmBinaryProviderSelector.select(commonBuffer)) {
+                        BinaryProviderType.Wasm -> {
+                            object : WasmBinaryVirtualFileProvider(myFile) {
+                                override suspend fun createTextEditor(file: VirtualFile): TextEditor {
+                                    return withContext(Dispatchers.EDT) {
+                                        disposeClosedEditors()
+                                        myTextEditor?.let {
+                                            myClosedTextEditors.add(it)
+                                        }
+                                        val textEditor =
+                                            TextEditorProvider.getInstance().createEditor(myProject, file)
+                                        textEditor as TextEditor
+                                        myTextEditor = textEditor
+                                        stateHolder.setEditor(textEditor.editor)
+                                        textEditor
+                                    }
+                                }
+
+                                override val sourceLocationProvider: HexanaSourceLocationProvider
+                                    get() = ref.get()
+                            }
                         }
 
+                        BinaryProviderType.WasmComponent -> {
+                            object : WasmComponentBinaryVirtualFileProvider(myFile) {
+                                override suspend fun createTextEditor(file: VirtualFile): TextEditor {
+                                    return withContext(Dispatchers.EDT) {
+                                        disposeClosedEditors()
+                                        myTextEditor?.let {
+                                            myClosedTextEditors.add(it)
+                                        }
+                                        val textEditor =
+                                            TextEditorProvider.getInstance().createEditor(myProject, file)
+                                        textEditor as TextEditor
+                                        myTextEditor = textEditor
+                                        stateHolder.setEditor(textEditor.editor)
+                                        textEditor
+                                    }
+                                }
+
+                                override val sourceLocationProvider: HexanaSourceLocationProvider
+                                    get() = ref.get()
+                            }
+                        }
+
+                        BinaryProviderType.Generic -> GenericBinaryProvider(commonBuffer)
                     }
-                    BinaryProviderType.Generic -> GenericBinaryProvider(buf.toCommonByteBuffer())
                 }
-
             }
-            else -> GenericBinaryProvider(buf.toCommonByteBuffer())
+            else -> GenericBinaryProvider(commonBuffer)
         }
 
         val hexView = createComposePanel {

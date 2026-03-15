@@ -72,6 +72,8 @@ class HexViewStateHolder(
     private val _bytesPerRow: MutableState<Int> = mutableStateOf(16)
     val bytesPerRow: State<Int> get() = _bytesPerRow
 
+    var displayBaseOffset: Int = 0
+
     private val _conversionState = MutableStateFlow<WatConversionState?>(null)
     internal val conversionStateFlow = _conversionState.asStateFlow()
 

@@ -6,6 +6,7 @@ import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.components.WasmComponent
+import org.jetbrains.hexana.wasm.components.WasmComponentCoreModule
 import org.jetbrains.hexana.wasm.components.WasmComponentExport
 import org.jetbrains.hexana.wasm.components.WasmComponentImport
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
@@ -69,6 +70,14 @@ open class WasmComponentBinaryProvider(override val bytes: CommonByteBuffer): Bi
     val exports: List<WasmComponentExport> by lazy {
         val exportSections = wasmModule?.exportSection ?: return@lazy emptyList()
         exportSections.flatMap {
+            with(it) {
+                bytes.scan()
+            }
+        }
+    }
+    val modules: List<WasmComponentCoreModule> by lazy {
+        val moduleSections = wasmModule?.moduleSection ?: return@lazy emptyList()
+        moduleSections.map {
             with(it) {
                 bytes.scan()
             }

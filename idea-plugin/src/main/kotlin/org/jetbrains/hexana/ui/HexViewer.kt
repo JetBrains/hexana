@@ -206,7 +206,7 @@ internal fun HexViewer(
                                     contentAlignment = Alignment.CenterEnd
                                 ) {
                                     Text(
-                                        (rowIndex * bytesPerRow).asHexString(padStart = 8),
+                                        (state.displayBaseOffset + rowIndex * bytesPerRow).asHexString(padStart = 8),
                                         softWrap = false,
                                         style = TextStyle(fontFamily = FontFamily.Monospace)
                                     )

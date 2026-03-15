@@ -15,6 +15,8 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.panel.Panel
 import org.jetbrains.hexana.ui.panel.WasmPanelFunctions
@@ -25,6 +27,7 @@ import org.jetbrains.hexana.ui.panel.WasmPanelImports
 import org.jetbrains.hexana.ui.panel.WasmPanelWat
 import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelExports
 import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelImports
+import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelModules
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -139,10 +142,27 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
             if (canProvideWasmModule()) arrayOf(
                 Panel("Exports") { WasmComponentPanelExports(this, state) },
                 Panel("Imports") { WasmComponentPanelImports(this, state) },
+                Panel("Modules") { WasmComponentPanelModules(this, state) },
                 Panel("Wat") { WasmPanelWat(this, state) },
             ) else {
                 errorPanel(state)
             }
+        }
+        is WasmBinaryProvider -> {
+            if (canProvideWasmModule()) arrayOf(
+                Panel("Data") { WasmPanelData(this, state) },
+                Panel("Exports") { WasmPanelExports(this, state) },
+                Panel("Imports") { WasmPanelImports(this, state) },
+                Panel("Functions") { WasmPanelFunctions(this) },
+                Panel("Custom") { WasmPanelCustom(this) },
+            ) else emptyArray()
+        }
+        is WasmComponentBinaryProvider -> {
+            if (canProvideWasmModule()) arrayOf(
+                Panel("Exports") { WasmComponentPanelExports(this, state) },
+                Panel("Imports") { WasmComponentPanelImports(this, state) },
+                Panel("Modules") { WasmComponentPanelModules(this, state) },
+            ) else emptyArray()
         }
 
         else -> emptyArray()
