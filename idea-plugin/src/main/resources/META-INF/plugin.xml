@@ -111,6 +111,7 @@
         <fileBasedIndex implementation="org.jetbrains.hexana.wit.WitComponentIndex"/>
         <platform.backend.documentation.psiTargetProvider implementation="org.jetbrains.hexana.wit.WitDocumentationProvider"/>
         <findUsagesHandlerFactory id="wit" implementation="org.jetbrains.hexana.wit.WitFindUsagesHandlerFactory"/>
+        <indexedRootsProvider implementation="org.jetbrains.hexana.wit.WitBuiltInDefinitionsContributor"/>
     </extensions>
 
     <actions>
