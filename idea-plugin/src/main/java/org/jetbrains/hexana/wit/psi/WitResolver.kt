@@ -9,7 +9,8 @@ import com.intellij.psi.util.parents
 import com.intellij.util.text.SemVer
 import org.jetbrains.hexana.wit.WitComponentIndex
 import org.jetbrains.hexana.wit.WitDeclarationType
-import kotlin.sequences.forEach
+import org.jetbrains.hexana.wit.WitIndexId
+import org.jetbrains.hexana.wit.processIndexEntries
 
 object WitResolver {
     private const val WASI_PREFIX = "wasi:"
@@ -25,8 +26,8 @@ object WitResolver {
             val packageName = packageNameAndVersion.substringBeforeLast("@")
             val packageVersion = packageNameAndVersion.substringAfterLast("@")
             val defs = mutableListOf<PsiElement>()
-            WitComponentIndex.processPackageDeclarations(
-                packageName, GlobalSearchScope.everythingScope(context.project),
+            processIndexEntries(
+                WitIndexId, packageName, GlobalSearchScope.everythingScope(context.project),
                 { file, decl ->
                     val pkg = decl.singleOrNull { it.type == WitDeclarationType.PACKAGE }
                     if (pkg != null) {
@@ -41,7 +42,7 @@ object WitResolver {
                             }
                         }
                     }
-                    return@processPackageDeclarations true
+                    return@processIndexEntries true
                 })
 
             if (defs.isNotEmpty()) {

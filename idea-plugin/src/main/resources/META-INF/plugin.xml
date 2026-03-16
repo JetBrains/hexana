@@ -109,9 +109,11 @@
         <lang.elementManipulator forClass="org.jetbrains.hexana.wit.psi.WitIncludeNamesItem"
                                  implementationClass="org.jetbrains.hexana.wit.psi.impl.WitIncludeNamesItemManipulator"/>
         <fileBasedIndex implementation="org.jetbrains.hexana.wit.WitComponentIndex"/>
+        <fileBasedIndex implementation="org.jetbrains.hexana.WasmIndex"/>
         <platform.backend.documentation.psiTargetProvider implementation="org.jetbrains.hexana.wit.WitDocumentationProvider"/>
         <findUsagesHandlerFactory id="wit" implementation="org.jetbrains.hexana.wit.WitFindUsagesHandlerFactory"/>
         <indexedRootsProvider implementation="org.jetbrains.hexana.wit.WitBuiltInDefinitionsContributor"/>
+        <codeInsight.lineMarkerProvider language="wit" implementationClass="org.jetbrains.hexana.wit.WitGoToRelatedSymbolsProvider"/>
     </extensions>
 
     <actions>
