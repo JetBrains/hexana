@@ -21,7 +21,7 @@ object WitResolver {
         if (packageName != null) {
             val defs = mutableListOf<PsiElement>()
             WitComponentIndex.processPackageDeclarations(
-                packageName, GlobalSearchScope.allScope(context.project),
+                packageName, GlobalSearchScope.everythingScope(context.project),
                 { file, decl ->
                     val pkg = decl.singleOrNull { it.type == WitDeclarationType.PACKAGE }
                     if (pkg != null) {
