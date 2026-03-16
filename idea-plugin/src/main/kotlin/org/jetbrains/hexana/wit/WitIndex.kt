@@ -15,17 +15,22 @@ enum class WitDeclarationType {
     PACKAGE
 }
 
-data class WitDeclaration(val name: String, val offset: Int, val type: WitDeclarationType)
-
+data class WitDeclaration(
+    val name: String,
+    val offset: Int,
+    val type: WitDeclarationType,
+    val version: String? = null
+)
 private object WitDeclarationExternalizer : DataExternalizer<WitDeclaration> {
     override fun save(out: DataOutput, value: WitDeclaration) {
         out.writeUTF(value.name)
         out.writeInt(value.offset)
         out.writeInt(value.type.ordinal)
+        out.writeUTF(value.version ?: "")
     }
 
     override fun read(`in`: DataInput) = WitDeclaration(`in`.readUTF(), `in`.readInt(),
-        WitDeclarationType.entries[`in`.readInt()])
+        WitDeclarationType.entries[`in`.readInt()], `in`.readUTF())
 }
 
 class WitComponentIndex: FileBasedIndexExtension<String, Collection<WitDeclaration>>() {
@@ -33,7 +38,11 @@ class WitComponentIndex: FileBasedIndexExtension<String, Collection<WitDeclarati
     override fun getIndexer() = DataIndexer<String, Collection<WitDeclaration>, FileContent> { content ->
         buildMap<String, MutableCollection<WitDeclaration>> {
             content.psiFile.children.filterIsInstance<WitPackageDefinition>()
-                .map { WitDeclaration(it.packageName.text, it.textOffset, WitDeclarationType.PACKAGE) }
+                .map {
+                    val pkgName = it.packageName.text
+                    WitDeclaration(pkgName.substringBeforeLast('@'), it.textOffset, WitDeclarationType.PACKAGE,
+                        pkgName.substringAfterLast('@'))
+                }
                 .singleOrNull()?.let { put(it.name, mutableListOf(it)) }
         }
     }
@@ -54,5 +63,5 @@ class WitComponentIndex: FileBasedIndexExtension<String, Collection<WitDeclarati
 
     override fun getValueExternalizer() = CollectionDataExternalizer(WitDeclarationExternalizer)
 
-    override fun getVersion(): Int = 1
+    override fun getVersion(): Int = 2
 }

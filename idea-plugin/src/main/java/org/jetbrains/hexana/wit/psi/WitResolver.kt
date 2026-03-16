@@ -6,27 +6,35 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.parentOfType
 import com.intellij.psi.util.parentOfTypes
 import com.intellij.psi.util.parents
+import com.intellij.util.text.SemVer
 import org.jetbrains.hexana.wit.WitComponentIndex
 import org.jetbrains.hexana.wit.WitDeclarationType
 import kotlin.sequences.forEach
 
 object WitResolver {
+    private const val WASI_PREFIX = "wasi:"
+
     fun resolveWitPath(context: PsiElement, name: String): PsiElement? {
-        val packageName = if (name.contains("/")) (name.substringBeforeLast("/") + name.indexOfLast { it == '@' }.let {
+        val packageNameAndVersion = if (name.contains("/")) (name.substringBeforeLast("/") + name.indexOfLast { it == '@' }.let {
             if (it == -1) "" else name.substring(it)
         }) else context.containingFile?.children?.filterIsInstance<WitPackageDefinition>()?.firstOrNull()?.packageName?.text
 
         val interfaceName = name.substringAfterLast("/").substringBeforeLast("@")
 
-        if (packageName != null) {
+        if (packageNameAndVersion != null) {
+            val packageName = packageNameAndVersion.substringBeforeLast("@")
+            val packageVersion = packageNameAndVersion.substringAfterLast("@")
             val defs = mutableListOf<PsiElement>()
             WitComponentIndex.processPackageDeclarations(
                 packageName, GlobalSearchScope.everythingScope(context.project),
                 { file, decl ->
                     val pkg = decl.singleOrNull { it.type == WitDeclarationType.PACKAGE }
                     if (pkg != null) {
-                        file.findPsiFile(context.project)?.children?.singleOrNull {
-                            it is WitPackageDefinition && it.packageName.text == packageName
+                        file.findPsiFile(context.project)?.children?.filterIsInstance<WitPackageDefinition>()?.singleOrNull {
+                            val fullPackageName = it.packageName.text
+                            fullPackageName.substringBeforeLast('@') == packageName
+                                    && matchesVersions(fullPackageName.substringAfterLast('@'), packageVersion,
+                                        fullPackageName.startsWith(WASI_PREFIX))
                         }?.let {
                             findPackageItemByName(it.parent, interfaceName)?.let {
                                 defs.add(it)
@@ -52,6 +60,15 @@ object WitResolver {
             findPackageItemByName(it, name)?.let { return it }
         }
         return null
+    }
+
+    fun matchesVersions(actualVersion: String, requestedVersion: String, isBuiltIn: Boolean): Boolean {
+        if (!isBuiltIn) return true // todo review this
+        // we must match built-ins exactly by version, so that 0.2 resolves to 0.2 etc
+        val actualVer = SemVer.parseFromText(actualVersion) ?: return true
+        val requestedVer = SemVer.parseFromText(requestedVersion) ?: return true
+        return actualVer.major == requestedVer.major
+            && actualVer.minor == requestedVer.minor
     }
 
     private fun findPackageItemByName(
