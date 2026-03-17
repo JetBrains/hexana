@@ -7,8 +7,9 @@ class HexanaMcpErrorContractTest : HexanaMcpToolsetDirectTestBase() {
     fun testSummarizeModuleReturnsErrorPayloadForMissingFile() {
         val result = callTool("summarize_module", jsonPath("fixtures/direct/missing/nope.wasm"))
 
-        assertFalse(result.isError)
-        assertEquals("""{"error": "File not found"}""", result.textPayloads.single())
+        assertTrue(result.isError)
+        assertEquals("File not found", result.textPayloads.single())
+        assertNull(result.structuredContent)
     }
 
     fun testSummarizeModuleReturnsErrorPayloadForNonWasmFile() {
@@ -16,8 +17,9 @@ class HexanaMcpErrorContractTest : HexanaMcpToolsetDirectTestBase() {
 
         val result = callTool("summarize_module", jsonPath(fixture.projectRelativePath))
 
-        assertFalse(result.isError)
-        assertEquals("""{"error": "Not a .wasm file"}""", result.textPayloads.single())
+        assertTrue(result.isError)
+        assertEquals("Not a .wasm file", result.textPayloads.single())
+        assertNull(result.structuredContent)
     }
 
     fun testListDataReturnsErrorPayloadForInvalidRange() {
@@ -41,7 +43,8 @@ class HexanaMcpErrorContractTest : HexanaMcpToolsetDirectTestBase() {
             }
         )
 
-        assertFalse(result.isError)
-        assertEquals("""{"error": "Invalid segmentRange `to` must be >= `from`"}""", result.textPayloads.single())
+        assertTrue(result.isError)
+        assertEquals("Invalid segmentRange `to` must be >= `from`", result.textPayloads.single())
+        assertNull(result.structuredContent)
     }
 }

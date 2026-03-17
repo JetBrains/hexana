@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp
 
 import com.intellij.mcpserver.McpToolset
+import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.toolsets.Constants
@@ -94,12 +95,7 @@ class HexanaToolset : McpToolset {
     suspend fun listImports(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
     ): String {
-        val fileNotFoundMessage = """{"error": "File not found"}"""
-        val notWasmError = """{"error": "Not a .wasm file"}"""
-        val file = resolveWasmVirtualFile(path) ?: return fileNotFoundMessage
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return notWasmError
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val module = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.importFunctions(module))
@@ -227,10 +223,7 @@ class HexanaToolset : McpToolset {
         @McpDescription("Maximum number of entries to return") limit: Int = 200,
 
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listFunctions(wasmModule, offset, limit))
@@ -393,16 +386,8 @@ class HexanaToolset : McpToolset {
         """)
         entriesRange: Map<String, Int>,
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
-        val range = run {
-            val from = entriesRange["from"] ?: return """{"error": "Invalid segmentRange no `from`"}"""
-            val to = entriesRange["to"] ?: return """{"error": "Invalid segmentRange no `to`"}"""
-            if (to < from) return """{"error": "Invalid segmentRange `to` must be >= `from`"}"""
-            from .. to
-        }
+        val file = requireWasmFile(path)
+        val range = requireClosedSegmentRange(entriesRange)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listDataSections(wasmModule, range))
@@ -471,10 +456,7 @@ class HexanaToolset : McpToolset {
     suspend fun listExports(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listExports(wasmModule))
@@ -656,16 +638,8 @@ class HexanaToolset : McpToolset {
         """)
         entriesRange: Map<String, Int>
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
-        val range = run {
-            val from = entriesRange["from"] ?: return """{"error": "Invalid segmentRange no `from`"}"""
-            val to = entriesRange["to"] ?: return """{"error": "Invalid segmentRange no `to`"}"""
-            if (to < from) return """{"error": "Invalid segmentRange `to` must be >= `from`"}"""
-            from .. to
-        }
+        val file = requireWasmFile(path)
+        val range = requireClosedSegmentRange(entriesRange)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listExportedFunctions(wasmModule, range))
@@ -791,10 +765,7 @@ class HexanaToolset : McpToolset {
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
         @McpDescription("List of function indices to retrieve details for") indices: List<Int>
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.functionsByIndices(wasmModule, indices))
@@ -876,10 +847,7 @@ class HexanaToolset : McpToolset {
     suspend fun listGlobals(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
     ):String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listGlobals(wasmModule))
@@ -991,10 +959,7 @@ class HexanaToolset : McpToolset {
     suspend fun listMemory(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listMemory(wasmModule))
@@ -1091,10 +1056,7 @@ class HexanaToolset : McpToolset {
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
         @McpDescription("List of function indices (globalidx) to retrieve details for") indices: List<Int>
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listGlobalsByIndices(wasmModule, indices))
@@ -1266,16 +1228,8 @@ class HexanaToolset : McpToolset {
         """)
         minByteLength: Int? = null
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
-        val range = run {
-            val from = segmentRange.get("from") ?: return """{"error": "Invalid segmentRange no `from`"}"""
-            val to = segmentRange.get("to") ?: Int.MAX_VALUE
-            if (from > to) return """{"error": "Invalid segmentRange `to` must be >= `from`"}"""
-            from to to
-        }
+        val file = requireWasmFile(path)
+        val range = requireHalfOpenSegmentRange(segmentRange)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(
@@ -1406,10 +1360,7 @@ class HexanaToolset : McpToolset {
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
         @McpDescription("List of memory indices (memidx) to retrieve details for") indices: List<Int>
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listMemoryByIndices(wasmModule, indices))
@@ -1547,10 +1498,7 @@ class HexanaToolset : McpToolset {
     suspend fun listTypes(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listTypes(wasmModule))
@@ -1661,10 +1609,7 @@ class HexanaToolset : McpToolset {
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
         @McpDescription("List of type indices (typeidx) to retrieve details for") indices: List<Int>
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listTypesByIndices(wasmModule, indices))
@@ -1780,10 +1725,7 @@ class HexanaToolset : McpToolset {
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
         @McpDescription("List of memory indices (memidx) to retrieve details for") indices: List<Int>
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.localsForFunctions(indices, wasmModule))
@@ -1917,10 +1859,7 @@ class HexanaToolset : McpToolset {
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
         @McpDescription("List of function indices (funcidx) to retrieve details for") indices: List<Int>
     ): String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.codeForFunctions(indices, wasmModule))
@@ -2119,10 +2058,7 @@ class HexanaToolset : McpToolset {
     fun listElementSegments(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
     ):String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.listElementSegments(wasmModule))
@@ -2203,10 +2139,7 @@ class HexanaToolset : McpToolset {
     fun summarizeModule(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
     ):String {
-        val file = resolveWasmVirtualFile(path) ?: return """{"error": "File not found"}"""
-        if (file.fileType != WasmFileType.INSTANCE) {
-            return """{"error": "Not a .wasm file"}"""
-        }
+        val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = WasmParser().parseOrNull(buffer)
         return objectMapper.writeValueAsString(buffer.moduleSummary(wasmModule))
@@ -2215,6 +2148,32 @@ class HexanaToolset : McpToolset {
 
 
 private fun VirtualFile.contentsToCommonByteBuffer() = contentsToByteArray().toCommonByteBuffer()
+
+private fun requireWasmFile(path: String): VirtualFile {
+    val file = resolveWasmVirtualFile(path) ?: mcpFail("File not found")
+    if (file.fileType != WasmFileType.INSTANCE) {
+        mcpFail("Not a .wasm file")
+    }
+    return file
+}
+
+private fun requireClosedSegmentRange(entriesRange: Map<String, Int>): IntRange {
+    val from = entriesRange["from"] ?: mcpFail("Invalid segmentRange no `from`")
+    val to = entriesRange["to"] ?: mcpFail("Invalid segmentRange no `to`")
+    if (to < from) {
+        mcpFail("Invalid segmentRange `to` must be >= `from`")
+    }
+    return from..to
+}
+
+private fun requireHalfOpenSegmentRange(segmentRange: Map<String, Int>): Pair<Int, Int> {
+    val from = segmentRange["from"] ?: mcpFail("Invalid segmentRange no `from`")
+    val to = segmentRange["to"] ?: Int.MAX_VALUE
+    if (from > to) {
+        mcpFail("Invalid segmentRange `to` must be >= `from`")
+    }
+    return from to to
+}
 
 private fun WasmParser.parseOrNull(buffer: CommonByteBuffer): WasmModule? {
     return when (val parseResult = parse(buffer)) {

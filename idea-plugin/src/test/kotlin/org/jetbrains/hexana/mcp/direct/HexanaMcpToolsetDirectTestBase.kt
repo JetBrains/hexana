@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.direct
 
+import com.intellij.mcpserver.McpExpectedError
 import com.intellij.mcpserver.McpTool
 import com.intellij.mcpserver.McpToolCallResultContent
 import com.intellij.openapi.application.runWriteAction
@@ -53,12 +54,20 @@ abstract class HexanaMcpToolsetDirectTestBase : BasePlatformTestCase() {
     }
 
     protected fun callTool(toolName: String, input: JsonObject): DirectToolCallResult = runBlocking {
-        val result = findTool(toolName).call(input)
-        DirectToolCallResult(
-            isError = result.isError,
-            textPayloads = result.content.filterIsInstance<McpToolCallResultContent.Text>().map { it.text },
-            structuredContent = extractStructuredContent(result)
-        )
+        try {
+            val result = findTool(toolName).call(input)
+            DirectToolCallResult(
+                isError = result.isError,
+                textPayloads = result.content.filterIsInstance<McpToolCallResultContent.Text>().map { it.text },
+                structuredContent = extractStructuredContent(result)
+            )
+        } catch (error: McpExpectedError) {
+            DirectToolCallResult(
+                isError = true,
+                textPayloads = listOf(error.mcpErrorText),
+                structuredContent = error.mcpErrorStructureContent
+            )
+        }
     }
 
     protected fun callToolText(toolName: String, input: JsonObject): String {
