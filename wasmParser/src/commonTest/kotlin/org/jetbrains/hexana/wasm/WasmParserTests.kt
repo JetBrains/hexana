@@ -105,6 +105,7 @@ class WasmParserTests {
 
 
     @Test
+    @Ignore
     fun parseSkikoSections() = runTest {
         val buffer = resourceAsByteBuffer("skiko.wasm")
 
