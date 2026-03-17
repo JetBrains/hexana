@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.direct
 
+import kotlinx.serialization.json.JsonObject
+
 class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
     fun testSummarizeModuleReturnsProjectRelativeFixtureData() {
         val fixture = createWasmFixture(
@@ -64,5 +66,26 @@ class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(0, result.int("globals"))
         assertEquals(0, result.int("tables"))
         assertTrue(result.int("moduleSize") > 0)
+    }
+
+    fun testSummarizeModuleProvidesStructuredContentForTypedResult() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/summary/structured.wasm",
+            """
+            (module
+              (memory 1)
+              (func (export "main") (result i32)
+                i32.const 42))
+            """.trimIndent()
+        )
+
+        val result = callTool("summarize_module", jsonPath(fixture.projectRelativePath))
+
+        assertFalse(result.isError)
+        assertEquals(1, result.textPayloads.size)
+        val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
+        assertEquals(textJson, result.structuredContent)
+        assertEquals(1, result.structuredContent!!.int("functions"))
+        assertEquals(1, result.structuredContent!!.int("exports"))
     }
 }

@@ -7,6 +7,8 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.toolsets.Constants
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
+import org.jetbrains.hexana.mcp.query.readModuleSummary
 import org.jetbrains.hexana.WasmFileType
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
@@ -2138,11 +2140,11 @@ class HexanaToolset : McpToolset {
 """)
     fun summarizeModule(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
-    ):String {
+    ): SummarizeModuleResult {
         val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = buffer.requireParsedWasmModule()
-        return objectMapper.writeValueAsString(buffer.moduleSummary(wasmModule))
+        return buffer.readModuleSummary(wasmModule)
     }
 }
 
