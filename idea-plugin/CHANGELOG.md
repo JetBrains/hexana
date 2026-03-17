@@ -16,6 +16,9 @@
 
 ### Fixed
 
+- [[mcp] Several MCP functions incorrectly working with indices of MCP request](https://github.com/JetBrains/hexana/issues/66)
+- [[mcp] importFunctions() must ignore non-function imports](https://github.com/JetBrains/hexana/issues/65)
+
 ### Security
 
 ## 0.5 - 2026-01-19
