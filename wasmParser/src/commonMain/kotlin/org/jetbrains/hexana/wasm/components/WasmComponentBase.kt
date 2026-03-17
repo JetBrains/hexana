@@ -56,7 +56,7 @@ interface WasmComponent: WasmComponentBase<WasmComponentStartSection, WasmCompon
     val componentSection: WasmComponentSection?
     val instanceSection: List<WasmInstanceSection>
     val aliasSection: List<WasmAliasSection>
-    val cannonSection: List<WasmCannonSection>
+    val canonSection: List<WasmCanonSection>
     val valueSection: List<WasmValueSection>
 
 }
@@ -108,7 +108,7 @@ fun CommonByteBuffer.componentResolver(unresolved: WasmSectionUnresolved): WasmS
         WasmInstanceSection.SECTION_ID -> WasmInstanceSection(unresolved)
         WasmAliasSection.SECTION_ID -> WasmAliasSection(unresolved)
         WasmComponentTypesSection.SECTION_ID -> WasmComponentTypesSection(unresolved)
-        WasmCannonSection.SECTION_ID -> WasmCannonSection(unresolved)
+        WasmCanonSection.SECTION_ID -> WasmCanonSection(unresolved)
         WasmComponentStartSection.SECTION_ID -> WasmComponentStartSection(unresolved)
         WasmComponentImportSection.SECTION_ID -> WasmComponentImportSection(unresolved)
         WasmComponentExportSection.SECTION_ID -> WasmComponentExportSection(unresolved)

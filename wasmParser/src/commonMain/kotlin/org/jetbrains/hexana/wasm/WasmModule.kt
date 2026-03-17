@@ -2,7 +2,7 @@ package org.jetbrains.hexana.wasm
 
 import org.jetbrains.hexana.wasm.components.CoreWasmComponent
 import org.jetbrains.hexana.wasm.components.WasmAliasSection
-import org.jetbrains.hexana.wasm.components.WasmCannonSection
+import org.jetbrains.hexana.wasm.components.WasmCanonSection
 import org.jetbrains.hexana.wasm.components.WasmComponent
 import org.jetbrains.hexana.wasm.components.WasmComponentBase
 import org.jetbrains.hexana.wasm.components.WasmComponentCoreTypeSection
@@ -72,7 +72,7 @@ class ComponentModule(
     override val componentSection: WasmComponentSection?,
     override val instanceSection: List<WasmInstanceSection>,
     override val aliasSection: List<WasmAliasSection>,
-    override val cannonSection: List<WasmCannonSection>,
+    override val canonSection: List<WasmCanonSection>,
     override val valueSection: List<WasmValueSection>,
     unresolvedSections: List<WasmSection>,
 ) : BaseModule(sections, customSections, unresolvedSections), WasmComponent {
@@ -100,7 +100,7 @@ private fun componentModuleFromSections(version: UShort, layer: UShort, sections
     var componentSection: WasmComponentSection? = null
     val instanceSection = mutableListOf<WasmInstanceSection>()
     val aliasSection = mutableListOf<WasmAliasSection>()
-    val cannonSection = mutableListOf<WasmCannonSection>()
+    val cannonSection = mutableListOf<WasmCanonSection>()
     val valueSection = mutableListOf<WasmValueSection>()
     val unresolvedSections = mutableListOf<WasmSection>()
 
@@ -117,7 +117,7 @@ private fun componentModuleFromSections(version: UShort, layer: UShort, sections
             is WasmComponentSection -> componentSection = section
             is WasmInstanceSection -> instanceSection.add(section)
             is WasmAliasSection -> aliasSection.add(section)
-            is WasmCannonSection -> cannonSection.add(section)
+            is WasmCanonSection -> cannonSection.add(section)
             else -> {
                 unresolvedSections.add(section)
             }

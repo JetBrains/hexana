@@ -3,7 +3,7 @@ package org.jetbrains.hexana.wasm.components
 import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
 
-class WasmCannonSection(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection("Cannon", sectionSize,
+class WasmCanonSection(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection("Cannon", sectionSize,
     sectionOffset,
     contentSize,
     contentOffset

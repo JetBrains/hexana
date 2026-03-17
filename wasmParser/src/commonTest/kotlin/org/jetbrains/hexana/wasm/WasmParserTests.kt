@@ -1285,7 +1285,7 @@ class WasmParserTests {
         val aliasSection = wasmModule.aliasSection
         assertNotNull(aliasSection)
 
-        val cannonSection = wasmModule.cannonSection
+        val cannonSection = wasmModule.canonSection
         assertNotNull(cannonSection)
 
         val valueSection = wasmModule.valueSection
