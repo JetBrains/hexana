@@ -5,6 +5,8 @@
 ### Added
 - [Parse Component Model binary format (component sections, instances, type definitions)](https://github.com/JetBrains/hexana/issues/64)
 - [Display component structure in the explorer tree (imports, exports, interfaces, worlds)](https://github.com/JetBrains/hexana/issues/63)
+- [Support for WIT definitions language (code model, go to definition, find usages, documentation on hover)](https://github.com/JetBrains/hexana/issues/9)
+- [Navigation from WIT files to export definitions in WASM files (currently only exports are supported, more to come later)](https://github.com/JetBrains/hexana/issues/11)
 
 ### Changed
 
