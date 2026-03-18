@@ -54,7 +54,28 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
     fun testGetLocalsForFunctionsReturnsGroupedLocalDeclarations() {
         val fixture = createFunctionFixture("fixtures/direct/functions/get_locals.wasm")
 
-        val result = callToolJsonArray(
+        val result = callToolJsonObject(
+            "get_locals_for_functions",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("indices", kotlinx.serialization.json.buildJsonArray {
+                    add(JsonPrimitive(1))
+                })
+            }
+        )
+        val functions = result.array("functions")
+
+        assertEquals(1, functions.size)
+        assertEquals(1, functions.obj(0).int("funcidx"))
+        assertEquals(1, functions.obj(0).array("locals").size)
+        assertEquals(1, functions.obj(0).array("locals").obj(0).int("local"))
+        assertEquals("num:i32", functions.obj(0).array("locals").obj(0).text("type"))
+    }
+
+    fun testGetLocalsForFunctionsProvidesStructuredContentForTypedResult() {
+        val fixture = createFunctionFixture("fixtures/direct/functions/structured_get_locals.wasm")
+
+        val result = callTool(
             "get_locals_for_functions",
             buildJsonObject {
                 put("path", JsonPrimitive(fixture.projectRelativePath))
@@ -64,11 +85,14 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
             }
         )
 
-        assertEquals(1, result.size)
-        assertEquals(1, result.obj(0).int("funcidx"))
-        assertEquals(1, result.obj(0).array("locals").size)
-        assertEquals(1, result.obj(0).array("locals").obj(0).int("local"))
-        assertEquals("num:i32", result.obj(0).array("locals").obj(0).text("type"))
+        assertFalse(result.isError)
+        assertEquals(1, result.textPayloads.size)
+        val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
+        val structuredContent = result.requireStructuredObject()
+        assertEquals(textJson, structuredContent)
+        val functions = structuredContent.array("functions")
+        assertEquals(1, functions.size)
+        assertEquals(1, functions.obj(0).int("funcidx"))
     }
 
     fun testGetInstructionsForFunctionsReturnsDecodedInstructionText() {
