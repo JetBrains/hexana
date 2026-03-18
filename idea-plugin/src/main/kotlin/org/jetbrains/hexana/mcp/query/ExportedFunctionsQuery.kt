@@ -50,12 +50,12 @@ private fun FunctionEntry.toExportedFunctionEntryResult(): ExportedFunctionEntry
             funcidx = funcidx,
             module = module,
             name = name,
-            signature = (signature as? ParameterSignature)?.toExportedFunctionSignatureResult()
+            signature = signature?.toExportedFunctionSignatureResult()
         )
 
         is GeneralFunctionEntry -> ExportedFunctionEntryResult(
             funcidx = funcidx,
-            signature = (signature as? ParameterSignature)?.toExportedFunctionSignatureResult(),
+            signature = signature?.toExportedFunctionSignatureResult(),
             exportedAs = exportedAs,
             definedIn = definedIn,
             codeOffset = codeOffset,

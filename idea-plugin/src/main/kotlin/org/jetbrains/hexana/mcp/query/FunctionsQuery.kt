@@ -35,7 +35,7 @@ internal fun CommonByteBuffer.readFunctionsByIndices(
 private fun GeneralFunctionEntry.toFunctionSummaryResult(): FunctionSummaryResult {
     return FunctionSummaryResult(
         funcidx = funcidx,
-        signature = (signature as? ParameterSignature)?.toFunctionSignatureResult(),
+        signature = signature?.toFunctionSignatureResult(),
         importInfo = import?.let { FunctionImportResult(module = it.module, name = it.name) },
         exportedAs = exportedAs,
         definedIn = definedIn,
@@ -49,7 +49,7 @@ private fun FunctionEntry.toFunctionSummaryResult(): FunctionSummaryResult {
     return when (this) {
         is ImportFunctionEntry -> FunctionSummaryResult(
             funcidx = funcidx,
-            signature = (signature as? ParameterSignature)?.toFunctionSignatureResult(),
+            signature = signature?.toFunctionSignatureResult(),
             importInfo = FunctionImportResult(module = module, name = name),
             definedIn = "import"
         )

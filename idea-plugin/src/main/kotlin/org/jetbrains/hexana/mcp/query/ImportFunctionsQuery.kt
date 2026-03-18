@@ -15,7 +15,7 @@ internal fun CommonByteBuffer.readImportFunctions(wasmModule: WasmModule): ListI
                 funcidx = entry.funcidx,
                 module = entry.module,
                 name = entry.name,
-                signature = (entry.signature as? ParameterSignature)?.toImportFunctionSignature()
+                signature = entry.signature?.toImportFunctionSignature()
             )
         }
     )
