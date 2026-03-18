@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.direct
 
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
@@ -7,17 +8,34 @@ class HexanaMcpGlobalsToolTest : HexanaMcpToolsetDirectTestBase() {
     fun testListGlobalsReturnsImportedAndDefinedGlobals() {
         val fixture = createGlobalsFixture("fixtures/direct/globals/list_globals.wasm")
 
-        val result = callToolJsonArray("list_globals", jsonPath(fixture.projectRelativePath))
+        val result = callToolJsonObject("list_globals", jsonPath(fixture.projectRelativePath))
+        val globals = result.array("globals")
 
-        assertEquals(2, result.size)
-        assertEquals(0, result.obj(0).int("globalIdx"))
-        assertEquals("env", result.obj(0).text("prefix"))
-        assertEquals("seed", result.obj(0).text("name"))
-        assertEquals("i32", result.obj(0).text("type"))
-        assertEquals("import", result.obj(0).text("definedIn"))
-        assertEquals(1, result.obj(1).int("globalIdx"))
-        assertEquals("i64", result.obj(1).text("type"))
-        assertEquals("global_section", result.obj(1).text("definedIn"))
+        assertEquals(2, globals.size)
+        assertEquals(0, globals.obj(0).int("globalIdx"))
+        assertEquals("env", globals.obj(0).text("prefix"))
+        assertEquals("seed", globals.obj(0).text("name"))
+        assertEquals("i32", globals.obj(0).text("type"))
+        assertEquals("import", globals.obj(0).text("definedIn"))
+        assertEquals(1, globals.obj(1).int("globalIdx"))
+        assertEquals("i64", globals.obj(1).text("type"))
+        assertEquals("global_section", globals.obj(1).text("definedIn"))
+    }
+
+    fun testListGlobalsProvidesStructuredContentForTypedResult() {
+        val fixture = createGlobalsFixture("fixtures/direct/globals/structured_list_globals.wasm")
+
+        val result = callTool("list_globals", jsonPath(fixture.projectRelativePath))
+
+        assertFalse(result.isError)
+        assertEquals(1, result.textPayloads.size)
+        val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
+        val structuredContent = result.requireStructuredObject()
+        assertEquals(textJson, structuredContent)
+        val globals = structuredContent.array("globals")
+        assertEquals(2, globals.size)
+        assertEquals(0, globals.obj(0).int("globalIdx"))
+        assertEquals(1, globals.obj(1).int("globalIdx"))
     }
 
     fun testGetGlobalsForIndicesReturnsOnlySelectedGlobals() {
