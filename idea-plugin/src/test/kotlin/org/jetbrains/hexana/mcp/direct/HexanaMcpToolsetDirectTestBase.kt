@@ -33,7 +33,7 @@ abstract class HexanaMcpToolsetDirectTestBase : BasePlatformTestCase() {
     protected data class DirectToolCallResult(
         val isError: Boolean,
         val textPayloads: List<String>,
-        val structuredContent: JsonObject?
+        val structuredContent: JsonElement?
     )
 
     protected fun createWasmFixture(pathInProject: String, wat: String): ProjectFileFixture {
@@ -139,6 +139,20 @@ abstract class HexanaMcpToolsetDirectTestBase : BasePlatformTestCase() {
         return primitive.content
     }
 
+    protected fun DirectToolCallResult.requireStructuredObject(): JsonObject {
+        val structuredContent = structuredContent
+            ?: assertionFailure("Expected structured content to be present, but it was null. Result: $this")
+        return structuredContent as? JsonObject
+            ?: assertionFailure("Expected structured content to be a JSON object, but got ${jsonType(structuredContent)}. Result: $this")
+    }
+
+    protected fun DirectToolCallResult.requireStructuredArray(): JsonArray {
+        val structuredContent = structuredContent
+            ?: assertionFailure("Expected structured content to be present, but it was null. Result: $this")
+        return structuredContent as? JsonArray
+            ?: assertionFailure("Expected structured content to be a JSON array, but got ${jsonType(structuredContent)}. Result: $this")
+    }
+
     protected fun jsonPath(path: String): JsonObject = JsonObject(mapOf("path" to JsonPrimitive(path)))
 
     private fun JsonObject.requireField(name: String): JsonElement {
@@ -185,11 +199,11 @@ abstract class HexanaMcpToolsetDirectTestBase : BasePlatformTestCase() {
             ?: error("MCP tool `$toolName` is not registered")
     }
 
-    private fun extractStructuredContent(result: Any): JsonObject? {
+    private fun extractStructuredContent(result: Any): JsonElement? {
         return runCatching {
             result.javaClass.methods
                 .singleOrNull { it.name == "getStructuredContent" && it.parameterCount == 0 }
-                ?.invoke(result) as? JsonObject
+                ?.invoke(result) as? JsonElement
         }.getOrNull()
     }
 }

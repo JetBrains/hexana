@@ -7,7 +7,9 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.toolsets.Constants
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
+import org.jetbrains.hexana.mcp.query.readImportFunctions
 import org.jetbrains.hexana.mcp.query.readModuleSummary
 import org.jetbrains.hexana.WasmFileType
 import org.jetbrains.hexana.io.CommonByteBuffer
@@ -96,11 +98,11 @@ class HexanaToolset : McpToolset {
     )
     suspend fun listImports(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
-    ): String {
+    ): ListImportsResult {
         val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val module = buffer.requireParsedWasmModule()
-        return objectMapper.writeValueAsString(buffer.importFunctions(module))
+        return buffer.readImportFunctions(module)
     }
 
     @McpTool("list_functions")

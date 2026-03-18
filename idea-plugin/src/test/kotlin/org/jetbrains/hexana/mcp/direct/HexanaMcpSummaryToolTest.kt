@@ -84,8 +84,9 @@ class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertFalse(result.isError)
         assertEquals(1, result.textPayloads.size)
         val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
-        assertEquals(textJson, result.structuredContent)
-        assertEquals(1, result.structuredContent!!.int("functions"))
-        assertEquals(1, result.structuredContent!!.int("exports"))
+        val structuredContent = result.requireStructuredObject()
+        assertEquals(textJson, structuredContent)
+        assertEquals(1, structuredContent.int("functions"))
+        assertEquals(1, structuredContent.int("exports"))
     }
 }
