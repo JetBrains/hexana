@@ -3,32 +3,11 @@ package org.jetbrains.hexana.wasm
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.hexana.tests.IgnoreJsTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
-import org.jetbrains.hexana.wasm.components.ComponentFunctionType
-import org.jetbrains.hexana.wasm.components.ComponentInstanceExpression
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveU32Type
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveValueType
-import org.jetbrains.hexana.wasm.components.CoreWasmComponent
-import org.jetbrains.hexana.wasm.components.ModuleInstanceCoreExpression
-import org.jetbrains.hexana.wasm.components.WasmComponent
-import org.jetbrains.hexana.wasm.components.WasmComponentTypesSection
+import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
-import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
-import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
-import org.jetbrains.hexana.wasm.sections.WasmI32Type
-import org.jetbrains.hexana.wasm.sections.WasmImportRecord
-import org.jetbrains.hexana.wasm.sections.WasmOpenI32Limits
-import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
-import org.jetbrains.hexana.wasm.sections.consumeString
-import kotlin.test.Test
-import kotlin.test.Ignore
-import kotlin.test.assertContentEquals
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import org.jetbrains.hexana.wasm.sections.*
+import kotlin.test.*
 
 class WasmParserTests {
 
@@ -105,7 +84,6 @@ class WasmParserTests {
 
 
     @Test
-    @Ignore
     fun parseSkikoSections() = runTest {
         val buffer = resourceAsByteBuffer("skiko.wasm")
 
@@ -682,7 +660,6 @@ class WasmParserTests {
     }
 
     @Test
-    @Ignore
     // Was broken after recent refactoring and I won't point fingers (but it's Vassily!)
     // Vasily > All memory operations are fetch memargs incorrectly, this test should be enabled after fix of memargs consumption fix.
     fun `code load`() = runTest {
