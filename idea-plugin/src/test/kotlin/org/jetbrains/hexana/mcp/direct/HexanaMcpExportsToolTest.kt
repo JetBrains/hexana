@@ -83,6 +83,70 @@ class HexanaMcpExportsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals("a", result.array("returned").obj(0).text("name"))
     }
 
+    fun testListExportedFunctionsPreservesImportedFunctionEntryShape() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/exports/list_exported_imported_function.wasm",
+            """
+            (module
+              (import "env" "log" (func (param i32)))
+              (export "log_alias" (func 0)))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "list_exported_functions",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("entriesRange", buildJsonObject {
+                    put("from", JsonPrimitive(0))
+                    put("to", JsonPrimitive(0))
+                })
+            }
+        )
+
+        val returned = result.array("returned")
+        assertEquals(1, returned.size)
+        assertEquals("log_alias", returned.obj(0).text("name"))
+        val entry = returned.obj(0).obj("entry")
+        assertEquals(0, entry.int("funcidx"))
+        assertEquals("env", entry.text("module"))
+        assertEquals("log", entry.text("name"))
+        assertEquals("i32", entry.obj("signature").array("params")[0].textValue())
+    }
+
+    fun testListExportedFunctionsProvidesStructuredContentForTypedResult() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/exports/structured_list_exported_functions.wasm",
+            """
+            (module
+              (func (export "a") (result i32)
+                i32.const 1)
+              (func (export "b") (result i32)
+                i32.const 2))
+            """.trimIndent()
+        )
+
+        val result = callTool(
+            "list_exported_functions",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("entriesRange", buildJsonObject {
+                    put("from", JsonPrimitive(0))
+                    put("to", JsonPrimitive(0))
+                })
+            }
+        )
+
+        assertFalse(result.isError)
+        assertEquals(1, result.textPayloads.size)
+        val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
+        val structuredContent = result.requireStructuredObject()
+        assertEquals(textJson, structuredContent)
+        val returned = structuredContent.array("returned")
+        assertEquals("a", returned.obj(0).text("name"))
+        assertEquals(0, returned.obj(0).obj("entry").int("funcidx"))
+    }
+
     private companion object {
         // TODO should be moved to some kind of enum
         const val WASM_EXPORT_KIND_FUNCTION = 0

@@ -7,9 +7,11 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.toolsets.Constants
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
+import org.jetbrains.hexana.mcp.query.readExportedFunctions
 import org.jetbrains.hexana.mcp.query.readExports
 import org.jetbrains.hexana.mcp.query.readImportFunctions
 import org.jetbrains.hexana.mcp.query.readModuleSummary
@@ -643,12 +645,12 @@ class HexanaToolset : McpToolset {
             Only segments with dataidx in this range will be returned.
         """)
         entriesRange: Map<String, Int>
-    ): String {
+    ): ListExportedFunctionsResult {
         val file = requireWasmFile(path)
         val range = requireClosedSegmentRange(entriesRange)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = buffer.requireParsedWasmModule()
-        return objectMapper.writeValueAsString(buffer.listExportedFunctions(wasmModule, range))
+        return buffer.readExportedFunctions(wasmModule, range)
     }
 
     @McpTool("functions_for_indices")
