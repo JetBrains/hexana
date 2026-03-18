@@ -8,7 +8,30 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
     fun testListFunctionsReturnsImportedAndDefinedFunctions() {
         val fixture = createFunctionFixture("fixtures/direct/functions/list_functions.wasm")
 
-        val result = callToolJsonArray(
+        val result = callToolJsonObject(
+            "list_functions",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("offset", JsonPrimitive(0))
+                put("limit", JsonPrimitive(10))
+            }
+        )
+        val functions = result.array("functions")
+
+        assertEquals(3, functions.size)
+        assertEquals(0, functions.obj(0).int("funcidx"))
+        assertEquals("import", functions.obj(0).text("definedIn"))
+        assertEquals(1, functions.obj(1).int("funcidx"))
+        assertEquals("function_section", functions.obj(1).text("definedIn"))
+        assertEquals("increment", functions.obj(1).array("exportedAs")[0].textValue())
+        assertTrue(functions.obj(1).long("codeSize") > 0)
+        assertEquals(2, functions.obj(2).int("funcidx"))
+    }
+
+    fun testListFunctionsProvidesStructuredContentForTypedResult() {
+        val fixture = createFunctionFixture("fixtures/direct/functions/structured_list_functions.wasm")
+
+        val result = callTool(
             "list_functions",
             buildJsonObject {
                 put("path", JsonPrimitive(fixture.projectRelativePath))
@@ -17,14 +40,15 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
             }
         )
 
-        assertEquals(3, result.size)
-        assertEquals(0, result.obj(0).int("funcidx"))
-        assertEquals("import", result.obj(0).text("definedIn"))
-        assertEquals(1, result.obj(1).int("funcidx"))
-        assertEquals("function_section", result.obj(1).text("definedIn"))
-        assertEquals("increment", result.obj(1).array("exportedAs")[0].textValue())
-        assertTrue(result.obj(1).long("codeSize") > 0)
-        assertEquals(2, result.obj(2).int("funcidx"))
+        assertFalse(result.isError)
+        assertEquals(1, result.textPayloads.size)
+        val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
+        val structuredContent = result.requireStructuredObject()
+        assertEquals(textJson, structuredContent)
+        val functions = structuredContent.array("functions")
+        assertEquals(3, functions.size)
+        assertEquals(0, functions.obj(0).int("funcidx"))
+        assertEquals(2, functions.obj(2).int("funcidx"))
     }
 
     fun testFunctionsForIndicesReturnsImportAndDefinedEntries() {

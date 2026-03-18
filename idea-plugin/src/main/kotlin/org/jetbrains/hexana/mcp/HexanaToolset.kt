@@ -24,6 +24,7 @@ import org.jetbrains.hexana.mcp.query.readDataSections
 import org.jetbrains.hexana.mcp.query.readElementSegments
 import org.jetbrains.hexana.mcp.query.readExportedFunctions
 import org.jetbrains.hexana.mcp.query.readExports
+import org.jetbrains.hexana.mcp.query.readFunctions
 import org.jetbrains.hexana.mcp.query.readFunctionsByIndices
 import org.jetbrains.hexana.mcp.query.readInstructionsForFunctions
 import org.jetbrains.hexana.mcp.query.readLocalsForFunctions
@@ -248,11 +249,11 @@ class HexanaToolset : McpToolset {
         @McpDescription("Offset into the unified function index space") offset: Int = 0,
         @McpDescription("Maximum number of entries to return") limit: Int = 200,
 
-    ): String {
+    ): FunctionsResult {
         val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = buffer.requireParsedWasmModule()
-        return objectMapper.writeValueAsString(buffer.listFunctions(wasmModule, offset, limit))
+        return buffer.readFunctions(wasmModule, offset, limit)
     }
 
     @McpTool("list_data")
