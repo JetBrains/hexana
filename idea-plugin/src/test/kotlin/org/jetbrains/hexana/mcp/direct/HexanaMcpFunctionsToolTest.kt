@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.direct
 
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
@@ -73,7 +74,27 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
     fun testGetInstructionsForFunctionsReturnsDecodedInstructionText() {
         val fixture = createFunctionFixture("fixtures/direct/functions/get_instructions.wasm")
 
-        val result = callToolJsonArray(
+        val result = callToolJsonObject(
+            "get_instructions_for_functions",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("indices", kotlinx.serialization.json.buildJsonArray {
+                    add(JsonPrimitive(1))
+                })
+            }
+        )
+        val functions = result.array("functions")
+
+        assertEquals(1, functions.size)
+        assertEquals(1, functions.obj(0).int("funcidx"))
+        assertTrue(functions.obj(0).array("instructions").map { it.textValue() }.contains("local.get 0"))
+        assertTrue(functions.obj(0).array("instructions").map { it.textValue() }.contains("call 0"))
+    }
+
+    fun testGetInstructionsForFunctionsProvidesStructuredContentForTypedResult() {
+        val fixture = createFunctionFixture("fixtures/direct/functions/structured_get_instructions.wasm")
+
+        val result = callTool(
             "get_instructions_for_functions",
             buildJsonObject {
                 put("path", JsonPrimitive(fixture.projectRelativePath))
@@ -83,10 +104,14 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
             }
         )
 
-        assertEquals(1, result.size)
-        assertEquals(1, result.obj(0).int("funcidx"))
-        assertTrue(result.obj(0).array("instructions").map { it.textValue() }.contains("local.get 0"))
-        assertTrue(result.obj(0).array("instructions").map { it.textValue() }.contains("call 0"))
+        assertFalse(result.isError)
+        assertEquals(1, result.textPayloads.size)
+        val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
+        val structuredContent = result.requireStructuredObject()
+        assertEquals(textJson, structuredContent)
+        val functions = structuredContent.array("functions")
+        assertEquals(1, functions.size)
+        assertEquals(1, functions.obj(0).int("funcidx"))
     }
 
     private fun createFunctionFixture(pathInProject: String) = createWasmFixture(
