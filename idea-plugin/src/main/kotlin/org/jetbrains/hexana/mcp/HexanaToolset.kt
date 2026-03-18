@@ -12,6 +12,7 @@ import org.jetbrains.hexana.mcp.model.data.ListDataSectionsResult
 import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
+import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
@@ -23,6 +24,7 @@ import org.jetbrains.hexana.mcp.query.readDataSections
 import org.jetbrains.hexana.mcp.query.readElementSegments
 import org.jetbrains.hexana.mcp.query.readExportedFunctions
 import org.jetbrains.hexana.mcp.query.readExports
+import org.jetbrains.hexana.mcp.query.readFunctionsByIndices
 import org.jetbrains.hexana.mcp.query.readInstructionsForFunctions
 import org.jetbrains.hexana.mcp.query.readLocalsForFunctions
 import org.jetbrains.hexana.mcp.query.readGlobalsByIndices
@@ -807,11 +809,11 @@ class HexanaToolset : McpToolset {
     suspend fun functionsForIndices(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
         @McpDescription("List of function indices to retrieve details for") indices: List<Int>
-    ): String {
+    ): FunctionsResult {
         val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = buffer.requireParsedWasmModule()
-        return objectMapper.writeValueAsString(buffer.functionsByIndices(wasmModule, indices))
+        return buffer.readFunctionsByIndices(wasmModule, indices)
     }
 
     @McpTool("list_globals")
