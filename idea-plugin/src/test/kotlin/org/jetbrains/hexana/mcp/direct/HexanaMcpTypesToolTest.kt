@@ -22,10 +22,8 @@ class HexanaMcpTypesToolTest : HexanaMcpToolsetDirectTestBase() {
         assertTrue(types.isNotEmpty())
         assertEquals(0, types.obj(0).int("typeidx"))
         assertEquals("func", types.obj(0).text("kind"))
-        assertEquals("val", types.obj(0).array("params").obj(0).text("kind"))
-        assertEquals("i32", types.obj(0).array("params").obj(0).text("type"))
-        assertFalse(types.obj(0).array("params").obj(0).containsKey("typeidx"))
-        assertEquals("val", types.obj(0).array("retTypes").obj(0).text("kind"))
+        assertEquals("i32", types.obj(0).array("params")[0].textValue())
+        assertEquals("i32", types.obj(0).array("retTypes")[0].textValue())
     }
 
     fun testListTypesProvidesStructuredContentForTypedResult() {
@@ -78,9 +76,7 @@ class HexanaMcpTypesToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(1, types.size)
         assertEquals(1, types.obj(0).int("typeidx"))
         assertEquals("func", types.obj(0).text("kind"))
-        assertEquals("val", types.obj(0).array("params").obj(0).text("kind"))
-        assertEquals("i64", types.obj(0).array("params").obj(0).text("type"))
-        assertFalse(types.obj(0).array("params").obj(0).containsKey("typeidx"))
+        assertEquals("i64", types.obj(0).array("params")[0].textValue())
     }
 
     fun testGetTypesForIndicesProvidesStructuredContentForTypedResult() {

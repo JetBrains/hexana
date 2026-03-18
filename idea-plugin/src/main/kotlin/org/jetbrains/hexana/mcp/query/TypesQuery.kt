@@ -60,7 +60,9 @@ internal fun CommonByteBuffer.readTypesByIndices(
     )
 }
 
-private fun WasmTypeRecord.toTypeResult(index: Int? = null): TypeResult = when (this) {
+private const val MAX_TYPE_RENDER_DEPTH = 100
+
+private fun WasmTypeRecord.toTypeResult(index: Int): TypeResult = when (this) {
     is WasmArrayTypeRecord -> TypeResult(
         kind = "array",
         typeidx = index,
@@ -77,46 +79,97 @@ private fun WasmTypeRecord.toTypeResult(index: Int? = null): TypeResult = when (
     is WasmRecursiveTypeRecord -> TypeResult(
         kind = "rec",
         typeidx = index,
-        entries = entries.map { it.toTypeResult() }
+        entries = entries.map { it.toTypeString() }
     )
 
     is WasmSectionFunctionTypeRecord -> TypeResult(
         kind = "func",
         typeidx = index,
-        params = params.map { it.toTypeResult() },
-        retTypes = retTypes.map { it.toTypeResult() }
+        params = params.map { it.toTypeString() },
+        retTypes = retTypes.map { it.toTypeString() }
     )
 }
 
 private fun WasmFieldType.toTypeFieldResult(): TypeFieldResult {
     return TypeFieldResult(
-        type = storageType.toTypeResult(),
+        type = storageType.toTypeString(),
         mutable = isMutable
     )
 }
 
-private fun WasmValueType<*>.toTypeResult(): TypeResult {
+internal fun WasmTypeRecord.toTypeString(depth: Int = 0): String {
+    if (depth >= MAX_TYPE_RENDER_DEPTH) {
+        return "..."
+    }
     return when (this) {
-        is WasmF32Type -> TypeResult(kind = "val", type = "i32")
-        is WasmF64Type -> TypeResult(kind = "val", type = "i64")
-        is WasmI32Type -> TypeResult(kind = "val", type = "i32")
-        is WasmI64Type -> TypeResult(kind = "val", type = "i64")
-        is WasmVecType -> TypeResult(kind = "val", type = "v128")
-        is WasmPactTypeI8 -> TypeResult(kind = "packed", packType = "i8")
-        is WasmPactTypeI16 -> TypeResult(kind = "packed", packType = "i16")
+        is WasmArrayTypeRecord -> "(array ${fieldType.toFieldDeclarationString(depth + 1)})"
+        is WasmStructTypeRecord -> buildString {
+            append("(struct")
+            if (fields.isNotEmpty()) {
+                append(' ')
+                append(fields.joinToString(" ") { it.toFieldString(depth + 1) })
+            }
+            append(')')
+        }
+        is WasmRecursiveTypeRecord -> buildString {
+            append("(rec")
+            if (entries.isNotEmpty()) {
+                append(' ')
+                append(entries.joinToString(" ") { "(type ${it.toTypeString(depth + 1)})" })
+            }
+            append(')')
+        }
+        is WasmSectionFunctionTypeRecord -> buildString {
+            append("(func")
+            if (params.isNotEmpty()) {
+                append(" (param ")
+                append(params.joinToString(" ") { it.toTypeString() })
+                append(')')
+            }
+            if (retTypes.isNotEmpty()) {
+                append(" (result ")
+                append(retTypes.joinToString(" ") { it.toTypeString() })
+                append(')')
+            }
+            append(')')
+        }
+    }
+}
+
+private fun WasmFieldType.toFieldString(depth: Int): String {
+    val type = storageType.toTypeString(depth)
+    return if (isMutable) {
+        "(field (mut $type))"
+    } else {
+        "(field $type)"
+    }
+}
+
+private fun WasmFieldType.toFieldDeclarationString(depth: Int): String {
+    val type = storageType.toTypeString(depth)
+    return if (isMutable) {
+        "(mut $type)"
+    } else {
+        type
+    }
+}
+
+private fun WasmValueType<*>.toTypeString(@Suppress("UNUSED_PARAMETER") depth: Int = 0): String {
+    return when (this) {
+        is WasmF32Type -> "i32"
+        is WasmF64Type -> "i64"
+        is WasmI32Type -> "i32"
+        is WasmI64Type -> "i64"
+        is WasmVecType -> "v128"
+        is WasmPactTypeI8 -> "i8"
+        is WasmPactTypeI16 -> "i16"
         is WasmRefType -> {
             when (code) {
                 is WasmNullableReferenceType,
-                is WasmNonNullableReferenceType -> TypeResult(
-                    kind = "ref",
-                    refKind = code.heapType.toHeapTypeResult(),
-                    nullable = code is WasmNullableReferenceType
-                )
+                is WasmNonNullableReferenceType ->
+                    "ref ${if (code is WasmNullableReferenceType) "null " else ""}${code.heapType.toHeapTypeResult()}"
 
-                is WasmReferenceHeapType -> TypeResult(
-                    kind = "ref",
-                    refKind = code.heapType.toHeapTypeResult()
-                )
+                is WasmReferenceHeapType -> "ref ${code.heapType.toHeapTypeResult()}"
             }
         }
     }
