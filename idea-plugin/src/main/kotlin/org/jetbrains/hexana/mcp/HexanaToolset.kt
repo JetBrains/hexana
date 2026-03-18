@@ -24,6 +24,7 @@ import org.jetbrains.hexana.mcp.query.readExports
 import org.jetbrains.hexana.mcp.query.readGlobalsByIndices
 import org.jetbrains.hexana.mcp.query.readGlobals
 import org.jetbrains.hexana.mcp.query.readImportFunctions
+import org.jetbrains.hexana.mcp.query.readMemoryByIndices
 import org.jetbrains.hexana.mcp.query.readMemory
 import org.jetbrains.hexana.mcp.query.readModuleSummary
 import org.jetbrains.hexana.WasmFileType
@@ -1395,11 +1396,11 @@ class HexanaToolset : McpToolset {
     suspend fun getMemoryForIndices(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
         @McpDescription("List of memory indices (memidx) to retrieve details for") indices: List<Int>
-    ): String {
+    ): ListMemoryResult {
         val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = buffer.requireParsedWasmModule()
-        return objectMapper.writeValueAsString(buffer.listMemoryByIndices(wasmModule, indices))
+        return buffer.readMemoryByIndices(wasmModule, indices)
     }
 
     @McpTool("list_types")

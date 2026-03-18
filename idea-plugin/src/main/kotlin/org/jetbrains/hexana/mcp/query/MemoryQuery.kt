@@ -4,6 +4,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.mcp.Limits
 import org.jetbrains.hexana.mcp.MemoryRecord
 import org.jetbrains.hexana.mcp.listMemory
+import org.jetbrains.hexana.mcp.listMemoryByIndices
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
 import org.jetbrains.hexana.mcp.model.memory.MemoryLimitsResult
 import org.jetbrains.hexana.mcp.model.memory.MemoryResult
@@ -12,6 +13,15 @@ import org.jetbrains.hexana.wasm.WasmModule
 internal fun CommonByteBuffer.readMemory(wasmModule: WasmModule): ListMemoryResult {
     return ListMemoryResult(
         memories = listMemory(wasmModule).map { it.toMemoryResult() }
+    )
+}
+
+internal fun CommonByteBuffer.readMemoryByIndices(
+    wasmModule: WasmModule,
+    indices: List<Int>
+): ListMemoryResult {
+    return ListMemoryResult(
+        memories = listMemoryByIndices(wasmModule, indices).map { it.toMemoryResult() }
     )
 }
 
