@@ -314,12 +314,6 @@ internal fun CommonByteBuffer.importFunctions(
     return signatures
 }
 
-internal fun CommonByteBuffer.types(wasmModule: WasmModule): List<WasmTypeRecord> =
-    with(wasmModule.typesSection) {
-        this ?: return@with emptyList()
-        parseTypes()
-    }
-
 internal fun CommonByteBuffer.listGlobals(wasmModule: WasmModule?): List<GlobalRecord> {
     wasmModule ?: return emptyList()
     val importedGlobals = with(wasmModule.importSection) {
