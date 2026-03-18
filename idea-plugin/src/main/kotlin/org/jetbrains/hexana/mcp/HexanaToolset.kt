@@ -7,10 +7,12 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.toolsets.Constants
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.hexana.mcp.model.data.ListDataSectionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
+import org.jetbrains.hexana.mcp.query.readDataSections
 import org.jetbrains.hexana.mcp.query.readExportedFunctions
 import org.jetbrains.hexana.mcp.query.readExports
 import org.jetbrains.hexana.mcp.query.readImportFunctions
@@ -385,6 +387,25 @@ class HexanaToolset : McpToolset {
     suitable for analysis, automated testing, and LLM reasoning.
     """
     )
+    // TODO: `list_data` still exposes raw segment bytes as a base64 string in the MCP payload.
+    //  This behavior is preserved intentionally for compatibility with the previous Jackson-based
+    //  implementation: the old path returned `DataEntry.data: ByteArray` through
+    //  `objectMapper.writeValueAsString(...)`, and Jackson serialized `byte[]` as a base64-encoded
+    //  JSON string. The current kotlinx.serialization path keeps the same wire contract on purpose.
+    //  *
+    //  Proof:
+    //  - Direct regression test in this repo:
+    //    `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp/direct/HexanaMcpDataToolTest.kt`
+    //    asserts `returned[0].data == "SGVsbG8="` for `(data (i32.const 0) "Hello")`.
+    //  - Jackson documents the old behavior here:
+    //    https://github.com/FasterXML/jackson-databind
+    //    ("default byte[] representation is base64-encoded String")
+    //  - kotlinx.serialization documents that the default ByteArray serializer is list-shaped here:
+    //    https://kotlinlang.org/api/kotlinx.serialization/kotlinx-serialization-core/kotlinx.serialization.builtins/
+    //  *
+    //  This is not a good long-term MCP contract and should be redesigned later in an explicit
+    //  behavior-change step. When we do that, we should replace the legacy base64 payload with a
+    //  clearer MCP-friendly representation and update all direct tests and clients together.
     fun listData(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
         @McpDescription("""
@@ -393,12 +414,12 @@ class HexanaToolset : McpToolset {
             Only segments with dataidx in this range will be returned.
         """)
         entriesRange: Map<String, Int>,
-    ): String {
+    ): ListDataSectionsResult {
         val file = requireWasmFile(path)
         val range = requireClosedSegmentRange(entriesRange)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = buffer.requireParsedWasmModule()
-        return objectMapper.writeValueAsString(buffer.listDataSections(wasmModule, range))
+        return buffer.readDataSections(wasmModule, range)
     }
 
     @McpTool("list_exports")
