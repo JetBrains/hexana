@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.direct
 
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
@@ -16,17 +17,40 @@ class HexanaMcpExportsToolTest : HexanaMcpToolsetDirectTestBase() {
             """.trimIndent()
         )
 
-        val result = callToolJsonArray("list_exports", jsonPath(fixture.projectRelativePath))
+        val result = callToolJsonObject("list_exports", jsonPath(fixture.projectRelativePath))
+        val exports = result.array("exports")
 
-        assertEquals(4, result.size)
-        assertEquals("mem", result.obj(0).text("name"))
-        assertEquals(WASM_EXPORT_KIND_MEMORY, result.obj(0).int("kind"))
-        assertEquals("tab", result.obj(1).text("name"))
-        assertEquals(WASM_EXPORT_KIND_TABLE, result.obj(1).int("kind"))
-        assertEquals("glob", result.obj(2).text("name"))
-        assertEquals(WASM_EXPORT_KIND_GLOBAL, result.obj(2).int("kind"))
-        assertEquals("func", result.obj(3).text("name"))
-        assertEquals(WASM_EXPORT_KIND_FUNCTION, result.obj(3).int("kind"))
+        assertEquals(4, exports.size)
+        assertEquals("mem", exports.obj(0).text("name"))
+        assertEquals(WASM_EXPORT_KIND_MEMORY, exports.obj(0).int("kind"))
+        assertEquals("tab", exports.obj(1).text("name"))
+        assertEquals(WASM_EXPORT_KIND_TABLE, exports.obj(1).int("kind"))
+        assertEquals("glob", exports.obj(2).text("name"))
+        assertEquals(WASM_EXPORT_KIND_GLOBAL, exports.obj(2).int("kind"))
+        assertEquals("func", exports.obj(3).text("name"))
+        assertEquals(WASM_EXPORT_KIND_FUNCTION, exports.obj(3).int("kind"))
+    }
+
+    fun testListExportsProvidesStructuredContentForTypedResult() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/exports/structured_list_exports.wasm",
+            """
+            (module
+              (memory (export "mem") 1)
+              (func (export "func")))
+            """.trimIndent()
+        )
+
+        val result = callTool("list_exports", jsonPath(fixture.projectRelativePath))
+
+        assertFalse(result.isError)
+        assertEquals(1, result.textPayloads.size)
+        val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
+        val structuredContent = result.requireStructuredObject()
+        assertEquals(textJson, structuredContent)
+        val exports = structuredContent.array("exports")
+        assertEquals("mem", exports.obj(0).text("name"))
+        assertEquals("func", exports.obj(1).text("name"))
     }
 
     fun testListExportedFunctionsReturnsMetadataSlice() {
