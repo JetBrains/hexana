@@ -22,6 +22,7 @@ class HexanaMcpDataToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(0, result.int("to"))
         assertEquals(1, result.array("returned").size)
         assertEquals(1, result.int("total_segments"))
+        assertEquals("SGVsbG8=", result.array("returned").obj(0).text("data"))
         assertTrue(result.array("returned").obj(0).text("expression").contains("i32.const"))
     }
 
