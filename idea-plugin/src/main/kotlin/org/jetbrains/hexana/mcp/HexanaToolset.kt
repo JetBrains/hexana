@@ -13,6 +13,7 @@ import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
+import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.mcp.query.readDataSegments
 import org.jetbrains.hexana.mcp.query.readDataSections
@@ -20,6 +21,7 @@ import org.jetbrains.hexana.mcp.query.readElementSegments
 import org.jetbrains.hexana.mcp.query.readExportedFunctions
 import org.jetbrains.hexana.mcp.query.readExports
 import org.jetbrains.hexana.mcp.query.readImportFunctions
+import org.jetbrains.hexana.mcp.query.readMemory
 import org.jetbrains.hexana.mcp.query.readModuleSummary
 import org.jetbrains.hexana.WasmFileType
 import org.jetbrains.hexana.io.CommonByteBuffer
@@ -991,11 +993,11 @@ class HexanaToolset : McpToolset {
     )
     suspend fun listMemory(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
-    ): String {
+    ): ListMemoryResult {
         val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = buffer.requireParsedWasmModule()
-        return objectMapper.writeValueAsString(buffer.listMemory(wasmModule))
+        return buffer.readMemory(wasmModule)
     }
 
     @McpTool("get_globals_for_indices")
