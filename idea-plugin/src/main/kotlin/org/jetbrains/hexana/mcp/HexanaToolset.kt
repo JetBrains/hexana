@@ -7,12 +7,14 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.toolsets.Constants
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
 import org.jetbrains.hexana.mcp.model.data.ListDataSectionsResult
 import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
+import org.jetbrains.hexana.mcp.query.readDataSegments
 import org.jetbrains.hexana.mcp.query.readDataSections
 import org.jetbrains.hexana.mcp.query.readElementSegments
 import org.jetbrains.hexana.mcp.query.readExportedFunctions
@@ -1095,8 +1097,8 @@ class HexanaToolset : McpToolset {
 
     @McpTool("list_data_segments")
     @McpDescription("""
-    Extracts data segments from a WebAssembly module and returns them as a JSON array
-    of DataSegmentEntry objects. Supports pagination, selective inclusion of related
+    Extracts data segments from a WebAssembly module and returns them in a JSON object
+    containing DataSegmentEntry objects and related metadata. Supports pagination, selective inclusion of related
     metadata, and filtering to keep responses lightweight and LLM-friendly.
     
     ------------------------------------------------ 
@@ -1258,20 +1260,18 @@ class HexanaToolset : McpToolset {
             tiny alignment/padding segments.
         """)
         minByteLength: Int? = null
-    ): String {
+    ): ListDataSegmentsResult {
         val file = requireWasmFile(path)
         val range = requireHalfOpenSegmentRange(segmentRange)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = buffer.requireParsedWasmModule()
-        return objectMapper.writeValueAsString(
-            buffer.listDataSegments(
-                segmentStartInclusive = range.first,
-                segmentEndExclusive = range.second,
-                wasmModule,
-                includeExports,
-                includeGlobals,
-                minByteLength
-            )
+        return buffer.readDataSegments(
+            segmentStartInclusive = range.first,
+            segmentEndExclusive = range.second,
+            wasmModule = wasmModule,
+            includeExports = includeExports,
+            includeGlobals = includeGlobals,
+            minByteLength = minByteLength
         )
     }
 

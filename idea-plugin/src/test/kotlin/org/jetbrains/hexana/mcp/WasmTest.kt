@@ -4,6 +4,8 @@ import com.intellij.testFramework.UsefulTestCase
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
+import org.jetbrains.hexana.mcp.query.readDataSegments
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
@@ -40,8 +42,8 @@ abstract class WasmTest: UsefulTestCase() {
     internal inline fun doExportTest(crossinline body: (List<ExportRecord>) -> Unit) = doTest("exports") {
         listExports(it).let(body)
     }
-    internal inline fun doListDataSegments(crossinline body: (McpDataSegmentsReport) -> Unit) = doTest("listDataSegments") {
-        listDataSegments(0..10, it,true, true, 0).let(body)
+    internal inline fun doListDataSegments(crossinline body: (ListDataSegmentsResult) -> Unit) = doTest("listDataSegments") {
+        readDataSegments(0..10, it!!, true, true, 0).let(body)
     }
     internal inline fun doFunctionTest(crossinline body: (List<GeneralFunctionEntry>) -> Unit) = doTest("function") {
         listFunctionsInternal(it).let(body)

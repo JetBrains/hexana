@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.direct
 
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
@@ -45,10 +46,38 @@ class HexanaMcpDataToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(1, result.array("segments").size)
         assertEquals("active", result.array("segments").obj(0).text("mode"))
         assertEquals("Hello", result.array("segments").obj(0).text("utf8Preview"))
+        assertFalse(result.containsKey("linkingMetadata"))
         assertTrue(result.array("memory").isNotEmpty())
         assertEquals(1, result.obj("summary").int("totalSegments"))
         assertEquals(1, result.obj("summary").int("activeSegments"))
         assertEquals(0, result.obj("summary").int("passiveSegments"))
+    }
+
+    fun testListDataSegmentsProvidesStructuredContentForTypedResult() {
+        val fixture = createDataFixture("fixtures/direct/data/structured_list_data_segments.wasm")
+
+        val result = callTool(
+            "list_data_segments",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("segmentRange", buildJsonObject {
+                    put("from", JsonPrimitive(0))
+                    put("to", JsonPrimitive(1))
+                })
+                put("includeExports", JsonPrimitive(false))
+                put("includeGlobals", JsonPrimitive(true))
+            }
+        )
+
+        assertFalse(result.isError)
+        assertEquals(1, result.textPayloads.size)
+        val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
+        val structuredContent = result.requireStructuredObject()
+        assertEquals(textJson, structuredContent)
+        assertEquals(1, structuredContent.array("segments").size)
+        assertEquals("Hello", structuredContent.array("segments").obj(0).text("utf8Preview"))
+        assertFalse(structuredContent.containsKey("linkingMetadata"))
+        assertEquals(1, structuredContent.obj("summary").int("totalSegments"))
     }
 
     private fun createDataFixture(pathInProject: String) = createWasmFixture(
