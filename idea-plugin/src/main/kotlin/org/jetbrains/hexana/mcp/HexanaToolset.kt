@@ -19,6 +19,7 @@ import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
+import org.jetbrains.hexana.mcp.model.types.TypesResult
 import org.jetbrains.hexana.mcp.query.readDataSegments
 import org.jetbrains.hexana.mcp.query.readDataSections
 import org.jetbrains.hexana.mcp.query.readElementSegments
@@ -34,6 +35,8 @@ import org.jetbrains.hexana.mcp.query.readImportFunctions
 import org.jetbrains.hexana.mcp.query.readMemoryByIndices
 import org.jetbrains.hexana.mcp.query.readMemory
 import org.jetbrains.hexana.mcp.query.readModuleSummary
+import org.jetbrains.hexana.mcp.query.readTypes
+import org.jetbrains.hexana.mcp.query.readTypesByIndices
 import org.jetbrains.hexana.WasmFileType
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
@@ -1541,11 +1544,11 @@ class HexanaToolset : McpToolset {
     )
     suspend fun listTypes(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String
-    ): String {
+    ): TypesResult {
         val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = buffer.requireParsedWasmModule()
-        return objectMapper.writeValueAsString(buffer.listTypes(wasmModule))
+        return buffer.readTypes(wasmModule)
     }
 
     @McpTool("get_types_for_indices")
@@ -1652,11 +1655,11 @@ class HexanaToolset : McpToolset {
     suspend fun getTypesForIndices(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
         @McpDescription("List of type indices (typeidx) to retrieve details for") indices: List<Int>
-    ): String {
+    ): TypesResult {
         val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = buffer.requireParsedWasmModule()
-        return objectMapper.writeValueAsString(buffer.listTypesByIndices(wasmModule, indices))
+        return buffer.readTypesByIndices(wasmModule, indices)
     }
 
     @McpTool("get_locals_for_functions")
