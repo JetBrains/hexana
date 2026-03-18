@@ -5,7 +5,6 @@ import org.jetbrains.hexana.mcp.listExports
 import org.jetbrains.hexana.mcp.listFunctionsInternal
 import org.jetbrains.hexana.mcp.listGlobals
 import org.jetbrains.hexana.mcp.listMemory
-import org.jetbrains.hexana.mcp.listTypes
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleImports
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.wasm.WasmModule
@@ -24,7 +23,10 @@ internal fun CommonByteBuffer.readModuleSummary(wasmModule: WasmModule): Summari
     val importedGlobals = globals.count { it.definedIn == "import" }
     val definedGlobals = globals.count { it.definedIn == "global_section" }
 
-    val types = listTypes(wasmModule).size
+    val types = with(wasmModule.typesSection) {
+        this ?: return@with emptyList()
+        parseTypes()
+    }.size
 
     val importedTables = with(wasmModule.importSection) {
         this ?: return@with emptyList()

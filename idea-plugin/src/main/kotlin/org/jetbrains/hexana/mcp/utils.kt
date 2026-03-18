@@ -17,9 +17,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.sections.WasmAnyRefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmArrayRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmArrayTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
-import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordActive
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordActiveWithMemoryIndex
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordPassive
@@ -28,12 +26,10 @@ import org.jetbrains.hexana.wasm.sections.WasmExnRefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmExternRefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmF32Type
 import org.jetbrains.hexana.wasm.sections.WasmF64Type
-import org.jetbrains.hexana.wasm.sections.WasmFieldType
 import org.jetbrains.hexana.wasm.sections.WasmFuncHeapType
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmGlobalExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmGlobalType
-import org.jetbrains.hexana.wasm.sections.WasmHeapType
 import org.jetbrains.hexana.wasm.sections.WasmI31RefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
 import org.jetbrains.hexana.wasm.sections.WasmI64Type
@@ -44,7 +40,6 @@ import org.jetbrains.hexana.wasm.sections.WasmMemoryExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmNoExnHeapType
 import org.jetbrains.hexana.wasm.sections.WasmNoExternRefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmNoFuncHeapType
-import org.jetbrains.hexana.wasm.sections.WasmNonNullableReferenceType
 import org.jetbrains.hexana.wasm.sections.WasmNoneHeapType
 import org.jetbrains.hexana.wasm.sections.WasmNullableReferenceType
 import org.jetbrains.hexana.wasm.sections.WasmNumType
@@ -52,13 +47,10 @@ import org.jetbrains.hexana.wasm.sections.WasmOpenI32Limits
 import org.jetbrains.hexana.wasm.sections.WasmOpenI64Limits
 import org.jetbrains.hexana.wasm.sections.WasmPactTypeI16
 import org.jetbrains.hexana.wasm.sections.WasmPactTypeI8
-import org.jetbrains.hexana.wasm.sections.WasmRecursiveTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmRefType
-import org.jetbrains.hexana.wasm.sections.WasmReferenceHeapType
 import org.jetbrains.hexana.wasm.sections.WasmReferenceType
 import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmStructRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmStructTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmTableExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmTagExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
@@ -190,19 +182,6 @@ internal fun CommonByteBuffer.listFunctions(wasmModule: WasmModule?, offset: Int
 private fun exportedAs(exports: List<ExportRecord>, index: Int):List<String> {
     return exports.filter { record -> record.kind.toInt() == 0 && record.externIndex.toInt() == index }
         .map { record -> record.name }
-}
-
-private fun serializeOpcodes(
-    codes: List<WasmCodeRecord>,
-    index: Int
-): String? = codes.getOrNull(index)?.opCodes?.wat()
-
-private fun serializeLocals(
-    codes: List<WasmCodeRecord>,
-    index: Int
-): List<Local>? {
-    val locals = codes.getOrNull(index)?.locals
-    return locals.serializeLocals()
 }
 
 private fun List<WasmCodeLocalRecord>?.serializeLocals(): List<Local> = this?.map {
@@ -340,88 +319,6 @@ internal fun CommonByteBuffer.types(wasmModule: WasmModule): List<WasmTypeRecord
         this ?: return@with emptyList()
         parseTypes()
     }
-
-internal fun CommonByteBuffer.listTypes(
-    wasmModule: WasmModule?,
-): List<McpType> {
-    wasmModule ?: return emptyList()
-    return types(wasmModule).mapIndexed { index, record ->
-        record.toMcpType(index)
-    }
-}
-
-private fun WasmTypeRecord.toMcpType(index: Int? = null): McpType = when (this) {
-    is WasmArrayTypeRecord -> index?.let {
-        McpArrayIndexed(index, this.fieldType.toMcpField())
-    } ?: McpArray(this.fieldType.toMcpField())
-
-    is WasmStructTypeRecord -> index?.let {
-        McpStructIndexed(it, this.superTypes, this.fields.map { it.toMcpField() })
-    } ?: McpStruct(this.superTypes, this.fields.map { it.toMcpField() })
-
-    is WasmRecursiveTypeRecord -> index?.let {
-        McpRecursiveIndexed(it, this.entries.map { it.toMcpType() })
-    } ?: McpRecursive(this.entries.map { it.toMcpType() })
-
-    is WasmSectionFunctionTypeRecord -> index?.let {
-        McpFuncIndexed(it, this.params.map { it.toMcpType() }, this.retTypes.map { it.toMcpType() })
-    } ?: McpFunc(this.params.map { it.toMcpType() }, this.retTypes.map { it.toMcpType() })
-}
-
-private fun WasmFieldType.toMcpField(): McpField = McpField(storageType.toMcpType(), isMutable)
-private fun WasmValueType<*>.toMcpType(): McpType {
-    return when (this) {
-        is WasmF32Type -> McpVal("i32")
-        is WasmF64Type -> McpVal("i64")
-        is WasmI32Type -> McpVal("i32")
-        is WasmI64Type -> McpVal("i64")
-        is WasmVecType -> McpVal("v128")
-        is WasmPactTypeI8 -> McpPacked("i8")
-        is WasmPactTypeI16 -> McpPacked("i16")
-        is WasmRefType -> {
-            when (code) {
-                is WasmNullableReferenceType,
-                is WasmNonNullableReferenceType -> McpRefWithNullability(
-                    code.heapType.toMcpType(),
-                    code is WasmNullableReferenceType
-                )
-
-                is WasmReferenceHeapType -> McpRef(code.heapType.toMcpType())
-            }
-        }
-    }
-}
-
-private fun WasmHeapType.toMcpType(): String = when (this) {
-    is WasmExnRefHeapType -> "exn"
-    is WasmArrayRefHeapType -> "array"
-    is WasmFuncHeapType -> "funcref"
-    is WasmStructRefHeapType -> "struct"
-    is WasmI31RefHeapType -> "i31ref"
-    is WasmEqRefHeapType -> "eq"
-    is WasmAnyRefHeapType -> "any"
-    is WasmExternRefHeapType -> "extern"
-    is WasmNoneHeapType -> "none"
-    is WasmNoExnHeapType -> "noexn"
-    is WasmIndexHeapType -> "index"
-    is WasmNoFuncHeapType -> "nofunc"
-    is WasmNoExternRefHeapType -> "noextern"
-}
-
-sealed class McpType(val kind: String)
-class McpArrayIndexed(val typeidx: Int, val elementType: McpField) : McpType("array")
-class McpArray(val elementType: McpField) : McpType("array")
-class McpStructIndexed(val typeidx: Int, val superTypes: List<UInt>, val fields: List<McpField>) : McpType("struct")
-class McpStruct(val superTypes: List<UInt>, val fields: List<McpField>) : McpType("struct")
-class McpField(val type: McpType, val mutable: Boolean)
-class McpRecursiveIndexed(val typeidx: Int, val entries: List<McpType>) : McpType("rec")
-class McpRecursive(val entries: List<McpType>) : McpType("rec")
-class McpFuncIndexed(val typeidx: Int, val params: List<McpType>, val retTypes: List<McpType>) : McpType("func")
-class McpFunc(val params: List<McpType>, val retTypes: List<McpType>) : McpType("func")
-class McpVal(val type: String) : McpType("val")
-class McpPacked(val packType: String) : McpType("packed")
-class McpRef(val refKind: String) : McpType("ref")
-class McpRefWithNullability(val refKind: String, val nullable: Boolean) : McpType("ref")
 
 internal fun CommonByteBuffer.listGlobals(wasmModule: WasmModule?): List<GlobalRecord> {
     wasmModule ?: return emptyList()

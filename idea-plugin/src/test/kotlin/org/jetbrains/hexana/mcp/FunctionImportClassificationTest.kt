@@ -21,5 +21,10 @@ class FunctionImportClassificationTest : WasmTest() {
         assertEquals(0, summary.memories)
         assertEquals(1, summary.globals)
         assertEquals(1, summary.functions)
+        val expectedTypes = with(requireNotNull(wasmModule).typesSection) {
+            this ?: return@with 0
+            parseTypes().size
+        }
+        assertEquals(expectedTypes, summary.types)
     }
 }
