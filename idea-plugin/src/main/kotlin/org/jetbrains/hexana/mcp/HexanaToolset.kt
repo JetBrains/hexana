@@ -21,6 +21,7 @@ import org.jetbrains.hexana.mcp.query.readDataSections
 import org.jetbrains.hexana.mcp.query.readElementSegments
 import org.jetbrains.hexana.mcp.query.readExportedFunctions
 import org.jetbrains.hexana.mcp.query.readExports
+import org.jetbrains.hexana.mcp.query.readGlobalsByIndices
 import org.jetbrains.hexana.mcp.query.readGlobals
 import org.jetbrains.hexana.mcp.query.readImportFunctions
 import org.jetbrains.hexana.mcp.query.readMemory
@@ -1092,11 +1093,11 @@ class HexanaToolset : McpToolset {
     suspend fun getGlobalsForIndices(
         @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
         @McpDescription("List of function indices (globalidx) to retrieve details for") indices: List<Int>
-    ): String {
+    ): ListGlobalsResult {
         val file = requireWasmFile(path)
         val buffer = file.contentsToCommonByteBuffer()
         val wasmModule = buffer.requireParsedWasmModule()
-        return objectMapper.writeValueAsString(buffer.listGlobalsByIndices(wasmModule, indices))
+        return buffer.readGlobalsByIndices(wasmModule, indices)
     }
 
     @McpTool("list_data_segments")
