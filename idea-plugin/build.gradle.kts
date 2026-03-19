@@ -1,5 +1,8 @@
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
+import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
+import org.jetbrains.intellij.platform.gradle.tasks.aware.SplitModeAware
 
 plugins {
     id("java")
@@ -130,6 +133,26 @@ tasks {
                 Changelog.OutputType.HTML
             )
         }
+    }
+
+    register<RunIdeTask>("buildEventsScheme") {
+        group = "verification"
+        description = "Generates Hexana FUS scheme artifact using the built-in IDE headless command"
+
+        val outputFile = layout.buildDirectory.file("fus/scheme.txt")
+        applySandboxFrom(project.tasks.named<PrepareSandboxTask>("prepareSandbox"))
+        splitMode.set(false)
+        splitModeTarget.set(SplitModeAware.SplitModeTarget.BACKEND)
+        outputs.file(outputFile)
+        environment("FUS_DESCRIPTION_REGISTRATION_ENABLED", "true")
+        environment("FUS_COLLECTOR_FILENAME_ENABLED", "true")
+        args(
+            "buildEventsScheme",
+            "--pluginId=org.jetbrains.hexana",
+            "--outputFile=${outputFile.get().asFile.absolutePath}",
+            "--errorsFile=${layout.buildDirectory.file("fus/scheme.errors.txt").get().asFile.absolutePath}",
+            "--pluginsFile=${layout.buildDirectory.file("fus/plugins.txt").get().asFile.absolutePath}",
+        )
     }
 }
 

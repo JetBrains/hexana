@@ -78,6 +78,8 @@
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
         <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>
         <fileTypeOverrider implementation="org.jetbrains.hexana.actions.HexFileTypeOverrider"/>
+        <statistics.counterUsagesCollector
+                implementationClass="org.jetbrains.hexana.statistics.HexanaCounterUsagesCollector"/>
         <useScopeOptimizer implementation="org.jetbrains.hexana.wat.WatScopeOptimizer"/>
         <lang.parserDefinition language="wat" implementationClass="org.jetbrains.hexana.wat.psi.WatParserDefinition" />
         <lang.syntaxHighlighter language="wat" implementationClass="org.jetbrains.hexana.wat.WatSyntaxHighlighter"/>
