@@ -1,6 +1,7 @@
 package org.jetbrains.hexana
 
 import com.intellij.openapi.components.*
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.options.ConfigurableProvider
@@ -9,6 +10,7 @@ import com.intellij.openapi.options.SearchableConfigurable
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.ui.emptyText
 import com.intellij.openapi.util.NlsContexts
+import com.intellij.util.messages.Topic
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.AlignY
 import com.intellij.ui.dsl.builder.bindSelected
@@ -24,6 +26,11 @@ import org.jetbrains.annotations.NonNls
 class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(HexanaSettingsState()) {
 
     companion object {
+        val TOPIC: Topic<HexanaSettingsListener> = Topic.create(
+            "Hexana settings changes",
+            HexanaSettingsListener::class.java,
+        )
+
         @JvmStatic
         fun getInstance(): HexanaSettings = service()
     }
@@ -72,12 +79,31 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
             state.vulnerabilitiesOnline = value
         }
 
+    var feedbackPromptDisabled: Boolean
+        get() = state.feedbackPromptDisabled
+        set(value) {
+            state.feedbackPromptDisabled = value
+            ApplicationManager.getApplication().messageBus
+                .syncPublisher(TOPIC)
+                .feedbackPromptVisibilityChanged(!value)
+        }
+
+    var feedbackPromptEnabled: Boolean
+        get() = !feedbackPromptDisabled
+        set(value) {
+            feedbackPromptDisabled = !value
+        }
+
     val wasmToolsPath: String
         get() = wasmToolsPathInUi ?: "wasm-tools"
 
     val llvmObjdumpPath: String?
         get() = llvmObjdumpPathInUi
 
+}
+
+fun interface HexanaSettingsListener {
+    fun feedbackPromptVisibilityChanged(enabled: Boolean)
 }
 
 class HexanaSettingsState : BaseState() {
@@ -88,6 +114,7 @@ class HexanaSettingsState : BaseState() {
     var sendAnalytics: Boolean by property(true)
     var lookupVulnerabilities: Boolean by property(false)
     var vulnerabilitiesOnline: Boolean by property(false)
+    var feedbackPromptDisabled: Boolean by property(false)
 }
 
 class HexanaConfigurableProvider : ConfigurableProvider() {
@@ -164,6 +191,13 @@ class HexanaConfigurable : DslConfigurableBase(), SearchableConfigurable {
                     .comment(HexanaBundle.message("hexana.settings.vulnerabilitiesOnlineComment"))
                     .bindSelected(settings::vulnerabilitiesOnline)
                     .enabledIf(lookupCheckbox.selected)
+            }
+            row {
+                checkBox(HexanaBundle.message("hexana.settings.showFeedbackPrompt"))
+                    .align(AlignY.TOP)
+                    .align(AlignX.FILL)
+                    .comment(HexanaBundle.message("hexana.settings.showFeedbackPromptComment"))
+                    .bindSelected(settings::feedbackPromptEnabled)
             }
         }
     }

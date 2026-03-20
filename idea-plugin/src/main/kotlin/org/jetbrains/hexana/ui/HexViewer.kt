@@ -1,5 +1,10 @@
 package org.jetbrains.hexana.ui
 
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -20,12 +25,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
@@ -34,6 +41,7 @@ import com.intellij.openapi.application.readAction
 import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.impl.EditorComponentImpl
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
+import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.PsiElement
@@ -48,22 +56,34 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaBundle
+import org.jetbrains.hexana.HexanaSettings
+import org.jetbrains.hexana.HexanaSettingsListener
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.document.EditableBinaryDocument
+import org.jetbrains.hexana.feedback.HexanaFeedbackOpener
+import org.jetbrains.hexana.feedback.HexanaIssueLinks
+import org.jetbrains.hexana.feedback.isInIdeFeedbackEnabled
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toByteBuffer
 import org.jetbrains.hexana.providers.*
+import org.jetbrains.hexana.ui.components.ShareFeedbackButton
+import org.jetbrains.hexana.ui.components.ShareFeedbackButtonLabel
+import org.jetbrains.hexana.ui.components.ShareFeedbackPopup
 import org.jetbrains.hexana.wat.psi.getDataByIndex
 import org.jetbrains.hexana.wat.psi.getDefinedFunctionByIndex
 import org.jetbrains.jewel.foundation.modifier.onHover
+import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import java.awt.datatransfer.StringSelection
 import java.nio.CharBuffer
 import java.nio.charset.CharsetDecoder
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
+import kotlin.math.max
 import kotlin.math.min
 
+private const val HexanaMarketplaceUrl =
+    "https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector"
 
 @Composable
 fun SyncLazyListStates(vararg states: LazyListState) {
@@ -123,6 +143,19 @@ internal fun HexViewer(
     val coroutineScope = rememberCoroutineScope()
 
     val arrowKeyHandler = remember { mutableStateOf<((Key, Boolean) -> Unit)?>(null) }
+    var showShareFeedbackPopup by remember { mutableStateOf(false) }
+    var feedbackPromptDisabled by remember {
+        mutableStateOf(HexanaSettings.getInstance().feedbackPromptDisabled)
+    }
+    DisposableEffect(Unit) {
+        val connection = ApplicationManager.getApplication().messageBus.connect()
+        connection.subscribe(HexanaSettings.TOPIC, HexanaSettingsListener { enabled ->
+            feedbackPromptDisabled = !enabled
+        })
+        onDispose {
+            connection.disconnect()
+        }
+    }
 
     // Pending hex digit for in-cell editing: when non-null, the cursor cell
     // shows `<digit>_` and the next hex digit typed combines into a byte and
@@ -136,6 +169,10 @@ internal fun HexViewer(
             .focusRequester(focusRequester)
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
+                    if (showShareFeedbackPopup && event.key == Key.Escape) {
+                        showShareFeedbackPopup = false
+                        return@onPreviewKeyEvent true
+                    }
                     when (event.key) {
                         Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight -> {
                             pendingDigit = null
@@ -191,6 +228,22 @@ internal fun HexViewer(
 
         val rowCount = (buf.limit() + bytesPerRow - 1) / bytesPerRow
         val offsetWidth = 96.dp
+
+        val showFloatingShareFeedbackButton = !feedbackPromptDisabled && shouldShowFloatingShareFeedbackButtonInHexViewer(
+            availableWidth = maxWidth,
+            bytesPerRow = bytesPerRow,
+            showOffsets = showOffsets,
+            offsetWidth = offsetWidth,
+            spacing = spacing,
+        )
+        val isDarkTheme = JewelTheme.isDark
+
+        LaunchedEffect(showFloatingShareFeedbackButton) {
+            if (!showFloatingShareFeedbackButton) {
+                showShareFeedbackPopup = false
+            }
+        }
+
         var selectionAnchor by remember { mutableStateOf<Pair<Int, Int>?>(null) }
         var currentPointerPosition by remember { mutableStateOf(Offset.Unspecified) }
         var isPointerPressed by remember { mutableStateOf(false) }
@@ -391,65 +444,98 @@ internal fun HexViewer(
 
 
         Column(modifier = Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                if (showOffsets) {
-                    Box(
-                        modifier = Modifier
-                            .width(offsetWidth)
-                            .background(HexanaTheme.backgroundColor)
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(" ", style = TextStyle(fontFamily = FontFamily.Monospace))
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+            ) {
+                Row(Modifier.fillMaxWidth()) {
+                    if (showOffsets) {
+                        Box(
+                            modifier = Modifier
+                                .width(offsetWidth)
+                                .background(HexanaTheme.backgroundColor)
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(" ", style = TextStyle(fontFamily = FontFamily.Monospace))
+                        }
                     }
-                }
-                Box(
-                    modifier = Modifier.background(HexanaTheme.backgroundColor)
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                        .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(spacing)
+                    Box(
+                        modifier = Modifier.background(HexanaTheme.backgroundColor)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
                     ) {
-                        (0 until bytesPerRow).forEach { byte ->
-                            Box(
-                                modifier = Modifier.padding(end = 2.dp)
-                            ) {
-                                Text(
-                                    byte.asHexString(),
-                                    softWrap = false,
-                                    maxLines = 1,
-                                    style = TextStyle(
-                                        color = HexanaTheme.textColor,
-                                        fontFamily = FontFamily.Monospace
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(spacing)
+                        ) {
+                            (0 until bytesPerRow).forEach { byte ->
+                                Box(
+                                    modifier = Modifier.padding(end = 2.dp)
+                                ) {
+                                    Text(
+                                        byte.asHexString(),
+                                        softWrap = false,
+                                        maxLines = 1,
+                                        style = TextStyle(
+                                            color = HexanaTheme.textColor,
+                                            fontFamily = FontFamily.Monospace
+                                        )
                                     )
-                                )
+                                }
                             }
                         }
                     }
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .background(HexanaTheme.backgroundColor)
+                            .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
+                    ) {
+                        val showAscii = state.showAscii
+                        Text(
+                            if (showAscii) {
+                                "ASCII"
+                            } else {
+                                "UTF-8"
+                            },
+                            softWrap = false,
+                            maxLines = 1,
+                            style = TextStyle(
+                                color = HexanaTheme.textColor,
+                                fontFamily = FontFamily.Monospace
+                            ),
+                            modifier = Modifier.onClick {
+                                state.setShowAscii(!showAscii)
+                            }
+                        )
+                    }
                 }
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 8.dp, vertical = 4.dp).background(HexanaTheme.backgroundColor)
-                        .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
-                ) {
-                    val showAscii = state.showAscii
-                    Text(
-                        if (showAscii) {
-                            "ASCII"
-                        } else {
-                            "UTF-8"
-                        },
-                        softWrap = false,
-                        maxLines = 1,
-                        style = TextStyle(
-                            color = HexanaTheme.textColor,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        modifier = Modifier.onClick {
-                            state.setShowAscii(!showAscii)
-                        }
-                    )
+
+                Box(modifier = Modifier.matchParentSize()) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showFloatingShareFeedbackButton,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 10.dp),
+                        enter = fadeIn(animationSpec = tween(durationMillis = 280)) +
+                                slideInHorizontally(
+                                    animationSpec = tween(durationMillis = 140),
+                                    initialOffsetX = { width -> width / 3 }
+                                ),
+                        exit = fadeOut(animationSpec = tween(durationMillis = 250)) +
+                                slideOutHorizontally(
+                                    animationSpec = tween(durationMillis = 90),
+                                    targetOffsetX = { width -> width / 4 }
+                                ),
+                    ) {
+                        ShareFeedbackButton(
+                            modifier = Modifier,
+                            onClick = {
+                                showShareFeedbackPopup = !showShareFeedbackPopup
+                            }
+                        )
+                    }
                 }
             }
             ContextMenuArea(items = {
@@ -760,7 +846,114 @@ internal fun HexViewer(
             }
         }
 
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showShareFeedbackPopup,
+            modifier = Modifier.fillMaxSize(),
+            enter = fadeIn(animationSpec = tween(durationMillis = 180)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 140)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        if (isDarkTheme) {
+                            Color.Black.copy(alpha = 0.18f)
+                        } else {
+                            Color(0xFFDCE9FF).copy(alpha = 0.22f)
+                        }
+                    )
+                    .onClick {
+                        showShareFeedbackPopup = false
+                    }
+            ) {
+                ShareFeedbackPopup(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 44.dp, end = 16.dp),
+                    showInIdeFeedbackAction = isInIdeFeedbackEnabled(),
+                    onReportBug = {
+                        BrowserUtil.browse(HexanaIssueLinks.bugReportUrl(binaryProvider, isDarkTheme))
+                        showShareFeedbackPopup = false
+                    },
+                    onRateOnMarketplace = {
+                        BrowserUtil.browse(HexanaMarketplaceUrl)
+                        showShareFeedbackPopup = false
+                    },
+                    onShareFeedback = {
+                        HexanaFeedbackOpener.open(state.project)
+                        showShareFeedbackPopup = false
+                    },
+                    onNeverShowAgain = {
+                        HexanaSettings.getInstance().feedbackPromptDisabled = true
+                        feedbackPromptDisabled = true
+                        showShareFeedbackPopup = false
+                    },
+                    onDismiss = {
+                        showShareFeedbackPopup = false
+                    },
+                )
+            }
+        }
 
+
+    }
+}
+
+@Composable
+private fun BoxWithConstraintsScope.shouldShowFloatingShareFeedbackButtonInHexViewer(
+    availableWidth: Dp,
+    bytesPerRow: Int,
+    showOffsets: Boolean,
+    offsetWidth: Dp,
+    spacing: Dp,
+): Boolean {
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val monospaceTextStyle = remember {
+        TextStyle(fontFamily = FontFamily.Monospace)
+    }
+
+    return remember(availableWidth, bytesPerRow, showOffsets, offsetWidth, spacing, density) {
+        val totalWidthPx = with(density) { availableWidth.roundToPx() }
+        val offsetColumnWidthPx = if (showOffsets) {
+            with(density) { offsetWidth.roundToPx() }
+        } else {
+            0
+        }
+        val hexCellTextWidthPx = textMeasurer.measure(
+            text = "00",
+            style = monospaceTextStyle,
+        ).size.width
+        val textColumnCharacterWidthPx = textMeasurer.measure(
+            text = "W",
+            style = monospaceTextStyle,
+        ).size.width
+        val hexCellPaddingPx = with(density) { 2.dp.roundToPx() }
+        val hexColumnHorizontalPaddingPx = with(density) { 16.dp.roundToPx() }
+        val textColumnHorizontalPaddingPx = with(density) { 16.dp.roundToPx() }
+        val interByteSpacingPx = with(density) { spacing.roundToPx() }
+        val minimumFreeGapPx = with(density) { 24.dp.roundToPx() }
+        val floatingButtonHorizontalPaddingPx = with(density) { 32.dp.roundToPx() }
+        val floatingButtonOuterPaddingPx = with(density) { 20.dp.roundToPx() }
+
+        val hexColumnWidthPx = hexColumnHorizontalPaddingPx +
+                bytesPerRow * (hexCellTextWidthPx + hexCellPaddingPx) +
+                (bytesPerRow - 1).coerceAtLeast(0) * interByteSpacingPx
+
+        val textColumnWidthPx = textColumnHorizontalPaddingPx + max(
+            textMeasurer.measure(
+                text = "ASCII",
+                style = monospaceTextStyle,
+            ).size.width,
+            bytesPerRow * textColumnCharacterWidthPx,
+        )
+
+        val floatingButtonWidthPx = textMeasurer.measure(
+            text = ShareFeedbackButtonLabel,
+            style = TextStyle(fontSize = 13.sp),
+        ).size.width + floatingButtonHorizontalPaddingPx + floatingButtonOuterPaddingPx
+
+        totalWidthPx - offsetColumnWidthPx - hexColumnWidthPx - textColumnWidthPx - minimumFreeGapPx >= floatingButtonWidthPx
     }
 }
 
@@ -805,7 +998,8 @@ private fun getContextActions(
         }
     }
 
-    val locationProvider = (binaryProvider as? WasmBinaryProvider)?.sourceLocationProvider ?: HexanaSourceLocationProvider.EMPTY
+    val locationProvider =
+        (binaryProvider as? WasmBinaryProvider)?.sourceLocationProvider ?: HexanaSourceLocationProvider.EMPTY
     if (byteOffset in codeSectionRange) {
         val sourceLocation = locationProvider.getSourceLocationForOffset(byteOffset)
         if (sourceLocation != null) {
@@ -814,21 +1008,28 @@ private fun getContextActions(
                     val virtualFile = readAction {
                         try {
                             VfsUtil.findFile(Path.of(sourceLocation.filePath), true)
-                        }
-                        catch (_: Exception) {
+                        } catch (_: Exception) {
                             null
                         }
                     }
 
                     if (virtualFile != null) {
                         withContext(Dispatchers.EDT) {
-                            val descriptor = OpenFileDescriptor(state.project, virtualFile, sourceLocation.line, sourceLocation.column)
+                            val descriptor = OpenFileDescriptor(
+                                state.project,
+                                virtualFile,
+                                sourceLocation.line,
+                                sourceLocation.column
+                            )
                             descriptor.navigate(true)
                         }
-                    }
-                    else {
+                    } else {
                         val message = HexanaBundle.message("notifications.fileNotFound", sourceLocation.filePath)
-                        Notification(HexanaService.NOTIFICATION_GROUP, message, NotificationType.WARNING).notify(state.project)
+                        Notification(
+                            HexanaService.NOTIFICATION_GROUP,
+                            message,
+                            NotificationType.WARNING
+                        ).notify(state.project)
                     }
                 }
             })
@@ -968,7 +1169,7 @@ fun copySelection(
     selectionBuilder: (CommonByteBuffer, HexViewStateHolder) -> String?
 ) {
     val position = buf.position()
-    val text =  try {
+    val text = try {
         selectionBuilder(buf, state)
     } finally {
         buf.position(position)

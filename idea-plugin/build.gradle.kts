@@ -292,6 +292,7 @@ tasks {
 
 val generatedToolsetDir = layout.projectDirectory.dir("src/main/gen")
 val verifiedToolsetDir = layout.buildDirectory.dir("generator-verify/toolset")
+val feedbackFormContractFile = layout.buildDirectory.file("feedback/hexana-feedback-form-contract.json")
 
 tasks.register<JavaExec>("generateHexanaToolset") {
     description = "Regenerates HexanaToolset.kt into src/main/gen; the output is checked into git."
@@ -309,6 +310,20 @@ tasks.register<JavaExec>("generateHexanaToolset") {
     outputs.file(generatedToolsetDir.file("org/jetbrains/hexana/mcp/HexanaToolset.kt"))
 
     dependsOn(":mcp:tools-generator:classes")
+}
+
+tasks.register<JavaExec>("generateHexanaFeedbackFormContract") {
+    description = "Generates the Hexana feedback form contract JSON for the feedback backend."
+    group = "generation"
+
+    mainClass.set("org.jetbrains.hexana.feedback.HexanaFeedbackContractKt")
+    classpath = sourceSets.main.get().runtimeClasspath + configurations.compileClasspath.get()
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf(feedbackFormContractFile.get().asFile.absolutePath)
+    })
+    outputs.file(feedbackFormContractFile)
+
+    dependsOn(tasks.named("classes"))
 }
 
 val regenerateHexanaToolsetForVerification = tasks.register<JavaExec>("regenerateHexanaToolsetForVerification") {

@@ -77,6 +77,9 @@
         <registryKey key="hexana.disassembly.perf.logging"
                      defaultValue="false"
                      description="Emit per-chunk [disasm-perf] timing to idea.log (decodeMs, renderMs, annotatedLen). Fires only when a function body is unfolded — the default-folded UX means no perf log until the user opens a function."/>
+        <registryKey key="hexana.feedback.in.ide.enabled"
+                     defaultValue="false"
+                     description="Show the in-IDE Hexana feedback action in the Hexana editor feedback popup. Disabled by default while the feedback submission flow is gated."/>
 
         <!-- Status bar widget surfacing in-flight Hexana disassembly work.
              Hidden when idle; shows "Disassembling: N" while decode +
@@ -153,6 +156,7 @@
                   extensions="dex"/>
 
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
+        <fileEditorProvider implementation="org.jetbrains.hexana.feedback.HexanaFeedbackFileEditorProvider"/>
         <editorTabTitleProvider implementation="org.jetbrains.hexana.ArchiveMemberTabTitleProvider"/>
         <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>
         <fileTypeOverrider implementation="org.jetbrains.hexana.actions.HexFileTypeOverrider"/>
