@@ -132,7 +132,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Exports") { WasmPanelExports(this, state) },
                 Panel("Imports") { WasmPanelImports(this, state) },
                 Panel("Functions") { WasmPanelFunctions(this) },
-                Panel("Custom") { WasmPanelCustom(this) },
+                Panel("Custom") { WasmPanelCustom(this, state) },
                 Panel("Wat") { WasmPanelWat(this, state) },
             ) else {
                 errorPanel(state)
@@ -154,7 +154,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Exports") { WasmPanelExports(this, state) },
                 Panel("Imports") { WasmPanelImports(this, state) },
                 Panel("Functions") { WasmPanelFunctions(this) },
-                Panel("Custom") { WasmPanelCustom(this) },
+                Panel("Custom") { WasmPanelCustom(this, state) },
             ) else emptyArray()
         }
         is WasmComponentBinaryProvider -> {

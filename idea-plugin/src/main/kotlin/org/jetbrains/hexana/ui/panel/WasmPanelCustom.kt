@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.rememberTextMeasurer
+import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.asASCII
 import org.jetbrains.hexana.ui.components.Table
@@ -13,8 +14,11 @@ import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
 
+
+private data class Payload(val offset: Int, val size: Int, val payload: String)
+
 @Composable
-fun WasmPanelCustom(wasmBinaryProvider: WasmBinaryProvider) {
+fun WasmPanelCustom(wasmBinaryProvider: WasmBinaryProvider, state: HexViewStateHolder) {
     val customSections = remember(wasmBinaryProvider) {
         wasmBinaryProvider.wasmModule?.customSections ?: emptyList()
     }
@@ -25,7 +29,7 @@ fun WasmPanelCustom(wasmBinaryProvider: WasmBinaryProvider) {
     val payloads = remember(wasmBinaryProvider) {
         customSections.map {
             val bytes = wasmBinaryProvider.readContent(it, 64)
-            return@map bytes.joinToString(separator = "") { b -> b.asASCII() ?: "." }
+            return@map Payload(it.sectionOffset, it.contentSize, bytes.joinToString(separator = "") { b -> b.asASCII() ?: "." })
         }
     }
     val textMeasurer = rememberTextMeasurer()
@@ -39,8 +43,10 @@ fun WasmPanelCustom(wasmBinaryProvider: WasmBinaryProvider) {
             )
         },
         TableColumn("Payload", modifier = Modifier.fillMaxWidth()) {
-            val payload = payloads[it]
+            val payload = payloads[it].payload
             TableCellValue(payload)
         }
-    ), customSections.size)
+    ), customSections.size) { rowIndex ->
+        state.scrollHexViewTo(payloads[rowIndex].offset, payloads[rowIndex].size)
+    }
 }
