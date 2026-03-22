@@ -83,7 +83,18 @@ class WasmTypeIndexExternalType(val index: Long): WasmExternalType(0) {
         return index.hashCode()
     }
 }
-class WasmTableExternalType(val referenceType: WasmReferenceType, val limits: WasmLimits<*>): WasmExternalType(1)
+class WasmTableExternalType(val referenceType: WasmReferenceType, val limits: WasmLimits<*>): WasmExternalType(1) {
+    override fun equals(other: Any?): Boolean {
+        val b = other as? WasmTableExternalType ?: return false
+        return referenceType == b.referenceType && limits == b.limits
+    }
+
+    override fun hashCode(): Int {
+        var result = referenceType.hashCode()
+        result = 31 * result + limits.hashCode()
+        return result
+    }
+}
 
 /**
  *
@@ -149,7 +160,18 @@ class WasmMemType(val limits: WasmLimits<*>): WasmExternalType(0x2) {
 /**
  * spec 5.3.11
  */
-class WasmGlobalType(val valueType: WasmValueType<*>, val mutable: Boolean): WasmExternalType(0x3)
+class WasmGlobalType(val valueType: WasmValueType<*>, val mutable: Boolean): WasmExternalType(0x3) {
+    override fun equals(other: Any?): Boolean {
+        val b = other as? WasmGlobalType ?: return false
+        return valueType == b.valueType && mutable == b.mutable
+    }
+
+    override fun hashCode(): Int {
+        var result = valueType.hashCode()
+        result = 31 * result + mutable.hashCode()
+        return result
+    }
+}
 
 /**
  * Represents an import record in a WebAssembly module.
