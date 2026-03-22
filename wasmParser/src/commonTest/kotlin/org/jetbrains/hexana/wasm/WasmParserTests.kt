@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.wasm
 
 import kotlinx.coroutines.test.runTest
+import org.jetbrains.hexana.dwarf.debugStrSection
 import org.jetbrains.hexana.tests.IgnoreJsTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
 import org.jetbrains.hexana.wasm.components.*
@@ -1473,6 +1474,29 @@ class WasmParserTests {
             assertEquals("memory", name)
             assertEquals(WasmMemType(WasmFixedI32Limits(0x1000, 0x1000, true)), type)
         }
+    }
+
+    @Test
+    fun parseDwarfStrSection() = runTest {
+        val buffer = resourceAsByteBuffer("c/utf8-c.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
+
+        val strSection = (wasmModule as BaseModule).debugStrSection()!!
+        val entries = with(strSection){
+            buffer.scanDwarfStr()
+        }
+        val strings = entries.map {
+            with(it) {
+                buffer.str()
+            }
+        }
+
+        assertEquals("errmsgidx", strings[30])
+        assertEquals("__syscall_setpriority", strings[1])
+        assertEquals("__pthread_exit", strings[99])
     }
 
     @Test
