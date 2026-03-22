@@ -678,16 +678,50 @@ class WasmParserTests {
     }
 
     @Test
-    // Was broken after recent refactoring and I won't point fingers (but it's Vassily!)
-    // Vasily > All memory operations are fetch memargs incorrectly, this test should be enabled after fix of memargs consumption fix.
+            /**
+             *   0x0 | 00 61 73 6d | version 1 (Module)
+             *       | 01 00 00 00
+             *   0x8 | 01 06       | type section
+             *   0xa | 01          | 1 count
+             * --- rec group 0 (implicit) ---
+             *-->0xb | 60 01 7f 01 | [type 0] SubType { is_final: true, supertype_idx: None, composite_type: CompositeType { inner: Func(FuncType { params: [I32], results: [I32] }), shared: false, descriptor_idx: None, describes_idx: None } }
+             *       | 7f
+             *  0x10 | 03 02       | func section
+             *  0x12 | 01          | 1 count
+             *  0x13 | 00          | [func 0] type 0
+             *  0x14 | 05 03       | memory section
+             *  0x16 | 01          | 1 count
+             *  0x17 | 00 01       | [memory 0] MemoryType { memory64: false, shared: false, initial: 1, maximum: None, page_size_log2: None }
+             *  0x19 | 07 23       | export section
+             *  0x1b | 02          | 2 count
+             *  0x1c | 06 6d 65 6d | export Export { name: "memory", kind: Memory, index: 0 }
+             *       | 6f 72 79 02
+             *       | 00
+             *  0x25 | 16 6c 6f 61 | export Export { name: "load_first_item_in_mem", kind: Func, index: 0 }
+             *       | 64 5f 66 69
+             *       | 72 73 74 5f
+             *       | 69 74 65 6d
+             *       | 5f 69 6e 5f
+             *       | 6d 65 6d 00
+             *       | 00
+             *  0x3e | 0a 09       | code section
+             *  0x40 | 01          | 1 count
+             * ============== func 0 ====================
+             *-->0x41 | 07          | size of function
+             *  0x42 | 00          | 0 local blocks
+             *  0x43 | 41 00       | i32_const value:0
+             *  0x45 | 28 02 00    | i32_load memarg:MemArg { align: 2, max_align: 2, offset: 0, memory: 0 }
+             *  0x48 | 0b          | end
+             *
+             */
     fun `code load`() = runTest {
         assertFunctions(
             "snippets/load.wasm", listOf(
                 FunctionRecord(
-                    signature = WasmSectionFunctionTypeRecord(0, 0,listOf(WasmI32Type), listOf(WasmI32Type)),
+                    signature = WasmSectionFunctionTypeRecord(0xb, 5,listOf(WasmI32Type), listOf(WasmI32Type)),
                     body = WasmCodeRecord(
-                        0,
-                        1,
+                        0x41,
+                        8,
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(0),
