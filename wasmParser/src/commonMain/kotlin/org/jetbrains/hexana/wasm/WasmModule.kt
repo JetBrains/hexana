@@ -204,3 +204,5 @@ private fun coreWasmModuleFromSections(sections: List<WasmSection>): WasmModule 
 }
 
 data class FunctionRecord(val signature: WasmTypeRecord, val body: WasmCodeRecord)
+
+fun BaseModule.customSectionByName(name: String): WasmSectionCustom? = customSections.find { it.name == name }
