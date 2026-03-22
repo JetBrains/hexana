@@ -97,7 +97,7 @@ class WasmOpenI32Limits(min: Int): WasmLimits<Int>(0, min, null)
 /**
  * [min, max]
  */
-class WasmFixedI32Limits(min: Int, max: Int): WasmLimits<Int>(1, min, max)
+class WasmFixedI32Limits(min: Int, max: Int, val shared:Boolean = false): WasmLimits<Int>(1, min, max)
 /**
  * [min, infinite)
  */
