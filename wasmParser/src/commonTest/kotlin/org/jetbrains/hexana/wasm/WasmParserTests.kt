@@ -8,6 +8,24 @@ import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.*
 import kotlin.test.*
+import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
+import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
+import org.jetbrains.hexana.wasm.sections.WasmFixedI32Limits
+import org.jetbrains.hexana.wasm.sections.WasmI32Type
+import org.jetbrains.hexana.wasm.sections.WasmImportRecord
+import org.jetbrains.hexana.wasm.sections.WasmOpenI32Limits
+import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
+import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
+import org.jetbrains.hexana.wasm.sections.consumeString
+import org.jetbrains.hexana.wasm.sections.WasmMemType
+import kotlin.test.Test
+import kotlin.test.Ignore
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class WasmParserTests {
 
@@ -1401,6 +1419,25 @@ class WasmParserTests {
         with(wasmModule.importSection!!) {
             val importRecords = buffer.getImportRecords()
             assertEquals(690, importRecords.size)
+        }
+    }
+
+    @Test
+    fun parseThreadsSpecificImportTypes() = runTest {
+        val buffer = resourceAsByteBuffer("threads/bpnode.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
+
+        val importRecords =with(wasmModule.importSection!!) {
+             buffer.getImportRecords()
+        }
+        assertEquals(888, importRecords.size)
+        with(importRecords[0]){
+            assertEquals("i", prefix)
+            assertEquals("memory", name)
+            assertEquals(WasmMemType(WasmFixedI32Limits(0x1000, 0x1000, true)), type)
         }
     }
 }

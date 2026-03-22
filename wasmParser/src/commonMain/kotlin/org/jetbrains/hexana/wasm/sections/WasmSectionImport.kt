@@ -88,7 +88,20 @@ class WasmTableExternalType(val referenceType: WasmReferenceType, val limits: Wa
 /**
  *
  */
-sealed class WasmLimits<T>(val kind: Byte, val min: T, val max: T?)
+sealed class WasmLimits<T>(val kind: Byte, val min: T, val max: T?) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        val b = other as? WasmLimits<*> ?: return false
+        return kind == b.kind && min == b.min && max == b.max
+    }
+
+    override fun hashCode(): Int {
+        var result = kind.hashCode()
+        result = 31 * result + (min?.hashCode() ?: 0)
+        result = 31 * result + (max?.hashCode() ?: 0)
+        return result
+    }
+}
 
 /**
  * [min, infinite)
@@ -97,7 +110,20 @@ class WasmOpenI32Limits(min: Int): WasmLimits<Int>(0, min, null)
 /**
  * [min, max]
  */
-class WasmFixedI32Limits(min: Int, max: Int, val shared:Boolean = false): WasmLimits<Int>(1, min, max)
+class WasmFixedI32Limits(min: Int, max: Int, val shared:Boolean = false): WasmLimits<Int>(1, min, max) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        val b = other as? WasmFixedI32Limits ?: return false
+        return min == b.min && max == b.max && shared == b.shared
+    }
+
+    override fun hashCode(): Int {
+        var result = min.hashCode()
+        result = 31 * result + max.hashCode()
+        result = 31 * result + shared.hashCode()
+        return result
+    }
+}
 /**
  * [min, infinite)
  */
@@ -111,7 +137,14 @@ class WasmFixedI64Limits(min: Long, max: Long): WasmLimits<Long>(5, min, max)
 /**
  * spec 5.3.12
  */
-class WasmMemType(val limits: WasmLimits<*>): WasmExternalType(0x2)
+class WasmMemType(val limits: WasmLimits<*>): WasmExternalType(0x2) {
+    override fun equals(other: Any?): Boolean {
+        val b = other as? WasmMemType ?: return false
+        return b.limits == limits
+    }
+
+    override fun hashCode(): Int = limits.hashCode()
+}
 
 /**
  * spec 5.3.11
