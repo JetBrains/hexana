@@ -1,9 +1,10 @@
 package org.jetbrains.hexana.mcp
 
-import org.jetbrains.hexana.wasm.opcodes.MemArg
-import org.jetbrains.hexana.wasm.opcodes.OpCode
-import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.opcodes.*
 import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
+import org.jetbrains.hexana.wasm.sections.WasmHeapType
+import org.jetbrains.hexana.wasm.sections.WasmValueType
+import org.jetbrains.hexana.wasm.opcodes.HeapType as OpCodeHeapType
 
 fun List<OpCode>.wat(): String {
     return this.joinToString("\n") { it.watString() }
@@ -178,8 +179,89 @@ internal fun OpCode.watString(): CharSequence {
         is OpCodes.F64.LT -> "f64.lt"
         is OpCodes.F64.Abs -> "f64.abs"
         is UnparsedOpCode -> "unparsed block: ${value.joinToString { "0x${it.toHexString()}" }}"
-        else -> toString()
+        // https://webassembly.github.io/spec/core/text/instructions.html
+        // I changed begin/end to {} because of AI
+        is OpCodes.Flow.Block -> "block${type?.let { " (result ${it.toSignature()})" } ?: ""}{\n${value.wat()}\n}"
+        // TODO add more opcodes. Protect somehow from 100+ lines switch?
+        else -> structuredWatString()
     }
 }
 
 private fun MemArg.watString() = "offset=$offset align=$align"
+
+private fun OpCode.structuredWatString(): String =
+    when (this) {
+        is OpCodeGCStruct -> "${mnemonic()} $typeIndex $fieldIndex"
+        is OpCodeGCSrcDst -> "${mnemonic()} $typeIndexDst $typeIndexSrc"
+        is OpCodeGCBreak -> "${mnemonic()} $label $srcType $dstType"
+        is OpCodeWithTwoValue<*, *> -> "${mnemonic()} ${value0.renderOperand()} ${value1.renderOperand()}"
+        is OpCodeWithValue<*> -> {
+            val operand = value
+            when {
+                operand is List<*> && operand.all { it is OpCode } -> "${mnemonic()}{\n${
+                    operand.filterIsInstance<OpCode>().wat()
+                }\n}"
+
+                operand == Unit -> mnemonic()
+                else -> "${mnemonic()} ${operand.renderOperand()}"
+            }
+        }
+
+        else -> mnemonic()
+    }
+
+// TODO deal with it somehow
+// Self-made fallback (best effort)
+// OpCodes$GC$RefCastNullable -> gc.ref_cast_nullable
+// OpCodes$Flow$BrIf -> flow.br_if
+private fun OpCode.mnemonic(): String {
+    val nestedName = javaClass.name.substringAfter("OpCodes$").substringAfterLast('.')
+    return nestedName
+        .split('$')
+        .joinToString(".") { segment ->
+            when {
+                segment.isEmpty() -> segment
+                segment.all { it.isUpperCase() || it.isDigit() } -> segment.lowercase()
+                else -> segment
+                    .replace(Regex("([a-z0-9])([A-Z])"), "$1_$2")
+                    .lowercase()
+            }
+        }
+}
+
+private fun Any?.renderOperand(): String =
+    when (this) {
+        null -> "null"
+        is MemArg -> watString()
+        is OpCodeHeapType -> toHeapTypeName()
+        is WasmHeapType -> toHeapTypeName()
+        is WasmValueType<*> -> toSignature()
+        is List<*> -> joinToString(", ", prefix = "[", postfix = "]") { it.renderOperand() }
+        is String, is Number, is Boolean, is Char -> toString()
+        else -> error("Unhandled MCP operand type: ${this::class.qualifiedName}")
+    }
+
+// TODO deal with it somehow
+// Why the mapping has both -23 and 0x69:
+//
+//  - opcode GC instructions parse heap types through consumeSignedInt(), not through the section-level WasmHeapType model
+//  - see /home/vladislavkuznetsov/Vl/Work/Hexana/wasmParser/src/commonMain/kotlin/org/jetbrains/hexana/wasm/opcodes/consumeGCOpCode.kt:21
+//  - so the same heap type may appear as:
+//      - signed SLEB value like -23
+//      - or positive hex form like 0x69
+private fun OpCodeHeapType.toHeapTypeName(): String =
+    when (type) {
+        -23, 0x69 -> "exn"
+        -22, 0x6A -> "array"
+        -21, 0x6B -> "struct"
+        -20, 0x6C -> "i31"
+        -19, 0x6D -> "eq"
+        -18, 0x6E -> "any"
+        -17, 0x6F -> "extern"
+        -16, 0x70 -> "func"
+        -15, 0x71 -> "none"
+        -14, 0x72 -> "noextern"
+        -13, 0x73 -> "nofunc"
+        -12, 0x74 -> "noexn"
+        else -> "type[$type]"
+    }
