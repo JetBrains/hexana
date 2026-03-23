@@ -258,7 +258,12 @@ private fun exportedAs(exports: List<ExportRecord>, index: Int): List<String> {
 }
 
 private fun Local.nullableSuffix(): String =
+    // Note: Do not insert there just else. This will be refactored soon, we shouldn't have branches with types and unresolved text.
     when (this) {
+        is LocalNum -> ""
+        is LocalPackI8 -> ""
+        is LocalPackI16 -> ""
+        is LocalVec -> ""
         is LocalEq -> if (nullable) "?" else ""
         is LocalAny -> if (nullable) "?" else ""
         is LocalNone -> if (nullable) "?" else ""
@@ -272,7 +277,6 @@ private fun Local.nullableSuffix(): String =
         is LocalExtern -> if (nullable) "?" else ""
         is LocalArray -> if (nullable) "?" else ""
         is LocalIndex -> if (nullable) "?" else ""
-        else -> ""
     }
 
 private fun byteToNumType(type: Byte): String =
