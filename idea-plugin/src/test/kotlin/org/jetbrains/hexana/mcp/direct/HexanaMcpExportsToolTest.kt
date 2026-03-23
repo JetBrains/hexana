@@ -148,6 +148,34 @@ class HexanaMcpExportsToolTest : HexanaMcpToolsetDirectTestBase() {
     assertEquals("i32", signature.array("return")[0].textValue())
   }
 
+  fun testListExportedFunctionsUsesNullableReferenceShorthandForAbstractHeapTypes() {
+    val fixture = createWasmFixture(
+      "fixtures/direct/exports/list_exported_externref_signature.wasm",
+      """
+            (module
+              (func (export "extern_id") (param externref) (result externref)
+                local.get 0))
+            """.trimIndent()
+    )
+
+    val result = callToolJsonObject(
+      "list_exported_functions",
+      buildJsonObject {
+        put("path", JsonPrimitive(fixture.projectRelativePath))
+        put("entriesRange", buildJsonObject {
+          put("from", JsonPrimitive(0))
+          put("to", JsonPrimitive(0))
+        })
+      }
+    )
+
+    val returned = result.array("returned")
+    assertEquals(1, returned.size)
+    val signature = returned.obj(0).obj("entry").obj("signature")
+    assertEquals("externref", signature.array("params")[0].textValue())
+    assertEquals("externref", signature.array("return")[0].textValue())
+  }
+
     fun testListExportedFunctionsProvidesStructuredContentForTypedResult() {
         val fixture = createWasmFixture(
             "fixtures/direct/exports/structured_list_exported_functions.wasm",
