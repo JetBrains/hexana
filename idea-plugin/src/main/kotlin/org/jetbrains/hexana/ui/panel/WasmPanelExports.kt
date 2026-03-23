@@ -12,12 +12,7 @@ import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
-import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
-import org.jetbrains.hexana.wasm.sections.WasmGlobalExportRecordEntry
-import org.jetbrains.hexana.wasm.sections.WasmMemoryExportRecordEntry
-import org.jetbrains.hexana.wasm.sections.WasmTableExportRecordEntry
-import org.jetbrains.hexana.wasm.sections.WasmTagExportRecordEntry
-import org.jetbrains.hexana.wasm.sections.WasmUnsupportedExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.*
 
 @Composable
 internal fun WasmPanelExports(wasmBinaryProvider: WasmBinaryProvider, state: HexViewStateHolder) {
@@ -49,9 +44,10 @@ internal fun WasmPanelExports(wasmBinaryProvider: WasmBinaryProvider, state: Hex
                 val export = exports[index]
                 TableCellValue(export.name)
             }
-        ), exports.size
-    ) { rowIndex ->
-        val exportRecord = exports[rowIndex] ?: return@Table
-        state.scrollHexViewTo(exportRecord.offset, exportRecord.size)
-    }
+        ), dataCount = exports.size,
+        onRow = { rowIndex ->
+            val exportRecord = exports[rowIndex] ?: return@Table
+            state.scrollHexViewTo(exportRecord.offset, exportRecord.size)
+        }
+    )
 }

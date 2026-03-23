@@ -7,6 +7,8 @@ import com.intellij.util.indexing.impl.CollectionDataExternalizer
 import com.intellij.util.io.DataExternalizer
 import com.intellij.util.io.EnumeratorStringDescriptor
 import org.jetbrains.hexana.wit.psi.WitPackageDefinition
+import org.jetbrains.hexana.wit.psi.WitResolver
+import org.jetbrains.hexana.wit.psi.WitWorldDefinition
 import java.io.DataInput
 import java.io.DataOutput
 
@@ -46,14 +48,31 @@ class WitComponentIndex: FileBasedIndexExtension<String, Collection<WitDeclarati
     override fun getName() = WitIndexId
     override fun getIndexer() = DataIndexer<String, Collection<WitDeclaration>, FileContent> { content ->
         buildMap<String, MutableCollection<WitDeclaration>> {
-            content.psiFile.children.filterIsInstance<WitPackageDefinition>()
-                .map {
-                    val pkgName = it.packageName.text
-                    WitDeclaration(pkgName.substringBeforeLast('@'), it.textOffset, WitDeclarationType.PACKAGE,
-                        it.textOffset + it.textLength,
-                        pkgName.substringAfterLast('@'))
-                }
-                .singleOrNull()?.let { put(it.name, mutableListOf(it)) }
+            content.psiFile.children.filter { it is WitPackageDefinition || it is WitWorldDefinition }
+                .flatMap {
+                    if (it is WitWorldDefinition) {
+                        it.exportDefinitionList.mapNotNull {
+                            val usePath = it.usePath ?: return@mapNotNull null
+                            val text = usePath.text
+                            val packageName = WitResolver.adjustPackageName(text, usePath) ?: return@mapNotNull null
+                            val (pkgName, pkgVer) = WitResolver.splitNameAndVersion(packageName)
+                            WitDeclaration(
+                                "$pkgName/$text", it.textOffset, WitDeclarationType.EXPORT,
+                                it.textOffset + it.textLength,
+                                pkgVer
+                            )
+                        }
+                    }
+                    else if (it is WitPackageDefinition) {
+                        val (pkgName, pkgVer) = WitResolver.splitNameAndVersion(it.packageName.text)
+                        listOf(WitDeclaration(
+                            pkgName, it.textOffset, WitDeclarationType.PACKAGE,
+                            it.textOffset + it.textLength,
+                            pkgVer
+                        ))
+                    }
+                    else emptyList()
+                }.forEach { put(it.name, mutableListOf(it)) }
         }
     }
 
@@ -65,7 +84,7 @@ class WitComponentIndex: FileBasedIndexExtension<String, Collection<WitDeclarati
 
     override fun getValueExternalizer() = CollectionDataExternalizer(WitDeclarationExternalizer)
 
-    override fun getVersion(): Int = 2
+    override fun getVersion(): Int = 4
 }
 
 fun processIndexEntries(

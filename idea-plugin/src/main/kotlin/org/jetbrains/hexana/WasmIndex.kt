@@ -10,6 +10,7 @@ import org.jetbrains.hexana.wasm.components.WasmComponent
 import org.jetbrains.hexana.wit.WitDeclaration
 import org.jetbrains.hexana.wit.WitDeclarationExternalizer
 import org.jetbrains.hexana.wit.WitDeclarationType
+import org.jetbrains.hexana.wit.psi.WitResolver
 
 val WasmIndexId: ID<String, Collection<WitDeclaration>> = ID.create("WasmIndex")
 
@@ -35,12 +36,12 @@ class WasmIndex : FileBasedIndexExtension<String, Collection<WitDeclaration>>() 
             }?.exportSection?.forEach {
                 val parsed = with(it) { buffer.scan() }
                 parsed.forEach {
-                    val name = it.exportName.substringBeforeLast('@')
+                    val (name, version) = WitResolver.splitNameAndVersion(it.exportName)
                     put(name, mutableListOf(
                         WitDeclaration(
                             name, it.offset, WitDeclarationType.EXPORT,
                             it.offset + it.size,
-                            it.exportName.substringAfterLast('@')
+                            version
                         )
                     ))
                 }

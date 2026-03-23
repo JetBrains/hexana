@@ -1,7 +1,10 @@
 package org.jetbrains.hexana.ui.components
 
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.onClick
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,11 +41,20 @@ import kotlin.math.floor
 import kotlin.math.log10
 
 class TableCellValue<T>(val value: T, val representation: String = value.toString())
-class TableColumn(val title: String, val modifier: Modifier = Modifier, val dataProvider: (index: Int) -> TableCellValue<*>)
+class TableColumn(
+    val title: String,
+    val modifier: Modifier = Modifier,
+    val dataProvider: (index: Int) -> TableCellValue<*>
+)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
-fun Table(columns: List<TableColumn>, dataCount: Int, onRow: (id: Int) -> Unit = {}) {
+fun Table(
+    columns: List<TableColumn>,
+    dataCount: Int,
+    onRowContextMenu: (id: Int) -> List<ContextMenuItem> = { emptyList() },
+    onRow: (id: Int) -> Unit = {},
+) {
 
     var sortAsc: Boolean by remember { mutableStateOf(true) }
     var sortIndex: Int by remember { mutableStateOf(-1) }
@@ -106,17 +117,18 @@ fun Table(columns: List<TableColumn>, dataCount: Int, onRow: (id: Int) -> Unit =
                 else -> "▾"
             }
 
-            Box(modifier = Modifier
-            .padding(horizontal = 4.dp)
-            .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
-            .widthIn(min = idColumnMinWidth)
-                .onClick {
-                    if (sortIndex == -1) {
-                        sortAsc = !sortAsc
-                    }
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
+                    .widthIn(min = idColumnMinWidth)
+                    .clickable {
+                        if (sortIndex == -1) {
+                            sortAsc = !sortAsc
+                        }
 
-                    sortIndex = -1
-                }
+                        sortIndex = -1
+                    }
             ) {
                 Row {
                     Text(
@@ -139,16 +151,17 @@ fun Table(columns: List<TableColumn>, dataCount: Int, onRow: (id: Int) -> Unit =
             }
 
             columns.forEachIndexed { columnIndex, column ->
-                Box(modifier = Modifier
-                .padding(horizontal = 4.dp)
-                .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
-                .onClick {
-                    if (sortIndex == columnIndex) {
-                        sortAsc = !sortAsc
+                Box(
+                    modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
+                    .clickable {
+                        if (sortIndex == columnIndex) {
+                            sortAsc = !sortAsc
+                        }
+                        sortIndex = columnIndex
                     }
-                    sortIndex = columnIndex
-                }
-                .then(column.modifier)) {
+                    .then(column.modifier)) {
                     val selectionColor = when {
                         columnIndex == sortIndex -> HexanaTheme.textColor
                         else -> Color(238, 237, 237, 80)
@@ -181,7 +194,9 @@ fun Table(columns: List<TableColumn>, dataCount: Int, onRow: (id: Int) -> Unit =
             }
         }
 
-        LazyColumn(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).onPointerEvent(PointerEventType.Exit) { hoveredOriginalIndex = null }) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                .onPointerEvent(PointerEventType.Exit) { hoveredOriginalIndex = null }) {
             items(dataCount) { rowIndex ->
                 val (id, data) = viewData[rowIndex]
 
@@ -193,36 +208,44 @@ fun Table(columns: List<TableColumn>, dataCount: Int, onRow: (id: Int) -> Unit =
                     Color.Unspecified
                 }
 
+
                 Row(
                     modifier = Modifier
-                    .fillMaxWidth()
-                    .background(rowBackgroundColor)
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                    .onPointerEvent(PointerEventType.Enter) {
-                        hoveredOriginalIndex = id
-                    }
-                    .onClick {
-                        selectedOriginalIndex = id
-                        onRow(id)
-                    },
+                        .fillMaxWidth()
+                        .background(rowBackgroundColor)
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                        .onPointerEvent(PointerEventType.Enter) {
+                            hoveredOriginalIndex = id
+                        }
+                        .clickable {
+                            selectedOriginalIndex = id
+                            onRow(id)
+                        },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(modifier = Modifier.padding(horizontal = 4.dp).widthIn(min = idColumnMinWidth)) {
-                        Text(
-                            id.toString(),
-                            style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
-                            lineHeight = TextUnit(1f, TextUnitType.Em)
-                        )
+                    ContextMenuArea(items = { onRowContextMenu(id) }) {
+                        Box(modifier = Modifier.padding(horizontal = 4.dp).widthIn(min = idColumnMinWidth)) {
+                            Text(
+                                id.toString(),
+                                style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
+                                lineHeight = TextUnit(1f, TextUnitType.Em)
+                            )
+                        }
                     }
 
                     columns.forEachIndexed { index, column ->
                         val text = data[index].representation
-                        Box(modifier = Modifier.padding(horizontal = 4.dp).then(column.modifier)) {
-                            Text(
-                                text,
-                                style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
-                                lineHeight = TextUnit(1f, TextUnitType.Em)
-                            )
+                        ContextMenuArea(items = { onRowContextMenu(id) }) {
+                            Box(modifier = Modifier.padding(horizontal = 4.dp).then(column.modifier)) {
+                                Text(
+                                    text,
+                                    style = TextStyle(
+                                        color = HexanaTheme.textColor,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    lineHeight = TextUnit(1f, TextUnitType.Em)
+                                )
+                            }
                         }
                     }
                 }
@@ -237,7 +260,7 @@ private fun TextMeasurer.measureMonospaceInt(str: String): TextLayoutResult {
     return measure("x".repeat(str.length), style = TextStyle(fontFamily = FontFamily.Monospace))
 }
 
-private  fun TextMeasurer.measureMonospaceInt(num: Int, minLen: Int = 0): TextLayoutResult {
+private fun TextMeasurer.measureMonospaceInt(num: Int, minLen: Int = 0): TextLayoutResult {
     val maxLen = maxOf(floor(log10(num.toDouble())).toInt() + 1, minLen)
     return measureMonospaceInt("x".repeat(maxLen))
 }
@@ -245,7 +268,7 @@ private  fun TextMeasurer.measureMonospaceInt(num: Int, minLen: Int = 0): TextLa
 @Composable
 internal fun TextMeasurer.measureWidthMonospace(str: String): Dp {
     val localDensity = LocalDensity.current
-    return with (localDensity) {
+    return with(localDensity) {
         measureMonospaceInt(str).size.width.toDp()
     }
 }
@@ -253,7 +276,7 @@ internal fun TextMeasurer.measureWidthMonospace(str: String): Dp {
 @Composable
 internal fun TextMeasurer.measureWidthMonospace(num: Int, minLen: Int = 0): Dp {
     val localDensity = LocalDensity.current
-    return with (localDensity) {
+    return with(localDensity) {
         measureMonospaceInt(num, minLen).size.width.toDp()
     }
 }

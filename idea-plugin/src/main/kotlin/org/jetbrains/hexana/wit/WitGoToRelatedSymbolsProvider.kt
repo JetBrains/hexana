@@ -13,6 +13,7 @@ import org.jetbrains.hexana.WasmIndexId
 import org.jetbrains.hexana.ui.panel.scrollHexViewTo
 import org.jetbrains.hexana.wit.psi.WitExportDefinition
 import org.jetbrains.hexana.wit.psi.WitPackageDefinition
+import org.jetbrains.hexana.wit.psi.WitResolver
 
 class WitGoToRelatedSymbolsProvider: RelatedItemLineMarkerProvider() {
     override fun collectNavigationMarkers(
@@ -23,7 +24,7 @@ class WitGoToRelatedSymbolsProvider: RelatedItemLineMarkerProvider() {
             element.usePath?.text?.let { usePathText ->
                 val pathName = if (usePathText.contains('/')) usePathText
                     else element.containingFile.childrenOfType<WitPackageDefinition>().singleOrNull()?.let { packageDefinition ->
-                        packageDefinition.packageName.text.substringBeforeLast('@') + "/" + usePathText
+                        WitResolver.splitNameAndVersion(packageDefinition.packageName.text).first + "/" + usePathText
                     } ?: return
                 processIndexEntries(WasmIndexId, pathName, GlobalSearchScope.everythingScope(element.project)) {
                         file, decls ->
