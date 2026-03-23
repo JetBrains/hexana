@@ -2,30 +2,7 @@ package org.jetbrains.hexana.mcp
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
-import org.jetbrains.hexana.wasm.sections.WasmAnyRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmArrayRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
-import org.jetbrains.hexana.wasm.sections.WasmEqRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmExnRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmExternRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmFuncHeapType
-import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
-import org.jetbrains.hexana.wasm.sections.WasmI31RefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmIndexHeapType
-import org.jetbrains.hexana.wasm.sections.WasmNoExnHeapType
-import org.jetbrains.hexana.wasm.sections.WasmNoExternRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmNoFuncHeapType
-import org.jetbrains.hexana.wasm.sections.WasmNoneHeapType
-import org.jetbrains.hexana.wasm.sections.WasmNullableReferenceType
-import org.jetbrains.hexana.wasm.sections.WasmNumType
-import org.jetbrains.hexana.wasm.sections.WasmPactTypeI16
-import org.jetbrains.hexana.wasm.sections.WasmPactTypeI8
-import org.jetbrains.hexana.wasm.sections.WasmRefType
-import org.jetbrains.hexana.wasm.sections.WasmReferenceType
-import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmStructRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
-import org.jetbrains.hexana.wasm.sections.WasmVecType
+import org.jetbrains.hexana.wasm.sections.*
 
 /**
  * Shared function-domain records and extraction helpers used by multiple MCP queries.
@@ -104,7 +81,7 @@ internal fun CommonByteBuffer.listFunctionsInternal(wasmModule: WasmModule?): Li
     }
     val indexBase = imports.size
     val functions = records.mapIndexedNotNull { index, typeIndex ->
-        (types.getOrNull(typeIndex) as? WasmSectionFunctionTypeRecord)?.toSignature()?.let { signature ->
+        resolveFunctionTypeRecord(types, typeIndex)?.toSignature()?.let { signature ->
             val funcidx = index + indexBase
             GeneralFunctionEntry(
                 funcidx = funcidx,

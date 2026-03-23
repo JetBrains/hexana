@@ -2,16 +2,7 @@ package org.jetbrains.hexana.mcp
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
-import org.jetbrains.hexana.wasm.sections.WasmF32Type
-import org.jetbrains.hexana.wasm.sections.WasmF64Type
-import org.jetbrains.hexana.wasm.sections.WasmI32Type
-import org.jetbrains.hexana.wasm.sections.WasmI64Type
-import org.jetbrains.hexana.wasm.sections.WasmPactTypeI16
-import org.jetbrains.hexana.wasm.sections.WasmPactTypeI8
-import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
-import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmValueType
+import org.jetbrains.hexana.wasm.sections.*
 
 /**
  * Shared type-domain records and signature helpers used across MCP queries and
@@ -26,10 +17,40 @@ internal fun CommonByteBuffer.types(wasmModule: WasmModule): List<WasmTypeRecord
         parseTypes()
     }
 
+internal fun resolveFunctionTypeRecord(
+    types: List<WasmTypeRecord>,
+    typeIndex: Int
+): WasmSectionFunctionTypeRecord? {
+    if (typeIndex < 0) return null
+    var flattenedIndex = 0
+    for (record in types) {
+        when (record) {
+            is WasmSectionFunctionTypeRecord -> {
+                if (flattenedIndex == typeIndex) return record
+                flattenedIndex += 1
+            }
+
+            is WasmRecursiveTypeRecord -> {
+                for (entry in record.entries) {
+                    if (flattenedIndex == typeIndex) {
+                        return entry as? WasmSectionFunctionTypeRecord
+                    }
+                    flattenedIndex += 1
+                }
+            }
+
+            else -> {
+                if (flattenedIndex == typeIndex) return null
+                flattenedIndex += 1
+            }
+        }
+    }
+    return null
+}
+
 fun WasmTypeIndexExternalType.toSignature(types: List<WasmTypeRecord>): ParameterSignature? {
     val typeIndex = index.toInt()
-    val rawSignature = types.getOrNull(typeIndex)
-    return (rawSignature as? WasmSectionFunctionTypeRecord)?.toSignature()
+    return resolveFunctionTypeRecord(types, typeIndex)?.toSignature()
 }
 
 fun WasmSectionFunctionTypeRecord.toSignature(): ParameterSignature {
