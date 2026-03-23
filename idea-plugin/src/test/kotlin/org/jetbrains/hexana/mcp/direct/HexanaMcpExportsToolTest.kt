@@ -114,6 +114,40 @@ class HexanaMcpExportsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals("i32", entry.obj("signature").array("params")[0].textValue())
     }
 
+  fun testListExportedFunctionsKeepsUnifiedIndicesAfterImportedPrefix() {
+    val fixture = createWasmFixture(
+      "fixtures/direct/exports/list_exported_local_after_imports.wasm",
+      """
+            (module
+              (type (func (param i32) (result i32)))
+              (import "env" "a" (func))
+              (import "env" "b" (func))
+              (func (export "local_after_imports") (type 0) (param i32) (result i32)
+                local.get 0))
+            """.trimIndent()
+    )
+
+    val result = callToolJsonObject(
+      "list_exported_functions",
+      buildJsonObject {
+        put("path", JsonPrimitive(fixture.projectRelativePath))
+        put("entriesRange", buildJsonObject {
+          put("from", JsonPrimitive(0))
+          put("to", JsonPrimitive(0))
+        })
+      }
+    )
+
+    val returned = result.array("returned")
+    assertEquals(1, returned.size)
+    assertEquals("local_after_imports", returned.obj(0).text("name"))
+    val entry = returned.obj(0).obj("entry")
+    assertEquals(2, entry.int("funcidx"))
+    val signature = entry.obj("signature")
+    assertEquals("i32", signature.array("params")[0].textValue())
+    assertEquals("i32", signature.array("return")[0].textValue())
+  }
+
     fun testListExportedFunctionsProvidesStructuredContentForTypedResult() {
         val fixture = createWasmFixture(
             "fixtures/direct/exports/structured_list_exported_functions.wasm",

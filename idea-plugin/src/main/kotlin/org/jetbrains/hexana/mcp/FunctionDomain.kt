@@ -50,7 +50,7 @@ internal fun CommonByteBuffer.listExportedInternal(wasmModule: WasmModule?): Lis
             if (index < imports.size) {
                 imports.getOrNull(index)?.let { function -> WasmExportFunctionRecord(it.name, function) }
             } else {
-                functions.getOrNull(index - imports.size)?.let { function -> WasmExportFunctionRecord(it.name, function) }
+                functions.getOrNull(index)?.let { function -> WasmExportFunctionRecord(it.name, function) }
             }
         }
 }
