@@ -71,7 +71,7 @@ dependencies {
     implementation(project(":graalwasm:common"))
     implementation(project(":graalwasm:wat2wasm"))
     implementation(kotlin("reflect"))
-    implementation(libs.kotlinx.serialization.json)
+    compileOnly(libs.kotlinx.serialization.json)
     implementation("org.graalvm.polyglot:polyglot:25.0.0")
     implementation("org.graalvm.polyglot:wasm:25.0.0")
 
@@ -80,6 +80,7 @@ dependencies {
     // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
     compileOnly(compose.desktop.currentOs)
     testImplementation("junit:junit:4.13.2")
+    testImplementation(libs.kotlinx.serialization.json)
     testRuntimeOnly("org.graalvm.polyglot:wasm:25.0.0")
     testRuntimeOnly("org.graalvm.polyglot:polyglot:25.0.0")
 
