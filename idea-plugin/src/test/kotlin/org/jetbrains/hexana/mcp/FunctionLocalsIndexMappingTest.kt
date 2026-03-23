@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp
 
 import org.jetbrains.hexana.wasm.sections.WasmF32Type
+import org.jetbrains.hexana.wasm.sections.WasmF64Type
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
 import org.jetbrains.hexana.wasm.sections.WasmI64Type
 
@@ -38,6 +39,13 @@ class FunctionLocalsIndexMappingTest : WasmTest() {
         assertEquals(2, results[2].locals.size)
         assertLocalNum(results[2].locals[0], count = 1, type = WasmI32Type.code)
         assertLocalNum(results[2].locals[1], count = 1, type = WasmI64Type.code)
+    }
+
+    fun testLocalNumRenderedTypeUsesSharedWasmNumTypeMapping() {
+        assertEquals("num:i32", LocalNum(1, WasmI32Type.code).renderedType())
+        assertEquals("num:i64", LocalNum(1, WasmI64Type.code).renderedType())
+        assertEquals("num:f32", LocalNum(1, WasmF32Type.code).renderedType())
+        assertEquals("num:f64", LocalNum(1, WasmF64Type.code).renderedType())
     }
 
     private fun assertLocalNum(local: Local, count: Int, type: Byte) {

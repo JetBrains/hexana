@@ -165,16 +165,16 @@ object StandardTypesParser {
     }
 
     fun CommonByteBuffer.valueType(): WasmValueType<*> {
-        return when (get()) {
-            WasmF32Type.code ->  WasmF32Type
-            WasmF64Type.code ->  WasmF64Type
-            WasmI64Type.code -> WasmI64Type
-            WasmI32Type.code  -> WasmI32Type
+        return when (val code = get()) {
             WasmVecType.code -> WasmVecType
-
             else -> {
-                position(position() - 1)
-                WasmRefType(referenceType())
+                val numType = code.toWasmNumTypeOrNull()
+                if (numType != null) {
+                    numType
+                } else {
+                    position(position() - 1)
+                    WasmRefType(referenceType())
+                }
             }
         }
     }
@@ -240,6 +240,18 @@ object WasmF64Type : WasmNumType(0x7c)
 object WasmI32Type : WasmNumType(0x7f)
 object WasmI64Type : WasmNumType(0x7e)
 object WasmVecType : WasmValueType<Byte>(0x7b)
+
+fun Byte.toWasmNumTypeOrNull(): WasmNumType? =
+    when (this) {
+        WasmI32Type.code -> WasmI32Type
+        WasmI64Type.code -> WasmI64Type
+        WasmF32Type.code -> WasmF32Type
+        WasmF64Type.code -> WasmF64Type
+        else -> null
+    }
+
+fun Byte.toWasmNumType(): WasmNumType =
+    toWasmNumTypeOrNull() ?: error("Unhandled numeric type byte: 0x${toUByte().toString(16)}")
 
 sealed class WasmPactType(override val code: Byte):WasmValueType<Byte>(0x70)
 object WasmPactTypeI16 : WasmPactType(0x77)

@@ -280,10 +280,4 @@ private fun Local.nullableSuffix(): String =
     }
 
 private fun byteToNumType(type: Byte): String =
-    when (type.toInt()) {
-        0x7F -> "i32"
-        0x7E -> "i64"
-        0x7D -> "f32"
-        0x7C -> "f64"
-        else -> "unknown"
-    }
+    type.toWasmNumType().toSignature()
