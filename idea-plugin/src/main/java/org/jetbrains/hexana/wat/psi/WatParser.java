@@ -20,8 +20,10 @@ public class WatParser implements PsiParser {
 
     static {
         tokenMap.put(WatToken.MODULE, WatElementType.MODULE);
+        tokenMap.put(WatToken.COMPONENT, WatElementType.COMPONENT);
         tokenMap.put(WatToken.TYPE, WatElementType.TYPE);
         tokenMap.put(WatToken.IMPORT, WatElementType.IMPORT);
+        tokenMap.put(WatToken.INSTANCE, WatElementType.INSTANCE);
         tokenMap.put(WatToken.EXPORT, WatElementType.EXPORT);
         tokenMap.put(WatToken.GLOBAL, WatElementType.GLOBAL);
         tokenMap.put(WatToken.MEMORY, WatElementType.MEMORY);
@@ -115,7 +117,10 @@ public class WatParser implements PsiParser {
             if (token == WatToken.OPEN_PAREN) {
                 PsiBuilder.Marker m = b.mark();
                 IElementType next = b.lookAhead(1);
-                IElementType exprType = next != null ? tokenMap.getOrDefault(next, WatElementType.SEXPR) : WatElementType.SEXPR;
+                IElementType exprType =
+                    next == WatToken.CORE
+                        ? b.lookAhead(2) == WatToken.MODULE ? WatElementType.MODULE : WatElementType.INSTANCE
+                        : (next != null ? tokenMap.getOrDefault(next, WatElementType.SEXPR) : WatElementType.SEXPR);
                 exprStack.add(new Expr(m, exprType));
                 b.advanceLexer();
 

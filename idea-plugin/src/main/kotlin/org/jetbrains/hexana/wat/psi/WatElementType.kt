@@ -13,6 +13,8 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val SEXPR = WatElementType("SEXPR")
         @JvmField val UEXPR = WatElementType("UEXPR") // unfolded expression without parentheses
         @JvmField val MODULE = WatElementType("MODULE")
+        @JvmField val COMPONENT = WatElementType("COMPONENT")
+        @JvmField val INSTANCE = WatElementType("INSTANCE")
         @JvmField val TYPE = WatElementType("TYPE")
         @JvmField val IMPORT = WatElementType("IMPORT")
         @JvmField val EXPORT = WatElementType("EXPORT")

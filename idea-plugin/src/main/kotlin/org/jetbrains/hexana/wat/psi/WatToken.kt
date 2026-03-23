@@ -57,6 +57,8 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val CATCH_ALL = WatToken("catch_all")
         @JvmField val CATCH_ALL_REF = WatToken("catch_all_ref")
         @JvmField val CATCH_REF = WatToken("catch_ref")
+        @JvmField val CORE = WatToken("core")
+        @JvmField val COMPONENT = WatToken("component")
         @JvmField val DATA = WatToken("data")
         @JvmField val DATA_DROP = WatToken("data.drop")
         @JvmField val DECLARE = WatToken("declare")
@@ -487,6 +489,7 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val I8X16_SUB_SAT_U = WatToken("i8x16.sub_sat_u")
         @JvmField val I8X16_SWIZZLE = WatToken("i8x16.swizzle")
         @JvmField val IF = WatToken("if")
+        @JvmField val INSTANCE = WatToken("instance")
         @JvmField val IMPORT = WatToken("import")
         @JvmField val ITEM = WatToken("item")
         @JvmField val LOCAL = WatToken("local")
@@ -593,8 +596,8 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField
         val KEYWORDS = arrayOf<WatToken>(
             ALIGN, ANY, ARRAY, BLOCK, BR, BR_IF, BR_ON_CAST, BR_ON_CAST_FAIL, BR_ON_NULL, BR_ON_NULL,
-            BR_TABLE, CATCH, CATCH_ALL, CATCH_ALL_REF, CATCH_REF, CALL, CALL_INDIRECT, CALL_REF,
-            DATA, ELEM, ELSE, END, EXN, EXPORT, EXTERN, FIELD, FUNC, GLOBAL, IF, IMPORT, ITEM,
+            BR_TABLE, CATCH, CATCH_ALL, CATCH_ALL_REF, CATCH_REF, CALL, CALL_INDIRECT, CALL_REF, CORE, COMPONENT,
+            DATA, ELEM, ELSE, END, EXN, EXPORT, EXTERN, FIELD, FUNC, GLOBAL, IF, IMPORT, ITEM, INSTANCE,
             LOOP, MUT, MODULE, MEMORY, NOEXN, NOEXTERN, OFFSET, PARAM, REC, RESULT, RETURN,
             RETURN_CALL, SELECT, START, STRUCT, SUB, TABLE, TAG, THEN, THROW, TRY_TABLE, TYPE
         )

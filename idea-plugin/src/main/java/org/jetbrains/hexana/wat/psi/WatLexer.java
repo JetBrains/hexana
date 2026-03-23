@@ -402,6 +402,9 @@ public class WatLexer extends LexerBase {
         entries.add(createTokenEntry(WatToken.CATCH_ALL));
         entries.add(createTokenEntry(WatToken.CATCH_ALL_REF));
         entries.add(createTokenEntry(WatToken.CATCH_REF));
+        entries.add(createTokenEntry(WatToken.CORE));
+        entries.add(createTokenEntry(WatToken.COMPONENT));
+        entries.add(createTokenEntry(WatToken.INSTANCE));
         entries.add(createTokenEntry(WatToken.DATA));
         entries.add(createTokenEntry(WatToken.DATA_DROP));
         entries.add(createTokenEntry(WatToken.DECLARE));
