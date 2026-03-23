@@ -1,3 +1,5 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
@@ -141,7 +143,10 @@ tasks {
         group = "verification"
         description = "Generates Hexana FUS scheme artifact using the built-in IDE headless command"
 
+        val rawOutputFile = layout.buildDirectory.file("fus/raw-scheme.txt")
         val outputFile = layout.buildDirectory.file("fus/scheme.txt")
+        val errorsFile = layout.buildDirectory.file("fus/scheme.errors.txt")
+        val pluginsFile = layout.buildDirectory.file("fus/plugins.txt")
         applySandboxFrom(project.tasks.named<PrepareSandboxTask>("prepareSandbox"))
         splitMode.set(false)
         splitModeTarget.set(SplitModeAware.SplitModeTarget.BACKEND)
@@ -151,10 +156,23 @@ tasks {
         args(
             "buildEventsScheme",
             "--pluginId=org.jetbrains.hexana",
-            "--outputFile=${outputFile.get().asFile.absolutePath}",
-            "--errorsFile=${layout.buildDirectory.file("fus/scheme.errors.txt").get().asFile.absolutePath}",
-            "--pluginsFile=${layout.buildDirectory.file("fus/plugins.txt").get().asFile.absolutePath}",
+            "--outputFile=${rawOutputFile.get().asFile.absolutePath}",
+            "--errorsFile=${errorsFile.get().asFile.absolutePath}",
+            "--pluginsFile=${pluginsFile.get().asFile.absolutePath}",
         )
+        doLast {
+            @Suppress("UNCHECKED_CAST")
+            val rawScheme = JsonSlurper().parse(rawOutputFile.get().asFile) as MutableMap<String, Any?>
+
+            @Suppress("UNCHECKED_CAST")
+            val groups = rawScheme["scheme"] as List<Map<String, Any?>>
+            rawScheme["scheme"] = groups.filter { group ->
+                val pluginId = (group["plugin"] as? Map<*, *>)?.get("id") as? String
+                val groupId = group["id"] as? String
+                pluginId == "org.jetbrains.hexana" && groupId == "org.jetbrains.hexana"
+            }
+            outputFile.get().asFile.writeText(JsonOutput.prettyPrint(JsonOutput.toJson(rawScheme)))
+        }
     }
 }
 
