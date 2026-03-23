@@ -202,6 +202,7 @@ internal fun WatMultifileEditorContainer(
             val watTextEditor = wasmBinaryProvider.createTextEditor(currentFile)
             fileset.editor = watTextEditor.editor
             watTextEditor.editor.settings.isUseSoftWraps = false
+            watTextEditor.editor.settings.isLineNumbersShown = false
             watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
             watTextEditor.editor.caretModel.moveToOffset(fileset.fileOffset)
             watTextEditor.editor.scrollingModel.scrollTo(
@@ -330,6 +331,7 @@ internal class WasmViewModel(
                         val editorComponent = withContext(Dispatchers.EDT) {
                             val watTextEditor = wasmBinaryProvider.createTextEditor(file)
                             watTextEditor.editor.settings.isUseSoftWraps = false
+                            watTextEditor.editor.settings.isLineNumbersShown = false
                             watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
 
                             if (success.warning != null) {
