@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.wasm
 
 import kotlinx.coroutines.test.runTest
+import org.jetbrains.hexana.dwarf.Tag
+import org.jetbrains.hexana.dwarf.debugAbbrevSection
 import org.jetbrains.hexana.dwarf.debugStrSection
 import org.jetbrains.hexana.tests.IgnoreJsTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
@@ -1497,6 +1499,97 @@ class WasmParserTests {
         assertEquals("errmsgidx", strings[30])
         assertEquals("__syscall_setpriority", strings[1])
         assertEquals("__pthread_exit", strings[99])
+    }
+
+    /**
+     * wasmParser/src/commonTest/resources/c/utf8-c.wasm:	file format WASM
+     *
+     * .debug_abbrev contents:
+     * Abbrev table for offset: 0x00000000
+     * [1] DW_TAG_compile_unit	DW_CHILDREN_yes
+     * 	DW_AT_producer	DW_FORM_strp
+     * 	DW_AT_language	DW_FORM_data2
+     * 	DW_AT_name	DW_FORM_strp
+     * 	DW_AT_stmt_list	DW_FORM_sec_offset
+     * 	DW_AT_comp_dir	DW_FORM_strp
+     * 	DW_AT_low_pc	DW_FORM_addr
+     * 	DW_AT_high_pc	DW_FORM_data4
+     *
+     * [2] DW_TAG_variable	DW_CHILDREN_no
+     * 	DW_AT_name	DW_FORM_strp
+     * 	DW_AT_type	DW_FORM_ref4
+     * 	DW_AT_external	DW_FORM_flag_present
+     * 	DW_AT_decl_file	DW_FORM_data1
+     * 	DW_AT_decl_line	DW_FORM_data1
+     * 	DW_AT_location	DW_FORM_exprloc
+     *
+     *  ...
+     *
+     * [8] DW_TAG_subprogram	DW_CHILDREN_no
+     * 	DW_AT_low_pc	DW_FORM_addr
+     * 	DW_AT_high_pc	DW_FORM_data4
+     * 	DW_AT_frame_base	DW_FORM_exprloc
+     * 	DW_AT_name	DW_FORM_strp
+     * 	DW_AT_decl_file	DW_FORM_data1
+     * 	DW_AT_decl_line	DW_FORM_data1
+     * 	DW_AT_prototyped	DW_FORM_flag_present
+     * 	DW_AT_type	DW_FORM_ref4
+     * 	DW_AT_external	DW_FORM_flag_present
+     *
+     * Abbrev table for offset: 0x0000006f
+     * [1] DW_TAG_compile_unit	DW_CHILDREN_yes
+     * 	DW_AT_producer	DW_FORM_strp
+     * 	DW_AT_language	DW_FORM_data2
+     * 	DW_AT_name	DW_FORM_strp
+     * 	DW_AT_stmt_list	DW_FORM_sec_offset
+     * 	DW_AT_comp_dir	DW_FORM_strp
+     * 	DW_AT_low_pc	DW_FORM_addr
+     * 	DW_AT_high_pc	DW_FORM_data4
+     *
+     * ...
+     *
+     * Abbrev table for offset: 0x00002c54
+     *
+     * ...
+     *
+     * [19] DW_TAG_structure_type      DW_CHILDREN_yes
+     *         DW_AT_name      DW_FORM_strp
+     *         DW_AT_byte_size DW_FORM_data1
+     *         DW_AT_decl_file DW_FORM_data1
+     *         DW_AT_decl_line DW_FORM_data1
+     *
+     * [20] DW_TAG_const_type  DW_CHILDREN_no
+     *
+     * [21] DW_TAG_typedef     DW_CHILDREN_no
+     *         DW_AT_type      DW_FORM_ref4
+     *         DW_AT_name      DW_FORM_strp
+     *         DW_AT_decl_file DW_FORM_data1
+     *         DW_AT_decl_line DW_FORM_data1
+     *
+     *
+     */
+    @Test
+    fun parserDwarfAbbrevSection() = runTest {
+        val buffer = resourceAsByteBuffer("c/utf8-c.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
+        val abbrevSection = (wasmModule as BaseModule).debugAbbrevSection()!!
+        val entries = with(abbrevSection){
+            buffer.scanDwarfAbbrev()
+        }
+        val entries1 = entries[0x00000000u]
+        assertEquals(8, entries1!!.size)
+        assertEquals(Tag.DW_TAG_compile_unit, entries1[0].tag)
+        assertEquals(Tag.DW_TAG_subprogram, entries1[7].tag)
+        val entries2 = entries[0x0000006fu]
+        assertEquals(9, entries2!!.size)
+        assertEquals(Tag.DW_TAG_compile_unit, entries2[0].tag)
+        val entries3 = entries[0x00002c54u]
+        assertEquals(21, entries3!!.size)
+        assertEquals(Tag.DW_TAG_compile_unit, entries3[0].tag)
+        assertEquals(Tag.DW_TAG_const_type, entries3[19].tag)
+        assertEquals(Tag.DW_TAG_typedef, entries3[20].tag)
     }
 
     @Test
