@@ -367,6 +367,7 @@ public class WatLexer extends LexerBase {
     private static StringMap<WatToken> createKeywordsMap() {
         List<StringMap.Entry<WatToken>> entries = new ArrayList<>();
         entries.add(createTokenEntry(WatToken.ACTIVE));
+        entries.add(createTokenEntry(WatToken.ALIAS));
         entries.add(createTokenEntry(WatToken.ALIGN));
         entries.add(createTokenEntry(WatToken.ANY));
         entries.add(createTokenEntry(WatToken.ANY_CONVERT_EXTERN));
@@ -398,6 +399,7 @@ public class WatLexer extends LexerBase {
         entries.add(createTokenEntry(WatToken.CALL));
         entries.add(createTokenEntry(WatToken.CALL_INDIRECT));
         entries.add(createTokenEntry(WatToken.CALL_REF));
+        entries.add(createTokenEntry(WatToken.CANON));
         entries.add(createTokenEntry(WatToken.CATCH));
         entries.add(createTokenEntry(WatToken.CATCH_ALL));
         entries.add(createTokenEntry(WatToken.CATCH_ALL_REF));
@@ -405,6 +407,7 @@ public class WatLexer extends LexerBase {
         entries.add(createTokenEntry(WatToken.CORE));
         entries.add(createTokenEntry(WatToken.COMPONENT));
         entries.add(createTokenEntry(WatToken.INSTANCE));
+        entries.add(createTokenEntry(WatToken.INSTANTIATE));
         entries.add(createTokenEntry(WatToken.DATA));
         entries.add(createTokenEntry(WatToken.DATA_DROP));
         entries.add(createTokenEntry(WatToken.DECLARE));
@@ -837,6 +840,7 @@ public class WatLexer extends LexerBase {
         entries.add(createTokenEntry(WatToken.IF));
         entries.add(createTokenEntry(WatToken.IMPORT));
         entries.add(createTokenEntry(WatToken.ITEM));
+        entries.add(createTokenEntry(WatToken.LIFT));
         entries.add(createTokenEntry(WatToken.LOCAL));
         entries.add(createTokenEntry(WatToken.LOCAL_GET));
         entries.add(createTokenEntry(WatToken.LOCAL_SET));
@@ -904,6 +908,7 @@ public class WatLexer extends LexerBase {
         entries.add(createTokenEntry(WatToken.TRY_TABLE));
         entries.add(createTokenEntry(WatToken.TYPE));
         entries.add(createTokenEntry(WatToken.UNREACHABLE));
+        entries.add(createTokenEntry(WatToken.U32));
         entries.add(createTokenEntry(WatToken.V128));
         entries.add(createTokenEntry(WatToken.V128_AND));
         entries.add(createTokenEntry(WatToken.V128_ANDNOT));
@@ -935,6 +940,7 @@ public class WatLexer extends LexerBase {
         entries.add(createTokenEntry(WatToken.V128_STORE64_LANE));
         entries.add(createTokenEntry(WatToken.V128_STORE8_LANE));
         entries.add(createTokenEntry(WatToken.V128_XOR));
+        entries.add(createTokenEntry(WatToken.WITH));
 
         return new StringMap<>(11, entries);
     }

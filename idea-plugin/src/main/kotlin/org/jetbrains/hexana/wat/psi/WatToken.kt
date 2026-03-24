@@ -53,6 +53,7 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val CALL = WatToken("call")
         @JvmField val CALL_INDIRECT = WatToken("call_indirect")
         @JvmField val CALL_REF = WatToken("call_ref")
+        @JvmField val CANON = WatToken("canon")
         @JvmField val CATCH = WatToken("catch")
         @JvmField val CATCH_ALL = WatToken("catch_all")
         @JvmField val CATCH_ALL_REF = WatToken("catch_all_ref")
@@ -490,8 +491,12 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val I8X16_SWIZZLE = WatToken("i8x16.swizzle")
         @JvmField val IF = WatToken("if")
         @JvmField val INSTANCE = WatToken("instance")
+        @JvmField val INSTANTIATE = WatToken("instantiate")
+        @JvmField val ALIAS = WatToken("alias")
+        @JvmField val WITH = WatToken("with")
         @JvmField val IMPORT = WatToken("import")
         @JvmField val ITEM = WatToken("item")
+        @JvmField val LIFT = WatToken("lift")
         @JvmField val LOCAL = WatToken("local")
         @JvmField val LOCAL_GET = WatToken("local.get")
         @JvmField val LOCAL_SET = WatToken("local.set")
@@ -559,6 +564,7 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val TRY_TABLE = WatToken("try_table")
         @JvmField val TYPE = WatToken("type")
         @JvmField val UNREACHABLE = WatToken("unreachable")
+        @JvmField val U32 = WatToken("u32")
         @JvmField val V128 = WatToken("v128")
         @JvmField val V128_AND = WatToken("v128.and")
         @JvmField val V128_ANDNOT = WatToken("v128.andnot")
@@ -595,11 +601,11 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
 
         @JvmField
         val KEYWORDS = arrayOf<WatToken>(
-            ALIGN, ANY, ARRAY, BLOCK, BR, BR_IF, BR_ON_CAST, BR_ON_CAST_FAIL, BR_ON_NULL, BR_ON_NULL,
-            BR_TABLE, CATCH, CATCH_ALL, CATCH_ALL_REF, CATCH_REF, CALL, CALL_INDIRECT, CALL_REF, CORE, COMPONENT,
-            DATA, ELEM, ELSE, END, EXN, EXPORT, EXTERN, FIELD, FUNC, GLOBAL, IF, IMPORT, ITEM, INSTANCE,
-            LOOP, MUT, MODULE, MEMORY, NOEXN, NOEXTERN, OFFSET, PARAM, REC, RESULT, RETURN,
-            RETURN_CALL, SELECT, START, STRUCT, SUB, TABLE, TAG, THEN, THROW, TRY_TABLE, TYPE
+            ALIGN, ANY, ALIAS, ARRAY, BLOCK, BR, BR_IF, BR_ON_CAST, BR_ON_CAST_FAIL, BR_ON_NULL, BR_ON_NULL,
+            BR_TABLE, CATCH, CATCH_ALL, CATCH_ALL_REF, CATCH_REF, CALL, CALL_INDIRECT, CALL_REF, CANON, CORE, COMPONENT,
+            DATA, ELEM, ELSE, END, EXN, EXPORT, EXTERN, FIELD, FUNC, GLOBAL, IF, IMPORT, ITEM, INSTANCE, INSTANTIATE,
+            LIFT, LOOP, MUT, MODULE, MEMORY, NOEXN, NOEXTERN, OFFSET, PARAM, REC, RESULT, RETURN,
+            RETURN_CALL, SELECT, START, STRUCT, SUB, TABLE, TAG, THEN, THROW, TRY_TABLE, TYPE, WITH
         )
 
         @JvmField
