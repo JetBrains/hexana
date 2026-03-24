@@ -11,6 +11,7 @@ import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
@@ -134,6 +135,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Functions") { WasmPanelFunctions(this, state) },
                 Panel("Custom") { WasmPanelCustom(this, state) },
                 Panel("Wat") { WasmPanelWat(this, state) },
+                *dwarfPanels(this, state).toTypedArray()
             ) else {
                 errorPanel(state)
             }
@@ -155,6 +157,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Imports") { WasmPanelImports(this, state) },
                 Panel("Functions") { WasmPanelFunctions(this, state) },
                 Panel("Custom") { WasmPanelCustom(this, state) },
+                *dwarfPanels(this, state).toTypedArray()
             ) else emptyArray()
         }
         is WasmComponentBinaryProvider -> {
