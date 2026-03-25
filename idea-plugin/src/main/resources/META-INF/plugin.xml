@@ -116,6 +116,7 @@
         <findUsagesHandlerFactory id="wit" implementation="org.jetbrains.hexana.wit.WitFindUsagesHandlerFactory"/>
         <indexedRootsProvider implementation="org.jetbrains.hexana.wit.WitBuiltInDefinitionsContributor"/>
         <codeInsight.lineMarkerProvider language="wit" implementationClass="org.jetbrains.hexana.wit.WitGoToRelatedSymbolsProvider"/>
+        <completion.contributor language="wit" implementationClass="org.jetbrains.hexana.wit.WitKeywordCompletionContributor" />
     </extensions>
 
     <actions>
