@@ -34,6 +34,7 @@ import com.intellij.openapi.editor.colors.EditorFontType
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.editor.ex.EditorEx
+import com.intellij.openapi.editor.impl.DocumentImpl
 import com.intellij.openapi.editor.impl.EditorComponentImpl
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.vfs.VfsUtil
@@ -341,16 +342,17 @@ internal class WasmViewModel(
                     }
                     conversionResult as HexanaService.WatConversionResult.Success
                 }.onSuccess { success ->
+                    val (fileText, lineOffsets) = handleOffsets(success.wat)
                     val conversionState = if (useMultifileEditor) {
-                        val fileset = createWatFileset(wasmFile, success.wat) { fileset ->
+                        val fileset = createWatFileset(wasmFile, fileText) { fileset ->
                             state.setConversionState(WatConversionState.ShowMultifileEditor(fileset))
                         }
                         WatConversionState.ShowMultifileEditor(fileset)
                     } else if (virtualFile.length() > HexanaService.WAT_EDITOR_MAX_FILE_SIZE) {
-                        WatConversionState.ShowLiteEditor(success.wat)
+                        WatConversionState.ShowLiteEditor(fileText)
                     } else {
                         val name = wasmFile.name.removeSuffix(".wasm") + ".wat"
-                        val file = LightWatFile(wasmFile, name, success.wat)
+                        val file = LightWatFile(wasmFile, name, fileText)
 
                         var notification: JComponent? = null
 
@@ -361,24 +363,7 @@ internal class WasmViewModel(
                             watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
 
                             if (HexanaSettings.getInstance().showOffsets == true) {
-                                val offsetPattern = Regex("""\(;@([0-9a-fA-F]+)\s*;\)""")
-                                val lineOffsets = mutableMapOf<Int, String>()
-                                val document = watTextEditor.editor.document
-                                for (line in 0 until document.lineCount) {
-                                    val lineStart = document.getLineStartOffset(line)
-                                    val lineEnd = document.getLineEndOffset(line)
-                                    val lineText = document.charsSequence.subSequence(lineStart, lineEnd)
-                                    val match = offsetPattern.find(lineText)
-                                    if (match != null) {
-                                        lineOffsets[line] = match.groupValues[1].uppercase()
-                                    }
-                                }
-
                                 if (lineOffsets.isNotEmpty()) {
-                                    // hack but..
-                                    writeAction {
-                                        document.setText(document.text.replace(offsetPattern, ""))
-                                    }
                                     val gutterProvider = object : TextAnnotationGutterProvider, EditorGutterAction {
                                         override fun getLineText(line: Int, editor: Editor?): String? =
                                             lineOffsets[line]?.let { "0x$it" }
@@ -441,6 +426,22 @@ internal class WasmViewModel(
                 }
             }
         }
+    }
+
+    private fun handleOffsets(wat: String): Pair<String, Map<Int, String>> {
+        val offsetPattern = Regex("""\(;@([0-9a-fA-F]+)\s*;\)""")
+        val lineOffsets = mutableMapOf<Int, String>()
+        val document = DocumentImpl(wat)
+        for (line in 0 until document.lineCount) {
+            val lineStart = document.getLineStartOffset(line)
+            val lineEnd = document.getLineEndOffset(line)
+            val lineText = document.charsSequence.subSequence(lineStart, lineEnd)
+            val match = offsetPattern.find(lineText)
+            if (match != null) {
+                lineOffsets[line] = match.groupValues[1].uppercase()
+            }
+        }
+        return Pair(wat.replace(offsetPattern, ""), lineOffsets)
     }
 }
 
