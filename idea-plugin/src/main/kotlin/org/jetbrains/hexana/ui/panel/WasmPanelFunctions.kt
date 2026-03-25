@@ -1,13 +1,16 @@
 package org.jetbrains.hexana.ui.panel
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.rememberTextMeasurer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
+import org.jetbrains.hexana.ui.components.measureWidthMonospace
 import org.jetbrains.hexana.wasm.sections.WasmF32Type
 import org.jetbrains.hexana.wasm.sections.WasmF64Type
 import org.jetbrains.hexana.wasm.sections.WasmI32Type
@@ -30,11 +33,14 @@ fun WasmPanelFunctions(wasmBinaryProvider: WasmBinaryProvider) {
 
     if (functions.isEmpty()) return
 
+    val textMeasurer = rememberTextMeasurer()
+
     val columns: List<TableColumn> = buildList {
         if (functionNamesMap != null) {
-            add(TableColumn("Name") { index ->
+            val nameColumnWidth = textMeasurer.measureWidthMonospace(universalNameMeasure)
+            add(TableColumn("Name", modifier = Modifier.width(nameColumnWidth)) { index ->
                 val nameResolved = functionNamesMap[index] ?: ""
-                TableCellValue(nameResolved)
+                TableCellValue(nameResolved, tooltip = nameResolved.takeIf { it.length > universalNameMeasure.length })
             })
         }
     }
@@ -42,7 +48,7 @@ fun WasmPanelFunctions(wasmBinaryProvider: WasmBinaryProvider) {
     Table(columns + listOf(
         TableColumn("Signature", modifier = Modifier.fillMaxWidth()) { index ->
             val signatureDescription = functions[index].getDescription(index, typeNames)
-            TableCellValue(signatureDescription)
+            TableCellValue(signatureDescription, tooltip = signatureDescription)
         },
     ), functions.size)
 }

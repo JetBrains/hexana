@@ -20,6 +20,7 @@ import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
 import org.jetbrains.hexana.ui.panel.scrollHexViewTo
+import org.jetbrains.hexana.ui.panel.universalQualifiedNameMeasure
 import org.jetbrains.hexana.wit.WitIndexId
 import org.jetbrains.hexana.wit.processIndexEntries
 import org.jetbrains.hexana.wit.psi.WitResolver
@@ -28,7 +29,7 @@ import org.jetbrains.hexana.wit.psi.WitResolver
 fun WasmComponentPanelExports( wasmBinaryProvider: WasmComponentBinaryProvider,
                                state: HexViewStateHolder) {
     val textMeasurer = rememberTextMeasurer()
-    val nameColumnWidth = textMeasurer.measureWidthMonospace("wasi:xxxxxxxx/environent:2.9.0")
+    val nameColumnWidth = textMeasurer.measureWidthMonospace(universalQualifiedNameMeasure)
 
     val exports = remember (wasmBinaryProvider) { wasmBinaryProvider.exports }
     Table(listOf(

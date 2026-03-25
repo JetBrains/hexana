@@ -47,11 +47,13 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.borderBottom
+import androidx.compose.ui.text.style.TextOverflow
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.Tooltip
 import kotlin.math.floor
 import kotlin.math.log10
 
-class TableCellValue<T>(val value: T, val representation: String = value.toString())
+class TableCellValue<T>(val value: T, val representation: String = value.toString(), val tooltip: String? = null)
 class TableColumn(
     val title: String,
     val modifier: Modifier = Modifier,
@@ -282,17 +284,32 @@ fun Table(
                     }
 
                     columns.forEachIndexed { index, column ->
-                        val text = data[index].representation
+                        val tableCellValue = data[index]
+                        val text = tableCellValue.representation
+                        val tooltip = tableCellValue.tooltip
+
                         ContextMenuArea(items = { onRowContextMenu(id) }) {
                             Box(modifier = Modifier.padding(horizontal = 4.dp).then(column.modifier)) {
-                                Text(
-                                    text,
-                                    style = TextStyle(
-                                        color = HexanaTheme.textColor,
-                                        fontFamily = FontFamily.Monospace
-                                    ),
-                                    lineHeight = TextUnit(1f, TextUnitType.Em)
-                                )
+                                val textComponent = @Composable {
+                                    Text(
+                                        text,
+                                        style = TextStyle(
+                                            color = HexanaTheme.textColor,
+                                            fontFamily = FontFamily.Monospace
+                                        ),
+                                        lineHeight = TextUnit(1f, TextUnitType.Em),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                if (tooltip != null) {
+                                    Tooltip(tooltip = { Text(tooltip) }) {
+                                        textComponent()
+                                    }
+                                } else {
+                                    textComponent()
+                                }
                             }
                         }
                     }

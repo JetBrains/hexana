@@ -14,6 +14,7 @@ import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
 import org.jetbrains.hexana.ui.panel.scrollHexViewTo
+import org.jetbrains.hexana.ui.panel.universalQualifiedNameMeasure
 
 @Composable
 internal fun WasmComponentPanelImports(
@@ -21,7 +22,7 @@ internal fun WasmComponentPanelImports(
     state: HexViewStateHolder) {
     val textMeasurer = rememberTextMeasurer()
 
-    val nameColumnWidth = textMeasurer.measureWidthMonospace("component:subtractor11111/environent@2.9.0")
+    val nameColumnWidth = textMeasurer.measureWidthMonospace(universalQualifiedNameMeasure)
 
     val imports = remember (wasmBinaryProvider) { wasmBinaryProvider.imports }
     Table(listOf(
