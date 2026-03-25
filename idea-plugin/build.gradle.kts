@@ -154,6 +154,8 @@ tasks {
         outputs.file(outputFile)
         environment("FUS_DESCRIPTION_REGISTRATION_ENABLED", "true")
         environment("FUS_COLLECTOR_FILENAME_ENABLED", "true")
+        // oldest version we can encounter
+        environment("IDEA_BUILD_NUMBER", "243")
         args(
             "buildEventsScheme",
             "--pluginId=org.jetbrains.hexana",
