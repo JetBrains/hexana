@@ -1,7 +1,7 @@
 package org.jetbrains.hexana.ui.panel
 
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -22,11 +22,11 @@ internal fun WasmPanelExports(wasmBinaryProvider: WasmBinaryProvider, state: Hex
 
     val textMeasurer = rememberTextMeasurer()
 
-    val minWidthKindColumnModifier = textMeasurer.measureWidthMonospace("function")
+    val kindColumnWidth = textMeasurer.measureWidthMonospace("function")
 
     Table(
         listOf(
-            TableColumn("Kind", modifier = Modifier.widthIn(min = minWidthKindColumnModifier)) { index ->
+            TableColumn("Kind", modifier = Modifier.width(kindColumnWidth)) { index ->
                 val export = exports[index]
                 val exportKind = when (export) {
                     is WasmFunctionExportRecordEntry -> "function"

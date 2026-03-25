@@ -2,7 +2,7 @@ package org.jetbrains.hexana.ui.panel.components
 
 import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -28,11 +28,11 @@ import org.jetbrains.hexana.wit.psi.WitResolver
 fun WasmComponentPanelExports( wasmBinaryProvider: WasmComponentBinaryProvider,
                                state: HexViewStateHolder) {
     val textMeasurer = rememberTextMeasurer()
-    val minNameColumnModifier = textMeasurer.measureWidthMonospace("wasi:xxxxxxxx/environent:2.9.0")
+    val nameColumnWidth = textMeasurer.measureWidthMonospace("wasi:xxxxxxxx/environent:2.9.0")
 
     val exports = remember (wasmBinaryProvider) { wasmBinaryProvider.exports }
     Table(listOf(
-        TableColumn("Name", modifier = Modifier.widthIn(min = minNameColumnModifier)) { index ->
+        TableColumn("Name", modifier = Modifier.width(nameColumnWidth)) { index ->
             val exportRecord = exports[index].exportName + (exports[index].version ?: "")
             TableCellValue(exportRecord)
         },
