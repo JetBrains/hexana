@@ -27,6 +27,7 @@ import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.writeAction
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ScrollType
+import com.intellij.openapi.editor.EditorGutterAction
 import com.intellij.openapi.editor.TextAnnotationGutterProvider
 import com.intellij.openapi.editor.colors.ColorKey
 import com.intellij.openapi.editor.colors.EditorFontType
@@ -378,7 +379,7 @@ internal class WasmViewModel(
                                     writeAction {
                                         document.setText(document.text.replace(offsetPattern, ""))
                                     }
-                                    val gutterProvider = object : TextAnnotationGutterProvider {
+                                    val gutterProvider = object : TextAnnotationGutterProvider, EditorGutterAction {
                                         override fun getLineText(line: Int, editor: Editor?): String? =
                                             lineOffsets[line]?.let { "0x$it" }
 
@@ -392,8 +393,20 @@ internal class WasmViewModel(
                                         override fun getBgColor(line: Int, editor: Editor?): AwtColor? = null
                                         override fun gutterClosed() {}
                                         override fun getPopupActions(line: Int, editor: Editor?): List<AnAction>? = null
+
+                                        override fun doAction(line: Int) {
+                                            lineOffsets[line]?.let { offsetStr ->
+                                                val offset = offsetStr.toLongOrNull(16) ?: return@let
+                                                state.setViewMode(HexViewMode.Hex)
+                                                state.scrollHexViewTo(offset)
+                                                state.setCursorPosition(offset, state.bytesPerRow.value)
+                                            }
+                                        }
+
+                                        override fun getCursor(line: Int): Cursor? =
+                                            if (lineOffsets.containsKey(line)) Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) else null
                                     }
-                                    watTextEditor.editor.gutter.registerTextAnnotation(gutterProvider)
+                                    watTextEditor.editor.gutter.registerTextAnnotation(gutterProvider, gutterProvider)
                                 }
                             }
 
