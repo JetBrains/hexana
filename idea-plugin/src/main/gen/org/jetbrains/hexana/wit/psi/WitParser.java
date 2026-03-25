@@ -72,13 +72,12 @@ public class WitParser implements PsiParser, LightPsiParser {
   // enum-case (',' enum-case)* ','?
   static boolean enum_cases(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "enum_cases")) return false;
-    if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
-    Marker m = enter_section_(b);
+    Marker m = enter_section_(b, l, _NONE_);
     r = enum_case(b, l + 1);
     r = r && enum_cases_1(b, l + 1);
     r = r && enum_cases_2(b, l + 1);
-    exit_section_(b, m, null, r);
+    exit_section_(b, l, m, r, false, WitParser::id_start_recovery);
     return r;
   }
 
@@ -112,17 +111,24 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // ENUM IDENTIFIER '{' enum-cases '}'
+  // ENUM IDENTIFIER '{' enum-cases? '}'
   public static boolean enum_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "enum_definition")) return false;
     if (!nextTokenIs(b, ENUM)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, ENUM, IDENTIFIER, OPEN_BRACE);
-    r = r && enum_cases(b, l + 1);
+    r = r && enum_definition_3(b, l + 1);
     r = r && consumeToken(b, CLOSE_BRACE);
     exit_section_(b, m, ENUM_DEFINITION, r);
     return r;
+  }
+
+  // enum-cases?
+  private static boolean enum_definition_3(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "enum_definition_3")) return false;
+    enum_cases(b, l + 1);
+    return true;
   }
 
   /* ********************************************************** */
@@ -224,30 +230,36 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // FLAGS IDENTIFIER '{' flags-fields '}'
+  // FLAGS IDENTIFIER '{' flags-fields? '}'
   public static boolean flags_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "flags_definition")) return false;
     if (!nextTokenIs(b, FLAGS)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, FLAGS, IDENTIFIER, OPEN_BRACE);
-    r = r && flags_fields(b, l + 1);
+    r = r && flags_definition_3(b, l + 1);
     r = r && consumeToken(b, CLOSE_BRACE);
     exit_section_(b, m, FLAGS_DEFINITION, r);
     return r;
+  }
+
+  // flags-fields?
+  private static boolean flags_definition_3(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "flags_definition_3")) return false;
+    flags_fields(b, l + 1);
+    return true;
   }
 
   /* ********************************************************** */
   // IDENTIFIER (',' IDENTIFIER)* ','?
   static boolean flags_fields(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "flags_fields")) return false;
-    if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
-    Marker m = enter_section_(b);
+    Marker m = enter_section_(b, l, _NONE_);
     r = consumeToken(b, IDENTIFIER);
     r = r && flags_fields_1(b, l + 1);
     r = r && flags_fields_2(b, l + 1);
-    exit_section_(b, m, null, r);
+    exit_section_(b, l, m, r, false, WitParser::id_start_recovery);
     return r;
   }
 
@@ -388,6 +400,29 @@ public class WitParser implements PsiParser, LightPsiParser {
     r = consumeToken(b, IDENTIFIER);
     if (!r) r = parseTokens(b, 0, BORROW, LESS_THAN, IDENTIFIER, GREATER_THAN);
     exit_section_(b, l, m, r, false, null);
+    return r;
+  }
+
+  /* ********************************************************** */
+  // !('}' | '@' | ';' | ',' | IDENTIFIER)
+  static boolean id_start_recovery(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "id_start_recovery")) return false;
+    boolean r;
+    Marker m = enter_section_(b, l, _NOT_);
+    r = !id_start_recovery_0(b, l + 1);
+    exit_section_(b, l, m, r, false, null);
+    return r;
+  }
+
+  // '}' | '@' | ';' | ',' | IDENTIFIER
+  private static boolean id_start_recovery_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "id_start_recovery_0")) return false;
+    boolean r;
+    r = consumeToken(b, CLOSE_BRACE);
+    if (!r) r = consumeToken(b, AT);
+    if (!r) r = consumeToken(b, SEMI);
+    if (!r) r = consumeToken(b, COMMA);
+    if (!r) r = consumeToken(b, IDENTIFIER);
     return r;
   }
 
@@ -970,17 +1005,24 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // RECORD IDENTIFIER '{' record-fields '}'
+  // RECORD IDENTIFIER '{' record-fields? '}'
   public static boolean record_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "record_definition")) return false;
     if (!nextTokenIs(b, RECORD)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, RECORD, IDENTIFIER, OPEN_BRACE);
-    r = r && record_fields(b, l + 1);
+    r = r && record_definition_3(b, l + 1);
     r = r && consumeToken(b, CLOSE_BRACE);
     exit_section_(b, m, RECORD_DEFINITION, r);
     return r;
+  }
+
+  // record-fields?
+  private static boolean record_definition_3(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "record_definition_3")) return false;
+    record_fields(b, l + 1);
+    return true;
   }
 
   /* ********************************************************** */
@@ -1000,13 +1042,12 @@ public class WitParser implements PsiParser, LightPsiParser {
   // record-field (',' record-field)* ','?
   static boolean record_fields(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "record_fields")) return false;
-    if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
-    Marker m = enter_section_(b);
+    Marker m = enter_section_(b, l, _NONE_);
     r = record_field(b, l + 1);
     r = r && record_fields_1(b, l + 1);
     r = r && record_fields_2(b, l + 1);
-    exit_section_(b, m, null, r);
+    exit_section_(b, l, m, r, false, WitParser::id_start_recovery);
     return r;
   }
 
@@ -1041,7 +1082,7 @@ public class WitParser implements PsiParser, LightPsiParser {
 
   /* ********************************************************** */
   // RESOURCE IDENTIFIER ';'
-  //                 | RESOURCE IDENTIFIER '{' resource-method* '}'
+  //                 | RESOURCE IDENTIFIER '{' resource-items? '}'
   public static boolean resource_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "resource_definition")) return false;
     if (!nextTokenIs(b, RESOURCE)) return false;
@@ -1053,7 +1094,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // RESOURCE IDENTIFIER '{' resource-method* '}'
+  // RESOURCE IDENTIFIER '{' resource-items? '}'
   private static boolean resource_definition_1(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "resource_definition_1")) return false;
     boolean r;
@@ -1065,14 +1106,24 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // resource-method*
+  // resource-items?
   private static boolean resource_definition_1_3(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "resource_definition_1_3")) return false;
+    resource_items(b, l + 1);
+    return true;
+  }
+
+  /* ********************************************************** */
+  // resource-method*
+  static boolean resource_items(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "resource_items")) return false;
+    Marker m = enter_section_(b, l, _NONE_);
     while (true) {
       int c = current_position_(b);
       if (!resource_method(b, l + 1)) break;
-      if (!empty_element_parsed_guard_(b, "resource_definition_1_3", c)) break;
+      if (!empty_element_parsed_guard_(b, "resource_items", c)) break;
     }
+    exit_section_(b, l, m, true, false, WitParser::resource_recovery);
     return true;
   }
 
@@ -1119,6 +1170,41 @@ public class WitParser implements PsiParser, LightPsiParser {
     r = consumeToken(b, CONSTRUCTOR);
     r = r && param_list(b, l + 1);
     r = r && consumeToken(b, SEMI);
+    exit_section_(b, m, null, r);
+    return r;
+  }
+
+  /* ********************************************************** */
+  // !('}' | '@' | ';' | (IDENTIFIER ':') | CONSTRUCTOR)
+  static boolean resource_recovery(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "resource_recovery")) return false;
+    boolean r;
+    Marker m = enter_section_(b, l, _NOT_);
+    r = !resource_recovery_0(b, l + 1);
+    exit_section_(b, l, m, r, false, null);
+    return r;
+  }
+
+  // '}' | '@' | ';' | (IDENTIFIER ':') | CONSTRUCTOR
+  private static boolean resource_recovery_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "resource_recovery_0")) return false;
+    boolean r;
+    Marker m = enter_section_(b);
+    r = consumeToken(b, CLOSE_BRACE);
+    if (!r) r = consumeToken(b, AT);
+    if (!r) r = consumeToken(b, SEMI);
+    if (!r) r = resource_recovery_0_3(b, l + 1);
+    if (!r) r = consumeToken(b, CONSTRUCTOR);
+    exit_section_(b, m, null, r);
+    return r;
+  }
+
+  // IDENTIFIER ':'
+  private static boolean resource_recovery_0_3(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "resource_recovery_0_3")) return false;
+    boolean r;
+    Marker m = enter_section_(b);
+    r = consumeTokens(b, 0, IDENTIFIER, COLON);
     exit_section_(b, m, null, r);
     return r;
   }
@@ -1946,13 +2032,12 @@ public class WitParser implements PsiParser, LightPsiParser {
   // variant-case (',' variant-case)* ','?
   static boolean variant_cases(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "variant_cases")) return false;
-    if (!nextTokenIs(b, IDENTIFIER)) return false;
     boolean r;
-    Marker m = enter_section_(b);
+    Marker m = enter_section_(b, l, _NONE_);
     r = variant_case(b, l + 1);
     r = r && variant_cases_1(b, l + 1);
     r = r && variant_cases_2(b, l + 1);
-    exit_section_(b, m, null, r);
+    exit_section_(b, l, m, r, false, WitParser::id_start_recovery);
     return r;
   }
 
@@ -1986,17 +2071,24 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // VARIANT IDENTIFIER '{' variant-cases '}'
+  // VARIANT IDENTIFIER '{' variant-cases? '}'
   public static boolean variant_definition(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "variant_definition")) return false;
     if (!nextTokenIs(b, VARIANT)) return false;
     boolean r;
     Marker m = enter_section_(b);
     r = consumeTokens(b, 0, VARIANT, IDENTIFIER, OPEN_BRACE);
-    r = r && variant_cases(b, l + 1);
+    r = r && variant_definition_3(b, l + 1);
     r = r && consumeToken(b, CLOSE_BRACE);
     exit_section_(b, m, VARIANT_DEFINITION, r);
     return r;
+  }
+
+  // variant-cases?
+  private static boolean variant_definition_3(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "variant_definition_3")) return false;
+    variant_cases(b, l + 1);
+    return true;
   }
 
   /* ********************************************************** */

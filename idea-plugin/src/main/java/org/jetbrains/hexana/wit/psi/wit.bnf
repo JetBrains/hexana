@@ -228,29 +228,41 @@ use-names-item ::= IDENTIFIER 'as' IDENTIFIER | IDENTIFIER {
 
 type-definition ::= TYPE IDENTIFIER '=' type-usage ';'
 
-record-definition ::= RECORD IDENTIFIER '{' record-fields '}'
+record-definition ::= RECORD IDENTIFIER '{' record-fields? '}'
 
-private record-fields ::= record-field (',' record-field)* ','?
+private record-fields ::= record-field (',' record-field)* ','? {
+   recoverWhile = id_start_recovery
+}
 
 record-field ::= IDENTIFIER ':' type-usage
 
-flags-definition ::= FLAGS IDENTIFIER '{' flags-fields '}'
+flags-definition ::= FLAGS IDENTIFIER '{' flags-fields? '}'
 
-private flags-fields ::= IDENTIFIER (',' IDENTIFIER)* ','?
+private flags-fields ::= IDENTIFIER (',' IDENTIFIER)* ','? {
+   recoverWhile = id_start_recovery
+}
 
-variant-definition ::= VARIANT IDENTIFIER '{' variant-cases '}'
+variant-definition ::= VARIANT IDENTIFIER '{' variant-cases? '}'
 
-private variant-cases ::= variant-case (',' variant-case)* ','?
+private variant-cases ::= variant-case (',' variant-case)* ','? {
+   recoverWhile = id_start_recovery
+}
 
 variant-case ::= IDENTIFIER '(' type-usage ')' | IDENTIFIER
 
-enum-definition ::= ENUM IDENTIFIER '{' enum-cases '}'
+enum-definition ::= ENUM IDENTIFIER '{' enum-cases? '}'
 
 enum-case ::= IDENTIFIER
-private enum-cases ::= enum-case (',' enum-case)* ','?
+private enum-cases ::= enum-case (',' enum-case)* ','? {
+    recoverWhile = id_start_recovery
+}
 
 resource-definition ::= RESOURCE IDENTIFIER ';'
-                | RESOURCE IDENTIFIER '{' resource-method* '}'
+                | RESOURCE IDENTIFIER '{' resource-items? '}'
+
+private resource-items ::= resource-method* {
+   recoverWhile = resource_recovery
+}
 
 static-func-item ::= IDENTIFIER ':' STATIC func-type ';'  {
    methods=[
@@ -308,3 +320,5 @@ handle ::= IDENTIFIER | BORROW '<' IDENTIFIER '>' {
 
 private world_recovery ::= !( '}' | '@' | ';' | EXPORT | IMPORT | USE | TYPE | INCLUDE )
 private interface_recovery ::= !( '}' | '@' | ';' | ENUM | FLAGS | RECORD | RESOURCE | TYPE | VARIANT | USE | (IDENTIFIER ':') )
+private resource_recovery ::= !('}' | '@' | ';' | (IDENTIFIER ':') | CONSTRUCTOR)
+private id_start_recovery ::= !('}' | '@' | ';' | ',' | IDENTIFIER)
