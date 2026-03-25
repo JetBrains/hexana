@@ -72,6 +72,7 @@ public interface WitElementTypes {
   IElementType COLON = new WitToken(":");
   IElementType COMMA = new WitToken(",");
   IElementType CONSTRUCTOR = new WitToken("constructor");
+  IElementType DASH = new WitToken("-");
   IElementType DOT = new WitToken(".");
   IElementType ENUM = new WitToken("enum");
   IElementType EQUALS = new WitToken("=");

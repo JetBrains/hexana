@@ -62,7 +62,7 @@ public class WitLexer extends LexerBase {
             case '_' -> readToken1(WitElementTypes.UNDERSCORE);
             case '-' -> {
                 if (!readArrow()) {
-                    readToken1(TokenType.BAD_CHARACTER);
+                    readToken1(WitElementTypes.DASH);
                 }
             }
             default -> {

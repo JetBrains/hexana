@@ -12,6 +12,7 @@ import org.jetbrains.hexana.wit.psi.WitElementTypes.BLOCK_COMMENT
 import org.jetbrains.hexana.wit.psi.WitElementTypes.CLOSE_BRACE
 import org.jetbrains.hexana.wit.psi.WitElementTypes.CLOSE_PAREN
 import org.jetbrains.hexana.wit.psi.WitElementTypes.COMMA
+import org.jetbrains.hexana.wit.psi.WitElementTypes.DASH
 import org.jetbrains.hexana.wit.psi.WitElementTypes.DOT
 import org.jetbrains.hexana.wit.psi.WitElementTypes.EQUALS
 import org.jetbrains.hexana.wit.psi.WitElementTypes.GREATER_THAN
@@ -48,6 +49,7 @@ class WitSyntaxAttributes {
             put(GREATER_THAN, arrayOf(DefaultLanguageHighlighterColors.OPERATION_SIGN))
             put(EQUALS, arrayOf(DefaultLanguageHighlighterColors.OPERATION_SIGN))
             put(AT, arrayOf(DefaultLanguageHighlighterColors.OPERATION_SIGN))
+            put(DASH, arrayOf(DefaultLanguageHighlighterColors.OPERATION_SIGN))
             put(UNDERSCORE, arrayOf(DefaultLanguageHighlighterColors.OPERATION_SIGN))
             put(SLASH, arrayOf(DefaultLanguageHighlighterColors.OPERATION_SIGN))
             put(OPEN_BRACE, arrayOf(DefaultLanguageHighlighterColors.BRACES))
