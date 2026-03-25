@@ -117,6 +117,12 @@
         <indexedRootsProvider implementation="org.jetbrains.hexana.wit.WitBuiltInDefinitionsContributor"/>
         <codeInsight.lineMarkerProvider language="wit" implementationClass="org.jetbrains.hexana.wit.WitGoToRelatedSymbolsProvider"/>
         <completion.contributor language="wit" implementationClass="org.jetbrains.hexana.wit.WitKeywordCompletionContributor" />
+
+        <langCodeStyleSettingsProvider implementation="org.jetbrains.hexana.wit.formatter.WitLanguageCodeStyleSettingsProvider"/>
+        <codeStyleSettingsProvider implementation="org.jetbrains.hexana.wit.formatter.WitCodeStyleSettingsProvider"/>
+        <lang.formatter language="wit" implementationClass="org.jetbrains.hexana.wit.formatter.WitFormattingBuilderModel"/>
+        <lang.lineWrapStrategy language="wit" implementationClass="org.jetbrains.hexana.wit.formatter.WitLineWrapPositionStrategy"/>
+
     </extensions>
 
     <actions>
