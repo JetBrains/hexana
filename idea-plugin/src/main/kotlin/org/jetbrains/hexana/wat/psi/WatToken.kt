@@ -68,6 +68,7 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val ELEM_DROP = WatToken("elem.drop")
         @JvmField val ELSE = WatToken("else")
         @JvmField val END = WatToken("end")
+        @JvmField val ENUM = WatToken("enum")
         @JvmField val EQ = WatToken("eq")
         @JvmField val EQREF = WatToken("eqref")
         @JvmField val EXN = WatToken("exn")
@@ -497,6 +498,7 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val IMPORT = WatToken("import")
         @JvmField val ITEM = WatToken("item")
         @JvmField val LIFT = WatToken("lift")
+        @JvmField val LOWER = WatToken("lower")
         @JvmField val LOCAL = WatToken("local")
         @JvmField val LOCAL_GET = WatToken("local.get")
         @JvmField val LOCAL_SET = WatToken("local.set")
@@ -603,8 +605,8 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         val KEYWORDS = arrayOf<WatToken>(
             ALIGN, ANY, ALIAS, ARRAY, BLOCK, BR, BR_IF, BR_ON_CAST, BR_ON_CAST_FAIL, BR_ON_NULL, BR_ON_NULL,
             BR_TABLE, CATCH, CATCH_ALL, CATCH_ALL_REF, CATCH_REF, CALL, CALL_INDIRECT, CALL_REF, CANON, CORE, COMPONENT,
-            DATA, ELEM, ELSE, END, EXN, EXPORT, EXTERN, FIELD, FUNC, GLOBAL, IF, IMPORT, ITEM, INSTANCE, INSTANTIATE,
-            LIFT, LOOP, MUT, MODULE, MEMORY, NOEXN, NOEXTERN, OFFSET, PARAM, REC, RESULT, RETURN,
+            DATA, ELEM, ELSE, END, ENUM, EXN, EXPORT, EXTERN, FIELD, FUNC, GLOBAL, IF, IMPORT, ITEM, INSTANCE, INSTANTIATE,
+            LIFT, LOOP, LOWER, MUT, MODULE, MEMORY, NOEXN, NOEXTERN, OFFSET, PARAM, REC, RESULT, RETURN,
             RETURN_CALL, SELECT, START, STRUCT, SUB, TABLE, TAG, THEN, THROW, TRY_TABLE, TYPE, WITH
         )
 

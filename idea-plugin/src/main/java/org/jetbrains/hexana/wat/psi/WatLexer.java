@@ -416,6 +416,7 @@ public class WatLexer extends LexerBase {
         entries.add(createTokenEntry(WatToken.ELEM_DROP));
         entries.add(createTokenEntry(WatToken.ELSE));
         entries.add(createTokenEntry(WatToken.END));
+        entries.add(createTokenEntry(WatToken.ENUM));
         entries.add(createTokenEntry(WatToken.EQ));
         entries.add(createTokenEntry(WatToken.EQREF));
         entries.add(createTokenEntry(WatToken.EXN));
@@ -841,6 +842,7 @@ public class WatLexer extends LexerBase {
         entries.add(createTokenEntry(WatToken.IMPORT));
         entries.add(createTokenEntry(WatToken.ITEM));
         entries.add(createTokenEntry(WatToken.LIFT));
+        entries.add(createTokenEntry(WatToken.LOWER));
         entries.add(createTokenEntry(WatToken.LOCAL));
         entries.add(createTokenEntry(WatToken.LOCAL_GET));
         entries.add(createTokenEntry(WatToken.LOCAL_SET));
