@@ -18,11 +18,12 @@ pub extern "C" fn alloc_input(len: usize) -> *mut u8 {
     ptr
 }
 
-pub fn print_bytes_internal(wasm: impl AsRef<[u8]>, fold_instructions: bool, name_unnamed: bool) -> Result<String, (String, String)> {
+pub fn print_bytes_internal(wasm: impl AsRef<[u8]>, fold_instructions: bool, name_unnamed: bool, print_offsets: bool) -> Result<String, (String, String)> {
     let mut dst = String::new();
     let mut cfg = wasmprinter::Config::new();
     cfg.fold_instructions(fold_instructions)
-        .name_unnamed(name_unnamed);
+        .name_unnamed(name_unnamed)
+        .print_offsets(print_offsets);
     match cfg.print(wasm.as_ref(), &mut PrintFmtWrite(&mut dst)) {
         Ok(_) => Ok(dst),
         Err(e) => Err((dst, format!("{e}"))),
@@ -30,10 +31,10 @@ pub fn print_bytes_internal(wasm: impl AsRef<[u8]>, fold_instructions: bool, nam
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn print_wat(ptr: *const u8, len: usize, flag_fold_instructions: u32,  flag_name_unnamed: u32) {
+pub extern "C" fn print_wat(ptr: *const u8, len: usize, flag_fold_instructions: u32,  flag_name_unnamed: u32, flag_print_offsets: u32) {
     let bytes = unsafe { slice::from_raw_parts(ptr, len) };
 
-    match print_bytes_internal(bytes, flag_fold_instructions != 0, flag_name_unnamed != 0) {
+    match print_bytes_internal(bytes, flag_fold_instructions != 0, flag_name_unnamed != 0, flag_print_offsets != 0) {
         Ok(wat) => {
             let wat_bytes = wat.as_bytes();
             unsafe {

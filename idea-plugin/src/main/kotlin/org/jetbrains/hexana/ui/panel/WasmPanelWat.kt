@@ -20,10 +20,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.intellij.codeInsight.hint.HintUtil
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
+import com.intellij.openapi.application.writeAction
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ScrollType
+import com.intellij.openapi.editor.TextAnnotationGutterProvider
+import com.intellij.openapi.editor.colors.ColorKey
+import com.intellij.openapi.editor.colors.EditorFontType
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.editor.ex.EditorEx
@@ -42,6 +48,7 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaService
+import org.jetbrains.hexana.HexanaSettings
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.wat.LightWatFile
 import org.jetbrains.hexana.wat.WatFileset
@@ -53,6 +60,8 @@ import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import java.awt.BorderLayout
+import java.awt.Color as AwtColor
+import java.awt.Cursor
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -148,28 +157,44 @@ internal fun WatLiteEditor(watContent: String) {
 
     val highlighter = WatSyntaxHighlighter()
 
+    val offsetPattern = remember { Regex("""\(;@([0-9a-fA-F]+)\s*;\)""") }
+    val showOffsets = remember { HexanaSettings.getInstance().showOffsets == true }
+
     LazyColumn {
         items(tokens.size) { lineIndex ->
             val tokensInLine = tokens[lineIndex]
-            Text(
-                text = buildAnnotatedString {
-                    tokensInLine.forEach { tokenData ->
-                        val colors = highlighter.getTokenHighlights(tokenData.tokenType)
+            val lineText = tokensInLine.joinToString("") { it.text }
+            val offsetMatch = if (showOffsets) offsetPattern.find(lineText) else null
 
-                        val colorResolved = colors.getOrNull(0)
-                        if (colorResolved != null) {
-                            withStyle(style = SpanStyle(color = colorResolved.toComposeColor())) {
+            Row(verticalAlignment = Alignment.Top) {
+                if (showOffsets) {
+                    val offsetText = offsetMatch?.groupValues?.get(1)?.uppercase() ?: ""
+                    Text(
+                        text = offsetText,
+                        modifier = Modifier.width(60.dp).padding(end = 8.dp),
+                        style = TextStyle(color = Color.Gray, fontFamily = FontFamily.Monospace)
+                    )
+                }
+                Text(
+                    text = buildAnnotatedString {
+                        tokensInLine.forEach { tokenData ->
+                            if (offsetPattern.matches(tokenData.text)) return@forEach
+                            val colors = highlighter.getTokenHighlights(tokenData.tokenType)
+                            val colorResolved = colors.getOrNull(0)
+                            if (colorResolved != null) {
+                                withStyle(style = SpanStyle(color = colorResolved.toComposeColor())) {
+                                    append(tokenData.text)
+                                }
+                            } else {
                                 append(tokenData.text)
                             }
-                        } else {
-                            append(tokenData.text)
+
                         }
 
+                        append(" ")
                     }
-
-                    append(" ")
-                }
-            )
+                )
+            }
         }
     }
 }
@@ -333,6 +358,44 @@ internal class WasmViewModel(
                             watTextEditor.editor.settings.isUseSoftWraps = false
                             watTextEditor.editor.settings.isLineNumbersShown = false
                             watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
+
+                            if (HexanaSettings.getInstance().showOffsets == true) {
+                                val offsetPattern = Regex("""\(;@([0-9a-fA-F]+)\s*;\)""")
+                                val lineOffsets = mutableMapOf<Int, String>()
+                                val document = watTextEditor.editor.document
+                                for (line in 0 until document.lineCount) {
+                                    val lineStart = document.getLineStartOffset(line)
+                                    val lineEnd = document.getLineEndOffset(line)
+                                    val lineText = document.charsSequence.subSequence(lineStart, lineEnd)
+                                    val match = offsetPattern.find(lineText)
+                                    if (match != null) {
+                                        lineOffsets[line] = match.groupValues[1].uppercase()
+                                    }
+                                }
+
+                                if (lineOffsets.isNotEmpty()) {
+                                    // hack but..
+                                    writeAction {
+                                        document.setText(document.text.replace(offsetPattern, ""))
+                                    }
+                                    val gutterProvider = object : TextAnnotationGutterProvider {
+                                        override fun getLineText(line: Int, editor: Editor?): String? =
+                                            lineOffsets[line]?.let { "0x$it" }
+
+                                        override fun getToolTip(line: Int, editor: Editor?): String? =
+                                            lineOffsets[line]?.let { "Offset: 0x$it" }
+
+                                        override fun getStyle(line: Int, editor: Editor?): EditorFontType =
+                                            EditorFontType.PLAIN
+
+                                        override fun getColor(line: Int, editor: Editor?): ColorKey? = null
+                                        override fun getBgColor(line: Int, editor: Editor?): AwtColor? = null
+                                        override fun gutterClosed() {}
+                                        override fun getPopupActions(line: Int, editor: Editor?): List<AnAction>? = null
+                                    }
+                                    watTextEditor.editor.gutter.registerTextAnnotation(gutterProvider)
+                                }
+                            }
 
                             if (success.warning != null) {
                                 notification = EditorNotificationPanel(

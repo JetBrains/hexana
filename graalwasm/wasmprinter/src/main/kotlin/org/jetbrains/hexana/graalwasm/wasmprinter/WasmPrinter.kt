@@ -61,14 +61,15 @@ internal class WasmPrinter(val foldInstructions: Boolean = true, val nameUnnamed
         }
     }
 
-    fun print(bytes: ByteArray): WatWithWarnings {
+    fun print(bytes: ByteArray, printOffsets: Boolean = false): WatWithWarnings {
         val ptr = allocInput.execute(bytes.size).asInt()
         memory.write(ptr, bytes)
 
         val flagFoldInstructions = foldInstructions.let { if (it) 1 else 0 }
         val flagNameUnnamed = nameUnnamed.let { if (it) 1 else 0 }
+        val flagPrintOffsets = printOffsets.let { if (it) 1 else 0 }
 
-        printWat.execute(ptr, bytes.size, flagFoldInstructions, flagNameUnnamed)
+        printWat.execute(ptr, bytes.size, flagFoldInstructions, flagNameUnnamed, flagPrintOffsets)
 
         return WatWithWarnings(out.toByteArray().decodeToString(),
             warning.toByteArray().decodeToString().takeIf { it.isNotEmpty() })

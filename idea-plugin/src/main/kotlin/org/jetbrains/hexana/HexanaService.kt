@@ -30,28 +30,33 @@ class HexanaService(
     }
 
     @RequiresBackgroundThread
-    fun convertWasmToWat(file: File): WatConversionResult {
+    fun convertWasmToWat(file: File, showOffsets: Boolean = HexanaSettings.getInstance().showOffsets == true): WatConversionResult {
         return try {
-            return convertToWasm(file)
+            return convertToWasm(file, showOffsets)
         }
         catch (e: Exception) {
             WatConversionResult.Error(e.message ?: "Failed to convert WASM to WAT")
         }
     }
 
-    private fun convertToWasm(file: File): WatConversionResult {
+    private fun convertToWasm(file: File, showOffsets: Boolean): WatConversionResult {
         val settings = HexanaSettings.getInstance()
         return if (settings.useBuiltInWasmTools == true) {
-            convertToWasmWithBuiltInTools(file)
+            convertToWasmWithBuiltInTools(file, showOffsets)
         } else {
-            convertToWasmWithExternalTools(file)
+            convertToWasmWithExternalTools(file, showOffsets)
         }
 
     }
 
-    private fun convertToWasmWithExternalTools(file: File): WatConversionResult {
+    private fun convertToWasmWithExternalTools(file: File, showOffsets: Boolean): WatConversionResult {
         val wasmTools = HexanaSettings.getInstance().wasmToolsPath
-        val cmd = GeneralCommandLine(wasmTools, "print", "--fold-instructions", "--name-unnamed", file.absolutePath)
+        val args = mutableListOf("print", "--fold-instructions", "--name-unnamed")
+        if (showOffsets) {
+            args.add("--print-offsets")
+        }
+        args.add(file.absolutePath)
+        val cmd = GeneralCommandLine(wasmTools, *args.toTypedArray())
         val processOutput = ExecUtil.execAndGetOutput(cmd)
         return when (processOutput.exitCode) {
             0 -> {
@@ -68,9 +73,9 @@ class HexanaService(
         }
     }
 
-    private fun convertToWasmWithBuiltInTools(file: File): WatConversionResult = FileInputStream(file).use { wasmInputStream ->
+    private fun convertToWasmWithBuiltInTools(file: File, showOffsets: Boolean): WatConversionResult = FileInputStream(file).use { wasmInputStream ->
         val wasmBytes = wasmInputStream.readAllBytes()
-        val textWithStatus = printWat(wasmBytes, foldInstructions = false)
+        val textWithStatus = printWat(wasmBytes, foldInstructions = false, printOffsets = showOffsets)
         WatConversionResult.Success(textWithStatus.wat, textWithStatus.warnings)
     }
 }
