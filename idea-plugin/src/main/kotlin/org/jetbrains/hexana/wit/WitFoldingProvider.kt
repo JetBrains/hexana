@@ -61,7 +61,9 @@ class WitFoldingBuilder : FoldingBuilder, DumbAware {
                 val rb = node.findChildByType(TokenSet.create(WitElementTypes.CLOSE_BRACE))
                 val range = TextRange( lb?.textRange?.endOffset ?: node.textRange.startOffset,
                     rb?.textRange?.startOffset ?: node.textRange.endOffset)
-                descriptors.add(FoldingDescriptor(node, range))
+                if (!range.isEmpty) {
+                    descriptors.add(FoldingDescriptor(node, range))
+                }
             } else if (type === WitElementTypes.BLOCK_COMMENT) {
                 descriptors.add(FoldingDescriptor(node, node.textRange))
             } else if (type === WitElementTypes.LINE_COMMENT) {
