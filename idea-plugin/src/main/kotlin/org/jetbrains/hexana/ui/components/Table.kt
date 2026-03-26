@@ -29,11 +29,13 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.ide.CopyPasteManager
 import kotlinx.coroutines.launch
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.borderBottom
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
+import java.awt.datatransfer.StringSelection
 import kotlin.math.floor
 import kotlin.math.log10
 
@@ -52,6 +54,11 @@ fun Table(
     onRowContextMenu: (id: Int) -> List<ContextMenuItem> = { emptyList() },
     onRow: (id: Int) -> Unit = {},
 ) {
+    val tableData = remember(columns, dataCount) {
+        (0 until dataCount).map { index ->
+            index to columns.map { column -> column.dataProvider(index) }
+        }
+    }
 
     var sortAsc: Boolean by remember { mutableStateOf(true) }
     var sortIndex: Int by remember { mutableStateOf(-1) }
@@ -82,15 +89,11 @@ fun Table(
     }
     val scope = rememberCoroutineScope()
 
-    val viewData = remember(columns, dataCount, sortIndex, sortAsc, searchQuery) {
-        val base = (0 until dataCount).map { index ->
-            index to columns.map { column -> column.dataProvider(index) }
-        }
-
+    val viewData = remember(tableData, sortIndex, sortAsc, searchQuery) {
         val filtered = if (searchQuery.text.isEmpty()) {
-            base
+            tableData
         } else {
-            base.filter { (_, values) ->
+            tableData.filter { (_, values) ->
                 values.any { it.representation.contains(searchQuery.text, ignoreCase = true) }
             }
         }
@@ -135,6 +138,23 @@ fun Table(
         .padding(top = 8.dp)
         .onPreviewKeyEvent { event ->
             if (event.type == KeyEventType.KeyDown) {
+                if (event.key == Key.C && (event.isCtrlPressed || event.isMetaPressed)) {
+                    selectedOriginalIndex?.let { id ->
+                        val rowData = tableData.find { it.first == id }
+                        if (rowData != null) {
+                            val rowContent = buildString {
+                                append(id)
+                                rowData.second.forEach {
+                                    append("\t")
+                                    append(it.representation)
+                                }
+                            }
+                            CopyPasteManager.getInstance().setContents(StringSelection(rowContent))
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
                 if (event.key == Key.F && (event.isCtrlPressed || event.isMetaPressed)) {
                     isSearchVisible = true
                     return@onPreviewKeyEvent true
@@ -156,18 +176,11 @@ fun Table(
                     }
                 }
 
-                if (!isSearchVisible && event.utf16CodePoint != 0 && !event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed) {
-                    val char = event.utf16CodePoint.toChar()
-                    if (!char.isISOControl()) {
-                        isSearchVisible = true
-                        searchQuery = TextFieldValue(char.toString(), selection = TextRange(1))
-                        return@onPreviewKeyEvent true
-                    }
-                }
-
                 val currentIndex = viewData.indexOfFirst { it.first == selectedOriginalIndex }
                 val newIndex = when (event.key) {
-                    Key.DirectionUp -> (currentIndex - 1).coerceAtLeast(0)
+                    Key.DirectionUp -> {
+                        (currentIndex - 1).coerceAtLeast(0)
+                    }
                     Key.DirectionDown -> {
                         if (currentIndex == -1) 0
                         else (currentIndex + 1).coerceAtMost(viewData.size - 1)
@@ -182,7 +195,20 @@ fun Table(
                     scope.launch {
                         lazyListState.animateScrollToItem(newIndex)
                     }
+                }
+
+                if (event.key == Key.DirectionUp || event.key == Key.DirectionDown
+                    || event.key == Key.DirectionLeft || event.key == Key.DirectionRight) {
                     return@onPreviewKeyEvent true
+                }
+
+                if (!isSearchVisible && event.utf16CodePoint != 0 && !event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed) {
+                    val char = event.utf16CodePoint.toChar()
+                    if (!char.isISOControl()) {
+                        isSearchVisible = true
+                        searchQuery = TextFieldValue(char.toString(), selection = TextRange(1))
+                        return@onPreviewKeyEvent true
+                    }
                 }
             }
             false
