@@ -18,6 +18,7 @@ import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
@@ -59,7 +60,14 @@ fun Table(
     var hoveredOriginalIndex: Int? by remember { mutableStateOf(null) }
 
     var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
+    var isSearchVisible by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isSearchVisible) {
+        if (isSearchVisible) {
+            searchFocusRequester.requestFocus()
+        }
+    }
 
     val lazyListState = rememberLazyListState()
 
@@ -69,6 +77,9 @@ fun Table(
     }
 
     val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
     val scope = rememberCoroutineScope()
 
     val viewData = remember(columns, dataCount, sortIndex, sortAsc, searchQuery) {
@@ -125,8 +136,33 @@ fun Table(
         .onPreviewKeyEvent { event ->
             if (event.type == KeyEventType.KeyDown) {
                 if (event.key == Key.F && (event.isCtrlPressed || event.isMetaPressed)) {
-                    searchFocusRequester.requestFocus()
+                    isSearchVisible = true
                     return@onPreviewKeyEvent true
+                }
+
+                if (event.key == Key.Escape) {
+                    if (isSearchVisible) {
+                        isSearchVisible = false
+                        searchQuery = TextFieldValue("")
+                        focusRequester.requestFocus()
+                        return@onPreviewKeyEvent true
+                    }
+                }
+
+                if (event.key == Key.Enter) {
+                    if (isSearchVisible) {
+                        focusRequester.requestFocus()
+                        return@onPreviewKeyEvent true
+                    }
+                }
+
+                if (!isSearchVisible && event.utf16CodePoint != 0 && !event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed) {
+                    val char = event.utf16CodePoint.toChar()
+                    if (!char.isISOControl()) {
+                        isSearchVisible = true
+                        searchQuery = TextFieldValue(char.toString(), selection = TextRange(1))
+                        return@onPreviewKeyEvent true
+                    }
                 }
 
                 val currentIndex = viewData.indexOfFirst { it.first == selectedOriginalIndex }
@@ -157,40 +193,52 @@ fun Table(
             focusRequester.requestFocus()
         }
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
+        if (isSearchVisible) {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(searchFocusRequester),
-                placeholder = { Text("Search...") },
-                leadingIcon = {
-                    Icon(
-                        AllIconsKeys.Actions.Search,
-                        contentDescription = null,
-                        iconClass = AllIcons::class.java,
-                        modifier = Modifier.size(16.dp)
-                    )
-                },
-                trailingIcon = if (searchQuery.text.isNotEmpty()) {
-                    {
-                        IconButton(onClick = { searchQuery = TextFieldValue("") }) {
-                            Icon(
-                                AllIconsKeys.Actions.Close,
-                                contentDescription = "Clear search",
-                                iconClass = AllIcons::class.java,
-                                modifier = Modifier.size(14.dp)
-                            )
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextField(
+                    value = searchQuery,
+                    onValueChange = {
+                        searchQuery = it
+                        if (it.text.isEmpty()) {
+                            isSearchVisible = false
+                            focusRequester.requestFocus()
                         }
-                    }
-                } else null
-            )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(searchFocusRequester),
+                    placeholder = { Text("Search...") },
+                    leadingIcon = {
+                        Icon(
+                            AllIconsKeys.Actions.Search,
+                            contentDescription = null,
+                            iconClass = AllIcons::class.java,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    trailingIcon = if (searchQuery.text.isNotEmpty()) {
+                        {
+                            IconButton(onClick = {
+                                searchQuery = TextFieldValue("")
+                                isSearchVisible = false
+                                focusRequester.requestFocus()
+                            }) {
+                                Icon(
+                                    AllIconsKeys.Actions.Close,
+                                    contentDescription = "Clear search",
+                                    iconClass = AllIcons::class.java,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    } else null
+                )
+            }
         }
 
         Row(
