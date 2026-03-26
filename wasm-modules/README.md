@@ -9,7 +9,8 @@ to get fresh `.wasm` binaries.
 
 ## Docker Build (All Modules)
 
-From repository root:
+ATTENTION: SHOULD BE RUNNED FROM REPOSITORY ROOT!
+**From repository root:**
 
 ```bash
 docker build -t hexana-wasm-modules:build wasm-modules
