@@ -284,78 +284,82 @@ fun Table(
             }
         }
 
-        LazyColumn(
-            state = lazyListState,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                .onPointerEvent(PointerEventType.Exit) { hoveredOriginalIndex = null }) {
-            items(viewData.size) { rowIndex ->
-                val (id, data) = viewData[rowIndex]
+        Box(modifier = Modifier.weight(1f)) {
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    .onPointerEvent(PointerEventType.Exit) { hoveredOriginalIndex = null }) {
+                items(viewData.size) { rowIndex ->
+                    val (id, data) = viewData[rowIndex]
 
-                val rowBackgroundColor = if (hoveredOriginalIndex == id) {
-                    Color(201, 255, 255, 100).compositeOver(HexanaTheme.hexCellHoverActiveColor)
-                } else if (selectedOriginalIndex == id) {
-                    HexanaTheme.hexCellHoverActiveColor
-                } else {
-                    Color.Unspecified
-                }
-
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(rowBackgroundColor)
-                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                        .onPointerEvent(PointerEventType.Enter) {
-                            hoveredOriginalIndex = id
-                        }
-                        .clickable {
-                            selectedOriginalIndex = id
-                            onRow(id)
-                        },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ContextMenuArea(items = { onRowContextMenu(id) }) {
-                        Box(modifier = Modifier.padding(horizontal = 4.dp).widthIn(min = idColumnMinWidth)) {
-                            Text(
-                                id.toString(),
-                                style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
-                                lineHeight = TextUnit(1f, TextUnitType.Em)
-                            )
-                        }
+                    val rowBackgroundColor = if (hoveredOriginalIndex == id) {
+                        Color(201, 255, 255, 100).compositeOver(HexanaTheme.hexCellHoverActiveColor)
+                    } else if (selectedOriginalIndex == id) {
+                        HexanaTheme.hexCellHoverActiveColor
+                    } else {
+                        Color.Unspecified
                     }
 
-                    columns.forEachIndexed { index, column ->
-                        val tableCellValue = data[index]
-                        val text = tableCellValue.representation
-                        val tooltip = tableCellValue.tooltip
 
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(rowBackgroundColor)
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .onPointerEvent(PointerEventType.Enter) {
+                                hoveredOriginalIndex = id
+                            }
+                            .clickable {
+                                selectedOriginalIndex = id
+                                onRow(id)
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         ContextMenuArea(items = { onRowContextMenu(id) }) {
-                            Box(modifier = Modifier.padding(horizontal = 4.dp).then(column.modifier)) {
-                                val textComponent = @Composable {
-                                    Text(
-                                        text,
-                                        style = TextStyle(
-                                            color = HexanaTheme.textColor,
-                                            fontFamily = FontFamily.Monospace
-                                        ),
-                                        lineHeight = TextUnit(1f, TextUnitType.Em),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
+                            Box(modifier = Modifier.padding(horizontal = 4.dp).widthIn(min = idColumnMinWidth)) {
+                                Text(
+                                    id.toString(),
+                                    style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
+                                    lineHeight = TextUnit(1f, TextUnitType.Em)
+                                )
+                            }
+                        }
 
-                                if (tooltip != null) {
-                                    Tooltip(tooltip = { Text(tooltip) }) {
+                        columns.forEachIndexed { index, column ->
+                            val tableCellValue = data[index]
+                            val text = tableCellValue.representation
+                            val tooltip = tableCellValue.tooltip
+
+                            ContextMenuArea(items = { onRowContextMenu(id) }) {
+                                Box(modifier = Modifier.padding(horizontal = 4.dp).then(column.modifier)) {
+                                    val textComponent = @Composable {
+                                        Text(
+                                            text,
+                                            style = TextStyle(
+                                                color = HexanaTheme.textColor,
+                                                fontFamily = FontFamily.Monospace
+                                            ),
+                                            lineHeight = TextUnit(1f, TextUnitType.Em),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    if (tooltip != null) {
+                                        Tooltip(tooltip = { Text(tooltip) }) {
+                                            textComponent()
+                                        }
+                                    } else {
                                         textComponent()
                                     }
-                                } else {
-                                    textComponent()
                                 }
                             }
                         }
                     }
                 }
             }
+
+            VerticalScrollbar(lazyListState, modifier = Modifier.align(Alignment.CenterEnd))
         }
     }
 
