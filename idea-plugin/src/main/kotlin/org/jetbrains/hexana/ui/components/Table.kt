@@ -1,25 +1,10 @@
 package org.jetbrains.hexana.ui.components
 
-import androidx.compose.foundation.ContextMenuArea
-import androidx.compose.foundation.ContextMenuItem
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -27,11 +12,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.platform.LocalDensity
@@ -39,17 +20,19 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
+import com.intellij.icons.AllIcons
 import kotlinx.coroutines.launch
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.borderBottom
-import androidx.compose.ui.text.style.TextOverflow
-import org.jetbrains.jewel.ui.component.Text
-import org.jetbrains.jewel.ui.component.Tooltip
+import org.jetbrains.jewel.ui.component.*
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import kotlin.math.floor
 import kotlin.math.log10
 
@@ -75,24 +58,41 @@ fun Table(
     var selectedOriginalIndex: Int? by remember { mutableStateOf(null) }
     var hoveredOriginalIndex: Int? by remember { mutableStateOf(null) }
 
+    var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
+    val searchFocusRequester = remember { FocusRequester() }
+
     val lazyListState = rememberLazyListState()
+
+    LaunchedEffect(searchQuery.text) {
+        selectedOriginalIndex = null
+        lazyListState.scrollToItem(0)
+    }
+
     val focusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
 
-    val viewData = remember(columns, dataCount, sortIndex, sortAsc) {
+    val viewData = remember(columns, dataCount, sortIndex, sortAsc, searchQuery) {
         val base = (0 until dataCount).map { index ->
             index to columns.map { column -> column.dataProvider(index) }
         }
 
+        val filtered = if (searchQuery.text.isEmpty()) {
+            base
+        } else {
+            base.filter { (_, values) ->
+                values.any { it.representation.contains(searchQuery.text, ignoreCase = true) }
+            }
+        }
+
         if (sortIndex == -1) {
             if (sortAsc) {
-                base.sortedBy { (id, _) -> id }
+                filtered.sortedBy { (id, _) -> id }
             } else {
-                base.sortedByDescending { (id, _) -> id }
+                filtered.sortedByDescending { (id, _) -> id }
             }
         } else {
             if (sortAsc) {
-                base.sortedWith { a, b ->
+                filtered.sortedWith { a, b ->
                     val valueA = a.second[sortIndex].value
                     val valueB = b.second[sortIndex].value
                     when {
@@ -102,7 +102,7 @@ fun Table(
                     }
                 }
             } else {
-                base.sortedWith { a, b ->
+                filtered.sortedWith { a, b ->
                     val valueA = a.second[sortIndex].value
                     val valueB = b.second[sortIndex].value
                     when {
@@ -124,6 +124,11 @@ fun Table(
         .padding(top = 8.dp)
         .onPreviewKeyEvent { event ->
             if (event.type == KeyEventType.KeyDown) {
+                if (event.key == Key.F && (event.isCtrlPressed || event.isMetaPressed)) {
+                    searchFocusRequester.requestFocus()
+                    return@onPreviewKeyEvent true
+                }
+
                 val currentIndex = viewData.indexOfFirst { it.first == selectedOriginalIndex }
                 val newIndex = when (event.key) {
                     Key.DirectionUp -> (currentIndex - 1).coerceAtLeast(0)
@@ -152,6 +157,42 @@ fun Table(
             focusRequester.requestFocus()
         }
     ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(searchFocusRequester),
+                placeholder = { Text("Search...") },
+                leadingIcon = {
+                    Icon(
+                        AllIconsKeys.Actions.Search,
+                        contentDescription = null,
+                        iconClass = AllIcons::class.java,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+                trailingIcon = if (searchQuery.text.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { searchQuery = TextFieldValue("") }) {
+                            Icon(
+                                AllIconsKeys.Actions.Close,
+                                contentDescription = "Clear search",
+                                iconClass = AllIcons::class.java,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                } else null
+            )
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -247,7 +288,7 @@ fun Table(
             state = lazyListState,
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                 .onPointerEvent(PointerEventType.Exit) { hoveredOriginalIndex = null }) {
-            items(dataCount) { rowIndex ->
+            items(viewData.size) { rowIndex ->
                 val (id, data) = viewData[rowIndex]
 
                 val rowBackgroundColor = if (hoveredOriginalIndex == id) {
