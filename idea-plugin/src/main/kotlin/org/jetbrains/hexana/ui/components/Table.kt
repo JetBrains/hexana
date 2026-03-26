@@ -359,6 +359,20 @@ fun Table(
         }
 
         Box(modifier = Modifier.weight(1f)) {
+            if (viewData.isEmpty()) {
+                Box(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+                ) {
+                    Text(
+                        if (searchQuery.text.isEmpty()) "No data available" else "No items match the filter",
+                        style = TextStyle(
+                            color = HexanaTheme.textColor.copy(alpha = 0.5f),
+                            fontFamily = FontFamily.Monospace
+                        )
+                    )
+                }
+            }
+
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
