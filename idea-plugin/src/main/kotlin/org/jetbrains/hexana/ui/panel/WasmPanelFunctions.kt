@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.rememberTextMeasurer
+import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
@@ -24,7 +25,7 @@ import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmValueType
 
 @Composable
-fun WasmPanelFunctions(wasmBinaryProvider: WasmBinaryProvider) {
+fun WasmPanelFunctions(wasmBinaryProvider: WasmBinaryProvider, state: HexViewStateHolder) {
     val functions = remember(wasmBinaryProvider) { wasmBinaryProvider.functions }
     val nameSection = remember(wasmBinaryProvider) { wasmBinaryProvider.nameSection }
 
@@ -50,7 +51,10 @@ fun WasmPanelFunctions(wasmBinaryProvider: WasmBinaryProvider) {
             val signatureDescription = functions[index].getDescription(index, typeNames)
             TableCellValue(signatureDescription, tooltip = signatureDescription)
         },
-    ), functions.size)
+    ), functions.size) { rowIndex ->
+        val funcRecord = functions[rowIndex] ?: return@Table
+        state.scrollHexViewTo(funcRecord.offset, funcRecord.size)
+    }
 }
 
 
