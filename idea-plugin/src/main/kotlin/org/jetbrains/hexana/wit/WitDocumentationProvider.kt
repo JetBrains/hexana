@@ -19,13 +19,16 @@ import com.intellij.psi.util.elementType
 import org.jetbrains.hexana.wit.psi.WitFuncItem
 import org.jetbrains.hexana.wit.psi.WitGateItem
 import org.jetbrains.hexana.wit.psi.WitInterfaceDefinition
+import org.jetbrains.hexana.wit.psi.WitPsiElement
+import org.jetbrains.hexana.wit.psi.WitPsiFile
 import org.jetbrains.hexana.wit.psi.WitStaticFuncItem
 import java.util.Locale
 import java.util.Locale.getDefault
 
 class WitDocumentationProvider: PsiDocumentationTargetProvider {
     override fun documentationTarget(element: PsiElement, originalElement: PsiElement?): DocumentationTarget? {
-        return WitDocumentationTarget(element)
+        if (element.containingFile is WitPsiFile) return WitDocumentationTarget(element)
+        return null
     }
 }
 
