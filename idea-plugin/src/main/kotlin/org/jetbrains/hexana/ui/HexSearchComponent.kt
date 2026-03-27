@@ -39,14 +39,32 @@ fun HexSearchField(
         state,
         onClose = {
             state.showSearchDialog.value = false
+            state.searchText.value = ""
+            state.searchResults.value = emptyList()
             closeFlow.tryEmit(Unit)
         },
         onSubmit = { text ->
+            state.searchText.value = text
             val bytesPerRow = state.bytesPerRow.value
             val needle = convertSearchTextToBytes(text)
             val hay = binaryProvider.bytes
             val lastMatch = state.selection.start.getByteOffset(bytesPerRow)
             val reverse = state.searchReverse
+
+            if (needle.isNotEmpty()) {
+                val results = mutableListOf<LongRange>()
+                var current = 0
+                while (true) {
+                    val idx = find(needle, hay, current)
+                    if (idx == -1) break
+                    results.add(idx.toLong() until (idx.toLong() + needle.size))
+                    current = idx + 1
+                }
+                state.searchResults.value = results
+            } else {
+                state.searchResults.value = emptyList()
+            }
+
             val startIndex = if (lastMatch >= 0) {
                 when {
                     reverse -> lastMatch - 1

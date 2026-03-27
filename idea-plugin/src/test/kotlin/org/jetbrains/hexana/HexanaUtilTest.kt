@@ -9,16 +9,16 @@ class HexanaUtilTest : UsefulTestCase() {
 
     fun testConvertSearchTextToBytes() {
         assertOrderedEquals(byteArrayOf(), convertSearchTextToBytes(""))
-        assertOrderedEquals(byteArrayOf(), convertSearchTextToBytes("not a hex string"))
+        assertOrderedEquals("text".toByteArray(), convertSearchTextToBytes("text"))
 
         for (i in 0 until UByte.MAX_VALUE.toInt()) {
             val b = i.toByte()
-            val text = b.toHexString()
+            val text = (b.toInt() and 0xFF).toString(16).padStart(2, '0')
             assertOrderedEquals(byteArrayOf(b), convertSearchTextToBytes(text))
         }
 
-        assertOrderedEquals(byteArrayOf(0x10), convertSearchTextToBytes("1"))
-        assertOrderedEquals(byteArrayOf(0x12, 0x30), convertSearchTextToBytes("123"))
+        assertOrderedEquals("1".toByteArray(), convertSearchTextToBytes("1"))
+        assertOrderedEquals("123".toByteArray(), convertSearchTextToBytes("123"))
 
         assertOrderedEquals(byteArrayOf(0x12, 0x34, 0x56), convertSearchTextToBytes("12 34  56"))
     }

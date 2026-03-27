@@ -48,6 +48,8 @@ class HexViewStateHolder(
     }
 
     var showSearchDialog = mutableStateOf(false)
+    val searchText = mutableStateOf("")
+    val searchResults = mutableStateOf<List<LongRange>>(emptyList())
     private val _searchReverse: MutableState<Boolean> = mutableStateOf(false)
     internal val searchReverse: Boolean get() = _searchReverse.value
 

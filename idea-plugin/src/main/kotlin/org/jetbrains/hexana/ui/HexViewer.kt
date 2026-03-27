@@ -269,6 +269,10 @@ internal fun HexViewer(
                                             val isHover =
                                                 byteIndex == state.hoverPosition.lineOffset && rowIndex == state.hoverPosition.line
 
+                                            val isSearchResult = state.searchResults.value.any { range ->
+                                                (rowIndex * bytesPerRow + byteIndex).toLong() in range
+                                            }
+
                                             val backgroundColor = if (isHover) {
                                                 if (isUnderCursor) HexanaTheme.hexCellHoverActiveColor else HexanaTheme.hexCellHoverColor
                                             } else {
@@ -278,6 +282,8 @@ internal fun HexViewer(
                                             val selectionBackgroundColor =
                                                 if (state.selection.contains(rowIndex, byteIndex)) {
                                                     Color(156, 183, 255, 255)
+                                                } else if (isSearchResult) {
+                                                    HexanaTheme.searchResultColor
                                                 } else {
                                                     backgroundColor
                                                 }
@@ -326,6 +332,9 @@ internal fun HexViewer(
                                         val isUnderCursor = byteIndex == state.cursorPosition.lineOffset &&
                                                 rowIndex == state.cursorPosition.line
 
+                                        val isSearchResult = state.searchResults.value.any { range ->
+                                            (rowIndex * bytesPerRow + byteIndex).toLong() in range
+                                        }
 
                                         val backgroundColor = if (isHover) {
                                             if (isUnderCursor) HexanaTheme.hexCellHoverActiveColor else HexanaTheme.hexCellHoverColor
@@ -336,6 +345,8 @@ internal fun HexViewer(
                                         val selectionBackgroundColor =
                                             if (state.selection.contains(rowIndex, byteIndex)) {
                                                 Color(156, 183, 255, 255)
+                                            } else if (isSearchResult) {
+                                                HexanaTheme.searchResultColor
                                             } else {
                                                 backgroundColor
                                             }

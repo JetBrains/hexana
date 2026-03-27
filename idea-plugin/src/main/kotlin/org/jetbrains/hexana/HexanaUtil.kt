@@ -8,19 +8,26 @@ import java.nio.file.StandardOpenOption
 import kotlin.io.path.fileSize
 
 fun convertSearchTextToBytes(text: String): ByteArray {
+    if (text.isEmpty()) return ByteArray(0)
     val byteList = arrayListOf<Byte>()
     val s = text.replace(" ", "")
-    for (i in s.indices step 2) {
-        val c1 = s[i]
-        val c2 = if (i+1 in s.indices) {
-            s[i+1]
-        } else {
-            '0'
+    var isHex = s.length % 2 == 0 && s.isNotEmpty()
+    if (isHex) {
+        for (i in s.indices step 2) {
+            val c1 = s[i]
+            val c2 = s[i + 1]
+            val upper = c1.digitToIntOrNull(16)
+            val lower = c2.digitToIntOrNull(16)
+            if (upper == null || lower == null) {
+                isHex = false
+                break
+            }
+            val byte = ((upper shl 4) or lower).toByte()
+            byteList.add(byte)
         }
-        val upper = c1.digitToIntOrNull(16) ?: return ByteArray(0)
-        val lower = c2.digitToIntOrNull(16) ?: return ByteArray(0)
-        val byte = ((upper shl 4) or lower).toByte()
-        byteList.add(byte)
+    }
+    if (!isHex) {
+        return text.toByteArray(Charsets.UTF_8)
     }
     return byteList.toByteArray()
 }

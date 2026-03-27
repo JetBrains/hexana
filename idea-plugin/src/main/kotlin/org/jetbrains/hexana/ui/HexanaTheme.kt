@@ -28,4 +28,8 @@ object HexanaTheme {
     val hexCellHoverColor: Color
         @Composable
         get() = Color(255, 175, 42, 255)
+
+    val searchResultColor: Color
+        @Composable
+        get() = if (JewelTheme.isDark) Color(153, 115, 0) else Color(255, 235, 59)
 }
