@@ -1,0 +1,27 @@
+world test-world {
+    import <error descr="Duplicate imported name: 'foo'">foo</error>: func();
+    import <error descr="Duplicate imported name: 'foo'">foo</error>: func();
+
+    import <error descr="Duplicate imported name: 'bar'">bar</error>: interface {}
+    import <error descr="Duplicate imported name: 'bar'">bar</error>: interface {}
+
+    import <error descr="Duplicate imported name: 'baz'">baz</error>: interface {}
+    use pkg:path/iface.{ <error descr="Duplicate imported name: 'baz'">baz</error> };
+
+    type <error descr="Duplicate imported name: 'qux'">qux</error> = u32;
+    import <error descr="Duplicate imported name: 'qux'">qux</error>: func();
+
+    include other-world with { a as <error descr="Duplicate imported name: 'alias'">alias</error> }
+    import <error descr="Duplicate imported name: 'alias'">alias</error>: func();
+
+    export <error descr="Duplicate exported name: 'exp'">exp</error>: func();
+    export <error descr="Duplicate exported name: 'exp'">exp</error>: func();
+
+    // Imports and exports can have same name
+    import same: func();
+    export same: func();
+
+    // Case-insensitive uniqueness
+    import <error descr="Duplicate imported name: 'CASE'">CASE</error>: func();
+    import <error descr="Duplicate imported name: 'case'">case</error>: func();
+}

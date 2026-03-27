@@ -127,6 +127,15 @@
                          level="ERROR"
                          implementationClass="org.jetbrains.hexana.wit.inspections.WitEmptyDefinitionInspection"/>
 
+        <localInspection language="wit"
+                         groupBundle="messages.HexanaBundle"
+                         groupKey="wit.language.description"
+                         bundle="messages.HexanaBundle"
+                         key="wit.inspection.world.duplicate.name.display.name"
+                         enabledByDefault="true"
+                         level="ERROR"
+                         implementationClass="org.jetbrains.hexana.wit.inspections.WitWorldNameUniquenessInspection"/>
+
         <langCodeStyleSettingsProvider implementation="org.jetbrains.hexana.wit.formatter.WitLanguageCodeStyleSettingsProvider"/>
         <codeStyleSettingsProvider implementation="org.jetbrains.hexana.wit.formatter.WitCodeStyleSettingsProvider"/>
         <lang.formatter language="wit" implementationClass="org.jetbrains.hexana.wit.formatter.WitFormattingBuilderModel"/>
