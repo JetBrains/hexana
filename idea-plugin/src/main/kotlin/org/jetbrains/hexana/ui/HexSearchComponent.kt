@@ -11,20 +11,22 @@ import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.intellij.icons.AllIcons
 import com.intellij.ide.DataManager
-import com.intellij.openapi.actionSystem.ActionUpdateThread
-import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.CompositeShortcutSet
-import com.intellij.openapi.actionSystem.IdeActions
+import com.intellij.openapi.actionSystem.*
+import com.intellij.openapi.actionSystem.impl.ActionButton
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.keymap.KeymapUtil
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.ui.SearchTextField
+import com.intellij.ui.components.JBLabel
+import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.jetbrains.hexana.*
 import org.jetbrains.hexana.providers.BinaryProvider
 import java.awt.BorderLayout
+import java.awt.FlowLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -41,48 +43,11 @@ fun HexSearchField(
             state.showSearchDialog.value = false
             state.searchText.value = ""
             state.searchResults.value = emptyList()
+            state.currentSearchIndex.value = -1
             closeFlow.tryEmit(Unit)
         },
-        onSubmit = { text ->
-            state.searchText.value = text
-            val bytesPerRow = state.bytesPerRow.value
-            val needle = convertSearchTextToBytes(text)
-            val hay = binaryProvider.bytes
-            val lastMatch = state.selection.start.getByteOffset(bytesPerRow)
-            val reverse = state.searchReverse
-
-            if (needle.isNotEmpty()) {
-                val results = mutableListOf<LongRange>()
-                var current = 0
-                while (true) {
-                    val idx = find(needle, hay, current)
-                    if (idx == -1) break
-                    results.add(idx.toLong() until (idx.toLong() + needle.size))
-                    current = idx + 1
-                }
-                state.searchResults.value = results
-            } else {
-                state.searchResults.value = emptyList()
-            }
-
-            val startIndex = if (lastMatch >= 0) {
-                when {
-                    reverse -> lastMatch - 1
-                    else -> lastMatch + 1
-                }.coerceIn(hay.indices)
-            } else {
-                val cursor = state.hoverPosition.getByteOffset(bytesPerRow)
-                cursor.coerceIn(hay.indices)
-            }
-            var index = find(needle, hay, startIndex, reverse)
-            if (index == -1) {
-                index = find(needle, hay, if (reverse) hay.lastIndex else 0, reverse)
-            }
-            if (index >= 0) {
-                state.scrollHexViewTo(index.toLong())
-                state.setCursorPosition(index.toLong(), bytesPerRow)
-                state.setSelection(index.toLong() until  index.toLong() + needle.size)
-            }
+        onSubmit = { text, reverse ->
+            performSearch(text, reverse, state, binaryProvider)
         }
     )
 
@@ -95,28 +60,106 @@ fun HexSearchField(
     }
 }
 
+fun performSearch(
+    text: String,
+    reverse: Boolean,
+    state: HexViewStateHolder,
+    binaryProvider: BinaryProvider
+) {
+    state.searchText.value = text
+    val bytesPerRow = state.bytesPerRow.value
+    val needle = convertSearchTextToBytes(text)
+    val hay = binaryProvider.bytes
+
+    if (needle.isNotEmpty()) {
+        val results = mutableListOf<LongRange>()
+        var current = 0
+        while (true) {
+            val idx = find(needle, hay, current)
+            if (idx == -1) break
+            results.add(idx.toLong() until (idx.toLong() + needle.size))
+            current = idx + 1
+        }
+        state.searchResults.value = results
+
+        val lastMatch = state.selection.start.getByteOffset(bytesPerRow)
+        val startIndex = if (lastMatch >= 0) {
+            when {
+                reverse -> lastMatch - 1
+                else -> lastMatch + 1
+            }.coerceIn(hay.indices)
+        } else {
+            val cursor = state.hoverPosition.getByteOffset(bytesPerRow)
+            cursor.coerceIn(hay.indices)
+        }
+        var index = find(needle, hay, startIndex, reverse)
+        if (index == -1) {
+            index = find(needle, hay, if (reverse) hay.lastIndex else 0, reverse)
+        }
+        if (index >= 0) {
+            state.scrollHexViewTo(index.toLong())
+            state.setCursorPosition(index.toLong(), bytesPerRow)
+            val range = index.toLong() until index.toLong() + needle.size
+            state.setSelection(range)
+
+            // Update current search index
+            state.currentSearchIndex.value = results.indexOf(range)
+        } else {
+            state.currentSearchIndex.value = -1
+        }
+    } else {
+        state.searchResults.value = emptyList()
+        state.currentSearchIndex.value = -1
+    }
+}
+
 @Composable
 private fun SwingSearchComponent(
     state: HexViewStateHolder,
     onClose: () -> Unit,
-    onSubmit: (String) -> Unit
+    onSubmit: (String, Boolean) -> Unit
 ) {
     SwingPanel(
         factory = {
             val panel = JPanel(BorderLayout())
 
-            // historyPopupEnabled = true (we cannot have named params for java entities)
             val searchTextField = SearchTextField(true)
 
-            searchTextField.textEditor.addActionListener { actionEvent ->
-                onSubmit(searchTextField.text)
+            searchTextField.textEditor.addActionListener {
+                onSubmit(searchTextField.text, state.searchReverse)
             }
 
             setupSearchActions(searchTextField, state)
 
             ApplicationManager.getApplication().invokeLater { searchTextField.requestFocusInWindow() }
 
-            panel.add(searchTextField)
+            val statusLabel = JBLabel().apply {
+                foreground = UIUtil.getContextHelpForeground()
+                border = JBUI.Borders.empty(0, 5)
+            }
+
+            val actionsPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0))
+
+            val prevAction = object : AnAction("Previous", "Previous occurrence", AllIcons.Actions.PreviousOccurence) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    onSubmit(searchTextField.text, true)
+                }
+            }
+            val nextAction = object : AnAction("Next", "Next occurrence", AllIcons.Actions.NextOccurence) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    onSubmit(searchTextField.text, false)
+                }
+            }
+
+            val prevBtn = ActionButton(prevAction, prevAction.templatePresentation.clone(), ActionPlaces.UNKNOWN, ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE)
+            val nextBtn = ActionButton(nextAction, nextAction.templatePresentation.clone(), ActionPlaces.UNKNOWN, ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE)
+
+            actionsPanel.add(statusLabel)
+            actionsPanel.add(prevBtn)
+            actionsPanel.add(nextBtn)
+
+            panel.add(searchTextField, BorderLayout.CENTER)
+            panel.add(actionsPanel, BorderLayout.EAST)
 
             val escapeShortcuts = KeymapUtil.getActiveKeymapShortcuts(IdeActions.ACTION_EDITOR_ESCAPE)
             val escapeAction = object : DumbAwareAction() {
@@ -134,9 +177,16 @@ private fun SwingSearchComponent(
 
             panel
         },
-        update = {
-            ApplicationManager.getApplication().invokeLater {
-                UIUtil.findComponentOfType(it, SearchTextField::class.java)?.requestFocusInWindow()
+        update = { panel ->
+            val results = state.searchResults.value
+            val currentIndex = state.currentSearchIndex.value
+            val statusLabel = UIUtil.findComponentOfType(panel, JBLabel::class.java)
+            if (statusLabel != null) {
+                if (results.isEmpty()) {
+                    statusLabel.text = ""
+                } else {
+                    statusLabel.text = "${currentIndex + 1} of ${results.size}"
+                }
             }
         },
         modifier = Modifier.fillMaxWidth().height(height = 24.dp).background(Color.Red)
