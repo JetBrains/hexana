@@ -70,7 +70,7 @@ fun performSearch(
 ) {
     state.searchText.value = text
     val bytesPerRow = state.bytesPerRow.value
-    val needle = convertSearchTextToBytes(text)
+    val needle = convertSearchTextToBytes(text, state.searchBinaryMode)
     val hay = binaryProvider.bytes
 
     if (needle.isNotEmpty()) {
@@ -170,7 +170,24 @@ private fun SwingSearchComponent(
             val prevBtn = ActionButton(prevAction, prevAction.templatePresentation.clone(), ActionPlaces.UNKNOWN, ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE)
             val nextBtn = ActionButton(nextAction, nextAction.templatePresentation.clone(), ActionPlaces.UNKNOWN, ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE)
 
+            val binaryModeAction = object : ToggleAction("Binary Mode", "Search by byte sequence", AllIcons.FileTypes.BinaryData) {
+                override fun isSelected(e: AnActionEvent): Boolean {
+                    return state.searchBinaryMode
+                }
+
+                override fun setSelected(e: AnActionEvent, stateVal: Boolean) {
+                    state.setSearchBinaryMode(stateVal)
+                    onSubmit(searchTextField.text, state.searchReverse)
+                }
+
+                override fun getActionUpdateThread(): ActionUpdateThread {
+                    return ActionUpdateThread.EDT
+                }
+            }
+            val binaryBtn = ActionButton(binaryModeAction, binaryModeAction.templatePresentation.clone(), ActionPlaces.UNKNOWN, ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE)
+
             actionsPanel.add(statusLabel)
+            actionsPanel.add(binaryBtn)
             actionsPanel.add(prevBtn)
             actionsPanel.add(nextBtn)
 

@@ -7,18 +7,19 @@ import java.nio.channels.FileChannel
 import java.nio.file.StandardOpenOption
 import kotlin.io.path.fileSize
 
-fun convertSearchTextToBytes(text: String): ByteArray {
+fun convertSearchTextToBytes(text: String, isBinaryMode: Boolean = false): ByteArray {
     if (text.isEmpty()) return ByteArray(0)
     val byteList = arrayListOf<Byte>()
     val s = text.replace(" ", "")
-    var isHex = s.length % 2 == 0 && s.isNotEmpty()
+    var isHex = isBinaryMode || (s.length % 2 == 0 && s.isNotEmpty())
     if (isHex) {
         for (i in s.indices step 2) {
             val c1 = s[i]
-            val c2 = s[i + 1]
+            val c2 = if (i + 1 < s.length) s[i + 1] else null
             val upper = c1.digitToIntOrNull(16)
-            val lower = c2.digitToIntOrNull(16)
-            if (upper == null || lower == null) {
+            val lower = c2?.digitToIntOrNull(16) ?: 0
+            if (upper == null || (c2 != null && lower == null)) {
+                if (isBinaryMode) return ByteArray(0) // Invalid hex in binary mode
                 isHex = false
                 break
             }

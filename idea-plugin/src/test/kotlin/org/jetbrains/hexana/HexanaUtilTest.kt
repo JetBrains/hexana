@@ -22,6 +22,14 @@ class HexanaUtilTest : UsefulTestCase() {
 
         assertOrderedEquals(byteArrayOf(0x12, 0x34, 0x56), convertSearchTextToBytes("12 34  56"))
     }
+    
+    fun testConvertSearchTextToBytesBinary() {
+        assertOrderedEquals(byteArrayOf(0x12, 0x34), convertSearchTextToBytes("1234", true))
+        assertOrderedEquals(byteArrayOf(0x12, 0x30), convertSearchTextToBytes("123", true))
+        assertOrderedEquals(byteArrayOf(0x12, 0x34, 0x50), convertSearchTextToBytes("12 34 5", true))
+        assertOrderedEquals(byteArrayOf(), convertSearchTextToBytes("G", true))
+        assertOrderedEquals(byteArrayOf(), convertSearchTextToBytes("12 G", true))
+    }
 
 
     fun testFind() {

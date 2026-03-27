@@ -54,6 +54,9 @@ class HexViewStateHolder(
     private val _searchReverse: MutableState<Boolean> = mutableStateOf(false)
     internal val searchReverse: Boolean get() = _searchReverse.value
 
+    private val _searchBinaryMode: MutableState<Boolean> = mutableStateOf(false)
+    internal val searchBinaryMode: Boolean get() = _searchBinaryMode.value
+
     // Keep the latest requested scroll offset so late collectors (e.g., HexViewer composed after
     // the emission from a LaunchedEffect) still receive it.
     private val _hexScrollFlow = MutableSharedFlow<Long>(
@@ -171,5 +174,9 @@ class HexViewStateHolder(
 
     fun setSearchReverse(doSearchReverse: Boolean) {
         _searchReverse.value = doSearchReverse
+    }
+
+    fun setSearchBinaryMode(doSearchBinaryMode: Boolean) {
+        _searchBinaryMode.value = doSearchBinaryMode
     }
 }
