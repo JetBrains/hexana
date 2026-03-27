@@ -1,0 +1,12 @@
+interface empty-test {
+    enum <error descr="enum cannot be empty">empty-enum</error> {}
+    record <error descr="record cannot be empty">empty-record</error> {}
+    variant <error descr="variant cannot be empty">empty-variant</error> {}
+    resource <error descr="resource cannot be empty">empty-resource</error> {}
+
+    enum non-empty-enum { a }
+    record non-empty-record { a: u32 }
+    variant non-empty-variant { a }
+    resource non-empty-resource { constructor(); }
+    resource semi-resource;
+}

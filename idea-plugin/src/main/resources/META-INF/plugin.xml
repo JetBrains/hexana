@@ -118,6 +118,15 @@
         <codeInsight.lineMarkerProvider language="wit" implementationClass="org.jetbrains.hexana.wit.WitGoToRelatedSymbolsProvider"/>
         <completion.contributor language="wit" implementationClass="org.jetbrains.hexana.wit.WitKeywordCompletionContributor" />
 
+        <localInspection language="wit"
+                         groupBundle="messages.HexanaBundle"
+                         groupKey="wit.language.description"
+                         bundle="messages.HexanaBundle"
+                         key="wit.inspection.empty.definition.display.name"
+                         enabledByDefault="true"
+                         level="ERROR"
+                         implementationClass="org.jetbrains.hexana.wit.inspections.WitEmptyDefinitionInspection"/>
+
         <langCodeStyleSettingsProvider implementation="org.jetbrains.hexana.wit.formatter.WitLanguageCodeStyleSettingsProvider"/>
         <codeStyleSettingsProvider implementation="org.jetbrains.hexana.wit.formatter.WitCodeStyleSettingsProvider"/>
         <lang.formatter language="wit" implementationClass="org.jetbrains.hexana.wit.formatter.WitFormattingBuilderModel"/>
