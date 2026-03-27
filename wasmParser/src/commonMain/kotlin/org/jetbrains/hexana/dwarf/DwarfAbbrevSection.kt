@@ -64,6 +64,6 @@ fun BaseModule.debugAbbrevSection() = customSectionByName(".debug_abbrev")?.let 
 sealed class DwarfAbbrevTableEntry {
     object End: DwarfAbbrevTableEntry()
 }
-class DwarfAbbrevEntry(val offset: Int, val size: Int, val number: Int, val tag: Tag, val children: Boolean, val attributes: List<DwarfAttribute>): DwarfAbbrevTableEntry()
+class DwarfAbbrevEntry(val offset: Int, val size: Int, val number: Int, val tag: Tag, val hasChildren: Boolean, val attributes: List<DwarfAttribute>): DwarfAbbrevTableEntry()
 
 class DwarfAttribute(val offset: Int, val size: Int, val name: Attribute, val form: Form, val value: Long? = null)

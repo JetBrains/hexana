@@ -20,7 +20,6 @@ import org.jetbrains.jewel.foundation.lazy.tree.buildTree
 import org.jetbrains.jewel.foundation.lazy.tree.TreeState
 import org.jetbrains.jewel.foundation.lazy.SelectableLazyListState
 import androidx.compose.foundation.lazy.LazyListState
-import org.jetbrains.hexana.dwarf.findAttribute
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.panel.scrollHexViewTo
 import org.jetbrains.jewel.ui.component.LazyTree
@@ -92,7 +91,7 @@ fun DebugAbbrevPanel(provider: BinaryProvider, state: HexViewStateHolder) {
     ) { element ->
         val label = when (val data = element.data) {
             is String -> "Compilation Unit @ $data"
-            is DwarfAbbrevEntry -> "[${data.number}] ${data.tag.name}  ${if (data.children) "DW_CHILDREN_yes" else "DW_CHILDREN_no"}"
+            is DwarfAbbrevEntry -> "[${data.number}] ${data.tag.name}  ${if (data.hasChildren) "DW_CHILDREN_yes" else "DW_CHILDREN_no"}"
             is DwarfAttribute -> "${data.name} ${data.form.name}" + (data.value?.let { " = ${it.toHexString()}" } ?: "")
             else -> data.toString()
         }

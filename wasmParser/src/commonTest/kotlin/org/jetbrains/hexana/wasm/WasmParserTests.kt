@@ -3,6 +3,7 @@ package org.jetbrains.hexana.wasm
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.hexana.dwarf.Tag
 import org.jetbrains.hexana.dwarf.debugAbbrevSection
+import org.jetbrains.hexana.dwarf.debugInfoSection
 import org.jetbrains.hexana.dwarf.debugStrSection
 import org.jetbrains.hexana.tests.IgnoreJsTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
@@ -1590,6 +1591,133 @@ class WasmParserTests {
         assertEquals(Tag.DW_TAG_compile_unit, entries3[0].tag)
         assertEquals(Tag.DW_TAG_const_type, entries3[19].tag)
         assertEquals(Tag.DW_TAG_typedef, entries3[20].tag)
+    }
+
+    /**
+     * wasmParser/src/commonTest/resources/c/utf8-c.wasm:      file format WASM
+     *
+     * .debug_info contents:
+     * 0x00000000: Compile Unit: length = 0x00000086, format = DWARF32, version = 0x0004, abbr_offset = 0x0000, addr_size = 0x04 (next unit at 0x0000008a)
+     *
+     * 0x0000000b: DW_TAG_compile_unit
+     *               DW_AT_producer    ("clang version 22.0.0git (https:/github.com/llvm/llvm-project 3388d40684742e950b3c5d1d2dafe5a40695cfc1)")
+     *               DW_AT_language    (DW_LANG_C11)
+     *               DW_AT_name        ("utf8.c")
+     *               DW_AT_stmt_list   (0x00000000)
+     *               DW_AT_comp_dir    ("/home/nd/w/hexana/wasmParser/src/commonTest/resources/c")
+     *               DW_AT_low_pc      (0x00000009)
+     *               DW_AT_high_pc     (0x00000053)
+     *
+     * 0x00000026:   DW_TAG_variable
+     *                 DW_AT_name      ("str")
+     *                 DW_AT_type      (0x00000037 "char[20]")
+     *                 DW_AT_external  (true)
+     *                 DW_AT_decl_file ("/home/nd/w/hexana/wasmParser/src/commonTest/resources/c/utf8.c")
+     *                 DW_AT_decl_line (7)
+     *                 DW_AT_location  (DW_OP_addr 0x10ad0)
+     * ...
+     * 0x0000008a: Compile Unit: length = 0x0000008b, format = DWARF32, version = 0x0004, abbr_offset = 0x006f, addr_size = 0x04 (next unit at 0x00000119)
+     *
+     * 0x00000095: DW_TAG_compile_unit
+     *               DW_AT_producer    ("clang version 22.0.0git (https:/github.com/llvm/llvm-project 3388d40684742e950b3c5d1d2dafe5a40695cfc1)")
+     *               DW_AT_language    (DW_LANG_C99)
+     *               DW_AT_name        ("/emsdk/emscripten/system/lib/libc/crt1.c")
+     *               DW_AT_stmt_list   (0x0000003c)
+     *               DW_AT_comp_dir    ("/emsdk/emscripten")
+     *               DW_AT_low_pc      (0x00000054)
+     *               DW_AT_high_pc     (0x00000075)
+     *
+     * 0x000000b0:   DW_TAG_subprogram
+     *                 DW_AT_low_pc    (0x00000054)
+     *                 DW_AT_high_pc   (0x00000075)
+     *                 DW_AT_frame_base        (DW_OP_WASM_location 0x3 0x0, DW_OP_stack_value)
+     *                 DW_AT_GNU_all_call_sites        (true)
+     *                 DW_AT_name      ("_start")
+     *                 DW_AT_decl_file ("/emsdk/emscripten/system/lib/libc/crt1.c")
+     *                 DW_AT_decl_line (15)
+     *                 DW_AT_prototyped        (true)
+     *                 DW_AT_external  (true)
+     */
+
+    @Test
+    fun testScanDwarfInfo() = runTest {
+        val buffer = resourceAsByteBuffer("c/utf8-c.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
+        val infoSection = (wasmModule as BaseModule).debugInfoSection()!!
+        val entries = with(infoSection){
+            buffer.scanDwarfInfo()
+        }
+
+        /**
+         * .debug_info contents:
+         * 0x00000000: Compile Unit: length = 0x00000086, format = DWARF32, version = 0x0004, abbr_offset = 0x0000, addr_size = 0x04 (next unit at 0x0000008a)
+         *
+         * 0x0000000b: DW_TAG_compile_unit
+         *               DW_AT_producer    ("clang version 22.0.0git (https:/github.com/llvm/llvm-project 3388d40684742e950b3c5d1d2dafe5a40695cfc1)")
+         *               DW_AT_language    (DW_LANG_C11)
+         *               DW_AT_name        ("utf8.c")
+         *               DW_AT_stmt_list   (0x00000000)
+         *               DW_AT_comp_dir    ("/home/nd/w/hexana/wasmParser/src/commonTest/resources/c")
+         *               DW_AT_low_pc      (0x00000009)
+         *               DW_AT_high_pc     (0x00000053)
+         */
+        assertEquals(51, entries.size)
+        assertEquals(0x86, entries[0].size)
+        assertEquals(0x4, entries[0].version)
+        assertEquals(0x0u, entries[0].debugAbbrevOffset)
+
+        assertEquals(1, entries[0].children.size)
+        val compilationUnit0 = entries[0].children[0]
+        assertEquals(Tag.DW_TAG_compile_unit, compilationUnit0.tag)
+        assertEquals(8, compilationUnit0.children.size)
+        /**
+         * 0x00000037:   DW_TAG_array_type
+         *                 DW_AT_type      (0x00000043 "char")
+         *
+         * 0x0000003c:     DW_TAG_subrange_type
+         *                   DW_AT_type    (0x0000004a "__ARRAY_SIZE_TYPE__")
+         *                   DW_AT_count   (0x14)
+         */
+        assertEquals(Tag.DW_TAG_array_type, compilationUnit0.children[1].tag)
+        assertEquals(1, compilationUnit0.children[1].children.size)
+        assertEquals(Tag.DW_TAG_subrange_type, compilationUnit0.children[1].children[0].tag)
+
+        /**
+         * 0x0000008a: Compile Unit: length = 0x0000008b, format = DWARF32, version = 0x0004, abbr_offset = 0x006f, addr_size = 0x04 (next unit at 0x00000119)
+         *
+         * 0x00000095: DW_TAG_compile_unit
+         *               DW_AT_producer    ("clang version 22.0.0git (https:/github.com/llvm/llvm-project 3388d40684742e950b3c5d1d2dafe5a40695cfc1)")
+         *               DW_AT_language    (DW_LANG_C99)
+         *               DW_AT_name        ("/emsdk/emscripten/system/lib/libc/crt1.c")
+         *               DW_AT_stmt_list   (0x0000003c)
+         *               DW_AT_comp_dir    ("/emsdk/emscripten")
+         *               DW_AT_low_pc      (0x00000054)
+         *               DW_AT_high_pc     (0x00000075)
+         */
+        assertEquals(0x8b, entries[1].size)
+        assertEquals(0x4, entries[1].version)
+        assertEquals(0x6fu, entries[1].debugAbbrevOffset)
+
+        /**
+         * 0x00000119: Compile Unit: length = 0x000000c4, format = DWARF32, version = 0x0004, abbr_offset = 0x00ff, addr_size = 0x04 (next unit at 0x000001e1)
+         *
+         * 0x00000124: DW_TAG_compile_unit
+         *               DW_AT_producer    ("clang version 22.0.0git (https:/github.com/llvm/llvm-project 3388d40684742e950b3c5d1d2dafe5a40695cfc1)")
+         *               DW_AT_language    (DW_LANG_C99)
+         *               DW_AT_name        ("/emsdk/emscripten/system/lib/libc/musl/src/exit/exit.c")
+         *               DW_AT_stmt_list   (0x000000d1)
+         *               DW_AT_comp_dir    ("/emsdk/emscripten")
+         *               DW_AT_low_pc      (0x00000000)
+         *               DW_AT_ranges      (0x00000000
+         *                  [0x00000076, 0x00000078)
+         *                  [0x00000079, 0x000000c0)
+         *                  [0x000000c1, 0x000000de))
+         */
+        assertEquals(0xc4, entries[2].size)
+        assertEquals(0x4, entries[2].version)
+        assertEquals(0xffu, entries[2].debugAbbrevOffset)
     }
 
     @Test
