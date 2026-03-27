@@ -29,6 +29,8 @@ import java.awt.BorderLayout
 import java.awt.FlowLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.event.DocumentEvent
+import javax.swing.event.DocumentListener
 
 @Composable
 fun HexSearchField(
@@ -128,6 +130,20 @@ private fun SwingSearchComponent(
             searchTextField.textEditor.addActionListener {
                 onSubmit(searchTextField.text, state.searchReverse)
             }
+
+            searchTextField.addDocumentListener(object : DocumentListener {
+                override fun insertUpdate(e: DocumentEvent) {
+                    onSubmit(searchTextField.text, state.searchReverse)
+                }
+
+                override fun removeUpdate(e: DocumentEvent) {
+                    onSubmit(searchTextField.text, state.searchReverse)
+                }
+
+                override fun changedUpdate(e: DocumentEvent) {
+                    onSubmit(searchTextField.text, state.searchReverse)
+                }
+            })
 
             setupSearchActions(searchTextField, state)
 
