@@ -125,7 +125,9 @@ private fun SwingSearchComponent(
         factory = {
             val panel = JPanel(BorderLayout())
 
-            val searchTextField = SearchTextField(true)
+            val searchTextField = SearchTextField(true).apply {
+                textEditor.emptyText.text = "Search"
+            }
 
             searchTextField.textEditor.addActionListener {
                 onSubmit(searchTextField.text, state.searchReverse)
@@ -154,7 +156,7 @@ private fun SwingSearchComponent(
                 border = JBUI.Borders.empty(0, 5)
             }
 
-            val actionsPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0))
+            val actionsPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 4, 0))
 
             val prevAction = object : AnAction("Previous", "Previous occurrence", AllIcons.Actions.PreviousOccurence) {
                 override fun actionPerformed(e: AnActionEvent) {
@@ -187,9 +189,9 @@ private fun SwingSearchComponent(
             val binaryBtn = ActionButton(binaryModeAction, binaryModeAction.templatePresentation.clone(), ActionPlaces.UNKNOWN, ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE)
 
             actionsPanel.add(statusLabel)
-            actionsPanel.add(binaryBtn)
             actionsPanel.add(prevBtn)
             actionsPanel.add(nextBtn)
+            actionsPanel.add(binaryBtn)
 
             panel.add(searchTextField, BorderLayout.CENTER)
             panel.add(actionsPanel, BorderLayout.EAST)
@@ -216,13 +218,13 @@ private fun SwingSearchComponent(
             val statusLabel = UIUtil.findComponentOfType(panel, JBLabel::class.java)
             if (statusLabel != null) {
                 if (results.isEmpty()) {
-                    statusLabel.text = ""
+                    statusLabel.text = if (state.searchText.value.isEmpty()) "" else "0 results"
                 } else {
                     statusLabel.text = "${currentIndex + 1} of ${results.size}"
                 }
             }
         },
-        modifier = Modifier.fillMaxWidth().height(height = 24.dp).background(Color.Red)
+        modifier = Modifier.fillMaxWidth().height(height = 28.dp)
     )
 }
 
