@@ -1,16 +1,16 @@
 package org.jetbrains.hexana.wit.inspections
 
-import com.intellij.codeInspection.*
-import com.intellij.lang.ASTNode
+import com.intellij.codeInspection.LocalInspectionTool
+import com.intellij.codeInspection.LocalQuickFixOnPsiElement
+import com.intellij.codeInspection.ProblemHighlightType
+import com.intellij.codeInspection.ProblemsHolder
+import com.intellij.codeInspection.util.IntentionName
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementVisitor
+import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiWhiteSpace
-import com.intellij.psi.SmartPointerManager
-import com.intellij.psi.SmartPsiElementPointer
-import com.intellij.psi.impl.smartPointers.SmartPsiElementPointerImpl
 import com.intellij.psi.util.PsiTreeUtil
-import com.intellij.xml.util.PsiElementPointer
 import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.wit.psi.*
 
@@ -122,12 +122,15 @@ class WitMissingSemicolonInspection : LocalInspectionTool() {
         }
     }
 
-    private class AddSemicolonFix(element: PsiElement) : LocalQuickFix {
-        private val pointer = SmartPointerManager.createPointer(element)
+    private class AddSemicolonFix(element: PsiElement) : LocalQuickFixOnPsiElement(element) {
         override fun getFamilyName(): String = HexanaBundle.message("wit.inspection.missing.semicolon.fix")
 
-        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
-            val element = pointer.element ?: return
+        override fun getText(): @IntentionName String {
+            return familyName
+        }
+
+        override fun invoke(project: Project, psiFile: PsiFile, startElement: PsiElement, endElement: PsiElement) {
+            val element = startElement
             val factory = WitElementFactory(project)
             val semi = factory.createSemicolon()
             val leaf = if (element.lastChild is PsiWhiteSpace) {
@@ -141,5 +144,6 @@ class WitMissingSemicolonInspection : LocalInspectionTool() {
                 element.add(semi)
             }
         }
+
     }
 }
