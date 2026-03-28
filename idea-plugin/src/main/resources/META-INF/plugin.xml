@@ -154,6 +154,15 @@
                          level="ERROR"
                          implementationClass="org.jetbrains.hexana.wit.inspections.WitGateInspection"/>
 
+        <localInspection language="wit"
+                         groupBundle="messages.HexanaBundle"
+                         groupKey="wit.language.description"
+                         bundle="messages.HexanaBundle"
+                         key="wit.inspection.use.declaration.missing.names.display.name"
+                         enabledByDefault="true"
+                         level="ERROR"
+                         implementationClass="org.jetbrains.hexana.wit.inspections.WitUseDeclarationInspection"/>
+
         <langCodeStyleSettingsProvider implementation="org.jetbrains.hexana.wit.formatter.WitLanguageCodeStyleSettingsProvider"/>
         <codeStyleSettingsProvider implementation="org.jetbrains.hexana.wit.formatter.WitCodeStyleSettingsProvider"/>
         <lang.formatter language="wit" implementationClass="org.jetbrains.hexana.wit.formatter.WitFormattingBuilderModel"/>
