@@ -24,7 +24,7 @@ class WitWorldNameUniquenessInspection : LocalInspectionTool() {
                 val exports = mutableMapOf<String, MutableList<PsiElement>>()
 
                 // Collect imports
-                world.importDefinitionList.forEach { collectName(it.identifier, it.usePath, imports) }
+                world.importDefinitionList.forEach { collectName(it.identifier, imports) }
                 world.useDeclarationList.forEach { useDecl ->
                     useDecl.useNamesList.useNamesItemList.forEach { item ->
                         val nameIdentifier = item.nameIdentifier
@@ -52,7 +52,7 @@ class WitWorldNameUniquenessInspection : LocalInspectionTool() {
                 }
 
                 // Collect exports
-                world.exportDefinitionList.forEach { collectName(it.identifier, it.usePath, exports) }
+                world.exportDefinitionList.forEach { collectName(it.identifier, exports) }
 
                 reportDuplicates(holder, imports, "imported")
                 reportDuplicates(holder, exports, "exported")
@@ -62,10 +62,9 @@ class WitWorldNameUniquenessInspection : LocalInspectionTool() {
 
     private fun collectName(
         identifier: PsiElement?,
-        usePath: WitUsePath?,
         names: MutableMap<String, MutableList<PsiElement>>
     ) {
-        val nameElement = identifier ?: usePath?.identifier
+        val nameElement = identifier
         if (nameElement != null) {
             val name = nameElement.text.lowercase()
             names.computeIfAbsent(name) { mutableListOf() }.add(nameElement)

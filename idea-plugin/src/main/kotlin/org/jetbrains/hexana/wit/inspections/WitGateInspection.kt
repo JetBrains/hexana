@@ -27,7 +27,7 @@ class WitGateInspection : LocalInspectionTool() {
         return object : WitElementVisitor() {
             private val gateStack: Deque<GateInfo> = ArrayDeque()
 
-            private fun checkItem(element: PsiElement) {
+            private fun checkItem(element: PsiElement, requiresGate: Boolean = true) {
                 val gateItems = getGateItemsForOwner(element)
                 
                 // XOR check: @since and @unstable together
@@ -42,8 +42,10 @@ class WitGateInspection : LocalInspectionTool() {
                 val parentGate = gateStack.peek()
                 if (parentGate != null && parentGate.since != null) {
                     if (currentSince == null && !currentUnstable) {
-                        val target = getIdentifier(element)
-                        holder.registerProblem(target, HexanaBundle.message("wit.inspection.gate.missing"))
+                        if (requiresGate) {
+                            val target = getIdentifier(element)
+                            holder.registerProblem(target, HexanaBundle.message("wit.inspection.gate.missing"))
+                        }
                     } else if (currentSince != null && compareVersions(currentSince, parentGate.since) < 0) {
                         val target = getIdentifier(element)
                         holder.registerProblem(target, HexanaBundle.message("wit.inspection.gate.incompatible", currentSince, parentGate.since))
@@ -99,49 +101,49 @@ class WitGateInspection : LocalInspectionTool() {
             }
 
             override fun visitResourceMethod(o: WitResourceMethod) {
-                checkItem(o)
+                checkItem(o, false)
                 o.acceptChildren(this)
                 afterVisit()
             }
 
             override fun visitRecordField(o: WitRecordField) {
-                checkItem(o)
+                checkItem(o, false)
                 o.acceptChildren(this)
                 afterVisit()
             }
 
             override fun visitEnumCase(o: WitEnumCase) {
-                checkItem(o)
+                checkItem(o, false)
                 o.acceptChildren(this)
                 afterVisit()
             }
 
             override fun visitVariantCase(o: WitVariantCase) {
-                checkItem(o)
+                checkItem(o, false)
                 o.acceptChildren(this)
                 afterVisit()
             }
 
             override fun visitExportDefinition(o: WitExportDefinition) {
-                checkItem(o)
+                checkItem(o, false)
                 o.acceptChildren(this)
                 afterVisit()
             }
 
             override fun visitImportDefinition(o: WitImportDefinition) {
-                checkItem(o)
+                checkItem(o, false)
                 o.acceptChildren(this)
                 afterVisit()
             }
 
             override fun visitUseDeclaration(o: WitUseDeclaration) {
-                checkItem(o)
+                checkItem(o, false)
                 o.acceptChildren(this)
                 afterVisit()
             }
 
             override fun visitIncludeDeclaration(o: WitIncludeDeclaration) {
-                checkItem(o)
+                checkItem(o, false)
                 o.acceptChildren(this)
                 afterVisit()
             }

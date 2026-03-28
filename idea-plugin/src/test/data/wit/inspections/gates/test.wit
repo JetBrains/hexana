@@ -29,7 +29,7 @@ interface i4 {
         @since(version = 1.1.0)
         m1: func();
 
-        <error descr="Item must be gated because its container is gated">m2</error>: func();
+        m2: func();
 
         @since(version = 0.8.0)
         <error descr="Item version 0.8.0 is lower than container version 1.0.0">m3</error>: func();
