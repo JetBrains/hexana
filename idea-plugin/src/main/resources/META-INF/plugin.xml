@@ -140,6 +140,15 @@
                          groupBundle="messages.HexanaBundle"
                          groupKey="wit.language.description"
                          bundle="messages.HexanaBundle"
+                         key="wit.inspection.missing.semicolon.display.name"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         implementationClass="org.jetbrains.hexana.wit.inspections.WitMissingSemicolonInspection"/>
+
+        <localInspection language="wit"
+                         groupBundle="messages.HexanaBundle"
+                         groupKey="wit.language.description"
+                         bundle="messages.HexanaBundle"
                          key="wit.inspection.gate.display.name"
                          enabledByDefault="true"
                          level="ERROR"
