@@ -26,7 +26,7 @@ class WitWorldNameUniquenessInspection : LocalInspectionTool() {
                 // Collect imports
                 world.importDefinitionList.forEach { collectName(it.identifier, imports) }
                 world.useDeclarationList.forEach { useDecl ->
-                    useDecl.useNamesList.useNamesItemList.forEach { item ->
+                    useDecl.useNamesList?.useNamesItemList?.forEach { item ->
                         val nameIdentifier = item.nameIdentifier
                         if (nameIdentifier != null) {
                             val name = nameIdentifier.text.lowercase()

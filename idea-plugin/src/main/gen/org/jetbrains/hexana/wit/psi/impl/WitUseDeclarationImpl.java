@@ -28,9 +28,9 @@ public class WitUseDeclarationImpl extends WitPsiElement implements WitUseDeclar
   }
 
   @Override
-  @NotNull
+  @Nullable
   public WitUseNamesList getUseNamesList() {
-    return findNotNullChildByClass(WitUseNamesList.class);
+    return findChildByClass(WitUseNamesList.class);
   }
 
   @Override

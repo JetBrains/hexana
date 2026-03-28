@@ -120,7 +120,7 @@ object WitResolver {
             return (container.typeDeclarationList.find { it.name == name }
                 ?: container.funcItemList.find { it.identifier.text == name }
                 ?: container.useDeclarationList.flatMap {
-                    it.useNamesList.useNamesItemList
+                    it.useNamesList?.useNamesItemList.orEmpty()
                 }.find { it.lastChild.text == name }?.let {
                     it.references.singleOrNull()?.resolve() ?: it
                 })
@@ -130,7 +130,7 @@ object WitResolver {
             return (externType.typeDeclarationList.find { it.name == name }
                 ?: externType.funcItemList.find { it.identifier.text == name }
                 ?: externType.useDeclarationList.flatMap {
-                    it.useNamesList.useNamesItemList
+                    it.useNamesList?.useNamesItemList.orEmpty()
                 }.find { it.lastChild.text == name }?.let {
                     it.references.singleOrNull()?.resolve() ?: it
                 })

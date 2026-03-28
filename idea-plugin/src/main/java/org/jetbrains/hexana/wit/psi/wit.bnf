@@ -211,7 +211,7 @@ named-type-list ::= named-type ( ',' named-type )* ','?
 
 named-type ::= IDENTIFIER ':' type-usage
 
-use-declaration ::= USE use-path '.' '{' use-names-list '}' ';'?
+use-declaration ::= USE use-path ('.' '{' use-names-list '}')? ';'?
 
 use-names-list ::= use-names-item (',' use-names-item)* ','?
 

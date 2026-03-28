@@ -1838,7 +1838,7 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // USE use-path '.' '{' use-names-list '}' ';'?
+  // USE use-path ('.' '{' use-names-list '}')? ';'?
   public static boolean use_declaration(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "use_declaration")) return false;
     if (!nextTokenIs(b, USE)) return false;
@@ -1846,17 +1846,34 @@ public class WitParser implements PsiParser, LightPsiParser {
     Marker m = enter_section_(b);
     r = consumeToken(b, USE);
     r = r && use_path(b, l + 1);
-    r = r && consumeTokens(b, 0, DOT, OPEN_BRACE);
-    r = r && use_names_list(b, l + 1);
-    r = r && consumeToken(b, CLOSE_BRACE);
-    r = r && use_declaration_6(b, l + 1);
+    r = r && use_declaration_2(b, l + 1);
+    r = r && use_declaration_3(b, l + 1);
     exit_section_(b, m, USE_DECLARATION, r);
     return r;
   }
 
+  // ('.' '{' use-names-list '}')?
+  private static boolean use_declaration_2(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "use_declaration_2")) return false;
+    use_declaration_2_0(b, l + 1);
+    return true;
+  }
+
+  // '.' '{' use-names-list '}'
+  private static boolean use_declaration_2_0(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "use_declaration_2_0")) return false;
+    boolean r;
+    Marker m = enter_section_(b);
+    r = consumeTokens(b, 0, DOT, OPEN_BRACE);
+    r = r && use_names_list(b, l + 1);
+    r = r && consumeToken(b, CLOSE_BRACE);
+    exit_section_(b, m, null, r);
+    return r;
+  }
+
   // ';'?
-  private static boolean use_declaration_6(PsiBuilder b, int l) {
-    if (!recursion_guard_(b, l, "use_declaration_6")) return false;
+  private static boolean use_declaration_3(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "use_declaration_3")) return false;
     consumeToken(b, SEMI);
     return true;
   }

@@ -7,7 +7,7 @@ import com.intellij.psi.PsiElement;
 
 public interface WitUseDeclaration extends PsiElement {
 
-  @NotNull
+  @Nullable
   WitUseNamesList getUseNamesList();
 
   @NotNull
