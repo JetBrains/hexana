@@ -61,11 +61,21 @@ class DwarfInfoSection(contentOffset: Int, contentSize: Int, private val debugAb
     }
 
     private fun CommonByteBuffer.readDwarf64v5Header( offset: Int, size: ULong ): CompilationUnitHeader<*> {
-        val unitType = readUByte()
+        val unitType = readUByte().toUnitType()
         val addressSize = readUByte()
         val debugAbbrevOffset = readULong()
-        val dwoId = readULong()
-        return CompilationUnitHeader.Dwarf64Header.V5(offset, size.toInt(), size.toInt() + 12, debugAbbrevOffset, addressSize, unitType, dwoId)
+        val next = size.toInt() + 12
+        return when (unitType) {
+            UnitType.DW_UT_compile, UnitType.DW_UT_partial -> CompilationUnitHeader.Dwarf64Header.V5.CompileUnit(offset, size.toInt(),
+                next, debugAbbrevOffset, addressSize, unitType)
+            UnitType.DW_UT_skeleton, UnitType.DW_UT_split_compile -> CompilationUnitHeader.Dwarf64Header.V5.SkeletonUnit(offset, size.toInt(),
+                next, debugAbbrevOffset, addressSize, unitType, readULong())
+            UnitType.DW_UT_type, UnitType.DW_UT_split_type -> CompilationUnitHeader.Dwarf64Header.V5.TypeUnit(offset, size.toInt(),
+                next, debugAbbrevOffset, addressSize, unitType, readULong(), readULong())
+            else -> CompilationUnitHeader.Dwarf64Header.V5.CompileUnit(offset, size.toInt(),
+                next, debugAbbrevOffset, addressSize, unitType)
+        }
+
     }
 
     private fun CommonByteBuffer.readDwarf32Header( offset: Int, size: UInt ): CompilationUnitHeader<*> {
@@ -85,12 +95,20 @@ class DwarfInfoSection(contentOffset: Int, contentSize: Int, private val debugAb
     }
 
     private fun CommonByteBuffer.readDwarf32v5Header(offset: Int, size: UInt): CompilationUnitHeader<*> {
-        val unitType = readUByte()
+        val unitType = readUByte().toUnitType()
         val addressSize = readUByte()
         val debugAbbrevOffset = readUInt()
-        val dwoId = readULong()
-        return CompilationUnitHeader.Dwarf32Header.V5(offset, size.toInt(),
-            size.toInt() + 4, debugAbbrevOffset, addressSize, unitType, dwoId)
+        val next = size.toInt() + 4
+        return when (unitType) {
+            UnitType.DW_UT_compile, UnitType.DW_UT_partial -> CompilationUnitHeader.Dwarf32Header.V5.CompileUnit(offset, size.toInt(),
+                next, debugAbbrevOffset, addressSize, unitType)
+            UnitType.DW_UT_skeleton, UnitType.DW_UT_split_compile -> CompilationUnitHeader.Dwarf32Header.V5.SkeletonUnit(offset, size.toInt(),
+                next, debugAbbrevOffset, addressSize, unitType, readULong())
+            UnitType.DW_UT_type, UnitType.DW_UT_split_type -> CompilationUnitHeader.Dwarf32Header.V5.TypeUnit(offset, size.toInt(),
+                next, debugAbbrevOffset, addressSize, unitType, readULong(), readUInt())
+            else -> CompilationUnitHeader.Dwarf32Header.V5.CompileUnit(offset, size.toInt(),
+                next, debugAbbrevOffset, addressSize, unitType)
+        }
     }
 
     fun CommonByteBuffer.readAttribute(header: CompilationUnitHeader<*>, attribute: DwarfAttribute): DieField {
@@ -207,27 +225,33 @@ sealed class CompilationUnitHeader<T>(offset: Int, size: Int, val next: Int, val
 
     sealed class Dwarf32Header(offset: Int, size: Int, next: Int, version: Int, debugAbbrevOffset: UInt, addressSize: UByte) : CompilationUnitHeader<UInt>(offset, size, next, version, debugAbbrevOffset, addressSize) {
         class V4(offset: Int, size: Int, next: Int, debugAbbrevOffset: UInt, addressSize: UByte) : Dwarf32Header(offset, size, next,4, debugAbbrevOffset, addressSize)
-        class V5(
+        sealed class V5(
             offset: Int,
             size: Int,
             next: Int,
             debugAbbrevOffset: UInt,
             addressSize: UByte,
-            val type: UByte,
-            dwoId: ULong
-        ) : Dwarf32Header(offset, size, next, 5, debugAbbrevOffset, addressSize)
+            val type: UnitType,
+        ) : Dwarf32Header(offset, size, next, 5, debugAbbrevOffset, addressSize) {
+            class CompileUnit(offset: Int, size: Int, next: Int, debugAbbrevOffset: UInt, addressSize: UByte, type: UnitType) : V5(offset, size, next, debugAbbrevOffset, addressSize, type)
+            class SkeletonUnit(offset: Int, size: Int, next: Int, debugAbbrevOffset: UInt, addressSize: UByte, type: UnitType, val dwoId: ULong) : V5(offset, size, next, debugAbbrevOffset, addressSize, type)
+            class TypeUnit(offset: Int, size: Int, next: Int, debugAbbrevOffset: UInt, addressSize: UByte, type: UnitType, val typeSignature: ULong, val typeOffset: UInt) : V5(offset, size, next, debugAbbrevOffset, addressSize, type)
+        }
     }
     sealed class Dwarf64Header(offset: Int, size: Int, next: Int, version: Int, debugAbbrevOffset: ULong, addressSize: UByte) : CompilationUnitHeader<ULong>(offset, size, next, version, debugAbbrevOffset, addressSize){
         class V4(offset: Int, size: Int, next: Int, debugAbbrevOffset: ULong, addressSize: UByte) : Dwarf64Header(offset, size, next, 4, debugAbbrevOffset, addressSize)
-        class V5(
+        sealed class V5(
             offset: Int,
             size: Int,
             next: Int,
             debugAbbrevOffset: ULong,
             addressSize: UByte,
-            val type: UByte,
-            dwoId: ULong
-        ) : Dwarf64Header(offset, size, next, 5,debugAbbrevOffset, addressSize)
+            val type: UnitType,
+        ) : Dwarf64Header(offset, size, next, 5,debugAbbrevOffset, addressSize) {
+            class CompileUnit(offset: Int, size: Int, next: Int, debugAbbrevOffset: ULong, addressSize: UByte, type: UnitType) : V5(offset, size, next, debugAbbrevOffset, addressSize, type)
+            class SkeletonUnit(offset: Int, size: Int, next: Int, debugAbbrevOffset: ULong, addressSize: UByte, type: UnitType, val dwoId: ULong) : V5(offset, size, next, debugAbbrevOffset, addressSize, type)
+            class TypeUnit(offset: Int, size: Int, next: Int, debugAbbrevOffset: ULong, addressSize: UByte, type: UnitType, val typeSignature: ULong, val typeOffset: ULong) : V5(offset, size, next, debugAbbrevOffset, addressSize, type)
+        }
     }
 }
 
