@@ -20,13 +20,12 @@ import org.jetbrains.jewel.foundation.lazy.tree.buildTree
 import org.jetbrains.jewel.foundation.lazy.tree.TreeState
 import org.jetbrains.jewel.foundation.lazy.SelectableLazyListState
 import androidx.compose.foundation.lazy.LazyListState
-import org.jetbrains.hexana.dwarf.CompilationUnitHeader
 import org.jetbrains.hexana.dwarf.DebugInformationEntry
 import org.jetbrains.hexana.dwarf.DieField
+import org.jetbrains.hexana.dwarf.Form
 import org.jetbrains.hexana.dwarf.debugInfoSection
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.panel.scrollHexViewTo
-import org.jetbrains.jewel.foundation.lazy.tree.TreeBuilder
 import org.jetbrains.jewel.foundation.lazy.tree.TreeGeneratorScope
 import org.jetbrains.jewel.ui.component.LazyTree
 import org.jetbrains.jewel.ui.component.Text
@@ -161,7 +160,20 @@ fun DebugInfoPanel(provider: BinaryProvider, state: HexViewStateHolder) {
     ) { element ->
         val label = when (val data = element.data) {
             is DebugInformationEntry -> "${data.tag} @ 0x${data.offset.toString(16)}"
-            is DieField -> "${data.attribute.name} ${data.attribute.form.name}"
+            is DieField -> {
+                when (data.attribute.form) {
+                    Form.DW_FORM_strp -> {
+                        val stringTable = with(infoSection) {
+                            wasmProvider.bytes.getStringTable()
+                        }
+                        val value = stringTable.find { it.originalOffset == data.value as UInt }?.run {
+                            wasmProvider.bytes.str()
+                        } ?: "Unknown string"
+                        "${data.attribute.name} ${data.attribute.form.name} ${data.value}: '$value'"
+                    }
+                    else -> "${data.attribute.name} ${data.attribute.form.name}"
+                }
+            }
             else -> data.toString()
         }
         Text(
