@@ -6,14 +6,21 @@ import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.lang.Language
 import com.intellij.lang.parser.GeneratedParserUtilBase
 import com.intellij.openapi.util.text.StringUtil
-import com.intellij.psi.PsiComment
-import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiErrorElement
-import com.intellij.psi.PsiFileFactory
+import com.intellij.psi.*
 import com.intellij.psi.impl.source.tree.TreeUtil
 import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtilBase
 import com.intellij.psi.tree.IElementType
+import com.intellij.psi.tree.TokenSet
+import com.intellij.psi.util.elementType
+import com.intellij.psi.util.prevLeaf
+import org.jetbrains.hexana.wit.psi.WitElementTypes
 import org.jetbrains.hexana.wit.psi.WitPsiFile
+
+private val KEYWORDS_NO_COMPLETION_AFTER = TokenSet.create(
+    WitElementTypes.IMPORT, WitElementTypes.EXPORT, WitElementTypes.WORLD,
+    WitElementTypes.INTERFACE, WitElementTypes.PACKAGE, WitElementTypes.USE,
+    WitElementTypes.ENUM, WitElementTypes.RECORD, WitElementTypes.VARIANT, WitElementTypes.FLAGS,
+)
 
 class WitKeywordCompletionContributor: CompletionContributor() {
     override fun fillCompletionVariants(parameters: CompletionParameters, result: CompletionResultSet) {
@@ -21,6 +28,7 @@ class WitKeywordCompletionContributor: CompletionContributor() {
 
         val position = parameters.position
         if (position is PsiComment) return
+        if (KEYWORDS_NO_COMPLETION_AFTER.contains(position.prevLeaf { it !is PsiWhiteSpace }?.elementType)) return
         if (parameters.completionType == CompletionType.BASIC) {
             val parent = position.parent?.let { (it as? PsiErrorElement)?.parent ?: it }
             val suggestedKeywords = suggestKeywords(parameters.position)
