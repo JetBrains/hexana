@@ -13,7 +13,7 @@ class DwarfStrSection(contentOffset: Int, contentSize: Int): DwarfSection(conten
         while (position() < contentOffset + contentSize) {
            val v = get()
            if (v == 0.toByte()) {
-               entries.add(StringTableEntry(entryOffset, position() - entryOffset - 1))
+               entries.add(StringTableEntry((entryOffset - contentOffset).toUInt(), entryOffset, position() - entryOffset - 1))
                entryOffset = position()
            }
         }
@@ -22,7 +22,7 @@ class DwarfStrSection(contentOffset: Int, contentSize: Int): DwarfSection(conten
 
 }
 
-class StringTableEntry(val offset: Int, val length: Int) {
+class StringTableEntry(val originalOffset: UInt, val offset: Int, val length: Int) {
     fun CommonByteBuffer.str(): String {
         position(offset)
         val buf = ByteArray(length)
