@@ -33,6 +33,7 @@ class WitKeywordCompletionContributor: CompletionContributor() {
                 suggestedKeywords.remove("interface")
                 suggestedKeywords.remove("package")
             }
+            suggestedKeywords.remove("identifier")
 
             for (keyword in suggestedKeywords) {
                 result.addElement(createKeywordLookupItem(keyword))
