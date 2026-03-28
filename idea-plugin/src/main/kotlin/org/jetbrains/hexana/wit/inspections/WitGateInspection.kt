@@ -2,158 +2,182 @@ package org.jetbrains.hexana.wit.inspections
 
 import com.intellij.codeInspection.LocalInspectionTool
 import com.intellij.codeInspection.ProblemsHolder
+import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementVisitor
+import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.wit.psi.*
+
+
+//World, export, import, use, type, include, interface, funcitem, staticfuncitem, constructor
+//Resource, variant, record, flags, enum, type
+
+import java.util.ArrayDeque
+import java.util.Deque
 
 class WitGateInspection : LocalInspectionTool() {
     override fun getDisplayName(): String = HexanaBundle.message("wit.inspection.gate.display.name")
     override fun getStaticDescription(): String = HexanaBundle.message("wit.inspection.gate.display.name")
 
+    private data class GateInfo(val since: String?, val unstable: Boolean)
+
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         return object : WitElementVisitor() {
-            override fun visitSinceGate(o: WitSinceGate) = checkXor(o, holder)
-            override fun visitUnstableGate(o: WitUnstableGate) = checkXor(o, holder)
+            private val gateStack: Deque<GateInfo> = ArrayDeque()
+
+            private fun checkItem(element: PsiElement) {
+                val gateItems = getGateItemsForOwner(element)
+                
+                // XOR check: @since and @unstable together
+                val currentSince = gateItems.filterIsInstance<WitSinceGate>().firstOrNull()?.let { getVersion(it) }
+                val currentUnstable = gateItems.any { it is WitUnstableGate }
+                
+                if (currentSince != null && currentUnstable && element !is WitInterfaceDefinition && element !is WitWorldDefinition) {
+                    val target = getIdentifier(element)
+                    holder.registerProblem(target, HexanaBundle.message("wit.inspection.gate.xor"))
+                }
+
+                val parentGate = gateStack.peek()
+                if (parentGate != null && parentGate.since != null) {
+                    if (currentSince == null && !currentUnstable) {
+                        val target = getIdentifier(element)
+                        holder.registerProblem(target, HexanaBundle.message("wit.inspection.gate.missing"))
+                    } else if (currentSince != null && compareVersions(currentSince, parentGate.since) < 0) {
+                        val target = getIdentifier(element)
+                        holder.registerProblem(target, HexanaBundle.message("wit.inspection.gate.incompatible", currentSince, parentGate.since))
+                    }
+                }
+                
+                val effectiveSince = currentSince ?: parentGate?.since
+                val effectiveUnstable = currentUnstable || (parentGate?.unstable ?: false)
+                
+                gateStack.push(GateInfo(effectiveSince, effectiveUnstable))
+            }
+
+            private fun afterVisit() {
+                if (gateStack.isNotEmpty()) {
+                    gateStack.pop()
+                }
+            }
+
+            override fun visitWorldDefinition(o: WitWorldDefinition) {
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
+            }
+
+            override fun visitInterfaceDefinition(o: WitInterfaceDefinition) {
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
+            }
+
+            override fun visitTypeDeclaration(o: WitTypeDeclaration) {
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
+            }
 
             override fun visitFuncItem(o: WitFuncItem) {
-                if (PsiTreeUtil.getParentOfType(o, WitResourceMethod::class.java) != null) return
-                checkCompatibility(o, holder)
-            }
-            override fun visitTypeDeclaration(o: WitTypeDeclaration) {
-                // To avoid duplicate reports, we only check compatibility here if it's NOT a resource.
-                if (o is WitResourceDefinition) {
-                   // return // Skip, as we want to check resource methods specifically, and resource itself here.
+                if (PsiTreeUtil.getParentOfType(o, WitResourceMethod::class.java, true) != null) {
+                    return
                 }
-                checkCompatibility(o, holder)
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
             }
-            override fun visitResourceMethod(o: WitResourceMethod) = checkCompatibility(o, holder)
+
             override fun visitStaticFuncItem(o: WitStaticFuncItem) {
-                if (PsiTreeUtil.getParentOfType(o, WitResourceMethod::class.java) != null) return
-                checkCompatibility(o, holder)
-            }
-            override fun visitRecordField(o: WitRecordField) = checkCompatibility(o, holder)
-            override fun visitEnumCase(o: WitEnumCase) = checkCompatibility(o, holder)
-            override fun visitVariantCase(o: WitVariantCase) = checkCompatibility(o, holder)
-
-            // Specifically avoid visiting more specific type declarations if we handle them in visitTypeDeclaration
-            override fun visitEnumDefinition(o: WitEnumDefinition) {}
-            override fun visitRecordDefinition(o: WitRecordDefinition) {}
-            override fun visitVariantDefinition(o: WitVariantDefinition) {}
-            override fun visitFlagsDefinition(o: WitFlagsDefinition) {}
-            override fun visitTypeDefinition(o: WitTypeDefinition) {}
-            override fun visitResourceDefinition(o: WitResourceDefinition) {}
-        }
-    }
-
-    private fun checkXor(o: WitGateItem, holder: ProblemsHolder) {
-        // Only report on the first gate item to avoid duplicate reports
-        var prev = PsiTreeUtil.prevVisibleLeaf(o)
-        if (prev != null && PsiTreeUtil.getParentOfType(prev, WitGateItem::class.java) != null) return
-
-        var hasSince = false
-        var hasUnstable = false
-        
-        var current: PsiElement? = o
-        while (current is WitGateItem) {
-            if (current is WitSinceGate) hasSince = true
-            if (current is WitUnstableGate) hasUnstable = true
-            
-            val next = PsiTreeUtil.nextVisibleLeaf(current)
-            if (next != null && PsiTreeUtil.getParentOfType(next, WitGateItem::class.java) != null) {
-                current = PsiTreeUtil.getParentOfType(next, WitGateItem::class.java)
-            } else {
-                current = null
-            }
-        }
-
-        if (hasSince && hasUnstable) {
-            val owner = findGateOwner(o) ?: return
-            val target = getIdentifier(owner)
-            holder.registerProblem(target, HexanaBundle.message("wit.inspection.gate.xor"))
-        }
-    }
-
-    private fun findGateOwner(gateItem: WitGateItem): PsiElement? {
-        var current: PsiElement? = gateItem
-        while (current != null) {
-            var next = PsiTreeUtil.nextVisibleLeaf(current)
-            while (next != null) {
-                if (next.parent is WitGateItem) {
-                    next = PsiTreeUtil.nextVisibleLeaf(next)
-                    continue
+                if (PsiTreeUtil.getParentOfType(o, WitResourceMethod::class.java, true) != null) {
+                    return
                 }
-                val p = next.parent
-                if (p is WitInterfaceDefinition || p is WitWorldDefinition || p is WitTypeDeclaration || p is WitFuncItem || p is WitResourceMethod) return p
-                if (next.text == "}" || next.text == "{") break
-                next = PsiTreeUtil.nextVisibleLeaf(next)
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
             }
-            current = current.parent
-        }
-        return null
-    }
 
-    private fun checkCompatibility(item: PsiElement, holder: ProblemsHolder) {
-        val container = findGatedContainer(item) ?: return
-        val containerGate = getGateItems(container)
-        val containerSince = containerGate.filterIsInstance<WitSinceGate>().firstOrNull() ?: return
-        val containerVersion = getVersion(containerSince) ?: return
+            override fun visitResourceMethod(o: WitResourceMethod) {
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
+            }
 
-        val itemGate = getGateItems(item)
-        if (itemGate.isEmpty()) {
-            val target = getIdentifier(item)
-            holder.registerProblem(target, HexanaBundle.message("wit.inspection.gate.missing"))
-            return
-        }
+            override fun visitRecordField(o: WitRecordField) {
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
+            }
 
-        val itemSince = itemGate.filterIsInstance<WitSinceGate>().firstOrNull()
-        if (itemSince != null) {
-            val itemVersion = getVersion(itemSince) ?: return
-            if (compareVersions(itemVersion, containerVersion) < 0) {
-                val target = getIdentifier(item)
-                holder.registerProblem(target, HexanaBundle.message("wit.inspection.gate.incompatible", itemVersion, containerVersion))
+            override fun visitEnumCase(o: WitEnumCase) {
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
+            }
+
+            override fun visitVariantCase(o: WitVariantCase) {
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
+            }
+
+            override fun visitExportDefinition(o: WitExportDefinition) {
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
+            }
+
+            override fun visitImportDefinition(o: WitImportDefinition) {
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
+            }
+
+            override fun visitUseDeclaration(o: WitUseDeclaration) {
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
+            }
+
+            override fun visitIncludeDeclaration(o: WitIncludeDeclaration) {
+                checkItem(o)
+                o.acceptChildren(this)
+                afterVisit()
+            }
+
+            private fun getGateItemsForOwner(element: PsiElement): List<WitGateItem> {
+                return when (element) {
+                    is WitWorldDefinition -> element.gateItemList
+                    is WitInterfaceDefinition -> element.gateItemList
+                    is WitResourceMethod -> element.gateItemList
+                    else -> getInlineGateItems(element)
+                }
+            }
+        }.let { visitor ->
+            object : PsiElementVisitor() {
+                override fun visitElement(element: PsiElement) {
+                    if (element is WitPsiFile) {
+                        element.acceptChildren(visitor)
+                    }
+                }
             }
         }
     }
 
-    private fun findGatedContainer(item: PsiElement): PsiElement? {
-        var current = item.parent
-        while (current != null) {
-            if (getGateItems(current).isNotEmpty()) return current
-            current = current.parent
-        }
-        return null
-    }
-
-    private fun getGateItems(element: PsiElement): List<WitGateItem> {
-        if (element is WitInterfaceDefinition) return element.gateItemList
-        if (element is WitWorldDefinition) return element.gateItemList
-        if (element is WitResourceMethod) return element.gateItemList
-
+    private fun getInlineGateItems(element: PsiElement): List<WitGateItem> {
         val result = mutableListOf<WitGateItem>()
-        var prev = PsiTreeUtil.prevVisibleLeaf(element)
+        var prev = element.prevSibling
         while (prev != null) {
-            val gateItem = PsiTreeUtil.getParentOfType(prev, WitGateItem::class.java)
-            if (gateItem != null) {
-                result.add(gateItem)
+            if (prev is WitGateItem) {
+                result.add(prev)
+            } else if (prev is PsiWhiteSpace || prev is PsiComment) {
+                // skip
             } else {
-                val text = prev.text
-                if (text != ";" && text != "}" && text != "{") {
-                   // keep looking?
-                } else {
-                    break
-                }
+                break
             }
-            
-            val p = prev.parent
-            if (p is WitFuncItem || p is WitTypeDeclaration || p is WitRecordField || p is WitEnumCase || p is WitVariantCase) {
-                if (p != element) break
-            }
-            
-            prev = PsiTreeUtil.prevVisibleLeaf(prev)
+            prev = prev.prevSibling
         }
-        
         return result
     }
 
@@ -169,6 +193,8 @@ class WitGateInspection : LocalInspectionTool() {
                 element.staticFuncItem?.nameIdentifier ?: 
                 element.firstChild // Fallback
             }
+            is WitWorldDefinition -> element.nameIdentifier ?: element
+            is WitInterfaceDefinition -> element.nameIdentifier ?: element
             else -> element
         }
     }
