@@ -14,7 +14,9 @@ import com.intellij.psi.tree.TokenSet
 import com.intellij.psi.util.elementType
 import com.intellij.psi.util.prevLeaf
 import org.jetbrains.hexana.wit.psi.WitElementTypes
+import org.jetbrains.hexana.wit.psi.WitIncludeNamesItem
 import org.jetbrains.hexana.wit.psi.WitPsiFile
+import org.jetbrains.hexana.wit.psi.WitUseNamesItem
 
 private val KEYWORDS_NO_COMPLETION_AFTER = TokenSet.create(
     WitElementTypes.IMPORT, WitElementTypes.EXPORT, WitElementTypes.WORLD,
@@ -29,6 +31,7 @@ class WitKeywordCompletionContributor: CompletionContributor() {
         val position = parameters.position
         if (position is PsiComment) return
         if (KEYWORDS_NO_COMPLETION_AFTER.contains(position.prevLeaf { it !is PsiWhiteSpace }?.elementType)) return
+        if (position.parent is WitUseNamesItem || position.parent is WitIncludeNamesItem) return
         if (parameters.completionType == CompletionType.BASIC) {
             val parent = position.parent?.let { (it as? PsiErrorElement)?.parent ?: it }
             val suggestedKeywords = suggestKeywords(parameters.position)
