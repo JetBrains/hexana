@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.wasm
 
 import kotlinx.coroutines.test.runTest
+import org.jetbrains.hexana.dwarf.CompilationUnitHeader
 import org.jetbrains.hexana.dwarf.Tag
 import org.jetbrains.hexana.dwarf.debugAbbrevSection
 import org.jetbrains.hexana.dwarf.debugInfoSection
@@ -1718,6 +1719,28 @@ class WasmParserTests {
         assertEquals(0xc4, entries[2].size)
         assertEquals(0x4, entries[2].version)
         assertEquals(0xffu, entries[2].debugAbbrevOffset)
+    }
+
+    @Test
+    fun testScanDwarfInfoV5() = runTest {
+        val buffer = resourceAsByteBuffer("kotlin/kotlin-dwarf-demo.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
+        val infoSection = (wasmModule as BaseModule).debugInfoSection()!!
+        val entries = with(infoSection) {
+            buffer.scanDwarfInfo()
+        }
+        assertEquals(1, entries.size)
+        val header = entries[0]
+        assertEquals(0x189, header.size)
+        assertEquals(0x5, header.version)
+        assertEquals(0x0u, header.debugAbbrevOffset)
+        assertIs<CompilationUnitHeader.Dwarf32Header.V5.CompileUnit>(header)
+        val compilationUnit = header.children[0]
+        assertEquals(0x180, compilationUnit.size)
+        assertEquals(Tag.DW_TAG_compile_unit, compilationUnit.tag)
+        assertEquals(21, compilationUnit.children.size)
     }
 
     @Test
