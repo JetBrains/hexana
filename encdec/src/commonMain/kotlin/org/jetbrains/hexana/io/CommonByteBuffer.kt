@@ -81,3 +81,12 @@ interface CommonByteBuffer {
     }
 }
 
+inline fun <R> CommonByteBuffer.crossSectionOperation(op: () -> R): R {
+    val position = position()
+    try {
+        return op()
+    } finally {
+        position(position)
+    }
+}
+
