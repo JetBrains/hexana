@@ -18,6 +18,7 @@
   tokens = [
     SLASH='/'
     DOT='.'
+    DASH='-'
     COMMA=','
     COLON=':'
     SEMI=';'
@@ -111,7 +112,7 @@ package-name ::= (IDENTIFIER !<<white_space>> ':' !<<white_space>>)+ IDENTIFIER 
 
 private package-decl ::= PACKAGE package-name
 
-toplevel-use-declaration ::= USE use-path ('as' IDENTIFIER)? ';'
+toplevel-use-declaration ::= USE use-path ('as' IDENTIFIER)? ';'?
 
 use-path ::= ( IDENTIFIER !<<white_space>> ':' !<<white_space>> )+ IDENTIFIER ( !<<white_space>> '/' !<<white_space>> IDENTIFIER )+ (!<<white_space>> '@' !<<white_space>> semver)?
  | IDENTIFIER  {
@@ -136,15 +137,15 @@ private world-item-definition ::= export-definition
                    | include-declaration
 
 export-definition ::= EXPORT IDENTIFIER ':' extern-type
-              | EXPORT use-path ';'
+              | EXPORT use-path ';'?
 import-definition ::= IMPORT IDENTIFIER ':' extern-type
-              | IMPORT use-path ';'
+              | IMPORT use-path ';'?
 
 private extern-interface ::= INTERFACE '{' interface-items* '}' { pin=1 }
-extern-type ::= func-type ';' | extern-interface
+extern-type ::= func-type ';'? | extern-interface
 
-include-declaration ::= INCLUDE use-path ';'
-               | INCLUDE use-path 'with' '{' include-names-list '}'
+include-declaration ::= INCLUDE use-path 'with' '{' include-names-list '}'
+               | INCLUDE use-path ';'?
 
 include-names-list ::= include-names-item (',' include-names-item)*
 
@@ -188,7 +189,7 @@ type-declaration ::= resource-definition
                     "com.intellij.psi.PsiNameIdentifierOwner"]
                }
 
-func-item ::= IDENTIFIER ':' func-type ';'  {
+func-item ::= IDENTIFIER ':' func-type ';'?  {
    methods=[
        getName
        getNameIdentifier
@@ -210,7 +211,7 @@ named-type-list ::= named-type ( ',' named-type )* ','?
 
 named-type ::= IDENTIFIER ':' type-usage
 
-use-declaration ::= USE use-path '.' '{' use-names-list '}' ';'
+use-declaration ::= USE use-path '.' '{' use-names-list '}' ';'?
 
 use-names-list ::= use-names-item (',' use-names-item)* ','?
 
@@ -226,7 +227,7 @@ use-names-item ::= IDENTIFIER 'as' IDENTIFIER | IDENTIFIER {
     "com.intellij.psi.PsiNameIdentifierOwner"]
 }
 
-type-definition ::= TYPE IDENTIFIER '=' type-usage ';'
+type-definition ::= TYPE IDENTIFIER '=' type-usage ';'?
 
 record-definition ::= RECORD IDENTIFIER '{' record-fields? '}'
 
@@ -257,14 +258,14 @@ private enum-cases ::= enum-case (',' enum-case)* ','? {
     recoverWhile = id_start_recovery
 }
 
-resource-definition ::= RESOURCE IDENTIFIER ';'
-                | RESOURCE IDENTIFIER '{' resource-items? '}'
+resource-definition ::= RESOURCE IDENTIFIER '{' resource-items? '}'
+                | RESOURCE IDENTIFIER ';'?
 
 private resource-items ::= resource-method* {
    recoverWhile = resource_recovery
 }
 
-static-func-item ::= IDENTIFIER ':' STATIC func-type ';'  {
+static-func-item ::= IDENTIFIER ':' STATIC func-type ';'?  {
    methods=[
        getName
        getNameIdentifier
@@ -278,7 +279,7 @@ static-func-item ::= IDENTIFIER ':' STATIC func-type ';'  {
 
 resource-method ::= gate? (func-item
                   | static-func-item
-                  | CONSTRUCTOR param-list ';')
+                  | CONSTRUCTOR param-list ';'?)
 
 type-usage ::= 'u8' | 'u16' | 'u32' | 'u64'
      | 's8' | 's16' | 's32' | 's64'
