@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.dwarf
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.crossSectionOperation
 import org.jetbrains.hexana.wasm.BaseModule
 import org.jetbrains.hexana.wasm.customSectionByName
 
@@ -10,9 +11,8 @@ class DwarfInfoSection(contentOffset: Int, contentSize: Int, private val debugAb
 
     private fun CommonByteBuffer.getAbbrevTables(): Map<UInt, List<DwarfAbbrevEntry>> {
         return abbrevCache ?: with(debugAbbrevSection) {
-            val oldOffset = position()
-            scanDwarfAbbrev().also {
-                position(oldOffset)
+            crossSectionOperation {
+                scanDwarfAbbrev()
             }
         }.also { abbrevCache = it }
     }
