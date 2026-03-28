@@ -63,7 +63,9 @@ class WitMissingSemicolonInspection : LocalInspectionTool() {
             }
 
             override fun visitUseDeclaration(o: WitUseDeclaration) {
-                checkSemicolon(o, o.node.findChildByType(WitElementTypes.SEMI)?.psi)
+                if (o.useNamesList != null) { // avoid noise of two errors if names list is missing
+                    checkSemicolon(o, o.node.findChildByType(WitElementTypes.SEMI)?.psi)
+                }
             }
 
             override fun visitTypeDefinition(o: WitTypeDefinition) {
