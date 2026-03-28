@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.dwarf
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.crossSectionOperation
 import org.jetbrains.hexana.wasm.BaseModule
 import org.jetbrains.hexana.wasm.customSectionByName
 
@@ -24,10 +25,12 @@ class DwarfStrSection(contentOffset: Int, contentSize: Int): DwarfSection(conten
 
 class StringTableEntry(val originalOffset: UInt, val offset: Int, val length: Int) {
     fun CommonByteBuffer.str(): String {
-        position(offset)
-        val buf = ByteArray(length)
-        get(buf, 0, length)
-        return buf.decodeToString()
+        return crossSectionOperation {
+            position(offset)
+            val buf = ByteArray(length)
+            get(buf, 0, length)
+            buf.decodeToString()
+        }
     }
 }
 
