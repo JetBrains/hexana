@@ -6,6 +6,7 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
 import com.intellij.psi.PsiReferenceBase
+import com.intellij.psi.util.parentOfType
 
 open class WitUseNamesItemMixin(node: ASTNode): WitPsiElement(node), WitUseNamesItem {
     override fun getReference(): PsiReference? {
@@ -29,5 +30,17 @@ class WitUseNamesItemReference(element: WitUseNamesItem): PsiReferenceBase<WitUs
 
     override fun getRangeInElement(): TextRange {
         return element.firstChild.textRangeInParent
+    }
+
+    override fun getVariants(): Array<out Any?> {
+        val path = element.parentOfType<WitUseDeclaration>()?.usePath ?: return emptyArray()
+        val element = WitResolver.resolveWitPath(path, path.text) ?: return emptyArray()
+        return (element as? WitInterfaceDefinition)?.let {
+            it.typeDeclarationList.map { it.name } +
+                    it.funcItemList.map { it.name } +
+                    it.useDeclarationList.flatMap {
+                        it.useNamesList?.useNamesItemList?.map { it.name } ?: emptyList()
+                    }
+        }.orEmpty().filterNotNull().toTypedArray()
     }
 }

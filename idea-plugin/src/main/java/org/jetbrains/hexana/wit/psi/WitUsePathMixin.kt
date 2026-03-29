@@ -1,7 +1,10 @@
 package org.jetbrains.hexana.wit.psi
 
+import com.intellij.codeInsight.completion.CodeCompletionHandlerBase
+import com.intellij.codeInsight.completion.CompletionType
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.lang.ASTNode
+import com.intellij.openapi.application.invokeLater
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
 import com.intellij.psi.PsiReferenceBase
@@ -65,6 +68,10 @@ private fun toLookupElement(string: String, context: WitUsePath): LookupElementB
                 context.document.insertString(context.selectionEndOffset, ".{};")
                 context.commitDocument()
                 context.editor.caretModel.moveToOffset(context.editor.caretModel.offset + 2)
+                invokeLater {
+                    CodeCompletionHandlerBase.createHandler(CompletionType.BASIC)
+                        .invokeCompletion(context.project, context.editor)
+                }
             }
         }
     }
