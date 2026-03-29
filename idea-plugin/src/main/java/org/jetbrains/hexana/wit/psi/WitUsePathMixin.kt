@@ -69,6 +69,7 @@ private fun toLookupElement(string: String, context: WitUsePath): LookupElementB
                 context.commitDocument()
                 context.editor.caretModel.moveToOffset(context.editor.caretModel.offset + 2)
                 invokeLater {
+                    if (context.editor.isDisposed) return@invokeLater
                     CodeCompletionHandlerBase.createHandler(CompletionType.BASIC)
                         .invokeCompletion(context.project, context.editor)
                 }
