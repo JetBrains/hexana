@@ -6,10 +6,8 @@ import com.intellij.openapi.editor.highlighter.HighlighterIterator
 import com.intellij.openapi.fileTypes.FileType
 import com.intellij.psi.PsiFile
 import com.intellij.psi.tree.IElementType
-import org.jetbrains.hexana.wit.psi.WitElementTypes.CLOSE_BRACE
-import org.jetbrains.hexana.wit.psi.WitElementTypes.CLOSE_PAREN
-import org.jetbrains.hexana.wit.psi.WitElementTypes.OPEN_BRACE
-import org.jetbrains.hexana.wit.psi.WitElementTypes.OPEN_PAREN
+import org.jetbrains.hexana.wit.psi.WitElementTypes
+import org.jetbrains.hexana.wit.psi.WitElementTypes.*
 
 class WitBraceMatcher : BraceMatcher {
     override fun getBraceTokenGroupId(token: IElementType): Int {
@@ -17,7 +15,10 @@ class WitBraceMatcher : BraceMatcher {
             return 1
         }
         if (token == OPEN_BRACE || token == CLOSE_BRACE) {
-            return 1
+            return 2
+        }
+        if (token == WitElementTypes.LESS_THAN || token == WitElementTypes.GREATER_THAN) {
+            return 3
         }
         return BraceMatchingUtil.UNDEFINED_TOKEN_GROUP
     }
@@ -27,7 +28,7 @@ class WitBraceMatcher : BraceMatcher {
         text: CharSequence,
         fileType: FileType
     ): Boolean {
-        return iterator.tokenType == OPEN_PAREN || iterator.tokenType == OPEN_BRACE
+        return iterator.tokenType == OPEN_PAREN || iterator.tokenType == OPEN_BRACE || iterator.tokenType == WitElementTypes.LESS_THAN
     }
 
     override fun isRBraceToken(
@@ -35,7 +36,7 @@ class WitBraceMatcher : BraceMatcher {
         text: CharSequence,
         fileType: FileType
     ): Boolean {
-        return iterator.tokenType == CLOSE_PAREN || iterator.tokenType == CLOSE_BRACE
+        return iterator.tokenType == CLOSE_PAREN || iterator.tokenType == CLOSE_BRACE || iterator.tokenType == WitElementTypes.GREATER_THAN
     }
 
     override fun isPairBraces(
@@ -63,6 +64,8 @@ class WitBraceMatcher : BraceMatcher {
             CLOSE_PAREN -> OPEN_PAREN
             OPEN_BRACE -> CLOSE_BRACE
             CLOSE_BRACE -> OPEN_BRACE
+            WitElementTypes.LESS_THAN -> WitElementTypes.GREATER_THAN
+            WitElementTypes.GREATER_THAN -> WitElementTypes.LESS_THAN
             else -> null
         }
     }
