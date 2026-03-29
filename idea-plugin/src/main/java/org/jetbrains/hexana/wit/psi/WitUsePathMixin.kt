@@ -6,6 +6,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
 import com.intellij.psi.PsiReferenceBase
 import com.intellij.psi.PsiWhiteSpace
+import com.intellij.psi.util.childrenOfType
 import com.intellij.psi.util.parentOfType
 import com.intellij.util.indexing.FileBasedIndex
 import org.jetbrains.hexana.WasmIndexId
@@ -31,14 +32,21 @@ class WitPathReference(element: WitUsePath): PsiReferenceBase<WitUsePath>(elemen
     }
 
     override fun getVariants(): Array<out Any> {
-        return (FileBasedIndex.getInstance().getAllKeys(WitIndexId, element.project)
-            + FileBasedIndex.getInstance().getAllKeys(WasmIndexId, element.project))
-            .toSet().map { toLookupElement(it) }.toTypedArray()
+        return (getLocalInterfaceNames(element) +
+                FileBasedIndex.getInstance().getAllKeys(WitIndexId, element.project).filter { it.contains('/') } +
+                FileBasedIndex.getInstance().getAllKeys(WasmIndexId, element.project).filter { it.contains('/') })
+            .toSet().map { toLookupElement(it, element) }.toTypedArray()
     }
 }
 
-private fun toLookupElement(string: String): LookupElementBuilder =
-    LookupElementBuilder.create(string).withInsertHandler { context, _ ->
+private fun getLocalInterfaceNames(element: WitUsePath): List<String> {
+    return element.containingFile.children.filterIsInstance<WitInterfaceDefinition>().mapNotNull {
+        it.nameIdentifier?.text
+    }
+}
+
+private fun toLookupElement(string: String, context: WitUsePath): LookupElementBuilder =
+    LookupElementBuilder.create(adjustNameInContext(string, context)).withInsertHandler { context, _ ->
         var element = context.file.findElementAt(context.selectionEndOffset)
         if (element is PsiWhiteSpace) {
             element = element.prevSibling
@@ -60,3 +68,16 @@ private fun toLookupElement(string: String): LookupElementBuilder =
             }
         }
     }
+
+private fun adjustNameInContext(string: String, context: WitUsePath): String {
+    if (!string.contains('/')) {
+        return string
+    }
+    val packageName = string.substringBeforeLast('/')
+    val packageDef = context.containingFile.childrenOfType<WitPackageDefinition>()
+    if (packageDef.size != 1) return string
+    if (packageDef.first().packageName.text.substringBeforeLast('@') == packageName) {
+        return string.substringAfterLast('/')
+    }
+    return string
+}
