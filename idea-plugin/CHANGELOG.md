@@ -14,6 +14,7 @@
 
 ### Fixed
 - [Issues with KDoc when Hexana is enabled](https://github.com/JetBrains/hexana/issues/67)
+- shared limit support for memory type was added.
 ### Security
 
 ## 0.6 - 2026-03-17
