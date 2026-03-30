@@ -492,7 +492,7 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // INCLUDE use-path 'with' '{' include-names-list '}'
+  // INCLUDE use-path 'with' '{' include-names-list '}' ';'?
   //                | INCLUDE use-path ';'?
   public static boolean include_declaration(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "include_declaration")) return false;
@@ -505,7 +505,7 @@ public class WitParser implements PsiParser, LightPsiParser {
     return r;
   }
 
-  // INCLUDE use-path 'with' '{' include-names-list '}'
+  // INCLUDE use-path 'with' '{' include-names-list '}' ';'?
   private static boolean include_declaration_0(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "include_declaration_0")) return false;
     boolean r;
@@ -516,8 +516,16 @@ public class WitParser implements PsiParser, LightPsiParser {
     r = r && consumeToken(b, OPEN_BRACE);
     r = r && include_names_list(b, l + 1);
     r = r && consumeToken(b, CLOSE_BRACE);
+    r = r && include_declaration_0_6(b, l + 1);
     exit_section_(b, m, null, r);
     return r;
+  }
+
+  // ';'?
+  private static boolean include_declaration_0_6(PsiBuilder b, int l) {
+    if (!recursion_guard_(b, l, "include_declaration_0_6")) return false;
+    consumeToken(b, SEMI);
+    return true;
   }
 
   // INCLUDE use-path ';'?
@@ -2110,7 +2118,7 @@ public class WitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // IDENTIFIER '(' type-usage ')' | IDENTIFIER
+  // (IDENTIFIER '(' type-usage ')') | IDENTIFIER
   public static boolean variant_case(PsiBuilder b, int l) {
     if (!recursion_guard_(b, l, "variant_case")) return false;
     if (!nextTokenIs(b, IDENTIFIER)) return false;

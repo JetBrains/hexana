@@ -8,10 +8,11 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementVisitor;
 import com.intellij.psi.util.PsiTreeUtil;
 import static org.jetbrains.hexana.wit.psi.WitElementTypes.*;
-import org.jetbrains.hexana.wit.psi.WitPsiElement;
+import org.jetbrains.hexana.wit.psi.WitEnumCaseMixin;
 import org.jetbrains.hexana.wit.psi.*;
+import com.intellij.openapi.util.NlsSafe;
 
-public class WitEnumCaseImpl extends WitPsiElement implements WitEnumCase {
+public class WitEnumCaseImpl extends WitEnumCaseMixin implements WitEnumCase {
 
   public WitEnumCaseImpl(@NotNull ASTNode node) {
     super(node);
@@ -31,6 +32,21 @@ public class WitEnumCaseImpl extends WitPsiElement implements WitEnumCase {
   @NotNull
   public PsiElement getIdentifier() {
     return findNotNullChildByType(IDENTIFIER);
+  }
+
+  @Override
+  public @NotNull String getName() {
+    return WitPsiImplUtil.getName(this);
+  }
+
+  @Override
+  public @Nullable PsiElement getNameIdentifier() {
+    return WitPsiImplUtil.getNameIdentifier(this);
+  }
+
+  @Override
+  public int getTextOffset() {
+    return WitPsiImplUtil.getTextOffset(this);
   }
 
 }

@@ -14,7 +14,8 @@ import org.jspecify.annotations.Nullable;
 public class WitUsePathManipulator extends AbstractElementManipulator<WitUsePath> {
     @Override
     public @Nullable WitUsePath handleContentChange(@NonNull WitUsePath element, @NotNull TextRange range, String newContent) throws IncorrectOperationException {
-        WitPsiFile file = WitHandleManipulator.createDummyFile(element.getProject(), "package foo; import " + newContent + ";");
-        return (WitUsePath) SyntaxTraverser.psiTraverser(file).filterTypes(type -> type == WitElementTypes.USE_PATH).bfsTraversal().single();
+        WitPsiFile file = WitHandleManipulator.createDummyFile(element.getProject(), "package foo:bar; use " + newContent + ";");
+        WitUsePath path = (WitUsePath) SyntaxTraverser.psiTraverser(file).filterTypes(type -> type == WitElementTypes.USE_PATH).bfsTraversal().single();
+        return (WitUsePath)element.replace(path);
     }
 }

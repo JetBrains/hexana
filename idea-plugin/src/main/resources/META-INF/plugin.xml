@@ -111,6 +111,7 @@
                                  implementationClass="org.jetbrains.hexana.wit.psi.impl.WitUseNamesItemManipulator"/>
         <lang.elementManipulator forClass="org.jetbrains.hexana.wit.psi.WitIncludeNamesItem"
                                  implementationClass="org.jetbrains.hexana.wit.psi.impl.WitIncludeNamesItemManipulator"/>
+        <renameInputValidator implementation="org.jetbrains.hexana.wit.psi.WitRenameInputValidator" />
         <fileBasedIndex implementation="org.jetbrains.hexana.wit.WitComponentIndex"/>
         <fileBasedIndex implementation="org.jetbrains.hexana.WasmIndex"/>
         <platform.backend.documentation.psiTargetProvider implementation="org.jetbrains.hexana.wit.WitDocumentationProvider"/>

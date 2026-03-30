@@ -23,8 +23,6 @@ public interface WitStaticFuncItem extends NavigatablePsiElement, PsiNamedElemen
 
   @Nullable PsiElement setName(@NlsSafe @NotNull String name);
 
-  //WARNING: getTextOffset(...) is skipped
-  //matching getTextOffset(WitStaticFuncItem, ...)
-  //methods are not found in WitPsiImplUtil
+  int getTextOffset();
 
 }

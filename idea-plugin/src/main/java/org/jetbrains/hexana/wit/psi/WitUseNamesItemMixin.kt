@@ -3,10 +3,12 @@ package org.jetbrains.hexana.wit.psi
 import com.intellij.lang.ASTNode
 import com.intellij.openapi.util.NlsSafe
 import com.intellij.openapi.util.TextRange
+import com.intellij.psi.ElementManipulators
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
 import com.intellij.psi.PsiReferenceBase
 import com.intellij.psi.util.parentOfType
+import org.jetbrains.hexana.wit.psi.impl.WitPsiImplUtil
 
 open class WitUseNamesItemMixin(node: ASTNode): WitPsiElement(node), WitUseNamesItem {
     override fun getReference(): PsiReference? {
@@ -15,11 +17,21 @@ open class WitUseNamesItemMixin(node: ASTNode): WitPsiElement(node), WitUseNames
     }
 
     override fun setName(name: @NlsSafe String): PsiElement? {
-        return null;
+        val identifier = nameIdentifier ?: return this
+        identifier.replace(WitPsiImplUtil.createId(project, name))
+        return this
     }
 
     override fun getNameIdentifier(): PsiElement? {
-        return lastChild;
+        return WitPsiImplUtil.getNameIdentifier(this)
+    }
+
+    override fun getName(): String? {
+        return WitPsiImplUtil.getName(this)
+    }
+
+    override fun getTextOffset(): Int {
+        return WitPsiImplUtil.getTextOffset(this)
     }
 }
 

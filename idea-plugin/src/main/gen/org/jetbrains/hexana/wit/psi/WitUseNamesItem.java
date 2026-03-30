@@ -11,16 +11,12 @@ import com.intellij.openapi.util.NlsSafe;
 
 public interface WitUseNamesItem extends NavigatablePsiElement, PsiNamedElement, PsiNameIdentifierOwner {
 
-  //WARNING: getName(...) is skipped
-  //matching getName(WitUseNamesItem, ...)
-  //methods are not found in WitPsiImplUtil
+  @Nullable String getName();
 
   @Nullable PsiElement getNameIdentifier();
 
   @Nullable PsiElement setName(@NlsSafe @NotNull String name);
 
-  //WARNING: getTextOffset(...) is skipped
-  //matching getTextOffset(WitUseNamesItem, ...)
-  //methods are not found in WitPsiImplUtil
+  int getTextOffset();
 
 }

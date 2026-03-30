@@ -3,10 +3,13 @@ package org.jetbrains.hexana.wit.psi
 import com.intellij.lang.ASTNode
 import com.intellij.openapi.util.NlsSafe
 import com.intellij.psi.PsiElement
+import org.jetbrains.hexana.wit.psi.impl.WitPsiImplUtil
 
 open class WitStaticFuncItemMixin(node: ASTNode): WitPsiElement(node), WitStaticFuncItem {
     override fun setName(name: @NlsSafe String): PsiElement? {
-        return null;
+        val identifier = nameIdentifier ?: return this
+        identifier.replace(WitPsiImplUtil.createId(project, name))
+        return this
     }
 
     override fun getFuncType(): WitFuncType {
@@ -22,6 +25,10 @@ open class WitStaticFuncItemMixin(node: ASTNode): WitPsiElement(node), WitStatic
     }
 
     override fun getName(): String? {
-        return nameIdentifier?.text
+        return WitPsiImplUtil.getName(this as WitFuncItem)
+    }
+
+    override fun getTextOffset(): Int {
+        return WitPsiImplUtil.getTextOffset(this as WitFuncItem)
     }
 }

@@ -108,6 +108,30 @@ object WitResolver {
         if (container is WitInterfaceDefinition) {
             return resolveHandle(container, name)
         }
+        if (container is WitWorldDefinition) {
+            container.importDefinitionList.forEach {
+                it.externType?.let { resolveHandle(it, name)?.let { return it } }
+                if (it.identifier?.text == name) return it
+            }
+            container.exportDefinitionList.forEach {
+                it.externType?.let { resolveHandle(it, name)?.let { return it } }
+                if (it.identifier?.text == name) return it
+            }
+            container.useDeclarationList.forEach { useDecl ->
+                useDecl.useNamesList?.useNamesItemList?.forEach { useItem ->
+                    if (useItem.name == name) {
+                        return useItem.reference?.resolve() ?: useItem
+                    }
+                }
+            }
+            container.includeDeclarationList.forEach { includeDecl ->
+                includeDecl.includeNamesList?.includeNamesItemList?.forEach { includeItem ->
+                    if (includeItem.name == name) {
+                        return includeItem.reference?.resolve() ?: includeItem
+                    }
+                }
+            }
+        }
         return null
     }
 
@@ -116,6 +140,7 @@ object WitResolver {
         name: String
     ): PsiElement? {
         val container = handle.parentOfType<WitInterfaceDefinition>(true)
+            ?: handle as? WitInterfaceDefinition
         if (container != null) {
             return (container.typeDeclarationList.find { it.name == name }
                 ?: container.funcItemList.find { it.identifier.text == name }

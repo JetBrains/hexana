@@ -144,7 +144,7 @@ import-definition ::= IMPORT IDENTIFIER ':' extern-type
 private extern-interface ::= INTERFACE '{' interface-items* '}' { pin=1 }
 extern-type ::= func-type ';'? | extern-interface
 
-include-declaration ::= INCLUDE use-path 'with' '{' include-names-list '}'
+include-declaration ::= INCLUDE use-path 'with' '{' include-names-list '}' ';'?
                | INCLUDE use-path ';'?
 
 include-names-list ::= include-names-item (',' include-names-item)*
@@ -235,7 +235,17 @@ private record-fields ::= record-field (',' record-field)* ','? {
    recoverWhile = id_start_recovery
 }
 
-record-field ::= IDENTIFIER ':' type-usage
+record-field ::= IDENTIFIER ':' type-usage {
+    methods=[
+        getName
+        getNameIdentifier
+        setName
+        getTextOffset
+    ]
+    mixin="org.jetbrains.hexana.wit.psi.WitRecordFieldMixin"
+    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+    "com.intellij.psi.PsiNameIdentifierOwner"]
+}
 
 flags-definition ::= FLAGS IDENTIFIER '{' flags-fields? '}'
 
@@ -249,11 +259,31 @@ private variant-cases ::= variant-case (',' variant-case)* ','? {
    recoverWhile = id_start_recovery
 }
 
-variant-case ::= IDENTIFIER '(' type-usage ')' | IDENTIFIER
+variant-case ::= (IDENTIFIER '(' type-usage ')') | IDENTIFIER {
+    methods=[
+        getName
+        getNameIdentifier
+        setName
+        getTextOffset
+    ]
+    mixin="org.jetbrains.hexana.wit.psi.WitVariantCaseMixin"
+    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+    "com.intellij.psi.PsiNameIdentifierOwner"]
+}
 
 enum-definition ::= ENUM IDENTIFIER '{' enum-cases? '}'
 
-enum-case ::= IDENTIFIER
+enum-case ::= IDENTIFIER {
+    methods=[
+        getName
+        getNameIdentifier
+        setName
+        getTextOffset
+    ]
+    mixin="org.jetbrains.hexana.wit.psi.WitEnumCaseMixin"
+    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+    "com.intellij.psi.PsiNameIdentifierOwner"]
+}
 private enum-cases ::= enum-case (',' enum-case)* ','? {
     recoverWhile = id_start_recovery
 }

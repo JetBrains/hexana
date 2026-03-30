@@ -15,7 +15,9 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitEnumCase(@NotNull WitEnumCase o) {
-    visitPsiElement(o);
+    visitNavigatablePsiElement(o);
+    // visitPsiNamedElement(o);
+    // visitPsiNameIdentifierOwner(o);
   }
 
   public void visitEnumDefinition(@NotNull WitEnumDefinition o) {
@@ -125,7 +127,9 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitRecordField(@NotNull WitRecordField o) {
-    visitPsiElement(o);
+    visitNavigatablePsiElement(o);
+    // visitPsiNamedElement(o);
+    // visitPsiNameIdentifierOwner(o);
   }
 
   public void visitResourceDefinition(@NotNull WitResourceDefinition o) {
@@ -215,7 +219,9 @@ public class WitElementVisitor extends PsiElementVisitor {
   }
 
   public void visitVariantCase(@NotNull WitVariantCase o) {
-    visitPsiElement(o);
+    visitNavigatablePsiElement(o);
+    // visitPsiNamedElement(o);
+    // visitPsiNameIdentifierOwner(o);
   }
 
   public void visitVariantDefinition(@NotNull WitVariantDefinition o) {

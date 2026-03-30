@@ -28,4 +28,19 @@ public class WitUseNamesItemImpl extends WitUseNamesItemMixin implements WitUseN
     else super.accept(visitor);
   }
 
+  @Override
+  public @NotNull String getName() {
+    return WitPsiImplUtil.getName(this);
+  }
+
+  @Override
+  public @Nullable PsiElement getNameIdentifier() {
+    return WitPsiImplUtil.getNameIdentifier(this);
+  }
+
+  @Override
+  public int getTextOffset() {
+    return WitPsiImplUtil.getTextOffset(this);
+  }
+
 }

@@ -40,4 +40,19 @@ public class WitFuncItemImpl extends WitFuncItemMixin implements WitFuncItem {
     return findNotNullChildByType(IDENTIFIER);
   }
 
+  @Override
+  public @NotNull String getName() {
+    return WitPsiImplUtil.getName(this);
+  }
+
+  @Override
+  public @Nullable PsiElement getNameIdentifier() {
+    return WitPsiImplUtil.getNameIdentifier(this);
+  }
+
+  @Override
+  public int getTextOffset() {
+    return WitPsiImplUtil.getTextOffset(this);
+  }
+
 }
