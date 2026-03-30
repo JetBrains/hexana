@@ -119,6 +119,7 @@
         <indexedRootsProvider implementation="org.jetbrains.hexana.wit.WitBuiltInDefinitionsContributor"/>
         <codeInsight.lineMarkerProvider language="wit" implementationClass="org.jetbrains.hexana.wit.WitGoToRelatedSymbolsProvider"/>
         <completion.contributor language="wit" implementationClass="org.jetbrains.hexana.wit.WitKeywordCompletionContributor" />
+        <completion.contributor language="wit" implementationClass="org.jetbrains.hexana.wit.WitGateCompletionContributor" />
 
         <localInspection language="wit"
                          groupBundle="messages.HexanaBundle"
