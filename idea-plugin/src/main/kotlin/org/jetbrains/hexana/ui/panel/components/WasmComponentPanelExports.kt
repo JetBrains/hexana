@@ -3,16 +3,11 @@ package org.jetbrains.hexana.ui.panel.components
 import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.rememberTextMeasurer
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.fileEditor.NavigatableFileEditor
-import com.intellij.openapi.vfs.findPsiFile
-import com.intellij.psi.NavigatablePsiElement
-import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.util.parentOfType
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.ui.components.Table
@@ -21,15 +16,14 @@ import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
 import org.jetbrains.hexana.ui.panel.scrollHexViewTo
 import org.jetbrains.hexana.ui.panel.universalQualifiedNameMeasure
-import org.jetbrains.hexana.wit.WitIndexId
-import org.jetbrains.hexana.wit.processIndexEntries
-import org.jetbrains.hexana.wit.psi.WitResolver
+import org.jetbrains.hexana.wasm.components.ComponentSortIndex
 
 @Composable
 fun WasmComponentPanelExports( wasmBinaryProvider: WasmComponentBinaryProvider,
                                state: HexViewStateHolder) {
     val textMeasurer = rememberTextMeasurer()
     val nameColumnWidth = textMeasurer.measureWidthMonospace(universalQualifiedNameMeasure)
+    val sortIndexColumnWidth = textMeasurer.measureWidthMonospace("Component(000)")
 
     val exports = remember (wasmBinaryProvider) { wasmBinaryProvider.exports }
     Table(listOf(
@@ -37,9 +31,13 @@ fun WasmComponentPanelExports( wasmBinaryProvider: WasmComponentBinaryProvider,
             val exportRecord = exports[index].exportName + (exports[index].version ?: "")
             TableCellValue(exportRecord)
         },
+        TableColumn("Sort Index", modifier = Modifier.widthIn(min = sortIndexColumnWidth)) { index ->
+            val exportRecord = exports[index]
+            TableCellValue(exportRecord.sortIndex.toStringRepresentation() ?: "")
+        },
         TableColumn("Extern Description", modifier = Modifier.fillMaxWidth()) { index ->
             val exportRecord = exports[index]
-            TableCellValue(exportRecord.externDescription.toStringRepresentation())
+            TableCellValue(exportRecord.externDescription?.toStringRepresentation() ?: "")
         },
 
         ), exports.size,

@@ -22,6 +22,8 @@ import org.jetbrains.hexana.wasm.components.ComponentPrimitiveU32Type
 import org.jetbrains.hexana.wasm.components.ComponentPrimitiveU64Type
 import org.jetbrains.hexana.wasm.components.ComponentPrimitiveU8Type
 import org.jetbrains.hexana.wasm.components.ComponentPrimitiveValueType
+import org.jetbrains.hexana.wasm.components.ComponentSort
+import org.jetbrains.hexana.wasm.components.ComponentSortIndex
 import org.jetbrains.hexana.wasm.components.ComponentValueIdxType
 import org.jetbrains.hexana.wasm.components.ComponentValueType
 import org.jetbrains.hexana.wasm.components.TypeBound
@@ -67,5 +69,16 @@ internal fun ComponentValueType.toStringRepresentation() = when (this) {
         is ComponentPrimitiveString -> "String"
         is ComponentPrimitiveCharType -> "Char"
         is ComponentPrimitiveErrorContext -> "ErrorContext"
+    }
+}
+
+internal fun ComponentSortIndex.toStringRepresentation(): String {
+    return when (this.sort) {
+        is ComponentSort.Func -> "Func(${this.index})"
+        is ComponentSort.Value -> "Value(${this.index})"
+        is ComponentSort.Type -> "Type(${this.index})"
+        is ComponentSort.Component -> "Component(${this.index})"
+        is ComponentSort.Instance -> "Instance(${this.index})"
+        else -> "Unknown(${this.sort})"
     }
 }
