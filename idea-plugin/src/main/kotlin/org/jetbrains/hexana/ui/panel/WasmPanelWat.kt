@@ -1,9 +1,12 @@
 package org.jetbrains.hexana.ui.panel
 
+import androidx.compose.foundation.clickable
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.*
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
@@ -24,7 +27,6 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
-import com.intellij.openapi.application.writeAction
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.EditorGutterAction
@@ -87,7 +89,8 @@ internal fun WasmPanelWat(
         null, is WatConversionState.Loading -> ConvertingIndicator(message = "0000 0 1001 01 10 01 converting ${wasmBinaryProvider.file.name}")
 
         is WatConversionState.ShowLiteEditor -> {
-            WatLiteEditor((wasmViewState as WatConversionState.ShowLiteEditor).wat)
+            val editor = wasmViewState as WatConversionState.ShowLiteEditor
+            WatLiteEditor(editor.wat, editor.lineOffsets, state)
         }
 
         is WatConversionState.ShowEditor -> {
@@ -135,7 +138,7 @@ fun TextAttributesKey.toComposeColor(): Color {
 }
 
 @Composable
-internal fun WatLiteEditor(watContent: String) {
+internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, state: HexViewStateHolder) {
     val tokens by remember {
         derivedStateOf {
             val result = mutableListOf<List<TokenData>>()
@@ -165,15 +168,22 @@ internal fun WatLiteEditor(watContent: String) {
     LazyColumn {
         items(tokens.size) { lineIndex ->
             val tokensInLine = tokens[lineIndex]
-            val lineText = tokensInLine.joinToString("") { it.text }
-            val offsetMatch = if (showOffsets) offsetPattern.find(lineText) else null
 
             Row(verticalAlignment = Alignment.Top) {
                 if (showOffsets) {
-                    val offsetText = offsetMatch?.groupValues?.get(1)?.uppercase() ?: ""
+                    val offsetText = lineOffsets[lineIndex]?.let { "0x$it" } ?: ""
                     Text(
                         text = offsetText,
-                        modifier = Modifier.width(60.dp).padding(end = 8.dp),
+                        modifier = Modifier.width(60.dp).padding(end = 8.dp)
+                            .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)))
+                            .clickable {
+                                lineOffsets[lineIndex]?.let { offsetStr ->
+                                    val offset = offsetStr.toLongOrNull(16) ?: return@let
+                                    state.setViewMode(HexViewMode.Hex)
+                                    state.scrollHexViewTo(offset)
+                                    state.setCursorPosition(offset, state.bytesPerRow.value)
+                                }
+                            },
                         style = TextStyle(color = Color.Gray, fontFamily = FontFamily.Monospace)
                     )
                 }
@@ -309,7 +319,7 @@ private fun ConvertingIndicator(message: String) {
 sealed class WatConversionState {
     object Loading : WatConversionState()
     class ShowEditor(val editorComponent: JComponent, val warningComponent: JComponent? = null) : WatConversionState()
-    class ShowLiteEditor(val wat: String) : WatConversionState()
+    class ShowLiteEditor(val wat: String, val lineOffsets: Map<Int, String>) : WatConversionState()
     class ShowMultifileEditor(val fileset: WatFileset) : WatConversionState()
     class Error(val error: String) : WatConversionState()
 }
@@ -349,7 +359,7 @@ internal class WasmViewModel(
                         }
                         WatConversionState.ShowMultifileEditor(fileset)
                     } else if (virtualFile.length() > HexanaService.WAT_EDITOR_MAX_FILE_SIZE) {
-                        WatConversionState.ShowLiteEditor(fileText)
+                        WatConversionState.ShowLiteEditor(fileText, lineOffsets)
                     } else {
                         val name = wasmFile.name.removeSuffix(".wasm") + ".wat"
                         val file = LightWatFile(wasmFile, name, fileText)
