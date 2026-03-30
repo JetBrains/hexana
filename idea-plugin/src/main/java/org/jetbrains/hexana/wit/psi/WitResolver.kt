@@ -105,18 +105,26 @@ object WitResolver {
             else -> return null
         }
         val container = resolveWitPath(path, path.text) ?: return null
+        return resolveHandle(container, name)
+    }
+
+    fun resolveHandle(handle: PsiElement, name: String): PsiElement? {
+        val externType = handle.parentOfType<WitExternType>(true)
+        if (externType != null) {
+             (externType.typeDeclarationList.find { it.name == name }
+                ?: externType.funcItemList.find { it.identifier.text == name }
+                ?: externType.useDeclarationList.flatMap {
+                    it.useNamesList?.useNamesItemList.orEmpty()
+                }.find { it.lastChild.text == name }?.let {
+                    it.references.singleOrNull()?.resolve() ?: it
+                })?.let { return it }
+        }
+        val container = handle.parentOfType<WitInterfaceDefinition>(true)
+            ?: handle.parentOfType<WitWorldDefinition>(true)
         if (container is WitInterfaceDefinition) {
-            return resolveHandle(container, name)
+            return resolveInterfaceMember(container, name)
         }
         if (container is WitWorldDefinition) {
-            container.importDefinitionList.forEach {
-                it.externType?.let { resolveHandle(it, name)?.let { return it } }
-                if (it.identifier?.text == name) return it
-            }
-            container.exportDefinitionList.forEach {
-                it.externType?.let { resolveHandle(it, name)?.let { return it } }
-                if (it.identifier?.text == name) return it
-            }
             container.useDeclarationList.forEach { useDecl ->
                 useDecl.useNamesList?.useNamesItemList?.forEach { useItem ->
                     if (useItem.name == name) {
@@ -135,31 +143,16 @@ object WitResolver {
         return null
     }
 
-    fun resolveHandle(
-        handle: PsiElement,
+    fun resolveInterfaceMember(
+        container: WitInterfaceDefinition,
         name: String
     ): PsiElement? {
-        val container = handle.parentOfType<WitInterfaceDefinition>(true)
-            ?: handle as? WitInterfaceDefinition
-        if (container != null) {
-            return (container.typeDeclarationList.find { it.name == name }
-                ?: container.funcItemList.find { it.identifier.text == name }
-                ?: container.useDeclarationList.flatMap {
-                    it.useNamesList?.useNamesItemList.orEmpty()
-                }.find { it.lastChild.text == name }?.let {
-                    it.references.singleOrNull()?.resolve() ?: it
-                })
-        }
-        val externType = handle.parentOfType<WitExternType>(true)
-        if (externType != null) {
-            return (externType.typeDeclarationList.find { it.name == name }
-                ?: externType.funcItemList.find { it.identifier.text == name }
-                ?: externType.useDeclarationList.flatMap {
-                    it.useNamesList?.useNamesItemList.orEmpty()
-                }.find { it.lastChild.text == name }?.let {
-                    it.references.singleOrNull()?.resolve() ?: it
-                })
-        }
-        return null
+        return (container.typeDeclarationList.find { it.name == name }
+            ?: container.funcItemList.find { it.identifier.text == name }
+            ?: container.useDeclarationList.flatMap {
+                it.useNamesList?.useNamesItemList.orEmpty()
+            }.find { it.lastChild.text == name }?.let {
+                it.references.singleOrNull()?.resolve() ?: it
+            })
     }
 }
