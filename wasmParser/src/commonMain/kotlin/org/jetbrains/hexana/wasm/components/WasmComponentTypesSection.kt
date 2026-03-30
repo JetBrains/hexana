@@ -363,10 +363,10 @@ fun CommonByteBuffer.externDescription(): ComponentExternDescription {
 }
 
 fun CommonByteBuffer.typeBound(): TypeBound {
-    return when(get()) {
+    return when(val bound = get()) {
         0x00.toByte() -> TypeBoundType(uint32())
         0x01.toByte() -> TypeBoundSubResource()
-        else -> TODO()
+        else -> error("Invalid type bound discriminant: 0x${bound.toString(16)}")
     }
 }
 

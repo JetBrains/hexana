@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.wasm.components
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.wasm.components.ComponentCoreInstance.componentSortWithIndex
 import org.jetbrains.hexana.wasm.components.ComponentExportSection.exportRecord
 import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
@@ -33,14 +34,23 @@ object ComponentExportSection {
         return when(get()) {
             0x00.toByte() -> {
                 val exportName = consumeString()
-                val externDescription = externDescription()
-                WasmComponentExport(offset, position() - offset, exportName, null, externDescription)
+                val sortIndex = componentSortWithIndex()
+                val externDescription = if (get() != 0x00.toByte()) externDescription() else null
+                WasmComponentExport(offset, position() - offset, exportName, null, sortIndex, externDescription)
             }
             0x01.toByte() -> {
                 val exportName = consumeString()
                 val version = consumeString()
-                val externDescription = externDescription()
-                WasmComponentExport(offset, position() - offset, exportName, version, externDescription)
+                val sortIndex = componentSortWithIndex()
+                val externDescription = if (get() != 0x00.toByte()) externDescription() else null
+                WasmComponentExport(
+                    offset,
+                    position() - offset,
+                    exportName,
+                    version,
+                    sortIndex,
+                    externDescription
+                )
             }
             else -> throw IllegalArgumentException("Invalid export record type")
         }
@@ -52,5 +62,7 @@ class WasmComponentExport(
     val size: Int,
     val exportName: String,
     val version: String?,
-    val externDescription: ComponentExternDescription)
+    val sortIndex: ComponentSortIndex,
+    val externDescription: ComponentExternDescription? = null
+)
 
