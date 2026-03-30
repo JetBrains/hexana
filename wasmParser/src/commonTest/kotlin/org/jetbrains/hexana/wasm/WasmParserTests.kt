@@ -1474,6 +1474,23 @@ class WasmParserTests {
             assertEquals(WasmMemType(WasmFixedI32Limits(0x1000, 0x1000, true)), type)
         }
     }
+
+    @Test
+    fun `#77 NIE on go-wasm module`() = runTest {
+        val buffer = resourceAsByteBuffer("wasm-component-experiment-2/repl-api.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as WasmComponent
+        val exports = wasmModule.exportSection.flatMap {
+            with(it) {
+                buffer.scan()
+            }
+        }
+        assertEquals(9, exports.size)
+        assertEquals("http-client", exports[1].exportName)
+        assertEquals(ComponentSort.Type, exports[1].sortIndex.sort)
+        assertEquals(2.toUInt(), exports[1].sortIndex.index)
+    }
 }
 
 
