@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.ui.panel
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -165,47 +167,48 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
     val offsetPattern = remember { Regex("""\(;@([0-9a-fA-F]+)\s*;\)""") }
     val showOffsets = remember { HexanaSettings.getInstance().showOffsets == true }
 
-    LazyColumn {
-        items(tokens.size) { lineIndex ->
-            val tokensInLine = tokens[lineIndex]
+    SelectionContainer {
+        LazyColumn {
+            items(tokens.size) { lineIndex ->
+                val tokensInLine = tokens[lineIndex]
 
-            Row(verticalAlignment = Alignment.Top) {
-                if (showOffsets) {
-                    val offsetText = lineOffsets[lineIndex]?.let { "0x$it" } ?: ""
+                Row(verticalAlignment = Alignment.Top) {
+                    if (showOffsets) {
+                        DisableSelection {
+                            val offsetText = lineOffsets[lineIndex]?.let { "0x$it" } ?: ""
+                            Text(
+                                text = offsetText,
+                                modifier = Modifier.width(60.dp).padding(end = 8.dp)
+                                    .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)))
+                                    .clickable {
+                                        lineOffsets[lineIndex]?.let { offsetStr ->
+                                            val offset = offsetStr.toLongOrNull(16) ?: return@let
+                                            state.setViewMode(HexViewMode.Hex)
+                                            state.scrollHexViewTo(offset)
+                                            state.setCursorPosition(offset, state.bytesPerRow.value)
+                                        }
+                                    },
+                                style = TextStyle(color = Color.Gray, fontFamily = FontFamily.Monospace)
+                            )
+                        }
+                    }
                     Text(
-                        text = offsetText,
-                        modifier = Modifier.width(60.dp).padding(end = 8.dp)
-                            .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)))
-                            .clickable {
-                                lineOffsets[lineIndex]?.let { offsetStr ->
-                                    val offset = offsetStr.toLongOrNull(16) ?: return@let
-                                    state.setViewMode(HexViewMode.Hex)
-                                    state.scrollHexViewTo(offset)
-                                    state.setCursorPosition(offset, state.bytesPerRow.value)
-                                }
-                            },
-                        style = TextStyle(color = Color.Gray, fontFamily = FontFamily.Monospace)
-                    )
-                }
-                Text(
-                    text = buildAnnotatedString {
-                        tokensInLine.forEach { tokenData ->
-                            if (offsetPattern.matches(tokenData.text)) return@forEach
-                            val colors = highlighter.getTokenHighlights(tokenData.tokenType)
-                            val colorResolved = colors.getOrNull(0)
-                            if (colorResolved != null) {
-                                withStyle(style = SpanStyle(color = colorResolved.toComposeColor())) {
+                        text = buildAnnotatedString {
+                            tokensInLine.forEach { tokenData ->
+                                if (offsetPattern.matches(tokenData.text)) return@forEach
+                                val colors = highlighter.getTokenHighlights(tokenData.tokenType)
+                                val colorResolved = colors.getOrNull(0)
+                                if (colorResolved != null) {
+                                    withStyle(style = SpanStyle(color = colorResolved.toComposeColor())) {
+                                        append(tokenData.text)
+                                    }
+                                } else {
                                     append(tokenData.text)
                                 }
-                            } else {
-                                append(tokenData.text)
                             }
-
                         }
-
-                        append(" ")
-                    }
-                )
+                    )
+                }
             }
         }
     }
