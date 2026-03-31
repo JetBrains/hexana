@@ -3,20 +3,30 @@
 ## Unreleased
 
 ### Added
-- [WAT: offsets-based line numbers](https://github.com/JetBrains/hexana/issues/35)
-- [Search in table view for imports/exports/functions (start typing to search)](https://github.com/JetBrains/hexana/issues/7)
+
 ### Changed
-- WIT: added very basic editing experience (keyword completion, code formatting)
-- Table UX improvements for imports/exports/functions: arrow keys for navigation, scrolling, layout fixes
+
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+
+### Security
+
+## 0.7 - 2026-03-31
+
+### Added
+- [WAT: offsets-based line numbers](https://github.com/JetBrains/hexana/issues/35)
+- [Search in table view for imports/exports/functions (start typing to search)](https://github.com/JetBrains/hexana/issues/7)
+### Changed
+- WIT: added very basic editing experience (keyword completion, code formatting)
+- Table UX improvements for imports/exports/functions: arrow keys for navigation, scrolling, layout fixes
+
+### Fixed
 - [Issues with KDoc when Hexana is enabled](https://github.com/JetBrains/hexana/issues/67)
 - shared limit support for memory type was added.
 - [NIE on reading go wasm module](https://github.com/JetBrains/hexana/issues/77)
-### Security
 
 ## 0.6 - 2026-03-17
 
