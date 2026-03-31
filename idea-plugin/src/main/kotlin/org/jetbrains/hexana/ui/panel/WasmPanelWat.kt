@@ -3,6 +3,8 @@ package org.jetbrains.hexana.ui.panel
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -12,21 +14,26 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.intellij.codeInsight.hint.HintUtil
@@ -52,18 +59,8 @@ import com.intellij.psi.tree.IElementType
 import com.intellij.ui.EditorNotificationPanel
 import com.intellij.util.asSafely
 import com.intellij.util.ui.UIUtil
-import kotlinx.coroutines.CoroutineName
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.ui.input.pointer.isPrimaryPressed
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.unit.Dp
-import kotlinx.coroutines.delay
 import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaService
@@ -76,11 +73,7 @@ import org.jetbrains.hexana.wat.WatSyntaxHighlighter
 import org.jetbrains.hexana.wat.createWatFileset
 import org.jetbrains.hexana.wat.psi.WatLexer
 import org.jetbrains.hexana.wat.psi.WatToken
-import org.jetbrains.jewel.ui.component.Icon
-import org.jetbrains.jewel.ui.component.IconButton
-import org.jetbrains.jewel.ui.component.Text
-import org.jetbrains.jewel.ui.component.TextField
-import org.jetbrains.jewel.ui.component.VerticalScrollbar
+import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import java.awt.BorderLayout
 import java.awt.Cursor
@@ -217,6 +210,31 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
         }
     }
 
+    var cursorLine by remember { mutableIntStateOf(0) }
+    var cursorColumn by remember { mutableIntStateOf(0) }
+
+    val lineTexts by remember(tokens) {
+        derivedStateOf {
+            tokens.map { line -> line.joinToString("") { it.text } }
+        }
+    }
+
+    LaunchedEffect(cursorLine, cursorColumn) {
+        val visibleItems = lazyListState.layoutInfo.visibleItemsInfo
+        val isVisible = visibleItems.any { it.index == cursorLine }
+        if (!isVisible) {
+            lazyListState.animateScrollToItem(cursorLine)
+        } else {
+            val item = visibleItems.find { it.index == cursorLine }
+            if (item != null) {
+                val viewportHeight = lazyListState.layoutInfo.viewportEndOffset - lazyListState.layoutInfo.viewportStartOffset
+                if (item.offset < 0 || item.offset + item.size > viewportHeight) {
+                    lazyListState.animateScrollToItem(cursorLine)
+                }
+            }
+        }
+    }
+
     fun scrollToMatch(index: Int) {
         if (matches.isEmpty()) return
         val match = matches[index % matches.size]
@@ -239,6 +257,10 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
         }
     }
 
+    LaunchedEffect(Unit) {
+        editorFocusRequester.requestFocus()
+    }
+
     Column(
         modifier = Modifier.fillMaxSize()
             .focusRequester(editorFocusRequester)
@@ -252,6 +274,60 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
                     searchQuery = TextFieldValue("")
                     editorFocusRequester.requestFocus()
                     true
+                } else if (it.type == KeyEventType.KeyDown) {
+                    when (it.key) {
+                        Key.DirectionUp -> {
+                            if (cursorLine > 0) {
+                                cursorLine--
+                                cursorColumn = minOf(cursorColumn, lineTexts[cursorLine].length)
+                            }
+                            true
+                        }
+                        Key.DirectionDown -> {
+                            if (cursorLine < lineTexts.size - 1) {
+                                cursorLine++
+                                cursorColumn = minOf(cursorColumn, lineTexts[cursorLine].length)
+                            }
+                            true
+                        }
+                        Key.DirectionLeft -> {
+                            if (cursorColumn > 0) {
+                                cursorColumn--
+                            } else if (cursorLine > 0) {
+                                cursorLine--
+                                cursorColumn = lineTexts[cursorLine].length
+                            }
+                            true
+                        }
+                        Key.DirectionRight -> {
+                            if (cursorColumn < lineTexts[cursorLine].length) {
+                                cursorColumn++
+                            } else if (cursorLine < lineTexts.size - 1) {
+                                cursorLine++
+                                cursorColumn = 0
+                            }
+                            true
+                        }
+                        Key.MoveHome -> {
+                            cursorColumn = 0
+                            true
+                        }
+                        Key.MoveEnd -> {
+                            cursorColumn = lineTexts[cursorLine].length
+                            true
+                        }
+                        Key.PageUp -> {
+                            cursorLine = maxOf(0, cursorLine - 10)
+                            cursorColumn = minOf(cursorColumn, lineTexts[cursorLine].length)
+                            true
+                        }
+                        Key.PageDown -> {
+                            cursorLine = minOf(lineTexts.size - 1, cursorLine + 10)
+                            cursorColumn = minOf(cursorColumn, lineTexts[cursorLine].length)
+                            true
+                        }
+                        else -> false
+                    }
                 } else {
                     false
                 }
@@ -463,7 +539,57 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
                                 }
                             }
 
-                            Text(text = annotatedString)
+                            val textMeasurer = rememberTextMeasurer()
+                            val style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
+                            val infiniteTransition = rememberInfiniteTransition()
+                            val cursorAlpha by infiniteTransition.animateFloat(
+                                initialValue = 1f,
+                                targetValue = 0f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = keyframes {
+                                        durationMillis = 1000
+                                        0.7f at 500
+                                    },
+                                    repeatMode = RepeatMode.Restart
+                                )
+                            )
+
+                            val isCursorInLine = lineIndex == cursorLine
+                            val foregroundColor = HexanaTheme.textColor
+
+                            var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+
+                            Text(
+                                text = annotatedString,
+                                style = style,
+                                onTextLayout = { textLayoutResult = it },
+                                modifier = Modifier
+                                    .pointerInput(lineIndex) {
+                                        detectTapGestures { offset ->
+                                            editorFocusRequester.requestFocus()
+                                            cursorLine = lineIndex
+                                            textLayoutResult?.let { layout ->
+                                                cursorColumn = layout.getOffsetForPosition(offset)
+                                            }
+                                        }
+                                    }
+                                    .drawWithContent {
+                                    drawContent()
+                                    if (isCursorInLine) {
+                                        val layoutResult = textMeasurer.measure(
+                                            text = annotatedString.substring(0, minOf(cursorColumn, annotatedString.length)),
+                                            style = style
+                                        )
+                                        val cursorX = layoutResult.size.width.toFloat()
+                                        drawLine(
+                                            color = foregroundColor.copy(alpha = cursorAlpha),
+                                            start = Offset(cursorX, 0f),
+                                            end = Offset(cursorX, size.height),
+                                            strokeWidth = 2f
+                                        )
+                                    }
+                                }
+                            )
                         }
                     }
                 }
