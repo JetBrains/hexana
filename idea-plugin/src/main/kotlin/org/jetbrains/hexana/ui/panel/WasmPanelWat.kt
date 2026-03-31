@@ -59,6 +59,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import kotlinx.coroutines.delay
 import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaService
@@ -325,10 +331,52 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
         }
 
         Box(modifier = Modifier.weight(1f)) {
+            var boxHeight by remember { mutableFloatStateOf(0f) }
+            var boxYOffset by remember { mutableFloatStateOf(0f) }
+            var currentPointerY by remember { mutableFloatStateOf(-1f) }
+            var isPointerPressed by remember { mutableStateOf(false) }
+
+            LaunchedEffect(isPointerPressed, currentPointerY, boxHeight) {
+                if (isPointerPressed && currentPointerY != -1f) {
+                    while (true) {
+                        val threshold = 40.dp.value
+                        val scrollSpeed = 50f
+                        if (currentPointerY < threshold) {
+                            val ratio = (threshold - maxOf(0f, currentPointerY)) / threshold
+                            lazyListState.scrollBy(-scrollSpeed * ratio)
+                        } else if (currentPointerY > boxHeight - threshold) {
+                            val ratio = (maxOf(0f, currentPointerY - (boxHeight - threshold))) / threshold
+                            lazyListState.scrollBy(scrollSpeed * ratio)
+                        } else {
+                            break
+                        }
+                        delay(16)
+                    }
+                }
+            }
+
             SelectionContainer {
                 LazyColumn(
                     state = lazyListState,
                     modifier = Modifier.fillMaxSize()
+                        .onGloballyPositioned {
+                            boxHeight = it.size.height.toFloat()
+                            boxYOffset = it.positionInWindow().y
+                        }
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    isPointerPressed = event.buttons.isPrimaryPressed
+                                    val change = event.changes.firstOrNull()
+                                    if (isPointerPressed && change != null) {
+                                        currentPointerY = change.position.y
+                                    } else {
+                                        currentPointerY = -1f
+                                    }
+                                }
+                            }
+                        }
                 ) {
                     items(tokens.size) { lineIndex ->
                         val tokensInLine = tokens[lineIndex]
