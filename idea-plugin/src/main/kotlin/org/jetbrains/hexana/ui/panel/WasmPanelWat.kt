@@ -3,7 +3,6 @@ package org.jetbrains.hexana.ui.panel
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,12 +21,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.isPrimaryPressed
-import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
@@ -212,10 +210,19 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
 
     var cursorLine by remember { mutableIntStateOf(0) }
     var cursorColumn by remember { mutableIntStateOf(0) }
+    var selectionStartLine by remember { mutableIntStateOf(0) }
+    var selectionStartColumn by remember { mutableIntStateOf(0) }
 
     val lineTexts by remember(tokens) {
         derivedStateOf {
             tokens.map { line -> line.joinToString("") { it.text } }
+        }
+    }
+
+    fun updateSelection(isShiftPressed: Boolean) {
+        if (!isShiftPressed) {
+            selectionStartLine = cursorLine
+            selectionStartColumn = cursorColumn
         }
     }
 
@@ -261,6 +268,34 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
         editorFocusRequester.requestFocus()
     }
 
+    val clipboardManager = LocalClipboardManager.current
+
+    fun copySelectedText() {
+        val selStart = if (selectionStartLine < cursorLine || (selectionStartLine == cursorLine && selectionStartColumn <= cursorColumn)) {
+            selectionStartLine to selectionStartColumn
+        } else {
+            cursorLine to cursorColumn
+        }
+        val selEnd = if (selStart.first == selectionStartLine && selStart.second == selectionStartColumn) {
+            cursorLine to cursorColumn
+        } else {
+            selectionStartLine to selectionStartColumn
+        }
+
+        if (selStart == selEnd) return
+
+        val selectedText = buildString {
+            for (i in selStart.first..selEnd.first) {
+                val line = lineTexts[i]
+                val start = if (i == selStart.first) selStart.second else 0
+                val end = if (i == selEnd.first) selEnd.second else line.length
+                append(line.substring(start, end))
+                if (i < selEnd.first) append("\n")
+            }
+        }
+        clipboardManager.setText(AnnotatedString(selectedText))
+    }
+
     Column(
         modifier = Modifier.fillMaxSize()
             .focusRequester(editorFocusRequester)
@@ -269,18 +304,29 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
                 if (it.type == KeyEventType.KeyDown && it.key == Key.F && (it.isMetaPressed || it.isCtrlPressed)) {
                     isSearchVisible = true
                     true
+                } else if (it.type == KeyEventType.KeyDown && it.key == Key.C && (it.isMetaPressed || it.isCtrlPressed)) {
+                    copySelectedText()
+                    true
+                } else if (it.type == KeyEventType.KeyDown && it.key == Key.A && (it.isMetaPressed || it.isCtrlPressed)) {
+                    selectionStartLine = 0
+                    selectionStartColumn = 0
+                    cursorLine = lineTexts.size - 1
+                    cursorColumn = lineTexts.last().length
+                    true
                 } else if (it.type == KeyEventType.KeyDown && it.key == Key.Escape && isSearchVisible) {
                     isSearchVisible = false
                     searchQuery = TextFieldValue("")
                     editorFocusRequester.requestFocus()
                     true
                 } else if (it.type == KeyEventType.KeyDown) {
+                    val isShiftPressed = it.isShiftPressed
                     when (it.key) {
                         Key.DirectionUp -> {
                             if (cursorLine > 0) {
                                 cursorLine--
                                 cursorColumn = minOf(cursorColumn, lineTexts[cursorLine].length)
                             }
+                            updateSelection(isShiftPressed)
                             true
                         }
                         Key.DirectionDown -> {
@@ -288,6 +334,7 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
                                 cursorLine++
                                 cursorColumn = minOf(cursorColumn, lineTexts[cursorLine].length)
                             }
+                            updateSelection(isShiftPressed)
                             true
                         }
                         Key.DirectionLeft -> {
@@ -297,6 +344,7 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
                                 cursorLine--
                                 cursorColumn = lineTexts[cursorLine].length
                             }
+                            updateSelection(isShiftPressed)
                             true
                         }
                         Key.DirectionRight -> {
@@ -306,24 +354,29 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
                                 cursorLine++
                                 cursorColumn = 0
                             }
+                            updateSelection(isShiftPressed)
                             true
                         }
                         Key.MoveHome -> {
                             cursorColumn = 0
+                            updateSelection(isShiftPressed)
                             true
                         }
                         Key.MoveEnd -> {
                             cursorColumn = lineTexts[cursorLine].length
+                            updateSelection(isShiftPressed)
                             true
                         }
                         Key.PageUp -> {
                             cursorLine = maxOf(0, cursorLine - 10)
                             cursorColumn = minOf(cursorColumn, lineTexts[cursorLine].length)
+                            updateSelection(isShiftPressed)
                             true
                         }
                         Key.PageDown -> {
                             cursorLine = minOf(lineTexts.size - 1, cursorLine + 10)
                             cursorColumn = minOf(cursorColumn, lineTexts[cursorLine].length)
+                            updateSelection(isShiftPressed)
                             true
                         }
                         else -> false
@@ -417,20 +470,48 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
             var currentPointerY by remember { mutableFloatStateOf(-1f) }
             var isPointerPressed by remember { mutableStateOf(false) }
 
-            LaunchedEffect(isPointerPressed, currentPointerY, boxHeight) {
+            val lineTextLayoutResults = remember { mutableStateMapOf<Int, TextLayoutResult>() }
+
+            var currentPointerX by remember { mutableFloatStateOf(-1f) }
+
+            val density = LocalDensity.current
+            val offsetWidthPx = if (showOffsets) with(density) { computeWidth(lineOffsets).toPx() } else 0f
+
+            LaunchedEffect(isPointerPressed, currentPointerY, currentPointerX, boxHeight) {
                 if (isPointerPressed && currentPointerY != -1f) {
                     while (true) {
                         val threshold = 40.dp.value
                         val scrollSpeed = 50f
+                        var scrolled = false
                         if (currentPointerY < threshold) {
                             val ratio = (threshold - maxOf(0f, currentPointerY)) / threshold
                             lazyListState.scrollBy(-scrollSpeed * ratio)
+                            scrolled = true
                         } else if (currentPointerY > boxHeight - threshold) {
                             val ratio = (maxOf(0f, currentPointerY - (boxHeight - threshold))) / threshold
                             lazyListState.scrollBy(scrollSpeed * ratio)
-                        } else {
-                            break
+                            scrolled = true
                         }
+
+                        if (scrolled) {
+                            val item = lazyListState.layoutInfo.visibleItemsInfo.find {
+                                currentPointerY >= it.offset && currentPointerY <= it.offset + it.size
+                            }
+                            if (item != null) {
+                                val lineIndex = item.index
+                                val layout = lineTextLayoutResults[lineIndex]
+                                if (layout != null) {
+                                    cursorLine = lineIndex
+                                    // How to get local X? Row contains offset + text.
+                                    // We need to account for the offset width.
+                                    val localX = currentPointerX - offsetWidthPx
+                                    cursorColumn = layout.getOffsetForPosition(Offset(localX, 0f))
+                                    updateSelection(true)
+                                }
+                            }
+                        }
+
+                        if (!scrolled) break
                         delay(16)
                     }
                 }
@@ -452,8 +533,26 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
                                     val change = event.changes.firstOrNull()
                                     if (isPointerPressed && change != null) {
                                         currentPointerY = change.position.y
+                                        currentPointerX = change.position.x
+
+                                        // Handle drag across lines
+                                        val viewportY = currentPointerY
+                                        val item = lazyListState.layoutInfo.visibleItemsInfo.find {
+                                            viewportY >= it.offset && viewportY <= it.offset + it.size
+                                        }
+                                        if (item != null) {
+                                            val lineIndex = item.index
+                                            val layout = lineTextLayoutResults[lineIndex]
+                                            if (layout != null) {
+                                                cursorLine = lineIndex
+                                                val localX = currentPointerX - offsetWidthPx
+                                                cursorColumn = layout.getOffsetForPosition(Offset(localX, 0f))
+                                                updateSelection(event.keyboardModifiers.isShiftPressed || event.type == PointerEventType.Move)
+                                            }
+                                        }
                                     } else {
                                         currentPointerY = -1f
+                                        currentPointerX = -1f
                                     }
                                 }
                             }
@@ -503,14 +602,36 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
                                         SpanStyle()
                                     }
 
-                                    val tokenStart = currentPosInLine
-                                    val tokenEnd = currentPosInLine + tokenData.text.length
-
                                     withStyle(style = style) {
                                         append(tokenData.text)
                                     }
 
                                     currentPosInLine += tokenData.text.length
+                                }
+
+                                // Apply selection highlights
+                                val selStart = if (selectionStartLine < cursorLine || (selectionStartLine == cursorLine && selectionStartColumn <= cursorColumn)) {
+                                    selectionStartLine to selectionStartColumn
+                                } else {
+                                    cursorLine to cursorColumn
+                                }
+                                val selEnd = if (selStart.first == selectionStartLine && selStart.second == selectionStartColumn) {
+                                    cursorLine to cursorColumn
+                                } else {
+                                    selectionStartLine to selectionStartColumn
+                                }
+
+                                if (lineIndex in selStart.first..selEnd.first && (selStart != selEnd)) {
+                                    val startInLine = if (lineIndex == selStart.first) selStart.second else 0
+                                    val endInLine = if (lineIndex == selEnd.first) selEnd.second else lineText.length
+
+                                    if (startInLine < endInLine) {
+                                        addStyle(
+                                            style = SpanStyle(background = HexanaTheme.searchResultColor.copy(alpha = 0.5f)),
+                                            start = startInLine,
+                                            end = endInLine
+                                        )
+                                    }
                                 }
 
                                 // Apply search highlights
@@ -557,19 +678,22 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
                             val isCursorInLine = lineIndex == cursorLine
                             val foregroundColor = HexanaTheme.textColor
 
-                            var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-
                             Text(
                                 text = annotatedString,
                                 style = style,
-                                onTextLayout = { textLayoutResult = it },
+                                onTextLayout = { lineTextLayoutResults[lineIndex] = it },
                                 modifier = Modifier
                                     .pointerInput(lineIndex) {
-                                        detectTapGestures { offset ->
-                                            editorFocusRequester.requestFocus()
-                                            cursorLine = lineIndex
-                                            textLayoutResult?.let { layout ->
-                                                cursorColumn = layout.getOffsetForPosition(offset)
+                                        awaitPointerEventScope {
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                val isSecondaryPressed = event.buttons.isSecondaryPressed
+
+                                                if (event.type == PointerEventType.Press) {
+                                                    if (isSecondaryPressed) {
+                                                        editorFocusRequester.requestFocus()
+                                                    }
+                                                }
                                             }
                                         }
                                     }
