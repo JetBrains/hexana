@@ -233,6 +233,12 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
     val offsetPattern = remember { Regex("""\(;@([0-9a-fA-F]+)\s*;\)""") }
     val showOffsets = remember { HexanaSettings.getInstance().showOffsets == true }
 
+    LaunchedEffect(isSearchVisible) {
+        if (isSearchVisible) {
+            searchFocusRequester.requestFocus()
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxSize()
             .focusRequester(editorFocusRequester)
@@ -240,7 +246,6 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
             .onPreviewKeyEvent {
                 if (it.type == KeyEventType.KeyDown && it.key == Key.F && (it.isMetaPressed || it.isCtrlPressed)) {
                     isSearchVisible = true
-                    searchFocusRequester.requestFocus()
                     true
                 } else if (it.type == KeyEventType.KeyDown && it.key == Key.Escape && isSearchVisible) {
                     isSearchVisible = false
