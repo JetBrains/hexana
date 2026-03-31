@@ -188,6 +188,42 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(1, functions.obj(0).int("funcidx"))
     }
 
+    fun testGetInstructionsForFunctionsSupportsMemoryInstructionsWithUnsignedOperands() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/functions/get_instructions_memory_ops.wasm",
+            """
+            (module
+              (memory 1 2)
+              (func (export "pages") (result i32)
+                memory.size)
+              (func (export "grow_one") (result i32)
+                i32.const 1
+                memory.grow))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "get_instructions_for_functions",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("indices", kotlinx.serialization.json.buildJsonArray {
+                    add(JsonPrimitive(0))
+                    add(JsonPrimitive(1))
+                })
+            }
+        )
+        val functions = result.array("functions")
+
+        assertEquals(2, functions.size)
+        assertEquals(0, functions.obj(0).int("funcidx"))
+        assertEquals(listOf("memory.size"), functions.obj(0).array("instructions").map { it.textValue() })
+        assertEquals(1, functions.obj(1).int("funcidx"))
+        assertEquals(
+            listOf("i32.const 1", "memory.grow"),
+            functions.obj(1).array("instructions").map { it.textValue() }
+        )
+    }
+
     private fun createFunctionFixture(pathInProject: String) = createWasmFixture(
         pathInProject,
         """

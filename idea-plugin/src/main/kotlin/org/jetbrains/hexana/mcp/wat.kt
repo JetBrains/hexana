@@ -32,6 +32,8 @@ internal fun OpCode.watString(): CharSequence {
         is OpCodes.Local.Tee -> "local.tee $value"
         is OpCodes.Global.Get -> "global.get $value"
         is OpCodes.Global.Set -> "global.set $value"
+        is OpCodes.Memory.Size -> "memory.size${value.takeIf { it != 0u }?.let { " $it" } ?: ""}"
+        is OpCodes.Memory.Grow -> "memory.grow${value.takeIf { it != 0u }?.let { " $it" } ?: ""}"
         /* i32 */
         is OpCodes.I32.Load -> "i32.load ${value.watString()}"
         is OpCodes.I32.Load8_S -> "i32.load8_s ${value.watString()}"
@@ -237,6 +239,7 @@ private fun Any?.renderOperand(): String =
         is WasmHeapType -> toHeapTypeName()
         is WasmValueType<*> -> toSignature()
         is List<*> -> joinToString(", ", prefix = "[", postfix = "]") { it.renderOperand() }
+        is UByte, is UShort, is UInt, is ULong -> toString()
         is String, is Number, is Boolean, is Char -> toString()
         else -> error("Unhandled MCP operand type: ${this::class.qualifiedName}")
     }
