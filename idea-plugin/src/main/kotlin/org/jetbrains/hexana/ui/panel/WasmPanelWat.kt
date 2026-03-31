@@ -62,6 +62,7 @@ import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.delay
 import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
@@ -391,7 +392,7 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
                                     val offsetText = lineOffsets[lineIndex]?.let { "0x$it" } ?: ""
                                     Text(
                                         text = offsetText,
-                                        modifier = Modifier.width(60.dp).padding(end = 8.dp)
+                                        modifier = Modifier.width(computeWidth(lineOffsets)).padding(end = 8.dp)
                                             .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)))
                                             .clickable {
                                                 lineOffsets[lineIndex]?.let { offsetStr ->
@@ -469,6 +470,16 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
             )
         }
     }
+}
+
+private fun computeWidth(lineOffsets: Map<Int, String>): Dp {
+    val maxLength = lineOffsets.values.maxOfOrNull { it.length } ?: 4
+    val width = when {
+        maxLength <= 4 -> 60.dp
+        maxLength <= 8 -> 80.dp
+        else -> 100.dp
+    }
+    return width
 }
 
 @Composable
