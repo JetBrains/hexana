@@ -6,8 +6,10 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -322,89 +324,102 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
             }
         }
 
-        SelectionContainer {
-            LazyColumn(state = lazyListState, modifier = Modifier.weight(1f)) {
-                items(tokens.size) { lineIndex ->
-                    val tokensInLine = tokens[lineIndex]
-                    val lineStartOffset = lineStartOffsets[lineIndex]
-                    val lineText = tokensInLine.joinToString("") { it.text }
+        Box(modifier = Modifier.weight(1f)) {
+            SelectionContainer {
+                LazyColumn(
+                    state = lazyListState,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(tokens.size) { lineIndex ->
+                        val tokensInLine = tokens[lineIndex]
+                        val lineStartOffset = lineStartOffsets[lineIndex]
+                        val lineText = tokensInLine.joinToString("") { it.text }
 
-                    Row(verticalAlignment = Alignment.Top) {
-                        if (showOffsets) {
-                            DisableSelection {
-                                val offsetText = lineOffsets[lineIndex]?.let { "0x$it" } ?: ""
-                                Text(
-                                    text = offsetText,
-                                    modifier = Modifier.width(60.dp).padding(end = 8.dp)
-                                        .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)))
-                                        .clickable {
-                                            lineOffsets[lineIndex]?.let { offsetStr ->
-                                                val offset = offsetStr.toLongOrNull(16) ?: return@let
-                                                state.setViewMode(HexViewMode.Hex)
-                                                state.scrollHexViewTo(offset)
-                                                state.setCursorPosition(offset, state.bytesPerRow.value)
-                                            }
-                                        },
-                                    style = TextStyle(color = Color.Gray, fontFamily = FontFamily.Monospace)
-                                )
-                            }
-                        }
-
-                        val annotatedString = buildAnnotatedString {
-                            var currentPosInLine = 0
-                            tokensInLine.forEach { tokenData ->
-                                if (offsetPattern.matches(tokenData.text)) {
-                                    currentPosInLine += tokenData.text.length
-                                    return@forEach
-                                }
-                                val colors = highlighter.getTokenHighlights(tokenData.tokenType)
-                                val colorResolved = colors.getOrNull(0)
-                                val style = if (colorResolved != null) {
-                                    SpanStyle(color = colorResolved.toComposeColor())
-                                } else {
-                                    SpanStyle()
-                                }
-
-                                val tokenStart = currentPosInLine
-                                val tokenEnd = currentPosInLine + tokenData.text.length
-
-                                withStyle(style = style) {
-                                    append(tokenData.text)
-                                }
-
-                                currentPosInLine += tokenData.text.length
-                            }
-
-                            // Apply search highlights
-                            if (searchQuery.text.isNotEmpty()) {
-                                matches.forEachIndexed { index, range ->
-                                    val matchStartInLine = range.first - lineStartOffset
-                                    val matchEndInLine = range.last - lineStartOffset
-
-                                    val intersectStart = maxOf(0, matchStartInLine)
-                                    val intersectEnd = minOf(lineText.length, matchEndInLine)
-
-                                    if (intersectStart < intersectEnd) {
-                                        addStyle(
-                                            style = SpanStyle(
-                                                background = if (index == currentMatchIndex) {
-                                                    Color.Yellow.copy(alpha = 0.5f)
-                                                } else {
-                                                    HexanaTheme.searchResultColor.copy(alpha = 0.5f)
+                        Row(
+                            verticalAlignment = Alignment.Top,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (showOffsets) {
+                                DisableSelection {
+                                    val offsetText = lineOffsets[lineIndex]?.let { "0x$it" } ?: ""
+                                    Text(
+                                        text = offsetText,
+                                        modifier = Modifier.width(60.dp).padding(end = 8.dp)
+                                            .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)))
+                                            .clickable {
+                                                lineOffsets[lineIndex]?.let { offsetStr ->
+                                                    val offset = offsetStr.toLongOrNull(16) ?: return@let
+                                                    state.setViewMode(HexViewMode.Hex)
+                                                    state.scrollHexViewTo(offset)
+                                                    state.setCursorPosition(offset, state.bytesPerRow.value)
                                                 }
-                                            ),
-                                            start = intersectStart,
-                                            end = intersectEnd
-                                        )
+                                            },
+                                        style = TextStyle(color = Color.Gray, fontFamily = FontFamily.Monospace)
+                                    )
+                                }
+                            }
+
+                            val annotatedString = buildAnnotatedString {
+                                var currentPosInLine = 0
+                                tokensInLine.forEach { tokenData ->
+                                    if (offsetPattern.matches(tokenData.text)) {
+                                        currentPosInLine += tokenData.text.length
+                                        return@forEach
+                                    }
+                                    val colors = highlighter.getTokenHighlights(tokenData.tokenType)
+                                    val colorResolved = colors.getOrNull(0)
+                                    val style = if (colorResolved != null) {
+                                        SpanStyle(color = colorResolved.toComposeColor())
+                                    } else {
+                                        SpanStyle()
+                                    }
+
+                                    val tokenStart = currentPosInLine
+                                    val tokenEnd = currentPosInLine + tokenData.text.length
+
+                                    withStyle(style = style) {
+                                        append(tokenData.text)
+                                    }
+
+                                    currentPosInLine += tokenData.text.length
+                                }
+
+                                // Apply search highlights
+                                if (searchQuery.text.isNotEmpty()) {
+                                    matches.forEachIndexed { index, range ->
+                                        val matchStartInLine = range.first - lineStartOffset
+                                        val matchEndInLine = range.last - lineStartOffset
+
+                                        val intersectStart = maxOf(0, matchStartInLine)
+                                        val intersectEnd = minOf(lineText.length, matchEndInLine)
+
+                                        if (intersectStart < intersectEnd) {
+                                            addStyle(
+                                                style = SpanStyle(
+                                                    background = if (index == currentMatchIndex) {
+                                                        Color.Yellow.copy(alpha = 0.5f)
+                                                    } else {
+                                                        HexanaTheme.searchResultColor.copy(alpha = 0.5f)
+                                                    }
+                                                ),
+                                                start = intersectStart,
+                                                end = intersectEnd
+                                            )
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        Text(text = annotatedString)
+                            Text(text = annotatedString)
+                        }
                     }
                 }
             }
+
+            VerticalScrollbar(
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                adapter = rememberScrollbarAdapter(lazyListState)
+            )
         }
     }
 }
