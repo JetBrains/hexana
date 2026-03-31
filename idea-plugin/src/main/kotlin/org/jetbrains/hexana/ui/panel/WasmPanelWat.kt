@@ -1,24 +1,30 @@
 package org.jetbrains.hexana.ui.panel
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.text.selection.DisableSelection
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.*
-import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -30,12 +36,12 @@ import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.EditorGutterAction
+import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.TextAnnotationGutterProvider
 import com.intellij.openapi.editor.colors.ColorKey
-import com.intellij.openapi.editor.colors.EditorFontType
 import com.intellij.openapi.editor.colors.EditorColorsManager
+import com.intellij.openapi.editor.colors.EditorFontType
 import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.impl.DocumentImpl
@@ -56,6 +62,7 @@ import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.HexanaSettings
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
+import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.wat.LightWatFile
 import org.jetbrains.hexana.wat.WatFileset
 import org.jetbrains.hexana.wat.WatSyntaxHighlighter
@@ -63,13 +70,15 @@ import org.jetbrains.hexana.wat.createWatFileset
 import org.jetbrains.hexana.wat.psi.WatLexer
 import org.jetbrains.hexana.wat.psi.WatToken
 import org.jetbrains.jewel.ui.component.Icon
+import org.jetbrains.jewel.ui.component.IconButton
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.TextField
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import java.awt.BorderLayout
-import java.awt.Color as AwtColor
 import java.awt.Cursor
 import javax.swing.JComponent
 import javax.swing.JPanel
+import java.awt.Color as AwtColor
 
 
 @Composable
@@ -141,6 +150,31 @@ fun TextAttributesKey.toComposeColor(): Color {
 
 @Composable
 internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, state: HexViewStateHolder) {
+    var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
+    var isSearchVisible by remember { mutableStateOf(false) }
+    var currentMatchIndex by remember { mutableIntStateOf(0) }
+
+    val searchFocusRequester = remember { FocusRequester() }
+    val editorFocusRequester = remember { FocusRequester() }
+
+    val matches by remember(watContent, searchQuery.text) {
+        derivedStateOf {
+            if (searchQuery.text.isEmpty()) emptyList<IntRange>()
+            else {
+                val result = mutableListOf<IntRange>()
+                var index = watContent.indexOf(searchQuery.text, ignoreCase = true)
+                while (index != -1) {
+                    result.add(index until index + searchQuery.text.length)
+                    index = watContent.indexOf(searchQuery.text, index + searchQuery.text.length, ignoreCase = true)
+                }
+                result
+            }
+        }
+    }
+
+    val lazyListState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
     val tokens by remember {
         derivedStateOf {
             val result = mutableListOf<List<TokenData>>()
@@ -162,52 +196,213 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
         }
     }
 
+    val lineStartOffsets by remember(tokens) {
+        derivedStateOf {
+            val offsets = mutableListOf<Int>()
+            var currentOffset = 0
+            tokens.forEach { line ->
+                offsets.add(currentOffset)
+                line.forEach { currentOffset += it.text.length }
+                currentOffset += 1 // for newline
+            }
+            offsets
+        }
+    }
+
+    fun scrollToMatch(index: Int) {
+        if (matches.isEmpty()) return
+        val match = matches[index % matches.size]
+        val lineIndex = lineStartOffsets.binarySearch(match.first).let { if (it < 0) -it - 2 else it }
+        if (lineIndex >= 0) {
+            coroutineScope.launch {
+                lazyListState.animateScrollToItem(lineIndex)
+            }
+        }
+    }
+
     val highlighter = WatSyntaxHighlighter()
 
     val offsetPattern = remember { Regex("""\(;@([0-9a-fA-F]+)\s*;\)""") }
     val showOffsets = remember { HexanaSettings.getInstance().showOffsets == true }
 
-    SelectionContainer {
-        LazyColumn {
-            items(tokens.size) { lineIndex ->
-                val tokensInLine = tokens[lineIndex]
-
-                Row(verticalAlignment = Alignment.Top) {
-                    if (showOffsets) {
-                        DisableSelection {
-                            val offsetText = lineOffsets[lineIndex]?.let { "0x$it" } ?: ""
-                            Text(
-                                text = offsetText,
-                                modifier = Modifier.width(60.dp).padding(end = 8.dp)
-                                    .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)))
-                                    .clickable {
-                                        lineOffsets[lineIndex]?.let { offsetStr ->
-                                            val offset = offsetStr.toLongOrNull(16) ?: return@let
-                                            state.setViewMode(HexViewMode.Hex)
-                                            state.scrollHexViewTo(offset)
-                                            state.setCursorPosition(offset, state.bytesPerRow.value)
-                                        }
-                                    },
-                                style = TextStyle(color = Color.Gray, fontFamily = FontFamily.Monospace)
-                            )
+    Column(
+        modifier = Modifier.fillMaxSize()
+            .focusRequester(editorFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent {
+                if (it.type == KeyEventType.KeyDown && it.key == Key.F && (it.isMetaPressed || it.isCtrlPressed)) {
+                    isSearchVisible = true
+                    searchFocusRequester.requestFocus()
+                    true
+                } else if (it.type == KeyEventType.KeyDown && it.key == Key.Escape && isSearchVisible) {
+                    isSearchVisible = false
+                    searchQuery = TextFieldValue("")
+                    editorFocusRequester.requestFocus()
+                    true
+                } else {
+                    false
+                }
+            }
+    ) {
+        if (isSearchVisible) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextField(
+                    value = searchQuery,
+                    onValueChange = {
+                        searchQuery = it
+                        currentMatchIndex = 0
+                        scrollToMatch(0)
+                    },
+                    modifier = Modifier.weight(1f).focusRequester(searchFocusRequester)
+                        .onPreviewKeyEvent {
+                            if (it.type == KeyEventType.KeyDown && it.key == Key.Enter) {
+                                if (it.isShiftPressed) {
+                                    currentMatchIndex = (currentMatchIndex - 1 + matches.size) % matches.size
+                                } else {
+                                    currentMatchIndex = (currentMatchIndex + 1) % matches.size
+                                }
+                                scrollToMatch(currentMatchIndex)
+                                true
+                            } else {
+                                false
+                            }
+                        },
+                    placeholder = { Text("Search...") },
+                    leadingIcon = {
+                        Icon(
+                            AllIconsKeys.Actions.Search,
+                            contentDescription = null,
+                            iconClass = AllIcons::class.java,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    trailingIcon = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (matches.isNotEmpty()) {
+                                Text(
+                                    "${currentMatchIndex + 1} of ${matches.size}",
+                                    style = TextStyle(color = Color.Gray)
+                                )
+                            }
+                            IconButton(onClick = {
+                                searchQuery = TextFieldValue("")
+                                isSearchVisible = false
+                                editorFocusRequester.requestFocus()
+                            }) {
+                                Icon(
+                                    AllIconsKeys.Actions.Close,
+                                    contentDescription = "Close search",
+                                    iconClass = AllIcons::class.java,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                         }
                     }
-                    Text(
-                        text = buildAnnotatedString {
+                )
+                IconButton(onClick = {
+                    if (matches.isNotEmpty()) {
+                        currentMatchIndex = (currentMatchIndex - 1 + matches.size) % matches.size
+                        scrollToMatch(currentMatchIndex)
+                    }
+                }) {
+                    Icon(AllIconsKeys.Actions.PreviousOccurence, "Previous", iconClass = AllIcons::class.java)
+                }
+                IconButton(onClick = {
+                    if (matches.isNotEmpty()) {
+                        currentMatchIndex = (currentMatchIndex + 1) % matches.size
+                        scrollToMatch(currentMatchIndex)
+                    }
+                }) {
+                    Icon(AllIconsKeys.Actions.NextOccurence, "Next", iconClass = AllIcons::class.java)
+                }
+            }
+        }
+
+        SelectionContainer {
+            LazyColumn(state = lazyListState, modifier = Modifier.weight(1f)) {
+                items(tokens.size) { lineIndex ->
+                    val tokensInLine = tokens[lineIndex]
+                    val lineStartOffset = lineStartOffsets[lineIndex]
+                    val lineText = tokensInLine.joinToString("") { it.text }
+
+                    Row(verticalAlignment = Alignment.Top) {
+                        if (showOffsets) {
+                            DisableSelection {
+                                val offsetText = lineOffsets[lineIndex]?.let { "0x$it" } ?: ""
+                                Text(
+                                    text = offsetText,
+                                    modifier = Modifier.width(60.dp).padding(end = 8.dp)
+                                        .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)))
+                                        .clickable {
+                                            lineOffsets[lineIndex]?.let { offsetStr ->
+                                                val offset = offsetStr.toLongOrNull(16) ?: return@let
+                                                state.setViewMode(HexViewMode.Hex)
+                                                state.scrollHexViewTo(offset)
+                                                state.setCursorPosition(offset, state.bytesPerRow.value)
+                                            }
+                                        },
+                                    style = TextStyle(color = Color.Gray, fontFamily = FontFamily.Monospace)
+                                )
+                            }
+                        }
+
+                        val annotatedString = buildAnnotatedString {
+                            var currentPosInLine = 0
                             tokensInLine.forEach { tokenData ->
-                                if (offsetPattern.matches(tokenData.text)) return@forEach
+                                if (offsetPattern.matches(tokenData.text)) {
+                                    currentPosInLine += tokenData.text.length
+                                    return@forEach
+                                }
                                 val colors = highlighter.getTokenHighlights(tokenData.tokenType)
                                 val colorResolved = colors.getOrNull(0)
-                                if (colorResolved != null) {
-                                    withStyle(style = SpanStyle(color = colorResolved.toComposeColor())) {
-                                        append(tokenData.text)
-                                    }
+                                val style = if (colorResolved != null) {
+                                    SpanStyle(color = colorResolved.toComposeColor())
                                 } else {
+                                    SpanStyle()
+                                }
+
+                                val tokenStart = currentPosInLine
+                                val tokenEnd = currentPosInLine + tokenData.text.length
+
+                                withStyle(style = style) {
                                     append(tokenData.text)
+                                }
+
+                                currentPosInLine += tokenData.text.length
+                            }
+
+                            // Apply search highlights
+                            if (searchQuery.text.isNotEmpty()) {
+                                matches.forEachIndexed { index, range ->
+                                    val matchStartInLine = range.first - lineStartOffset
+                                    val matchEndInLine = range.last - lineStartOffset
+
+                                    val intersectStart = maxOf(0, matchStartInLine)
+                                    val intersectEnd = minOf(lineText.length, matchEndInLine)
+
+                                    if (intersectStart < intersectEnd) {
+                                        addStyle(
+                                            style = SpanStyle(
+                                                background = if (index == currentMatchIndex) {
+                                                    Color.Yellow.copy(alpha = 0.5f)
+                                                } else {
+                                                    HexanaTheme.searchResultColor.copy(alpha = 0.5f)
+                                                }
+                                            ),
+                                            start = intersectStart,
+                                            end = intersectEnd
+                                        )
+                                    }
                                 }
                             }
                         }
-                    )
+
+                        Text(text = annotatedString)
+                    }
                 }
             }
         }
