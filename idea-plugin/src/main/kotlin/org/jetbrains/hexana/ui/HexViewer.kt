@@ -4,6 +4,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -18,6 +19,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
@@ -38,6 +40,7 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.util.startOffset
 import com.intellij.util.ui.UIUtil
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewMode
@@ -121,11 +124,75 @@ internal fun HexViewer(
 
         val rowCount = (buf.limit() + bytesPerRow - 1) / bytesPerRow
         val offsetWidth = 96.dp
+        var selectionAnchor by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+        var currentPointerPosition by remember { mutableStateOf(Offset.Unspecified) }
+        var isPointerPressed by remember { mutableStateOf(false) }
+        var selectionAreaHeight by remember { mutableFloatStateOf(0f) }
+        var selectionAreaWidth by remember { mutableFloatStateOf(0f) }
 
         LaunchedEffect(state) {
             state.hexScrollFlow.collect { offset ->
                 val lineNo = (offset / bytesPerRow).toInt()
                 hexDataListState.animateScrollToItem(lineNo)
+            }
+        }
+
+        fun resolveSelectionPosition(pointer: Offset, areaWidth: Float): Pair<Int, Int>? {
+            val visibleItemsInfo = hexDataListState.layoutInfo.visibleItemsInfo
+            if (visibleItemsInfo.isEmpty() || areaWidth <= 0f || rowCount == 0) {
+                return null
+            }
+
+            val firstVisible = visibleItemsInfo.first()
+            val lastVisible = visibleItemsInfo.last()
+
+            val resolvedRow = when {
+                pointer.y < firstVisible.offset -> firstVisible.index - 1
+                pointer.y > lastVisible.offset + lastVisible.size -> lastVisible.index + 1
+                else -> visibleItemsInfo.indexOfLast { it.offset <= pointer.y } + hexDataListState.firstVisibleItemIndex
+            }.coerceIn(0, rowCount - 1)
+
+            val cellWidth = areaWidth / bytesPerRow
+            val resolvedColumn = (pointer.x / cellWidth).toInt().coerceIn(0, bytesPerRow - 1)
+
+            return resolvedRow to resolvedColumn
+        }
+
+        LaunchedEffect(isPointerPressed, currentPointerPosition, selectionAreaHeight, selectionAnchor, bytesPerRow) {
+            if (!isPointerPressed || currentPointerPosition == Offset.Unspecified || selectionAreaHeight <= 0f) {
+                return@LaunchedEffect
+            }
+            while (isPointerPressed && currentPointerPosition != Offset.Unspecified) {
+                val threshold = 40.dp.value
+                val scrollSpeed = 50f
+                val scrollDelta = when {
+                    currentPointerPosition.y < threshold -> {
+                        val ratio = (threshold - maxOf(0f, currentPointerPosition.y)) / threshold
+                        -scrollSpeed * ratio
+                    }
+
+                    currentPointerPosition.y > selectionAreaHeight - threshold -> {
+                        val ratio = maxOf(0f, currentPointerPosition.y - (selectionAreaHeight - threshold)) / threshold
+                        scrollSpeed * ratio
+                    }
+
+                    else -> 0f
+                }
+
+                if (scrollDelta == 0f) {
+                    break
+                }
+
+                val consumed = hexDataListState.scrollBy(scrollDelta)
+                val anchor = selectionAnchor
+                val current = resolveSelectionPosition(currentPointerPosition, selectionAreaWidth)
+                if (anchor != null && current != null) {
+                    state.setSelection(anchor.first, anchor.second, current.first, current.second)
+                }
+                if (consumed == 0f) {
+                    break
+                }
+                delay(16)
             }
         }
 
@@ -218,31 +285,39 @@ internal fun HexViewer(
 
                     Box(
                         modifier = Modifier
+                            .onGloballyPositioned {
+                                selectionAreaHeight = it.size.height.toFloat()
+                                selectionAreaWidth = it.size.width.toFloat()
+                            }
                             .pointerInput(Unit) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown()
                                     state.resetSelection()
+                                    isPointerPressed = true
+                                    currentPointerPosition = down.position
 
-                                    val visibleItemsInfo = hexDataListState.layoutInfo.visibleItemsInfo
-                                    val indexResolvedRelative = visibleItemsInfo.indexOfLast {
-                                        it.offset <= down.position.y
+                                    val start = resolveSelectionPosition(down.position, size.width.toFloat())
+                                    if (start == null) {
+                                        isPointerPressed = false
+                                        currentPointerPosition = Offset.Unspecified
+                                        selectionAnchor = null
+                                        return@awaitEachGesture
                                     }
-
-                                    val startIndex = indexResolvedRelative + hexDataListState.firstVisibleItemIndex
-                                    val cellWidth = (size.width / bytesPerRow)
-                                    val startOffset = (down.position.x / cellWidth).toInt()
+                                    val startIndex = start.first
+                                    val startOffset = start.second
+                                    selectionAnchor = start
 
                                     drag(down.id) { change ->
-                                        val visibleItemsInfo = hexDataListState.layoutInfo.visibleItemsInfo
-                                        val indexResolvedRelative = visibleItemsInfo.indexOfLast {
-                                            it.offset <= change.position.y
-                                        }
-
-                                        val endIndex = indexResolvedRelative + hexDataListState.firstVisibleItemIndex
-                                        val endOffset = (change.position.x / cellWidth).toInt()
-
+                                        currentPointerPosition = change.position
+                                        val end = resolveSelectionPosition(change.position, size.width.toFloat()) ?: return@drag
+                                        val endIndex = end.first
+                                        val endOffset = end.second
                                         state.setSelection(startIndex, startOffset, endIndex, endOffset)
                                     }
+
+                                    isPointerPressed = false
+                                    currentPointerPosition = Offset.Unspecified
+                                    selectionAnchor = null
                                 }
                             }
                     ) {
