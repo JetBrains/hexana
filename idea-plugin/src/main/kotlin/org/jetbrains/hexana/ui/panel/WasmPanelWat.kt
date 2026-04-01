@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,6 +37,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.intellij.codeInsight.hint.HintUtil
 import com.intellij.icons.AllIcons
+import com.intellij.ide.ui.UISettingsUtils
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.ApplicationManager
@@ -789,21 +791,30 @@ internal fun WatMultifileEditorContainer(
 @Composable
 private fun SwingPanelEditor(editorPanel: JComponent?, vararg additionalComponents: JComponent?) {
     if (editorPanel == null) return
+    val currentDensity = LocalDensity.current
+    val ideScale = UISettingsUtils.getInstance().currentIdeScale
+    val unscaledDensity = if (ideScale != 0f) {
+        Density(currentDensity.density / ideScale, currentDensity.fontScale)
+    } else {
+        currentDensity
+    }
     Box(Modifier.fillMaxSize()) {
-        SwingPanel(
-            modifier = Modifier.fillMaxSize(),
-            update = {
-                ApplicationManager.getApplication().invokeLater {
-                    UIUtil.findComponentOfType(it, EditorComponentImpl::class.java)?.requestFocusInWindow()
+        CompositionLocalProvider(LocalDensity provides unscaledDensity) {
+            SwingPanel(
+                modifier = Modifier.fillMaxSize(),
+                update = {
+                    ApplicationManager.getApplication().invokeLater {
+                        UIUtil.findComponentOfType(it, EditorComponentImpl::class.java)?.requestFocusInWindow()
+                    }
+                },
+                factory = {
+                    val panel = JPanel(BorderLayout())
+                    panel.add(editorPanel, BorderLayout.CENTER)
+                    additionalComponents.filterNotNull().forEach { panel.add(it, BorderLayout.NORTH) }
+                    panel
                 }
-            },
-            factory = {
-                val panel = JPanel(BorderLayout())
-                panel.add(editorPanel, BorderLayout.CENTER)
-                additionalComponents.filterNotNull().forEach { panel.add(it, BorderLayout.NORTH) }
-                panel
-            }
-        )
+            )
+        }
     }
 }
 
