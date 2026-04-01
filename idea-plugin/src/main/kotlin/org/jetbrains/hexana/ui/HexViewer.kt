@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -461,12 +460,20 @@ internal fun HexViewer(
                         }
 
                         if (showScrollbar) {
+                            val scrollbarColor = HexanaTheme.hexTextColor
                             VerticalScrollbar(
                                 modifier = Modifier
                                     .align(alignment = Alignment.CenterEnd)
-                                    .fillMaxHeight()
-                                    .background(Color.Gray),
-                                adapter = rememberScrollbarAdapter(scrollState = hexDataListState)
+                                    .fillMaxHeight().width(18.dp).padding(end = 8.dp),
+                                adapter = rememberScrollbarAdapter(scrollState = hexDataListState),
+                                style = ScrollbarStyle(
+                                    minimalHeight = 16.dp,
+                                    thickness = 8.dp,
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                                    hoverDurationMillis = 300,
+                                    unhoverColor = scrollbarColor.copy(alpha = 0.50f),
+                                    hoverColor = scrollbarColor.copy(alpha = 0.80f),
+                                )
                             )
                         }
                     }
