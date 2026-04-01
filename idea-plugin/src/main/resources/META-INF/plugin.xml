@@ -31,8 +31,8 @@
 
     <resource-bundle>messages.HexanaBundle</resource-bundle>
 
-    <!-- Product and plugin compatibility requirements.
-         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
+    <depends optional="true" config-file="./org.jetbrains.hexana.javascript.xml">JavaScript</depends>
+
     <dependencies>
         <plugin id="com.intellij.mcpServer"/>
         <module name="intellij.libraries.skiko"/>

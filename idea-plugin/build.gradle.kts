@@ -59,7 +59,7 @@ dependencies {
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
 
 
-        bundledPlugins("com.intellij.mcpServer")
+        bundledPlugins("com.intellij.mcpServer", "JavaScript")
 
         // TODO: whenever composeUI() will be updated, we can safely remove direct dependencies to dekstop runtime
         // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
