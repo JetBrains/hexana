@@ -17,10 +17,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.intellij.notification.Notification
@@ -100,9 +102,24 @@ internal fun HexViewer(
     val buf = binaryProvider.bytes
 
 
+    val coroutineScope = rememberCoroutineScope()
+
+    val arrowKeyHandler = remember { mutableStateOf<((Key, Boolean) -> Unit)?>(null) }
+
     BoxWithConstraints(
         modifier = Modifier
             .focusRequester(focusRequester)
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    when (event.key) {
+                        Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight -> {
+                            arrowKeyHandler.value?.invoke(event.key, event.isShiftPressed)
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                }
+                false
+            }
             .focusable(true)
             .fillMaxSize()
             .onClick {
@@ -129,6 +146,111 @@ internal fun HexViewer(
         var selectionAreaHeight by remember { mutableFloatStateOf(0f) }
         var selectionAreaWidth by remember { mutableFloatStateOf(0f) }
 
+        val totalBytes = buf.limit()
+
+        val textMeasurer = rememberTextMeasurer()
+        val monoCharWidthPx = remember(textMeasurer) {
+            textMeasurer.measure(
+                "W",
+                style = TextStyle(fontFamily = FontFamily.Monospace)
+            ).size.width.toFloat()
+        }
+
+        arrowKeyHandler.value = handleArrowKey@{ key: Key, isShiftPressed: Boolean ->
+            val curLine = state.cursorPosition.line
+            val curCol = state.cursorPosition.lineOffset
+
+            // If cursor was never placed, start at 0,0
+            val startLine = if (curLine < 0) 0 else curLine
+            val startCol = if (curCol < 0) 0 else curCol
+
+            val newLine: Int
+            val newCol: Int
+            when (key) {
+                Key.DirectionRight -> {
+                    val nextAbsolute = startLine * bytesPerRow + startCol + 1
+                    if (nextAbsolute >= totalBytes) {
+                        newLine = startLine
+                        newCol = startCol
+                    } else {
+                        newLine = nextAbsolute / bytesPerRow
+                        newCol = nextAbsolute % bytesPerRow
+                    }
+                }
+                Key.DirectionLeft -> {
+                    val prevAbsolute = startLine * bytesPerRow + startCol - 1
+                    if (prevAbsolute < 0) {
+                        newLine = 0
+                        newCol = 0
+                    } else {
+                        newLine = prevAbsolute / bytesPerRow
+                        newCol = prevAbsolute % bytesPerRow
+                    }
+                }
+                Key.DirectionDown -> {
+                    val nextAbsolute = (startLine + 1) * bytesPerRow + startCol
+                    if (nextAbsolute >= totalBytes) {
+                        newLine = startLine
+                        newCol = startCol
+                    } else {
+                        newLine = startLine + 1
+                        newCol = startCol
+                    }
+                }
+                Key.DirectionUp -> {
+                    if (startLine <= 0) {
+                        newLine = 0
+                        newCol = startCol
+                    } else {
+                        newLine = startLine - 1
+                        newCol = startCol
+                    }
+                }
+                else -> return@handleArrowKey
+            }
+
+            state.setCursorPosition(newLine, newCol)
+            state.setHoverPosition(newLine, newCol)
+
+            if (isShiftPressed) {
+                if (selectionAnchor == null) {
+                    selectionAnchor = startLine to startCol
+                }
+                val anchor = selectionAnchor!!
+                state.setSelection(anchor.first, anchor.second, newLine, newCol)
+            } else {
+                selectionAnchor = null
+                state.resetSelection()
+            }
+
+            // Only scroll if the cursor line is outside the visible area
+            val visibleItems = hexDataListState.layoutInfo.visibleItemsInfo
+            if (visibleItems.isNotEmpty()) {
+                val firstFullyVisible = if (visibleItems.first().offset < 0) {
+                    visibleItems.getOrNull(1)?.index ?: visibleItems.first().index
+                } else {
+                    visibleItems.first().index
+                }
+                val viewportEnd = hexDataListState.layoutInfo.viewportEndOffset
+                val lastFullyVisible = visibleItems.lastOrNull { it.offset + it.size <= viewportEnd }?.index
+                    ?: visibleItems.last().index
+
+                if (newLine < firstFullyVisible) {
+                    coroutineScope.launch {
+                        hexDataListState.animateScrollToItem(newLine)
+                    }
+                } else if (newLine > lastFullyVisible) {
+                    // Scroll so newLine appears at the bottom of the viewport
+                    // We need to find how many items fit and scroll so newLine is the last visible
+                    val itemsVisible = lastFullyVisible - firstFullyVisible
+                    val scrollTarget = (newLine - itemsVisible).coerceAtLeast(0)
+                    coroutineScope.launch {
+                        hexDataListState.animateScrollToItem(scrollTarget)
+                    }
+                }
+            }
+        }
+
         LaunchedEffect(state) {
             state.hexScrollFlow.collect { offset ->
                 val lineNo = (offset / bytesPerRow).toInt()
@@ -136,8 +258,8 @@ internal fun HexViewer(
             }
         }
 
-        fun resolveSelectionPosition(pointer: Offset, areaWidth: Float): Pair<Int, Int>? {
-            val visibleItemsInfo = hexDataListState.layoutInfo.visibleItemsInfo
+        fun resolveSelectionPosition(pointer: Offset, areaWidth: Float, listState: LazyListState = hexDataListState): Pair<Int, Int>? {
+            val visibleItemsInfo = listState.layoutInfo.visibleItemsInfo
             if (visibleItemsInfo.isEmpty() || areaWidth <= 0f || rowCount == 0) {
                 return null
             }
@@ -148,11 +270,32 @@ internal fun HexViewer(
             val resolvedRow = when {
                 pointer.y < firstVisible.offset -> firstVisible.index - 1
                 pointer.y > lastVisible.offset + lastVisible.size -> lastVisible.index + 1
-                else -> visibleItemsInfo.indexOfLast { it.offset <= pointer.y } + hexDataListState.firstVisibleItemIndex
+                else -> visibleItemsInfo.indexOfLast { it.offset <= pointer.y } + listState.firstVisibleItemIndex
             }.coerceIn(0, rowCount - 1)
 
             val cellWidth = areaWidth / bytesPerRow
             val resolvedColumn = (pointer.x / cellWidth).toInt().coerceIn(0, bytesPerRow - 1)
+
+            return resolvedRow to resolvedColumn
+        }
+
+        fun resolveTextSelectionPosition(pointer: Offset, paddingPx: Float, charWidthPx: Float, listState: LazyListState): Pair<Int, Int>? {
+            val visibleItemsInfo = listState.layoutInfo.visibleItemsInfo
+            if (visibleItemsInfo.isEmpty() || charWidthPx <= 0f || rowCount == 0) {
+                return null
+            }
+
+            val firstVisible = visibleItemsInfo.first()
+            val lastVisible = visibleItemsInfo.last()
+
+            val resolvedRow = when {
+                pointer.y < firstVisible.offset -> firstVisible.index - 1
+                pointer.y > lastVisible.offset + lastVisible.size -> lastVisible.index + 1
+                else -> visibleItemsInfo.indexOfLast { it.offset <= pointer.y } + listState.firstVisibleItemIndex
+            }.coerceIn(0, rowCount - 1)
+
+            val adjustedX = pointer.x - paddingPx
+            val resolvedColumn = (adjustedX / charWidthPx).toInt().coerceIn(0, bytesPerRow - 1)
 
             return resolvedRow to resolvedColumn
         }
@@ -291,6 +434,7 @@ internal fun HexViewer(
                             .pointerInput(Unit) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown()
+                                    focusRequester.requestFocus()
                                     state.resetSelection()
                                     isPointerPressed = true
                                     currentPointerPosition = down.position
@@ -305,6 +449,8 @@ internal fun HexViewer(
                                     val startIndex = start.first
                                     val startOffset = start.second
                                     selectionAnchor = start
+                                    state.setCursorPosition(startIndex, startOffset)
+                                    state.setHoverPosition(startIndex, startOffset)
 
                                     drag(down.id) { change ->
                                         currentPointerPosition = change.position
@@ -312,11 +458,12 @@ internal fun HexViewer(
                                         val endIndex = end.first
                                         val endOffset = end.second
                                         state.setSelection(startIndex, startOffset, endIndex, endOffset)
+                                        state.setCursorPosition(endIndex, endOffset)
+                                        state.setHoverPosition(endIndex, endOffset)
                                     }
 
                                     isPointerPressed = false
                                     currentPointerPosition = Offset.Unspecified
-                                    selectionAnchor = null
                                 }
                             }
                     ) {
@@ -333,8 +480,8 @@ internal fun HexViewer(
                                         val start = rowIndex * bytesPerRow
                                         val end = min(start + bytesPerRow, buf.limit())
 
-                                        (start until end).forEach { byteIndex ->
-                                            buf.position(byteIndex)
+                                        (start until end).forEachIndexed { byteIndex, absoluteIndex ->
+                                            buf.position(absoluteIndex)
                                             val byte = buf.get()
                                             val byteText = (byte.toInt() and 0xFF).asHexString()
                                             val isUnderCursor = byteIndex == state.cursorPosition.lineOffset &&
@@ -344,13 +491,15 @@ internal fun HexViewer(
                                                 byteIndex == state.hoverPosition.lineOffset && rowIndex == state.hoverPosition.line
 
                                             val isSearchResult = state.searchResults.value.any { range ->
-                                                (rowIndex * bytesPerRow + byteIndex).toLong() in range
+                                                absoluteIndex.toLong() in range
                                             }
 
-                                            val backgroundColor = if (isHover) {
-                                                if (isUnderCursor) HexanaTheme.hexCellHoverActiveColor else HexanaTheme.hexCellHoverColor
+                                            val backgroundColor = if (isUnderCursor) {
+                                                HexanaTheme.hexCellActiveColor
+                                            } else if (isHover) {
+                                                HexanaTheme.hexCellHoverColor
                                             } else {
-                                                if (isUnderCursor) HexanaTheme.hexCellActiveColor else Color.Unspecified
+                                                Color.Unspecified
                                             }
 
                                             val selectionBackgroundColor =
@@ -388,7 +537,45 @@ internal fun HexViewer(
                         }
                     }
 
-                    Box {
+                    Box(
+                        modifier = Modifier
+                            .pointerInput(Unit) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+                                    focusRequester.requestFocus()
+                                    state.resetSelection()
+                                    isPointerPressed = true
+                                    currentPointerPosition = down.position
+
+                                    val textPaddingPx = 8.dp.toPx()
+                                    val start = resolveTextSelectionPosition(down.position, textPaddingPx, monoCharWidthPx, textDataListState)
+                                    if (start == null) {
+                                        isPointerPressed = false
+                                        currentPointerPosition = Offset.Unspecified
+                                        selectionAnchor = null
+                                        return@awaitEachGesture
+                                    }
+                                    val startIndex = start.first
+                                    val startOffset = start.second
+                                    selectionAnchor = start
+                                    state.setCursorPosition(startIndex, startOffset)
+                                    state.setHoverPosition(startIndex, startOffset)
+
+                                    drag(down.id) { change ->
+                                        currentPointerPosition = change.position
+                                        val end = resolveTextSelectionPosition(change.position, textPaddingPx, monoCharWidthPx, textDataListState) ?: return@drag
+                                        val endIndex = end.first
+                                        val endOffset = end.second
+                                        state.setSelection(startIndex, startOffset, endIndex, endOffset)
+                                        state.setCursorPosition(endIndex, endOffset)
+                                        state.setHoverPosition(endIndex, endOffset)
+                                    }
+
+                                    isPointerPressed = false
+                                    currentPointerPosition = Offset.Unspecified
+                                }
+                            }
+                    ) {
                         LazyColumn(state = textDataListState) {
                             items(count = rowCount) { rowIndex ->
                                 Row(
@@ -410,10 +597,12 @@ internal fun HexViewer(
                                             (rowIndex * bytesPerRow + byteIndex).toLong() in range
                                         }
 
-                                        val backgroundColor = if (isHover) {
-                                            if (isUnderCursor) HexanaTheme.hexCellHoverActiveColor else HexanaTheme.hexCellHoverColor
+                                        val backgroundColor = if (isUnderCursor) {
+                                            HexanaTheme.hexCellActiveColor
+                                        } else if (isHover) {
+                                            HexanaTheme.hexCellHoverColor
                                         } else {
-                                            if (isUnderCursor) HexanaTheme.hexCellActiveColor else Color.Unspecified
+                                            Color.Unspecified
                                         }
 
                                         val selectionBackgroundColor =
