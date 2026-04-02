@@ -17,14 +17,10 @@ kotlin {
 }
 
 dependencies {
-    testImplementation(libs.intellij.starter.squashed)
+    testImplementation(libs.bundles.intellij.driver)
     testImplementation(libs.intellij.starter.junit5) {
         exclude(group = "com.jetbrains.intellij.platform", module = "test-framework-junit5")
     }
-    testImplementation(libs.intellij.starter.driver)
-    testImplementation(libs.intellij.driver.client)
-    testImplementation(libs.intellij.driver.sdk)
-    testImplementation(libs.intellij.driver.model)
     testImplementation(libs.kotlinx.serialization.json)
 
     testImplementation(platform(libs.junit.bom))

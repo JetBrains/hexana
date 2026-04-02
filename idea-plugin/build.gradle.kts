@@ -72,16 +72,14 @@ dependencies {
     implementation(project(":graalwasm:wat2wasm"))
     implementation(libs.kotlin.reflect)
     compileOnly(libs.kotlinx.serialization.json)
-    implementation(libs.graalvm.polyglot)
-    implementation(libs.graalvm.wasm)
+    implementation(libs.bundles.graalvm)
     implementation(libs.jackson.module.kotlin)
 
     // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
     compileOnly(compose.desktop.currentOs)
     testImplementation(libs.junit4)
     testImplementation(libs.kotlinx.serialization.json)
-    testRuntimeOnly(libs.graalvm.wasm)
-    testRuntimeOnly(libs.graalvm.polyglot)
+    testRuntimeOnly(libs.bundles.graalvm)
     implementation(libs.gson)
 }
 

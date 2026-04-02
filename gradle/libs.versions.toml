@@ -36,6 +36,19 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 
+[bundles]
+graalvm = [
+    "graalvm-polyglot",
+    "graalvm-wasm",
+]
+intellij-driver = [
+    "intellij-starter-squashed",
+    "intellij-starter-driver",
+    "intellij-driver-client",
+    "intellij-driver-sdk",
+    "intellij-driver-model",
+]
+
 [plugins]
 changelog = { id = "org.jetbrains.changelog", version.ref = "changelog" }
 intellij-platform = { id = "org.jetbrains.intellij.platform", version.ref = "intellijPlatform" }

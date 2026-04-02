@@ -4,8 +4,7 @@ plugins {
 
 dependencies {
     implementation(libs.kotlin.reflect)
-    implementation(libs.graalvm.polyglot)
-    implementation(libs.graalvm.wasm)
+    implementation(libs.bundles.graalvm)
     implementation(project.parent!!.project("common"))
 }
 
