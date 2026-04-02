@@ -1,5 +1,5 @@
 plugins {
-    kotlin("jvm")
+    alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
 }
 
@@ -17,19 +17,19 @@ kotlin {
 }
 
 dependencies {
-    testImplementation("com.jetbrains.intellij.tools:ide-starter-squashed:LATEST-EAP-SNAPSHOT")
-    testImplementation("com.jetbrains.intellij.tools:ide-starter-junit5:LATEST-EAP-SNAPSHOT") {
+    testImplementation(libs.intellij.starter.squashed)
+    testImplementation(libs.intellij.starter.junit5) {
         exclude(group = "com.jetbrains.intellij.platform", module = "test-framework-junit5")
     }
-    testImplementation("com.jetbrains.intellij.tools:ide-starter-driver:LATEST-EAP-SNAPSHOT")
-    testImplementation("com.jetbrains.intellij.driver:driver-client:LATEST-EAP-SNAPSHOT")
-    testImplementation("com.jetbrains.intellij.driver:driver-sdk:LATEST-EAP-SNAPSHOT")
-    testImplementation("com.jetbrains.intellij.driver:driver-model:LATEST-EAP-SNAPSHOT")
+    testImplementation(libs.intellij.starter.driver)
+    testImplementation(libs.intellij.driver.client)
+    testImplementation(libs.intellij.driver.sdk)
+    testImplementation(libs.intellij.driver.model)
     testImplementation(libs.kotlinx.serialization.json)
 
-    testImplementation(platform("org.junit:junit-bom:5.12.2"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 tasks.test {
