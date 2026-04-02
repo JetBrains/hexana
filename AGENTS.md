@@ -70,6 +70,7 @@ Existing IDE run configurations currently include:
 ## Working Rules
 
 - Prefer module-scoped Gradle commands over workspace-wide builds.
+- Prefer adding external dependency and plugin versions to `gradle/libs.versions.toml` and referencing them from module build scripts through `libs`.
 - Add or update tests for behavior changes.
 - Do not edit anything under `build/`, `.gradle/`, `.intellijPlatform/`, or `target/`.
 - Keep changes inside the affected module unless the design actually crosses module boundaries.
