@@ -8,10 +8,10 @@ import org.jetbrains.intellij.platform.gradle.tasks.aware.SplitModeAware
 
 plugins {
     id("java")
-    id("org.jetbrains.kotlin.jvm")
+    alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
-    id("org.jetbrains.intellij.platform") version "2.10.5"
-    id("org.jetbrains.changelog") version "2.4.0"
+    alias(libs.plugins.intellij.platform)
+    alias(libs.plugins.changelog)
     // Compose compiler plugin from version catalog
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.compose.multiplatform)
@@ -50,7 +50,7 @@ repositories {
 // Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
     intellijPlatform {
-        intellijIdea("2025.3") {
+        intellijIdea(libs.versions.intellijIdea.get()) {
             type = IntelliJPlatformType.IntellijIdea
             useInstaller = false
         }
@@ -70,21 +70,19 @@ dependencies {
     implementation(project(":graalwasm:wasmprinter"))
     implementation(project(":graalwasm:common"))
     implementation(project(":graalwasm:wat2wasm"))
-    implementation(kotlin("reflect"))
+    implementation(libs.kotlin.reflect)
     compileOnly(libs.kotlinx.serialization.json)
-    implementation("org.graalvm.polyglot:polyglot:25.0.0")
-    implementation("org.graalvm.polyglot:wasm:25.0.0")
-
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.20.0")
+    implementation(libs.graalvm.polyglot)
+    implementation(libs.graalvm.wasm)
+    implementation(libs.jackson.module.kotlin)
 
     // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
     compileOnly(compose.desktop.currentOs)
-    testImplementation("junit:junit:4.13.2")
+    testImplementation(libs.junit4)
     testImplementation(libs.kotlinx.serialization.json)
-    testRuntimeOnly("org.graalvm.polyglot:wasm:25.0.0")
-    testRuntimeOnly("org.graalvm.polyglot:polyglot:25.0.0")
-
-    implementation("com.google.code.gson:gson:2.13.1")
+    testRuntimeOnly(libs.graalvm.wasm)
+    testRuntimeOnly(libs.graalvm.polyglot)
+    implementation(libs.gson)
 }
 
 changelog {

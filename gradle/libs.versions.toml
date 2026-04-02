@@ -1,12 +1,21 @@
 [versions]
+changelog = "2.4.0"
 kotlin = "2.2.21"
 composeMultiplatform = "1.9.0"
 graalvm = "25.0.0"
+gson = "2.13.1"
+intellijIdea = "2025.3"
+intellijPlatform = "2.10.5"
+jackson = "2.20.0"
+junit4 = "4.13.2"
 kotlinx-browser = "0.5.0"
 kotlinx-coroutines = "1.10.2"
 kotlinx-serialization = "1.9.0"
 
 [libraries]
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
+junit4 = { module = "junit:junit", version.ref = "junit4" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 graalvm-polyglot = { module = "org.graalvm.polyglot:polyglot", version.ref = "graalvm" }
@@ -17,6 +26,8 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 
 [plugins]
+changelog = { id = "org.jetbrains.changelog", version.ref = "changelog" }
+intellij-platform = { id = "org.jetbrains.intellij.platform", version.ref = "intellijPlatform" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
