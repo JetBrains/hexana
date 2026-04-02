@@ -1,11 +1,11 @@
 plugins {
-    kotlin("jvm")
+    alias(libs.plugins.kotlin.jvm)
 }
 
 dependencies {
-    implementation(kotlin("reflect"))
-    implementation("org.graalvm.polyglot:polyglot:25.0.0")
-    implementation("org.graalvm.polyglot:wasm:25.0.0")
+    implementation(libs.kotlin.reflect)
+    implementation(libs.graalvm.polyglot)
+    implementation(libs.graalvm.wasm)
 }
 
 kotlin {
