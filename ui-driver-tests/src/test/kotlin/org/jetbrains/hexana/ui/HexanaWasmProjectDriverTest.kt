@@ -5,6 +5,8 @@ import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
 import com.intellij.driver.sdk.ui.components.common.editorTabs
 import com.intellij.driver.sdk.ui.components.common.ideFrame
 import com.intellij.driver.sdk.waitForIndicators
+import com.intellij.ide.starter.community.PublicIdeDownloader
+import com.intellij.ide.starter.community.model.BuildType
 import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.ide.starter.ide.IdeProductProvider
 import com.intellij.ide.starter.ide.installer.StandardInstaller
@@ -25,12 +27,7 @@ class HexanaWasmProjectDriverTest {
     val projectDir = resolveProjectDir()
     val pluginZip = resolvePluginZip()
 
-    val ideInfo = IdeProductProvider.IU.copy(
-      buildType = HexanaTeamCityArtifacts.resolveIdeBuildType(),
-      buildNumber = "",
-      tag = null,
-      getInstaller = { StandardInstaller(HexanaTeamCityIdeDownloader) }
-    )
+    val ideInfo = resolveIdeInfo()
 
     val context = Starter.newContext(
       ideInfo = ideInfo,
@@ -94,6 +91,42 @@ class HexanaWasmProjectDriverTest {
     return value?.trim()?.lowercase() in setOf("true", "1", "yes")
   }
 
+  private fun resolveIdeInfo() = when {
+    ideVersion != null && ideBuildNumber != null -> {
+      error("Set only one of $ideVersionEnv or $ideBuildNumberEnv.")
+    }
+
+    ideVersion != null -> {
+      IdeProductProvider.IU.copy(
+        buildType = BuildType.RELEASE.type,
+        buildNumber = "",
+        version = ideVersion,
+        tag = null,
+        getInstaller = { StandardInstaller(PublicIdeDownloader()) }
+      )
+    }
+
+    ideBuildNumber != null -> {
+      IdeProductProvider.IU.copy(
+        buildType = "",
+        buildNumber = ideBuildNumber,
+        version = "",
+        tag = null,
+        getInstaller = { StandardInstaller(PublicIdeDownloader()) }
+      )
+    }
+
+    else -> {
+      IdeProductProvider.IU.copy(
+        buildType = HexanaTeamCityArtifacts.resolveIdeBuildType(),
+        buildNumber = "",
+        version = "",
+        tag = null,
+        getInstaller = { StandardInstaller(HexanaTeamCityIdeDownloader) }
+      )
+    }
+  }
+
   companion object {
     private const val projectName = "hexana_wasm_project"
     private const val wasmFileName = "hello.wasm"
@@ -101,5 +134,9 @@ class HexanaWasmProjectDriverTest {
     private const val useLocalPluginEnv = "HEXANA_USE_LOCAL_PLUGIN"
     private const val downloadPluginEnv = "HEXANA_DOWNLOAD_PLUGIN"
     private const val pluginBuildNumberEnv = "HEXANA_PLUGIN_BUILD_NUMBER"
+    private const val ideVersionEnv = "HEXANA_IDE_VERSION"
+    private const val ideBuildNumberEnv = "HEXANA_IDE_BUILD_NUMBER"
+    private val ideVersion = System.getenv(ideVersionEnv)?.trim()?.ifBlank { null }
+    private val ideBuildNumber = System.getenv(ideBuildNumberEnv)?.trim()?.ifBlank { null }
   }
 }
