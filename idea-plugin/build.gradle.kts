@@ -17,6 +17,8 @@ plugins {
     alias(libs.plugins.compose.multiplatform)
 }
 
+apply(from = project.file("gradle/mcp-token-counter.gradle.kts"))
+
 group = "org.jetbrains.hexana"
 
 val baseVersion = project.property("pluginVersion") as String
