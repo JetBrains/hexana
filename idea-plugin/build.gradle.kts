@@ -23,6 +23,7 @@ group = "org.jetbrains.hexana"
 
 val baseVersion = project.property("pluginVersion") as String
 val hexanaBuild = project.property("hexanaBuild")
+val defaultIdeaType = ideLibs.versions.defaultIdeType.map(IntelliJPlatformType::valueOf)
 version = when (hexanaBuild) {
     "release" -> {
         baseVersion
@@ -52,8 +53,7 @@ repositories {
 // Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
     intellijPlatform {
-        intellijIdea(libs.versions.intellijIdea.get()) {
-            type = IntelliJPlatformType.IntellijIdea
+        create(defaultIdeaType, ideLibs.versions.defaultIdeVersion) {
             useInstaller = false
         }
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
@@ -102,7 +102,15 @@ intellijPlatform {
 
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "253"
+            sinceBuild = ideLibs.versions.defaultSinceBuild.get()
+        }
+    }
+
+    pluginVerification {
+        ides {
+            create(defaultIdeaType, ideLibs.versions.defaultIdeVersion) {
+                useInstaller = false
+            }
         }
     }
 }
