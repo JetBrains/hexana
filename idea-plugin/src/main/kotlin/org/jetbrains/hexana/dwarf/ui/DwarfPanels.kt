@@ -98,7 +98,7 @@ fun DebugAbbrevPanel(provider: BinaryProvider, state: HexViewStateHolder) {
         val label = when (val data = element.data) {
             is String -> "Compilation Unit @ $data"
             is DwarfAbbrevEntry -> "[${data.number}] ${data.tag.name}  ${if (data.hasChildren) "DW_CHILDREN_yes" else "DW_CHILDREN_no"}"
-            is DwarfAttribute -> "${data.name} ${data.form.name}" + (data.value?.let { " = ${it.toHexString()}" } ?: "")
+            is DwarfAttribute -> "${data.name} ${data.form::class.simpleName}" + (data.value?.let { " = ${it.toHexString()}" } ?: "")
             else -> data.toString()
         }
         Text(
@@ -169,9 +169,9 @@ fun DebugInfoPanel(provider: BinaryProvider, state: HexViewStateHolder) {
                         val value = stringTable.find { it.originalOffset == data.value as UInt }?.run {
                             wasmProvider.bytes.str()
                         } ?: "Unknown string"
-                        "${data.attribute.name} ${data.attribute.form.name} ${data.value}: '$value'"
+                        "${data.attribute.name} ${data.attribute.form::class.simpleName} ${data.value}: '$value'"
                     }
-                    else -> "${data.attribute.name} ${data.attribute.form.name}"
+                    else -> "${data.attribute.name} ${data.attribute.form::class.simpleName}"
                 }
             }
             else -> data.toString()
