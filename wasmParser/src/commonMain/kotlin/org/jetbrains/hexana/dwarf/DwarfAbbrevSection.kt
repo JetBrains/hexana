@@ -44,7 +44,7 @@ private fun CommonByteBuffer.readAttributes(attributes: MutableList<DwarfAttribu
     val rawForm = getULEB128().toUShort()
     if (name == 0UL && rawForm == 0.toUShort())
         return false
-    val form = findForm(rawForm)
+    val form = findForm(rawForm) ?: return false
     if (form == Form.DW_FORM_implicit_const) {
         val size = position() - offset
         val value = getSLEB128()
@@ -52,7 +52,6 @@ private fun CommonByteBuffer.readAttributes(attributes: MutableList<DwarfAttribu
         return true
     }
     val size = position() - offset
-    Form.entries.find { it.value == rawForm } ?: return false
     attributes.add(DwarfAttribute(offset, size, findAttribute(name.toUShort()), form))
     return true
 }

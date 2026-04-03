@@ -178,7 +178,10 @@ class DwarfInfoSection(
                get(buffer, 0, length)
                DieField(attribute, buffer)
            }
-           else -> TODO("Unsupported form: ${attribute.form}")
+           Form.DW_FORM_addrx -> {
+               DieField(attribute, getULEB128())
+           }
+           else -> TODO("Unsupported form: ${attribute.form::class.simpleName}")
        }
     }
 
