@@ -1,6 +1,7 @@
 // compile with
 // 
 //  emcc -g -gsource-map -O0 -o utf8-c.wasm utf8.c
+//  emcc -g -gdwarf-5 -O0 utf8.c -o utf8-c.dwarf5.wasm
 
 #include <stdio.h>
 
