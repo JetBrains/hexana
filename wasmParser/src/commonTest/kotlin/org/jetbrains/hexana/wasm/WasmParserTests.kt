@@ -2,17 +2,19 @@ package org.jetbrains.hexana.wasm
 
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.hexana.dwarf.CompilationUnitHeader
+import org.jetbrains.hexana.dwarf.DwarfLineUnitHeader
+import org.jetbrains.hexana.dwarf.LnsOpcode
+import org.jetbrains.hexana.dwarf.LnsSpecialOpcode
 import org.jetbrains.hexana.dwarf.Tag
 import org.jetbrains.hexana.dwarf.debugAbbrevSection
 import org.jetbrains.hexana.dwarf.debugInfoSection
+import org.jetbrains.hexana.dwarf.debugLineSection
 import org.jetbrains.hexana.dwarf.debugStrSection
 import org.jetbrains.hexana.tests.IgnoreJsTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
 import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
-import org.jetbrains.hexana.wasm.sections.*
-import kotlin.test.*
 import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmFixedI32Limits
@@ -24,7 +26,6 @@ import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 import org.jetbrains.hexana.wasm.sections.consumeString
 import org.jetbrains.hexana.wasm.sections.WasmMemType
 import kotlin.test.Test
-import kotlin.test.Ignore
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -1741,6 +1742,168 @@ class WasmParserTests {
         assertEquals(0x180, compilationUnit.size)
         assertEquals(Tag.DW_TAG_compile_unit, compilationUnit.tag)
         assertEquals(21, compilationUnit.children.size)
+    }
+
+    @OptIn(ExperimentalUnsignedTypes::class)
+    @Test
+    fun testScanDwarfLineSection() = runTest {
+        val buffer = resourceAsByteBuffer("c/utf8-c.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
+        val infoSection = (wasmModule as BaseModule).debugLineSection()!!
+        val entries = with(infoSection) {
+            buffer.scanLineTable()
+        }
+        /**
+         * dwarfdump --debug-line -v wasmParser/src/commonTest/resources/c/utf8-c.wasm | grep "Line table prologue:" | wc -l
+         *       51
+         */
+        assertEquals(51, entries.size)
+        /**
+         * Line table prologue:
+         *     total_length: 0x00000038
+         *           format: DWARF32
+         *          version: 4
+         *  prologue_length: 0x0000001e
+         *  min_inst_length: 1
+         * max_ops_per_inst: 1
+         *  default_is_stmt: 1
+         *        line_base: -5
+         *       line_range: 14
+         *      opcode_base: 13
+         * standard_opcode_lengths[DW_LNS_copy] = 0
+         * standard_opcode_lengths[DW_LNS_advance_pc] = 1
+         * standard_opcode_lengths[DW_LNS_advance_line] = 1
+         * standard_opcode_lengths[DW_LNS_set_file] = 1
+         * standard_opcode_lengths[DW_LNS_set_column] = 1
+         * standard_opcode_lengths[DW_LNS_negate_stmt] = 0
+         * standard_opcode_lengths[DW_LNS_set_basic_block] = 0
+         * standard_opcode_lengths[DW_LNS_const_add_pc] = 0
+         * standard_opcode_lengths[DW_LNS_fixed_advance_pc] = 1
+         * standard_opcode_lengths[DW_LNS_set_prologue_end] = 0
+         * standard_opcode_lengths[DW_LNS_set_epilogue_begin] = 0
+         * standard_opcode_lengths[DW_LNS_set_isa] = 1
+         * file_names[  1]:
+         *            name: "utf8.c"
+         *       dir_index: 0
+         *        mod_time: 0x00000000
+         *          length: 0x00000000
+         *
+         */
+        val unit0 = entries[0]
+        assertIs<DwarfLineUnitHeader.Dwarf32LineUnitHeader.V4>(unit0)
+        assertEquals(0x1eu, unit0.prologLength)
+        assertEquals(1, unit0.fileNames.size)
+
+        assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_copy.standardOpcodeLengthsEncoding])
+        assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_advance_pc.standardOpcodeLengthsEncoding])
+        assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_advance_line.standardOpcodeLengthsEncoding])
+        assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_file.standardOpcodeLengthsEncoding])
+        assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_column.standardOpcodeLengthsEncoding])
+        assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_negate_stmt.standardOpcodeLengthsEncoding])
+        assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_basic_block.standardOpcodeLengthsEncoding])
+        assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_const_add_pc.standardOpcodeLengthsEncoding])
+        assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_fixed_advance_pc.standardOpcodeLengthsEncoding])
+        assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_prologue_end.standardOpcodeLengthsEncoding])
+        assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_epilogue_begin.standardOpcodeLengthsEncoding])
+        assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_isa.standardOpcodeLengthsEncoding])
+
+        assertEquals("utf8.c", unit0.fileNames[0].fileName)
+        assertEquals(0, unit0.fileNames[0].dirIndex)
+        assertEquals(0, unit0.fileNames[0].fileSize)
+        assertEquals(0, unit0.fileNames[0].lastModified)
+        assertEquals(1.toUByte(), unit0.maximumInstructionsLength)
+        assertEquals(1.toUByte(), unit0.maximumOperationsPerInstruction)
+        assertEquals(1.toUByte(), unit0.defaultIsStatement)
+        assertEquals(-5, unit0.lineBase)
+        assertEquals(14.toUByte(), unit0.lineRange)
+        assertEquals(0, unit0.includeDirectories.size)
+
+        /**
+         * 0x00000028: 00 DW_LNE_set_address (0x00000009)
+         * 0x0000002f: 1a address += 0,  line += 8,  op-index += 0
+         *             0x0000000000000009      9      0      1   0             0       0  is_stmt
+         * 0x00000030: 05 DW_LNS_set_column (3)
+         * 0x00000032: 0a DW_LNS_set_prologue_end
+         * 0x00000033: 08 DW_LNS_const_add_pc (addr += 0x0000000000000011, op-index += 0)
+         * 0x00000034: bb address += 12,  line += 1,  op-index += 0
+         *             0x0000000000000026     10      3      1   0             0       0  is_stmt prologue_end
+         * 0x00000035: 08 DW_LNS_const_add_pc (addr += 0x0000000000000011, op-index += 0)
+         * 0x00000036: 91 address += 9,  line += 1,  op-index += 0
+         *             0x0000000000000040     11      3      1   0             0       0  is_stmt
+         * 0x00000037: 02 DW_LNS_advance_pc (addr += 19, op-index += 0)
+         * 0x00000039: 00 DW_LNE_end_sequence
+         *             0x0000000000000053     11      3      1   0             0       0  is_stmt end_sequence
+         */
+        val program0 = with(unit0) {
+            buffer.lineProgram()
+        }
+        assertEquals(10, program0.size)
+        val opcode1 = program0[1]
+        assertIs<LnsSpecialOpcode>(opcode1)
+        assertEquals(0x1a.toUByte(), opcode1.value)
+
+        val opcode2 = program0[2]
+        assertIs<LnsOpcode.DW_LNS_set_column>(opcode2)
+        assertEquals(0x03u, opcode2.params[0])
+
+        /**
+         * prologue_length: 0x000000b0
+         *  min_inst_length: 1
+         * max_ops_per_inst: 1
+         *  default_is_stmt: 1
+         *        line_base: -5
+         *       line_range: 14
+         *      opcode_base: 13
+         * standard_opcode_lengths[DW_LNS_copy] = 0
+         * standard_opcode_lengths[DW_LNS_advance_pc] = 1
+         * standard_opcode_lengths[DW_LNS_advance_line] = 1
+         * standard_opcode_lengths[DW_LNS_set_file] = 1
+         * standard_opcode_lengths[DW_LNS_set_column] = 1
+         * standard_opcode_lengths[DW_LNS_negate_stmt] = 0
+         * standard_opcode_lengths[DW_LNS_set_basic_block] = 0
+         * standard_opcode_lengths[DW_LNS_const_add_pc] = 0
+         * standard_opcode_lengths[DW_LNS_fixed_advance_pc] = 1
+         * standard_opcode_lengths[DW_LNS_set_prologue_end] = 0
+         * standard_opcode_lengths[DW_LNS_set_epilogue_begin] = 0
+         * standard_opcode_lengths[DW_LNS_set_isa] = 1
+         * include_directories[  1] = "system/lib/libc/musl/src/string"
+         * include_directories[  2] = "system/lib/libc/musl/src/include/../../include"
+         * include_directories[  3] = "cache/sysroot/include/bits"
+         * file_names[  1]:
+         *            name: "strdup.c"
+         *       dir_index: 1
+         *        mod_time: 0x00000000
+         *          length: 0x00000000
+         * file_names[  2]:
+         *            name: "string.h"
+         *       dir_index: 2
+         *        mod_time: 0x00000000
+         *          length: 0x00000000
+         * file_names[  3]:
+         *            name: "alltypes.h"
+         *       dir_index: 3
+         *        mod_time: 0x00000000
+         *          length: 0x00000000
+         * file_names[  4]:
+         *            name: "stdlib.h"
+         *       dir_index: 2
+         *        mod_time: 0x00000000
+         *          length: 0x00000000
+         */
+        val unit16 = entries[16]
+        assertIs<DwarfLineUnitHeader.Dwarf32LineUnitHeader.V4>(unit16)
+        assertEquals(0xb0u, unit16.prologLength)
+        assertEquals(3, unit16.includeDirectories.size)
+        assertEquals("system/lib/libc/musl/src/string", unit16.includeDirectories[0])
+        assertEquals("system/lib/libc/musl/src/include/../../include", unit16.includeDirectories[1])
+        assertEquals("cache/sysroot/include/bits", unit16.includeDirectories[2])
+        assertEquals(4, unit16.fileNames.size)
+        assertEquals("strdup.c", unit16.fileNames[0].fileName)
+        assertEquals("string.h", unit16.fileNames[1].fileName)
+        assertEquals("alltypes.h", unit16.fileNames[2].fileName)
+        assertEquals("stdlib.h", unit16.fileNames[3].fileName)
     }
 
     @Test
