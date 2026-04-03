@@ -142,17 +142,7 @@ class DwarfInfoSection(
            }
            Form.DW_FORM_flag_present -> DieField(attribute, true)
            Form.DW_FORM_string -> {
-               val start = position()
-               while (get() != 0.toByte()){
-                   /* empty */
-               }
-               val end = position()
-               val length = end - 1 - start
-               val buffer = ByteArray(length)
-               position(start)
-               get(buffer, 0, length)
-               get() // null byte
-               DieField(attribute, buffer.decodeToString())
+               DieField(attribute, readStringZ())
            }
            Form.DW_FORM_exprloc -> {
                val size = getULEB128()
@@ -216,6 +206,21 @@ class DwarfInfoSection(
         }
         return DebugInformationEntry(offset, position() - offset, dieAbbrev.tag, attributes, children)
     }
+}
+
+fun CommonByteBuffer.readStringZ(): String {
+    val start = position()
+    while (get() != 0.toByte()) {
+        /* empty */
+    }
+    val end = position()
+    val length = end - 1 - start
+    val buffer = ByteArray(length)
+    position(start)
+    get(buffer, 0, length)
+    get() // null byte
+    val string = buffer.decodeToString()
+    return string
 }
 
 class DieField(val attribute: DwarfAttribute, val value: Any)
