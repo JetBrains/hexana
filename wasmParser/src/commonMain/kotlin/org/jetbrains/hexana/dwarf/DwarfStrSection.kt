@@ -2,11 +2,13 @@ package org.jetbrains.hexana.dwarf
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.crossSectionOperation
-import org.jetbrains.hexana.wasm.BaseModule
-import org.jetbrains.hexana.wasm.customSectionByName
 
 
-open class DwarfStringSection(contentOffset: Int, contentSize: Int): DwarfSection(contentOffset, contentSize) {
+open class DwarfStringSection(contentOffset: Int, contentSize: Int, accessor: DwarfAccessor) : DwarfSection(
+    contentOffset,
+    contentSize,
+    accessor
+) {
     fun CommonByteBuffer.scanDwarfStr():List<StringTableEntry> {
         position(contentOffset)
         val entries = mutableListOf<StringTableEntry>()
@@ -22,8 +24,10 @@ open class DwarfStringSection(contentOffset: Int, contentSize: Int): DwarfSectio
     }
 }
 
-class DwarfStrSection(contentOffset: Int, contentSize: Int): DwarfStringSection(contentOffset, contentSize)
-class DwarfLineStrSection(contentOffset: Int, contentSize: Int): DwarfStringSection(contentOffset, contentSize)
+class DwarfStrSection(contentOffset: Int, contentSize: Int, accessor: DwarfAccessor):
+    DwarfStringSection(contentOffset, contentSize, accessor)
+class DwarfLineStrSection(contentOffset: Int, contentSize: Int, accessor: DwarfAccessor):
+    DwarfStringSection(contentOffset, contentSize, accessor)
 
 class StringTableEntry(val originalOffset: UInt, val offset: Int, val length: Int) {
     fun CommonByteBuffer.str(): String {
@@ -35,7 +39,4 @@ class StringTableEntry(val originalOffset: UInt, val offset: Int, val length: In
         }
     }
 }
-
-fun BaseModule.debugStrSection() = customSectionByName(".debug_str")?.let { DwarfStrSection(it.contentOffset, it.contentSize) }
-fun BaseModule.debugLineStrSection() = customSectionByName(".debug_line_str")?.let { DwarfStrSection(it.contentOffset, it.contentSize) }
 

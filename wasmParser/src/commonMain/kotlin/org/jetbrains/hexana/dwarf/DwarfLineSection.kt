@@ -7,7 +7,9 @@ import org.jetbrains.hexana.io.crossSectionOperation
 import org.jetbrains.hexana.wasm.BaseModule
 import org.jetbrains.hexana.wasm.customSectionByName
 
-class DwarfLineSection(contentOffset: Int, contentSize: Int) : DwarfSection(contentOffset, contentSize) {
+class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAccessor) : DwarfSection(contentOffset, contentSize,
+    accessor
+) {
     fun CommonByteBuffer.scanLineTable(): List<DwarfLineUnitHeader<*>> {
         position(contentOffset)
         val units = mutableListOf<DwarfLineUnitHeader<*>>()
@@ -98,7 +100,8 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int) : DwarfSection(cont
             includeDirectories,
             includeFiles,
             headerLength + 22u,
-            headerLength + 14u
+            headerLength + 14u,
+            accessor
         )
     }
 
@@ -170,7 +173,8 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int) : DwarfSection(cont
             includeDirectories,
             includeFiles,
             prologLength + 10u,
-            unitSize + 4u
+            unitSize + 4u,
+            accessor
         )
     }
 
@@ -236,7 +240,8 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int) : DwarfSection(cont
             fileNameEntryFormatCount,
             fileNameEntryFormats,
             fileNamesCount,
-            fileNames)
+            fileNames,
+            accessor)
     }
 }
 
@@ -256,7 +261,8 @@ sealed class DwarfLineUnitHeader<T>(
     val lineRange: UByte,
     val lineBase: Byte,
     val standardOpcodeLengths: ByteArray,
-) : DwarfSection(contentOffset, contentSize.toInt()) {
+    accessor: DwarfAccessor
+) : DwarfSection(contentOffset, contentSize.toInt(), accessor) {
     sealed class Dwarf32LineUnitHeader(
         contentOffset: Int,
         prologLength: UInt,
@@ -269,6 +275,7 @@ sealed class DwarfLineUnitHeader<T>(
         lineRange: UByte,
         lineBase: Byte,
         standardOpcodeLengths: ByteArray,
+        accessor: DwarfAccessor
     ) :
         DwarfLineUnitHeader<UInt>(
             contentOffset,
@@ -282,6 +289,7 @@ sealed class DwarfLineUnitHeader<T>(
             lineRange,
             lineBase,
             standardOpcodeLengths,
+            accessor
         ) {
         class V4(
             contentOffset: Int,
@@ -296,7 +304,7 @@ sealed class DwarfLineUnitHeader<T>(
             val includeDirectories: List<String>,
             val fileNames: List<LineNumberFileEntryV4>,
             programOffset: UInt,
-            unitSize: UInt
+            unitSize: UInt, accessor: DwarfAccessor
         ) : Dwarf32LineUnitHeader(
             contentOffset,
             prologLength,
@@ -309,6 +317,7 @@ sealed class DwarfLineUnitHeader<T>(
             lineRange,
             lineBase,
             standardOpcodeLengths,
+            accessor
         )
 
         class V5(
@@ -331,7 +340,7 @@ sealed class DwarfLineUnitHeader<T>(
             val fileNameEntryFormatCount: UByte,
             val fileNameEntryFormats: List<DwarfEntryFormat>,
             val fileNamesCount: Long,
-            val fileNames: List<List<DwarfLineSection.Entry>>,
+            val fileNames: List<List<DwarfLineSection.Entry>>, accessor: DwarfAccessor,
         ) : Dwarf32LineUnitHeader(
             contentOffset,
             prologLength,
@@ -344,6 +353,7 @@ sealed class DwarfLineUnitHeader<T>(
             lineRange,
             lineBase,
             standardOpcodeLengths,
+            accessor
         )
     }
 
@@ -358,7 +368,7 @@ sealed class DwarfLineUnitHeader<T>(
         lineRange: UByte,
         standardOpcodeLengths: ByteArray,
         programOffset: ULong,
-        unitSize: ULong
+        unitSize: ULong, accessor: DwarfAccessor
     ) : DwarfLineUnitHeader<ULong>(
         contentOffset,
         contentSize.toInt(),
@@ -371,6 +381,7 @@ sealed class DwarfLineUnitHeader<T>(
         lineRange,
         lineBase,
         standardOpcodeLengths,
+        accessor
     ) {
 
         class V4(
@@ -386,7 +397,7 @@ sealed class DwarfLineUnitHeader<T>(
             val includeDirectories: List<String>,
             val includeFiles: List<LineNumberFileEntryV4>,
             programOffset: ULong,
-            unitSize: ULong
+            unitSize: ULong, accessor: DwarfAccessor
         ) : Dwarf64LineUnitHeader(
             contentOffset,
             contentSize,
@@ -399,6 +410,7 @@ sealed class DwarfLineUnitHeader<T>(
             standardOpcodeLengths,
             programOffset,
             unitSize,
+            accessor
         )
 
         class V5(
@@ -412,7 +424,7 @@ sealed class DwarfLineUnitHeader<T>(
             lineRange: UByte,
             standardOpcodeLengths: ByteArray,
             programOffset: ULong,
-            unitSize: ULong,
+            unitSize: ULong, accessor: DwarfAccessor,
         ) : Dwarf64LineUnitHeader(
             contentOffset,
             contentSize,
@@ -424,7 +436,8 @@ sealed class DwarfLineUnitHeader<T>(
             lineRange,
             standardOpcodeLengths,
             programOffset,
-            unitSize
+            unitSize,
+            accessor
         )
 
     }
@@ -609,11 +622,6 @@ sealed class DwarfLineUnitHeader<T>(
         position(extendedOffset + extendedLength)
         return params
     }
-}
-
-
-fun BaseModule.debugLineSection() = customSectionByName(".debug_line")?.let {
-    DwarfLineSection(it.contentOffset, it.contentSize)
 }
 
 sealed class LineProgramOpcode(val offset: Int, val size: Int, val params: ULongArray)

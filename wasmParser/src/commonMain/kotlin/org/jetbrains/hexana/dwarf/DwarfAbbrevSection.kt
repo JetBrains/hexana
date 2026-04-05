@@ -1,10 +1,8 @@
 package org.jetbrains.hexana.dwarf
 
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.wasm.BaseModule
-import org.jetbrains.hexana.wasm.customSectionByName
 
-class DwarfAbbrevSection(contentOffset: Int, contentSize: Int): DwarfSection(contentOffset, contentSize) {
+class DwarfAbbrevSection(contentOffset: Int, contentSize: Int, accessor: DwarfAccessor): DwarfSection(contentOffset, contentSize, accessor) {
     fun CommonByteBuffer.scanDwarfAbbrev(): Map<UInt, List<DwarfAbbrevEntry>> {
         position(contentOffset)
         var tableEntryOffset = 0U
@@ -55,10 +53,6 @@ private fun CommonByteBuffer.readAttributes(attributes: MutableList<DwarfAttribu
     attributes.add(DwarfAttribute(offset, size, findAttribute(name.toUShort()), form))
     return true
 }
-
-
-
-fun BaseModule.debugAbbrevSection() = customSectionByName(".debug_abbrev")?.let { DwarfAbbrevSection(it.contentOffset, it.contentSize) }
 
 sealed class DwarfAbbrevTableEntry {
     object End: DwarfAbbrevTableEntry()

@@ -2,20 +2,17 @@ package org.jetbrains.hexana.wasm
 
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.hexana.dwarf.CompilationUnitHeader
+import org.jetbrains.hexana.dwarf.DwarfAccessor
 import org.jetbrains.hexana.dwarf.DwarfLineUnitHeader
 import org.jetbrains.hexana.dwarf.Form
 import org.jetbrains.hexana.dwarf.LineNumberHeaderEntryFormatName
 import org.jetbrains.hexana.dwarf.LnsOpcode
 import org.jetbrains.hexana.dwarf.LnsSpecialOpcode
 import org.jetbrains.hexana.dwarf.Tag
-import org.jetbrains.hexana.dwarf.debugAbbrevSection
-import org.jetbrains.hexana.dwarf.debugInfoSection
-import org.jetbrains.hexana.dwarf.debugLineSection
-import org.jetbrains.hexana.dwarf.debugStrSection
-import org.jetbrains.hexana.dwarf.findForm
 import org.jetbrains.hexana.tests.IgnoreJsTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
 import org.jetbrains.hexana.wasm.components.*
+import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
@@ -1490,9 +1487,7 @@ class WasmParserTests {
         val wasmParseResult = WasmParser().parse(buffer)
         assertIs<WasmParseSuccess>(wasmParseResult)
 
-        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
-
-        val strSection = (wasmModule as BaseModule).debugStrSection()!!
+        val strSection = WasmDwarfAccessor(wasmParseResult.wasmModule as BaseModule).debugStrSection()!!
         val entries = with(strSection){
             buffer.scanDwarfStr()
         }
@@ -1580,7 +1575,7 @@ class WasmParserTests {
         val wasmParseResult = WasmParser().parse(buffer)
         assertIs<WasmParseSuccess>(wasmParseResult)
         val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
-        val abbrevSection = (wasmModule as BaseModule).debugAbbrevSection()!!
+        val abbrevSection = WasmDwarfAccessor(wasmModule as BaseModule).debugAbbrevSection()!!
         val entries = with(abbrevSection){
             buffer.scanDwarfAbbrev()
         }
@@ -1650,7 +1645,7 @@ class WasmParserTests {
         val wasmParseResult = WasmParser().parse(buffer)
         assertIs<WasmParseSuccess>(wasmParseResult)
         val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
-        val infoSection = (wasmModule as BaseModule).debugInfoSection()!!
+        val infoSection = WasmDwarfAccessor(wasmModule as BaseModule).debugInfoSection()!!
         val entries = with(infoSection){
             buffer.scanDwarfInfo()
         }
@@ -1731,7 +1726,7 @@ class WasmParserTests {
         val wasmParseResult = WasmParser().parse(buffer)
         assertIs<WasmParseSuccess>(wasmParseResult)
         val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
-        val infoSection = (wasmModule as BaseModule).debugInfoSection()!!
+        val infoSection = WasmDwarfAccessor(wasmModule as BaseModule).debugInfoSection()!!
         val entries = with(infoSection) {
             buffer.scanDwarfInfo()
         }
@@ -1754,7 +1749,7 @@ class WasmParserTests {
         val wasmParseResult = WasmParser().parse(buffer)
         assertIs<WasmParseSuccess>(wasmParseResult)
         val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
-        val infoSection = (wasmModule as BaseModule).debugLineSection()!!
+        val infoSection = WasmDwarfAccessor(wasmModule as BaseModule).debugLineSection()!!
         val entries = with(infoSection) {
             buffer.scanLineTable()
         }
@@ -1916,7 +1911,7 @@ class WasmParserTests {
         val wasmParseResult = WasmParser().parse(buffer)
         assertIs<WasmParseSuccess>(wasmParseResult)
         val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
-        val infoSection = (wasmModule as BaseModule).debugLineSection()!!
+        val infoSection = WasmDwarfAccessor(wasmModule as BaseModule).debugLineSection()!!
         val entries = with(infoSection) {
             buffer.scanLineTable()
         }

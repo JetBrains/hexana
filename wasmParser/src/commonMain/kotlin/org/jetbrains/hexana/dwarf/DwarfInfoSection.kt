@@ -2,20 +2,17 @@ package org.jetbrains.hexana.dwarf
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.crossSectionOperation
-import org.jetbrains.hexana.wasm.BaseModule
-import org.jetbrains.hexana.wasm.customSectionByName
 
 class DwarfInfoSection(
     contentOffset: Int,
     contentSize: Int,
-    private val debugAbbrevSection: DwarfAbbrevSection,
-    val debugStringSection: DwarfStrSection
-): DwarfSection(contentOffset, contentSize) {
+    accessor: DwarfAccessor
+): DwarfSection(contentOffset, contentSize, accessor) {
 
     private var abbrevCache: Map<UInt, List<DwarfAbbrevEntry>>? = null
 
     private fun CommonByteBuffer.getAbbrevTables(): Map<UInt, List<DwarfAbbrevEntry>> {
-        return abbrevCache ?: with(debugAbbrevSection) {
+        return abbrevCache ?: with(accessor.debugAbbrevSection()!!) {
             crossSectionOperation {
                 scanDwarfAbbrev()
             }
@@ -24,7 +21,7 @@ class DwarfInfoSection(
 
     private var stringCache: List<StringTableEntry>? = null
     fun CommonByteBuffer.getStringTable(): List<StringTableEntry> {
-        return stringCache ?: with(debugStringSection) {
+        return stringCache ?: with(accessor.debugStrSection()!!) {
             crossSectionOperation {
                 scanDwarfStr()
             }
@@ -172,14 +169,6 @@ fun CommonByteBuffer.readStringZ(): String {
 }
 
 class DieField(val attribute: DwarfAttribute, val value: Any)
-
-fun BaseModule.debugInfoSection() = customSectionByName(".debug_info")?.let {
-    DwarfInfoSection(
-        it.contentOffset,
-        it.contentSize,
-        debugAbbrevSection() ?: throw IllegalStateException("No debug_abbrev section"),
-        debugStrSection() ?: throw IllegalArgumentException("No debug_str section"))
-}
 
 open class DebugInformationEntry(offset: Int, size: Int, val tag: Tag, val attributes: List<DieField> = listOf(), open val children: List<DebugInformationEntry> = listOf()):DwarfEntry(offset, size)
 
