@@ -3,6 +3,8 @@ package org.jetbrains.hexana.wasm
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.hexana.dwarf.CompilationUnitHeader
 import org.jetbrains.hexana.dwarf.DwarfLineUnitHeader
+import org.jetbrains.hexana.dwarf.Form
+import org.jetbrains.hexana.dwarf.LineNumberHeaderEntryFormatName
 import org.jetbrains.hexana.dwarf.LnsOpcode
 import org.jetbrains.hexana.dwarf.LnsSpecialOpcode
 import org.jetbrains.hexana.dwarf.Tag
@@ -10,6 +12,7 @@ import org.jetbrains.hexana.dwarf.debugAbbrevSection
 import org.jetbrains.hexana.dwarf.debugInfoSection
 import org.jetbrains.hexana.dwarf.debugLineSection
 import org.jetbrains.hexana.dwarf.debugStrSection
+import org.jetbrains.hexana.dwarf.findForm
 import org.jetbrains.hexana.tests.IgnoreJsTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
 import org.jetbrains.hexana.wasm.components.*
@@ -1904,6 +1907,91 @@ class WasmParserTests {
         assertEquals("string.h", unit16.fileNames[1].fileName)
         assertEquals("alltypes.h", unit16.fileNames[2].fileName)
         assertEquals("stdlib.h", unit16.fileNames[3].fileName)
+    }
+
+    @OptIn(ExperimentalUnsignedTypes::class)
+    @Test
+    fun testScanDwarfV5LineSection() = runTest {
+        val buffer = resourceAsByteBuffer("c/utf8-c.dwarf5.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
+        val infoSection = (wasmModule as BaseModule).debugLineSection()!!
+        val entries = with(infoSection) {
+            buffer.scanLineTable()
+        }
+        /**
+         * dwarfdump --debug-line -v wasmParser/src/commonTest/resources/c/utf8-c.dwarf5.wasm | grep "Line table prologue:" | wc -l
+         *        51
+         */
+        assertEquals(51, entries.size)
+        /**
+         * Line table prologue:
+         *     total_length: 0x00000057
+         *           format: DWARF32
+         *          version: 5
+         *     address_size: 4
+         *  seg_select_size: 0
+         *  prologue_length: 0x00000037
+         *  min_inst_length: 1
+         * max_ops_per_inst: 1
+         *  default_is_stmt: 1
+         *        line_base: -5
+         *       line_range: 14
+         *      opcode_base: 13
+         * standard_opcode_lengths[DW_LNS_copy] = 0
+         * standard_opcode_lengths[DW_LNS_advance_pc] = 1
+         * standard_opcode_lengths[DW_LNS_advance_line] = 1
+         * standard_opcode_lengths[DW_LNS_set_file] = 1
+         * standard_opcode_lengths[DW_LNS_set_column] = 1
+         * standard_opcode_lengths[DW_LNS_negate_stmt] = 0
+         * standard_opcode_lengths[DW_LNS_set_basic_block] = 0
+         * standard_opcode_lengths[DW_LNS_const_add_pc] = 0
+         * standard_opcode_lengths[DW_LNS_fixed_advance_pc] = 1
+         * standard_opcode_lengths[DW_LNS_set_prologue_end] = 0
+         * standard_opcode_lengths[DW_LNS_set_epilogue_begin] = 0
+         * standard_opcode_lengths[DW_LNS_set_isa] = 1
+         * include_directories[  0] =  .debug_line_str[0x00000000] = "/Users/user/ws/Hexana/wasmParser/src/commonTest/resources/c"
+         * file_names[  0]:
+         *            name:  .debug_line_str[0x00000040] = "utf8.c"
+         *       dir_index: 0
+         *    md5_checksum: 08f5ddfc65bc704d9718f9466848d3bc
+         */
+        val unit0 = entries[0]
+        assertIs<DwarfLineUnitHeader.Dwarf32LineUnitHeader.V5>(unit0)
+        assertEquals(0x37u, unit0.prologLength)
+
+        assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_copy.standardOpcodeLengthsEncoding])
+        assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_advance_pc.standardOpcodeLengthsEncoding])
+        assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_advance_line.standardOpcodeLengthsEncoding])
+        assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_file.standardOpcodeLengthsEncoding])
+        assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_column.standardOpcodeLengthsEncoding])
+        assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_negate_stmt.standardOpcodeLengthsEncoding])
+        assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_basic_block.standardOpcodeLengthsEncoding])
+        assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_const_add_pc.standardOpcodeLengthsEncoding])
+        assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_fixed_advance_pc.standardOpcodeLengthsEncoding])
+        assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_prologue_end.standardOpcodeLengthsEncoding])
+        assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_epilogue_begin.standardOpcodeLengthsEncoding])
+        assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_isa.standardOpcodeLengthsEncoding])
+
+        assertEquals(1, unit0.directoriesCount)
+        assertEquals(0x37, unit0.prologLength.toInt())
+        assertEquals(0x57, unit0.size)
+        assertEquals(1.toUByte(), unit0.directoryEntryFormatCount)
+
+        assertEquals(LineNumberHeaderEntryFormatName.DW_LNCT_path.value, unit0.directoryEntryFormats[0].contentType.toUShort())
+        assertEquals(31u,unit0.directoryEntryFormats[0].form)
+
+        assertEquals(3.toUByte(), unit0.fileNameEntryFormatCount)
+        assertEquals(LineNumberHeaderEntryFormatName.DW_LNCT_path.value, unit0.fileNameEntryFormats[0].contentType.toUShort())
+        assertEquals(LineNumberHeaderEntryFormatName.DW_LNCT_directory_index.value, unit0.fileNameEntryFormats[1].contentType.toUShort())
+        assertEquals(LineNumberHeaderEntryFormatName.DW_LNCT_MD5.value, unit0.fileNameEntryFormats[2].contentType.toUShort())
+
+        assertEquals(1, unit0.fileNamesCount)
+        assertEquals(LineNumberHeaderEntryFormatName.DW_LNCT_path, unit0.fileNames[0][0].formatName)
+        assertEquals(Form.DW_FORM_line_strp, unit0.fileNames[0][0].form)
+        assertEquals(0x40, unit0.fileNames[0][0].value)
+
     }
 
     @Test
