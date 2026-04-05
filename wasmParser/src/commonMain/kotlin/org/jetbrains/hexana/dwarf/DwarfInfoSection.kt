@@ -125,64 +125,9 @@ class DwarfInfoSection(
         }
     }
 
-    fun CommonByteBuffer.readAttribute(header: CompilationUnitHeader<*>, attribute: DwarfAttribute): DieField {
-       return when (attribute.form) {
-           Form.DW_FORM_flag, Form.DW_FORM_ref1, Form.DW_FORM_data1, Form.DW_FORM_strx1 -> DieField(attribute, readUByte())
-           Form.DW_FORM_ref2, Form.DW_FORM_data2, Form.DW_FORM_strx2 -> DieField(attribute, readUShort())
-           Form.DW_FORM_ref4, Form.DW_FORM_data4, Form.DW_FORM_strx4 -> DieField(attribute, readUInt())
-           Form.DW_FORM_ref8, Form.DW_FORM_data8, Form.DW_FORM_strx8 -> DieField(attribute, readULong())
-           Form.DW_FORM_strp, Form.DW_FORM_sec_offset, Form.DW_FORM_ref_addr -> when (header) {
-               is CompilationUnitHeader.Dwarf32Header -> DieField(attribute, readUInt())
-               is CompilationUnitHeader.Dwarf64Header -> DieField(attribute ,readULong())
-           }
-           Form.DW_FORM_addr -> when (header.addressSize) {
-               4.toUByte() -> DieField(attribute, readUInt())
-               8.toUByte() -> DieField(attribute, readULong())
-               else -> throw IllegalArgumentException("Unsupported address size: ${header.addressSize}")
-           }
-           Form.DW_FORM_flag_present -> DieField(attribute, true)
-           Form.DW_FORM_string -> {
-               DieField(attribute, readStringZ())
-           }
-           Form.DW_FORM_exprloc -> {
-               val size = getULEB128()
-               val buffer = ByteArray(size.toInt())
-               get(buffer, 0, size.toInt())
-               DieField(attribute, buffer)
-           }
-           Form.DW_FORM_udata,
-           Form.DW_FORM_sdata -> {
-               DieField(attribute, getULEB128())
-           }
-           Form.DW_FORM_block1 -> {
-               val length = readUByte().toInt()
-               val buffer = ByteArray(length)
-               get(buffer, 0, length)
-               DieField(attribute, buffer)
-           }
-           Form.DW_FORM_block2 -> {
-               val length = readUShort().toInt()
-               val buffer = ByteArray(length)
-               get(buffer, 0, length)
-               DieField(attribute, buffer)
-           }
-           Form.DW_FORM_block4 -> {
-               val length = readUInt().toInt()
-               val buffer = ByteArray(length)
-               get(buffer, 0, length)
-               DieField(attribute, buffer)
-           }
-           Form.DW_FORM_block -> {
-               val length = getULEB128().toInt()
-               val buffer = ByteArray(length)
-               get(buffer, 0, length)
-               DieField(attribute, buffer)
-           }
-           Form.DW_FORM_addrx -> {
-               DieField(attribute, getULEB128())
-           }
-           else -> TODO("Unsupported form: ${attribute.form::class.simpleName}")
-       }
+    fun CommonByteBuffer.readAttribute(header: DwarfUnit, attribute: DwarfAttribute): DieField {
+        val form = attribute.form
+        return DieField(attribute,  readForm(form, header))
     }
 
     private fun CommonByteBuffer.readDebugInformationEntry(header: CompilationUnitHeader<*>,  limit: Int): DebugInformationEntry? {
@@ -238,7 +183,7 @@ fun BaseModule.debugInfoSection() = customSectionByName(".debug_info")?.let {
 
 open class DebugInformationEntry(offset: Int, size: Int, val tag: Tag, val attributes: List<DieField> = listOf(), open val children: List<DebugInformationEntry> = listOf()):DwarfEntry(offset, size)
 
-sealed class CompilationUnitHeader<T>(offset: Int, size: Int, val next: Int, val version: Int, val debugAbbrevOffset: T, val addressSize: UByte) : DebugInformationEntry(offset, size, Tag.DW_TAG_compile_unit) {
+sealed class CompilationUnitHeader<T>(offset: Int, size: Int, val next: Int, val version: Int, val debugAbbrevOffset: T, override val addressSize: UByte) : DebugInformationEntry(offset, size, Tag.DW_TAG_compile_unit), DwarfUnit {
     private val children_ = mutableListOf<DebugInformationEntry>()
     override val children: List<DebugInformationEntry> = children_
 
