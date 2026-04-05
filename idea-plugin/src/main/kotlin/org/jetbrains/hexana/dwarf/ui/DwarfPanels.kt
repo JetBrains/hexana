@@ -11,7 +11,6 @@ import androidx.compose.ui.unit.dp
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.dwarf.DwarfAbbrevEntry
 import org.jetbrains.hexana.dwarf.DwarfAttribute
-import org.jetbrains.hexana.dwarf.debugAbbrevSection
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.panel.Panel
@@ -23,9 +22,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import org.jetbrains.hexana.dwarf.DebugInformationEntry
 import org.jetbrains.hexana.dwarf.DieField
 import org.jetbrains.hexana.dwarf.Form
-import org.jetbrains.hexana.dwarf.debugInfoSection
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.panel.scrollHexViewTo
+import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 import org.jetbrains.jewel.foundation.lazy.tree.TreeGeneratorScope
 import org.jetbrains.jewel.ui.component.LazyTree
 import org.jetbrains.jewel.ui.component.Text
@@ -36,10 +35,10 @@ fun dwarfPanels(provider: BinaryProvider, state: HexViewStateHolder):List<Panel>
         is WasmBinaryProvider -> {
             provider.wasmModule?.let { module ->
                 buildList {
-                    (module as BaseModule).debugAbbrevSection()?.let {
+                    WasmDwarfAccessor(module as BaseModule).debugAbbrevSection()?.let {
                             add(Panel(".debug_abbrev") { DebugAbbrevPanel(provider, state) })
                     }
-                    (module as BaseModule).debugInfoSection()?.let {
+                    WasmDwarfAccessor(module as BaseModule).debugInfoSection()?.let {
                         add(Panel(".debug_info") { DebugInfoPanel(provider, state) })
                     }
                 }
@@ -53,7 +52,7 @@ fun dwarfPanels(provider: BinaryProvider, state: HexViewStateHolder):List<Panel>
 fun DebugAbbrevPanel(provider: BinaryProvider, state: HexViewStateHolder) {
     val wasmProvider = calculateProvider(provider) ?: return
     val module = wasmProvider.wasmModule as? BaseModule ?: return
-    val abbrevSection = remember(provider) { module.debugAbbrevSection() } ?: return
+    val abbrevSection = remember(provider) { WasmDwarfAccessor(module).debugAbbrevSection() } ?: return
 
     val abbrevTables = remember(provider) {
         with(abbrevSection) { wasmProvider.bytes.scanDwarfAbbrev() }
@@ -114,7 +113,7 @@ fun DebugAbbrevPanel(provider: BinaryProvider, state: HexViewStateHolder) {
 fun DebugInfoPanel(provider: BinaryProvider, state: HexViewStateHolder) {
     val wasmProvider = calculateProvider(provider) ?: return
     val module = wasmProvider.wasmModule as? BaseModule ?: return
-    val infoSection = remember(provider) { module.debugInfoSection() } ?: return
+    val infoSection = remember(provider) { WasmDwarfAccessor(module).debugInfoSection() } ?: return
 
     val debugInfoHeaders = remember(provider) {
         with(infoSection) {
