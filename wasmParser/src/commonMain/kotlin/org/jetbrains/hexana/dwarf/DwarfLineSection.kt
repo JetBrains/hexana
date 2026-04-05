@@ -8,9 +8,9 @@ import org.jetbrains.hexana.wasm.BaseModule
 import org.jetbrains.hexana.wasm.customSectionByName
 
 class DwarfLineSection(contentOffset: Int, contentSize: Int) : DwarfSection(contentOffset, contentSize) {
-    fun CommonByteBuffer.scanLineTable(): List<DwarfLineUnitHeader<*, *>> {
+    fun CommonByteBuffer.scanLineTable(): List<DwarfLineUnitHeader<*>> {
         position(contentOffset)
-        val units = mutableListOf<DwarfLineUnitHeader<*, *>>()
+        val units = mutableListOf<DwarfLineUnitHeader<*>>()
         while (position() < contentOffset + contentSize) {
             val unitHeader = readLineUnitHeader()
             units.add(unitHeader)
@@ -24,7 +24,7 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int) : DwarfSection(cont
         return units
     }
 
-    fun CommonByteBuffer.readLineUnitHeader(): DwarfLineUnitHeader<*, *> {
+    fun CommonByteBuffer.readLineUnitHeader(): DwarfLineUnitHeader<*> {
         val offset = position()
         return when (val unitSize = readUInt()) {
             0xFFFFFFFFu -> readDwarf64Header(offset)
@@ -32,7 +32,7 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int) : DwarfSection(cont
         }
     }
 
-    fun CommonByteBuffer.readDwarf64Header(unitOffset: Int): DwarfLineUnitHeader<*, *> {
+    fun CommonByteBuffer.readDwarf64Header(unitOffset: Int): DwarfLineUnitHeader<*> {
         val size = readULong()
         val version = readUShort()
         return when (version.toInt()) {
@@ -42,7 +42,7 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int) : DwarfSection(cont
         }
     }
 
-    fun CommonByteBuffer.readDwarfLine64V4Header(unitOffset: Int, size1: ULong): DwarfLineUnitHeader<*, *> {
+    fun CommonByteBuffer.readDwarfLine64V4Header(unitOffset: Int, size: ULong): DwarfLineUnitHeader<*> {
         val headerLength = readULong()
         val maximumInstructionsLength = readUByte()
         val maximumOperationsPerInstruction = readUByte()
@@ -87,7 +87,7 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int) : DwarfSection(cont
          */
         return DwarfLineUnitHeader.Dwarf64LineUnitHeader.V4(
             unitOffset,
-            headerLength,
+            size,
             headerLength,
             maximumInstructionsLength,
             maximumOperationsPerInstruction,
@@ -102,11 +102,11 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int) : DwarfSection(cont
         )
     }
 
-    fun CommonByteBuffer.readDwarfLine64V5Header(unitOffset: Int, size1: ULong): DwarfLineUnitHeader<*, *> {
+    fun CommonByteBuffer.readDwarfLine64V5Header(unitOffset: Int, size1: ULong): DwarfLineUnitHeader<*> {
         TODO()
     }
 
-    fun CommonByteBuffer.readDwarf32Header(unitOffset: Int, unitSize: UInt): DwarfLineUnitHeader<*, *> {
+    fun CommonByteBuffer.readDwarf32Header(unitOffset: Int, unitSize: UInt): DwarfLineUnitHeader<*> {
         val version = readUShort()
         return when (version.toInt()) {
             1, 2, 3, 4 -> readDwarfLine32V4Header(unitOffset, unitSize)
@@ -115,7 +115,7 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int) : DwarfSection(cont
         }
     }
 
-    fun CommonByteBuffer.readDwarfLine32V4Header(unitOffset: Int, unitSize: UInt): DwarfLineUnitHeader<*, *> {
+    fun CommonByteBuffer.readDwarfLine32V4Header(unitOffset: Int, unitSize: UInt): DwarfLineUnitHeader<*> {
         val prologLength = readUInt()
         val maximumInstructionsLength = readUByte()
         val maximumOperationsPerInstruction = readUByte()
@@ -168,19 +168,83 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int) : DwarfSection(cont
             lineRange,
             standardOpcodeLengths,
             includeDirectories,
-            includeFiles, prologLength + 10u, unitSize + 4u
+            includeFiles,
+            prologLength + 10u,
+            unitSize + 4u
         )
     }
 
-    fun CommonByteBuffer.readDwarfLine32V5Header(unitOffset: Int, unitSize: UInt): DwarfLineUnitHeader<*, *> {
-        TODO()
+    class Entry(
+        val formatName: LineNumberHeaderEntryFormatName,
+        val form: Form,
+        val value: Any
+    )
+
+    fun CommonByteBuffer.readDwarfLine32V5Header(unitOffset: Int, unitSize: UInt): DwarfLineUnitHeader<UInt> {
+        val addressSize = readUByte()
+        val segmentSelectorSize = readUByte()
+        val prologLength = readUInt()
+        val minimumInstructionLength = readUByte()
+        val maximumOperationsPerInstruction = readUByte()
+        val defaultIsStatement = readUByte()
+        val lineBase = get()
+        val lineRange = readUByte()
+        val opcodeBase = readUByte()
+        val unit = object : DwarfUnit {
+            override val addressSize: UByte = addressSize
+        }
+        val standardOpcodeLengths = ByteArray(opcodeBase.toInt() - 1).also {
+            get(it, 0, opcodeBase.toInt() - 1)
+        }
+        val directoryEntryFormatCount = readUByte()
+        val directoryEntryFormats = List(directoryEntryFormatCount.toInt()) { DwarfEntryFormat(getULEB128().toULong(), getULEB128().toULong()) }
+        val directoriesCount = getULEB128()
+        val directories = List(directoriesCount.toInt()) {
+            directoryEntryFormats.map {
+                val form = findForm(it.form.toUShort()) ?: throw IllegalArgumentException("Unsupported form: ${it.form}")
+                val formatName = findLineNumberHeaderEntryFormatName(it.contentType.toUShort()) ?: throw IllegalArgumentException("Unsupported format name: ${it.contentType}")
+                Entry(formatName, form, readForm(form, unit))
+            }
+        }
+        val fileNameEntryFormatCount = readUByte()
+        val fileNameEntryFormats = List(fileNameEntryFormatCount.toInt()) { DwarfEntryFormat(getULEB128().toULong(), getULEB128().toULong()) }
+        val fileNamesCount = getULEB128()
+        val fileNames = List(fileNamesCount.toInt()) {
+            fileNameEntryFormats.map {
+                val form = findForm(it.form.toUShort()) ?: throw IllegalArgumentException("Unsupported form: ${it.form}")
+                val formatName = findLineNumberHeaderEntryFormatName(it.contentType.toUShort()) ?: throw IllegalArgumentException("Unsupported format name: ${it.contentType}")
+                Entry(formatName, form, readForm(form, unit))
+            }
+        }
+        return DwarfLineUnitHeader.Dwarf32LineUnitHeader.V5(
+            unitOffset,
+            unitSize,
+            prologLength.toUInt(),
+            maximumOperationsPerInstruction,
+            minimumInstructionLength,
+            defaultIsStatement,
+            prologLength + 10u,
+            unitSize + 4u,
+            lineRange,
+            lineBase,
+            standardOpcodeLengths,
+            segmentSelectorSize,
+            directoryEntryFormatCount,
+            directoryEntryFormats,
+            directoriesCount,
+            directories,
+            fileNameEntryFormatCount,
+            fileNameEntryFormats,
+            fileNamesCount,
+            fileNames)
     }
 }
 
-class LineNumberFileEntryV4(val fileName: String, val dirIndex: Int, val lastModified: Long, val fileSize: Long)
-class LineNumberFileEntryV5(val fileName: String, val dirIndex: Int, val lastModified: Long, val fileSize: Long)
+class DwarfEntryFormat(val contentType:  ULong, val form: ULong)
 
-sealed class DwarfLineUnitHeader<T, L>(
+class LineNumberFileEntryV4(val fileName: String, val dirIndex: Int, val lastModified: Long, val fileSize: Long)
+
+sealed class DwarfLineUnitHeader<T>(
     contentOffset: Int,
     contentSize: Int,
     val prologLength: T,
@@ -192,10 +256,8 @@ sealed class DwarfLineUnitHeader<T, L>(
     val lineRange: UByte,
     val lineBase: Byte,
     val standardOpcodeLengths: ByteArray,
-    val includeDirectories: List<String>,
-    val fileNames: List<L>
 ) : DwarfSection(contentOffset, contentSize.toInt()) {
-    sealed class Dwarf32LineUnitHeader<L>(
+    sealed class Dwarf32LineUnitHeader(
         contentOffset: Int,
         prologLength: UInt,
         maximumInstructionsLength: UByte,
@@ -207,10 +269,8 @@ sealed class DwarfLineUnitHeader<T, L>(
         lineRange: UByte,
         lineBase: Byte,
         standardOpcodeLengths: ByteArray,
-        includeDirectories: List<String>,
-        fileNames: List<L>
     ) :
-        DwarfLineUnitHeader<UInt, L>(
+        DwarfLineUnitHeader<UInt>(
             contentOffset,
             contentSize.toInt(),
             prologLength,
@@ -222,8 +282,6 @@ sealed class DwarfLineUnitHeader<T, L>(
             lineRange,
             lineBase,
             standardOpcodeLengths,
-            includeDirectories,
-            fileNames
         ) {
         class V4(
             contentOffset: Int,
@@ -235,11 +293,11 @@ sealed class DwarfLineUnitHeader<T, L>(
             lineBase: Byte,
             lineRange: UByte,
             standardOpcodeLengths: ByteArray,
-            includeDirectories: List<String>,
-            fileNames: List<LineNumberFileEntryV4>,
+            val includeDirectories: List<String>,
+            val fileNames: List<LineNumberFileEntryV4>,
             programOffset: UInt,
             unitSize: UInt
-        ) : Dwarf32LineUnitHeader<LineNumberFileEntryV4>(
+        ) : Dwarf32LineUnitHeader(
             contentOffset,
             prologLength,
             maximumInstructionsLength,
@@ -251,8 +309,6 @@ sealed class DwarfLineUnitHeader<T, L>(
             lineRange,
             lineBase,
             standardOpcodeLengths,
-            includeDirectories,
-            fileNames
         )
 
         class V5(
@@ -267,9 +323,16 @@ sealed class DwarfLineUnitHeader<T, L>(
             lineRange: UByte,
             lineBase: Byte,
             standardOpcodeLengths: ByteArray,
-            includeDirectories: List<String>,
-            fileNames: List<LineNumberFileEntryV5>
-        ) : Dwarf32LineUnitHeader<LineNumberFileEntryV5>(
+            val segmentSelectorSize: UByte,
+            val directoryEntryFormatCount: UByte,
+            val directoryEntryFormats: List<DwarfEntryFormat>,
+            val directoriesCount: Long,
+            val directories: List<List<DwarfLineSection.Entry>>,
+            val fileNameEntryFormatCount: UByte,
+            val fileNameEntryFormats: List<DwarfEntryFormat>,
+            val fileNamesCount: Long,
+            val fileNames: List<List<DwarfLineSection.Entry>>,
+        ) : Dwarf32LineUnitHeader(
             contentOffset,
             prologLength,
             maximumInstructionsLength,
@@ -281,12 +344,10 @@ sealed class DwarfLineUnitHeader<T, L>(
             lineRange,
             lineBase,
             standardOpcodeLengths,
-            includeDirectories,
-            fileNames
         )
     }
 
-    sealed class Dwarf64LineUnitHeader<L>(
+    sealed class Dwarf64LineUnitHeader(
         contentOffset: Int,
         contentSize: ULong,
         prologLength: ULong,
@@ -296,11 +357,9 @@ sealed class DwarfLineUnitHeader<T, L>(
         lineBase: Byte,
         lineRange: UByte,
         standardOpcodeLengths: ByteArray,
-        includeDirectories: List<String>,
-        includeFiles: List<L>,
         programOffset: ULong,
         unitSize: ULong
-    ) : DwarfLineUnitHeader<ULong, L>(
+    ) : DwarfLineUnitHeader<ULong>(
         contentOffset,
         contentSize.toInt(),
         prologLength,
@@ -312,8 +371,6 @@ sealed class DwarfLineUnitHeader<T, L>(
         lineRange,
         lineBase,
         standardOpcodeLengths,
-        includeDirectories,
-        includeFiles
     ) {
 
         class V4(
@@ -326,11 +383,11 @@ sealed class DwarfLineUnitHeader<T, L>(
             lineBase: Byte,
             lineRange: UByte,
             standardOpcodeLengths: ByteArray,
-            includeDirectories: List<String>,
-            includeFiles: List<LineNumberFileEntryV4>,
+            val includeDirectories: List<String>,
+            val includeFiles: List<LineNumberFileEntryV4>,
             programOffset: ULong,
             unitSize: ULong
-        ) : Dwarf64LineUnitHeader<LineNumberFileEntryV4>(
+        ) : Dwarf64LineUnitHeader(
             contentOffset,
             contentSize,
             prologLength,
@@ -340,8 +397,6 @@ sealed class DwarfLineUnitHeader<T, L>(
             lineBase,
             lineRange,
             standardOpcodeLengths,
-            includeDirectories,
-            includeFiles,
             programOffset,
             unitSize,
         )
@@ -356,11 +411,9 @@ sealed class DwarfLineUnitHeader<T, L>(
             lineBase: Byte,
             lineRange: UByte,
             standardOpcodeLengths: ByteArray,
-            includeDirectories: List<String>,
-            includeFiles: List<LineNumberFileEntryV5>,
             programOffset: ULong,
             unitSize: ULong,
-        ) : Dwarf64LineUnitHeader<LineNumberFileEntryV5>(
+        ) : Dwarf64LineUnitHeader(
             contentOffset,
             contentSize,
             prologLength,
@@ -370,8 +423,6 @@ sealed class DwarfLineUnitHeader<T, L>(
             lineBase,
             lineRange,
             standardOpcodeLengths,
-            includeDirectories,
-            includeFiles,
             programOffset,
             unitSize
         )
@@ -727,6 +778,28 @@ sealed class LneOpcode(val value: UByte, offset: Int, size: Int, params: ULongAr
 
     class DW_LNE_user(value: UByte, offset: Int, size: Int, params: ULongArray) :
         LneOpcode(value, offset, size, params)
+}
+
+sealed class LineNumberHeaderEntryFormatName(val value: UShort) {
+    object DW_LNCT_path: LineNumberHeaderEntryFormatName(0x01.toUShort())
+    object DW_LNCT_directory_index: LineNumberHeaderEntryFormatName(0x02.toUShort())
+    object DW_LNCT_timestamp: LineNumberHeaderEntryFormatName(0x03.toUShort())
+    object DW_LNCT_size: LineNumberHeaderEntryFormatName(0x04.toUShort())
+    object DW_LNCT_MD5: LineNumberHeaderEntryFormatName(0x05.toUShort())
+    object DW_LNCT_lo_user: LineNumberHeaderEntryFormatName(0x2000.toUShort())
+    object DW_LNCT_hi_user: LineNumberHeaderEntryFormatName(0x3fff.toUShort())
+    class DW_LNCT_user(value: UShort): LineNumberHeaderEntryFormatName(value)
+}
+
+fun findLineNumberHeaderEntryFormatName(value: UShort): LineNumberHeaderEntryFormatName? = when (value) {
+    LineNumberHeaderEntryFormatName.DW_LNCT_path.value -> LineNumberHeaderEntryFormatName.DW_LNCT_path
+    LineNumberHeaderEntryFormatName.DW_LNCT_directory_index.value -> LineNumberHeaderEntryFormatName.DW_LNCT_directory_index
+    LineNumberHeaderEntryFormatName.DW_LNCT_timestamp.value -> LineNumberHeaderEntryFormatName.DW_LNCT_timestamp
+    LineNumberHeaderEntryFormatName.DW_LNCT_size.value -> LineNumberHeaderEntryFormatName.DW_LNCT_size
+    LineNumberHeaderEntryFormatName.DW_LNCT_MD5.value -> LineNumberHeaderEntryFormatName.DW_LNCT_MD5
+    in LineNumberHeaderEntryFormatName.DW_LNCT_lo_user.value until
+    LineNumberHeaderEntryFormatName.DW_LNCT_hi_user.value -> LineNumberHeaderEntryFormatName.DW_LNCT_user(value)
+    else -> null
 }
 
 
