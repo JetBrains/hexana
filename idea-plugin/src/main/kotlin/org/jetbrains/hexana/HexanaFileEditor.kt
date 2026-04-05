@@ -21,7 +21,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
-import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.sourcemap.parseSourceMap
 import org.jetbrains.hexana.ui.BinaryEditorView
@@ -73,7 +72,7 @@ class HexanaFileEditor(
             stateHolder.displayBaseOffset = myFile.getUserData(HexanaBinaryVirtualFile.BASE_OFFSET_KEY) ?: 0
             inMemoryBuffer
         } else {
-            file.toMappedBuffer()?.toCommonByteBuffer() ?: return
+            file.toCommonByteBuffer() ?: return
         }
 
         binaryProvider = when (myFile.extension) {
@@ -273,7 +272,7 @@ data class HexViewState(
 
 private fun HexanaFileEditor.initSourceLocationProvider(ref: AtomicReference<HexanaSourceLocationProvider>) {
     HexanaService.getInstance().coroutineScope.launch(Dispatchers.IO) {
-        val sourceMap = myFile.parent.findChild("${myFile.name}.map")
+        val sourceMap = myFile.parent?.findChild("${myFile.name}.map")
         if (sourceMap?.exists() != true) {
             return@launch
         }

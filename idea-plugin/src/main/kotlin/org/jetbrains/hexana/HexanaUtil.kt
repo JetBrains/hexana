@@ -1,7 +1,14 @@
 package org.jetbrains.hexana
 
 import com.intellij.openapi.vfs.VirtualFile
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.toCommonByteBuffer
+import java.nio.ByteBuffer
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.StandardOpenOption
@@ -107,4 +114,28 @@ fun VirtualFile.toMappedBuffer(): MappedByteBuffer? {
     return FileChannel.open(filePath, StandardOpenOption.READ).use { fileChannel ->
         fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, fileSize)
     }
+}
+
+fun VirtualFile.toCommonByteBuffer(): CommonByteBuffer? {
+    if (this.path.isHttpUrl()) {
+        val response = readRemoteResponseBlocking(this.path)
+        return ByteBuffer.wrap(response).toCommonByteBuffer()
+    }
+    return toMappedBuffer()?.toCommonByteBuffer()
+}
+
+fun String.isHttpUrl(): Boolean {
+    return startsWith("http:") || startsWith("https:")
+}
+
+fun readRemoteResponseBlocking(urlString: String): ByteArray {
+    val response = HttpClient().use { client ->
+        runBlocking {
+            val bodyBytes: ByteArray = client.request(urlString) {
+                method = HttpMethod.Get
+            }.body()
+            bodyBytes
+        }
+    }
+    return response
 }

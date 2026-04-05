@@ -41,7 +41,7 @@ class HexanaService(
 
     private fun convertToWasm(file: File, showOffsets: Boolean): WatConversionResult {
         val settings = HexanaSettings.getInstance()
-        return if (settings.useBuiltInWasmTools == true) {
+        return if (settings.useBuiltInWasmTools == true || file.path.isHttpUrl()) {
             convertToWasmWithBuiltInTools(file, showOffsets)
         } else {
             convertToWasmWithExternalTools(file, showOffsets)
@@ -73,9 +73,19 @@ class HexanaService(
         }
     }
 
-    private fun convertToWasmWithBuiltInTools(file: File, showOffsets: Boolean): WatConversionResult = FileInputStream(file).use { wasmInputStream ->
-        val wasmBytes = wasmInputStream.readAllBytes()
-        val textWithStatus = printWat(wasmBytes, foldInstructions = false, printOffsets = showOffsets)
-        WatConversionResult.Success(textWithStatus.wat, textWithStatus.warnings)
+    private fun convertToWasmWithBuiltInTools(file: File, showOffsets: Boolean): WatConversionResult {
+        if (file.path.isHttpUrl()) {
+            val wasmBytes = readRemoteResponseBlocking(normalizeHttpPath(file))
+            val textWithStatus = printWat(wasmBytes, foldInstructions = false, printOffsets = showOffsets)
+            return WatConversionResult.Success(textWithStatus.wat, textWithStatus.warnings)
+        }
+        return FileInputStream(file).use { wasmInputStream ->
+            val wasmBytes = wasmInputStream.readAllBytes()
+            val textWithStatus = printWat(wasmBytes, foldInstructions = false, printOffsets = showOffsets)
+            WatConversionResult.Success(textWithStatus.wat, textWithStatus.warnings)
+        }
     }
+
+    private fun normalizeHttpPath(file: File): String = (if (file.path.startsWith("http:")) "http://" else "https://") +
+            file.path.removePrefix("http://").removePrefix("https://").removePrefix("http:/").removePrefix("https:/")
 }
