@@ -1,5 +1,5 @@
 <idea-plugin>
-    <dependencies>
-        <plugin id="JavaScript"/>
-    </dependencies>
+    <extensions defaultExtensionNs="JavaScript">
+        <frameworkIndexingHandler implementation="org.jetbrains.hexana.javascript.WasmFrameworkIndexingHandler" version="0"/>
+    </extensions>
 </idea-plugin>

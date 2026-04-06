@@ -31,7 +31,7 @@
 
     <resource-bundle>messages.HexanaBundle</resource-bundle>
 
-    <depends optional="true" config-file="./org.jetbrains.hexana.javascript.xml">JavaScript</depends>
+    <depends optional="true" config-file="org.jetbrains.hexana.javascript.xml">JavaScript</depends>
 
     <dependencies>
         <plugin id="com.intellij.mcpServer"/>
