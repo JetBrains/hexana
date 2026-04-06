@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- [DWARF section detection and parsing](https://github.com/JetBrains/hexana/issues/49)
+- [Explorer integration](https://github.com/JetBrains/hexana/issues/52)
 
 ### Changed
 
