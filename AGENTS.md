@@ -10,6 +10,7 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 - If you touch `idea-plugin/`, also read `idea-plugin/AGENTS.md`.
 - If you touch `mcp/`, also read `mcp/AGENTS.md`.
 - If you touch `mcp/core/`, also read `mcp/core/AGENTS.md`.
+- If you touch `mcp/server/`, also read `mcp/server/AGENTS.md`.
 - If you touch `wasmParser/`, also read `wasmParser/AGENTS.md`.
 - If you touch `ui-driver-tests/`, also read `ui-driver-tests/AGENTS.md`.
 - If you touch `wasm-modules/`, also read `wasm-modules/AGENTS.md`.
@@ -21,6 +22,7 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 - `mcp/`: parent folder for extracted MCP modules.
 - `mcp/core/`: JVM-only Wasm MCP query/model library extracted from the plugin. It contains pure MCP-facing Wasm
   analysis logic, not IntelliJ registration or file-system integration.
+- `mcp/server/`: standalone Kotlin/JVM MCP runtime that exposes `mcp/core` over `stdio` and HTTP transports.
 - `wasmParser/`: Kotlin Multiplatform parser for core Wasm and component-model binaries.
 - `binaryProvider/`: thin provider layer that wraps parsed Wasm data for the UI and navigation features.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
@@ -59,6 +61,7 @@ Run the narrowest command that proves your change.
 - Start the plugin in a sandbox IDE: `./gradlew :idea-plugin:runIde`
 - Run plugin tests: `./gradlew :idea-plugin:test`
 - Build the extracted MCP core module: `./gradlew :mcp:core:build`
+- Build the standalone MCP server: `./gradlew :mcp:server:build`
 - Build the plugin ZIP: `./gradlew :idea-plugin:buildPlugin`
 - Build the FUS scheme artifact: `./gradlew :idea-plugin:buildEventsScheme`
 - Run JVM parser tests: `./gradlew :wasmParser:jvmTest`
@@ -117,6 +120,7 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
 - `idea-plugin/` changes: run `:idea-plugin:test`.
 - `mcp/core/` changes: run `:mcp:core:build` and the affected `:idea-plugin:test` coverage when the plugin bridge or
   tool contracts change.
+- `mcp/server/` changes: run `:mcp:server:build` and the narrowest affected `mcp/core` or plugin MCP coverage.
 - `wasmParser/` changes: run at least the relevant parser tests and any affected plugin tests.
 - `mcp/` changes in the plugin: run the direct MCP tests under `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp/direct`.
 - `graalwasm/` or embedded converter changes: run the directly affected plugin tests and the existing `:graalwasm:wat2wasm:test` run configuration if relevant.

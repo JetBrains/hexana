@@ -6,7 +6,11 @@ plugins {
 dependencies {
     implementation(project(":encdec"))
     implementation(project(":wasmParser"))
-    compileOnly(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.serialization.json)
+
+    testImplementation(project(":graalwasm:wat2wasm"))
+    testImplementation(libs.junit4)
+    testImplementation(libs.kotlin.test)
 }
 
 kotlin {
