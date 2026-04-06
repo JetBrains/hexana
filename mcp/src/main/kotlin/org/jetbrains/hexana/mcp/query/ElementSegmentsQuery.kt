@@ -9,7 +9,7 @@ import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.sections.ExprWasmElementSegment
 import org.jetbrains.hexana.wasm.sections.FuncIdxWasmElementSegment
 
-internal fun CommonByteBuffer.readElementSegments(wasmModule: WasmModule): ListElementSegmentsResult {
+fun CommonByteBuffer.readElementSegments(wasmModule: WasmModule): ListElementSegmentsResult {
     val elementSection = wasmModule.elementSection ?: return ListElementSegmentsResult(emptyList())
     return with(elementSection) {
         ListElementSegmentsResult(

@@ -7,7 +7,7 @@ import org.jetbrains.hexana.mcp.model.data.DataEntryResult
 import org.jetbrains.hexana.mcp.model.data.ListDataSectionsResult
 import org.jetbrains.hexana.wasm.WasmModule
 
-internal fun CommonByteBuffer.readDataSections(
+fun CommonByteBuffer.readDataSections(
     wasmModule: WasmModule,
     range: IntRange
 ): ListDataSectionsResult {

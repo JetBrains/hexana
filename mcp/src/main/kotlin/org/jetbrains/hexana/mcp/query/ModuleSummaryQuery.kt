@@ -10,7 +10,7 @@ import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.sections.WasmTableExternalType
 
-internal fun CommonByteBuffer.readModuleSummary(wasmModule: WasmModule): SummarizeModuleResult {
+fun CommonByteBuffer.readModuleSummary(wasmModule: WasmModule): SummarizeModuleResult {
     val functions = listFunctionsInternal(wasmModule)
     val importedFunctions = functions.count { it.definedIn == "import" }
     val definedFunctions = functions.count { it.definedIn == "function_section" }

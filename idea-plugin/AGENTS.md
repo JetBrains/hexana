@@ -1,6 +1,7 @@
 # AGENTS.md for `idea-plugin`
 
-This module is the product. It contains the IntelliJ plugin, the custom editor, WAT/WIT language support, and the MCP toolset.
+This module is the product. It contains the IntelliJ plugin, the custom editor, WAT/WIT language support, and the
+IntelliJ-facing MCP bridge/tool registration layer.
 
 ## Start Here
 
@@ -12,6 +13,7 @@ Read these files before making structural changes:
 - `src/main/kotlin/org/jetbrains/hexana/HexanaFileEditor.kt`
 - `src/main/kotlin/org/jetbrains/hexana/HexanaService.kt`
 - `src/main/kotlin/org/jetbrains/hexana/mcp/HexanaToolset.kt`
+- `../mcp/src/main/kotlin/org/jetbrains/hexana/mcp/query`
 
 ## Module Map
 
@@ -28,7 +30,7 @@ Read these files before making structural changes:
 - `wit/`:
   - WIT language support, indexes, built-in definitions, documentation, breadcrumbs.
 - `mcp/`:
-  - MCP tool registration and query/model code for Wasm analysis.
+    - IntelliJ-facing MCP bridge code only: tool registration, file resolution, and plugin integration.
 - `sourcemap/`:
   - source-map parsing used to connect binary offsets back to source files.
 - `statistics/`:
@@ -97,9 +99,11 @@ This module compiles sources from three locations:
 ### MCP Tooling
 
 - `HexanaToolset.kt` is the registration surface for all plugin MCP tools.
-- Query logic is split into `mcp/query/*`.
-- Serialized result models live in `mcp/model/*`.
-- Shared Wasm-to-JSON helpers live in `mcp/utils.kt`.
+- The extracted pure query/model library lives in the sibling `mcp/` module.
+- This module should keep only IntelliJ-specific MCP integration concerns such as:
+    - tool registration and descriptions
+    - `VirtualFile` and project-relative path resolution
+    - MCP plugin wiring through `plugin.xml`
 - For tool semantics around binary/module structure, use the official core spec as the source of truth:
   - `https://webassembly.github.io/spec/core/intro/overview.html`
   - `https://webassembly.github.io/spec/core/binary/index.html`
@@ -108,8 +112,8 @@ This module compiles sources from three locations:
 When adding or changing an MCP tool:
 
 - Keep registration in `HexanaToolset.kt`.
-- Put the real decode/query logic in `mcp/query/`, not in the descriptor body.
-- Add or update a result model under `mcp/model/` when the response shape is non-trivial.
+- Put the real decode/query logic in the extracted `mcp` module, not in the descriptor body.
+- Add or update a result model under the extracted `mcp/model/` package when the response shape is non-trivial.
 - Prefer typed structured content over hand-built strings.
 - Use the existing direct MCP test base to create `.wat` fixtures and call tools through the real MCP layer.
 

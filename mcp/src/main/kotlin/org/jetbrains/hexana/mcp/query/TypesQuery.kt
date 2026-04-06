@@ -6,46 +6,15 @@ import org.jetbrains.hexana.mcp.model.types.TypeResult
 import org.jetbrains.hexana.mcp.model.types.TypesResult
 import org.jetbrains.hexana.mcp.types
 import org.jetbrains.hexana.wasm.WasmModule
-import org.jetbrains.hexana.wasm.sections.WasmAnyRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmArrayRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmArrayTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmEqRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmExnRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmExternRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmF32Type
-import org.jetbrains.hexana.wasm.sections.WasmF64Type
-import org.jetbrains.hexana.wasm.sections.WasmFieldType
-import org.jetbrains.hexana.wasm.sections.WasmFuncHeapType
-import org.jetbrains.hexana.wasm.sections.WasmHeapType
-import org.jetbrains.hexana.wasm.sections.WasmI31RefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmI32Type
-import org.jetbrains.hexana.wasm.sections.WasmI64Type
-import org.jetbrains.hexana.wasm.sections.WasmIndexHeapType
-import org.jetbrains.hexana.wasm.sections.WasmNoExnHeapType
-import org.jetbrains.hexana.wasm.sections.WasmNoExternRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmNoFuncHeapType
-import org.jetbrains.hexana.wasm.sections.WasmNonNullableReferenceType
-import org.jetbrains.hexana.wasm.sections.WasmNoneHeapType
-import org.jetbrains.hexana.wasm.sections.WasmNullableReferenceType
-import org.jetbrains.hexana.wasm.sections.WasmPactTypeI16
-import org.jetbrains.hexana.wasm.sections.WasmPactTypeI8
-import org.jetbrains.hexana.wasm.sections.WasmRecursiveTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmRefType
-import org.jetbrains.hexana.wasm.sections.WasmReferenceHeapType
-import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmStructRefHeapType
-import org.jetbrains.hexana.wasm.sections.WasmStructTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmValueType
-import org.jetbrains.hexana.wasm.sections.WasmVecType
+import org.jetbrains.hexana.wasm.sections.*
 
-internal fun CommonByteBuffer.readTypes(wasmModule: WasmModule): TypesResult {
+fun CommonByteBuffer.readTypes(wasmModule: WasmModule): TypesResult {
     return TypesResult(
         types = types(wasmModule).mapIndexed { index, record -> record.toTypeResult(index) }
     )
 }
 
-internal fun CommonByteBuffer.readTypesByIndices(
+fun CommonByteBuffer.readTypesByIndices(
     wasmModule: WasmModule,
     indices: List<Int>
 ): TypesResult {

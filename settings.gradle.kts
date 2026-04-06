@@ -34,6 +34,7 @@ rootProject.name = "hexana"
 include("binaryProvider")
 include("wasmParser")
 include("encdec")
+include("mcp")
 include("idea-plugin")
 include("graalwasm:wasmprinter")
 include("graalwasm:wat2wasm")

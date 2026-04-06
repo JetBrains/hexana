@@ -1,19 +1,14 @@
 package org.jetbrains.hexana.mcp.query
 
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.mcp.FunctionEntry
-import org.jetbrains.hexana.mcp.GeneralFunctionEntry
-import org.jetbrains.hexana.mcp.ImportFunctionEntry
-import org.jetbrains.hexana.mcp.ParameterSignature
-import org.jetbrains.hexana.mcp.WasmExportFunctionRecord
-import org.jetbrains.hexana.mcp.listExportedInternal
+import org.jetbrains.hexana.mcp.*
 import org.jetbrains.hexana.mcp.model.exports.ExportedFunctionEntryResult
 import org.jetbrains.hexana.mcp.model.exports.ExportedFunctionResult
 import org.jetbrains.hexana.mcp.model.exports.ExportedFunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.wasm.WasmModule
 
-internal fun CommonByteBuffer.readExportedFunctions(
+fun CommonByteBuffer.readExportedFunctions(
     wasmModule: WasmModule,
     range: IntRange
 ): ListExportedFunctionsResult {

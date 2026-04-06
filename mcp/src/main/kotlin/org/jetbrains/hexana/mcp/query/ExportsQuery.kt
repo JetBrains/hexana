@@ -6,7 +6,7 @@ import org.jetbrains.hexana.mcp.model.exports.ExportResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.wasm.WasmModule
 
-internal fun CommonByteBuffer.readExports(wasmModule: WasmModule): ListExportsResult {
+fun CommonByteBuffer.readExports(wasmModule: WasmModule): ListExportsResult {
     return ListExportsResult(
         exports = listExports(wasmModule).map { record ->
             ExportResult(

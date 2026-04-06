@@ -55,7 +55,7 @@ internal fun CommonByteBuffer.listExportedInternal(wasmModule: WasmModule?): Lis
         }
 }
 
-internal fun CommonByteBuffer.listFunctionsInternal(wasmModule: WasmModule?): List<GeneralFunctionEntry> {
+fun CommonByteBuffer.listFunctionsInternal(wasmModule: WasmModule?): List<GeneralFunctionEntry> {
     wasmModule ?: return emptyList()
     val types = types(wasmModule)
     val exports = listExports(wasmModule)
@@ -166,7 +166,7 @@ fun CommonByteBuffer.localsForFunctions(indices: List<Int>, wasmModule: WasmModu
 
 data class LocalsByFunction(val funcidx: Int, val locals: List<Local>)
 
-internal fun CommonByteBuffer.importFunctions(
+fun CommonByteBuffer.importFunctions(
     wasmModule: WasmModule?
 ): List<ImportFunctionEntry> {
     val records = with(wasmModule!!.importSection) {
@@ -203,7 +203,7 @@ data class LocalExn(override val count: Int, val nullable: Boolean) : Local(coun
 data class LocalExtern(override val count: Int, val nullable: Boolean) : Local(count)
 data class LocalArray(override val count: Int, val nullable: Boolean) : Local(count)
 
-internal fun Local.renderedType(): String =
+fun Local.renderedType(): String =
     when (this) {
         is LocalNum -> "num:${byteToNumType(type)}"
         is LocalPackI8 -> "pack:i8"

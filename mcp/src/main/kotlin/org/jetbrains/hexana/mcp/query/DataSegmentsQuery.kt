@@ -1,24 +1,11 @@
 package org.jetbrains.hexana.mcp.query
 
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.mcp.DataEntry
-import org.jetbrains.hexana.mcp.ExportRecord
-import org.jetbrains.hexana.mcp.GlobalRecord
-import org.jetbrains.hexana.mcp.Limits
-import org.jetbrains.hexana.mcp.MemoryRecord
-import org.jetbrains.hexana.mcp.listDataSectionInternal
-import org.jetbrains.hexana.mcp.listExports
-import org.jetbrains.hexana.mcp.listGlobals
-import org.jetbrains.hexana.mcp.listMemory
-import org.jetbrains.hexana.mcp.model.data.DataSegmentGlobalResult
-import org.jetbrains.hexana.mcp.model.data.DataSegmentMemoryLimitsResult
-import org.jetbrains.hexana.mcp.model.data.DataSegmentMemoryResult
-import org.jetbrains.hexana.mcp.model.data.DataSegmentResult
-import org.jetbrains.hexana.mcp.model.data.DataSegmentsSummaryResult
-import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
+import org.jetbrains.hexana.mcp.*
+import org.jetbrains.hexana.mcp.model.data.*
 import org.jetbrains.hexana.wasm.WasmModule
 
-internal fun CommonByteBuffer.readDataSegments(
+fun CommonByteBuffer.readDataSegments(
     segmentRange: IntRange,
     wasmModule: WasmModule,
     includeExports: Boolean,
@@ -30,7 +17,7 @@ internal fun CommonByteBuffer.readDataSegments(
     return readDataSegments(start, endExclusive, wasmModule, includeExports, includeGlobals, minByteLength)
 }
 
-internal fun CommonByteBuffer.readDataSegments(
+fun CommonByteBuffer.readDataSegments(
     segmentStartInclusive: Int,
     segmentEndExclusive: Int,
     wasmModule: WasmModule,

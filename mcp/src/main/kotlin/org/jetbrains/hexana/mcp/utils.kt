@@ -1,26 +1,8 @@
 package org.jetbrains.hexana.mcp
 
-import com.intellij.openapi.project.ProjectManager
-import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.search.FilenameIndex
-import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
-import org.jetbrains.hexana.wasm.sections.WasmDataRecordActive
-import org.jetbrains.hexana.wasm.sections.WasmDataRecordActiveWithMemoryIndex
-import org.jetbrains.hexana.wasm.sections.WasmDataRecordPassive
-import org.jetbrains.hexana.wasm.sections.WasmGlobalExportRecordEntry
-import org.jetbrains.hexana.wasm.sections.WasmGlobalType
-import org.jetbrains.hexana.wasm.sections.WasmLimits
-import org.jetbrains.hexana.wasm.sections.WasmMemType
-import org.jetbrains.hexana.wasm.sections.WasmMemoryExportRecordEntry
-import org.jetbrains.hexana.wasm.sections.WasmOpenI32Limits
-import org.jetbrains.hexana.wasm.sections.WasmOpenI64Limits
-import org.jetbrains.hexana.wasm.sections.WasmTableExportRecordEntry
-import org.jetbrains.hexana.wasm.sections.WasmTagExportRecordEntry
-import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
-
+import org.jetbrains.hexana.wasm.sections.*
 
 
 internal fun CommonByteBuffer.listDataSectionInternal(wasmModule: WasmModule?): List<DataEntry> {
@@ -54,7 +36,7 @@ internal fun CommonByteBuffer.listDataSectionInternal(wasmModule: WasmModule?): 
     }
 }
 
-internal fun CommonByteBuffer.listExports(wasmModule: WasmModule?): List<ExportRecord> {
+fun CommonByteBuffer.listExports(wasmModule: WasmModule?): List<ExportRecord> {
     wasmModule ?: return emptyList()
     val records = with(wasmModule.exportSection) {
         this ?: return@with emptyList()
@@ -72,7 +54,7 @@ internal fun CommonByteBuffer.listExports(wasmModule: WasmModule?): List<ExportR
     }
 }
 
-internal fun CommonByteBuffer.listGlobals(wasmModule: WasmModule?): List<GlobalRecord> {
+fun CommonByteBuffer.listGlobals(wasmModule: WasmModule?): List<GlobalRecord> {
     wasmModule ?: return emptyList()
     val importedGlobals = with(wasmModule.importSection) {
         this ?: return@with emptyList()
@@ -125,7 +107,7 @@ data class GlobalRecord(
     val definedIn: String
 )
 
-internal fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRecord> {
+fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRecord> {
     wasmModule ?: return emptyList()
     val importMemories = with(wasmModule.importSection) {
         this ?: return@with emptyList()
@@ -151,9 +133,9 @@ internal fun CommonByteBuffer.listMemoryByIndices(
     return listMemory(wasmModule).filter { indices.contains(it.memoryIdx) }
 }
 
-internal data class MemoryRecord(val memoryIdx: Int, val limit: Limits<*>, val definedIn: String)
+data class MemoryRecord(val memoryIdx: Int, val limit: Limits<*>, val definedIn: String)
 
-internal class Limits<T>(private val internal: WasmLimits<T>) {
+class Limits<T>(private val internal: WasmLimits<T>) {
     val addressType: String
         get() {
             when (internal.min) {
@@ -211,36 +193,3 @@ data class DataEntry(
 }
 
 data class ExportRecord(val name: String, val externIndex: Long, val kind: Byte)
-
-internal fun resolveWasmVirtualFile(path: String): VirtualFile? {
-    val lfs = LocalFileSystem.getInstance()
-    // 1) Absolute path or VFS path
-    lfs.refreshAndFindFileByPath(path)?.let { return it }
-
-    val hasSeparator = path.contains('/') || path.contains('\\')
-    val projects = ProjectManager.getInstance().openProjects
-
-    // 2) Project-relative resolution against basePath
-    for (project in projects) {
-        val base = project.basePath
-        if (!base.isNullOrBlank()) {
-            lfs.refreshAndFindFileByPath("$base/$path")?.let { return it }
-        }
-    }
-
-    // 3) Filename search within project if a bare filename was provided
-    if (!hasSeparator) {
-        for (project in projects) {
-            val scope = GlobalSearchScope.projectScope(project)
-            val matches = FilenameIndex.getVirtualFilesByName(project, path, scope)
-            if (matches.size == 1) return matches.first()
-            if (matches.isNotEmpty()) {
-                // Pick the first but log ambiguity to idea.log
-                val picked = matches.first()
-                return picked
-            }
-        }
-    }
-
-    return null
-}

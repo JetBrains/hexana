@@ -1,19 +1,14 @@
 package org.jetbrains.hexana.mcp.query
 
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.mcp.FunctionEntry
-import org.jetbrains.hexana.mcp.GeneralFunctionEntry
-import org.jetbrains.hexana.mcp.ImportFunctionEntry
-import org.jetbrains.hexana.mcp.ParameterSignature
-import org.jetbrains.hexana.mcp.functionsByIndices
-import org.jetbrains.hexana.mcp.listFunctions
+import org.jetbrains.hexana.mcp.*
 import org.jetbrains.hexana.mcp.model.functions.FunctionImportResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionSummaryResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.wasm.WasmModule
 
-internal fun CommonByteBuffer.readFunctions(
+fun CommonByteBuffer.readFunctions(
     wasmModule: WasmModule,
     offset: Int,
     limit: Int
@@ -23,7 +18,7 @@ internal fun CommonByteBuffer.readFunctions(
     )
 }
 
-internal fun CommonByteBuffer.readFunctionsByIndices(
+fun CommonByteBuffer.readFunctionsByIndices(
     wasmModule: WasmModule,
     indices: List<Int>
 ): FunctionsResult {

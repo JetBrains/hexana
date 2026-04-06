@@ -8,13 +8,13 @@ import org.jetbrains.hexana.mcp.model.globals.GlobalResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.wasm.WasmModule
 
-internal fun CommonByteBuffer.readGlobals(wasmModule: WasmModule): ListGlobalsResult {
+fun CommonByteBuffer.readGlobals(wasmModule: WasmModule): ListGlobalsResult {
     return ListGlobalsResult(
         globals = listGlobals(wasmModule).map { it.toGlobalResult() }
     )
 }
 
-internal fun CommonByteBuffer.readGlobalsByIndices(
+fun CommonByteBuffer.readGlobalsByIndices(
     wasmModule: WasmModule,
     indices: List<Int>
 ): ListGlobalsResult {

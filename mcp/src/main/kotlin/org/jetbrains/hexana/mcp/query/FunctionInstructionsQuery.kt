@@ -7,7 +7,7 @@ import org.jetbrains.hexana.mcp.model.functions.FunctionInstructionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.wasm.WasmModule
 
-internal fun CommonByteBuffer.readInstructionsForFunctions(
+fun CommonByteBuffer.readInstructionsForFunctions(
     wasmModule: WasmModule,
     indices: List<Int>
 ): GetInstructionsForFunctionsResult {

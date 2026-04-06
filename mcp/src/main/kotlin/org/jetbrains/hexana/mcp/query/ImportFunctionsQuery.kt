@@ -8,7 +8,7 @@ import org.jetbrains.hexana.mcp.model.imports.ImportFunctionSignature
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.wasm.WasmModule
 
-internal fun CommonByteBuffer.readImportFunctions(wasmModule: WasmModule): ListImportsResult {
+fun CommonByteBuffer.readImportFunctions(wasmModule: WasmModule): ListImportsResult {
     return ListImportsResult(
         imports = importFunctions(wasmModule).map { entry ->
             ImportFunctionResult(
