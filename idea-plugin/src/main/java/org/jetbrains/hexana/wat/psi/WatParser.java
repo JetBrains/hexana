@@ -102,11 +102,15 @@ public class WatParser implements PsiParser {
         boolean collapseLazy = root instanceof WatFileElementType;
         ArrayList<Expr> exprStack = new ArrayList<>();
         ArrayList<Expr> unfoldedBlockStack = new ArrayList<>();
+        ArrayList<Integer> unfoldedBlockStackSizes = new ArrayList<>();
         while (true) {
             IElementType token = b.getTokenType();
             if (token == null) {
-                if (!exprStack.isEmpty()) {
+                if (!exprStack.isEmpty() || !unfoldedBlockStack.isEmpty()) {
                     b.error("Unexpected end of file");
+                    while (!unfoldedBlockStack.isEmpty()) {
+                        unfoldedBlockStack.removeLast().done();
+                    }
                     while (!exprStack.isEmpty()) {
                         Expr expr = exprStack.removeLast();
                         expr.done();
@@ -122,6 +126,7 @@ public class WatParser implements PsiParser {
                         ? b.lookAhead(2) == WatToken.MODULE ? WatElementType.MODULE : WatElementType.INSTANCE
                         : (next != null ? tokenMap.getOrDefault(next, WatElementType.SEXPR) : WatElementType.SEXPR);
                 exprStack.add(new Expr(m, exprType));
+                unfoldedBlockStackSizes.add(unfoldedBlockStack.size());
                 b.advanceLexer();
 
                 if (next == WatToken.FUNC) {
@@ -132,6 +137,7 @@ public class WatParser implements PsiParser {
                     IElementType nextToken = b.getTokenType();
                     if (nextToken != null && nextToken != WatToken.CLOSE_PAREN) {
                         exprStack.add(new Expr(b.mark(), WatElementType.FUNC_BODY));
+                        unfoldedBlockStackSizes.add(unfoldedBlockStack.size());
                         if (collapseLazy) {
                             // fast-forward to the close parenthesis of the function
                             IElementType t = b.getTokenType();
@@ -160,9 +166,18 @@ public class WatParser implements PsiParser {
                     b.advanceLexer();
                 } else {
                     Expr expr = exprStack.removeLast();
+                    // Close any unfolded block markers that were opened within this s-expression
+                    int savedSize = unfoldedBlockStackSizes.removeLast();
+                    while (unfoldedBlockStack.size() > savedSize) {
+                        unfoldedBlockStack.removeLast().done();
+                    }
                     if (expr.type == WatElementType.FUNC_BODY) {
                         expr.done(collapseLazy);
                         expr = exprStack.removeLast();
+                        savedSize = unfoldedBlockStackSizes.removeLast();
+                        while (unfoldedBlockStack.size() > savedSize) {
+                            unfoldedBlockStack.removeLast().done();
+                        }
                     }
                     b.advanceLexer();
                     expr.done();

@@ -83,4 +83,12 @@ class WatParserTest : ParsingTestCase("parser", "wat", true, WatParserDefinition
     fun testBlocks() {
         doTest()
     }
+
+    fun testUnbalancedBlock() {
+        doTest()
+    }
+
+    fun testUnbalancedIf() {
+        doTest()
+    }
 }
