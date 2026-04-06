@@ -9,6 +9,7 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 - Start here for repo-wide rules and commands.
 - If you touch `idea-plugin/`, also read `idea-plugin/AGENTS.md`.
 - If you touch `mcp/`, also read `mcp/AGENTS.md`.
+- If you touch `mcp/core/`, also read `mcp/core/AGENTS.md`.
 - If you touch `wasmParser/`, also read `wasmParser/AGENTS.md`.
 - If you touch `ui-driver-tests/`, also read `ui-driver-tests/AGENTS.md`.
 - If you touch `wasm-modules/`, also read `wasm-modules/AGENTS.md`.
@@ -17,8 +18,9 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 ## What This Repo Contains
 
 - `idea-plugin/`: IntelliJ plugin implementation, Compose-based hex viewer, WAT/WIT language support, MCP toolset, plugin packaging.
-- `mcp/`: JVM-only Wasm MCP query/model library extracted from the plugin. It contains pure MCP-facing Wasm analysis
-  logic, not IntelliJ registration or file-system integration.
+- `mcp/`: parent folder for extracted MCP modules.
+- `mcp/core/`: JVM-only Wasm MCP query/model library extracted from the plugin. It contains pure MCP-facing Wasm
+  analysis logic, not IntelliJ registration or file-system integration.
 - `wasmParser/`: Kotlin Multiplatform parser for core Wasm and component-model binaries.
 - `binaryProvider/`: thin provider layer that wraps parsed Wasm data for the UI and navigation features.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
@@ -56,7 +58,7 @@ Run the narrowest command that proves your change.
 
 - Start the plugin in a sandbox IDE: `./gradlew :idea-plugin:runIde`
 - Run plugin tests: `./gradlew :idea-plugin:test`
-- Build the extracted MCP module: `./gradlew :mcp:build`
+- Build the extracted MCP core module: `./gradlew :mcp:core:build`
 - Build the plugin ZIP: `./gradlew :idea-plugin:buildPlugin`
 - Build the FUS scheme artifact: `./gradlew :idea-plugin:buildEventsScheme`
 - Run JVM parser tests: `./gradlew :wasmParser:jvmTest`
@@ -113,8 +115,8 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
 ## Testing Expectations By Area
 
 - `idea-plugin/` changes: run `:idea-plugin:test`.
-- `mcp/` changes: run `:mcp:build` and the affected `:idea-plugin:test` coverage when the plugin bridge or tool
-  contracts change.
+- `mcp/core/` changes: run `:mcp:core:build` and the affected `:idea-plugin:test` coverage when the plugin bridge or
+  tool contracts change.
 - `wasmParser/` changes: run at least the relevant parser tests and any affected plugin tests.
 - `mcp/` changes in the plugin: run the direct MCP tests under `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp/direct`.
 - `graalwasm/` or embedded converter changes: run the directly affected plugin tests and the existing `:graalwasm:wat2wasm:test` run configuration if relevant.

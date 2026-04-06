@@ -80,6 +80,7 @@ internal fun WasmTypeRecord.toTypeString(depth: Int = 0): String {
             }
             append(')')
         }
+
         is WasmRecursiveTypeRecord -> buildString {
             append("(rec")
             if (entries.isNotEmpty()) {
@@ -88,6 +89,7 @@ internal fun WasmTypeRecord.toTypeString(depth: Int = 0): String {
             }
             append(')')
         }
+
         is WasmSectionFunctionTypeRecord -> buildString {
             append("(func")
             if (params.isNotEmpty()) {

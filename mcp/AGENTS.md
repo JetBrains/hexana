@@ -1,47 +1,16 @@
 # AGENTS.md for `mcp`
 
-This module contains the extracted JVM-only MCP library for WebAssembly analysis. It owns Wasm-oriented MCP DTOs, query
-functions, and shared rendering/domain helpers. It does not own IntelliJ registration, plugin.xml wiring, or
-VirtualFile/path resolution.
+This folder groups extracted MCP modules.
 
-## Start Here
+## Read Order
 
-Read these files before making structural changes:
+- If you touch `mcp/core/`, also read `mcp/core/AGENTS.md`.
 
-- `build.gradle.kts`
-- `src/main/kotlin/org/jetbrains/hexana/mcp/FunctionDomain.kt`
-- `src/main/kotlin/org/jetbrains/hexana/mcp/TypeDomain.kt`
-- `src/main/kotlin/org/jetbrains/hexana/mcp/utils.kt`
+## Structure
 
-## Module Map
+- `core/`: JVM-only Wasm MCP query/model library used by the IntelliJ plugin bridge in `idea-plugin/`.
 
-- `src/main/kotlin/org/jetbrains/hexana/mcp`:
-    - shared Wasm-domain extraction helpers used by multiple tools.
-- `src/main/kotlin/org/jetbrains/hexana/mcp/query`:
-    - public query functions that turn parsed Wasm modules into MCP-ready result objects.
-- `src/main/kotlin/org/jetbrains/hexana/mcp/model`:
-    - serialized result DTOs returned by the query layer.
+## Boundary
 
-## Ownership Boundary
-
-- Keep this module free of IntelliJ Platform APIs.
-- Do not add `VirtualFile`, project lookup, plugin.xml registration, or MCP tool annotations here.
-- IntelliJ-specific MCP integration stays in `idea-plugin/`.
-- If a change requires file/path resolution or IDE state, define a clean input for it here and keep the actual IDE
-  bridge in `idea-plugin`.
-
-## Dependencies
-
-- Prefer existing Wasm abstractions from:
-    - `encdec/CommonByteBuffer`
-    - `wasmParser/WasmParser`
-    - `wasmParser` section/opcode models
-- This module is JVM-only for now. Do not introduce multiplatform setup unless the task explicitly requires it.
-
-## Testing
-
-- There are no dedicated tests in this module yet.
-- While tests still live in `idea-plugin`, keep public APIs stable enough for:
-    - `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp`
-    - `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp/direct`
-- Run `./gradlew :mcp:build` first, then the narrowest affected `idea-plugin` test coverage.
+- Keep folder-level organization concerns here.
+- Put module-specific rules in the nested module `AGENTS.md`.

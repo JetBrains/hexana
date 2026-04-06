@@ -13,7 +13,7 @@ Read these files before making structural changes:
 - `src/main/kotlin/org/jetbrains/hexana/HexanaFileEditor.kt`
 - `src/main/kotlin/org/jetbrains/hexana/HexanaService.kt`
 - `src/main/kotlin/org/jetbrains/hexana/mcp/HexanaToolset.kt`
-- `../mcp/src/main/kotlin/org/jetbrains/hexana/mcp/query`
+- `../mcp/core/src/main/kotlin/org/jetbrains/hexana/mcp/query`
 
 ## Module Map
 
@@ -99,7 +99,7 @@ This module compiles sources from three locations:
 ### MCP Tooling
 
 - `HexanaToolset.kt` is the registration surface for all plugin MCP tools.
-- The extracted pure query/model library lives in the sibling `mcp/` module.
+- The extracted pure query/model library lives in the sibling `mcp/core` module.
 - This module should keep only IntelliJ-specific MCP integration concerns such as:
     - tool registration and descriptions
     - `VirtualFile` and project-relative path resolution
@@ -112,8 +112,8 @@ This module compiles sources from three locations:
 When adding or changing an MCP tool:
 
 - Keep registration in `HexanaToolset.kt`.
-- Put the real decode/query logic in the extracted `mcp` module, not in the descriptor body.
-- Add or update a result model under the extracted `mcp/model/` package when the response shape is non-trivial.
+- Put the real decode/query logic in the extracted `mcp/core` module, not in the descriptor body.
+- Add or update a result model under the extracted `mcp/core` model package when the response shape is non-trivial.
 - Prefer typed structured content over hand-built strings.
 - Use the existing direct MCP test base to create `.wat` fixtures and call tools through the real MCP layer.
 
