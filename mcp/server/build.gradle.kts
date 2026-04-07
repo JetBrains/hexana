@@ -62,7 +62,7 @@ tasks.jar {
 }
 
 tasks.register<Test>("integrationTest") {
-    description = "Runs black-box HTTP integration tests against the installed standalone MCP server."
+    description = "Runs black-box HTTP and stdio integration tests against the installed standalone MCP server."
     group = "verification"
     dependsOn(tasks.named("installDist"))
     shouldRunAfter(tasks.named("test"))
