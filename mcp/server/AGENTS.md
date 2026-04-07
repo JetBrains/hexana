@@ -8,6 +8,7 @@ must remain free of IntelliJ Platform APIs.
 Read these files before making structural changes:
 
 - `build.gradle.kts`
+- `gradle.properties`
 - `src/main/kotlin/org/jetbrains/hexana/mcp/server/Main.kt`
 - `src/main/kotlin/org/jetbrains/hexana/mcp/server/HexanaMcpServer.kt`
 - `src/main/kotlin/org/jetbrains/hexana/mcp/server/HexanaToolHandlers.kt`
@@ -19,6 +20,7 @@ Read these files before making structural changes:
 - Use the shared JVM CLI/logging stack here rather than ad hoc parsing or `System.err.println` wrappers.
 - Keep Wasm parsing, query semantics, and result DTOs in `mcp/core`.
 - Do not add IntelliJ APIs, `VirtualFile`, or plugin.xml-style registration here.
+- The standalone MCP version is owned by `mcp/server/gradle.properties`, not by `idea-plugin/gradle.properties`.
 
 ## Transport Rules
 
@@ -30,5 +32,7 @@ Read these files before making structural changes:
 ## Testing
 
 - Add focused server tests in this module for tool argument handling and runtime behavior.
+- Use `src/integrationTest/kotlin` plus `./gradlew :mcp:server:integrationTest` for black-box process tests against the
+  installed standalone distribution.
 - Run `./gradlew :mcp:server:build` after changes here.
 - If a change crosses the `mcp/core` boundary, also run `./gradlew :mcp:core:build`.

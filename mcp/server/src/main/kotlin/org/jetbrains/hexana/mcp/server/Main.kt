@@ -3,6 +3,7 @@ package org.jetbrains.hexana.mcp.server
 import com.github.ajalt.clikt.core.CliktError
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
 import io.ktor.server.cio.*
 import io.ktor.server.engine.*
 import io.ktor.server.request.*
@@ -19,6 +20,7 @@ import kotlin.system.exitProcess
 private val logger = LoggerFactory.getLogger("org.jetbrains.hexana.mcp.server.Main")
 
 fun main(args: Array<String>) {
+    KotlinLoggingConfiguration.logStartupMessage = false
     configureLogging(HexanaLogLevel.INFO)
     val cli = HexanaCli()
     val command = try {
