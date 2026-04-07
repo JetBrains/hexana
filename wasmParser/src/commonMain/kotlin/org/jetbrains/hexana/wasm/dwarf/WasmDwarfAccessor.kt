@@ -13,7 +13,7 @@ import org.jetbrains.hexana.wasm.customSectionByName
 
 class WasmDwarfAccessor(val module: BaseModule): DwarfAccessor {
     override fun section(name: String): DwarfSection? {
-        val customSection = module.customSectionByName(name) ?: throw Exception("Section $name not found")
+        val customSection = module.customSectionByName(name) ?: return null
         return when (name) {
             ".debug_line" -> DwarfLineSection(customSection.contentOffset, customSection.contentSize, this@WasmDwarfAccessor)
             ".debug_info" -> DwarfInfoSection(customSection.contentOffset, customSection.contentSize, this@WasmDwarfAccessor)
