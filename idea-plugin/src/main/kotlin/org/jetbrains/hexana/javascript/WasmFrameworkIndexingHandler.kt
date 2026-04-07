@@ -101,7 +101,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
             is ComponentSort.Component,
             is ComponentSort.Instance,
             is ComponentSort.Value,
-            is ComponentSortWithCoreSort -> allTypes.getOrNull(export.sortIndex.index.toInt() + 1)
+            is ComponentSortWithCoreSort -> allTypes.getOrNull(export.sortIndex.index.toInt())
         }
     }
 
