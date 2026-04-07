@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "hexana": {
+      "command": "__GENERATED_BY_ASSEMBLY__",
+      "args": [
+        "stdio"
+      ]
+    }
+  }
+}

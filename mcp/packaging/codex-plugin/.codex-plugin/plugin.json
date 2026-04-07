@@ -1,0 +1,17 @@
+{
+  "name": "hexana",
+  "version": "0.7",
+  "description": "Hexana WebAssembly MCP server",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Hexana",
+    "shortDescription": "Inspect WebAssembly modules through MCP.",
+    "longDescription": "Thin Codex wrapper for the standalone Hexana MCP runtime in mcp/server.",
+    "developerName": "JetBrains",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read"
+    ],
+    "websiteURL": "https://github.com/JetBrains/Hexana"
+  }
+}

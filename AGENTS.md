@@ -11,6 +11,7 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 - If you touch `mcp/`, also read `mcp/AGENTS.md`.
 - If you touch `mcp/core/`, also read `mcp/core/AGENTS.md`.
 - If you touch `mcp/server/`, also read `mcp/server/AGENTS.md`.
+- If you touch `mcp/packaging/`, also read `mcp/packaging/AGENTS.md`.
 - If you touch `wasmParser/`, also read `wasmParser/AGENTS.md`.
 - If you touch `ui-driver-tests/`, also read `ui-driver-tests/AGENTS.md`.
 - If you touch `wasm-modules/`, also read `wasm-modules/AGENTS.md`.
@@ -23,6 +24,7 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 - `mcp/core/`: JVM-only Wasm MCP query/model library extracted from the plugin. It contains pure MCP-facing Wasm
   analysis logic, not IntelliJ registration or file-system integration.
 - `mcp/server/`: standalone Kotlin/JVM MCP runtime that exposes `mcp/core` over `stdio` and HTTP transports.
+- `mcp/packaging/`: thin Claude/Codex wrapper layouts that point at the standalone runtime from `mcp/server/`.
 - `wasmParser/`: Kotlin Multiplatform parser for core Wasm and component-model binaries.
 - `binaryProvider/`: thin provider layer that wraps parsed Wasm data for the UI and navigation features.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
