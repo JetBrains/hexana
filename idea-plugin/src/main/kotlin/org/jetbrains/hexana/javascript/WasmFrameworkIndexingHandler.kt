@@ -29,8 +29,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                 JSStringUtil.unquoteAndUnescapeString(it)
             }
         if (wasmLiteral != null) {
-            expr.containingFile.virtualFile?.findFileByRelativePath(wasmLiteral)?.let {
-                it.refresh(false, false)
+            expr.containingFile.originalFile.virtualFile?.parent?.findFileByRelativePath(wasmLiteral)?.let {
                 val buffer = it.toCommonByteBuffer() ?: return type
                 if (WasmBinaryProviderSelector.select(buffer) == BinaryProviderType.WasmComponent) {
                     ((WasmParser().parse(buffer) as? WasmParseSuccess)?.wasmModule as? WasmComponent)?.let {
@@ -55,7 +54,9 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                                 with(it) {
                                     buffer.scan()
                                 }.map {
-                                    PropertySignatureImpl(it.exportName, JSAnyType.get(type.source), false, false)
+                                    PropertySignatureImpl(it.exportName
+                                        .substringAfter('/').substringBefore('@'),
+                                        JSAnyType.get(type.source), false, false)
                                 }
                             }),
                             JSNamedTypeFactory.createType("WebAssembly.Instance.Exports", type.source, JSTypeContext.INSTANCE, false),
