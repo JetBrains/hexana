@@ -2,14 +2,20 @@ package org.jetbrains.hexana.mcp
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.mcp.model.data.ListDataSectionsResult
+import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
+import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
+import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
+import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
+import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
+import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
+import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
-import org.jetbrains.hexana.mcp.query.readExports
-import org.jetbrains.hexana.mcp.query.readFunctions
-import org.jetbrains.hexana.mcp.query.readImportFunctions
-import org.jetbrains.hexana.mcp.query.readModuleSummary
+import org.jetbrains.hexana.mcp.model.types.TypesResult
+import org.jetbrains.hexana.mcp.query.*
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
@@ -22,6 +28,27 @@ interface HexanaAnalysisService {
     fun listImports(input: WasmInput): ListImportsResult
     fun listExports(input: WasmInput): ListExportsResult
     fun listFunctions(input: WasmInput, offset: Int = 0, limit: Int = 200): FunctionsResult
+    fun listExportedFunctions(input: WasmInput, entriesRange: IntRange): ListExportedFunctionsResult
+    fun functionsForIndices(input: WasmInput, indices: List<Int>): FunctionsResult
+    fun listGlobals(input: WasmInput): ListGlobalsResult
+    fun listTypes(input: WasmInput): TypesResult
+    fun listMemory(input: WasmInput): ListMemoryResult
+    fun getGlobalsForIndices(input: WasmInput, indices: List<Int>): ListGlobalsResult
+    fun listData(input: WasmInput, entriesRange: IntRange): ListDataSectionsResult
+    fun listDataSegments(
+        input: WasmInput,
+        segmentStartInclusive: Int,
+        segmentEndExclusive: Int = Int.MAX_VALUE,
+        includeExports: Boolean = false,
+        includeGlobals: Boolean = true,
+        minByteLength: Int? = null
+    ): ListDataSegmentsResult
+
+    fun getMemoryForIndices(input: WasmInput, indices: List<Int>): ListMemoryResult
+    fun getTypesForIndices(input: WasmInput, indices: List<Int>): TypesResult
+    fun getLocalsForFunctions(input: WasmInput, indices: List<Int>): GetLocalsForFunctionsResult
+    fun getInstructionsForFunctions(input: WasmInput, indices: List<Int>): GetInstructionsForFunctionsResult
+    fun listElementSegments(input: WasmInput): ListElementSegmentsResult
 }
 
 object HexanaAnalysisServices {
@@ -54,6 +81,95 @@ class DefaultHexanaAnalysisService(
         requireLimit(limit)
         val wasm = load(input)
         return wasm.buffer.readFunctions(wasm.module, offset, limit)
+    }
+
+    override fun listExportedFunctions(input: WasmInput, entriesRange: IntRange): ListExportedFunctionsResult {
+        requireClosedRange(entriesRange)
+        val wasm = load(input)
+        return wasm.buffer.readExportedFunctions(wasm.module, entriesRange)
+    }
+
+    override fun functionsForIndices(input: WasmInput, indices: List<Int>): FunctionsResult {
+        requireIndices(indices)
+        val wasm = load(input)
+        return wasm.buffer.readFunctionsByIndices(wasm.module, indices)
+    }
+
+    override fun listGlobals(input: WasmInput): ListGlobalsResult {
+        val wasm = load(input)
+        return wasm.buffer.readGlobals(wasm.module)
+    }
+
+    override fun listTypes(input: WasmInput): TypesResult {
+        val wasm = load(input)
+        return wasm.buffer.readTypes(wasm.module)
+    }
+
+    override fun listMemory(input: WasmInput): ListMemoryResult {
+        val wasm = load(input)
+        return wasm.buffer.readMemory(wasm.module)
+    }
+
+    override fun getGlobalsForIndices(input: WasmInput, indices: List<Int>): ListGlobalsResult {
+        requireIndices(indices)
+        val wasm = load(input)
+        return wasm.buffer.readGlobalsByIndices(wasm.module, indices)
+    }
+
+    override fun listData(input: WasmInput, entriesRange: IntRange): ListDataSectionsResult {
+        requireClosedRange(entriesRange)
+        val wasm = load(input)
+        return wasm.buffer.readDataSections(wasm.module, entriesRange)
+    }
+
+    override fun listDataSegments(
+        input: WasmInput,
+        segmentStartInclusive: Int,
+        segmentEndExclusive: Int,
+        includeExports: Boolean,
+        includeGlobals: Boolean,
+        minByteLength: Int?
+    ): ListDataSegmentsResult {
+        requireHalfOpenRange(segmentStartInclusive, segmentEndExclusive)
+        requireOptionalNonNegative(minByteLength, "Minimum byte length")
+        val wasm = load(input)
+        return wasm.buffer.readDataSegments(
+            segmentStartInclusive = segmentStartInclusive,
+            segmentEndExclusive = segmentEndExclusive,
+            wasmModule = wasm.module,
+            includeExports = includeExports,
+            includeGlobals = includeGlobals,
+            minByteLength = minByteLength
+        )
+    }
+
+    override fun getMemoryForIndices(input: WasmInput, indices: List<Int>): ListMemoryResult {
+        requireIndices(indices)
+        val wasm = load(input)
+        return wasm.buffer.readMemoryByIndices(wasm.module, indices)
+    }
+
+    override fun getTypesForIndices(input: WasmInput, indices: List<Int>): TypesResult {
+        requireIndices(indices)
+        val wasm = load(input)
+        return wasm.buffer.readTypesByIndices(wasm.module, indices)
+    }
+
+    override fun getLocalsForFunctions(input: WasmInput, indices: List<Int>): GetLocalsForFunctionsResult {
+        requireIndices(indices)
+        val wasm = load(input)
+        return wasm.buffer.readLocalsForFunctions(wasm.module, indices)
+    }
+
+    override fun getInstructionsForFunctions(input: WasmInput, indices: List<Int>): GetInstructionsForFunctionsResult {
+        requireIndices(indices)
+        val wasm = load(input)
+        return wasm.buffer.readInstructionsForFunctions(wasm.module, indices)
+    }
+
+    override fun listElementSegments(input: WasmInput): ListElementSegmentsResult {
+        val wasm = load(input)
+        return wasm.buffer.readElementSegments(wasm.module)
     }
 
     private fun load(input: WasmInput): LoadedWasm {
@@ -158,6 +274,66 @@ class DefaultHexanaAnalysisService(
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.OUT_OF_RANGE,
                 "Limit must be greater than 0"
+            )
+        }
+    }
+
+    private fun requireClosedRange(range: IntRange) {
+        if (range.first < 0) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "Range `from` must be greater than or equal to 0"
+            )
+        }
+        if (range.last < 0) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "Range `to` must be greater than or equal to 0"
+            )
+        }
+        if (range.last < range.first) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "Range `to` must be greater than or equal to `from`"
+            )
+        }
+    }
+
+    private fun requireHalfOpenRange(from: Int, to: Int) {
+        if (from < 0) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "Range `from` must be greater than or equal to 0"
+            )
+        }
+        if (to < 0) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "Range `to` must be greater than or equal to 0"
+            )
+        }
+        if (to < from) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "Range `to` must be greater than or equal to `from`"
+            )
+        }
+    }
+
+    private fun requireIndices(indices: List<Int>) {
+        if (indices.any { it < 0 }) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "Indices must be greater than or equal to 0"
+            )
+        }
+    }
+
+    private fun requireOptionalNonNegative(value: Int?, label: String) {
+        if (value != null && value < 0) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "$label must be greater than or equal to 0"
             )
         }
     }

@@ -80,6 +80,114 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun listExportedFunctionsReturnsPaginatedEntries() {
+        val wasm = createWasmFile(
+            "exported_functions.wasm",
+            """
+            (module
+              (type (func (param i32) (result i32)))
+              (import "env" "log" (func (param i32)))
+              (func ${'$'}main (type 0) (param i32) (result i32)
+                local.get 0)
+              (export "log_alias" (func 0))
+              (export "main" (func 1)))
+            """.trimIndent()
+        )
+
+        val result = service.listExportedFunctions(WasmInput.FilePath(wasm.toString()), entriesRange = 0..0)
+
+        assertEquals(0, result.from)
+        assertEquals(0, result.to)
+        assertEquals(2, result.total)
+        assertEquals(1, result.returned.size)
+        assertEquals("log_alias", result.returned.single().name)
+        assertEquals("env", result.returned.single().entry.module)
+        assertEquals("log", result.returned.single().entry.name)
+    }
+
+    @Test
+    fun listTypesAndMemoryReuseCurrentQueryShapes() {
+        val wasm = createWasmFile(
+            "types_memory.wasm",
+            """
+            (module
+              (type (func (param i32) (result i32)))
+              (import "env" "shared" (memory 1))
+              (memory 2 4))
+            """.trimIndent()
+        )
+
+        val types = service.listTypes(WasmInput.FilePath(wasm.toString()))
+        val memory = service.listMemory(WasmInput.FilePath(wasm.toString()))
+
+        assertEquals(1, types.types.size)
+        assertEquals("func", types.types.single().kind)
+        assertEquals("i32", types.types.single().params!!.single())
+        assertEquals("i32", types.types.single().retTypes!!.single())
+        assertEquals(2, memory.memories.size)
+        assertEquals("import", memory.memories.first().definedIn)
+        assertEquals("memory_section", memory.memories.last().definedIn)
+        assertEquals(1L, memory.memories.first().limit.min)
+        assertEquals(4L, memory.memories.last().limit.max)
+    }
+
+    @Test
+    fun remainingQueriesReuseCurrentQueryShapes() {
+        val wasm = createWasmFile(
+            "rich_fixture.wasm",
+            """
+            (module
+              (type (func (param i32) (result i32)))
+              (import "env" "print" (func (param i32)))
+              (import "env" "seed" (global i32))
+              (memory (export "memory") 1)
+              (table 1 funcref)
+              (func ${'$'}increment (type 0) (param i32) (result i32)
+                (local i32)
+                local.get 0
+                local.set 1
+                local.get 1
+                call 0
+                local.get 1)
+              (global (export "counter") (mut i64) (i64.const 7))
+              (elem (i32.const 0) func 1)
+              (data (i32.const 0) "Hello"))
+            """.trimIndent()
+        )
+
+        val functions = service.functionsForIndices(WasmInput.FilePath(wasm.toString()), indices = listOf(0, 1))
+        val globals = service.listGlobals(WasmInput.FilePath(wasm.toString()))
+        val selectedGlobals = service.getGlobalsForIndices(WasmInput.FilePath(wasm.toString()), indices = listOf(1))
+        val data = service.listData(WasmInput.FilePath(wasm.toString()), entriesRange = 0..0)
+        val dataSegments = service.listDataSegments(
+            input = WasmInput.FilePath(wasm.toString()),
+            segmentStartInclusive = 0,
+            segmentEndExclusive = 1,
+            includeExports = false,
+            includeGlobals = true
+        )
+        val selectedMemory = service.getMemoryForIndices(WasmInput.FilePath(wasm.toString()), indices = listOf(0))
+        val selectedTypes = service.getTypesForIndices(WasmInput.FilePath(wasm.toString()), indices = listOf(0))
+        val locals = service.getLocalsForFunctions(WasmInput.FilePath(wasm.toString()), indices = listOf(1))
+        val instructions = service.getInstructionsForFunctions(WasmInput.FilePath(wasm.toString()), indices = listOf(1))
+        val elements = service.listElementSegments(WasmInput.FilePath(wasm.toString()))
+
+        assertEquals(2, functions.functions.size)
+        assertEquals("env", functions.functions.first().importInfo!!.module)
+        assertEquals(2, globals.globals.size)
+        assertEquals("env", globals.globals.first().prefix)
+        assertEquals(1, selectedGlobals.globals.single().globalIdx)
+        assertEquals("SGVsbG8=", java.util.Base64.getEncoder().encodeToString(data.returned.single().data))
+        assertEquals("Hello", dataSegments.segments.single().utf8Preview)
+        assertEquals(1, dataSegments.summary.totalSegments)
+        assertEquals(0, selectedMemory.memories.single().memoryIdx)
+        assertEquals("func", selectedTypes.types.single().kind)
+        assertEquals("num:i32", locals.functions.single().locals.single().type)
+        assertTrue(instructions.functions.single().instructions.contains("call 0"))
+        assertEquals("1", elements.segments.single().elements!!.single())
+    }
+
+    @Test
     fun rejectsMissingFile() {
         val error = assertFailsWith<HexanaAnalysisException> {
             service.summarizeModule(WasmInput.FilePath("/definitely/missing/module.wasm"))
@@ -154,6 +262,62 @@ class DefaultHexanaAnalysisServiceTest {
 
         assertEquals(HexanaAnalysisErrorCode.OUT_OF_RANGE, negativeOffset.code)
         assertEquals(HexanaAnalysisErrorCode.OUT_OF_RANGE, nonPositiveLimit.code)
+    }
+
+    @Test
+    fun rejectsInvalidExportedFunctionRange() {
+        val wasm = createWasmFile(
+            "export_range.wasm",
+            """
+            (module
+              (func (export "main")))
+            """.trimIndent()
+        )
+
+        val negativeFrom = assertFailsWith<HexanaAnalysisException> {
+            service.listExportedFunctions(WasmInput.FilePath(wasm.toString()), entriesRange = -1..0)
+        }
+        val invertedRange = assertFailsWith<HexanaAnalysisException> {
+            service.listExportedFunctions(WasmInput.FilePath(wasm.toString()), entriesRange = 1..0)
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.OUT_OF_RANGE, negativeFrom.code)
+        assertEquals(HexanaAnalysisErrorCode.OUT_OF_RANGE, invertedRange.code)
+    }
+
+    @Test
+    fun rejectsInvalidIndicesAndSegmentParameters() {
+        val wasm = createWasmFile(
+            "invalid_inputs.wasm",
+            """
+            (module
+              (memory 1)
+              (func (export "main")))
+            """.trimIndent()
+        )
+
+        val negativeIndex = assertFailsWith<HexanaAnalysisException> {
+            service.getTypesForIndices(WasmInput.FilePath(wasm.toString()), indices = listOf(-1))
+        }
+        val invertedSegmentRange = assertFailsWith<HexanaAnalysisException> {
+            service.listDataSegments(
+                input = WasmInput.FilePath(wasm.toString()),
+                segmentStartInclusive = 5,
+                segmentEndExclusive = 1
+            )
+        }
+        val negativeMinByteLength = assertFailsWith<HexanaAnalysisException> {
+            service.listDataSegments(
+                input = WasmInput.FilePath(wasm.toString()),
+                segmentStartInclusive = 0,
+                segmentEndExclusive = 1,
+                minByteLength = -1
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.OUT_OF_RANGE, negativeIndex.code)
+        assertEquals(HexanaAnalysisErrorCode.OUT_OF_RANGE, invertedSegmentRange.code)
+        assertEquals(HexanaAnalysisErrorCode.OUT_OF_RANGE, negativeMinByteLength.code)
     }
 
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {
