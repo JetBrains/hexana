@@ -4,8 +4,6 @@ package org.jetbrains.hexana.dwarf
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.crossSectionOperation
-import org.jetbrains.hexana.wasm.BaseModule
-import org.jetbrains.hexana.wasm.customSectionByName
 
 class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAccessor) : DwarfSection(contentOffset, contentSize,
     accessor
@@ -302,7 +300,7 @@ sealed class DwarfLineUnitHeader<T>(
             lineRange: UByte,
             standardOpcodeLengths: ByteArray,
             val includeDirectories: List<String>,
-            val fileNames: List<LineNumberFileEntryV4>,
+            val includeFiles: List<LineNumberFileEntryV4>,
             programOffset: UInt,
             unitSize: UInt, accessor: DwarfAccessor
         ) : Dwarf32LineUnitHeader(

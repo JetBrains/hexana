@@ -2,8 +2,8 @@ package org.jetbrains.hexana.wasm
 
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.hexana.dwarf.CompilationUnitHeader
-import org.jetbrains.hexana.dwarf.DwarfAccessor
 import org.jetbrains.hexana.dwarf.DwarfLineUnitHeader
+import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver
 import org.jetbrains.hexana.dwarf.Form
 import org.jetbrains.hexana.dwarf.LineNumberHeaderEntryFormatName
 import org.jetbrains.hexana.dwarf.LnsOpcode
@@ -1792,7 +1792,7 @@ class WasmParserTests {
         val unit0 = entries[0]
         assertIs<DwarfLineUnitHeader.Dwarf32LineUnitHeader.V4>(unit0)
         assertEquals(0x1eu, unit0.prologLength)
-        assertEquals(1, unit0.fileNames.size)
+        assertEquals(1, unit0.includeFiles.size)
 
         assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_copy.standardOpcodeLengthsEncoding])
         assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_advance_pc.standardOpcodeLengthsEncoding])
@@ -1807,10 +1807,10 @@ class WasmParserTests {
         assertEquals(0, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_epilogue_begin.standardOpcodeLengthsEncoding])
         assertEquals(1, unit0.standardOpcodeLengths[LnsOpcode.DW_LNS_set_isa.standardOpcodeLengthsEncoding])
 
-        assertEquals("utf8.c", unit0.fileNames[0].fileName)
-        assertEquals(0, unit0.fileNames[0].dirIndex)
-        assertEquals(0, unit0.fileNames[0].fileSize)
-        assertEquals(0, unit0.fileNames[0].lastModified)
+        assertEquals("utf8.c", unit0.includeFiles[0].fileName)
+        assertEquals(0, unit0.includeFiles[0].dirIndex)
+        assertEquals(0, unit0.includeFiles[0].fileSize)
+        assertEquals(0, unit0.includeFiles[0].lastModified)
         assertEquals(1.toUByte(), unit0.maximumInstructionsLength)
         assertEquals(1.toUByte(), unit0.maximumOperationsPerInstruction)
         assertEquals(1.toUByte(), unit0.defaultIsStatement)
@@ -1897,11 +1897,11 @@ class WasmParserTests {
         assertEquals("system/lib/libc/musl/src/string", unit16.includeDirectories[0])
         assertEquals("system/lib/libc/musl/src/include/../../include", unit16.includeDirectories[1])
         assertEquals("cache/sysroot/include/bits", unit16.includeDirectories[2])
-        assertEquals(4, unit16.fileNames.size)
-        assertEquals("strdup.c", unit16.fileNames[0].fileName)
-        assertEquals("string.h", unit16.fileNames[1].fileName)
-        assertEquals("alltypes.h", unit16.fileNames[2].fileName)
-        assertEquals("stdlib.h", unit16.fileNames[3].fileName)
+        assertEquals(4, unit16.includeFiles.size)
+        assertEquals("strdup.c", unit16.includeFiles[0].fileName)
+        assertEquals("string.h", unit16.includeFiles[1].fileName)
+        assertEquals("alltypes.h", unit16.includeFiles[2].fileName)
+        assertEquals("stdlib.h", unit16.includeFiles[3].fileName)
     }
 
     @OptIn(ExperimentalUnsignedTypes::class)
@@ -1989,11 +1989,59 @@ class WasmParserTests {
 
     }
 
+    /**
+     * 0:user@DE-UNIT-1497(0)# dwarfdump --lookup=0x39  utf8-c.dwarf5.wasm
+     * utf8-c.dwarf5.wasm: Error in creating MCRegInfo
+     * utf8-c.dwarf5.wasm:     file format WASM
+     * 0x00000000: Compile Unit: length = 0x0000006b, format = DWARF32, version = 0x0005, unit_type = DW_UT_compile, abbr_offset = 0x0000, addr_size = 0x04 (next unit at 0x0000006f)
+     *
+     * 0x0000000c: DW_TAG_compile_unit
+     *               DW_AT_producer   ("clang version 22.0.0git (https:/github.com/llvm/llvm-project c4e1bca407f4cca7644937c117890fad157fec4b)")
+     *               DW_AT_language   (DW_LANG_C11)
+     *               DW_AT_name       ("utf8.c")
+     *               DW_AT_str_offsets_base   (0x00000008)
+     *               DW_AT_stmt_list  (0x00000000)
+     *               DW_AT_comp_dir   ("/Users/user/ws/Hexana/wasmParser/src/commonTest/resources/c")
+     *               DW_AT_low_pc     (0x00000009)
+     *               DW_AT_high_pc    (0x00000053)
+     *               DW_AT_addr_base  (0x00000008)
+     *
+     * 0x00000058:   DW_TAG_subprogram
+     *                 DW_AT_low_pc   (0x00000009)
+     *                 DW_AT_high_pc  (0x00000053)
+     *                 DW_AT_frame_base       (DW_OP_WASM_location 0x0 0x0, DW_OP_stack_value)
+     *                 DW_AT_name     ("main")
+     *                 DW_AT_decl_file        ("/Users/user/ws/Hexana/wasmParser/src/commonTest/resources/c/utf8.c")
+     *                 DW_AT_decl_line        (10)
+     *                 DW_AT_prototyped       (true)
+     *                 DW_AT_type     (0x0000006a "int")
+     *                 DW_AT_external (true)
+     * Line info: file 'utf8.c', line 11, column 3, start file 'utf8.c', start line 10
+     */
+    @OptIn(ExperimentalUnsignedTypes::class)
+    @Test
+    fun testV5LocationByOffset() = runTest {
+        val buffer = resourceAsByteBuffer("c/utf8-c.dwarf5.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
+        val accessor = WasmDwarfAccessor(wasmModule as BaseModule)
+        val resolver = DwarfSourceLocationResolver(accessor)
+        val location = with(resolver) {
+            buffer.resolveLocation(0x39)
+        }
+        assertNotNull(location)
+        assertEquals(10, location.line)
+        assertEquals(3, location.column)
+        assertTrue(location.file.endsWith("utf8.c"))
+    }
+
     @Test
     fun `#77 NIE on go-wasm module`() = runTest {
         val buffer = resourceAsByteBuffer("wasm-component-experiment-2/repl-api.wasm")
         val wasmParseResult = WasmParser().parse(buffer)
         assertIs<WasmParseSuccess>(wasmParseResult)
+
         val wasmModule = wasmParseResult.wasmModule as WasmComponent
         val exports = wasmModule.exportSection.flatMap {
             with(it) {
