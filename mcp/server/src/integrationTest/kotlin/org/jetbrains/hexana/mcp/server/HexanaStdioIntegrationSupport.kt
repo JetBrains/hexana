@@ -77,6 +77,7 @@ internal class HexanaInstalledStdioClient private constructor(
             val process = withContext(Dispatchers.IO) {
                 ProcessBuilder(command)
                     .directory(installDir.toFile())
+                    .useCurrentJvm(logger)
                     .start()
             }
             logger.info("STDIO process started with pid={}", process.pid())

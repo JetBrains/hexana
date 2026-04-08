@@ -78,6 +78,7 @@ internal class HexanaInstalledServer private constructor(
             val process = withContext(Dispatchers.IO) {
                 ProcessBuilder(command)
                     .directory(installDir.toFile())
+                    .useCurrentJvm(logger)
                     .start()
             }
             logger.info("Process started with pid={}", process.pid())
