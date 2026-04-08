@@ -25,6 +25,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.intellij.execution.ProgramRunnerUtil
+import com.intellij.execution.RunManager
+import com.intellij.execution.configurations.ConfigurationTypeUtil
+import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.icons.AllIcons
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
@@ -51,12 +56,21 @@ import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.HexanaSourceLocationProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.run.WasmConfigurationFactory
+import org.jetbrains.hexana.run.WasmRunConfiguration
+import org.jetbrains.hexana.run.WasmRunConfigurationType
+import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wat.psi.getDataByIndex
 import org.jetbrains.hexana.wat.psi.getDefinedFunctionByIndex
 import org.jetbrains.jewel.foundation.modifier.onHover
+import org.jetbrains.jewel.ui.component.Icon
+import org.jetbrains.jewel.ui.component.IconButton
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.Tooltip
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import java.awt.datatransfer.StringSelection
 import java.nio.CharBuffer
 import java.nio.charset.CharsetDecoder
@@ -339,6 +353,17 @@ internal fun HexViewer(
         }
 
 
+        val isRunnable = remember(binaryProvider) {
+            if (binaryProvider is WasmBinaryProvider) {
+                binaryProvider.exports.any { export ->
+                    export is WasmFunctionExportRecordEntry &&
+                        (export.name == "_start" || export.name == "_initialize")
+                }
+            } else {
+                false
+            }
+        }
+
         Column(modifier = Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 if (showOffsets) {
@@ -346,9 +371,24 @@ internal fun HexViewer(
                         modifier = Modifier
                             .width(offsetWidth)
                             .background(HexanaTheme.backgroundColor)
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Text(" ", style = TextStyle(fontFamily = FontFamily.Monospace))
+                        if (isRunnable) {
+                            Tooltip(tooltip = { Text("Run Wasm module") }) {
+                                IconButton(onClick = {
+                                    runWasmFile(binaryProvider, state)
+                                }) {
+                                    Icon(
+                                        AllIconsKeys.Actions.Execute,
+                                        contentDescription = "Run",
+                                        iconClass = AllIcons::class.java,
+                                    )
+                                }
+                            }
+                        } else {
+                            Text(" ", style = TextStyle(fontFamily = FontFamily.Monospace))
+                        }
                     }
                 }
                 Box(
@@ -837,6 +877,31 @@ fun openInWat(state: HexViewStateHolder, findElement: (file: PsiFile) -> PsiElem
     }
 }
 
+
+private fun runWasmFile(binaryProvider: BinaryProvider, state: HexViewStateHolder) {
+    val project = state.project
+    val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return
+    val runManager = RunManager.getInstance(project)
+    val configurationType = ConfigurationTypeUtil.findConfigurationType(WasmRunConfigurationType::class.java)
+    val factory = configurationType.configurationFactories.first { it is WasmConfigurationFactory }
+
+    // Reuse existing configuration for this file if one exists
+    val existing = runManager.allSettings.firstOrNull { settings ->
+        settings.type == configurationType &&
+            (settings.configuration as? WasmRunConfiguration)?.wasmFilePath == file.path
+    }
+
+    val settings = existing ?: runManager.createConfiguration(file.nameWithoutExtension, factory).also { newSettings ->
+        (newSettings.configuration as WasmRunConfiguration).apply {
+            wasmFilePath = file.path
+            workingDirectory = file.parent?.path ?: ""
+        }
+        runManager.addConfiguration(newSettings)
+    }
+
+    runManager.selectedConfiguration = settings
+    ProgramRunnerUtil.executeConfiguration(settings, DefaultRunExecutor.getRunExecutorInstance())
+}
 
 fun getUtf8CharacterAtIndex(buf: CommonByteBuffer, index: Int): String? {
     val bufferPosition = buf.position()
