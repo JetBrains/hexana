@@ -7,6 +7,8 @@ import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
 import io.ktor.server.cio.*
 import io.ktor.server.engine.*
 import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
 import io.modelcontextprotocol.kotlin.sdk.server.mcpStatelessStreamableHttp
 import kotlinx.coroutines.CompletableDeferred
@@ -107,6 +109,11 @@ private suspend fun runHttp(command: HexanaCommand.Http) {
     embeddedServer(CIO, host = command.host, port = command.port) {
         if (localOnlyBinding) {
             install(localOriginValidationPlugin(command.endpoint, command.host, command.port))
+        }
+        routing {
+            get("/healthz") {
+                call.respondText("OK", ContentType.Text.Plain)
+            }
         }
         mcpStatelessStreamableHttp(
             path = command.endpoint,

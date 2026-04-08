@@ -23,6 +23,7 @@ internal class HexanaInstalledServer private constructor(
 ) {
     private val logger = LoggerFactory.getLogger(HexanaInstalledServer::class.java)
 
+    val origin: String = "http://127.0.0.1:$port"
     val baseUrl: String = "http://127.0.0.1:$port$endpoint"
 
     val stdout: String
