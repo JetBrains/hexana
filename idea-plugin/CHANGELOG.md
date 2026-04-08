@@ -13,6 +13,7 @@
 ### Removed
 
 ### Fixed
+- [IJPL-242167 IAE: WasmModuleKt.fromSections via WasmIndex](https://youtrack.jetbrains.com/issue/IJPL-242167)
 
 ### Security
 
