@@ -8,6 +8,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.rememberTextMeasurer
+import com.intellij.openapi.application.invokeLater
+import com.intellij.openapi.application.runReadActionBlocking
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.ui.components.Table
@@ -16,7 +18,6 @@ import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
 import org.jetbrains.hexana.ui.panel.scrollHexViewTo
 import org.jetbrains.hexana.ui.panel.universalQualifiedNameMeasure
-import org.jetbrains.hexana.wasm.components.ComponentSortIndex
 
 @Composable
 fun WasmComponentPanelExports( wasmBinaryProvider: WasmComponentBinaryProvider,
@@ -45,7 +46,11 @@ fun WasmComponentPanelExports( wasmBinaryProvider: WasmComponentBinaryProvider,
             listOfNotNull(
                 ContextMenuItem("Navigate to WIT definition") {
                     val exportRecord = exports[rowIndex]
-                    navigateToWitDefinition(exportRecord.exportName, state.project)
+                    invokeLater {
+                        runReadActionBlocking {
+                            navigateToWitDefinition(exportRecord.exportName, state.project)
+                        }
+                    }
                 }
             )}) { rowIndex ->
         val exportRecords = exports[rowIndex] ?: return@Table

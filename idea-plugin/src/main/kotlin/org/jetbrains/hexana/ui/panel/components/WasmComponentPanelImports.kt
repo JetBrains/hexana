@@ -7,6 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.rememberTextMeasurer
+import com.intellij.openapi.application.invokeLater
+import com.intellij.openapi.application.runReadActionBlocking
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.ui.components.Table
@@ -40,10 +42,18 @@ internal fun WasmComponentPanelImports(
         onRowContextMenu = { rowIndex ->
             listOfNotNull(
                 ContextMenuItem("Navigate to WASM definition") {
-                    navigateToWasmDefinition(imports[rowIndex].importName, state.project)
+                    invokeLater {
+                        runReadActionBlocking {
+                            navigateToWasmDefinition(imports[rowIndex].importName, state.project)
+                        }
+                    }
                 },
                 ContextMenuItem("Navigate to WIT definition") {
-                    navigateToWitDefinition(imports[rowIndex].importName, state.project)
+                    invokeLater {
+                        runReadActionBlocking {
+                            navigateToWitDefinition(imports[rowIndex].importName, state.project)
+                        }
+                    }
                 }
             )}) { rowIndex ->
         val importRecord = imports[rowIndex] ?: return@Table
