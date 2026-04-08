@@ -2,6 +2,7 @@ import java.util.*
 
 plugins {
     application
+    alias(libs.plugins.jib)
     alias(libs.plugins.kotlin.jvm)
 }
 
@@ -50,6 +51,46 @@ dependencies {
 application {
     mainClass = "org.jetbrains.hexana.mcp.server.MainKt"
     applicationDefaultJvmArgs = listOf("-Dhexana.version=$version")
+}
+
+val jibTargetImage = providers.gradleProperty("hexanaMcpImage")
+    .orElse("example.invalid/hexana/mcp-server:$version")
+val jibBaseImage = providers.gradleProperty("hexanaMcpBaseImage")
+    .orElse("eclipse-temurin:21-jre")
+val jibHttpPort = providers.gradleProperty("hexanaMcpHttpPort")
+    .orElse("8080")
+val jibHttpEndpoint = providers.gradleProperty("hexanaMcpHttpEndpoint")
+    .orElse("/mcp")
+val jibLogLevel = providers.gradleProperty("hexanaMcpLogLevel")
+    .orElse("info")
+
+jib {
+    from {
+        image = jibBaseImage.get()
+    }
+    to {
+        image = jibTargetImage.get()
+    }
+    container {
+        mainClass = application.mainClass.get()
+        appRoot = "/opt/hexana-mcp"
+        format = com.google.cloud.tools.jib.api.buildplan.ImageFormat.OCI
+        jvmFlags = listOf("-Dhexana.version=$version")
+        args = listOf(
+            "http",
+            "--host", "0.0.0.0",
+            "--port", jibHttpPort.get(),
+            "--endpoint", jibHttpEndpoint.get(),
+            "--allow-public-bind",
+            "--log-level", jibLogLevel.get()
+        )
+        ports = listOf(jibHttpPort.get())
+        labels = mapOf(
+            "org.opencontainers.image.title" to "hexana-mcp-server",
+            "org.opencontainers.image.version" to version.toString(),
+            "org.opencontainers.image.description" to "Standalone Hexana MCP server for WebAssembly inspection."
+        )
+    }
 }
 
 tasks.jar {
