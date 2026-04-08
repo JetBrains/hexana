@@ -66,7 +66,10 @@ class WasmParser {
                 }
             }
             sections.add(wasmSection)
-            buffer.position(wasmSection.sectionOffset + wasmSection.sectionSize)
+            val nextIndex = wasmSection.sectionOffset + wasmSection.sectionSize
+            if (nextIndex >= buffer.limit())
+                break
+            buffer.position(nextIndex)
         }
 
         val wasmModule = fromSections(version, layer, sections) ?: return WasmParseFailure()
