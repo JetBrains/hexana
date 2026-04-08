@@ -171,6 +171,9 @@
         <lang.formatter language="wit" implementationClass="org.jetbrains.hexana.wit.formatter.WitFormattingBuilderModel"/>
         <lang.lineWrapStrategy language="wit" implementationClass="org.jetbrains.hexana.wit.formatter.WitLineWrapPositionStrategy"/>
 
+        <configurationType implementation="org.jetbrains.hexana.run.WasmRunConfigurationType"/>
+        <runConfigurationProducer implementation="org.jetbrains.hexana.run.WasmRunConfigurationProducer"/>
+
     </extensions>
 
     <actions>

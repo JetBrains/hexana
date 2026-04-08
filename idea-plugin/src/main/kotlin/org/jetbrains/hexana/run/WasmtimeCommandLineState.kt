@@ -1,0 +1,57 @@
+package org.jetbrains.hexana.run
+
+import com.intellij.execution.configurations.CommandLineState
+import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.OSProcessHandler
+import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.process.ProcessTerminatedListener
+import com.intellij.execution.runners.ExecutionEnvironment
+import java.io.File
+
+class WasmtimeCommandLineState(
+    private val configuration: WasmRunConfiguration,
+    environment: ExecutionEnvironment,
+) : CommandLineState(environment) {
+
+    override fun startProcess(): ProcessHandler {
+        val wasmtimePath = configuration.wasmtimePath.ifBlank { resolveDefaultWasmtimePath() }
+
+        val commandLine = GeneralCommandLine().apply {
+            exePath = wasmtimePath
+            addParameter("run")
+
+            val options = configuration.wasmtimeOptions.trim()
+            if (options.isNotEmpty()) {
+                addParameters(options.split("\\s+".toRegex()))
+            }
+
+            addParameter(configuration.wasmFilePath)
+
+            val args = configuration.programArguments.trim()
+            if (args.isNotEmpty()) {
+                addParameters(args.split("\\s+".toRegex()))
+            }
+
+            val workDir = configuration.workingDirectory.ifBlank { null }
+            if (workDir != null) {
+                withWorkDirectory(workDir)
+            }
+
+            withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+        }
+
+        val handler = OSProcessHandler(commandLine)
+        ProcessTerminatedListener.attach(handler)
+        return handler
+    }
+
+    companion object {
+        val DEFAULT_WASMTIME_PATH: String =
+            System.getProperty("user.home") + File.separator + ".wasmtime" + File.separator + "bin" + File.separator + "wasmtime"
+
+        fun resolveDefaultWasmtimePath(): String {
+            val defaultPath = DEFAULT_WASMTIME_PATH
+            return if (File(defaultPath).exists()) defaultPath else "wasmtime"
+        }
+    }
+}
