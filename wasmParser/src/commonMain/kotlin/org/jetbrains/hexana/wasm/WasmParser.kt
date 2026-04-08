@@ -69,7 +69,7 @@ class WasmParser {
             buffer.position(wasmSection.sectionOffset + wasmSection.sectionSize)
         }
 
-        val wasmModule = fromSections(version, layer, sections)
+        val wasmModule = fromSections(version, layer, sections) ?: return WasmParseFailure()
 
         return WasmParseSuccess(wasmModule)
     }

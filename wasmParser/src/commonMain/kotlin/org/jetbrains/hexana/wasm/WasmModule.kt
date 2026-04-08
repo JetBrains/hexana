@@ -80,11 +80,11 @@ class ComponentModule(
 }
 
 
-fun fromSections(version: UShort, layer: UShort, sections: List<WasmSection>): WasmComponentBase<*, *> {
+fun fromSections(version: UShort, layer: UShort, sections: List<WasmSection>): WasmComponentBase<*, *>? {
     return when {
         isCoreVersion(version, layer) -> coreWasmModuleFromSections(sections)
         isComponentsVersion(version, layer) -> componentModuleFromSections(version, layer, sections)
-        else -> throw IllegalArgumentException("Unknown version: $version, layer: $layer")
+        else -> null
     }
 }
 
