@@ -79,6 +79,10 @@ open class WasmComponentBinaryProvider(override val bytes: CommonByteBuffer): Bi
         }
     }
 
+    val sizeAnalysis: SizeNode.Module? by lazy {
+        wasmModule?.let { SizeAnalysisBuilder(bytes, it).buildTree() }
+    }
+
     val instances: List<InstanceExpression> by lazy {
         val instanceSections = wasmModule?.instanceSection ?: return@lazy emptyList()
         instanceSections.flatMap {

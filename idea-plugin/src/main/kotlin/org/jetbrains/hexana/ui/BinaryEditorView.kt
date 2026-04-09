@@ -22,6 +22,7 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.panel.Panel
 import org.jetbrains.hexana.ui.panel.WasmPanelFunctions
 import org.jetbrains.hexana.ui.panel.WasmPanelCustom
+import org.jetbrains.hexana.ui.panel.WasmPanelSize
 import org.jetbrains.hexana.ui.panel.WasmPanelData
 import org.jetbrains.hexana.ui.panel.WasmPanelExports
 import org.jetbrains.hexana.ui.panel.WasmPanelImports
@@ -134,6 +135,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Imports") { WasmPanelImports(this, state) },
                 Panel("Functions") { WasmPanelFunctions(this, state) },
                 Panel("Custom") { WasmPanelCustom(this, state) },
+                Panel("Size") { WasmPanelSize(this, state) },
                 Panel("Wat") { WasmPanelWat(this, state) },
                 *dwarfPanels(this, state).toTypedArray()
             ) else {
@@ -145,6 +147,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Exports") { WasmComponentPanelExports(this, state) },
                 Panel("Imports") { WasmComponentPanelImports(this, state) },
                 Panel("Modules") { WasmComponentPanelModules(this, state) },
+                Panel("Size") { WasmPanelSize(this, state) },
                 Panel("Wat") { WasmPanelWat(this, state) },
             ) else {
                 errorPanel(state)
@@ -157,6 +160,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Imports") { WasmPanelImports(this, state) },
                 Panel("Functions") { WasmPanelFunctions(this, state) },
                 Panel("Custom") { WasmPanelCustom(this, state) },
+                Panel("Size") { WasmPanelSize(this, state) },
                 *dwarfPanels(this, state).toTypedArray()
             ) else emptyArray()
         }
@@ -165,6 +169,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Exports") { WasmComponentPanelExports(this, state) },
                 Panel("Imports") { WasmComponentPanelImports(this, state) },
                 Panel("Modules") { WasmComponentPanelModules(this, state) },
+                Panel("Size") { WasmPanelSize(this, state) },
             ) else emptyArray()
         }
 
