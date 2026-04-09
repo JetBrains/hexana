@@ -5,6 +5,8 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
+import org.jetbrains.hexana.wasm.analysis.SizeAnalysisBuilder
+import org.jetbrains.hexana.wasm.analysis.SizeNode
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
@@ -157,10 +159,14 @@ internal fun buildComponentTypeIndex(sections: List<WasmSection>, buffer: Common
 }
 
 open class WasmBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProvider {
-    val wasmModule = when (val parseResult = WasmParser().parse(bytes)) {
-        is WasmParseSuccess -> parseResult.wasmModule as? WasmModule
+    private val parseResult = WasmParser().parse(bytes)
+
+    val parsedModule = when (parseResult) {
+        is WasmParseSuccess -> parseResult.wasmModule
         else -> null
     }
+
+    val wasmModule = parsedModule as? WasmModule
 
     fun canProvideWasmModule() = wasmModule != null
 
@@ -225,6 +231,14 @@ open class WasmBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProv
         val signatures = funs.mapNotNull { types.getOrNull(it) }
 
         signatures
+    }
+
+    val sizeAnalysis: SizeNode.Module? by lazy {
+        parsedModule?.let { SizeAnalysisBuilder(bytes, it).buildTree() }
+    }
+
+    val sizeAnalysisBuilder: SizeAnalysisBuilder? by lazy {
+        parsedModule?.let { SizeAnalysisBuilder(bytes, it) }
     }
 
     fun getCodeRecordByIndex(index: Int): WasmCodeRecord? {
