@@ -7,6 +7,34 @@ import kotlin.test.assertEquals
 
 class HexanaMcpServerSchemaTest {
     @Test
+    fun wasmInputPropertiesDescribeRuntimeValidation() {
+        val summarizeModuleSchema = createHexanaMcpServer()
+            .tools
+            .getValue("summarize_module")
+            .tool
+            .inputSchema
+            .properties
+            ?.jsonObject
+            ?: error("Missing summarize_module input schema properties")
+
+        assertEquals(
+            "Path to a local `.wasm` file readable by the Hexana MCP server. " +
+                "Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`.",
+            summarizeModuleSchema.getValue("path").jsonObject.getValue("description").jsonPrimitive.content
+        )
+        assertEquals(
+            "Base64-encoded `.wasm` bytes. " +
+                "Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`.",
+            summarizeModuleSchema.getValue("bytesBase64").jsonObject.getValue("description").jsonPrimitive.content
+        )
+        assertEquals(
+            "Raw `.wasm` bytes as integers in the range 0..255. " +
+                "Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`.",
+            summarizeModuleSchema.getValue("bytes").jsonObject.getValue("description").jsonPrimitive.content
+        )
+    }
+
+    @Test
     fun listExportedFunctionsSchemaMakesInclusiveBoundsExplicit() {
         val listExportedFunctionsSchema = createHexanaMcpServer()
             .tools

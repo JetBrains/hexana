@@ -21,6 +21,7 @@ import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.*
 import kotlin.io.path.extension
 
 interface HexanaAnalysisService {
@@ -180,10 +181,8 @@ class DefaultHexanaAnalysisService(
                 "Unsupported input kind: uri"
             )
 
-            is WasmInput.InlineBytes -> throw HexanaAnalysisException(
-                HexanaAnalysisErrorCode.UNSUPPORTED_INPUT_KIND,
-                "Unsupported input kind: inline_bytes"
-            )
+            is WasmInput.InlineBytes -> loadFromInlineBytes(input.base64)
+            is WasmInput.RawBytes -> loadFromRawBytes(input.bytes)
         }
     }
 
@@ -214,13 +213,42 @@ class DefaultHexanaAnalysisService(
             )
         }
 
+        return loadFromBytes(bytes)
+    }
+
+    private fun loadFromInlineBytes(base64: String): LoadedWasm {
+        if (base64.isBlank()) {
+            throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Inline bytes must not be blank")
+        }
+        requireInlineBase64Size(base64)
+
+        val bytes = try {
+            Base64.getDecoder().decode(base64)
+        } catch (_: IllegalArgumentException) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INVALID_INPUT,
+                "Inline bytes must be valid base64"
+            )
+        }
+
+        requireInlineByteCount(bytes.size)
+        return loadFromBytes(bytes)
+    }
+
+    private fun loadFromRawBytes(bytes: ByteArray): LoadedWasm {
+        requireInlineByteCount(bytes.size)
+        return loadFromBytes(bytes)
+    }
+
+    private fun loadFromBytes(bytes: ByteArray): LoadedWasm {
         val buffer = bytes.toCommonByteBuffer()
         val module = parser.parseOrThrow(buffer)
         return LoadedWasm(buffer, module)
     }
 
     private fun requireInlineBase64Size(base64: String) {
-        val estimatedDecodedSize = ((base64.length.toLong() + 3L) / 4L) * 3L
+        val paddingBytes = base64.takeLastWhile { it == '=' }.length.coerceAtMost(2)
+        val estimatedDecodedSize = ((base64.length.toLong() + 3L) / 4L) * 3L - paddingBytes
         if (estimatedDecodedSize > maxInlineInputBytes.toLong()) {
             throw inlineBytesTooLarge()
         }
@@ -240,7 +268,6 @@ class DefaultHexanaAnalysisService(
             throw fileTooLarge()
         }
     }
-
     private fun requireInlineByteCount(size: Int) {
         if (size > maxInlineInputBytes) {
             throw inlineBytesTooLarge()
@@ -253,7 +280,6 @@ class DefaultHexanaAnalysisService(
             "File exceeds maximum size of $maxFileInputBytes bytes"
         )
     }
-
     private fun inlineBytesTooLarge(): HexanaAnalysisException {
         return HexanaAnalysisException(
             HexanaAnalysisErrorCode.INVALID_INPUT,

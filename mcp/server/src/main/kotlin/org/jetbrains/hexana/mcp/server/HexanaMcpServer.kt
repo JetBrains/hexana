@@ -3,9 +3,11 @@ package org.jetbrains.hexana.mcp.server
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.types.*
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.HexanaAnalysisService
 import org.jetbrains.hexana.mcp.HexanaAnalysisServices
 
@@ -25,8 +27,8 @@ fun createHexanaMcpServer(
         addTool(
             tool = Tool(
                 name = "summarize_module",
-                description = "Summarize a local WebAssembly module from a `.wasm` file path.",
-                inputSchema = pathToolSchema()
+                description = "Summarize a WebAssembly module provided as a local `.wasm` path or inline bytes.",
+                inputSchema = wasmInputToolSchema()
             )
         ) { request: CallToolRequest ->
             toolHandlers.summarizeModule(request.arguments)
@@ -35,8 +37,8 @@ fun createHexanaMcpServer(
         addTool(
             tool = Tool(
                 name = "list_imports",
-                description = "List imported functions declared by a local `.wasm` module.",
-                inputSchema = pathToolSchema()
+                description = "List imported functions declared by a `.wasm` module from a path or inline bytes.",
+                inputSchema = wasmInputToolSchema()
             )
         ) { request: CallToolRequest ->
             toolHandlers.listImports(request.arguments)
@@ -45,8 +47,8 @@ fun createHexanaMcpServer(
         addTool(
             tool = Tool(
                 name = "list_exports",
-                description = "List exports declared by a local `.wasm` module.",
-                inputSchema = pathToolSchema()
+                description = "List exports declared by a `.wasm` module from a path or inline bytes.",
+                inputSchema = wasmInputToolSchema()
             )
         ) { request: CallToolRequest ->
             toolHandlers.listExports(request.arguments)
@@ -55,7 +57,7 @@ fun createHexanaMcpServer(
         addTool(
             tool = Tool(
                 name = "list_functions",
-                description = "List functions from a local `.wasm` module using offset/limit pagination.",
+                description = "List functions from a `.wasm` module using offset/limit pagination.",
                 inputSchema = listFunctionsSchema()
             )
         ) { request: CallToolRequest ->
@@ -65,7 +67,7 @@ fun createHexanaMcpServer(
         addTool(
             tool = Tool(
                 name = "list_exported_functions",
-                description = "List exported functions from a local `.wasm` module using a closed export-range slice.",
+                description = "List exported functions from a `.wasm` module using a closed export-range slice.",
                 inputSchema = listExportedFunctionsSchema()
             )
         ) { request: CallToolRequest ->
@@ -85,8 +87,8 @@ fun createHexanaMcpServer(
         addTool(
             tool = Tool(
                 name = "list_globals",
-                description = "List imported and defined globals declared by a local `.wasm` module.",
-                inputSchema = pathToolSchema()
+                description = "List imported and defined globals declared by a `.wasm` module.",
+                inputSchema = wasmInputToolSchema()
             )
         ) { request: CallToolRequest ->
             toolHandlers.listGlobals(request.arguments)
@@ -95,8 +97,8 @@ fun createHexanaMcpServer(
         addTool(
             tool = Tool(
                 name = "list_types",
-                description = "List type entries declared by a local `.wasm` module.",
-                inputSchema = pathToolSchema()
+                description = "List type entries declared by a `.wasm` module.",
+                inputSchema = wasmInputToolSchema()
             )
         ) { request: CallToolRequest ->
             toolHandlers.listTypes(request.arguments)
@@ -105,8 +107,8 @@ fun createHexanaMcpServer(
         addTool(
             tool = Tool(
                 name = "list_memory",
-                description = "List imported and defined memories declared by a local `.wasm` module.",
-                inputSchema = pathToolSchema()
+                description = "List imported and defined memories declared by a `.wasm` module.",
+                inputSchema = wasmInputToolSchema()
             )
         ) { request: CallToolRequest ->
             toolHandlers.listMemory(request.arguments)
@@ -185,8 +187,8 @@ fun createHexanaMcpServer(
         addTool(
             tool = Tool(
                 name = "list_element_segments",
-                description = "List element segments declared by a local `.wasm` module.",
-                inputSchema = pathToolSchema()
+                description = "List element segments declared by a `.wasm` module.",
+                inputSchema = wasmInputToolSchema()
             )
         ) { request: CallToolRequest ->
             toolHandlers.listElementSegments(request.arguments)
@@ -194,125 +196,151 @@ fun createHexanaMcpServer(
     }
 }
 
-private fun pathToolSchema(): ToolSchema {
+private const val WASM_INPUT_RUNTIME_VALIDATION =
+    "Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."
+
+private fun wasmInputToolSchema(
+    required: List<String> = emptyList(),
+    extraProperties: JsonObjectBuilder.() -> Unit = {}
+): ToolSchema {
     return ToolSchema(
         properties = buildJsonObject {
-            put("path", pathPropertySchema())
+            putWasmInputProperties()
+            extraProperties()
         },
-        required = listOf("path")
+        required = required
     )
 }
 
 private fun listFunctionsSchema(): ToolSchema {
-    return ToolSchema(
-        properties = buildJsonObject {
-            put("path", pathPropertySchema())
-            put(
-                "offset",
-                integerPropertySchema(
-                    description = "Zero-based offset into the unified function index space.",
-                    minimum = 0
-                )
+    return wasmInputToolSchema {
+        put(
+            "offset",
+            integerPropertySchema(
+                description = "Zero-based offset into the unified function index space.",
+                minimum = 0
             )
-            put(
-                "limit",
-                integerPropertySchema(
-                    description = "Maximum number of functions to return.",
-                    minimum = 1
-                )
+        )
+        put(
+            "limit",
+            integerPropertySchema(
+                description = "Maximum number of functions to return.",
+                minimum = 1
             )
-        },
-        required = listOf("path")
-    )
+        )
+    }
 }
 
 private fun listExportedFunctionsSchema(): ToolSchema {
-    return ToolSchema(
-        properties = buildJsonObject {
-            put("path", pathPropertySchema())
-            put(
-                "entriesRange",
-                closedRangePropertySchema(
-                    "Closed zero-based export slice. Both `from` and `to` are required and inclusive."
-                )
+    return wasmInputToolSchema(required = listOf("entriesRange")) {
+        put(
+            "entriesRange",
+            closedRangePropertySchema(
+                "Closed zero-based export slice. Both `from` and `to` are required and inclusive."
             )
-        },
-        required = listOf("path", "entriesRange")
-    )
+        )
+    }
 }
 
 private fun pathAndIndicesSchema(indicesDescription: String): ToolSchema {
-    return ToolSchema(
-        properties = buildJsonObject {
-            put("path", pathPropertySchema())
-            put(
-                "indices",
-                buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("description", JsonPrimitive(indicesDescription))
-                    put(
-                        "items",
-                        buildJsonObject {
-                            put("type", JsonPrimitive("integer"))
-                            put("minimum", JsonPrimitive(0))
-                        }
-                    )
-                }
-            )
-        },
-        required = listOf("path", "indices")
-    )
+    return wasmInputToolSchema(required = listOf("indices")) {
+        put(
+            "indices",
+            buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("description", JsonPrimitive(indicesDescription))
+                put(
+                    "items",
+                    buildJsonObject {
+                        put("type", JsonPrimitive("integer"))
+                        put("minimum", JsonPrimitive(0))
+                    }
+                )
+            }
+        )
+    }
 }
 
 private fun listDataSchema(): ToolSchema {
-    return ToolSchema(
-        properties = buildJsonObject {
-            put("path", pathPropertySchema())
-            put(
-                "entriesRange",
-                closedRangePropertySchema(
-                    "Closed zero-based data-segment slice. Both `from` and `to` are required and inclusive."
-                )
+    return wasmInputToolSchema(required = listOf("entriesRange")) {
+        put(
+            "entriesRange",
+            closedRangePropertySchema(
+                "Closed zero-based data-segment slice. Both `from` and `to` are required and inclusive."
             )
-        },
-        required = listOf("path", "entriesRange")
-    )
+        )
+    }
 }
 
 private fun listDataSegmentsSchema(): ToolSchema {
-    return ToolSchema(
-        properties = buildJsonObject {
-            put("path", pathPropertySchema())
-            put(
-                "segmentRange",
-                halfOpenRangePropertySchema(
-                    description = "Half-open zero-based data-segment slice. `from` is required; `to` is optional and treated as exclusive."
-                )
+    return wasmInputToolSchema(required = listOf("segmentRange")) {
+        put(
+            "segmentRange",
+            halfOpenRangePropertySchema(
+                description = "Half-open zero-based data-segment slice. `from` is required; `to` is optional and treated as exclusive."
             )
-            put(
-                "includeExports",
-                booleanPropertySchema("Whether to include exported symbol names alongside segment metadata.")
+        )
+        put(
+            "includeExports",
+            booleanPropertySchema("Whether to include exported symbol names alongside segment metadata.")
+        )
+        put(
+            "includeGlobals",
+            booleanPropertySchema("Whether to include globals referenced by segment offset expressions.")
+        )
+        put(
+            "minByteLength",
+            integerPropertySchema(
+                description = "Optional minimum byte length filter for returned segments.",
+                minimum = 0
             )
-            put(
-                "includeGlobals",
-                booleanPropertySchema("Whether to include globals referenced by segment offset expressions.")
-            )
-            put(
-                "minByteLength",
-                integerPropertySchema(
-                    description = "Optional minimum byte length filter for returned segments.",
-                    minimum = 0
-                )
-            )
-        },
-        required = listOf("path", "segmentRange")
-    )
+        )
+    }
+}
+
+private fun JsonObjectBuilder.putWasmInputProperties() {
+    put("path", pathPropertySchema())
+    put("bytesBase64", bytesBase64PropertySchema())
+    put("bytes", bytesPropertySchema())
 }
 
 private fun pathPropertySchema() = buildJsonObject {
     put("type", JsonPrimitive("string"))
-    put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server."))
+    put(
+        "description",
+        JsonPrimitive(
+            "Path to a local `.wasm` file readable by the Hexana MCP server. $WASM_INPUT_RUNTIME_VALIDATION"
+        )
+    )
 }
+
+private fun bytesBase64PropertySchema() = buildJsonObject {
+    put("type", JsonPrimitive("string"))
+    put(
+        "description",
+        JsonPrimitive("Base64-encoded `.wasm` bytes. $WASM_INPUT_RUNTIME_VALIDATION")
+    )
+    put("maxLength", JsonPrimitive(maxBase64Length(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES)))
+}
+
+private fun bytesPropertySchema() = buildJsonObject {
+    put("type", JsonPrimitive("array"))
+    put(
+        "description",
+        JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. $WASM_INPUT_RUNTIME_VALIDATION")
+    )
+    put(
+        "items",
+        buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("minimum", JsonPrimitive(0))
+            put("maximum", JsonPrimitive(255))
+        }
+    )
+    put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+}
+
+private fun maxBase64Length(maxBytes: Int): Int = ((maxBytes + 2) / 3) * 4
 
 private fun integerPropertySchema(description: String, minimum: Int) = buildJsonObject {
     put("type", JsonPrimitive("integer"))

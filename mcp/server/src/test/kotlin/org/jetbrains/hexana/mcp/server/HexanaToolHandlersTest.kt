@@ -25,6 +25,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.slf4j.Logger
 import java.nio.file.Files
+import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -57,6 +58,55 @@ class HexanaToolHandlersTest {
         val structured = result.structuredContent ?: error("Expected structured content")
         assertEquals(structured, Json.parseToJsonElement(textPayload.text).jsonObject)
         assertEquals(1, structured["functions"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun summarizeModuleAcceptsInlineByteArray() {
+        val wasm = createWasmFile(
+            "summary-inline-array.wasm",
+            """
+            (module
+              (memory 1)
+              (func (export "main")))
+            """.trimIndent()
+        )
+
+        val result = handlers.summarizeModule(
+            buildJsonObject {
+                put("bytes", buildJsonArray {
+                    Files.readAllBytes(wasm).forEach { add(JsonPrimitive(it.toInt() and 0xFF)) }
+                })
+            }
+        )
+
+        assertTrue(result.isError != true)
+        assertEquals(1, result.structuredContent!!["functions"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun listImportsAcceptsInlineBase64Bytes() {
+        val wasm = createWasmFile(
+            "imports-inline-base64.wasm",
+            """
+            (module
+              (import "env" "print" (func (param i32)))
+              (func (export "main")
+                i32.const 1
+                call 0))
+            """.trimIndent()
+        )
+
+        val result = handlers.listImports(
+            buildJsonObject {
+                put("bytesBase64", JsonPrimitive(Base64.getEncoder().encodeToString(Files.readAllBytes(wasm))))
+            }
+        )
+
+        assertFalse(result.isError == true)
+        assertEquals(
+            "env",
+            result.structuredContent!!["imports"]!!.jsonArray[0].jsonObject["module"]!!.jsonPrimitive.content
+        )
     }
 
     @Test
@@ -189,6 +239,92 @@ class HexanaToolHandlersTest {
         assertEquals(true, result.isError)
         assertEquals("INVALID_INPUT", result.structuredContent?.get("code")?.jsonPrimitive?.content)
         assertEquals("`entriesRange` is required", (result.content.single() as TextContent).text)
+    }
+
+    @Test
+    fun inputValidationRejectsMissingOrConflictingWasmInputs() {
+        val missingInput = handlers.listImports(buildJsonObject {})
+        val conflictingInput = handlers.listImports(
+            buildJsonObject {
+                put("path", JsonPrimitive("/tmp/module.wasm"))
+                put("bytesBase64", JsonPrimitive("AGFzbQ=="))
+            }
+        )
+
+        assertEquals(true, missingInput.isError)
+        assertEquals("INVALID_INPUT", missingInput.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertEquals(
+            "Exactly one of `path`, `bytesBase64`, or `bytes` is required",
+            (missingInput.content.single() as TextContent).text
+        )
+
+        assertEquals(true, conflictingInput.isError)
+        assertEquals("INVALID_INPUT", conflictingInput.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertEquals(
+            "Provide exactly one of `path`, `bytesBase64`, or `bytes`",
+            (conflictingInput.content.single() as TextContent).text
+        )
+    }
+
+    @Test
+    fun inputValidationRejectsOutOfRangeByteValues() {
+        val outOfRange = handlers.listImports(
+            buildJsonObject {
+                put("bytes", buildJsonArray {
+                    add(JsonPrimitive(256))
+                })
+            }
+        )
+        val negative = handlers.listImports(
+            buildJsonObject {
+                put("bytes", buildJsonArray {
+                    add(JsonPrimitive(-1))
+                })
+            }
+        )
+        val nonInteger = handlers.listImports(
+            buildJsonObject {
+                put("bytes", buildJsonArray {
+                    add(JsonPrimitive("bad"))
+                })
+            }
+        )
+        val nullElement = handlers.listImports(
+            buildJsonObject {
+                put("bytes", buildJsonArray {
+                    add(JsonNull)
+                })
+            }
+        )
+        val oversized = HexanaToolHandlers(maxInlineInputBytes = 2).listImports(
+            buildJsonObject {
+                put("bytes", buildJsonArray {
+                    add(JsonPrimitive(0))
+                    add(JsonPrimitive(1))
+                    add(JsonPrimitive(2))
+                })
+            }
+        )
+
+        assertEquals(true, outOfRange.isError)
+        assertEquals("INVALID_INPUT", outOfRange.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertEquals("`bytes[0]` must be between 0 and 255", (outOfRange.content.single() as TextContent).text)
+
+        assertEquals(true, negative.isError)
+        assertEquals("INVALID_INPUT", negative.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertEquals("`bytes[0]` must be between 0 and 255", (negative.content.single() as TextContent).text)
+
+        assertEquals(true, nonInteger.isError)
+        assertEquals("INVALID_INPUT", nonInteger.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertEquals("`bytes[0]` must be an integer", (nonInteger.content.single() as TextContent).text)
+
+        assertEquals(true, nullElement.isError)
+        assertEquals("INVALID_INPUT", nullElement.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertEquals("`bytes[0]` must be an integer", (nullElement.content.single() as TextContent).text)
+
+        assertEquals(true, oversized.isError)
+        assertEquals("INVALID_INPUT", oversized.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertEquals("`bytes` exceeds maximum size of 2 bytes", (oversized.content.single() as TextContent).text)
     }
 
     @Test

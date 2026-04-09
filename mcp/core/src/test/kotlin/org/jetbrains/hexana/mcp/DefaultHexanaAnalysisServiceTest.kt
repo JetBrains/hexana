@@ -5,6 +5,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.nio.file.Files
+import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -35,6 +36,46 @@ class DefaultHexanaAnalysisServiceTest {
         assertEquals(1, result.exports)
         assertEquals(1, result.memories)
         assertEquals(1, result.imports.functions)
+        assertTrue(result.moduleSize > 0)
+    }
+
+    @Test
+    fun summarizeModuleReadsInlineBytesInput() {
+        val wasm = createWasmFile(
+            "summary-inline.wasm",
+            """
+            (module
+              (memory 1)
+              (func (export "main")))
+            """.trimIndent()
+        )
+
+        val result = service.summarizeModule(
+            WasmInput.InlineBytes(Base64.getEncoder().encodeToString(Files.readAllBytes(wasm)))
+        )
+
+        assertEquals(1, result.functions)
+        assertEquals(1, result.exports)
+        assertEquals(1, result.memories)
+        assertTrue(result.moduleSize > 0)
+    }
+
+    @Test
+    fun summarizeModuleReadsRawBytesInput() {
+        val wasm = createWasmFile(
+            "summary-raw-bytes.wasm",
+            """
+            (module
+              (memory 1)
+              (func (export "main")))
+            """.trimIndent()
+        )
+
+        val result = service.summarizeModule(WasmInput.RawBytes(Files.readAllBytes(wasm)))
+
+        assertEquals(1, result.functions)
+        assertEquals(1, result.exports)
+        assertEquals(1, result.memories)
         assertTrue(result.moduleSize > 0)
     }
 
@@ -198,16 +239,62 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
-    fun rejectsUnsupportedInputKinds() {
+    fun rejectsUnsupportedUriInputKind() {
         val uriError = assertFailsWith<HexanaAnalysisException> {
             service.summarizeModule(WasmInput.Uri("file:///tmp/module.wasm"))
         }
-        val inlineError = assertFailsWith<HexanaAnalysisException> {
-            service.summarizeModule(WasmInput.InlineBytes("AGFzbQ=="))
-        }
 
         assertEquals(HexanaAnalysisErrorCode.UNSUPPORTED_INPUT_KIND, uriError.code)
-        assertEquals(HexanaAnalysisErrorCode.UNSUPPORTED_INPUT_KIND, inlineError.code)
+    }
+
+    @Test
+    fun rejectsInvalidInlineBytes() {
+        val invalidBase64 = assertFailsWith<HexanaAnalysisException> {
+            service.summarizeModule(WasmInput.InlineBytes("%%%"))
+        }
+        val blankInlineBytes = assertFailsWith<HexanaAnalysisException> {
+            service.summarizeModule(WasmInput.InlineBytes("   "))
+        }
+        val malformedBase64 = assertFailsWith<HexanaAnalysisException> {
+            service.summarizeModule(WasmInput.InlineBytes("A"))
+        }
+        val oversizedInlineBytes = assertFailsWith<HexanaAnalysisException> {
+            DefaultHexanaAnalysisService(maxInlineInputBytes = 3)
+                .summarizeModule(WasmInput.InlineBytes(Base64.getEncoder().encodeToString(byteArrayOf(0, 1, 2, 3))))
+        }
+        val oversizedRawBytes = assertFailsWith<HexanaAnalysisException> {
+            DefaultHexanaAnalysisService(maxInlineInputBytes = 3)
+                .summarizeModule(WasmInput.RawBytes(byteArrayOf(0, 1, 2, 3)))
+        }
+        val nonWasmInlineBytes = assertFailsWith<HexanaAnalysisException> {
+            service.summarizeModule(
+                WasmInput.InlineBytes(Base64.getEncoder().encodeToString("not wasm".encodeToByteArray()))
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, invalidBase64.code)
+        assertEquals("Inline bytes must be valid base64", invalidBase64.message)
+        assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, blankInlineBytes.code)
+        assertEquals("Inline bytes must not be blank", blankInlineBytes.message)
+        assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, malformedBase64.code)
+        assertEquals("Inline bytes must be valid base64", malformedBase64.message)
+        assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, oversizedInlineBytes.code)
+        assertEquals("Inline bytes exceed maximum size of 3 bytes", oversizedInlineBytes.message)
+        assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, oversizedRawBytes.code)
+        assertEquals("Inline bytes exceed maximum size of 3 bytes", oversizedRawBytes.message)
+        assertEquals(HexanaAnalysisErrorCode.WASM_PARSE_FAILED, nonWasmInlineBytes.code)
+    }
+
+    @Test
+    fun acceptsInlineBytesAtExactConfiguredLimitWhenBase64IsPadded() {
+        val service = DefaultHexanaAnalysisService(maxInlineInputBytes = 8)
+        val minimalWasm = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00)
+
+        val result = service.summarizeModule(
+            WasmInput.InlineBytes(Base64.getEncoder().encodeToString(minimalWasm))
+        )
+
+        assertEquals(8, result.moduleSize)
     }
 
     @Test

@@ -9,30 +9,31 @@ import org.slf4j.LoggerFactory
 
 class HexanaToolHandlers(
     private val analysisService: HexanaAnalysisService = HexanaAnalysisServices.default,
+    private val maxInlineInputBytes: Int = HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES,
     private val logger: Logger = LoggerFactory.getLogger(HexanaToolHandlers::class.java)
 ) {
     fun summarizeModule(arguments: JsonObject?): CallToolResult {
         return execute("summarize_module") {
-            analysisService.summarizeModule(WasmInput.FilePath(arguments.requireString("path")))
+            analysisService.summarizeModule(wasmInput(arguments))
         }
     }
 
     fun listImports(arguments: JsonObject?): CallToolResult {
         return execute("list_imports") {
-            analysisService.listImports(WasmInput.FilePath(arguments.requireString("path")))
+            analysisService.listImports(wasmInput(arguments))
         }
     }
 
     fun listExports(arguments: JsonObject?): CallToolResult {
         return execute("list_exports") {
-            analysisService.listExports(WasmInput.FilePath(arguments.requireString("path")))
+            analysisService.listExports(wasmInput(arguments))
         }
     }
 
     fun listFunctions(arguments: JsonObject?): CallToolResult {
         return execute("list_functions") {
             analysisService.listFunctions(
-                input = WasmInput.FilePath(arguments.requireString("path")),
+                input = wasmInput(arguments),
                 offset = arguments.intOrDefault("offset", 0),
                 limit = arguments.intOrDefault("limit", 200)
             )
@@ -42,7 +43,7 @@ class HexanaToolHandlers(
     fun listExportedFunctions(arguments: JsonObject?): CallToolResult {
         return execute("list_exported_functions") {
             analysisService.listExportedFunctions(
-                input = pathInput(arguments),
+                input = wasmInput(arguments),
                 entriesRange = arguments.requireClosedRange("entriesRange")
             )
         }
@@ -51,7 +52,7 @@ class HexanaToolHandlers(
     fun functionsForIndices(arguments: JsonObject?): CallToolResult {
         return execute("functions_for_indices") {
             analysisService.functionsForIndices(
-                input = pathInput(arguments),
+                input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
             )
         }
@@ -59,26 +60,26 @@ class HexanaToolHandlers(
 
     fun listGlobals(arguments: JsonObject?): CallToolResult {
         return execute("list_globals") {
-            analysisService.listGlobals(pathInput(arguments))
+            analysisService.listGlobals(wasmInput(arguments))
         }
     }
 
     fun listTypes(arguments: JsonObject?): CallToolResult {
         return execute("list_types") {
-            analysisService.listTypes(pathInput(arguments))
+            analysisService.listTypes(wasmInput(arguments))
         }
     }
 
     fun listMemory(arguments: JsonObject?): CallToolResult {
         return execute("list_memory") {
-            analysisService.listMemory(pathInput(arguments))
+            analysisService.listMemory(wasmInput(arguments))
         }
     }
 
     fun getGlobalsForIndices(arguments: JsonObject?): CallToolResult {
         return execute("get_globals_for_indices") {
             analysisService.getGlobalsForIndices(
-                input = pathInput(arguments),
+                input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
             )
         }
@@ -87,7 +88,7 @@ class HexanaToolHandlers(
     fun listData(arguments: JsonObject?): CallToolResult {
         return execute("list_data") {
             analysisService.listData(
-                input = pathInput(arguments),
+                input = wasmInput(arguments),
                 entriesRange = arguments.requireClosedRange("entriesRange")
             )
         }
@@ -97,7 +98,7 @@ class HexanaToolHandlers(
         return execute("list_data_segments") {
             val (from, toExclusive) = arguments.requireHalfOpenRange("segmentRange")
             analysisService.listDataSegments(
-                input = pathInput(arguments),
+                input = wasmInput(arguments),
                 segmentStartInclusive = from,
                 segmentEndExclusive = toExclusive,
                 includeExports = arguments.booleanOrDefault("includeExports", false),
@@ -110,7 +111,7 @@ class HexanaToolHandlers(
     fun getMemoryForIndices(arguments: JsonObject?): CallToolResult {
         return execute("get_memory_for_indices") {
             analysisService.getMemoryForIndices(
-                input = pathInput(arguments),
+                input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
             )
         }
@@ -119,7 +120,7 @@ class HexanaToolHandlers(
     fun getTypesForIndices(arguments: JsonObject?): CallToolResult {
         return execute("get_types_for_indices") {
             analysisService.getTypesForIndices(
-                input = pathInput(arguments),
+                input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
             )
         }
@@ -128,7 +129,7 @@ class HexanaToolHandlers(
     fun getLocalsForFunctions(arguments: JsonObject?): CallToolResult {
         return execute("get_locals_for_functions") {
             analysisService.getLocalsForFunctions(
-                input = pathInput(arguments),
+                input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
             )
         }
@@ -137,7 +138,7 @@ class HexanaToolHandlers(
     fun getInstructionsForFunctions(arguments: JsonObject?): CallToolResult {
         return execute("get_instructions_for_functions") {
             analysisService.getInstructionsForFunctions(
-                input = pathInput(arguments),
+                input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
             )
         }
@@ -145,7 +146,7 @@ class HexanaToolHandlers(
 
     fun listElementSegments(arguments: JsonObject?): CallToolResult {
         return execute("list_element_segments") {
-            analysisService.listElementSegments(pathInput(arguments))
+            analysisService.listElementSegments(wasmInput(arguments))
         }
     }
 
@@ -195,13 +196,51 @@ class HexanaToolHandlers(
         }
     }
 
-    private fun pathInput(arguments: JsonObject?): WasmInput.FilePath {
-        return WasmInput.FilePath(arguments.requireString("path"))
+    private fun wasmInput(arguments: JsonObject?): WasmInput {
+        val path = arguments.optionalNonBlankString("path")
+        val bytesBase64 = arguments.optionalNonBlankString("bytesBase64")
+        val bytes = arguments.optionalByteArray("bytes")
+
+        val providedInputs = listOf(path, bytesBase64, bytes).count { it != null }
+        if (providedInputs == 0) {
+            throw ToolInputException("Exactly one of `path`, `bytesBase64`, or `bytes` is required")
+        }
+        if (providedInputs > 1) {
+            throw ToolInputException("Provide exactly one of `path`, `bytesBase64`, or `bytes`")
+        }
+
+        return when {
+            path != null -> WasmInput.FilePath(path)
+            bytesBase64 != null -> WasmInput.InlineBytes(bytesBase64)
+            bytes != null -> WasmInput.RawBytes(bytes)
+            else -> error("Unreachable input state")
+        }
     }
 
-    private fun JsonObject?.requireString(name: String): String {
-        val value = this?.get(name)?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-        return value ?: throw ToolInputException("`$name` is required")
+    private fun JsonObject?.optionalNonBlankString(name: String): String? {
+        val element = this?.get(name) ?: return null
+        val value = element.jsonPrimitive.contentOrNull
+            ?: throw ToolInputException("`$name` must be a string")
+        if (value.isBlank()) {
+            throw ToolInputException("`$name` must not be blank")
+        }
+        return value
+    }
+
+    private fun JsonObject?.optionalByteArray(name: String): ByteArray? {
+        val element = this?.get(name) ?: return null
+        val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
+        if (array.size > maxInlineInputBytes) {
+            throw ToolInputException("`$name` exceeds maximum size of $maxInlineInputBytes bytes")
+        }
+        return ByteArray(array.size) { index ->
+            val value = array[index].jsonPrimitive.intOrNull
+                ?: throw ToolInputException("`$name[$index]` must be an integer")
+            if (value !in 0..255) {
+                throw ToolInputException("`$name[$index]` must be between 0 and 255")
+            }
+            value.toByte()
+        }
     }
 
     private fun JsonObject?.intOrDefault(name: String, default: Int): Int {
