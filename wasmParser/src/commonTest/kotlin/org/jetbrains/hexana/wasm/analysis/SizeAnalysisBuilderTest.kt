@@ -6,8 +6,10 @@ import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.components.CoreWasmComponent
 import org.jetbrains.hexana.wasm.sections.WasmSectionCode
+import org.jetbrains.hexana.wasm.sections.WasmSectionData
 import kotlin.test.Test
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SizeAnalysisBuilderTest {
@@ -81,5 +83,84 @@ class SizeAnalysisBuilderTest {
         functions.forEach { func ->
             assertTrue(func.size > 0, "Function '${func.name}' should have positive size")
         }
+    }
+
+    @Test
+    fun `buildFunctionDetail returns instruction categories`() = runTest {
+        val buffer = resourceAsByteBuffer("c/utf8-c.wasm")
+        val result = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(result)
+
+        val module = result.wasmModule
+        assertIs<CoreWasmComponent>(module)
+        val codeSec = module.codeSection
+        assertNotNull(codeSec)
+        val codeRecords = with(codeSec) { buffer.scan() }
+
+        val builder = SizeAnalysisBuilder(buffer, module)
+        val detail = builder.buildFunctionDetail(codeRecords, 0)
+
+        assertTrue(detail.isNotEmpty(), "Function detail should not be empty")
+        val categories = detail.filterIsInstance<SizeNode.InstructionCategory>()
+        assertTrue(categories.isNotEmpty(), "Should have instruction categories")
+    }
+
+    @Test
+    fun `buildFunctionDetail includes call targets for functions with calls`() = runTest {
+        val buffer = resourceAsByteBuffer("c/utf8-c.wasm")
+        val result = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(result)
+
+        val module = result.wasmModule
+        assertIs<CoreWasmComponent>(module)
+        val codeSec = module.codeSection
+        assertNotNull(codeSec)
+        val codeRecords = with(codeSec) { buffer.scan() }
+
+        val builder = SizeAnalysisBuilder(buffer, module)
+
+        var foundCallTargets = false
+        for (funcIndex in codeRecords.indices) {
+            val detail = builder.buildFunctionDetail(codeRecords, funcIndex)
+            if (detail.any { it is SizeNode.CallTarget }) {
+                foundCallTargets = true
+                break
+            }
+        }
+        assertTrue(foundCallTargets, "At least one function should have call targets")
+    }
+
+    @Test
+    fun `buildDataSegmentDetail classifies content`() = runTest {
+        val buffer = resourceAsByteBuffer("c/utf8-c.wasm")
+        val result = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(result)
+
+        val module = result.wasmModule
+        assertIs<CoreWasmComponent>(module)
+        val dataSec = module.dataSection
+        if (dataSec != null) {
+            val dataRecords = with(dataSec) { buffer.scan() }
+            if (dataRecords.isNotEmpty()) {
+                val builder = SizeAnalysisBuilder(buffer, module)
+                val detail = builder.buildDataSegmentDetail(dataRecords, 0)
+                assertTrue(detail.isNotEmpty(), "Data segment detail should not be empty")
+                assertIs<SizeNode.DataContent>(detail.first())
+            }
+        }
+    }
+
+    @Test
+    fun `buildTree handles component model module`() = runTest {
+        val buffer = resourceAsByteBuffer("wasm-component-experiment-2/repl-api.wasm")
+        val result = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(result)
+
+        val builder = SizeAnalysisBuilder(buffer, result.wasmModule)
+        val tree = builder.buildTree()
+
+        assertIs<SizeNode.Module>(tree)
+        assertTrue(tree.children.isNotEmpty(), "Component module should have section children")
+        assertTrue(tree.size > 0)
     }
 }
