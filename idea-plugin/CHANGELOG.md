@@ -5,6 +5,7 @@
 ### Added
 - [DWARF section detection and parsing](https://github.com/JetBrains/hexana/issues/49)
 - [Explorer integration](https://github.com/JetBrains/hexana/issues/52)
+- [Source mapping via DWARF](https://github.com/JetBrains/hexana/issues/48)
 
 ### Changed
 
