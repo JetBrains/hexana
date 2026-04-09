@@ -530,10 +530,9 @@ sealed class DwarfLineUnitHeader<T>(
                     }
 
                     LnsOpcode.DW_LNS_advance_line.std -> {
-                        val params =
-                            standardArgumentsLoading(LnsOpcode.DW_LNS_advance_line.standardOpcodeLengthsEncoding)
+                        val param = getSLEB128().toULong()
                         val size = position() - standardOpcodeOffset
-                        LnsOpcode.DW_LNS_advance_line(standardOpcodeOffset, size, params)
+                        LnsOpcode.DW_LNS_advance_line(standardOpcodeOffset, size, ulongArrayOf(param))
                     }
 
                     LnsOpcode.DW_LNS_set_file.std -> {

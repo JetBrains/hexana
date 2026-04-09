@@ -2,6 +2,7 @@ package org.jetbrains.hexana.wasm.dwarf
 
 import org.jetbrains.hexana.dwarf.DwarfAbbrevSection
 import org.jetbrains.hexana.dwarf.DwarfAccessor
+import org.jetbrains.hexana.dwarf.DwarfAddressSection
 import org.jetbrains.hexana.dwarf.DwarfInfoSection
 import org.jetbrains.hexana.dwarf.DwarfLineSection
 import org.jetbrains.hexana.dwarf.DwarfLineStrSection
@@ -24,6 +25,7 @@ class WasmDwarfAccessor(val module: BaseModule): DwarfAccessor {
                 this@WasmDwarfAccessor
             )
             ".debug_line_str" -> DwarfLineStrSection(customSection.contentOffset, customSection.contentSize, this@WasmDwarfAccessor)
+            ".debug_addr" -> DwarfAddressSection(customSection.contentOffset, customSection.contentSize, this@WasmDwarfAccessor)
             else -> null
         }
 
@@ -43,5 +45,9 @@ class WasmDwarfAccessor(val module: BaseModule): DwarfAccessor {
 
     override fun debugStrSection(): DwarfStrSection? {
         return section(".debug_str") as? DwarfStrSection
+    }
+
+    override fun debugAddrSection(): DwarfAddressSection? {
+        return section(".debug_addr") as? DwarfAddressSection
     }
 }

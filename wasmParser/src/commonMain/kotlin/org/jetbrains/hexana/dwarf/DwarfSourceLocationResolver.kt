@@ -4,7 +4,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.crossSectionOperation
 
 
-data class LineRow(val offset: Int, val line: Int, val column: Int, val directory: Int, val file: Int)
+data class LineRow(val offset: Int, val line: Int, val column: Int, val file: Int)
 
 class DwarfSourceLocationResolver(val dwarfAccessor: DwarfAccessor) {
 
@@ -13,8 +13,7 @@ class DwarfSourceLocationResolver(val dwarfAccessor: DwarfAccessor) {
         var address: ULong = 0UL,
         var line: Int = 1,
         var column: Int = 0,
-        var file: Int = 0,
-        var directory: Int = 0) {
+        var file: Int = 0) {
 
         fun reset() {
             address = 0UL
@@ -25,17 +24,15 @@ class DwarfSourceLocationResolver(val dwarfAccessor: DwarfAccessor) {
                 is DwarfLineUnitHeader.Dwarf32LineUnitHeader.V4,
                 is DwarfLineUnitHeader.Dwarf64LineUnitHeader.V4 -> {
                     file = 1
-                    directory = 1
                 }
                 is DwarfLineUnitHeader.Dwarf32LineUnitHeader.V5,
                 is DwarfLineUnitHeader.Dwarf64LineUnitHeader.V5 -> {
                     file = 0
-                    directory = 0
                 }
             }
         }
 
-        fun toLineRow() = LineRow(address.toInt(), line, column, directory, file)
+        fun toLineRow() = LineRow(address.toInt(), line, column, file)
     }
 
     @OptIn(ExperimentalUnsignedTypes::class)
@@ -85,6 +82,7 @@ class DwarfSourceLocationResolver(val dwarfAccessor: DwarfAccessor) {
                 }
                 is LneOpcode.DW_LNE_end_sequence -> {
                     range.add(state.toLineRow())
+                    state.reset()
                 }
                 else -> { /* ignore */ }
             }
@@ -149,13 +147,27 @@ class DwarfSourceLocationResolver(val dwarfAccessor: DwarfAccessor) {
             scanDwarfInfo()
         }
         val targetDie = infos.find {
-            val low = (it.children[0].attributes.find { it.attribute.name == Attribute.DW_AT_low_pc }?.value as Long).toInt()
-            val hi = (it.children[0].attributes.find { it.attribute.name == Attribute.DW_AT_high_pc }?.value as UInt).toInt()
+            val addressSize = when(it) {
+                is CompilationUnitHeader.Dwarf32Header.V4, is CompilationUnitHeader.Dwarf32Header.V5 -> 4
+                is CompilationUnitHeader.Dwarf64Header.V4, is CompilationUnitHeader.Dwarf64Header.V5 -> 8
+            }
+            val cu = it.children.firstOrNull() ?: return@find false
+            val addrBase = cu.attributes.find { it.attribute.name == Attribute.DW_AT_addr_base }?.intValue ?: 0
+            val lowAddress = cu.attributes.find { it.attribute.name == Attribute.DW_AT_low_pc } ?: return@find false
+            val low = readAddress(lowAddress, addressSize, addrBase) ?: return@find false
+            val hiAddress = cu.attributes.find { it.attribute.name == Attribute.DW_AT_high_pc } ?: return@find false
+            val hi = when (hiAddress.attribute.form) {
+                is Form.DW_FORM_addr, is Form.DW_FORM_addrx,
+                is Form.DW_FORM_addrx1, is Form.DW_FORM_addrx2,
+                is Form.DW_FORM_addrx4, is Form.DW_FORM_addrx8 ->
+                    readAddress(hiAddress, addressSize, addrBase) ?: return@find false
+                else -> low + (hiAddress.intValue ?: return@find false)
+            }
             offset in low..hi
         } ?: return null
 
         val targetCu = targetDie.children[0]
-        val debugLineOffset = (targetCu.attributes.find { it.attribute.name == Attribute.DW_AT_stmt_list }?.value as? UInt)?.toInt() ?: return null
+        val debugLineOffset = targetCu.attributes.find { it.attribute.name == Attribute.DW_AT_stmt_list }?.intValue ?: return null
 
         val debugLineSection = dwarfAccessor.debugLineSection() ?: return null
         val lineUnits = with(debugLineSection) {
@@ -167,13 +179,43 @@ class DwarfSourceLocationResolver(val dwarfAccessor: DwarfAccessor) {
         }
         val result = executeProgram(lineUnitHeader, program)
         val entry = result.findLast { it.offset <= offset } ?: return null
-        val compDir = when(targetCu) {
-            is CompilationUnitHeader.Dwarf32Header.V4,
-            is CompilationUnitHeader.Dwarf64Header.V4 -> {
-                targetCu.attributes.find { it.attribute.name == Attribute.DW_AT_comp_dir }?.value as? String
-            }
-            else -> null
-        }
+        val compDir = resolveStringAttribute(targetCu, Attribute.DW_AT_comp_dir)
         return resolveState(lineUnitHeader, entry, compDir)
+    }
+
+    private fun CommonByteBuffer.resolveStringAttribute(die: DebugInformationEntry, attr: Attribute): String? {
+        val field = die.attributes.find { it.attribute.name == attr } ?: return null
+        return when (field.value) {
+            is String -> field.value
+            else -> {
+                val debugStrSection = dwarfAccessor.debugStrSection() ?: return null
+                val strOffset = field.intValue ?: return null
+                crossSectionOperation {
+                    position(debugStrSection.contentOffset + strOffset)
+                    readStringZ()
+                }
+            }
+        }
+    }
+
+    private fun CommonByteBuffer.readAddress(df: DieField, addressSize: Int, addrBase: Int = 0): Int? {
+        return when (df.attribute.form)  {
+            is Form.DW_FORM_addrx -> {
+                val debugAddrSection = dwarfAccessor.debugAddrSection() ?: return null
+                val index = df.intValue ?: return null
+                with(debugAddrSection) {
+                    addrx(addrBase + index * addressSize, addressSize)
+                }?.toInt()
+            }
+            is Form.DW_FORM_addrx1, is Form.DW_FORM_addrx2,
+            is Form.DW_FORM_addrx4, is Form.DW_FORM_addrx8 -> {
+                val debugAddrSection = dwarfAccessor.debugAddrSection() ?: return null
+                val index = df.intValue ?: return null
+                with(debugAddrSection) {
+                    addrx(addrBase + index * addressSize, addressSize)
+                }?.toInt()
+            }
+            else -> df.intValue
+        }
     }
 }

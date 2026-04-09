@@ -168,7 +168,21 @@ fun CommonByteBuffer.readStringZ(): String {
     return string
 }
 
-class DieField(val attribute: DwarfAttribute, val value: Any)
+class DieField(val attribute: DwarfAttribute, val value: Any) {
+    val intValue: Int?
+        get () = when (value) {
+            is Int -> value
+            is Long -> value.toInt()
+            is ULong -> value.toInt()
+            is UInt -> value.toInt()
+            is UByte -> value.toInt()
+            is UShort -> value.toInt()
+            is Byte -> value.toInt()
+            is Short -> value.toInt()
+            is Boolean -> if (value) 1 else 0
+            else -> null
+        }
+}
 
 open class DebugInformationEntry(offset: Int, size: Int, val tag: Tag, val attributes: List<DieField> = listOf(), open val children: List<DebugInformationEntry> = listOf()):DwarfEntry(offset, size)
 
