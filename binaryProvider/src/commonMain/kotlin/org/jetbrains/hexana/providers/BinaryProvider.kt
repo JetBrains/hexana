@@ -9,6 +9,7 @@ import org.jetbrains.hexana.wasm.components.WasmComponent
 import org.jetbrains.hexana.wasm.components.WasmComponentCoreModule
 import org.jetbrains.hexana.wasm.components.WasmComponentExport
 import org.jetbrains.hexana.wasm.components.WasmComponentImport
+import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmDataRecord
 import org.jetbrains.hexana.wasm.sections.WasmExportRecordEntry
@@ -93,7 +94,9 @@ open class WasmBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProv
 
     fun canProvideWasmModule() = wasmModule != null
 
-    open val sourceLocationProvider: HexanaSourceLocationProvider = HexanaSourceLocationProvider.EMPTY
+    open val sourceLocationProvider: HexanaSourceLocationProvider
+        get() = wasmModule?.let { DwarfSourceLocationProvider(bytes, WasmDwarfAccessor(it)) }
+            ?: HexanaSourceLocationProvider.EMPTY
 
     val imports: List<WasmImportRecord> by lazy {
         val importSection = wasmModule?.importSection ?: return@lazy emptyList()
