@@ -27,6 +27,7 @@ import org.jetbrains.hexana.ui.BinaryEditorView
 import org.jetbrains.hexana.ui.HexSearchField
 import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.setupSearchActions
+import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 import org.jetbrains.hexana.wat.WatFileset
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
@@ -106,7 +107,14 @@ class HexanaFileEditor(
                                 }
 
                                 override val sourceLocationProvider: HexanaSourceLocationProvider
-                                    get() = ref.get()
+                                    get() {
+                                        return wasmModule?.let {
+                                                DwarfSourceLocationProvider(
+                                                    bytes,
+                                                    WasmDwarfAccessor(it)
+                                                )
+                                            } ?: ref.get()
+                                    }
                             }
                         }
 
@@ -267,7 +275,6 @@ data class HexViewState(
         return false
     }
 }
-
 
 
 private fun HexanaFileEditor.initSourceLocationProvider(ref: AtomicReference<HexanaSourceLocationProvider>) {
