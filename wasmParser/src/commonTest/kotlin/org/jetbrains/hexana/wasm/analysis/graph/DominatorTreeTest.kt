@@ -178,4 +178,62 @@ class DominatorTreeTest {
         assertEquals(listOf(2), result.children[1])
         assertTrue(result.children[2].isNullOrEmpty())
     }
+
+    @Test
+    fun `dominance frontier for diamond`() {
+        //     A
+        //    / \
+        //   B   C
+        //    \ /
+        //     D
+        val graph = DirectedGraphBuilder()
+            .addNode(0, "A").addNode(1, "B").addNode(2, "C").addNode(3, "D")
+            .addEdge(0, 1).addEdge(0, 2).addEdge(1, 3).addEdge(2, 3)
+            .build(root = 0)
+
+        val result = DominatorTree.compute(graph)
+
+        // D is the join point — B and C both have D in their dominance frontier
+        assertEquals(setOf(3), result.dominanceFrontier[1])
+        assertEquals(setOf(3), result.dominanceFrontier[2])
+        // A and D have empty frontiers
+        assertTrue(result.dominanceFrontier[0].isNullOrEmpty())
+        assertTrue(result.dominanceFrontier[3].isNullOrEmpty())
+    }
+
+    @Test
+    fun `dominance frontier for loop`() {
+        // A -> B -> C -> B (back edge), C -> D
+        val graph = DirectedGraphBuilder()
+            .addNode(0, "A").addNode(1, "B").addNode(2, "C").addNode(3, "D")
+            .addEdge(0, 1).addEdge(1, 2).addEdge(2, 1).addEdge(2, 3)
+            .build(root = 0)
+
+        val result = DominatorTree.compute(graph)
+
+        // B is the loop header — C has B in its frontier (back edge target)
+        assertEquals(setOf(1), result.dominanceFrontier[2])
+        // B has itself in its frontier (it's a loop header with a back edge)
+        assertEquals(setOf(1), result.dominanceFrontier[1])
+    }
+
+    @Test
+    fun `subtree returns full subtree`() {
+        // A -> B -> C, A -> D
+        val graph = DirectedGraphBuilder()
+            .addNode(0, "A").addNode(1, "B").addNode(2, "C").addNode(3, "D")
+            .addEdge(0, 1).addEdge(1, 2).addEdge(0, 3)
+            .build(root = 0)
+
+        val result = DominatorTree.compute(graph)
+
+        // Subtree of A (root) is everything
+        assertEquals(setOf(0, 1, 2, 3), result.subtree(0).toSet())
+        // Subtree of B includes B and C
+        assertEquals(setOf(1, 2), result.subtree(1).toSet())
+        // Subtree of C is just C (leaf)
+        assertEquals(listOf(2), result.subtree(2))
+        // Subtree of D is just D (leaf)
+        assertEquals(listOf(3), result.subtree(3))
+    }
 }
