@@ -180,7 +180,7 @@ internal fun OpCode.watString(): CharSequence {
         is OpCodes.F64.GT -> "f64.gt"
         is OpCodes.F64.LT -> "f64.lt"
         is OpCodes.F64.Abs -> "f64.abs"
-        is UnparsedOpCode -> "unparsed block: ${value.joinToString { "0x${it.toHexString()}" }}"
+        is UnparsedOpCode -> "unparsed block: 0x${value.offset.toHexString()} .. 0x${(value.offset + value.size).toHexString()}"
         // https://webassembly.github.io/spec/core/text/instructions.html
         // I changed begin/end to {} because of AI
         is OpCodes.Flow.Block -> "block${type?.let { " (result ${it.toSignature()})" } ?: ""}{\n${value.wat()}\n}"

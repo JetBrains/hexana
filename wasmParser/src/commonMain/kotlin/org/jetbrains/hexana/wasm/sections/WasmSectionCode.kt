@@ -76,8 +76,7 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
         } catch (e: Exception) {
             position(bodyStart)
             val bytesToRead = minOf(funSize.toInt(), remaining())
-            val raw = ByteArray(bytesToRead)
-            get(raw, 0, raw.size)
+            val raw = MemoryRegion(bodyStart, bytesToRead)
             position(bodyStart + bytesToRead)
             return WasmCodeRecord(
                 codeEntryStart,
@@ -87,8 +86,7 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
             )
         }
     } catch (e: Exception) {
-        val raw = ByteArray(remaining())
-        if (raw.isNotEmpty()) get(raw, 0, raw.size)
+        val raw = MemoryRegion(position(), remaining())
         return WasmCodeRecord(
             codeEntryStart,
             sizeFromOffset(codeEntryStart),
@@ -106,7 +104,8 @@ fun CommonByteBuffer.consumeLocals(locals: MutableList<WasmCodeLocalRecord>) {
     }
 }
 
-class UnparsedOpCode(val e: Throwable, rawCodes: ByteArray): OpCodeWithValue<ByteArray>(rawCodes)
+data class MemoryRegion(val offset: Int, val size: Int)
+class UnparsedOpCode(val e: Throwable, rawCodes: MemoryRegion): OpCodeWithValue<MemoryRegion>(rawCodes)
 
 data class WasmCodeLocalRecord(val local: Int, val type: WasmValueType<*>)
 data class WasmCodeRecord(
