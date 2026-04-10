@@ -1,14 +1,21 @@
 package org.jetbrains.hexana.ui.panel
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
@@ -17,6 +24,7 @@ import org.jetbrains.hexana.wasm.analysis.SizeNode
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmDataRecord
 import org.jetbrains.jewel.foundation.lazy.SelectableLazyListState
+import org.jetbrains.jewel.foundation.lazy.tree.Tree
 import org.jetbrains.jewel.foundation.lazy.tree.TreeGeneratorScope
 import org.jetbrains.jewel.foundation.lazy.tree.TreeState
 import org.jetbrains.jewel.foundation.lazy.tree.buildTree
@@ -46,20 +54,34 @@ private fun SizeTreeContent(
     dataRecords: List<WasmDataRecord>,
     state: HexViewStateHolder,
 ) {
-    val detailCache = remember { mutableMapOf<Any, List<SizeNode>>() }
+    var tree by remember { mutableStateOf<Tree<Any>?>(null) }
 
-    val tree = remember(module, detailCache.size) {
-        buildTree {
-            addSizeChildren(module, module.size, builder, codeRecords, dataRecords, detailCache)
+    LaunchedEffect(module) {
+        tree = withContext(Dispatchers.IO) {
+            val detailCache = mutableMapOf<Any, List<SizeNode>>()
+            buildTree {
+                addSizeChildren(module, builder, codeRecords, dataRecords, detailCache)
+            }
         }
     }
 
-    val treeState = remember(tree) {
+    val currentTree = tree
+    if (currentTree == null) {
+        Box(modifier = Modifier.padding(8.dp)) {
+            Text(
+                "Loading...",
+                style = TextStyle(fontFamily = FontFamily.Monospace),
+            )
+        }
+        return
+    }
+
+    val treeState = remember(currentTree) {
         TreeState(SelectableLazyListState(LazyListState()))
     }
 
     LazyTree(
-        tree = tree,
+        tree = currentTree,
         treeState = treeState,
         modifier = Modifier.fillMaxSize(),
         onElementClick = { element ->
@@ -81,7 +103,6 @@ private fun SizeTreeContent(
 
 private fun TreeGeneratorScope<Any>.addSizeChildren(
     parent: SizeNode,
-    moduleSize: Int,
     builder: SizeAnalysisBuilder?,
     codeRecords: List<WasmCodeRecord>,
     dataRecords: List<WasmDataRecord>,
@@ -92,7 +113,7 @@ private fun TreeGeneratorScope<Any>.addSizeChildren(
         val grandchildren = resolveChildren(child, builder, codeRecords, dataRecords, detailCache)
         if (grandchildren.isNotEmpty()) {
             addNode(child) {
-                addSizeChildren(child, moduleSize, builder, codeRecords, dataRecords, detailCache)
+                addSizeChildren(child, builder, codeRecords, dataRecords, detailCache)
             }
         } else {
             addLeaf(child)

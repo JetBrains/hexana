@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,6 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphNode
@@ -27,6 +30,7 @@ import org.jetbrains.hexana.wasm.analysis.cfg.CfgBuilder
 import org.jetbrains.hexana.wasm.analysis.cfg.CfgResult
 import org.jetbrains.hexana.wasm.analysis.graph.DominatorResult
 import org.jetbrains.jewel.foundation.lazy.SelectableLazyListState
+import org.jetbrains.jewel.foundation.lazy.tree.Tree
 import org.jetbrains.jewel.foundation.lazy.tree.TreeGeneratorScope
 import org.jetbrains.jewel.foundation.lazy.tree.TreeState
 import org.jetbrains.jewel.foundation.lazy.tree.buildTree
@@ -35,17 +39,34 @@ import org.jetbrains.jewel.ui.component.Text
 
 @Composable
 fun WasmPanelDominators(provider: WasmBinaryProvider, state: HexViewStateHolder) {
-    val callGraphResult = remember(provider) { provider.callGraphResult } ?: return
-    val dominators = remember(provider) { provider.callGraphDominators } ?: return
+    var callGraphResult by remember { mutableStateOf<CallGraphResult?>(null) }
+    var dominators by remember { mutableStateOf<DominatorResult?>(null) }
+
+    LaunchedEffect(provider) {
+        withContext(Dispatchers.IO) {
+            val cgr = provider.callGraphResult
+            val dom = provider.callGraphDominators
+            callGraphResult = cgr
+            dominators = dom
+        }
+    }
+
+    val cgr = callGraphResult
+    val dom = dominators
+    if (cgr == null || dom == null) {
+        Box(modifier = Modifier.padding(8.dp)) {
+            Text("Loading...", style = TextStyle(fontFamily = FontFamily.Monospace))
+        }
+        return
+    }
 
     var selectedFuncIndex by remember { mutableStateOf<Int?>(null) }
-    val cfgCache = remember { mutableMapOf<Int, CfgResult>() }
 
     Row(modifier = Modifier.fillMaxSize()) {
         // Left pane: call graph dominator tree (~40%)
         Box(modifier = Modifier.weight(0.4f).fillMaxHeight()) {
-            CallGraphDominatorTree(callGraphResult, dominators) { nodeId ->
-                val node = callGraphResult.nodeMap[nodeId]
+            CallGraphDominatorTree(cgr, dom) { nodeId ->
+                val node = cgr.nodeMap[nodeId]
                 if (node is CallGraphNode.DefinedFunction) {
                     selectedFuncIndex = node.funcIndex
                 }
@@ -64,23 +85,38 @@ fun WasmPanelDominators(provider: WasmBinaryProvider, state: HexViewStateHolder)
         Box(modifier = Modifier.weight(0.6f).fillMaxHeight()) {
             val funcIdx = selectedFuncIndex
             if (funcIdx != null) {
-                val importCount = callGraphResult.nodeMap.values
-                    .count { it is CallGraphNode.ImportedFunction }
-                val codeIndex = funcIdx - importCount
-                val record = provider.codeRecords.getOrNull(codeIndex)
-                if (record != null) {
-                    val cfgResult = cfgCache.getOrPut(funcIdx) {
-                        CfgBuilder.build(record, funcIdx)
-                    }
-                    CfgDominatorTree(cfgResult)
-                } else {
-                    InfoMessage("No code record for func $funcIdx")
-                }
+                CfgDominatorPane(provider, cgr, funcIdx)
             } else {
                 InfoMessage("Select a defined function to view its CFG dominators")
             }
         }
     }
+}
+
+@Composable
+private fun CfgDominatorPane(
+    provider: WasmBinaryProvider,
+    callGraphResult: CallGraphResult,
+    funcIndex: Int,
+) {
+    var cfgResult by remember(funcIndex) { mutableStateOf<CfgResult?>(null) }
+
+    LaunchedEffect(funcIndex) {
+        cfgResult = withContext(Dispatchers.IO) {
+            val importCount = callGraphResult.nodeMap.values
+                .count { it is CallGraphNode.ImportedFunction }
+            val codeIndex = funcIndex - importCount
+            val record = provider.codeRecords.getOrNull(codeIndex) ?: return@withContext null
+            CfgBuilder.build(record, funcIndex)
+        }
+    }
+
+    val result = cfgResult
+    if (result == null) {
+        InfoMessage("Loading CFG...")
+        return
+    }
+    CfgDominatorTree(result)
 }
 
 @Composable
@@ -102,51 +138,61 @@ private fun CallGraphDominatorTree(
     dominators: DominatorResult,
     onSelect: (Int) -> Unit,
 ) {
-    val subtreeSizes = remember(dominators) {
-        val sizes = mutableMapOf<Int, Int>()
-        fun computeSize(nodeId: Int): Int {
-            val children = dominators.children[nodeId] ?: emptyList()
-            val size = 1 + children.sumOf { computeSize(it) }
-            sizes[nodeId] = size
-            return size
-        }
-        computeSize(CallGraphNode.VIRTUAL_ROOT_ID)
-        sizes
-    }
+    var tree by remember { mutableStateOf<Tree<Any>?>(null) }
 
-    val tree = remember(dominators) {
-        buildTree {
-            fun TreeGeneratorScope<Any>.walkDom(nodeId: Int) {
-                val children = (dominators.children[nodeId] ?: emptyList()).sorted()
-                if (children.isNotEmpty()) {
-                    addNode(DomEntry(nodeId, callGraphResult.nodeMap[nodeId], subtreeSizes[nodeId] ?: 1)) {
-                        for (childId in children) {
-                            walkDom(childId)
+    LaunchedEffect(dominators) {
+        tree = withContext(Dispatchers.IO) {
+            val subtreeSizes = mutableMapOf<Int, Int>()
+            fun computeSize(nodeId: Int): Int {
+                val children = dominators.children[nodeId] ?: emptyList()
+                val size = 1 + children.sumOf { computeSize(it) }
+                subtreeSizes[nodeId] = size
+                return size
+            }
+            computeSize(CallGraphNode.VIRTUAL_ROOT_ID)
+
+            buildTree {
+                fun TreeGeneratorScope<Any>.walkDom(nodeId: Int) {
+                    val children = (dominators.children[nodeId] ?: emptyList()).sorted()
+                    val entry = DomEntry(
+                        nodeId, callGraphResult.nodeMap[nodeId],
+                        subtreeSizes[nodeId] ?: 1
+                    )
+                    if (children.isNotEmpty()) {
+                        addNode(entry) {
+                            for (childId in children) { walkDom(childId) }
+                        }
+                    } else {
+                        addLeaf(entry)
+                    }
+                }
+                walkDom(CallGraphNode.VIRTUAL_ROOT_ID)
+
+                if (dominators.unreachable.isNotEmpty()) {
+                    addNode(UnreachableHeader(dominators.unreachable.size)) {
+                        for (nodeId in dominators.unreachable.sorted()) {
+                            addLeaf(
+                                DomEntry(nodeId, callGraphResult.nodeMap[nodeId], 1, unreachable = true)
+                            )
                         }
                     }
-                } else {
-                    addLeaf(DomEntry(nodeId, callGraphResult.nodeMap[nodeId], 1))
-                }
-            }
-            walkDom(CallGraphNode.VIRTUAL_ROOT_ID)
-
-            // Unreachable functions as flat leaves
-            if (dominators.unreachable.isNotEmpty()) {
-                addNode(UnreachableHeader(dominators.unreachable.size)) {
-                    for (nodeId in dominators.unreachable.sorted()) {
-                        addLeaf(DomEntry(nodeId, callGraphResult.nodeMap[nodeId], 1, unreachable = true))
-                    }
                 }
             }
         }
     }
 
-    val treeState = remember(tree) {
+    val currentTree = tree
+    if (currentTree == null) {
+        InfoMessage("Loading...")
+        return
+    }
+
+    val treeState = remember(currentTree) {
         TreeState(SelectableLazyListState(LazyListState()))
     }
 
     LazyTree(
-        tree = tree,
+        tree = currentTree,
         treeState = treeState,
         modifier = Modifier.fillMaxSize(),
         onElementClick = { element ->
@@ -188,15 +234,12 @@ private fun CfgDominatorTree(cfgResult: CfgResult) {
                 val entry = CfgBlockEntry(block, doms.idom[blockId], children.size)
                 if (children.isNotEmpty()) {
                     addNode(entry) {
-                        for (childId in children) {
-                            walkCfgDom(childId)
-                        }
+                        for (childId in children) { walkCfgDom(childId) }
                     }
                 } else {
                     addLeaf(entry)
                 }
             }
-            // Start from entry block (first block, which is the dominator tree root)
             val entryBlockId = blocks.first().id
             walkCfgDom(entryBlockId)
         }
