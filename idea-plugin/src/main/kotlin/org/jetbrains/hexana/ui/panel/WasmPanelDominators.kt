@@ -251,18 +251,26 @@ private fun buildFlatDominatorTree(
     showUnreachable: Boolean,
 ): List<FlatDomEntry> {
     val result = mutableListOf<FlatDomEntry>()
+    // Compute subtree sizes bottom-up in O(n)
+    val subtreeSizes = mutableMapOf<Int, Int>()
+    fun computeSize(nodeId: Int): Int {
+        val children = dominators.children[nodeId] ?: emptyList()
+        val size = 1 + children.sumOf { computeSize(it) }
+        subtreeSizes[nodeId] = size
+        return size
+    }
+    computeSize(CallGraphNode.VIRTUAL_ROOT_ID)
 
     fun walk(nodeId: Int, depth: Int) {
         val node = callGraphResult.nodeMap[nodeId]
         val label = buildNodeLabel(node, nodeId)
         val children = dominators.children[nodeId] ?: emptyList()
-        val subtreeSize = dominators.subtree(nodeId).size
         result.add(
             FlatDomEntry(
                 nodeId = nodeId,
                 label = label,
                 depth = depth,
-                subtreeSize = subtreeSize,
+                subtreeSize = subtreeSizes[nodeId] ?: 1,
                 hasChildren = children.isNotEmpty(),
                 unreachable = false,
             )

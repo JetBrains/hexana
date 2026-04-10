@@ -29,6 +29,8 @@ class CallGraphBuilder(
     private val module: WasmModule
 ) {
 
+    private lateinit var elementFunctions: Set<Int>
+
     fun build(): CallGraphResult {
         val graphBuilder = DirectedGraphBuilder()
         val nodeMap = mutableMapOf<Int, CallGraphNode>()
@@ -45,9 +47,12 @@ class CallGraphBuilder(
         val codeRecords = addDefinedFunctions(graphBuilder, nodeMap, importCount)
 
         // 4. Connect virtual root to exported functions, start function, element segment functions
+        elementFunctions = collectElementFunctions()
         connectRootToExports(graphBuilder, virtualRoot.id)
         connectRootToStart(graphBuilder, virtualRoot.id)
-        connectRootToElementSegments(graphBuilder, virtualRoot.id)
+        for (funcIdx in elementFunctions) {
+            graphBuilder.addEdge(virtualRoot.id, funcIdx)
+        }
 
         // 5. For each defined function, scan opcodes for Call instructions and add edges
         codeRecords.forEachIndexed { index, record ->
@@ -112,16 +117,18 @@ class CallGraphBuilder(
         graphBuilder.addEdge(rootId, startFuncIdx)
     }
 
-    private fun connectRootToElementSegments(graphBuilder: DirectedGraphBuilder, rootId: Int) {
-        val elementSection = module.elementSection ?: return
+    private fun collectElementFunctions(): Set<Int> {
+        val elementSection = module.elementSection ?: return emptySet()
         val segments = with(elementSection) { buffer.scanElements() }
+        val result = mutableSetOf<Int>()
         for (segment in segments) {
             if (segment is FuncIdxWasmElementSegment) {
                 for (funcIdx in segment.funcs) {
-                    graphBuilder.addEdge(rootId, funcIdx.toInt())
+                    result.add(funcIdx.toInt())
                 }
             }
         }
+        return result
     }
 
     private fun collectCallEdges(opcodes: List<OpCode>, callerFuncIdx: Int, graphBuilder: DirectedGraphBuilder) {
@@ -129,6 +136,14 @@ class CallGraphBuilder(
             when (opcode) {
                 is OpCodes.Flow.Call -> {
                     graphBuilder.addEdge(callerFuncIdx, opcode.value.toInt())
+                }
+                is OpCodes.Flow.CallIndirect -> {
+                    // Conservative: add edges to all element segment functions with matching type.
+                    // Since precise type matching requires resolving the type section, we connect
+                    // to all element segment functions (already connected to virtual root).
+                    for (funcIdx in elementFunctions) {
+                        graphBuilder.addEdge(callerFuncIdx, funcIdx)
+                    }
                 }
                 is OpCodes.Flow.Block -> {
                     // Block, Loop, If, Else all extend Block and have nested opcodes in value

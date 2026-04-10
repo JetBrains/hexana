@@ -264,6 +264,11 @@ object CfgBuilder {
                         curBlockId = TERMINATED
                     }
 
+                    is OpCodes.Flow.Trow, is OpCodes.Flow.ThrowRef -> {
+                        updateBlockEnd(curBlockId, idx + 1)
+                        curBlockId = TERMINATED
+                    }
+
                     is OpCodeGCBreak -> {
                         // BrOnCastFail - conditional branch similar to BrIf
                         val depth = opcode.label

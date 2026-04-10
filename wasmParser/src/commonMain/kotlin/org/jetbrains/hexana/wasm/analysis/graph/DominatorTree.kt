@@ -48,21 +48,23 @@ object DominatorTree {
         val best = IntArray(n) { it }
         val bucket = Array(n) { mutableListOf<Int>() }
 
-        fun compress(v: Int) {
-            val a = ancestor[v]
-            if (a == -1) return
-            if (ancestor[a] != -1) {
-                compress(a)
-                if (semi[best[a]] < semi[best[v]]) {
-                    best[v] = best[a]
-                }
-                ancestor[v] = ancestor[a]
-            }
-        }
-
         fun eval(v: Int): Int {
             if (ancestor[v] == -1) return v
-            compress(v)
+            // Iterative path compression (avoids stack overflow on deep graphs)
+            val path = mutableListOf<Int>()
+            var cur = v
+            while (ancestor[cur] != -1 && ancestor[ancestor[cur]] != -1) {
+                path.add(cur)
+                cur = ancestor[cur]
+            }
+            for (node in path.asReversed()) {
+                val a = ancestor[node]
+                if (a == -1) continue
+                if (semi[best[a]] < semi[best[node]]) {
+                    best[node] = best[a]
+                }
+                ancestor[node] = ancestor[a]
+            }
             return best[v]
         }
 
