@@ -22,6 +22,7 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.panel.Panel
 import org.jetbrains.hexana.ui.panel.WasmPanelFunctions
 import org.jetbrains.hexana.ui.panel.WasmPanelCustom
+import org.jetbrains.hexana.ui.panel.WasmPanelDominators
 import org.jetbrains.hexana.ui.panel.WasmPanelSize
 import org.jetbrains.hexana.ui.panel.WasmPanelData
 import org.jetbrains.hexana.ui.panel.WasmPanelExports
@@ -136,6 +137,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Functions") { WasmPanelFunctions(this, state) },
                 Panel("Custom") { WasmPanelCustom(this, state) },
                 Panel("Size") { WasmPanelSize(this, state) },
+                Panel("Dominators") { WasmPanelDominators(this, state) },
                 Panel("Wat") { WasmPanelWat(this, state) },
                 *dwarfPanels(this, state).toTypedArray()
             ) else {
@@ -161,6 +163,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Functions") { WasmPanelFunctions(this, state) },
                 Panel("Custom") { WasmPanelCustom(this, state) },
                 Panel("Size") { WasmPanelSize(this, state) },
+                Panel("Dominators") { WasmPanelDominators(this, state) },
                 *dwarfPanels(this, state).toTypedArray()
             ) else emptyArray()
         }
