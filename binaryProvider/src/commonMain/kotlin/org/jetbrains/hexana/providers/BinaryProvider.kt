@@ -7,6 +7,10 @@ import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.analysis.SizeAnalysisBuilder
 import org.jetbrains.hexana.wasm.analysis.SizeNode
+import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphBuilder
+import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphResult
+import org.jetbrains.hexana.wasm.analysis.graph.DominatorResult
+import org.jetbrains.hexana.wasm.analysis.graph.DominatorTree
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
@@ -243,6 +247,14 @@ open class WasmBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProv
 
     val sizeAnalysisBuilder: SizeAnalysisBuilder? by lazy {
         parsedModule?.let { SizeAnalysisBuilder(bytes, it) }
+    }
+
+    val callGraphResult: CallGraphResult? by lazy {
+        wasmModule?.let { CallGraphBuilder(bytes, it).build() }
+    }
+
+    val callGraphDominators: DominatorResult? by lazy {
+        callGraphResult?.let { DominatorTree.compute(it.graph) }
     }
 
     fun getCodeRecordByIndex(index: Int): WasmCodeRecord? {
