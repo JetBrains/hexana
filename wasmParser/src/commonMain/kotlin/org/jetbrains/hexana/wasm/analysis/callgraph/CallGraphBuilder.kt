@@ -7,6 +7,7 @@ import org.jetbrains.hexana.wasm.analysis.graph.DirectedGraphBuilder
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.FuncIdxWasmElementSegment
+import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 
@@ -29,19 +30,21 @@ class CallGraphBuilder(
     private val module: WasmModule
 ) {
 
-    private lateinit var elementFunctions: Set<Int>
-
     fun build(): CallGraphResult {
-        val codeSection = module.codeSection
-        val funcCount = (codeSection?.let { with(it) { buffer.scan() }.size } ?: 0) +
-            (module.importSection?.let { with(it) { buffer.getImportRecords() }.count { r ->
-                r.type is WasmTypeIndexExternalType
-            } } ?: 0)
-        val graphBuilder = DirectedGraphBuilder(
-            expectedNodes = funcCount + 1,
-            expectedEdges = funcCount * 4
-        )
-        val nodeMap = HashMap<Int, CallGraphNode>(funcCount * 2)
+        // Parse code records once — used for both node creation and edge extraction
+        val codeRecords: List<WasmCodeRecord> = module.codeSection?.let { section ->
+            with(section) { buffer.scan() }
+        } ?: emptyList()
+
+        val importRecords = module.importSection?.let { section ->
+            with(section) { buffer.getImportRecords() }
+        } ?: emptyList()
+
+        val importFuncCount = importRecords.count { it.type is WasmTypeIndexExternalType }
+        val totalFuncCount = importFuncCount + codeRecords.size
+
+        val graphBuilder = DirectedGraphBuilder(expectedNodes = totalFuncCount + 1)
+        val nodeMap = HashMap<Int, CallGraphNode>(totalFuncCount * 2)
 
         // 1. Virtual root
         val virtualRoot = CallGraphNode.VirtualRoot()
@@ -49,37 +52,8 @@ class CallGraphBuilder(
         nodeMap[virtualRoot.id] = virtualRoot
 
         // 2. Import function nodes (funcidx 0 to importCount-1)
-        val importCount = addImportedFunctions(graphBuilder, nodeMap)
-
-        // 3. Defined function nodes (funcidx importCount to N)
-        val codeRecords = addDefinedFunctions(graphBuilder, nodeMap, importCount)
-
-        // 4. Connect virtual root to exported functions, start function, element segment functions
-        elementFunctions = collectElementFunctions()
-        connectRootToExports(graphBuilder, virtualRoot.id)
-        connectRootToStart(graphBuilder, virtualRoot.id)
-        for (funcIdx in elementFunctions) {
-            graphBuilder.addEdge(virtualRoot.id, funcIdx)
-        }
-
-        // 5. For each defined function, scan opcodes for Call instructions and add edges
-        codeRecords.forEachIndexed { index, record ->
-            val callerFuncIdx = importCount + index
-            collectCallEdges(record.opCodes, callerFuncIdx, graphBuilder)
-        }
-
-        val graph = graphBuilder.build(CallGraphNode.VIRTUAL_ROOT_ID)
-        return CallGraphResult(graph, nodeMap)
-    }
-
-    private fun addImportedFunctions(
-        graphBuilder: DirectedGraphBuilder,
-        nodeMap: MutableMap<Int, CallGraphNode>
-    ): Int {
-        val importSection = module.importSection ?: return 0
-        val records = with(importSection) { buffer.getImportRecords() }
         var funcIdx = 0
-        for (record in records) {
+        for (record in importRecords) {
             if (record.type is WasmTypeIndexExternalType) {
                 val name = if (record.name.isBlank()) "import_$funcIdx" else record.name
                 val node = CallGraphNode.ImportedFunction(funcIdx, name, record.prefix)
@@ -88,77 +62,94 @@ class CallGraphBuilder(
                 funcIdx++
             }
         }
-        return funcIdx
-    }
 
-    private fun addDefinedFunctions(
-        graphBuilder: DirectedGraphBuilder,
-        nodeMap: MutableMap<Int, CallGraphNode>,
-        importCount: Int
-    ): List<org.jetbrains.hexana.wasm.sections.WasmCodeRecord> {
-        val codeSection = module.codeSection ?: return emptyList()
-        val records = with(codeSection) { buffer.scan() }
-        records.forEachIndexed { index, _ ->
-            val funcIdx = importCount + index
-            val name = "func_$funcIdx"
-            val node = CallGraphNode.DefinedFunction(funcIdx, name, funcIdx)
+        // 3. Defined function nodes (funcidx importCount to N)
+        for (i in codeRecords.indices) {
+            val idx = importFuncCount + i
+            val name = "func_$idx"
+            val node = CallGraphNode.DefinedFunction(idx, name, idx)
             graphBuilder.addNode(node.id, node.name)
             nodeMap[node.id] = node
         }
-        return records
-    }
 
-    private fun connectRootToExports(graphBuilder: DirectedGraphBuilder, rootId: Int) {
-        val exportSection = module.exportSection ?: return
-        val exports = with(exportSection) { buffer.scan() }
-        for (export in exports) {
-            if (export is WasmFunctionExportRecordEntry) {
-                graphBuilder.addEdge(rootId, export.index.toInt())
+        // 4. Connect virtual root to exported functions, start function, element segment functions
+        val elementFunctions = collectElementFunctions()
+
+        module.exportSection?.let { exportSection ->
+            val exports = with(exportSection) { buffer.scan() }
+            for (export in exports) {
+                if (export is WasmFunctionExportRecordEntry) {
+                    graphBuilder.addEdge(virtualRoot.id, export.index.toInt())
+                }
             }
         }
+
+        module.startSection?.let { startSection ->
+            buffer.position(startSection.contentOffset)
+            graphBuilder.addEdge(virtualRoot.id, buffer.getULEB128().toInt())
+        }
+
+        for (elemFuncIdx in elementFunctions) {
+            graphBuilder.addEdge(virtualRoot.id, elemFuncIdx)
+        }
+
+        // 5. For each defined function, collect call info then add edges once
+        for (i in codeRecords.indices) {
+            val callerIdx = importFuncCount + i
+            addEdgesForFunction(callerIdx, codeRecords[i].opCodes, elementFunctions, graphBuilder)
+        }
+
+        val graph = graphBuilder.build(CallGraphNode.VIRTUAL_ROOT_ID)
+        return CallGraphResult(graph, nodeMap)
     }
 
-    private fun connectRootToStart(graphBuilder: DirectedGraphBuilder, rootId: Int) {
-        val startSection = module.startSection ?: return
-        buffer.position(startSection.contentOffset)
-        val startFuncIdx = buffer.getULEB128().toInt()
-        graphBuilder.addEdge(rootId, startFuncIdx)
+    /**
+     * Walks the opcode tree of a single function, collects unique direct call targets
+     * and whether any indirect call exists, then adds edges once.
+     * This avoids adding duplicate edges for repeated call_indirect instructions.
+     */
+    private fun addEdgesForFunction(
+        callerIdx: Int,
+        opcodes: List<OpCode>,
+        elementFunctions: Set<Int>,
+        graphBuilder: DirectedGraphBuilder
+    ) {
+        val directTargets = HashSet<Int>(8)
+        var hasIndirectCall = false
+
+        fun walk(ops: List<OpCode>) {
+            for (op in ops) {
+                when (op) {
+                    is OpCodes.Flow.Call -> directTargets.add(op.value.toInt())
+                    is OpCodes.Flow.CallIndirect -> hasIndirectCall = true
+                    is OpCodes.Flow.Block -> walk(op.value)
+                    else -> {}
+                }
+            }
+        }
+        walk(opcodes)
+
+        for (target in directTargets) {
+            graphBuilder.addEdge(callerIdx, target)
+        }
+        if (hasIndirectCall) {
+            for (elemFuncIdx in elementFunctions) {
+                graphBuilder.addEdge(callerIdx, elemFuncIdx)
+            }
+        }
     }
 
     private fun collectElementFunctions(): Set<Int> {
         val elementSection = module.elementSection ?: return emptySet()
         val segments = with(elementSection) { buffer.scanElements() }
-        val result = mutableSetOf<Int>()
+        val result = HashSet<Int>()
         for (segment in segments) {
             if (segment is FuncIdxWasmElementSegment) {
-                for (funcIdx in segment.funcs) {
-                    result.add(funcIdx.toInt())
+                for (idx in segment.funcs) {
+                    result.add(idx.toInt())
                 }
             }
         }
         return result
-    }
-
-    private fun collectCallEdges(opcodes: List<OpCode>, callerFuncIdx: Int, graphBuilder: DirectedGraphBuilder) {
-        for (opcode in opcodes) {
-            when (opcode) {
-                is OpCodes.Flow.Call -> {
-                    graphBuilder.addEdge(callerFuncIdx, opcode.value.toInt())
-                }
-                is OpCodes.Flow.CallIndirect -> {
-                    // Conservative: add edges to all element segment functions with matching type.
-                    // Since precise type matching requires resolving the type section, we connect
-                    // to all element segment functions (already connected to virtual root).
-                    for (funcIdx in elementFunctions) {
-                        graphBuilder.addEdge(callerFuncIdx, funcIdx)
-                    }
-                }
-                is OpCodes.Flow.Block -> {
-                    // Block, Loop, If, Else all extend Block and have nested opcodes in value
-                    collectCallEdges(opcode.value, callerFuncIdx, graphBuilder)
-                }
-                else -> { /* not a call or block-structured opcode */ }
-            }
-        }
     }
 }
