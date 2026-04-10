@@ -32,8 +32,16 @@ class CallGraphBuilder(
     private lateinit var elementFunctions: Set<Int>
 
     fun build(): CallGraphResult {
-        val graphBuilder = DirectedGraphBuilder()
-        val nodeMap = mutableMapOf<Int, CallGraphNode>()
+        val codeSection = module.codeSection
+        val funcCount = (codeSection?.let { with(it) { buffer.scan() }.size } ?: 0) +
+            (module.importSection?.let { with(it) { buffer.getImportRecords() }.count { r ->
+                r.type is WasmTypeIndexExternalType
+            } } ?: 0)
+        val graphBuilder = DirectedGraphBuilder(
+            expectedNodes = funcCount + 1,
+            expectedEdges = funcCount * 4
+        )
+        val nodeMap = HashMap<Int, CallGraphNode>(funcCount * 2)
 
         // 1. Virtual root
         val virtualRoot = CallGraphNode.VirtualRoot()

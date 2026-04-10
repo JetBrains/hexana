@@ -10,13 +10,15 @@ object DominatorTree {
             return DominatorResult(idom, emptyMap(), emptyMap(), emptySet())
         }
 
-        // Step 1: DFS numbering
-        val dfsOrder = mutableListOf<Int>()     // dfnum -> nodeId
-        val dfNum = mutableMapOf<Int, Int>()    // nodeId -> dfnum
-        val dfsParent = mutableMapOf<Int, Int>() // nodeId -> parent nodeId in DFS tree
+        val nodeCount = nodeIds.size
 
-        val visited = mutableSetOf<Int>()
-        val stack = ArrayDeque<Pair<Int, Iterator<Int>>>()
+        // Step 1: DFS numbering
+        val dfsOrder = ArrayList<Int>(nodeCount)
+        val dfNum = HashMap<Int, Int>(nodeCount * 2)
+        val dfsParent = HashMap<Int, Int>(nodeCount * 2)
+
+        val visited = HashSet<Int>(nodeCount * 2)
+        val stack = ArrayDeque<Pair<Int, Iterator<Int>>>(nodeCount)
         visited.add(graph.root)
         dfNum[graph.root] = 0
         dfsOrder.add(graph.root)
@@ -104,21 +106,21 @@ object DominatorTree {
         }
 
         // Convert to nodeId-indexed
-        val idomMap = mutableMapOf<Int, Int?>()
+        val idomMap = HashMap<Int, Int?>(n * 2)
         idomMap[graph.root] = null
         for (i in 1 until n) {
             idomMap[dfsOrder[i]] = dfsOrder[idom[i]]
         }
 
-        val childrenMap = mutableMapOf<Int, MutableList<Int>>()
+        val childrenMap = HashMap<Int, MutableList<Int>>(n * 2)
         for ((node, parent) in idomMap) {
             if (parent != null) {
-                childrenMap.getOrPut(parent) { mutableListOf() }.add(node)
+                childrenMap.getOrPut(parent) { ArrayList(4) }.add(node)
             }
         }
 
         // Dominance frontier
-        val df = mutableMapOf<Int, MutableSet<Int>>()
+        val df = HashMap<Int, MutableSet<Int>>(n)
         for (nodeId in dfsOrder) {
             val preds = graph.predecessors[nodeId] ?: continue
             if (preds.size < 2) continue
