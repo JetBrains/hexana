@@ -14,6 +14,11 @@ import com.intellij.execution.RunManager
 import com.intellij.execution.configurations.ConfigurationTypeUtil
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.ui.ValidationInfo
+import com.intellij.ui.dsl.builder.bindText
+import com.intellij.ui.dsl.builder.panel
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
@@ -31,6 +36,7 @@ import org.jetbrains.jewel.ui.component.IconButton
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.Tooltip
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
+import javax.swing.JComponent
 
 @Composable
 internal fun WasmPanelExports(wasmBinaryProvider: WasmBinaryProvider, state: HexViewStateHolder) {
@@ -80,10 +86,11 @@ internal fun WasmPanelExports(binaryProvider: BinaryProvider, wasmBinaryProvider
         },
         actionColumn = if (canRun) { { index ->
             val export = exports[index]
-            if (export is WasmFunctionExportRecordEntry) {
+            val name = export.name
+            if (export is WasmFunctionExportRecordEntry && !isInternalName(name)) {
                 Tooltip(tooltip = { Text("Run '${export.name}'") }) {
                     IconButton(onClick = {
-                        runExportedFunction(binaryProvider, state, export.name)
+                        runExportedFunction(binaryProvider, wasmBinaryProvider, state, export)
                     }) {
                         Icon(
                             AllIconsKeys.Actions.Execute,
@@ -99,9 +106,89 @@ internal fun WasmPanelExports(binaryProvider: BinaryProvider, wasmBinaryProvider
     )
 }
 
-private fun runExportedFunction(binaryProvider: BinaryProvider, state: HexViewStateHolder, exportName: String) {
+private fun isInternalName(name: String): Boolean = name.startsWith("__")
+
+private fun resolveFunctionSignature(
+    wasmBinaryProvider: WasmBinaryProvider,
+    export: WasmFunctionExportRecordEntry,
+): WasmSectionFunctionTypeRecord? {
+    val importedFunctionCount = wasmBinaryProvider.imports.count { it.type is WasmTypeIndexExternalType }
+    val localIndex = export.index.toInt() - importedFunctionCount
+    if (localIndex < 0) return null
+    return wasmBinaryProvider.functions.getOrNull(localIndex) as? WasmSectionFunctionTypeRecord
+}
+
+private fun isTrivialType(type: WasmValueType<*>): Boolean = type is WasmNumType
+
+private fun wasmTypeName(type: WasmValueType<*>): String = when (type) {
+    is WasmI32Type -> "i32"
+    is WasmI64Type -> "i64"
+    is WasmF32Type -> "f32"
+    is WasmF64Type -> "f64"
+    else -> type.toString()
+}
+
+private class WasmFunctionArgsDialog(
+    project: Project,
+    private val exportName: String,
+    private val params: List<WasmValueType<*>>,
+) : DialogWrapper(project, false) {
+
+    val argValues = MutableList(params.size) { "0" }
+
+    init {
+        title = "Arguments for '$exportName'"
+        init()
+    }
+
+    override fun createCenterPanel(): JComponent {
+        return panel {
+            for ((i, param) in params.withIndex()) {
+                val typeName = wasmTypeName(param)
+                row("arg$i ($typeName):") {
+                    val field = textField()
+                        .bindText({ argValues[i] }, { argValues[i] = it })
+                        .validationInfo { field ->
+                            validateArg(field.text, param)
+                        }
+                    if (i == 0) field.focused()
+                }
+            }
+        }
+    }
+
+    private fun validateArg(text: String, type: WasmValueType<*>): ValidationInfo? {
+        if (text.isBlank()) return ValidationInfo("Value is required")
+        return when (type) {
+            is WasmI32Type -> if (text.toIntOrNull() == null) ValidationInfo("Expected an i32 integer") else null
+            is WasmI64Type -> if (text.toLongOrNull() == null) ValidationInfo("Expected an i64 integer") else null
+            is WasmF32Type -> if (text.toFloatOrNull() == null) ValidationInfo("Expected an f32 number") else null
+            is WasmF64Type -> if (text.toDoubleOrNull() == null) ValidationInfo("Expected an f64 number") else null
+            else -> null
+        }
+    }
+}
+
+private fun runExportedFunction(
+    binaryProvider: BinaryProvider,
+    wasmBinaryProvider: WasmBinaryProvider,
+    state: HexViewStateHolder,
+    export: WasmFunctionExportRecordEntry,
+) {
     val project = state.project
     val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return
+    val exportName = export.name
+
+    val signature = resolveFunctionSignature(wasmBinaryProvider, export)
+    val params = signature?.params ?: emptyList()
+
+    var programArgs = ""
+    if (params.isNotEmpty() && params.all { isTrivialType(it) }) {
+        val dialog = WasmFunctionArgsDialog(project, exportName, params)
+        if (!dialog.showAndGet()) return
+        programArgs = dialog.argValues.joinToString(" ")
+    }
+
     val runManager = RunManager.getInstance(project)
     val configurationType = ConfigurationTypeUtil.findConfigurationType(WasmRunConfigurationType::class.java)
     val factory = configurationType.configurationFactories.first { it is WasmConfigurationFactory }
@@ -125,6 +212,8 @@ private fun runExportedFunction(binaryProvider: BinaryProvider, state: HexViewSt
         }
         runManager.addConfiguration(newSettings)
     }
+
+    (settings.configuration as? WasmRunConfiguration)?.programArguments = programArgs
 
     runManager.selectedConfiguration = settings
     ProgramRunnerUtil.executeConfiguration(settings, DefaultRunExecutor.getRunExecutorInstance())
