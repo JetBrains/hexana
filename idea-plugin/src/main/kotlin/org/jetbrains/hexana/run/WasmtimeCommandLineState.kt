@@ -6,6 +6,7 @@ import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
+import com.intellij.util.execution.ParametersListUtil
 import java.io.File
 import java.nio.file.Files
 
@@ -26,7 +27,7 @@ class WasmtimeCommandLineState(
 
             val options = configuration.wasmtimeOptions.trim()
             if (options.isNotEmpty()) {
-                addParameters(options.split("\\s+".toRegex()))
+                addParameters(ParametersListUtil.parse(options))
             }
 
             if (wasmBytes != null && WasmImportStubGenerator.hasImports(wasmBytes)) {

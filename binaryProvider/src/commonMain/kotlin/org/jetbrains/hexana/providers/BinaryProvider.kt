@@ -1,22 +1,14 @@
 package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
-import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
-import org.jetbrains.hexana.wasm.components.WasmComponent
-import org.jetbrains.hexana.wasm.components.WasmComponentCoreModule
-import org.jetbrains.hexana.wasm.components.WasmComponentExport
-import org.jetbrains.hexana.wasm.components.WasmComponentImport
+import org.jetbrains.hexana.wasm.WasmParser
+import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
-import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
-import org.jetbrains.hexana.wasm.sections.WasmDataRecord
-import org.jetbrains.hexana.wasm.sections.WasmExportRecordEntry
-import org.jetbrains.hexana.wasm.sections.WasmImportRecord
-import org.jetbrains.hexana.wasm.sections.WasmNameSection
-import org.jetbrains.hexana.wasm.sections.WasmSection
-import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
+import org.jetbrains.hexana.wasm.sections.*
 
 sealed interface BinaryProvider {
     val bytes: CommonByteBuffer
@@ -84,7 +76,60 @@ open class WasmComponentBinaryProvider(override val bytes: CommonByteBuffer): Bi
             }
         }
     }
+
+    val instances: List<InstanceExpression> by lazy {
+        val instanceSections = wasmModule?.instanceSection ?: return@lazy emptyList()
+        instanceSections.flatMap {
+            with(it) {
+                bytes.parseInstances()
+            }
+        }
+    }
+
+    val coreInstances: List<InstanceCoreExpression> by lazy {
+        val coreInstanceSections = wasmModule?.coreInstanceSection ?: return@lazy emptyList()
+        coreInstanceSections.flatMap {
+            with(it) {
+                bytes.parseCoreInstances()
+            }
+        }
+    }
+
+    val nestedComponents: List<NestedComponentData> by lazy {
+        val componentSection = wasmModule?.componentSection ?: return@lazy emptyList()
+        val component = with(componentSection) { bytes.parseNestedComponent() } ?: return@lazy emptyList()
+        bytes.position(componentSection.contentOffset)
+        val nestedBytes = ByteArray(componentSection.contentSize)
+        bytes.get(nestedBytes, 0, componentSection.contentSize)
+        listOf(NestedComponentData(component, nestedBytes.toCommonByteBuffer()))
+    }
+
+    val types: List<ComponentDefType> by lazy {
+        val typesSection = wasmModule?.typesSection ?: return@lazy emptyList()
+        with(typesSection) {
+            bytes.scanTypes()
+        }
+    }
+
+    fun nestedComponentExports(componentIndex: Int): List<WasmComponentExport> {
+        val data = nestedComponents.getOrNull(componentIndex) ?: return emptyList()
+        return data.component.exportSection.flatMap {
+            with(it) {
+                data.buffer.scan()
+            }
+        }
+    }
+
+    fun nestedComponentTypes(componentIndex: Int): List<ComponentDefType> {
+        val data = nestedComponents.getOrNull(componentIndex) ?: return emptyList()
+        val typesSection = data.component.typesSection ?: return emptyList()
+        return with(typesSection) {
+            data.buffer.scanTypes()
+        }
+    }
 }
+
+class NestedComponentData(val component: WasmComponent, val buffer: CommonByteBuffer)
 
 open class WasmBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProvider {
     val wasmModule = when (val parseResult = WasmParser().parse(bytes)) {

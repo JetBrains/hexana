@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.wasm.components
 
+import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.wasm.WasmParseSuccess
+import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
 
@@ -13,4 +17,13 @@ class WasmComponentSection(sectionSize: Int, sectionOffset: Int, contentSize: In
     }
 
     constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
+
+    fun CommonByteBuffer.parseNestedComponent(): WasmComponent? {
+        position(contentOffset)
+        val nestedBytes = ByteArray(contentSize)
+        get(nestedBytes, 0, contentSize)
+        val nestedBuffer = nestedBytes.toCommonByteBuffer()
+        val parseResult = WasmParser().parse(nestedBuffer)
+        return (parseResult as? WasmParseSuccess)?.wasmModule as? WasmComponent
+    }
 }

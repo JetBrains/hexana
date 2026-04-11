@@ -1,37 +1,16 @@
 package org.jetbrains.hexana.wasm
 
 import kotlinx.coroutines.test.runTest
-import org.jetbrains.hexana.dwarf.CompilationUnitHeader
-import org.jetbrains.hexana.dwarf.DwarfLineUnitHeader
-import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver
-import org.jetbrains.hexana.dwarf.Form
-import org.jetbrains.hexana.dwarf.LineNumberHeaderEntryFormatName
-import org.jetbrains.hexana.dwarf.LnsOpcode
-import org.jetbrains.hexana.dwarf.LnsSpecialOpcode
-import org.jetbrains.hexana.dwarf.Tag
+import org.jetbrains.hexana.dwarf.*
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.tests.IgnoreJsTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
 import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
-import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
-import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
-import org.jetbrains.hexana.wasm.sections.WasmFixedI32Limits
-import org.jetbrains.hexana.wasm.sections.WasmI32Type
-import org.jetbrains.hexana.wasm.sections.WasmImportRecord
-import org.jetbrains.hexana.wasm.sections.WasmOpenI32Limits
-import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
-import org.jetbrains.hexana.wasm.sections.consumeString
-import org.jetbrains.hexana.wasm.sections.WasmMemType
-import kotlin.test.Test
-import kotlin.test.assertContentEquals
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import org.jetbrains.hexana.wasm.sections.*
+import kotlin.test.*
 
 class WasmParserTests {
 
@@ -1329,6 +1308,85 @@ class WasmParserTests {
 
         val coreTypeSection = wasmModule.coreTypesSection
         assertEquals(0, coreTypeSection.size)
+    }
+
+    @Test
+    fun `HX-1-Component-Wasm calculator nested component`() = runTest {
+        val buffer = resourceAsByteBuffer("component/calculator.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as WasmComponent
+        assertEquals(0, wasmModule.unresolvedSections.size)
+
+        val componentSection = wasmModule.componentSection
+        assertNotNull(componentSection)
+
+        val nestedComponent = with(componentSection) { buffer.parseNestedComponent() }
+        assertNotNull(nestedComponent)
+
+        buffer.position(componentSection.contentOffset)
+        val nestedBytes = ByteArray(componentSection.contentSize)
+        buffer.get(nestedBytes, 0, componentSection.contentSize)
+        val nestedBuffer = nestedBytes.toCommonByteBuffer()
+        val nestedExports = nestedComponent.exportSection.flatMap {
+            with(it) { nestedBuffer.scan() }
+        }
+        assertTrue(nestedExports.isNotEmpty())
+        assertTrue(nestedExports.any { it.sortIndex.sort is ComponentSort.Func })
+
+        val nestedTypesSection = nestedComponent.typesSection
+        assertNotNull(nestedTypesSection)
+        val nestedTypes = with(nestedTypesSection) { nestedBuffer.scanTypes() }
+        assertTrue(nestedTypes.isNotEmpty())
+
+        val funcExport = nestedExports.first { it.sortIndex.sort is ComponentSort.Func }
+        val funcExternDesc = funcExport.externDescription
+        assertIs<ComponentExternType>(funcExternDesc)
+
+        // The type index in externDescription references the nested component's full type index
+        // space (which includes imports, aliases, etc.), not just the types section entries.
+        // As a practical approach, search for the first ComponentRoutineType in the types section.
+        val funcType = nestedTypes.filterIsInstance<ComponentRoutineType>().firstOrNull()
+        assertNotNull(funcType)
+        assertTrue(funcType.params.isNotEmpty())
+
+        val instanceExpressions = wasmModule.instanceSection.flatMap {
+            with(it) { buffer.parseInstances() }
+        }
+        assertTrue(instanceExpressions.any { it is ComponentInstanceExpression })
+        val instantiateInstance = instanceExpressions.filterIsInstance<ComponentInstanceExpression>().first()
+        assertEquals(0u, instantiateInstance.index)
+
+        val exports = wasmModule.exportSection.flatMap {
+            with(it) { buffer.scan() }
+        }
+        assertTrue(exports.isNotEmpty())
+        assertTrue(exports.any { it.sortIndex.sort is ComponentSort.Instance })
+    }
+
+    @Test
+    fun `HX-1-Component-Wasm calculator instance index mismatch`() = runTest {
+        val buffer = resourceAsByteBuffer("component/calculator.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as WasmComponent
+
+        val exports = wasmModule.exportSection.flatMap {
+            with(it) { buffer.scan() }
+        }
+
+        val instanceExport = exports.first { it.sortIndex.sort is ComponentSort.Instance }
+        assertEquals("component:calculator/calculate@0.1.0", instanceExport.exportName)
+
+        val instanceExpressions = wasmModule.instanceSection.flatMap {
+            with(it) { buffer.parseInstances() }
+        }
+
+        // The instance index space includes entries from alias sections,
+        // so the export's sort index may exceed the instance section's own list.
+        assertTrue(instanceExport.sortIndex.index.toInt() >= instanceExpressions.size)
     }
 
     @Test
