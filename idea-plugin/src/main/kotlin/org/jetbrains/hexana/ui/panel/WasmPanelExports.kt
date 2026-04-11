@@ -59,6 +59,16 @@ internal fun WasmPanelExports(binaryProvider: BinaryProvider, wasmBinaryProvider
         binaryProvider is BinaryVirtualFileProvider
     }
 
+    val signatureCache = remember(wasmBinaryProvider) {
+        exports.map { export ->
+            if (export is WasmFunctionExportRecordEntry) {
+                resolveFunctionSignature(wasmBinaryProvider, export)?.let { sig ->
+                    formatSignature(sig)
+                } ?: ""
+            } else ""
+        }
+    }
+
     Table(
         listOf(
             TableColumn("Kind", modifier = Modifier.width(kindColumnWidth)) { index ->
@@ -75,9 +85,14 @@ internal fun WasmPanelExports(binaryProvider: BinaryProvider, wasmBinaryProvider
                 TableCellValue(exportKind)
             },
 
-            TableColumn("Name", modifier = Modifier.fillMaxWidth()) { index ->
+            TableColumn("Name", modifier = Modifier.fillMaxWidth(0.5f)) { index ->
                 val export = exports[index]
                 TableCellValue(export.name)
+            },
+
+            TableColumn("Signature", modifier = Modifier.fillMaxWidth()) { index ->
+                val sig = signatureCache[index]
+                TableCellValue(sig, tooltip = sig.takeIf { it.isNotEmpty() })
             }
         ), dataCount = exports.size,
         onRow = { rowIndex ->
@@ -126,6 +141,12 @@ private fun wasmTypeName(type: WasmValueType<*>): String = when (type) {
     is WasmF32Type -> "f32"
     is WasmF64Type -> "f64"
     else -> type.toString()
+}
+
+private fun formatSignature(sig: WasmSectionFunctionTypeRecord): String {
+    val params = sig.params.joinToString(", ") { wasmTypeName(it) }
+    val result = sig.retTypes.firstOrNull()?.let { wasmTypeName(it) } ?: "void"
+    return "($params) -> $result"
 }
 
 private class WasmFunctionArgsDialog(
