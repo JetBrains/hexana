@@ -11,6 +11,10 @@ import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ProgramRunner
 import org.graalvm.polyglot.Context
 import org.graalvm.polyglot.Source
+import org.graalvm.polyglot.proxy.ProxyObject
+import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import java.io.File
 import java.io.OutputStream
 import java.io.PipedInputStream
@@ -56,6 +60,23 @@ class GraalWasmProcessHandler(
             return
         }
 
+        val resolvedDeps = configuration.dependencies
+            .mapNotNull { entry ->
+                val parts = entry.split("=", limit = 2)
+                if (parts.size == 2) parts[0] to parts[1] else null
+            }
+            .toMap()
+        val coreModuleDeps = resolvedDeps.filter { (_, path) ->
+            val depFile = File(path)
+            if (depFile.exists()) {
+                val depType = WasmBinaryProviderSelector.select(depFile.readBytes().toCommonByteBuffer())
+                depType is BinaryProviderType.Wasm
+            } else {
+                false
+            }
+        }
+        val resolvedCoreModuleNames = coreModuleDeps.keys
+
         val stdoutPipe = PipedOutputStream()
         val stdoutInput = PipedInputStream(stdoutPipe)
         val stderrPipe = PipedOutputStream()
@@ -94,8 +115,31 @@ class GraalWasmProcessHandler(
         context.use { ctx ->
             val wasmBytes = wasmFile.readBytes()
 
+            val moduleMap = mutableMapOf<String, Any>()
+
+            for ((name, path) in coreModuleDeps) {
+                val depFile = File(path)
+                if (depFile.exists()) {
+                    val depSource = Source.newBuilder("wasm", depFile)
+                        .name(name)
+                        .build()
+                    val depModule = ctx.eval(depSource)
+                    val depInstance = depModule.newInstance()
+                    moduleMap[name] = depInstance.getMember("exports")
+                }
+            }
+
             val stubs = WasmImportStubGenerator.generateStubs(wasmBytes)
-            val importObject = WasmImportStubGenerator.instantiateStubs(ctx, stubs)
+                .filter { it.moduleName !in resolvedCoreModuleNames }
+            for (stub in stubs) {
+                val stubSource = Source.newBuilder("wasm", org.graalvm.polyglot.io.ByteSequence.create(stub.wasmBytes), stub.moduleName)
+                    .build()
+                val stubModule = ctx.eval(stubSource)
+                val stubInstance = stubModule.newInstance()
+                moduleMap[stub.moduleName] = stubInstance.getMember("exports")
+            }
+
+            val importObject = ProxyObject.fromMap(moduleMap)
 
             val source = Source.newBuilder("wasm", wasmFile)
                 .name(wasmFile.nameWithoutExtension)

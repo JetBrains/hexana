@@ -30,6 +30,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.run.WasmConfigurationFactory
+import org.jetbrains.hexana.run.WasmDependencyResolver
 import org.jetbrains.hexana.run.WasmRunConfiguration
 import org.jetbrains.hexana.run.WasmRunConfigurationType
 import org.jetbrains.hexana.ui.components.Table
@@ -380,6 +381,11 @@ private fun runComponentExportedFunction(
     }
 
     (settings.configuration as? WasmRunConfiguration)?.wasmtimeOptions = "--invoke \"$invokeExpression\""
+
+    val wasmBytes = file.contentsToByteArray()
+    val resolved = WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = file)
+    (settings.configuration as? WasmRunConfiguration)?.dependencies =
+        resolved.map { (name, path) -> "$name=$path" }
 
     runManager.selectedConfiguration = settings
     ProgramRunnerUtil.executeConfiguration(settings, DefaultRunExecutor.getRunExecutorInstance())

@@ -28,9 +28,13 @@ class WasmRunConfigurationProducer : LazyRunConfigurationProducer<WasmRunConfigu
     ): Boolean {
         val file = context.location?.virtualFile ?: return false
         if (file.extension != "wasm") return false
+        val project = context.project
         configuration.wasmFilePath = file.path
         configuration.name = file.nameWithoutExtension
         configuration.workingDirectory = file.parent?.path ?: ""
+        val wasmBytes = file.contentsToByteArray()
+        val resolved = WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = file)
+        configuration.dependencies = resolved.map { (name, path) -> "$name=$path" }
         return true
     }
 }

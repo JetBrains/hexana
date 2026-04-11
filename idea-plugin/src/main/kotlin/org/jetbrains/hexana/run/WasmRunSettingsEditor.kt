@@ -7,6 +7,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.RawCommandLineEditor
+import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Row
@@ -37,6 +38,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private val wasmtimeOptionsField = RawCommandLineEditor()
     private val programArgumentsField = RawCommandLineEditor()
     private val workingDirectoryField = TextFieldWithBrowseButton()
+    private val dependenciesField = JBTextArea(3, 40).apply { isEditable = false }
 
     private var wasmtimePathRow: Row? = null
     private var wasmtimeOptionsRow: Row? = null
@@ -76,6 +78,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         wasmtimeOptionsField.text = configuration.wasmtimeOptions
         programArgumentsField.text = configuration.programArguments
         workingDirectoryField.text = configuration.workingDirectory
+        dependenciesField.text = configuration.dependencies.joinToString("\n")
         updateWasmtimeFieldsVisibility()
     }
 
@@ -106,6 +109,9 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         }
         row(HexanaBundle.message("wasm.run.configuration.workingDirectory")) {
             cell(workingDirectoryField).align(AlignX.FILL)
+        }
+        row(HexanaBundle.message("wasm.run.configuration.dependencies")) {
+            scrollCell(dependenciesField).align(AlignX.FILL)
         }
     }
 }
