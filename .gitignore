@@ -10,3 +10,5 @@ out/
 .kotlin
 .intellijPlatform
 /teamcity.local.properties
+wasm-modules/wasmprinter_wrapper/target
+wasm-modules/wasmprinter_wrapper/Cargo.lock
