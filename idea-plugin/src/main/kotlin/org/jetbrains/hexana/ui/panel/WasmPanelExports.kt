@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.ui.panel
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,7 +34,6 @@ import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
 import org.jetbrains.hexana.wasm.sections.*
 import org.jetbrains.jewel.ui.component.Icon
-import org.jetbrains.jewel.ui.component.IconButton
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.Tooltip
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -104,16 +105,17 @@ internal fun WasmPanelExports(binaryProvider: BinaryProvider, wasmBinaryProvider
             val name = export.name
             if (export is WasmFunctionExportRecordEntry && !isInternalName(name)) {
                 Tooltip(tooltip = { Text("Run '${export.name}'") }) {
-                    IconButton(onClick = {
-                        runExportedFunction(binaryProvider, wasmBinaryProvider, state, export)
-                    }) {
-                        Icon(
-                            AllIconsKeys.Actions.Execute,
-                            contentDescription = "Run",
-                            iconClass = AllIcons::class.java,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
+                    Icon(
+                        AllIconsKeys.Actions.Execute,
+                        contentDescription = "Run",
+                        iconClass = AllIcons::class.java,
+                        modifier = Modifier.size(16.dp).clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) {
+                            runExportedFunction(binaryProvider, wasmBinaryProvider, state, export)
+                        },
+                    )
                 }
             }
         } } else null,
