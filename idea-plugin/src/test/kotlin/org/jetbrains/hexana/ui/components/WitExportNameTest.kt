@@ -53,6 +53,14 @@ class WitExportNameTest : UsefulTestCase() {
         assertEquals("type(5)", componentTypeName(ComponentValueIdxType(5u)))
     }
 
+    fun testComponentTypeNameWithEnumIdx() {
+        val types = listOf<ComponentDefType>(
+            ComponentEnumType(listOf("red", "green", "blue")),
+        )
+        assertEquals("enum{red, green, blue}", componentTypeName(ComponentValueIdxType(0u), types))
+        assertEquals("type(1)", componentTypeName(ComponentValueIdxType(1u), types))
+    }
+
     fun testIsTrivialComponentType() {
         assertTrue(isTrivialComponentType(ComponentPrimitiveValueType(ComponentPrimitiveU32Type)))
         assertTrue(isTrivialComponentType(ComponentPrimitiveValueType(ComponentPrimitiveS32Type)))
@@ -61,6 +69,19 @@ class WitExportNameTest : UsefulTestCase() {
         assertTrue(isTrivialComponentType(ComponentPrimitiveValueType(ComponentPrimitiveString)))
         assertFalse(isTrivialComponentType(ComponentValueIdxType(0u)))
         assertFalse(isTrivialComponentType(ComponentPrimitiveValueType(ComponentPrimitiveErrorContext)))
+    }
+
+    fun testIsTrivialComponentTypeWithEnumIdx() {
+        val types = listOf<ComponentDefType>(
+            ComponentEnumType(listOf("add", "subtract")),
+        )
+        assertTrue(isTrivialComponentType(ComponentValueIdxType(0u), types))
+        assertFalse(isTrivialComponentType(ComponentValueIdxType(1u), types))
+        // Non-enum type idx is not trivial
+        val typesWithRecord = listOf<ComponentDefType>(
+            ComponentRecordType(listOf(LabelValueType("x", ComponentPrimitiveValueType(ComponentPrimitiveU32Type)))),
+        )
+        assertFalse(isTrivialComponentType(ComponentValueIdxType(0u), typesWithRecord))
     }
 
     fun testFormatComponentSignature() {

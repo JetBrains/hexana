@@ -210,21 +210,32 @@ internal fun resolveComponentFunctionType(
     return null
 }
 
-internal fun isTrivialComponentType(type: ComponentValueType): Boolean {
-    if (type !is ComponentPrimitiveValueType) return false
-    return when (type.type) {
-        is ComponentPrimitiveBoolType,
-        is ComponentPrimitiveU8Type, is ComponentPrimitiveS8Type,
-        is ComponentPrimitiveU16Type, is ComponentPrimitiveS16Type,
-        is ComponentPrimitiveU32Type, is ComponentPrimitiveS32Type,
-        is ComponentPrimitiveU64Type, is ComponentPrimitiveS64Type,
-        is ComponentPrimitiveF32Type, is ComponentPrimitiveF64Type,
-        is ComponentPrimitiveCharType, is ComponentPrimitiveString -> true
-        else -> false
+internal fun isTrivialComponentType(type: ComponentValueType, types: List<ComponentDefType> = emptyList()): Boolean {
+    if (type is ComponentPrimitiveValueType) {
+        return when (type.type) {
+            is ComponentPrimitiveBoolType,
+            is ComponentPrimitiveU8Type, is ComponentPrimitiveS8Type,
+            is ComponentPrimitiveU16Type, is ComponentPrimitiveS16Type,
+            is ComponentPrimitiveU32Type, is ComponentPrimitiveS32Type,
+            is ComponentPrimitiveU64Type, is ComponentPrimitiveS64Type,
+            is ComponentPrimitiveF32Type, is ComponentPrimitiveF64Type,
+            is ComponentPrimitiveCharType, is ComponentPrimitiveString -> true
+            else -> false
+        }
     }
+    if (type is ComponentValueIdxType) {
+        val resolved = types.getOrNull(type.idx.toInt())
+        if (resolved is ComponentEnumType) return true
+    }
+    return false
 }
 
-internal fun componentTypeName(type: ComponentValueType): String = when (type) {
+internal fun resolveComponentValueType(type: ComponentValueType, types: List<ComponentDefType>): ComponentDefType? {
+    if (type is ComponentValueIdxType) return types.getOrNull(type.idx.toInt())
+    return null
+}
+
+internal fun componentTypeName(type: ComponentValueType, types: List<ComponentDefType> = emptyList()): String = when (type) {
     is ComponentPrimitiveValueType -> when (type.type) {
         is ComponentPrimitiveBoolType -> "bool"
         is ComponentPrimitiveU8Type -> "u8"
@@ -241,14 +252,21 @@ internal fun componentTypeName(type: ComponentValueType): String = when (type) {
         is ComponentPrimitiveString -> "string"
         else -> type.type.toString()
     }
-    is ComponentValueIdxType -> "type(${type.idx})"
+    is ComponentValueIdxType -> {
+        val resolved = types.getOrNull(type.idx.toInt())
+        when (resolved) {
+            is ComponentEnumType -> "enum{${resolved.entries.joinToString(", ")}}"
+            null -> "type(${type.idx})"
+            else -> "type(${type.idx})"
+        }
+    }
     else -> type.toString()
 }
 
-internal fun formatComponentSignature(funcType: ComponentRoutineType): String {
-    val params = funcType.params.joinToString(", ") { "${it.label}: ${componentTypeName(it.value)}" }
+internal fun formatComponentSignature(funcType: ComponentRoutineType, types: List<ComponentDefType> = emptyList()): String {
+    val params = funcType.params.joinToString(", ") { "${it.label}: ${componentTypeName(it.value, types)}" }
     val result = when (val ret = funcType.ret) {
-        is ComponentValueType -> componentTypeName(ret)
+        is ComponentValueType -> componentTypeName(ret, types)
         is ComponentVoidType -> "void"
         else -> ret.toString()
     }
@@ -259,9 +277,13 @@ private class ComponentFunctionArgsDialog(
     project: Project,
     private val exportName: String,
     private val params: List<LabelValueType>,
+    private val types: List<ComponentDefType> = emptyList(),
 ) : DialogWrapper(project, false) {
 
-    val argValues = MutableList(params.size) { "0" }
+    val argValues = MutableList(params.size) { i ->
+        val resolved = resolveComponentValueType(params[i].value, types)
+        if (resolved is ComponentEnumType) resolved.entries.firstOrNull() ?: "" else "0"
+    }
 
     init {
         title = "Arguments for '$exportName'"
@@ -271,14 +293,26 @@ private class ComponentFunctionArgsDialog(
     override fun createCenterPanel(): JComponent {
         return panel {
             for ((i, param) in params.withIndex()) {
-                val typeName = componentTypeName(param.value)
+                val typeName = componentTypeName(param.value, types)
+                val resolved = resolveComponentValueType(param.value, types)
                 row("${param.label} ($typeName):") {
-                    val field = textField()
-                        .bindText({ argValues[i] }, { argValues[i] = it })
-                        .validationInfo { field ->
-                            validateArg(field.text, param.value)
-                        }
-                    if (i == 0) field.focused()
+                    if (resolved is ComponentEnumType) {
+                        val model = com.intellij.openapi.ui.ComboBox(resolved.entries.toTypedArray())
+                        val combo = cell(model)
+                            .bind(
+                                { component -> component.selectedItem as? String ?: "" },
+                                { component, value -> component.selectedItem = value },
+                                com.intellij.ui.dsl.builder.MutableProperty({ argValues[i] }, { argValues[i] = it }),
+                            )
+                        if (i == 0) combo.focused()
+                    } else {
+                        val field = textField()
+                            .bindText({ argValues[i] }, { argValues[i] = it })
+                            .validationInfo { field ->
+                                validateArg(field.text, param.value)
+                            }
+                        if (i == 0) field.focused()
+                    }
                 }
             }
         }
@@ -286,6 +320,13 @@ private class ComponentFunctionArgsDialog(
 
     private fun validateArg(text: String, type: ComponentValueType): ValidationInfo? {
         if (text.isBlank()) return ValidationInfo("Value is required")
+        if (type is ComponentValueIdxType) {
+            val resolved = types.getOrNull(type.idx.toInt())
+            if (resolved is ComponentEnumType) {
+                return if (text !in resolved.entries) ValidationInfo("Expected one of: ${resolved.entries.joinToString(", ")}") else null
+            }
+            return null
+        }
         if (type !is ComponentPrimitiveValueType) return null
         return when (type.type) {
             is ComponentPrimitiveBoolType -> if (text != "true" && text != "false") ValidationInfo("Expected 'true' or 'false'") else null
@@ -348,9 +389,10 @@ private fun runComponentExportedFunction(
     val funcType = resolveComponentFunctionType(export, wasmBinaryProvider)
     val params = funcType?.params ?: emptyList()
 
+    val componentTypes = wasmBinaryProvider.types
     var argsString = ""
-    if (params.isNotEmpty() && params.all { isTrivialComponentType(it.value) }) {
-        val dialog = ComponentFunctionArgsDialog(project, invokeName, params)
+    if (params.isNotEmpty() && params.all { isTrivialComponentType(it.value, componentTypes) }) {
+        val dialog = ComponentFunctionArgsDialog(project, invokeName, params, componentTypes)
         if (!dialog.showAndGet()) return
         argsString = dialog.argValues.joinToString(", ")
     }
