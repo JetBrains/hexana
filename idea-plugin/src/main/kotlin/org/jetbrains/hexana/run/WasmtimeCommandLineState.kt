@@ -7,6 +7,7 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import java.io.File
+import java.nio.file.Files
 
 class WasmtimeCommandLineState(
     private val configuration: WasmRunConfiguration,
@@ -16,6 +17,9 @@ class WasmtimeCommandLineState(
     override fun startProcess(): ProcessHandler {
         val wasmtimePath = configuration.wasmtimePath.ifBlank { resolveDefaultWasmtimePath() }
 
+        val wasmFile = File(configuration.wasmFilePath)
+        val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
+
         val commandLine = GeneralCommandLine().apply {
             exePath = wasmtimePath
             addParameter("run")
@@ -23,6 +27,24 @@ class WasmtimeCommandLineState(
             val options = configuration.wasmtimeOptions.trim()
             if (options.isNotEmpty()) {
                 addParameters(options.split("\\s+".toRegex()))
+            }
+
+            if (wasmBytes != null && WasmImportStubGenerator.hasImports(wasmBytes)) {
+                addParameter("-W")
+                addParameter("unknown-imports-default")
+
+                if (WasmImportStubGenerator.hasNonFunctionImports(wasmBytes)) {
+                    val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasmBytes)
+                    val tempDir = Files.createTempDirectory("hexana-wasm-stubs").toFile()
+                    tempDir.deleteOnExit()
+                    for (stub in stubs) {
+                        val stubFile = File(tempDir, "${stub.moduleName}.wasm")
+                        stubFile.writeBytes(stub.wasmBytes)
+                        stubFile.deleteOnExit()
+                        addParameter("--preload")
+                        addParameter("${stub.moduleName}=${stubFile.absolutePath}")
+                    }
+                }
             }
 
             addParameter(configuration.wasmFilePath)

@@ -91,14 +91,20 @@ class GraalWasmProcessHandler(
             .build()
 
         wasmContext = context
-        context.use {
+        context.use { ctx ->
+            val wasmBytes = wasmFile.readBytes()
+
+            val stubs = WasmImportStubGenerator.generateStubs(wasmBytes)
+            val importObject = WasmImportStubGenerator.instantiateStubs(ctx, stubs)
+
             val source = Source.newBuilder("wasm", wasmFile)
                 .name(wasmFile.nameWithoutExtension)
                 .build()
-            it.eval(source)
+            val mainModule = ctx.eval(source)
+            val mainInstance = mainModule.newInstance(importObject)
+            val exports = mainInstance.getMember("exports")
 
-            val mainFunc = it.getBindings("wasm").getMember(wasmFile.nameWithoutExtension)
-                ?.getMember("_start")
+            val mainFunc = exports.getMember("_start")
 
             if (mainFunc != null && mainFunc.canExecute()) {
                 mainFunc.execute()
