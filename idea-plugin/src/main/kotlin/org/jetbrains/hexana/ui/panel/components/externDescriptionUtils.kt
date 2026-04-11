@@ -1,37 +1,6 @@
 package org.jetbrains.hexana.ui.panel.components
 
-import org.jetbrains.hexana.wasm.components.ComponentExternComponent
-import org.jetbrains.hexana.wasm.components.ComponentExternCoreType
-import org.jetbrains.hexana.wasm.components.ComponentExternDescription
-import org.jetbrains.hexana.wasm.components.ComponentExternInstance
-import org.jetbrains.hexana.wasm.components.ComponentExternType
-import org.jetbrains.hexana.wasm.components.ComponentExternTypeBound
-import org.jetbrains.hexana.wasm.components.ComponentExternValueBound
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveBoolType
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveCharType
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveErrorContext
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveF32Type
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveF64Type
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveS16Type
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveS32Type
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveS64Type
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveS8Type
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveString
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveU16Type
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveU32Type
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveU64Type
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveU8Type
-import org.jetbrains.hexana.wasm.components.ComponentPrimitiveValueType
-import org.jetbrains.hexana.wasm.components.ComponentSort
-import org.jetbrains.hexana.wasm.components.ComponentSortIndex
-import org.jetbrains.hexana.wasm.components.ComponentValueIdxType
-import org.jetbrains.hexana.wasm.components.ComponentValueType
-import org.jetbrains.hexana.wasm.components.TypeBound
-import org.jetbrains.hexana.wasm.components.TypeBoundSubResource
-import org.jetbrains.hexana.wasm.components.TypeBoundType
-import org.jetbrains.hexana.wasm.components.ValueBound
-import org.jetbrains.hexana.wasm.components.ValueBoundType
-import org.jetbrains.hexana.wasm.components.ValueBoundValue
+import org.jetbrains.hexana.wasm.components.*
 
 internal fun ComponentExternDescription.toStringRepresentation() = when (this) {
     is ComponentExternCoreType -> "Extern(Core:Type (${this.idx}))"
@@ -73,12 +42,20 @@ internal fun ComponentValueType.toStringRepresentation() = when (this) {
 }
 
 internal fun ComponentSortIndex.toStringRepresentation(): String {
-    return when (this.sort) {
+    return when (val sort = this.sort) {
         is ComponentSort.Func -> "Func(${this.index})"
         is ComponentSort.Value -> "Value(${this.index})"
         is ComponentSort.Type -> "Type(${this.index})"
         is ComponentSort.Component -> "Component(${this.index})"
         is ComponentSort.Instance -> "Instance(${this.index})"
-        else -> "Unknown(${this.sort})"
+        is ComponentSortWithCoreSort -> when (sort.cs) {
+            is ComponentCoreSort.Func -> "Core:Func(${this.index})"
+            is ComponentCoreSort.Table -> "Core:Table(${this.index})"
+            is ComponentCoreSort.Memory -> "Core:Memory(${this.index})"
+            is ComponentCoreSort.Global -> "Core:Global(${this.index})"
+            is ComponentCoreSort.Type -> "Core:Type(${this.index})"
+            is ComponentCoreSort.Module -> "Core:Module(${this.index})"
+            is ComponentCoreSort.Instance -> "Core:Instance(${this.index})"
+        }
     }
 }
