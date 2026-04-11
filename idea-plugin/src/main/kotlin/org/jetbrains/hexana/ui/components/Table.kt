@@ -16,13 +16,9 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.TextMeasurer
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -52,6 +48,8 @@ fun Table(
     columns: List<TableColumn>,
     dataCount: Int,
     onRowContextMenu: (id: Int) -> List<ContextMenuItem> = { emptyList() },
+    actionColumn: (@Composable (id: Int) -> Unit)? = null,
+    actionColumnWidth: Dp = 0.dp,
     onRow: (id: Int) -> Unit = {},
 ) {
     val tableData = remember(columns, dataCount) {
@@ -271,71 +269,36 @@ fun Table(
             modifier = Modifier
                 .fillMaxWidth()
         ) {
-            val selectionColor = when {
-                sortIndex == -1 -> HexanaTheme.textColor
-                else -> Color(238, 237, 237, 80)
+            if (actionColumn != null) {
+                Spacer(modifier = Modifier.width(actionColumnWidth + 8.dp))
             }
 
-            val sortSelectorText = when {
-                sortIndex == -1 && sortAsc -> "▴"
-                else -> "▾"
-            }
-
-            Box(
-                modifier = Modifier
-                    .padding(horizontal = 4.dp)
-                    .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
-                    .widthIn(min = idColumnMinWidth)
-                    .clickable {
-                        if (sortIndex == -1) {
-                            sortAsc = !sortAsc
-                        }
-
-                        sortIndex = -1
-                    }
+            Row(
+                modifier = Modifier.weight(1f)
             ) {
-                Row {
-                    Text(
-                        sortSelectorText,
-                        modifier = Modifier.padding(end = 4.dp),
-                        style = TextStyle(
-                            color = selectionColor,
-                            fontFamily = FontFamily.Monospace,
-                        )
-                    )
-
-                    Text(
-                        "ID",
-                        style = TextStyle(
-                            color = HexanaTheme.textColor,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    )
+                val selectionColor = when {
+                    sortIndex == -1 -> HexanaTheme.textColor
+                    else -> Color(238, 237, 237, 80)
                 }
-            }
 
-            columns.forEachIndexed { columnIndex, column ->
+                val sortSelectorText = when {
+                    sortIndex == -1 && sortAsc -> "▴"
+                    else -> "▾"
+                }
+
                 Box(
                     modifier = Modifier
-                    .padding(horizontal = 4.dp)
-                    .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
-                    .clickable {
-                        if (sortIndex == columnIndex) {
-                            sortAsc = !sortAsc
+                        .padding(horizontal = 4.dp)
+                        .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
+                        .widthIn(min = idColumnMinWidth)
+                        .clickable {
+                            if (sortIndex == -1) {
+                                sortAsc = !sortAsc
+                            }
+
+                            sortIndex = -1
                         }
-                        sortIndex = columnIndex
-                    }
-                    .then(column.modifier)) {
-                    val selectionColor = when {
-                        columnIndex == sortIndex -> HexanaTheme.textColor
-                        else -> Color(238, 237, 237, 80)
-                    }
-
-                    val sortSelectorText = when {
-                        columnIndex == sortIndex && sortAsc -> "▴"
-                        else -> "▾"
-                    }
-
+                ) {
                     Row {
                         Text(
                             sortSelectorText,
@@ -347,12 +310,55 @@ fun Table(
                         )
 
                         Text(
-                            column.title,
+                            "ID",
                             style = TextStyle(
                                 color = HexanaTheme.textColor,
                                 fontFamily = FontFamily.Monospace
                             )
                         )
+                    }
+                }
+
+                columns.forEachIndexed { columnIndex, column ->
+                    Box(
+                        modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
+                        .clickable {
+                            if (sortIndex == columnIndex) {
+                                sortAsc = !sortAsc
+                            }
+                            sortIndex = columnIndex
+                        }
+                        .then(column.modifier)) {
+                        val selectionColor = when {
+                            columnIndex == sortIndex -> HexanaTheme.textColor
+                            else -> Color(238, 237, 237, 80)
+                        }
+
+                        val sortSelectorText = when {
+                            columnIndex == sortIndex && sortAsc -> "▴"
+                            else -> "▾"
+                        }
+
+                        Row {
+                            Text(
+                                sortSelectorText,
+                                modifier = Modifier.padding(end = 4.dp),
+                                style = TextStyle(
+                                    color = selectionColor,
+                                    fontFamily = FontFamily.Monospace,
+                                )
+                            )
+
+                            Text(
+                                column.title,
+                                style = TextStyle(
+                                    color = HexanaTheme.textColor,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -403,42 +409,58 @@ fun Table(
                             },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        ContextMenuArea(items = { onRowContextMenu(id) }) {
-                            Box(modifier = Modifier.padding(horizontal = 4.dp).widthIn(min = idColumnMinWidth)) {
-                                Text(
-                                    id.toString(),
-                                    style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
-                                    lineHeight = TextUnit(1f, TextUnitType.Em)
-                                )
+                        if (actionColumn != null) {
+                            Box(
+                                modifier = Modifier
+                                    .width(actionColumnWidth)
+                                    .padding(horizontal = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                actionColumn(id)
                             }
                         }
 
-                        columns.forEachIndexed { index, column ->
-                            val tableCellValue = data[index]
-                            val text = tableCellValue.representation
-                            val tooltip = tableCellValue.tooltip
-
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             ContextMenuArea(items = { onRowContextMenu(id) }) {
-                                Box(modifier = Modifier.padding(horizontal = 4.dp).then(column.modifier)) {
-                                    val textComponent = @Composable {
-                                        Text(
-                                            text,
-                                            style = TextStyle(
-                                                color = HexanaTheme.textColor,
-                                                fontFamily = FontFamily.Monospace
-                                            ),
-                                            lineHeight = TextUnit(1f, TextUnitType.Em),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
+                                Box(modifier = Modifier.padding(horizontal = 4.dp).widthIn(min = idColumnMinWidth)) {
+                                    Text(
+                                        id.toString(),
+                                        style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
+                                        lineHeight = TextUnit(1f, TextUnitType.Em)
+                                    )
+                                }
+                            }
 
-                                    if (tooltip != null) {
-                                        Tooltip(tooltip = { Text(tooltip) }) {
+                            columns.forEachIndexed { index, column ->
+                                val tableCellValue = data[index]
+                                val text = tableCellValue.representation
+                                val tooltip = tableCellValue.tooltip
+
+                                ContextMenuArea(items = { onRowContextMenu(id) }) {
+                                    Box(modifier = Modifier.padding(horizontal = 4.dp).then(column.modifier)) {
+                                        val textComponent = @Composable {
+                                            Text(
+                                                text,
+                                                style = TextStyle(
+                                                    color = HexanaTheme.textColor,
+                                                    fontFamily = FontFamily.Monospace
+                                                ),
+                                                lineHeight = TextUnit(1f, TextUnitType.Em),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+
+                                        if (tooltip != null) {
+                                            Tooltip(tooltip = { Text(tooltip) }) {
+                                                textComponent()
+                                            }
+                                        } else {
                                             textComponent()
                                         }
-                                    } else {
-                                        textComponent()
                                     }
                                 }
                             }
