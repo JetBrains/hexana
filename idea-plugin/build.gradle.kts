@@ -130,6 +130,7 @@ tasks {
     // Enable remote debugger attach for runIde and debug against intellij sources.
     withType<org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask>().configureEach {
         //jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5007")
+        jvmArgs("-Xmx8g", "-XX:HeapDumpPath=/tmp")
     }
 
     patchPluginXml {
