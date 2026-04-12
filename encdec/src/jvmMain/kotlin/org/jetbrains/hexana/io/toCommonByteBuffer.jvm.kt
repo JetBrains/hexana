@@ -1,12 +1,23 @@
 package org.jetbrains.hexana.io
 
+import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.channels.FileChannel
+import java.nio.file.Files
 
 actual fun ByteArray.toCommonByteBuffer(): CommonByteBuffer = JvmByteBuffer(ByteBuffer.wrap(this))
 
-actual fun allocateCommonByteBuffer(size: Int): CommonByteBuffer =
-    JvmByteBuffer(ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN))
+actual fun allocateCommonByteBuffer(size: Int): CommonByteBuffer {
+    val tempFile = Files.createTempFile("hexana-graph-", ".buf").toFile()
+    tempFile.deleteOnExit()
+    val raf = RandomAccessFile(tempFile, "rw")
+    raf.setLength(size.toLong())
+    val mapped = raf.channel.map(FileChannel.MapMode.READ_WRITE, 0, size.toLong())
+    raf.close()
+    mapped.order(ByteOrder.LITTLE_ENDIAN)
+    return JvmByteBuffer(mapped)
+}
 
 fun ByteBuffer.toCommonByteBuffer(): CommonByteBuffer = JvmByteBuffer(this)
 
