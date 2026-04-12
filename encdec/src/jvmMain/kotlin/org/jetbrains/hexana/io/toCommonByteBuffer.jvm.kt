@@ -5,6 +5,9 @@ import java.nio.ByteOrder
 
 actual fun ByteArray.toCommonByteBuffer(): CommonByteBuffer = JvmByteBuffer(ByteBuffer.wrap(this))
 
+actual fun allocateCommonByteBuffer(size: Int): CommonByteBuffer =
+    JvmByteBuffer(ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN))
+
 fun ByteBuffer.toCommonByteBuffer(): CommonByteBuffer = JvmByteBuffer(this)
 
 private class JvmByteBuffer(val buffer: ByteBuffer) : CommonByteBuffer {
@@ -20,6 +23,22 @@ private class JvmByteBuffer(val buffer: ByteBuffer) : CommonByteBuffer {
 
     override fun get(dst: ByteArray, offset: Int, size: Int) {
         buffer.get(dst, offset, size)
+    }
+
+    override fun put(value: Byte) {
+        buffer.put(value)
+    }
+
+    override fun put(src: ByteArray, offset: Int, size: Int) {
+        buffer.put(src, offset, size)
+    }
+
+    override fun putIntLE(value: Int) {
+        buffer.order(ByteOrder.LITTLE_ENDIAN).putInt(value)
+    }
+
+    override fun getIntLE(): Int {
+        return buffer.order(ByteOrder.LITTLE_ENDIAN).getInt()
     }
 
     override fun getFloatLE(): Float {

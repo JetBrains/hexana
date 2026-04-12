@@ -3,6 +3,10 @@ package org.jetbrains.hexana.io
 interface CommonByteBuffer {
     fun get(): Byte
     fun get(dst: ByteArray, offset: Int, size: Int)
+    fun put(value: Byte)
+    fun put(src: ByteArray, offset: Int, size: Int)
+    fun putIntLE(value: Int)
+    fun getIntLE(): Int
     fun position(): Int
     fun position(index: Int): CommonByteBuffer
     fun remaining(): Int

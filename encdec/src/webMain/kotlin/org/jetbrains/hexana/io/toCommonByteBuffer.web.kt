@@ -8,10 +8,13 @@ import org.khronos.webgl.get
 
 actual fun ByteArray.toCommonByteBuffer(): CommonByteBuffer = WebByteBuffer(toInt8Array().buffer)
 
+actual fun allocateCommonByteBuffer(size: Int): CommonByteBuffer = WebByteBuffer(ArrayBuffer(size))
+
 fun ArrayBuffer.toCommonByteBuffer(): CommonByteBuffer = WebByteBuffer(this)
 
 private class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer {
     private var cursorPosition = 0
+    private val dataView = DataView(buffer)
 
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer
     override fun get(): Byte {
@@ -26,6 +29,30 @@ private class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer 
             dst.set(i, slice.get(i - offset))
         }
         position(position() + size)
+    }
+
+    override fun put(value: Byte) {
+        Int8Array(buffer)[cursorPosition] = value
+        cursorPosition++
+    }
+
+    override fun put(src: ByteArray, offset: Int, size: Int) {
+        val target = Int8Array(buffer)
+        for (i in 0 until size) {
+            target[cursorPosition + i] = src[offset + i]
+        }
+        cursorPosition += size
+    }
+
+    override fun putIntLE(value: Int) {
+        dataView.setInt32(cursorPosition, value, true)
+        cursorPosition += 4
+    }
+
+    override fun getIntLE(): Int {
+        val res = dataView.getInt32(cursorPosition, true)
+        cursorPosition += 4
+        return res
     }
 
     override fun position(): Int {
@@ -46,13 +73,13 @@ private class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer 
     }
 
     override fun getFloatLE(): Float {
-        val res = DataView(buffer).getFloat32(cursorPosition, true)
+        val res = dataView.getFloat32(cursorPosition, true)
         position(cursorPosition + 4)
-        return res;
+        return res
     }
 
     override fun getDoubleLE(): Double {
-        val res = DataView(buffer).getFloat64(cursorPosition, true)
+        val res = dataView.getFloat64(cursorPosition, true)
         position(cursorPosition + 8)
         return res
     }
@@ -63,6 +90,5 @@ private class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer 
 
     override fun slice(range: IntRange): CommonByteBuffer {
         return WebByteBuffer(buffer.slice(range.first, range.last))
-
     }
 }
