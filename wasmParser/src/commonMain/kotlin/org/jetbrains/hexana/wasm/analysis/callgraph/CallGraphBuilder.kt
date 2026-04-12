@@ -7,9 +7,9 @@ import org.jetbrains.hexana.wasm.analysis.graph.DirectedGraphBuilder
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.FuncIdxWasmElementSegment
-import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
+import org.jetbrains.hexana.wasm.sections.parseCodeEntry
 
 /**
  * Result of building a call graph: the [DirectedGraph] and a mapping from node ID to [CallGraphNode].
@@ -31,9 +31,10 @@ class CallGraphBuilder(
 ) {
 
     fun build(): CallGraphResult {
-        // Parse code records once — used for both node creation and edge extraction
-        val codeRecords: List<WasmCodeRecord> = module.codeSection?.let { section ->
-            with(section) { buffer.scan() }
+        // Lightweight offset index — no opcode parsing
+        val codeSection = module.codeSection
+        val codeOffsets = codeSection?.let { section ->
+            with(section) { buffer.scanOffsets() }
         } ?: emptyList()
 
         val importRecords = module.importSection?.let { section ->
@@ -41,7 +42,7 @@ class CallGraphBuilder(
         } ?: emptyList()
 
         val importFuncCount = importRecords.count { it.type is WasmTypeIndexExternalType }
-        val totalFuncCount = importFuncCount + codeRecords.size
+        val totalFuncCount = importFuncCount + codeOffsets.size
 
         val graphBuilder = DirectedGraphBuilder(expectedNodes = totalFuncCount + 1)
         val nodeMap = HashMap<Int, CallGraphNode>(totalFuncCount * 2)
@@ -64,7 +65,7 @@ class CallGraphBuilder(
         }
 
         // 3. Defined function nodes (funcidx importCount to N)
-        for (i in codeRecords.indices) {
+        for (i in codeOffsets.indices) {
             val idx = importFuncCount + i
             val name = "func_$idx"
             val node = CallGraphNode.DefinedFunction(idx, name, idx)
@@ -93,10 +94,11 @@ class CallGraphBuilder(
             graphBuilder.addEdge(virtualRoot.id, elemFuncIdx)
         }
 
-        // 5. For each defined function, collect call info then add edges once
-        for (i in codeRecords.indices) {
+        // 5. Parse each function one at a time, extract call edges, let GC reclaim parsed data
+        for (i in codeOffsets.indices) {
             val callerIdx = importFuncCount + i
-            addEdgesForFunction(callerIdx, codeRecords[i].opCodes, elementFunctions, graphBuilder)
+            val record = buffer.parseCodeEntry(codeOffsets[i].offset)
+            addEdgesForFunction(callerIdx, record.opCodes, elementFunctions, graphBuilder)
         }
 
         val graph = graphBuilder.build(CallGraphNode.VIRTUAL_ROOT_ID)
