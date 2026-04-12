@@ -68,6 +68,10 @@ class SizeAnalysisBuilder(
         return buildFunctionDetailFromRecord(record)
     }
 
+    fun buildFunctionDetail(record: WasmCodeRecord): List<SizeNode> {
+        return buildFunctionDetailFromRecord(record)
+    }
+
     /**
      * Builds deferred per-data-segment detail: classifies data bytes as ZeroFilled, StringLiteral, or Binary.
      */

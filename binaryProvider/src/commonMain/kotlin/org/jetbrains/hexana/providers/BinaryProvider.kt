@@ -220,7 +220,17 @@ open class WasmBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProv
         }
     }
 
+    /** Lightweight offset index — only byte positions, no opcode parsing. */
+    val codeOffsets: List<CodeEntryOffset> by lazy {
+        val codeSection = wasmModule?.codeSection ?: return@lazy emptyList()
+        with(codeSection) { bytes.scanOffsets() }
+    }
 
+    /** Parse a single code record by its index in the code section (0-based). */
+    fun parseCodeRecord(codeIndex: Int): WasmCodeRecord? {
+        val offset = codeOffsets.getOrNull(codeIndex) ?: return null
+        return bytes.parseCodeEntry(offset.offset)
+    }
 
     val functions: List<WasmTypeRecord> by lazy {
         wasmModule ?: return@lazy emptyList()
@@ -258,12 +268,12 @@ open class WasmBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProv
     }
 
     fun getCodeRecordByIndex(index: Int): WasmCodeRecord? {
-        return codeRecords.getOrNull(index)
+        return parseCodeRecord(index)
     }
 
     fun getCodeRecordIndexAtByteOffset(byteOffset: Long): Int {
-        return codeRecords.indexOfFirst { record ->
-            record.offset <= byteOffset && byteOffset < record.offset + record.size.toLong()
+        return codeOffsets.indexOfFirst { entry ->
+            entry.offset <= byteOffset && byteOffset < entry.offset + entry.size.toLong()
         }
     }
 

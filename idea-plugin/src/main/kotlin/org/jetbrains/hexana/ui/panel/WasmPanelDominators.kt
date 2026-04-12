@@ -106,7 +106,7 @@ private fun CfgDominatorPane(
             val importCount = callGraphResult.nodeMap.values
                 .count { it is CallGraphNode.ImportedFunction }
             val codeIndex = funcIndex - importCount
-            val record = provider.codeRecords.getOrNull(codeIndex) ?: return@withContext null
+            val record = provider.parseCodeRecord(codeIndex) ?: return@withContext null
             CfgBuilder.build(record, funcIndex)
         }
     }

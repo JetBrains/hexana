@@ -38,6 +38,25 @@ class WasmSectionCode(sectionSize: Int, sectionOffset: Int, contentSize: Int, co
         return wasmCodeRecords
     }
 
+    /**
+     * Builds a lightweight index of code entry byte offsets without parsing opcodes.
+     * Each entry records the start position of the code entry in the buffer.
+     * Use [CommonByteBuffer.parseCodeEntry] to parse a single entry by its offset.
+     */
+    fun CommonByteBuffer.scanOffsets(): List<CodeEntryOffset> {
+        position(contentOffset)
+        val count = getULEB128().toInt()
+        val offsets = ArrayList<CodeEntryOffset>(count)
+        repeat(count) {
+            val entryStart = position()
+            val funSize = getULEB128().toUInt()
+            val bodyStart = position()
+            position(bodyStart + funSize.toInt())
+            offsets.add(CodeEntryOffset(entryStart, sizeFromOffset(entryStart)))
+        }
+        return offsets
+    }
+
     fun CommonByteBuffer.scanCodeEntries(declaredFuncIdxs: List<Int>): Map<Int, WasmCodeRecord> {
         val wasmCodeRecords = mutableMapOf<Int, WasmCodeRecord>()
         position(contentOffset)
@@ -106,6 +125,15 @@ fun CommonByteBuffer.consumeLocals(locals: MutableList<WasmCodeLocalRecord>) {
 
 data class MemoryRegion(val offset: Int, val size: Int)
 class UnparsedOpCode(val e: Throwable, rawCodes: MemoryRegion): OpCodeWithValue<MemoryRegion>(rawCodes)
+
+/** Lightweight index entry: byte offset and size of a code entry, without parsed opcodes. */
+data class CodeEntryOffset(val offset: Int, val size: Int)
+
+/** Parse a single code entry at the given byte offset. */
+fun CommonByteBuffer.parseCodeEntry(entryOffset: Int): WasmCodeRecord {
+    position(entryOffset)
+    return consumeCodeEntry()
+}
 
 data class WasmCodeLocalRecord(val local: Int, val type: WasmValueType<*>)
 data class WasmCodeRecord(

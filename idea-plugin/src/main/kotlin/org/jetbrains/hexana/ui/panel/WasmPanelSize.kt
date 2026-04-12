@@ -21,7 +21,6 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.wasm.analysis.SizeAnalysisBuilder
 import org.jetbrains.hexana.wasm.analysis.SizeNode
-import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmDataRecord
 import org.jetbrains.jewel.foundation.lazy.SelectableLazyListState
 import org.jetbrains.jewel.foundation.lazy.tree.Tree
@@ -35,22 +34,21 @@ import org.jetbrains.jewel.ui.component.Text
 fun WasmPanelSize(provider: WasmBinaryProvider, state: HexViewStateHolder) {
     val module = remember(provider) { provider.sizeAnalysis } ?: return
     val builder = remember(provider) { provider.sizeAnalysisBuilder }
-    val codeRecords = remember(provider) { provider.codeRecords }
     val dataRecords = remember(provider) { provider.data }
-    SizeTreeContent(module, builder, codeRecords, dataRecords, state)
+    SizeTreeContent(module, builder, provider, dataRecords, state)
 }
 
 @Composable
 fun WasmPanelSize(provider: WasmComponentBinaryProvider, state: HexViewStateHolder) {
     val module = remember(provider) { provider.sizeAnalysis } ?: return
-    SizeTreeContent(module, builder = null, codeRecords = emptyList(), dataRecords = emptyList(), state)
+    SizeTreeContent(module, builder = null, provider = null, dataRecords = emptyList(), state)
 }
 
 @Composable
 private fun SizeTreeContent(
     module: SizeNode.Module,
     builder: SizeAnalysisBuilder?,
-    codeRecords: List<WasmCodeRecord>,
+    provider: WasmBinaryProvider?,
     dataRecords: List<WasmDataRecord>,
     state: HexViewStateHolder,
 ) {
@@ -60,7 +58,7 @@ private fun SizeTreeContent(
         tree = withContext(Dispatchers.IO) {
             val detailCache = mutableMapOf<Any, List<SizeNode>>()
             buildTree {
-                addSizeChildren(module, builder, codeRecords, dataRecords, detailCache)
+                addSizeChildren(module, builder, provider, dataRecords, detailCache)
             }
         }
     }
@@ -104,16 +102,16 @@ private fun SizeTreeContent(
 private fun TreeGeneratorScope<Any>.addSizeChildren(
     parent: SizeNode,
     builder: SizeAnalysisBuilder?,
-    codeRecords: List<WasmCodeRecord>,
+    provider: WasmBinaryProvider?,
     dataRecords: List<WasmDataRecord>,
     detailCache: MutableMap<Any, List<SizeNode>>,
 ) {
-    val children = resolveChildren(parent, builder, codeRecords, dataRecords, detailCache)
+    val children = resolveChildren(parent, builder, provider, dataRecords, detailCache)
     for (child in children) {
-        val grandchildren = resolveChildren(child, builder, codeRecords, dataRecords, detailCache)
+        val grandchildren = resolveChildren(child, builder, provider, dataRecords, detailCache)
         if (grandchildren.isNotEmpty()) {
             addNode(child) {
-                addSizeChildren(child, builder, codeRecords, dataRecords, detailCache)
+                addSizeChildren(child, builder, provider, dataRecords, detailCache)
             }
         } else {
             addLeaf(child)
@@ -124,7 +122,7 @@ private fun TreeGeneratorScope<Any>.addSizeChildren(
 private fun resolveChildren(
     node: SizeNode,
     builder: SizeAnalysisBuilder?,
-    codeRecords: List<WasmCodeRecord>,
+    provider: WasmBinaryProvider?,
     dataRecords: List<WasmDataRecord>,
     cache: MutableMap<Any, List<SizeNode>>,
 ): List<SizeNode> {
@@ -134,7 +132,8 @@ private fun resolveChildren(
     return when (node) {
         is SizeNode.Function -> {
             cache.getOrPut("func:${node.funcIndex}") {
-                builder.buildFunctionDetail(codeRecords, node.funcIndex)
+                val record = provider?.parseCodeRecord(node.funcIndex) ?: return emptyList()
+                builder.buildFunctionDetail(record)
             }
         }
         is SizeNode.DataSegment -> {
