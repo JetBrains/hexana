@@ -55,7 +55,7 @@ class CallGraphBuilderTest {
         val (graph, nodeMap) = builder.build()
 
         assertTrue(graph.nodes.size > 5, "UTF8 module should have multiple function nodes")
-        val totalEdges = graph.successors.values.sumOf { it.size }
+        val totalEdges = graph.nodes.sumOf { (graph.successors[it.id]?.size ?: 0) }
         assertTrue(totalEdges > 0, "Should have call edges")
     }
 
