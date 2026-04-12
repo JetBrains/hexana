@@ -914,6 +914,12 @@ object OpCodes {
             }
         }
 
+        class StructNewDefault(typeIdIndex: UInt) : OpCodeWithValue<UInt>(typeIdIndex) {
+            companion object {
+                const val code: UByte = 0x01u
+            }
+        }
+
         class StructGet(typeIdIndex: UInt, fieldIdIndex: UInt) : OpCodeGCStruct(typeIdIndex, fieldIdIndex) {
             companion object {
                 const val code: UByte = 0x02u
@@ -938,9 +944,21 @@ object OpCodes {
             }
         }
 
+        class ArrayNew(typeIdIndex: UInt) : OpCodeWithValue<UInt>(typeIdIndex) {
+            companion object {
+                const val code: UByte = 0x06u
+            }
+        }
+
         class RefTest(initValue: HeapType) : OpCodeWithValue<HeapType>(initValue) {
             companion object {
                 const val code: UByte = 0x14u
+            }
+        }
+
+        class RefTestNullable(initValue: HeapType) : OpCodeWithValue<HeapType>(initValue) {
+            companion object {
+                const val code: UByte = 0x15u
             }
         }
 
@@ -958,9 +976,27 @@ object OpCodes {
             const val code: UByte = 0x1Bu
         }
 
+        object RefI31 : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x1Cu
+        }
+
+        object I31GetS : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x1Du
+        }
+
+        object I31GetU : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x1Eu
+        }
+
         class RefCastNullable(initValue: HeapType) : OpCodeWithValue<HeapType>(initValue) {
             companion object {
                 const val code: UByte = 0x17u
+            }
+        }
+
+        class BrOnCast(label: UInt, val srcType: HeapType, val dstType: HeapType) : OpCodeWithValue<UInt>(label) {
+            companion object {
+                const val code: UByte = 0x18u
             }
         }
 
@@ -988,9 +1024,27 @@ object OpCodes {
             }
         }
 
+        class ArrayFill(typeIndex: UInt): OpCodeWithValue<UInt>(typeIndex) {
+            companion object {
+                const val code: UByte = 0x10u
+            }
+        }
+
         class ArrayCopy(typeIndexDst: UInt, typeIndexSrc: UInt): OpCodeGCSrcDst(typeIndexDst, typeIndexSrc) {
             companion object {
                 const val code: UByte = 0x11u
+            }
+        }
+
+        class ArrayInitData(typeIndex: UInt, val dataIndex: UInt): OpCodeWithValue<UInt>(typeIndex) {
+            companion object {
+                const val code: UByte = 0x12u
+            }
+        }
+
+        class ArrayInitElem(typeIndex: UInt, val elemIndex: UInt): OpCodeWithValue<UInt>(typeIndex) {
+            companion object {
+                const val code: UByte = 0x13u
             }
         }
 
