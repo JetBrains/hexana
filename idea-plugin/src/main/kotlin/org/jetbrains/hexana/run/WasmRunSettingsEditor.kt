@@ -83,12 +83,14 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private val wasmFileField = TextFieldWithBrowseButton()
     private val wasmtimePathField = TextFieldWithBrowseButton()
     private val wasmtimeOptionsField = RawCommandLineEditor()
+    private val exportNameField = JBTextField()
     private val programArgumentsField = RawCommandLineEditor()
     private val workingDirectoryField = TextFieldWithBrowseButton()
     private val dependenciesField = JBTextArea(3, 40).apply { isEditable = false }
 
     private var wasmtimePathRow: Row? = null
     private var wasmtimeOptionsRow: Row? = null
+    private var exportNameRow: Row? = null
 
     init {
         wasmFileField.addBrowseFolderListener(
@@ -109,7 +111,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
             if (e.stateChange == ItemEvent.SELECTED) {
                 val newEngine = engineCombo.item as? WasmEngine ?: return@addItemListener
                 migrateInvokeArgs(newEngine)
-                updateWasmtimeFieldsVisibility()
+                updateFieldsVisibility()
             }
         }
     }
@@ -129,7 +131,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private fun migrateWasmtimeToGraalWasm() {
         val options = wasmtimeOptionsField.text.trim()
         val parsed = parseStandardInvoke(options) ?: return
-        exportName = parsed.exportName
+        exportNameField.text = parsed.exportName
         if (parsed.inlineArgs.isNotEmpty()) {
             programArgumentsField.text = parsed.inlineArgs
         }
@@ -137,7 +139,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     }
 
     private fun migrateGraalWasmToWasmtime() {
-        val name = exportName.ifBlank { return }
+        val name = exportNameField.text.trim().ifBlank { return }
         val currentOptions = wasmtimeOptionsField.text.trim()
         if (currentOptions.contains("--invoke")) return
 
@@ -150,25 +152,24 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         wasmtimeOptionsField.text = if (currentOptions.isEmpty()) invokeOption else "$currentOptions $invokeOption"
     }
 
-    /** Transient export name carried across engine switches. Not displayed in the editor. */
-    private var exportName: String = ""
 
-    private fun updateWasmtimeFieldsVisibility() {
+    private fun updateFieldsVisibility() {
         val isWasmtime = engineCombo.item == WasmEngine.WASMTIME
         wasmtimePathRow?.visible(isWasmtime)
         wasmtimeOptionsRow?.visible(isWasmtime)
+        exportNameRow?.visible(!isWasmtime)
     }
 
     override fun resetEditorFrom(configuration: WasmRunConfiguration) {
-        exportName = configuration.exportName
         engineCombo.item = configuration.engine
         wasmFileField.text = configuration.wasmFilePath
         wasmtimePathField.text = configuration.wasmtimePath
         wasmtimeOptionsField.text = configuration.wasmtimeOptions
+        exportNameField.text = configuration.exportName
         programArgumentsField.text = configuration.programArguments
         workingDirectoryField.text = configuration.workingDirectory
         dependenciesField.text = configuration.dependencies.joinToString("\n")
-        updateWasmtimeFieldsVisibility()
+        updateFieldsVisibility()
     }
 
     override fun applyEditorTo(configuration: WasmRunConfiguration) {
@@ -176,9 +177,9 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         configuration.wasmFilePath = wasmFileField.text
         configuration.wasmtimePath = wasmtimePathField.text
         configuration.wasmtimeOptions = wasmtimeOptionsField.text
+        configuration.exportName = exportNameField.text
         configuration.programArguments = programArgumentsField.text
         configuration.workingDirectory = workingDirectoryField.text
-        configuration.exportName = exportName
     }
 
     override fun createEditor(): JComponent = panel {
@@ -193,6 +194,9 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         }
         wasmtimeOptionsRow = row(HexanaBundle.message("wasm.run.configuration.wasmtime.options")) {
             cell(wasmtimeOptionsField).align(AlignX.FILL)
+        }
+        exportNameRow = row(HexanaBundle.message("wasm.run.configuration.exportName")) {
+            cell(exportNameField).align(AlignX.FILL)
         }
         row(HexanaBundle.message("wasm.run.configuration.programArguments")) {
             cell(programArgumentsField).align(AlignX.FILL)
