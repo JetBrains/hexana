@@ -1,6 +1,7 @@
 package org.jetbrains.hexana
 
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.readBytes
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
@@ -120,6 +121,9 @@ fun VirtualFile.toCommonByteBuffer(): CommonByteBuffer? {
     if (this.path.isHttpUrl()) {
         val response = readRemoteResponseBlocking(this.path)
         return ByteBuffer.wrap(response).toCommonByteBuffer()
+    }
+    if (this.url.startsWith("temp:///")) { // tests
+        return this.readBytes().toCommonByteBuffer()
     }
     return toMappedBuffer()?.toCommonByteBuffer()
 }
