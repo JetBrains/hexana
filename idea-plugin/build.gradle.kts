@@ -74,7 +74,7 @@ dependencies {
     implementation(project(":graalwasm:common"))
     implementation(project(":graalwasm:wat2wasm"))
     implementation(libs.kotlin.reflect)
-    compileOnly(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.bundles.graalvm)
     implementation(libs.jackson.module.kotlin)
 
