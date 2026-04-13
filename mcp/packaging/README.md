@@ -13,11 +13,24 @@ Build self-contained wrapper outputs with:
 ./gradlew :mcp:assembleMcpPackaging
 ```
 
+Install the Codex plugin into the repo-local marketplace layout with:
+
+```bash
+./gradlew :mcp:installRepoLocalCodexPlugin
+```
+
 This produces:
 
 ```text
 mcp/build/packaging/claude-plugin/
 mcp/build/packaging/codex-plugin/
+```
+
+and for repo-local Codex testing:
+
+```text
+.agents/plugins/marketplace.json
+plugins/hexana/
 ```
 
 Each assembled wrapper includes its own bundled standalone runtime under `server/` and exposes `bin/hexana-mcp`.
@@ -33,3 +46,6 @@ For ad hoc local testing, you can still override the launcher path explicitly:
 ```bash
 HEXANA_SERVER_BIN=/absolute/path/to/server/bin/server mcp/packaging/claude-plugin/bin/hexana-mcp version
 ```
+
+For Codex local plugin testing, run `./gradlew :mcp:installRepoLocalCodexPlugin`, restart Codex, and install
+`Hexana` from the `Hexana Local` marketplace in the plugin directory (`/plugins` in CLI).

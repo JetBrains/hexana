@@ -12,3 +12,4 @@ out/
 /teamcity.local.properties
 wasm-modules/wasmprinter_wrapper/target
 wasm-modules/wasmprinter_wrapper/Cargo.lock
+/plugins/hexana/

@@ -1,0 +1,20 @@
+{
+  "name": "hexana-local",
+  "interface": {
+    "displayName": "Hexana Local"
+  },
+  "plugins": [
+    {
+      "name": "hexana",
+      "source": {
+        "source": "local",
+        "path": "./plugins/hexana"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

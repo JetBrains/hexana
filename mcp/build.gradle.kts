@@ -1,5 +1,5 @@
-import java.util.Properties
 import java.net.InetAddress
+import java.util.*
 
 val serverPropertiesFile = layout.projectDirectory.file("server/gradle.properties").asFile
 require(serverPropertiesFile.isFile) {
@@ -125,6 +125,21 @@ tasks.register<Sync>("installRepoLocalClaudePlugin") {
         into("server")
     }
     into(rootProject.layout.projectDirectory.dir("plugins/hexana"))
+}
+
+tasks.register<Sync>("installRepoLocalCodexPlugin") {
+    group = "distribution"
+    description = "Install the assembled Codex plugin into the repo-local plugins/hexana path for /plugins testing."
+    dependsOn(":mcp:server:installDist")
+    from(layout.projectDirectory.dir("packaging/codex-plugin"))
+    from(standaloneInstallDir) {
+        into("server")
+    }
+    into(rootProject.layout.projectDirectory.dir("plugins/hexana"))
+    doLast {
+        val launcherPath = destinationDir.resolve("bin/hexana-mcp").absolutePath
+        destinationDir.resolve(".mcp.json").writeText(renderMcpConfig(launcherPath))
+    }
 }
 
 tasks.register("assembleMcpPackaging") {
