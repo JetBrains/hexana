@@ -17,6 +17,53 @@ import java.awt.event.ItemEvent
 import javax.swing.DefaultComboBoxModel
 import javax.swing.JComponent
 
+internal data class ParsedInvoke(
+    val exportName: String,
+    val inlineArgs: String,
+    val remainingOptions: String,
+)
+
+/**
+ * Recognises the standard `--invoke` patterns that Hexana generates:
+ *  - `--invoke exportName`            (core-module style)
+ *  - `--invoke "exportName(a, b)"`    (component style)
+ *
+ * Returns `null` when `wasmtimeOptions` does not contain `--invoke`.
+ */
+internal fun parseStandardInvoke(wasmtimeOptions: String): ParsedInvoke? {
+    val trimmed = wasmtimeOptions.trim()
+    if (!trimmed.contains("--invoke")) return null
+
+    // Match: --invoke "name(args)" or --invoke name
+    val quotedPattern = Regex("""--invoke\s+"([^"]+)"""")
+    val simplePattern = Regex("""--invoke\s+(\S+)""")
+
+    val quotedMatch = quotedPattern.find(trimmed)
+    val invokeValue: String
+    val matchRange: IntRange
+
+    if (quotedMatch != null) {
+        invokeValue = quotedMatch.groupValues[1]
+        matchRange = quotedMatch.range
+    } else {
+        val simpleMatch = simplePattern.find(trimmed) ?: return null
+        invokeValue = simpleMatch.groupValues[1]
+        matchRange = simpleMatch.range
+    }
+
+    val remaining = (trimmed.removeRange(matchRange)).trim()
+
+    // Check for component-style "exportName(args)"
+    val parenIdx = invokeValue.indexOf('(')
+    return if (parenIdx >= 0 && invokeValue.endsWith(')')) {
+        val name = invokeValue.substring(0, parenIdx)
+        val args = invokeValue.substring(parenIdx + 1, invokeValue.length - 1)
+        ParsedInvoke(name, args, remaining)
+    } else {
+        ParsedInvoke(invokeValue, "", remaining)
+    }
+}
+
 class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmRunConfiguration>() {
 
     private val engineCombo = ComboBox(DefaultComboBoxModel(WasmEngine.entries.toTypedArray())).apply {
@@ -60,10 +107,51 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         )
         engineCombo.addItemListener { e ->
             if (e.stateChange == ItemEvent.SELECTED) {
+                val newEngine = engineCombo.item as? WasmEngine ?: return@addItemListener
+                migrateInvokeArgs(newEngine)
                 updateWasmtimeFieldsVisibility()
             }
         }
     }
+
+    /**
+     * When the user switches engine, migrate the standard `--invoke` wasmtime
+     * option to/from the engine-independent [exportName] and [programArguments]
+     * fields so the configuration stays meaningful for the new engine.
+     */
+    private fun migrateInvokeArgs(newEngine: WasmEngine) {
+        when (newEngine) {
+            WasmEngine.GRAALWASM -> migrateWasmtimeToGraalWasm()
+            WasmEngine.WASMTIME -> migrateGraalWasmToWasmtime()
+        }
+    }
+
+    private fun migrateWasmtimeToGraalWasm() {
+        val options = wasmtimeOptionsField.text.trim()
+        val parsed = parseStandardInvoke(options) ?: return
+        exportName = parsed.exportName
+        if (parsed.inlineArgs.isNotEmpty()) {
+            programArgumentsField.text = parsed.inlineArgs
+        }
+        wasmtimeOptionsField.text = parsed.remainingOptions
+    }
+
+    private fun migrateGraalWasmToWasmtime() {
+        val name = exportName.ifBlank { return }
+        val currentOptions = wasmtimeOptionsField.text.trim()
+        if (currentOptions.contains("--invoke")) return
+
+        val args = programArgumentsField.text.trim()
+        val invokeOption = if (args.contains(",")) {
+            "--invoke \"$name($args)\""
+        } else {
+            "--invoke $name"
+        }
+        wasmtimeOptionsField.text = if (currentOptions.isEmpty()) invokeOption else "$currentOptions $invokeOption"
+    }
+
+    /** Transient export name carried across engine switches. Not displayed in the editor. */
+    private var exportName: String = ""
 
     private fun updateWasmtimeFieldsVisibility() {
         val isWasmtime = engineCombo.item == WasmEngine.WASMTIME
@@ -72,6 +160,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     }
 
     override fun resetEditorFrom(configuration: WasmRunConfiguration) {
+        exportName = configuration.exportName
         engineCombo.item = configuration.engine
         wasmFileField.text = configuration.wasmFilePath
         wasmtimePathField.text = configuration.wasmtimePath
@@ -89,6 +178,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         configuration.wasmtimeOptions = wasmtimeOptionsField.text
         configuration.programArguments = programArgumentsField.text
         configuration.workingDirectory = workingDirectoryField.text
+        configuration.exportName = exportName
     }
 
     override fun createEditor(): JComponent = panel {
