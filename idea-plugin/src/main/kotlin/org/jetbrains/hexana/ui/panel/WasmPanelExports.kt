@@ -12,11 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
-import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
-import com.intellij.ui.dsl.builder.bindText
-import com.intellij.ui.dsl.builder.panel
 import org.jetbrains.hexana.*
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
@@ -31,7 +27,6 @@ import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.Tooltip
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
-import javax.swing.JComponent
 
 @Composable
 internal fun WasmPanelExports(wasmBinaryProvider: WasmBinaryProvider, state: HexViewStateHolder) {
@@ -118,44 +113,23 @@ internal fun WasmPanelExports(binaryProvider: BinaryProvider, wasmBinaryProvider
 }
 
 
-private class WasmFunctionArgsDialog(
-    project: Project,
-    private val exportName: String,
-    private val params: List<WasmValueType<*>>,
-) : DialogWrapper(project, false) {
-
-    val argValues = MutableList(params.size) { "0" }
-
-    init {
-        title = "Arguments for '$exportName'"
-        init()
+private fun wasmArgDescriptors(params: List<WasmValueType<*>>): List<FunctionArgDescriptor> =
+    params.mapIndexed { i, param ->
+        FunctionArgDescriptor(
+            label = "arg$i",
+            typeName = wasmTypeName(param),
+            validate = { text -> validateWasmArg(text, param) },
+        )
     }
 
-    override fun createCenterPanel(): JComponent {
-        return panel {
-            for ((i, param) in params.withIndex()) {
-                val typeName = wasmTypeName(param)
-                row("arg$i ($typeName):") {
-                    val field = textField()
-                        .bindText({ argValues[i] }, { argValues[i] = it })
-                        .validationInfo { field ->
-                            validateArg(field.text, param)
-                        }
-                    if (i == 0) field.focused()
-                }
-            }
-        }
-    }
-
-    private fun validateArg(text: String, type: WasmValueType<*>): ValidationInfo? {
-        if (text.isBlank()) return ValidationInfo("Value is required")
-        return when (type) {
-            is WasmI32Type -> if (text.toIntOrNull() == null) ValidationInfo("Expected an i32 integer") else null
-            is WasmI64Type -> if (text.toLongOrNull() == null) ValidationInfo("Expected an i64 integer") else null
-            is WasmF32Type -> if (text.toFloatOrNull() == null) ValidationInfo("Expected an f32 number") else null
-            is WasmF64Type -> if (text.toDoubleOrNull() == null) ValidationInfo("Expected an f64 number") else null
-            else -> null
-        }
+private fun validateWasmArg(text: String, type: WasmValueType<*>): ValidationInfo? {
+    if (text.isBlank()) return ValidationInfo("Value is required")
+    return when (type) {
+        is WasmI32Type -> if (text.toIntOrNull() == null) ValidationInfo("Expected an i32 integer") else null
+        is WasmI64Type -> if (text.toLongOrNull() == null) ValidationInfo("Expected an i64 integer") else null
+        is WasmF32Type -> if (text.toFloatOrNull() == null) ValidationInfo("Expected an f32 number") else null
+        is WasmF64Type -> if (text.toDoubleOrNull() == null) ValidationInfo("Expected an f64 number") else null
+        else -> null
     }
 }
 
@@ -174,7 +148,7 @@ private fun runExportedFunction(
 
     var programArgs = ""
     if (params.isNotEmpty() && params.all { isTrivialType(it) }) {
-        val dialog = WasmFunctionArgsDialog(project, exportName, params)
+        val dialog = FunctionArgsDialog(project, exportName, wasmArgDescriptors(params))
         if (!dialog.showAndGet()) return
         programArgs = dialog.argValues.joinToString(" ")
     }
