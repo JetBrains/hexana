@@ -25,10 +25,10 @@ open class WitStaticFuncItemMixin(node: ASTNode): WitPsiElement(node), WitStatic
     }
 
     override fun getName(): String? {
-        return WitPsiImplUtil.getName(this as WitFuncItem)
+        return identifier.text
     }
 
     override fun getTextOffset(): Int {
-        return WitPsiImplUtil.getTextOffset(this as WitFuncItem)
+        return identifier.textOffset
     }
 }
