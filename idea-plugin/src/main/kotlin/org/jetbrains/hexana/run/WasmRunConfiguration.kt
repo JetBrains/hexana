@@ -41,6 +41,10 @@ class WasmRunConfiguration(
         get() = options.getWasmtimeOptions()
         set(value) { options.setWasmtimeOptions(value) }
 
+    var exportName: String
+        get() = options.getExportName()
+        set(value) { options.setExportName(value) }
+
     var dependencies: List<String>
         get() = options.getDependencies()
         set(value) { options.setDependencies(value) }

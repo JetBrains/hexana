@@ -9,6 +9,7 @@ class WasmRunConfigurationOptions : RunConfigurationOptions() {
     private val workingDirectory = string("").provideDelegate(this, "workingDirectory")
     private val wasmtimePath = string("").provideDelegate(this, "wasmtimePath")
     private val wasmtimeOptions = string("").provideDelegate(this, "wasmtimeOptions")
+    private val exportName = string("").provideDelegate(this, "exportName")
     private val dependencies = list<String>().provideDelegate(this, "dependencies")
 
     fun getEngine(): WasmEngine = WasmEngine.fromString(engine.getValue(this))
@@ -28,6 +29,9 @@ class WasmRunConfigurationOptions : RunConfigurationOptions() {
 
     fun getWasmtimeOptions(): String = wasmtimeOptions.getValue(this) ?: ""
     fun setWasmtimeOptions(value: String) { wasmtimeOptions.setValue(this, value) }
+
+    fun getExportName(): String = exportName.getValue(this) ?: ""
+    fun setExportName(value: String) { exportName.setValue(this, value) }
 
     fun getDependencies(): List<String> = dependencies.getValue(this)
     fun setDependencies(value: List<String>) {

@@ -14,7 +14,9 @@ import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.proxy.ProxyObject
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import org.jetbrains.hexana.wasm.sections.*
 import java.io.File
 import java.io.OutputStream
 import java.io.PipedInputStream
@@ -99,17 +101,20 @@ class GraalWasmProcessHandler(
         stdoutReader.start()
         stderrReader.start()
 
-        val args = configuration.programArguments.trim()
+        val programArgs = configuration.programArguments.trim()
             .split("\\s+".toRegex())
             .filter { it.isNotEmpty() }
-            .toTypedArray()
 
-        val context = Context.newBuilder("wasm")
+        val targetExport = configuration.exportName.ifBlank { null }
+
+        val contextBuilder = Context.newBuilder("wasm")
             .option("engine.WarnInterpreterOnly", "false")
             .out(stdoutPipe)
             .err(stderrPipe)
-            .arguments("wasm", args)
-            .build()
+        if (targetExport == null) {
+            contextBuilder.arguments("wasm", programArgs.toTypedArray())
+        }
+        val context = contextBuilder.build()
 
         wasmContext = context
         context.use { ctx ->
@@ -148,10 +153,22 @@ class GraalWasmProcessHandler(
             val mainInstance = mainModule.newInstance(importObject)
             val exports = mainInstance.getMember("exports")
 
-            val mainFunc = exports.getMember("_start")
-
-            if (mainFunc != null && mainFunc.canExecute()) {
-                mainFunc.execute()
+            if (targetExport != null) {
+                val func = exports.getMember(targetExport)
+                if (func != null && func.canExecute()) {
+                    val typedArgs = convertArgsToWasmTypes(wasmBytes, targetExport, programArgs)
+                    val result = func.execute(*typedArgs.toTypedArray())
+                    if (result != null && !result.isNull) {
+                        notifyTextAvailable(result.toString() + "\n", ProcessOutputType.STDOUT)
+                    }
+                } else {
+                    notifyTextAvailable("Error: Export '$targetExport' not found or not callable\n", ProcessOutputType.STDERR)
+                }
+            } else {
+                val startFunc = exports.getMember("_start")
+                if (startFunc != null && startFunc.canExecute()) {
+                    startFunc.execute()
+                }
             }
         }
         wasmContext = null
@@ -174,4 +191,38 @@ class GraalWasmProcessHandler(
     override fun detachIsDefault(): Boolean = false
 
     override fun getProcessInput(): OutputStream? = null
+}
+
+private fun convertArgsToWasmTypes(
+    wasmBytes: ByteArray,
+    exportName: String,
+    args: List<String>,
+): List<Any> {
+    if (args.isEmpty()) return emptyList()
+
+    val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
+    val export = provider.exports
+        .filterIsInstance<WasmFunctionExportRecordEntry>()
+        .firstOrNull { it.name == exportName }
+        ?: return args
+
+    val importedFunctionCount = provider.imports.count { it.type is WasmTypeIndexExternalType }
+    val localIndex = export.index.toInt() - importedFunctionCount
+    if (localIndex < 0) return args
+
+    val signature = provider.functions.getOrNull(localIndex) as? WasmSectionFunctionTypeRecord
+        ?: return args
+
+    return args.mapIndexed { i, arg ->
+        val paramType = signature.params.getOrNull(i)
+        convertArg(arg, paramType)
+    }
+}
+
+private fun convertArg(arg: String, type: WasmValueType<*>?): Any = when (type) {
+    is WasmI32Type -> arg.toIntOrNull() ?: arg
+    is WasmI64Type -> arg.toLongOrNull() ?: arg
+    is WasmF32Type -> arg.toFloatOrNull() ?: arg
+    is WasmF64Type -> arg.toDoubleOrNull() ?: arg
+    else -> arg
 }

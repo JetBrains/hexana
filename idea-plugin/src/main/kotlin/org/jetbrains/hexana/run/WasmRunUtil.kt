@@ -41,7 +41,10 @@ fun runWasmConfiguration(
         runManager.addConfiguration(newSettings)
     }
 
-    (settings.configuration as? WasmRunConfiguration)?.programArguments = programArgs
+    (settings.configuration as? WasmRunConfiguration)?.apply {
+        programArguments = programArgs
+        this.exportName = exportName
+    }
 
     doRun(file, project, settings, runManager)
 }

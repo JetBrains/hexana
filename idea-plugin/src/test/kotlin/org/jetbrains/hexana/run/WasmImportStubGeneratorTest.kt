@@ -461,6 +461,102 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
         assertEquals("table", hostExports[0].name)
     }
 
+    fun testGraalWasmTypedArgumentPassing() {
+        val wasm = wat2wasm("""
+            (module
+              (func (export "add") (param i32 i32) (result i32)
+                local.get 0
+                local.get 1
+                i32.add
+              )
+            )
+        """.trimIndent())
+
+        val context = Context.newBuilder("wasm")
+            .option("engine.WarnInterpreterOnly", "false")
+            .build()
+
+        context.use { ctx ->
+            val mainSource = Source.newBuilder("wasm", ByteSequence.create(wasm), "test")
+                .build()
+            val mainModule = ctx.eval(mainSource)
+            val mainInstance = mainModule.newInstance()
+            val exports = mainInstance.getMember("exports")
+
+            val addFunc = exports.getMember("add")
+            assertNotNull("add should be accessible", addFunc)
+            assertTrue("add should be executable", addFunc.canExecute())
+
+            // Passing typed Int values should work
+            val result = addFunc.execute(3, 4)
+            assertEquals(7, result.asInt())
+
+            // Passing strings should fail (this is the bug we're fixing)
+            try {
+                addFunc.execute("3", "4")
+                fail("Passing string arguments should throw an error for i32 params")
+            } catch (_: Exception) {
+                // Expected: GraalWasm rejects string arguments for numeric params
+            }
+        }
+    }
+
+    fun testGraalWasmTypedArgumentPassingI64() {
+        val wasm = wat2wasm("""
+            (module
+              (func (export "add64") (param i64 i64) (result i64)
+                local.get 0
+                local.get 1
+                i64.add
+              )
+            )
+        """.trimIndent())
+
+        val context = Context.newBuilder("wasm")
+            .option("engine.WarnInterpreterOnly", "false")
+            .build()
+
+        context.use { ctx ->
+            val mainSource = Source.newBuilder("wasm", ByteSequence.create(wasm), "test")
+                .build()
+            val mainInstance = ctx.eval(mainSource).newInstance()
+            val exports = mainInstance.getMember("exports")
+
+            val addFunc = exports.getMember("add64")
+            assertNotNull(addFunc)
+            val result = addFunc.execute(100L, 200L)
+            assertEquals(300L, result.asLong())
+        }
+    }
+
+    fun testGraalWasmTypedArgumentPassingF32() {
+        val wasm = wat2wasm("""
+            (module
+              (func (export "add_f32") (param f32 f32) (result f32)
+                local.get 0
+                local.get 1
+                f32.add
+              )
+            )
+        """.trimIndent())
+
+        val context = Context.newBuilder("wasm")
+            .option("engine.WarnInterpreterOnly", "false")
+            .build()
+
+        context.use { ctx ->
+            val mainSource = Source.newBuilder("wasm", ByteSequence.create(wasm), "test")
+                .build()
+            val mainInstance = ctx.eval(mainSource).newInstance()
+            val exports = mainInstance.getMember("exports")
+
+            val addFunc = exports.getMember("add_f32")
+            assertNotNull(addFunc)
+            val result = addFunc.execute(1.5f, 2.5f)
+            assertEquals(4.0f, result.asFloat())
+        }
+    }
+
     private fun assertValidWasmModule(bytes: ByteArray) {
         val buffer = bytes.toCommonByteBuffer()
         val result = WasmParser().parse(buffer)
