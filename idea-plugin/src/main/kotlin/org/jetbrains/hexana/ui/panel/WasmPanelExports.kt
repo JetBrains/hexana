@@ -17,7 +17,9 @@ import org.jetbrains.hexana.*
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.run.WasmEngine
 import org.jetbrains.hexana.run.runWasmConfiguration
+import org.jetbrains.hexana.run.showEnginePopup
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
@@ -102,7 +104,9 @@ internal fun WasmPanelExports(binaryProvider: BinaryProvider, wasmBinaryProvider
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                         ) {
-                            runExportedFunction(binaryProvider, wasmBinaryProvider, state, export)
+                            showEnginePopup { engine ->
+                                runExportedFunction(binaryProvider, wasmBinaryProvider, state, export, engine)
+                            }
                         },
                     )
                 }
@@ -138,6 +142,7 @@ private fun runExportedFunction(
     wasmBinaryProvider: WasmBinaryProvider,
     state: HexViewStateHolder,
     export: WasmFunctionExportRecordEntry,
+    engine: WasmEngine,
 ) {
     val project = state.project
     val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return
@@ -153,5 +158,5 @@ private fun runExportedFunction(
         programArgs = dialog.argValues.joinToString(" ")
     }
 
-    runWasmConfiguration(project, file, exportName, programArgs, "--invoke $exportName")
+    runWasmConfiguration(project, file, exportName, programArgs, "--invoke $exportName", engine)
 }

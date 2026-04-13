@@ -1,8 +1,8 @@
 package org.jetbrains.hexana.run
 
-enum class WasmEngine(val displayName: String) {
-    WASMTIME("Wasmtime"),
-    GRAALWASM("GraalWasm"),
+enum class WasmEngine(val displayName: String, val supportsComponentsModel: Boolean) {
+    WASMTIME("Wasmtime", true),
+    GRAALWASM("GraalWasm", false),
     ;
 
     companion object {

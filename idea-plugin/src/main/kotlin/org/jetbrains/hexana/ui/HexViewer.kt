@@ -55,6 +55,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.HexanaSourceLocationProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.run.runWasmFile
+import org.jetbrains.hexana.run.showEnginePopup
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wat.psi.getDataByIndex
 import org.jetbrains.hexana.wat.psi.getDefinedFunctionByIndex
@@ -368,7 +369,9 @@ internal fun HexViewer(
                         if (isRunnable) {
                             Tooltip(tooltip = { Text("Run Wasm module") }) {
                                 IconButton(onClick = {
-                                    runWasmFile(binaryProvider, state)
+                                    showEnginePopup { engine ->
+                                        runWasmFile(binaryProvider, state, engine)
+                                    }
                                 }) {
                                     Icon(
                                         AllIconsKeys.Actions.Execute,
