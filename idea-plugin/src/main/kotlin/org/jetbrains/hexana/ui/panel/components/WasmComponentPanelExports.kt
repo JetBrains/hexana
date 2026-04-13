@@ -13,10 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import com.intellij.execution.ProgramRunnerUtil
-import com.intellij.execution.RunManager
-import com.intellij.execution.configurations.ConfigurationTypeUtil
-import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.application.runReadActionBlocking
@@ -25,14 +21,11 @@ import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
-import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.*
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
-import org.jetbrains.hexana.run.WasmConfigurationFactory
-import org.jetbrains.hexana.run.WasmDependencyResolver
-import org.jetbrains.hexana.run.WasmRunConfiguration
-import org.jetbrains.hexana.run.WasmRunConfigurationType
+import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
@@ -119,160 +112,6 @@ fun WasmComponentPanelExports(binaryProvider: BinaryProvider,
     }
 }
 
-private fun isComponentFunctionExport(export: WasmComponentExport, provider: WasmComponentBinaryProvider): Boolean {
-    val sort = export.sortIndex.sort
-    if (sort is ComponentSort.Func ||
-        (sort is ComponentSortWithCoreSort && sort.cs is ComponentCoreSort.Func)) {
-        return true
-    }
-    if (sort is ComponentSort.Instance) {
-        val instance = provider.instances.getOrNull(export.sortIndex.index.toInt())
-        if (instance is InlineInstanceExpression) {
-            return instance.e.any { it is FuncInstanceInlineExport }
-        }
-        if (instance is ComponentInstanceExpression) {
-            val componentExports = provider.nestedComponentExports(instance.index.toInt())
-            return componentExports.any {
-                it.sortIndex.sort is ComponentSort.Func ||
-                    (it.sortIndex.sort is ComponentSortWithCoreSort && (it.sortIndex.sort as ComponentSortWithCoreSort).cs is ComponentCoreSort.Func)
-            }
-        }
-        if (instance == null && looksLikeWitInterfaceExport(export.exportName)) {
-            return true
-        }
-    }
-    if (sort is ComponentSortWithCoreSort && sort.cs is ComponentCoreSort.Instance) {
-        val coreInstance = provider.coreInstances.getOrNull(export.sortIndex.index.toInt())
-        if (coreInstance is InlineInstanceCoreExpression) {
-            return coreInstance.e.any { it is FuncInlineCoreExpression }
-        }
-    }
-    return false
-}
-
-internal val WIT_INTERFACE_PATTERN = Regex("^[a-zA-Z][a-zA-Z0-9-]*:[a-zA-Z][a-zA-Z0-9-]*/([a-zA-Z][a-zA-Z0-9-]*)(@.+)?$")
-
-internal fun looksLikeWitInterfaceExport(name: String): Boolean = WIT_INTERFACE_PATTERN.matches(name)
-
-internal fun extractNameFromWitExport(name: String): String? =
-    WIT_INTERFACE_PATTERN.matchEntire(name)?.groupValues?.get(1)
-
-internal fun resolveComponentFunctionType(
-    export: WasmComponentExport,
-    provider: WasmComponentBinaryProvider,
-): ComponentRoutineType? {
-    val ed = export.externDescription
-    if (ed is ComponentExternType) {
-        val type = provider.types.getOrNull(ed.idx.toInt())
-        if (type is ComponentRoutineType) return type
-    }
-    if (ed is ComponentExternInstance) {
-        val instanceType = provider.types.getOrNull(ed.idx.toInt())
-        if (instanceType is ComponentInstanceType) {
-            val funcDecl = instanceType.cd.filterIsInstance<ExportDeclaration>()
-                .firstOrNull { it.ed is ComponentExternType }
-            if (funcDecl != null) {
-                val funcType = provider.types.getOrNull((funcDecl.ed as ComponentExternType).idx.toInt())
-                if (funcType is ComponentRoutineType) return funcType
-            }
-        }
-    }
-    // Go deeper into component instances and nested components, same as resolveInvokeName
-    val sort = export.sortIndex.sort
-    if (sort is ComponentSort.Instance) {
-        val instance = provider.instances.getOrNull(export.sortIndex.index.toInt())
-        if (instance is ComponentInstanceExpression) {
-            val nestedExports = provider.nestedComponentExports(instance.index.toInt())
-            val nestedTypes = provider.nestedComponentTypes(instance.index.toInt())
-            val funcExport = nestedExports.firstOrNull {
-                it.sortIndex.sort is ComponentSort.Func ||
-                    (it.sortIndex.sort is ComponentSortWithCoreSort && (it.sortIndex.sort as ComponentSortWithCoreSort).cs is ComponentCoreSort.Func)
-            }
-            if (funcExport != null) {
-                val nestedEd = funcExport.externDescription
-                if (nestedEd is ComponentExternType) {
-                    val type = nestedTypes.getOrNull(nestedEd.idx.toInt())
-                    if (type is ComponentRoutineType) return type
-                }
-                // The type index may reference the full type index space (imports, aliases, etc.)
-                // rather than just the types section entries. Fall back to the first routine type.
-                val fallbackType = nestedTypes.filterIsInstance<ComponentRoutineType>().firstOrNull()
-                if (fallbackType != null) return fallbackType
-            }
-        }
-        // When instance lookup fails but export name matches a WIT interface pattern,
-        // try to resolve the type from the parent component's type definitions
-        if (instance == null && looksLikeWitInterfaceExport(export.exportName)) {
-            val routineType = provider.types.filterIsInstance<ComponentRoutineType>().firstOrNull()
-            if (routineType != null) return routineType
-        }
-    }
-    return null
-}
-
-internal fun isTrivialComponentType(type: ComponentValueType, types: List<ComponentDefType> = emptyList()): Boolean {
-    if (type is ComponentPrimitiveValueType) {
-        return when (type.type) {
-            is ComponentPrimitiveBoolType,
-            is ComponentPrimitiveU8Type, is ComponentPrimitiveS8Type,
-            is ComponentPrimitiveU16Type, is ComponentPrimitiveS16Type,
-            is ComponentPrimitiveU32Type, is ComponentPrimitiveS32Type,
-            is ComponentPrimitiveU64Type, is ComponentPrimitiveS64Type,
-            is ComponentPrimitiveF32Type, is ComponentPrimitiveF64Type,
-            is ComponentPrimitiveCharType, is ComponentPrimitiveString -> true
-            else -> false
-        }
-    }
-    if (type is ComponentValueIdxType) {
-        val resolved = types.getOrNull(type.idx.toInt())
-        if (resolved is ComponentEnumType) return true
-    }
-    return false
-}
-
-internal fun resolveComponentValueType(type: ComponentValueType, types: List<ComponentDefType>): ComponentDefType? {
-    if (type is ComponentValueIdxType) return types.getOrNull(type.idx.toInt())
-    return null
-}
-
-internal fun componentTypeName(type: ComponentValueType, types: List<ComponentDefType> = emptyList()): String = when (type) {
-    is ComponentPrimitiveValueType -> when (type.type) {
-        is ComponentPrimitiveBoolType -> "bool"
-        is ComponentPrimitiveU8Type -> "u8"
-        is ComponentPrimitiveS8Type -> "s8"
-        is ComponentPrimitiveU16Type -> "u16"
-        is ComponentPrimitiveS16Type -> "s16"
-        is ComponentPrimitiveU32Type -> "u32"
-        is ComponentPrimitiveS32Type -> "s32"
-        is ComponentPrimitiveU64Type -> "u64"
-        is ComponentPrimitiveS64Type -> "s64"
-        is ComponentPrimitiveF32Type -> "f32"
-        is ComponentPrimitiveF64Type -> "f64"
-        is ComponentPrimitiveCharType -> "char"
-        is ComponentPrimitiveString -> "string"
-        else -> type.type.toString()
-    }
-    is ComponentValueIdxType -> {
-        val resolved = types.getOrNull(type.idx.toInt())
-        when (resolved) {
-            is ComponentEnumType -> "enum{${resolved.entries.joinToString(", ")}}"
-            null -> "type(${type.idx})"
-            else -> "type(${type.idx})"
-        }
-    }
-    else -> type.toString()
-}
-
-internal fun formatComponentSignature(funcType: ComponentRoutineType, types: List<ComponentDefType> = emptyList()): String {
-    val params = funcType.params.joinToString(", ") { "${it.label}: ${componentTypeName(it.value, types)}" }
-    val result = when (val ret = funcType.ret) {
-        is ComponentValueType -> componentTypeName(ret, types)
-        is ComponentVoidType -> "void"
-        else -> ret.toString()
-    }
-    return "($params) -> $result"
-}
-
 private class ComponentFunctionArgsDialog(
     project: Project,
     private val exportName: String,
@@ -347,35 +186,6 @@ private class ComponentFunctionArgsDialog(
     }
 }
 
-private fun resolveInvokeName(export: WasmComponentExport, provider: WasmComponentBinaryProvider): String {
-    val sort = export.sortIndex.sort
-    if (sort is ComponentSort.Instance) {
-        val instance = provider.instances.getOrNull(export.sortIndex.index.toInt())
-        if (instance is InlineInstanceExpression) {
-            val funcExport = instance.e.filterIsInstance<FuncInstanceInlineExport>().firstOrNull()
-            if (funcExport != null) return funcExport.name
-        }
-        if (instance is ComponentInstanceExpression) {
-            val componentExports = provider.nestedComponentExports(instance.index.toInt())
-            val funcExport = componentExports.firstOrNull {
-                it.sortIndex.sort is ComponentSort.Func ||
-                    (it.sortIndex.sort is ComponentSortWithCoreSort && (it.sortIndex.sort as ComponentSortWithCoreSort).cs is ComponentCoreSort.Func)
-            }
-            if (funcExport != null) return funcExport.exportName
-        }
-        val witName = extractNameFromWitExport(export.exportName)
-        if (witName != null) return witName
-    }
-    if (sort is ComponentSortWithCoreSort && sort.cs is ComponentCoreSort.Instance) {
-        val coreInstance = provider.coreInstances.getOrNull(export.sortIndex.index.toInt())
-        if (coreInstance is InlineInstanceCoreExpression) {
-            val funcExport = coreInstance.e.filterIsInstance<FuncInlineCoreExpression>().firstOrNull()
-            if (funcExport != null) return funcExport.name
-        }
-    }
-    return export.exportName
-}
-
 private fun runComponentExportedFunction(
     binaryProvider: BinaryProvider,
     wasmBinaryProvider: WasmComponentBinaryProvider,
@@ -397,38 +207,5 @@ private fun runComponentExportedFunction(
         argsString = dialog.argValues.joinToString(", ")
     }
 
-    val invokeExpression = "${invokeName}($argsString)"
-
-    val runManager = RunManager.getInstance(project)
-    val configurationType = ConfigurationTypeUtil.findConfigurationType(WasmRunConfigurationType::class.java)
-    val factory = configurationType.configurationFactories.first { it is WasmConfigurationFactory }
-
-    val configName = "${file.nameWithoutExtension}::${invokeName}"
-
-    val existing = runManager.allSettings.firstOrNull { settings ->
-        settings.type == configurationType &&
-            (settings.configuration as? WasmRunConfiguration)?.let { config ->
-                config.wasmFilePath == file.path &&
-                    config.wasmtimeOptions.contains("--invoke") &&
-                    config.wasmtimeOptions.contains(invokeName)
-            } == true
-    }
-
-    val settings = existing ?: runManager.createConfiguration(configName, factory).also { newSettings ->
-        (newSettings.configuration as WasmRunConfiguration).apply {
-            wasmFilePath = file.path
-            workingDirectory = file.parent?.path ?: ""
-        }
-        runManager.addConfiguration(newSettings)
-    }
-
-    (settings.configuration as? WasmRunConfiguration)?.wasmtimeOptions = "--invoke \"$invokeExpression\""
-
-    val wasmBytes = file.contentsToByteArray()
-    val resolved = WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = file)
-    (settings.configuration as? WasmRunConfiguration)?.dependencies =
-        resolved.map { (name, path) -> "$name=$path" }
-
-    runManager.selectedConfiguration = settings
-    ProgramRunnerUtil.executeConfiguration(settings, DefaultRunExecutor.getRunExecutorInstance())
+    runWasmConfiguration(project, file, invokeName, "", "--invoke \"${invokeName}($argsString)\"")
 }

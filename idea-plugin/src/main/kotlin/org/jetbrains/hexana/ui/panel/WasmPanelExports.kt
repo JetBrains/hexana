@@ -11,24 +11,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import com.intellij.execution.ProgramRunnerUtil
-import com.intellij.execution.RunManager
-import com.intellij.execution.configurations.ConfigurationTypeUtil
-import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
-import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.*
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.run.WasmConfigurationFactory
-import org.jetbrains.hexana.run.WasmDependencyResolver
-import org.jetbrains.hexana.run.WasmRunConfiguration
-import org.jetbrains.hexana.run.WasmRunConfigurationType
+import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
@@ -124,33 +117,6 @@ internal fun WasmPanelExports(binaryProvider: BinaryProvider, wasmBinaryProvider
     )
 }
 
-private fun isInternalName(name: String): Boolean = name.startsWith("__")
-
-private fun resolveFunctionSignature(
-    wasmBinaryProvider: WasmBinaryProvider,
-    export: WasmFunctionExportRecordEntry,
-): WasmSectionFunctionTypeRecord? {
-    val importedFunctionCount = wasmBinaryProvider.imports.count { it.type is WasmTypeIndexExternalType }
-    val localIndex = export.index.toInt() - importedFunctionCount
-    if (localIndex < 0) return null
-    return wasmBinaryProvider.functions.getOrNull(localIndex) as? WasmSectionFunctionTypeRecord
-}
-
-private fun isTrivialType(type: WasmValueType<*>): Boolean = type is WasmNumType
-
-private fun wasmTypeName(type: WasmValueType<*>): String = when (type) {
-    is WasmI32Type -> "i32"
-    is WasmI64Type -> "i64"
-    is WasmF32Type -> "f32"
-    is WasmF64Type -> "f64"
-    else -> type.toString()
-}
-
-private fun formatSignature(sig: WasmSectionFunctionTypeRecord): String {
-    val params = sig.params.joinToString(", ") { wasmTypeName(it) }
-    val result = sig.retTypes.firstOrNull()?.let { wasmTypeName(it) } ?: "void"
-    return "($params) -> $result"
-}
 
 private class WasmFunctionArgsDialog(
     project: Project,
@@ -213,37 +179,5 @@ private fun runExportedFunction(
         programArgs = dialog.argValues.joinToString(" ")
     }
 
-    val runManager = RunManager.getInstance(project)
-    val configurationType = ConfigurationTypeUtil.findConfigurationType(WasmRunConfigurationType::class.java)
-    val factory = configurationType.configurationFactories.first { it is WasmConfigurationFactory }
-
-    val configName = "${file.nameWithoutExtension}::${exportName}"
-
-    val existing = runManager.allSettings.firstOrNull { settings ->
-        settings.type == configurationType &&
-            (settings.configuration as? WasmRunConfiguration)?.let { config ->
-                config.wasmFilePath == file.path &&
-                    config.wasmtimeOptions.contains("--invoke") &&
-                    config.wasmtimeOptions.contains(exportName)
-            } == true
-    }
-
-    val settings = existing ?: runManager.createConfiguration(configName, factory).also { newSettings ->
-        (newSettings.configuration as WasmRunConfiguration).apply {
-            wasmFilePath = file.path
-            workingDirectory = file.parent?.path ?: ""
-            wasmtimeOptions = "--invoke $exportName"
-        }
-        runManager.addConfiguration(newSettings)
-    }
-
-    (settings.configuration as? WasmRunConfiguration)?.programArguments = programArgs
-
-    val wasmBytes = file.contentsToByteArray()
-    val resolved = WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = file)
-    (settings.configuration as? WasmRunConfiguration)?.dependencies =
-        resolved.map { (name, path) -> "$name=$path" }
-
-    runManager.selectedConfiguration = settings
-    ProgramRunnerUtil.executeConfiguration(settings, DefaultRunExecutor.getRunExecutorInstance())
+    runWasmConfiguration(project, file, exportName, programArgs, "--invoke $exportName")
 }

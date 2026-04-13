@@ -25,10 +25,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.intellij.execution.ProgramRunnerUtil
-import com.intellij.execution.RunManager
-import com.intellij.execution.configurations.ConfigurationTypeUtil
-import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.icons.AllIcons
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationType
@@ -56,13 +52,9 @@ import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
-import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.HexanaSourceLocationProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.run.WasmConfigurationFactory
-import org.jetbrains.hexana.run.WasmDependencyResolver
-import org.jetbrains.hexana.run.WasmRunConfiguration
-import org.jetbrains.hexana.run.WasmRunConfigurationType
+import org.jetbrains.hexana.run.runWasmFile
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wat.psi.getDataByIndex
 import org.jetbrains.hexana.wat.psi.getDefinedFunctionByIndex
@@ -149,8 +141,6 @@ internal fun HexViewer(
         SyncLazyListStates(offsetListState, hexDataListState, textDataListState)
 
         val bytesPerRow by remember { state.bytesPerRow }
-
-        val separator = 4.dp
         val spacing = 8.dp
 
         val rowCount = (buf.limit() + bytesPerRow - 1) / bytesPerRow
@@ -876,37 +866,6 @@ fun openInWat(state: HexViewStateHolder, findElement: (file: PsiFile) -> PsiElem
     ApplicationManager.getApplication().invokeLater {
         UIUtil.findComponentOfType(watEditor.component, EditorComponentImpl::class.java)?.requestFocusInWindow()
     }
-}
-
-
-private fun runWasmFile(binaryProvider: BinaryProvider, state: HexViewStateHolder) {
-    val project = state.project
-    val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return
-    val runManager = RunManager.getInstance(project)
-    val configurationType = ConfigurationTypeUtil.findConfigurationType(WasmRunConfigurationType::class.java)
-    val factory = configurationType.configurationFactories.first { it is WasmConfigurationFactory }
-
-    // Reuse existing configuration for this file if one exists
-    val existing = runManager.allSettings.firstOrNull { settings ->
-        settings.type == configurationType &&
-            (settings.configuration as? WasmRunConfiguration)?.wasmFilePath == file.path
-    }
-
-    val settings = existing ?: runManager.createConfiguration(file.nameWithoutExtension, factory).also { newSettings ->
-        (newSettings.configuration as WasmRunConfiguration).apply {
-            wasmFilePath = file.path
-            workingDirectory = file.parent?.path ?: ""
-        }
-        runManager.addConfiguration(newSettings)
-    }
-
-    val wasmBytes = file.contentsToByteArray()
-    val resolved = WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = file)
-    (settings.configuration as? WasmRunConfiguration)?.dependencies =
-        resolved.map { (name, path) -> "$name=$path" }
-
-    runManager.selectedConfiguration = settings
-    ProgramRunnerUtil.executeConfiguration(settings, DefaultRunExecutor.getRunExecutorInstance())
 }
 
 fun getUtf8CharacterAtIndex(buf: CommonByteBuffer, index: Int): String? {

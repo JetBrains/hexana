@@ -1,7 +1,7 @@
 package org.jetbrains.hexana.ui.components
 
 import com.intellij.testFramework.UsefulTestCase
-import org.jetbrains.hexana.ui.panel.components.*
+import org.jetbrains.hexana.*
 import org.jetbrains.hexana.wasm.components.*
 
 class WitExportNameTest : UsefulTestCase() {
