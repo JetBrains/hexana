@@ -62,6 +62,18 @@ class GraalWasmProcessHandler(
             return
         }
 
+        val wasmBytes = wasmFile.readBytes()
+        val binaryType = WasmBinaryProviderSelector.select(wasmBytes.toCommonByteBuffer())
+        if (binaryType is BinaryProviderType.WasmComponent) {
+            notifyTextAvailable(
+                "Error: GraalWasm does not support the WebAssembly Component Model.\n" +
+                        "The file '${wasmFile.name}' is a component (binary version 0x0D). " +
+                        "Please use the Wasmtime engine to run component modules.\n",
+                ProcessOutputType.STDERR,
+            )
+            return
+        }
+
         val resolvedDeps = configuration.dependencies
             .mapNotNull { entry ->
                 val parts = entry.split("=", limit = 2)
@@ -118,8 +130,6 @@ class GraalWasmProcessHandler(
 
         wasmContext = context
         context.use { ctx ->
-            val wasmBytes = wasmFile.readBytes()
-
             val moduleMap = mutableMapOf<String, Any>()
 
             for ((name, path) in coreModuleDeps) {

@@ -4,9 +4,14 @@ import com.intellij.execution.Executor
 import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.configurations.RunProfileState
+import com.intellij.execution.configurations.RuntimeConfigurationError
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
+import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import java.io.File
 
 class WasmRunConfiguration(
     project: Project,
@@ -48,6 +53,26 @@ class WasmRunConfiguration(
     var dependencies: List<String>
         get() = options.getDependencies()
         set(value) { options.setDependencies(value) }
+
+    override fun checkConfiguration() {
+        val path = wasmFilePath
+        if (path.isBlank()) {
+            throw RuntimeConfigurationError("Wasm file path is not specified")
+        }
+        val file = File(path)
+        if (!file.exists()) {
+            throw RuntimeConfigurationError("Wasm file not found: $path")
+        }
+        if (engine == WasmEngine.GRAALWASM) {
+            val binaryType = WasmBinaryProviderSelector.select(file.readBytes().toCommonByteBuffer())
+            if (binaryType is BinaryProviderType.WasmComponent) {
+                throw RuntimeConfigurationError(
+                    "GraalWasm does not support the WebAssembly Component Model. " +
+                            "Please use the Wasmtime engine to run component modules."
+                )
+            }
+        }
+    }
 
     override fun getConfigurationEditor(): SettingsEditor<WasmRunConfiguration> =
         WasmRunSettingsEditor(project)
