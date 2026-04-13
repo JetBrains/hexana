@@ -86,28 +86,46 @@ jib {
     }
 }
 
-fun registerPackagingSync(taskName: String, packagingDirName: String) = tasks.register<Sync>(taskName) {
+fun registerPackagingSync(
+    taskName: String,
+    packagingDirName: String,
+    rewriteMcpJson: Boolean = true,
+) = tasks.register<Sync>(taskName) {
     dependsOn(":mcp:server:installDist")
     from(layout.projectDirectory.dir("packaging/$packagingDirName"))
     from(standaloneInstallDir) {
         into("server")
     }
     into(layout.buildDirectory.dir("packaging/$packagingDirName"))
-    doLast {
-        val launcherPath = destinationDir.resolve("bin/hexana-mcp").absolutePath
-        destinationDir.resolve(".mcp.json").writeText(renderMcpConfig(launcherPath))
+    if (rewriteMcpJson) {
+        doLast {
+            val launcherPath = destinationDir.resolve("bin/hexana-mcp").absolutePath
+            destinationDir.resolve(".mcp.json").writeText(renderMcpConfig(launcherPath))
+        }
     }
 }
 
 val assembleClaudePluginPackage = registerPackagingSync(
     taskName = "assembleClaudePluginPackage",
-    packagingDirName = "claude-plugin"
+    packagingDirName = "claude-plugin",
+    rewriteMcpJson = false,
 )
 
 val assembleCodexPluginPackage = registerPackagingSync(
     taskName = "assembleCodexPluginPackage",
     packagingDirName = "codex-plugin"
 )
+
+tasks.register<Sync>("installRepoLocalClaudePlugin") {
+    group = "distribution"
+    description = "Install the assembled Claude plugin into the repo-local plugins/hexana path for /plugin testing."
+    dependsOn(":mcp:server:installDist")
+    from(layout.projectDirectory.dir("packaging/claude-plugin"))
+    from(standaloneInstallDir) {
+        into("server")
+    }
+    into(rootProject.layout.projectDirectory.dir("plugins/hexana"))
+}
 
 tasks.register("assembleMcpPackaging") {
     group = "distribution"

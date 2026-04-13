@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "hexana": {
-      "command": "__GENERATED_BY_ASSEMBLY__",
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/hexana-mcp",
       "args": [
         "stdio"
       ]
