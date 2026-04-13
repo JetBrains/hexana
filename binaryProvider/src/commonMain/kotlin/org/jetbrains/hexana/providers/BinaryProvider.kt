@@ -140,7 +140,7 @@ open class WasmComponentBinaryProvider(override val bytes: CommonByteBuffer): Bi
 
 class NestedComponentData(val component: WasmComponent, val buffer: CommonByteBuffer)
 
-internal fun buildComponentTypeIndex(sections: List<WasmSection>, buffer: CommonByteBuffer): List<ComponentDefType> {
+fun buildComponentTypeIndex(sections: List<WasmSection>, buffer: CommonByteBuffer): List<ComponentDefType> {
     val types = mutableListOf<ComponentDefType>()
     for (section in sections) {
         when (section) {

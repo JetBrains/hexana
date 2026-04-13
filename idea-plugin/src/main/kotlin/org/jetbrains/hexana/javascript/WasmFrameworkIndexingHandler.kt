@@ -9,8 +9,10 @@ import com.intellij.lang.javascript.psi.types.evaluable.JSUnwrapPromiseType
 import com.intellij.lang.javascript.psi.types.recordImpl.PropertySignatureImpl
 import com.intellij.psi.SyntaxTraverser
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.looksLikeWitInterfaceExport
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import org.jetbrains.hexana.providers.buildComponentTypeIndex
 import org.jetbrains.hexana.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParseSuccess
@@ -43,11 +45,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
     }
 
     private fun createCustomWasmType(type: JSUnwrapPromiseType, component: WasmComponent, buffer: CommonByteBuffer): JSRecordTypeImpl {
-        val allTypes = component.sections.filterIsInstance<WasmComponentTypesSection>().flatMap {
-            with(it) {
-                buffer.scanTypes()
-            }
-        }
+        val allTypes = buildComponentTypeIndex(component.sections, buffer)
 
         val allCoreInstances = component.coreInstanceSection.flatMap {
             with(it) {
@@ -118,9 +116,19 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                 else -> null
             }
         }
-        return when (export.sortIndex.sort) {
+        return when (val sort = export.sortIndex.sort) {
             is ComponentSort.Type -> allTypes.getOrNull(export.sortIndex.index.toInt())
-            is ComponentSort.Instance -> resolveComponentInstanceType(export.sortIndex.index, allTypes, allComponentInstances)
+            is ComponentSort.Instance -> {
+                val resolved = resolveComponentInstanceType(export.sortIndex.index, allTypes, allComponentInstances)
+                if (resolved != null) return resolved
+                // The instance index space includes entries from alias sections,
+                // so the export's sort index may exceed the instance section's own list.
+                // When the instance lookup fails but the export name matches a WIT interface pattern,
+                // fall back to the first routine type from the parent component's type definitions.
+                if (looksLikeWitInterfaceExport(export.exportName)) {
+                    allTypes.filterIsInstance<ComponentRoutineType>().firstOrNull()
+                } else null
+            }
             is ComponentSort.Func -> resolveComponentFuncType(export.sortIndex.index, allTypes, allCoreInstances, allModuleSections, buffer)
             is ComponentSort.Component,
             is ComponentSort.Value,
@@ -231,6 +239,18 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
             is ComponentStreamType -> JSAnyType.get(source)
             is ComponentFutureType -> JSAnyType.get(source)
             is ComponentArrayType -> mapArrayTypeToJs(defType, allTypes, source, visited)
+            is ComponentAliasedType -> {
+                val target = defType.alias.aliasTarget
+                if (target is AliasTarget.Outer) {
+                    val idx = target.outerIndex.toInt()
+                    if (!visited.add(idx)) return JSAnyType.get(source)
+                    val resolved = allTypes.getOrNull(idx)
+                    if (resolved != null) mapComponentDefTypeToJsType(resolved, allTypes, source, visited) else JSAnyType.get(source)
+                } else {
+                    JSAnyType.get(source)
+                }
+            }
+            is ComponentImportedType -> resolveExternDescriptionType(defType.import.externDescription, allTypes, source, visited)
         }
     }
 
@@ -411,4 +431,5 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
             }
         }
     }
+
 }
