@@ -31,6 +31,10 @@ class WasmComponentTypesSection(sectionSize: Int, sectionOffset: Int, contentSiz
 
 sealed class ComponentDefType: InstanceDeclaration
 
+class ComponentAliasedType(val alias: ComponentAlias) : ComponentDefType()
+
+class ComponentImportedType(val import: WasmComponentImport) : ComponentDefType()
+
 sealed class ComponentPrimitiveType: ComponentDefType()
 object ComponentPrimitiveBoolType: ComponentPrimitiveType()
 object ComponentPrimitiveS8Type: ComponentPrimitiveType()

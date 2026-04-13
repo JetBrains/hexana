@@ -105,10 +105,8 @@ open class WasmComponentBinaryProvider(override val bytes: CommonByteBuffer): Bi
     }
 
     val types: List<ComponentDefType> by lazy {
-        val typesSection = wasmModule?.typesSection ?: return@lazy emptyList()
-        with(typesSection) {
-            bytes.scanTypes()
-        }
+        wasmModule ?: return@lazy emptyList()
+        buildComponentTypeIndex(wasmModule.sections, bytes)
     }
 
     fun nestedComponentExports(componentIndex: Int): List<WasmComponentExport> {
@@ -122,14 +120,41 @@ open class WasmComponentBinaryProvider(override val bytes: CommonByteBuffer): Bi
 
     fun nestedComponentTypes(componentIndex: Int): List<ComponentDefType> {
         val data = nestedComponents.getOrNull(componentIndex) ?: return emptyList()
-        val typesSection = data.component.typesSection ?: return emptyList()
-        return with(typesSection) {
-            data.buffer.scanTypes()
-        }
+        return buildComponentTypeIndex(data.component.sections, data.buffer)
     }
 }
 
 class NestedComponentData(val component: WasmComponent, val buffer: CommonByteBuffer)
+
+internal fun buildComponentTypeIndex(sections: List<WasmSection>, buffer: CommonByteBuffer): List<ComponentDefType> {
+    val types = mutableListOf<ComponentDefType>()
+    for (section in sections) {
+        when (section) {
+            is WasmComponentTypesSection -> {
+                val sectionTypes = with(section) { buffer.scanTypes() }
+                types.addAll(sectionTypes)
+            }
+            is WasmAliasSection -> {
+                val aliases = with(section) { buffer.scanAliases() }
+                for (alias in aliases) {
+                    if (alias is ComponentAlias && alias.componentSort is ComponentSort.Type) {
+                        types.add(ComponentAliasedType(alias))
+                    }
+                }
+            }
+            is WasmComponentImportSection -> {
+                val imports = with(section) { buffer.scan() }
+                for (import in imports) {
+                    if (import.externDescription is ComponentExternTypeBound) {
+                        types.add(ComponentImportedType(import))
+                    }
+                }
+            }
+            else -> { /* other sections don't contribute to the type index space */ }
+        }
+    }
+    return types
+}
 
 open class WasmBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProvider {
     val wasmModule = when (val parseResult = WasmParser().parse(bytes)) {

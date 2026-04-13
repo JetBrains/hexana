@@ -5,6 +5,7 @@ import org.jetbrains.hexana.wasm.components.ComponentCoreInstance.componentCoreS
 import org.jetbrains.hexana.wasm.components.ComponentCoreInstance.componentSort
 import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
+import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.consumeString
 
 class WasmAliasSection(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection("Alias", sectionSize,
@@ -16,6 +17,15 @@ class WasmAliasSection(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
         const val SECTION_ID: Byte = 6
     }
     constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
+
+    fun CommonByteBuffer.scanAliases(): List<ComponentAliasDef> {
+        position(contentOffset)
+        val aliases = mutableListOf<ComponentAliasDef>()
+        consumeArray {
+            aliases.add(Alias.run { componentAlias() })
+        }
+        return aliases
+    }
 }
 
 
