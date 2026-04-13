@@ -1,10 +1,14 @@
 package org.jetbrains.hexana.ui.panel
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
@@ -37,6 +41,8 @@ import org.jetbrains.jewel.foundation.lazy.tree.buildTree
 import org.jetbrains.jewel.ui.component.LazyTree
 import org.jetbrains.jewel.ui.component.Text
 
+enum class RightPaneMode { CfgDominators, PathsFromRoots }
+
 @Composable
 fun WasmPanelDominators(provider: WasmBinaryProvider, state: HexViewStateHolder) {
     var callGraphResult by remember { mutableStateOf<CallGraphResult?>(null) }
@@ -61,6 +67,7 @@ fun WasmPanelDominators(provider: WasmBinaryProvider, state: HexViewStateHolder)
     }
 
     var selectedFuncIndex by remember { mutableStateOf<Int?>(null) }
+    var rightPaneMode by remember { mutableStateOf(RightPaneMode.CfgDominators) }
 
     Row(modifier = Modifier.fillMaxSize()) {
         // Left pane: call graph dominator tree (~40%)
@@ -81,13 +88,38 @@ fun WasmPanelDominators(provider: WasmBinaryProvider, state: HexViewStateHolder)
                 .background(Color.Gray.copy(alpha = 0.4f))
         )
 
-        // Right pane: CFG dominator tree for selected function (~60%)
-        Box(modifier = Modifier.weight(0.6f).fillMaxHeight()) {
+        // Right pane: mode-switched content (~60%)
+        Column(modifier = Modifier.weight(0.6f).fillMaxHeight()) {
+            // Mode toggle row
+            Row(modifier = Modifier.fillMaxWidth().padding(4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (mode in RightPaneMode.entries) {
+                    val label = when (mode) {
+                        RightPaneMode.CfgDominators -> "CFG Dominators"
+                        RightPaneMode.PathsFromRoots -> "Paths from Roots"
+                    }
+                    Text(
+                        label,
+                        modifier = Modifier
+                            .clickable { rightPaneMode = mode }
+                            .background(if (rightPaneMode == mode) Color.Gray.copy(alpha = 0.3f) else Color.Transparent)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            color = if (rightPaneMode == mode) Color.White else Color.Gray,
+                        ),
+                    )
+                }
+            }
+
+            // Pane content
             val funcIdx = selectedFuncIndex
             if (funcIdx != null) {
-                CfgDominatorPane(provider, cgr, funcIdx)
+                when (rightPaneMode) {
+                    RightPaneMode.CfgDominators -> CfgDominatorPane(provider, cgr, funcIdx)
+                    RightPaneMode.PathsFromRoots -> WasmPanelCallerPaths(cgr, funcIdx)
+                }
             } else {
-                InfoMessage("Select a defined function to view its CFG dominators")
+                InfoMessage("Select a defined function to view analysis")
             }
         }
     }
