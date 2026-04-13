@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.foundation.ContextMenuItem
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.components.Table
@@ -25,7 +26,11 @@ import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmValueType
 
 @Composable
-fun WasmPanelFunctions(wasmBinaryProvider: WasmBinaryProvider, state: HexViewStateHolder) {
+fun WasmPanelFunctions(
+    wasmBinaryProvider: WasmBinaryProvider,
+    state: HexViewStateHolder,
+    onShowPaths: ((funcIndex: Int) -> Unit)? = null,
+) {
     val functions = remember(wasmBinaryProvider) { wasmBinaryProvider.functions }
     val nameSection = remember(wasmBinaryProvider) { wasmBinaryProvider.nameSection }
 
@@ -51,7 +56,15 @@ fun WasmPanelFunctions(wasmBinaryProvider: WasmBinaryProvider, state: HexViewSta
             val signatureDescription = functions[index].getDescription(index, typeNames)
             TableCellValue(signatureDescription, tooltip = signatureDescription)
         },
-    ), functions.size) { rowIndex ->
+    ), functions.size, onRowContextMenu = { rowIndex ->
+        buildList {
+            if (onShowPaths != null) {
+                add(ContextMenuItem("Show Paths from Roots") {
+                    onShowPaths(rowIndex)
+                })
+            }
+        }
+    }) { rowIndex ->
         val funcRecord = functions[rowIndex] ?: return@Table
         state.scrollHexViewTo(funcRecord.offset, funcRecord.size)
     }

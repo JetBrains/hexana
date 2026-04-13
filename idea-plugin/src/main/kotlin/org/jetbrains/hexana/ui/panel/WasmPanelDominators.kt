@@ -43,8 +43,16 @@ import org.jetbrains.jewel.ui.component.Text
 
 enum class RightPaneMode { CfgDominators, PathsFromRoots }
 
+class PathsNavigationState {
+    var targetFuncIndex by mutableStateOf<Int?>(null)
+}
+
 @Composable
-fun WasmPanelDominators(provider: WasmBinaryProvider, state: HexViewStateHolder) {
+fun WasmPanelDominators(
+    provider: WasmBinaryProvider,
+    state: HexViewStateHolder,
+    pathsNav: PathsNavigationState? = null,
+) {
     var callGraphResult by remember { mutableStateOf<CallGraphResult?>(null) }
     var dominators by remember { mutableStateOf<DominatorResult?>(null) }
 
@@ -68,6 +76,13 @@ fun WasmPanelDominators(provider: WasmBinaryProvider, state: HexViewStateHolder)
 
     var selectedFuncIndex by remember { mutableStateOf<Int?>(null) }
     var rightPaneMode by remember { mutableStateOf(RightPaneMode.CfgDominators) }
+
+    LaunchedEffect(pathsNav?.targetFuncIndex) {
+        val target = pathsNav?.targetFuncIndex ?: return@LaunchedEffect
+        selectedFuncIndex = target
+        rightPaneMode = RightPaneMode.PathsFromRoots
+        pathsNav.targetFuncIndex = null
+    }
 
     Row(modifier = Modifier.fillMaxSize()) {
         // Left pane: call graph dominator tree (~40%)

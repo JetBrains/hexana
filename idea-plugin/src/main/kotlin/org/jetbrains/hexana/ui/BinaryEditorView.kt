@@ -22,6 +22,7 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.panel.Panel
 import org.jetbrains.hexana.ui.panel.WasmPanelFunctions
 import org.jetbrains.hexana.ui.panel.WasmPanelCustom
+import org.jetbrains.hexana.ui.panel.PathsNavigationState
 import org.jetbrains.hexana.ui.panel.WasmPanelDominators
 import org.jetbrains.hexana.ui.panel.WasmPanelSize
 import org.jetbrains.hexana.ui.panel.WasmPanelData
@@ -46,7 +47,11 @@ internal fun BinaryEditorView(
         VerticalSplitPanel(state, northPanel = {
             HexViewer(binaryProvider, state, focusRequester = hexFocusRequester)
         }, southPanel = {
-            val panels = remember { mutableStateListOf(*binaryProvider.resolvePanels(state)) }
+            val pathsNav = remember { PathsNavigationState() }
+            val panels = remember {
+                val p = binaryProvider.resolvePanels(state, pathsNav)
+                mutableStateListOf(*p)
+            }
 
             TabsPanel(panels, state.currentState.value,  onExpand = { expanded ->
                 if (expanded) {
@@ -126,8 +131,8 @@ private fun TabsPanel(
 }
 
 
-private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel> {
-    return when (this) {
+private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: PathsNavigationState): Array<Panel> {
+    val panels = when (this) {
         is GenericBinaryProvider -> emptyArray()
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) arrayOf(
@@ -137,7 +142,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Functions") { WasmPanelFunctions(this, state) },
                 Panel("Custom") { WasmPanelCustom(this, state) },
                 Panel("Size") { WasmPanelSize(this, state) },
-                Panel("Dominators") { WasmPanelDominators(this, state) },
+                Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 Panel("Wat") { WasmPanelWat(this, state) },
                 *dwarfPanels(this, state).toTypedArray()
             ) else {
@@ -163,7 +168,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
                 Panel("Functions") { WasmPanelFunctions(this, state) },
                 Panel("Custom") { WasmPanelCustom(this, state) },
                 Panel("Size") { WasmPanelSize(this, state) },
-                Panel("Dominators") { WasmPanelDominators(this, state) },
+                Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 *dwarfPanels(this, state).toTypedArray()
             ) else emptyArray()
         }
@@ -178,6 +183,19 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder): Array<Panel
 
         else -> emptyArray()
     }
+    // Wire Functions → Dominators cross-panel navigation
+    val domIndex = panels.indexOfFirst { it.description == "Dominators" }
+    val funcIndex = panels.indexOfFirst { it.description == "Functions" }
+    if (domIndex >= 0 && funcIndex >= 0 && this is WasmBinaryProvider) {
+        val provider = this
+        panels[funcIndex] = Panel("Functions") {
+            WasmPanelFunctions(provider, state) { fIdx ->
+                pathsNav.targetFuncIndex = fIdx
+                state.setSelectedTab(domIndex)
+            }
+        }
+    }
+    return panels
 }
 
 private fun BinaryVirtualFileProvider.errorPanel(state: HexViewStateHolder): Array<Panel> = arrayOf(
