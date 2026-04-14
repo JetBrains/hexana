@@ -11,15 +11,7 @@ import com.intellij.lang.javascript.psi.types.recordImpl.PropertySignatureImpl
 import com.intellij.psi.SyntaxTraverser
 import com.intellij.psi.util.contextOfType
 import com.intellij.psi.util.descendantsOfType
-import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.looksLikeWitInterfaceExport
-import org.jetbrains.hexana.providers.BinaryProviderType
-import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
-import org.jetbrains.hexana.providers.buildComponentTypeIndex
-import org.jetbrains.hexana.toCommonByteBuffer
-import org.jetbrains.hexana.wasm.WasmModule
-import org.jetbrains.hexana.wasm.WasmParseSuccess
-import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.sections.*
 
@@ -85,9 +77,15 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         expr: JSCallExpression,
         wasmLiteral: String,
         typeSource: JSTypeSource
-    ): JSType? = expr.containingFile.originalFile.virtualFile?.parent?.findFileByRelativePath(wasmLiteral)?.let {
-        it.toCommonByteBuffer()?.let { buffer ->
-            createTypeFromBinary(buffer, typeSource)
+    ): JSType? = expr.containingFile.originalFile.virtualFile?.parent?.findFileByRelativePath(wasmLiteral)?.let { wasmFile ->
+        val parsedData = WasmBinaryDataCacheService.getInstance().getOrParseBinary(wasmFile) ?: return@let null
+        createTypeFromParsedData(parsedData, typeSource)
+    }
+
+    private fun createTypeFromParsedData(data: ParsedWasmData, source: JSTypeSource): JSType? {
+        return when (data) {
+            is CoreWasmData -> createCoreWasmTypeFromData(data, source)
+            is ComponentWasmData -> createComponentWasmTypeFromData(data, source)
         }
     }
 
@@ -97,37 +95,11 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                 JSStringUtil.unquoteAndUnescapeString(it)
             }
 
-    private fun createTypeFromBinary(buffer: CommonByteBuffer, source: JSTypeSource): JSType? {
-        when (WasmBinaryProviderSelector.select(buffer)) {
-            BinaryProviderType.Generic -> return null
-            BinaryProviderType.WasmComponent -> {
-                ((WasmParser().parse(buffer) as? WasmParseSuccess)?.wasmModule as? WasmComponent)?.let {
-                    return createComponentWasmType(it, buffer, source)
-                }
-            }
-            BinaryProviderType.Wasm -> {
-                ((WasmParser().parse(buffer) as? WasmParseSuccess)?.wasmModule as? WasmModule)?.let {
-                    return createCoreWasmType(it, buffer, source)
-                }
-            }
-        }
-        return null
-    }
-
-    private fun createCoreWasmType(module: WasmModule, buffer: CommonByteBuffer, typeSource: JSTypeSource): JSRecordTypeImpl? {
-        val exportSection = module.exportSection ?: return null
-        val exports = with(exportSection) { buffer.scan() }
-
-        val typeRecords = module.typesSection?.let { with(it) { buffer.parseTypes() } } ?: emptyList()
-        val funcTypeIndices = module.functionSection?.let { with(it) { buffer.parseFunctions() } } ?: emptyList()
-        val importedFunctions = module.importSection?.let { sec ->
-            with(sec) { buffer.getImportRecords() }.count { it.type is WasmTypeIndexExternalType }
-        } ?: 0
-
-        val properties = exports.map { export ->
+    private fun createCoreWasmTypeFromData(data: CoreWasmData, typeSource: JSTypeSource): JSRecordTypeImpl {
+        val properties = data.exports.map { export ->
             PropertySignatureImpl(
                 export.name,
-                mapCoreExportToJsType(export, typeRecords, funcTypeIndices, importedFunctions, typeSource),
+                mapCoreExportToJsType(export, data.typeRecords, data.funcTypeIndices, data.importedFunctions, typeSource),
                 false, false
             )
         }
@@ -207,28 +179,15 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         }
     }
 
-    private fun createComponentWasmType(component: WasmComponent, buffer: CommonByteBuffer,
-                                        typeSource: JSTypeSource): JSRecordTypeImpl {
-        val allTypes = buildComponentTypeIndex(component.sections, buffer)
-
-        val allComponentInstances = component.instanceSection.flatMap {
-            with(it) {
-                buffer.parseInstances()
-            }
-        }
-
-        return createWasmModuleRecordType(typeSource, component.exportSection.flatMap {
-            with(it) {
-                buffer.scan()
-            }.map { export ->
-                PropertySignatureImpl(
-                    export.exportName.substringAfter('/').substringBefore('@'),
-                    resolveExportType(
-                        export, allTypes,
-                        allComponentInstances, typeSource
-                    ), false, false
-                )
-            }
+    private fun createComponentWasmTypeFromData(data: ComponentWasmData, typeSource: JSTypeSource): JSRecordTypeImpl {
+        return createWasmModuleRecordType(typeSource, data.exports.map { export ->
+            PropertySignatureImpl(
+                export.exportName.substringAfter('/').substringBefore('@'),
+                resolveExportType(
+                    export, data.allTypes,
+                    data.allComponentInstances, typeSource
+                ), false, false
+            )
         })
     }
 
