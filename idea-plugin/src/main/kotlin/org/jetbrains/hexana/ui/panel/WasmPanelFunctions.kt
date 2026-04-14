@@ -30,6 +30,7 @@ fun WasmPanelFunctions(
     wasmBinaryProvider: WasmBinaryProvider,
     state: HexViewStateHolder,
     onShowPaths: ((funcIndex: Int) -> Unit)? = null,
+    unreachableFuncIndices: Set<Int> = emptySet(),
 ) {
     val functions = remember(wasmBinaryProvider) { wasmBinaryProvider.functions }
     val nameSection = remember(wasmBinaryProvider) { wasmBinaryProvider.nameSection }
@@ -46,7 +47,12 @@ fun WasmPanelFunctions(
             val nameColumnWidth = textMeasurer.measureWidthMonospace(universalNameMeasure)
             add(TableColumn("Name", modifier = Modifier.width(nameColumnWidth)) { index ->
                 val nameResolved = functionNamesMap[index] ?: ""
-                TableCellValue(nameResolved, tooltip = nameResolved.takeIf { it.length > universalNameMeasure.length })
+                val isUnreachable = index in unreachableFuncIndices
+                val displayName = if (isUnreachable) "\u25CF $nameResolved" else nameResolved
+                TableCellValue(
+                    displayName,
+                    tooltip = nameResolved.takeIf { it.length > universalNameMeasure.length },
+                )
             })
         }
     }

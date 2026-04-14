@@ -34,6 +34,8 @@ import org.jetbrains.hexana.ui.panel.WasmPanelWat
 import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelExports
 import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelImports
 import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelModules
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -189,16 +191,27 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: Pa
 
         else -> emptyArray()
     }
-    // Wire Functions → Dominators cross-panel navigation
+    // Wire Functions → Dominators cross-panel navigation + garbage badges
     val domIndex = panels.indexOfFirst { it.description == "Dominators" }
     val funcIndex = panels.indexOfFirst { it.description == "Functions" }
-    if (domIndex >= 0 && funcIndex >= 0 && this is WasmBinaryProvider) {
+    if (funcIndex >= 0 && this is WasmBinaryProvider) {
         val provider = this
         panels[funcIndex] = Panel("Functions") {
-            WasmPanelFunctions(provider, state) { fIdx ->
-                pathsNav.targetFuncIndex = fIdx
-                state.setSelectedTab(domIndex)
+            var unreachableIndices by remember { mutableStateOf(emptySet<Int>()) }
+            LaunchedEffect(provider) {
+                unreachableIndices = withContext(Dispatchers.IO) {
+                    provider.garbageAnalysis?.entries
+                        ?.map { it.funcIndex }?.toSet() ?: emptySet()
+                }
             }
+            WasmPanelFunctions(
+                provider, state,
+                onShowPaths = if (domIndex >= 0) { fIdx ->
+                    pathsNav.targetFuncIndex = fIdx
+                    state.setSelectedTab(domIndex)
+                } else null,
+                unreachableFuncIndices = unreachableIndices,
+            )
         }
     }
     // Wire Garbage → Dominators cross-panel navigation
