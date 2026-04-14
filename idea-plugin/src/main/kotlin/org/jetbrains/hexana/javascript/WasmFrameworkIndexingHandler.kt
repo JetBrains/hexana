@@ -8,6 +8,7 @@ import com.intellij.lang.javascript.psi.resolve.JSEvaluateContext
 import com.intellij.lang.javascript.psi.resolve.JSResolveUtil
 import com.intellij.lang.javascript.psi.types.*
 import com.intellij.lang.javascript.psi.types.recordImpl.PropertySignatureImpl
+import com.intellij.openapi.vfs.findPsiFile
 import com.intellij.psi.SyntaxTraverser
 import com.intellij.psi.util.contextOfType
 import com.intellij.psi.util.descendantsOfType
@@ -20,13 +21,14 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
 
     override fun adjustTypeBeforeAdd(type: JSType, context: JSEvaluateContext): JSType {
         if (type is JSGenericTypeImpl && type.arguments.size == 1) {
+            val typeSource = type.source
             if ((type.type as? JSTypeImpl)?.qualifiedName?.qualifiedName != "Promise") return type
             val processedType = type.arguments.first() as? JSTypeImpl ?: return type
             if (isAcceptableType(processedType)) {
                 val call = context.processedExpression?.context as? JSCallExpression ?: return type
-                val wasmType = adjustWasmType(type.source, call)
+                val wasmType = adjustWasmType(typeSource, call)
                 if (wasmType != null) {
-                    return JSGenericTypeImpl(type.source, type.type, listOf(wasmType))
+                    return JSGenericTypeImpl(typeSource, type.type, listOf(wasmType))
                 }
             }
         }
@@ -79,7 +81,11 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         typeSource: JSTypeSource
     ): JSType? = expr.containingFile.originalFile.virtualFile?.parent?.findFileByRelativePath(wasmLiteral)?.let { wasmFile ->
         val parsedData = WasmBinaryDataCacheService.getInstance().getOrParseBinary(wasmFile) ?: return@let null
-        createTypeFromParsedData(parsedData, typeSource)
+        createTypeFromParsedData(parsedData, JSTypeSource(
+            wasmFile.findPsiFile(expr.project),
+            typeSource.language,
+            typeSource.isStrict
+        ))
     }
 
     private fun createTypeFromParsedData(data: ParsedWasmData, source: JSTypeSource): JSType? {
