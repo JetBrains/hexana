@@ -42,4 +42,25 @@ class JsResolveTest : BasePlatformTestCase() {
         assert(functionType.parameters[1].simpleType is JSNumberType)
         assert(functionType.parameters[2].simpleType is JSNumberType)
     }
+
+    fun testClassicModule() {
+        myFixture.copyFileToProject("add.wasm")
+        val psiFile = myFixture.configureByFile("classicModule.js")
+        assert(psiFile is JSFile)
+
+        val callExpr = SyntaxTraverser.psiTraverser(psiFile)
+            .filterIsInstance<JSCallExpression>()
+            .find { (it.methodExpression as? JSReferenceExpression)?.referencedName == "add" }
+        assertNotNull("Could not find add() call expression", callExpr)
+
+        val methodRef = callExpr!!.methodExpression as JSReferenceExpression
+        val jsType = JSResolveUtil.getExpressionJSType(methodRef)
+        assertNotNull("calculate reference has no JS type", jsType)
+        assertInstanceOf(jsType, JSFunctionTypeImpl::class.java)
+
+        val functionType = jsType as JSFunctionTypeImpl
+        assertEquals("add should have 2 parameters", 2, functionType.parameters.size)
+        assert(functionType.parameters[0].simpleType is JSNumberType)
+        assert(functionType.parameters[1].simpleType is JSNumberType)
+    }
 }
