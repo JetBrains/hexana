@@ -22,17 +22,15 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
     private val acceptedCallNames = setOf("instantiateStreaming", "instantiate", "compileStreaming", "compile")
 
     override fun adjustTypeBeforeAdd(type: JSType, context: JSEvaluateContext): JSType {
-        if (type is JSGenericTypeImpl && type.arguments.size == 1) {
-            val typeSource = type.source
-            if ((type.type as? JSTypeImpl)?.qualifiedName?.qualifiedName != "Promise") return type
-            val processedType = type.arguments.first() as? JSTypeImpl ?: return type
-            if (isAcceptableType(processedType)) {
-                val call = context.processedExpression?.context as? JSCallExpression ?: return type
-                val wasmType = adjustWasmType(typeSource, call)
-                if (wasmType != null) {
-                    return JSGenericTypeImpl(typeSource, type.type, listOf(wasmType))
-                }
-            }
+        if (type !is JSGenericTypeImpl || type.arguments.size != 1) return type
+        val typeSource = type.source
+        if ((type.type as? JSTypeImpl)?.qualifiedName?.qualifiedName != "Promise") return type
+        val processedType = type.arguments.first() as? JSTypeImpl ?: return type
+        if (!isAcceptableType(processedType)) return type
+        val call = context.processedExpression?.context as? JSCallExpression ?: return type
+        val wasmType = adjustWasmType(typeSource, call)
+        if (wasmType != null) {
+            return JSGenericTypeImpl(typeSource, type.type, listOf(wasmType))
         }
         return type
     }
