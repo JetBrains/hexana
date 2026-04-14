@@ -145,7 +145,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: Pa
                 Panel("Imports") { WasmPanelImports(this, state) },
                 Panel("Functions") { WasmPanelFunctions(this, state) },
                 Panel("Custom") { WasmPanelCustom(this, state) },
-                Panel("Size") { WasmPanelSize(this, state) },
+                Panel("Top") { WasmPanelSize(this, state) },
                 Panel("Monos") { WasmPanelMonos(this, state) },
                 Panel("Garbage") { WasmPanelGarbage(this, state) },
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
@@ -160,7 +160,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: Pa
                 Panel("Exports") { WasmComponentPanelExports(this, state) },
                 Panel("Imports") { WasmComponentPanelImports(this, state) },
                 Panel("Modules") { WasmComponentPanelModules(this, state) },
-                Panel("Size") { WasmPanelSize(this, state) },
+                Panel("Top") { WasmPanelSize(this, state) },
                 Panel("Wat") { WasmPanelWat(this, state) },
             ) else {
                 errorPanel(state)
@@ -173,7 +173,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: Pa
                 Panel("Imports") { WasmPanelImports(this, state) },
                 Panel("Functions") { WasmPanelFunctions(this, state) },
                 Panel("Custom") { WasmPanelCustom(this, state) },
-                Panel("Size") { WasmPanelSize(this, state) },
+                Panel("Top") { WasmPanelSize(this, state) },
                 Panel("Monos") { WasmPanelMonos(this, state) },
                 Panel("Garbage") { WasmPanelGarbage(this, state) },
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
@@ -185,7 +185,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: Pa
                 Panel("Exports") { WasmComponentPanelExports(this, state) },
                 Panel("Imports") { WasmComponentPanelImports(this, state) },
                 Panel("Modules") { WasmComponentPanelModules(this, state) },
-                Panel("Size") { WasmPanelSize(this, state) },
+                Panel("Top") { WasmPanelSize(this, state) },
             ) else emptyArray()
         }
 
