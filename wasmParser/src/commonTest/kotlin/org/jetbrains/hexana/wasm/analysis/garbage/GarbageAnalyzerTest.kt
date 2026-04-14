@@ -1,11 +1,19 @@
 package org.jetbrains.hexana.wasm.analysis.garbage
 
+import kotlinx.coroutines.test.runTest
+import org.jetbrains.hexana.tests.resourceAsByteBuffer
+import org.jetbrains.hexana.wasm.WasmModule
+import org.jetbrains.hexana.wasm.WasmParser
+import org.jetbrains.hexana.wasm.WasmParseSuccess
+import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphBuilder
 import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphNode
 import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphResult
 import org.jetbrains.hexana.wasm.analysis.graph.DominatorTree
 import org.jetbrains.hexana.wasm.analysis.graph.DirectedGraphBuilder
 import org.jetbrains.hexana.wasm.sections.CodeEntryOffset
+import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 import kotlin.test.Test
+import kotlin.test.assertIs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -180,5 +188,45 @@ class GarbageAnalyzerTest {
         assertEquals("Big", result.entries[0].name)
         assertEquals("Medium", result.entries[1].name)
         assertEquals("Small", result.entries[2].name)
+    }
+
+    /**
+     * Run GarbageAnalyzer on the real skiko.wasm binary (~8MB, 14k functions).
+     *
+     * `twiggy garbage --all` reports 0 unreachable functions for skiko.wasm.
+     * Our analyzer uses conservative indirect call resolution (over-approximation
+     * via element segment type matching), which may miss some call edges that
+     * twiggy's more precise analysis captures. As a result, we report more
+     * unreachable functions than twiggy.
+     *
+     * This test captures the current state as a regression baseline.
+     */
+    @Test
+    fun `skiko wasm garbage analysis — regression baseline`() = runTest {
+        val buffer = resourceAsByteBuffer("maps/skiko.wasm")
+        val parseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(parseResult)
+        val module = parseResult.wasmModule
+        assertIs<WasmModule>(module)
+
+        val cgr = CallGraphBuilder(buffer, module).build()
+        val dom = DominatorTree.compute(cgr.graph)
+
+        val codeSection = module.codeSection!!
+        val codeOffsets = with(codeSection) { buffer.scanOffsets() }
+
+        val importRecords = module.importSection?.let { section ->
+            with(section) { buffer.getImportRecords() }
+        } ?: emptyList()
+        val importFuncCount = importRecords.count { it.type is WasmTypeIndexExternalType }
+
+        val result = GarbageAnalyzer(cgr, dom, codeOffsets, importFuncCount).analyze()
+
+        // twiggy reports 0 unreachable functions; our conservative call graph
+        // over-approximation misses some indirect call edges, yielding 566.
+        // If call graph precision improves, this number should decrease toward 0.
+        assertEquals(566, result.entries.size, "Regression check: unreachable function count changed")
+        assertTrue(result.totalWastedBytes > 0, "Unreachable functions should have non-zero wasted bytes")
+        assertTrue(result.codeSectionTotalBytes > 0)
     }
 }

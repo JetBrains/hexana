@@ -17,7 +17,13 @@ fun KotlinJsTest.passTestFlagsToEnvironment() {
 }
 
 kotlin {
-    jvm()
+    jvm {
+        testRuns.all {
+            executionTask.configure {
+                maxHeapSize = "8g"
+            }
+        }
+    }
 
     js {
         browser {
