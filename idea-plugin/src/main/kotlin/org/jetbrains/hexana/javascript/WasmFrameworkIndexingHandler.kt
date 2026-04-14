@@ -20,6 +20,7 @@ import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.components.*
+import org.jetbrains.hexana.wasm.sections.*
 
 class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
     override fun adjustTypeBeforeAdd(type: JSType, context: JSEvaluateContext): JSType {
@@ -59,9 +60,106 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                     return createCustomWasmType(type, it, buffer)
                 }
             }
-            BinaryProviderType.Wasm -> TODO()
+            BinaryProviderType.Wasm -> {
+                ((WasmParser().parse(buffer) as? WasmParseSuccess)?.wasmModule as? WasmModule)?.let {
+                    return createCoreWasmType(type, it, buffer)
+                }
+            }
         }
         return type
+    }
+
+    private fun createCoreWasmType(type: JSType, module: WasmModule, buffer: CommonByteBuffer): JSRecordTypeImpl {
+        val exportSection = module.exportSection ?: return coreWasmShell(type, emptyList())
+        val exports = with(exportSection) { buffer.scan() }
+
+        val typeRecords = module.typesSection?.let { with(it) { buffer.parseTypes() } } ?: emptyList()
+        val funcTypeIndices = module.functionSection?.let { with(it) { buffer.parseFunctions() } } ?: emptyList()
+        val importedFunctions = module.importSection?.let { sec ->
+            with(sec) { buffer.getImportRecords() }.count { it.type is WasmTypeIndexExternalType }
+        } ?: 0
+
+        val properties = exports.map { export ->
+            PropertySignatureImpl(
+                export.name,
+                mapCoreExportToJsType(export, typeRecords, funcTypeIndices, importedFunctions, type.source),
+                false, false
+            )
+        }
+        return coreWasmShell(type, properties)
+    }
+
+    private fun coreWasmShell(type: JSType, exportProperties: List<PropertySignatureImpl>): JSRecordTypeImpl {
+        return JSRecordTypeImpl(
+            type.source,
+            listOf(
+                PropertySignatureImpl(
+                    "instance",
+                    JSRecordTypeImpl(
+                        type.source,
+                        listOf(PropertySignatureImpl("exports",
+                            JSContextualUnionTypeImpl(type.source, listOf(
+                                JSRecordTypeImpl(type.source, exportProperties),
+                                JSNamedTypeFactory.createType("WebAssembly.Instance.Exports", type.source, JSTypeContext.INSTANCE, false),
+                            ))
+                            , false, false))
+                    ),
+                    false, false
+                ),
+                PropertySignatureImpl(
+                    "module",
+                    JSNamedTypeFactory.createType("WebAssembly.Module", type.source, JSTypeContext.INSTANCE, false),
+                    false, false
+                )
+            )
+        )
+    }
+
+    private fun mapCoreExportToJsType(
+        export: WasmExportRecordEntry,
+        typeRecords: List<WasmTypeRecord>,
+        funcTypeIndices: List<Int>,
+        importedFunctions: Int,
+        source: JSTypeSource
+    ): JSType {
+        return when (export) {
+            is WasmFunctionExportRecordEntry -> {
+                val localIndex = export.index.toInt() - importedFunctions
+                val typeIdx = funcTypeIndices.getOrNull(localIndex) ?: return JSAnyType.get(source)
+                val funcType = typeRecords.getOrNull(typeIdx) as? WasmSectionFunctionTypeRecord ?: return JSAnyType.get(source)
+                mapCoreFuncTypeToJs(funcType, source)
+            }
+            is WasmMemoryExportRecordEntry -> JSNamedTypeFactory.createType("WebAssembly.Memory", source, JSTypeContext.INSTANCE, false)
+            is WasmTableExportRecordEntry -> JSNamedTypeFactory.createType("WebAssembly.Table", source, JSTypeContext.INSTANCE, false)
+            is WasmGlobalExportRecordEntry -> JSNamedTypeFactory.createType("WebAssembly.Global", source, JSTypeContext.INSTANCE, false)
+            is WasmTagExportRecordEntry -> JSNamedTypeFactory.createType("WebAssembly.Tag", source, JSTypeContext.INSTANCE, false)
+            is WasmUnsupportedExportRecordEntry -> JSAnyType.get(source)
+        }
+    }
+
+    private fun mapCoreFuncTypeToJs(funcType: WasmSectionFunctionTypeRecord, source: JSTypeSource): JSType {
+        val params = funcType.params.mapIndexed { index, valueType ->
+            JSParameterTypeDecoratorImpl("p$index", mapWasmValueTypeToJsType(valueType, source), false, false, true)
+        }
+        val returnType = when (funcType.retTypes.size) {
+            0 -> JSNamedTypeFactory.createType("void", source, JSTypeContext.INSTANCE, false)
+            1 -> mapWasmValueTypeToJsType(funcType.retTypes.first(), source)
+            else -> JSArrayTypeImpl(
+                JSContextualUnionTypeImpl(source, funcType.retTypes.map { mapWasmValueTypeToJsType(it, source) }),
+                source
+            )
+        }
+        return JSFunctionTypeImpl(source, params, returnType)
+    }
+
+    private fun mapWasmValueTypeToJsType(valueType: WasmValueType<*>, source: JSTypeSource): JSType {
+        return when (valueType) {
+            is WasmI32Type, is WasmF32Type, is WasmF64Type -> JSNamedTypeFactory.createType("number", source, JSTypeContext.INSTANCE, false)
+            is WasmI64Type -> JSNamedTypeFactory.createType("bigint", source, JSTypeContext.INSTANCE, false)
+            is WasmVecType -> JSNamedTypeFactory.createType("v128", source, JSTypeContext.INSTANCE, false)
+            is WasmRefType -> JSAnyType.get(source)
+            else -> JSAnyType.get(source)
+        }
     }
 
     private fun createCustomWasmType(type: JSType, component: WasmComponent, buffer: CommonByteBuffer): JSRecordTypeImpl {
