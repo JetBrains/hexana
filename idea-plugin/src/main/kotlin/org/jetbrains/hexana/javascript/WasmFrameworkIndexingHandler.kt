@@ -6,9 +6,11 @@ import com.intellij.lang.javascript.psi.*
 import com.intellij.lang.javascript.psi.ecma6.TypeScriptModule
 import com.intellij.lang.javascript.psi.resolve.JSEvaluateContext
 import com.intellij.lang.javascript.psi.resolve.JSResolveUtil
+import com.intellij.lang.javascript.psi.stubs.impl.JSImplicitElementImpl
 import com.intellij.lang.javascript.psi.types.*
 import com.intellij.lang.javascript.psi.types.recordImpl.PropertySignatureImpl
 import com.intellij.openapi.vfs.findPsiFile
+import com.intellij.psi.PsiElement
 import com.intellij.psi.SyntaxTraverser
 import com.intellij.psi.util.contextOfType
 import com.intellij.psi.util.descendantsOfType
@@ -105,7 +107,8 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         val properties = data.exports.map { export ->
             PropertySignatureImpl(
                 export.name,
-                mapCoreExportToJsType(export, data.typeRecords, data.funcTypeIndices, data.importedFunctions, typeSource),
+                mapCoreExportToJsType(export, data.typeRecords, data.funcTypeIndices, data.importedFunctions,
+                    JSTypeSource(WasmImplicitElementImpl(export.name, typeSource.sourceElement), typeSource.language, typeSource.isStrict)),
                 false, false
             )
         }
@@ -497,3 +500,5 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
     }
 
 }
+
+class WasmImplicitElementImpl(name: String, provider: PsiElement?): JSImplicitElementImpl(name, provider)
