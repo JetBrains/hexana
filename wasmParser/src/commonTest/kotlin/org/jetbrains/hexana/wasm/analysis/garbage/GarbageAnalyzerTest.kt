@@ -238,5 +238,12 @@ class GarbageAnalyzerTest {
         // Our simpler analysis finds 0 unreachable types for skiko since all types
         // appear in the function section.
         assertEquals(0, result.typeEntries.size, "No unreachable types with whole-module scan")
+
+        // twiggy reports "4185 potential false-positive data segments" totaling 1,531,520 bytes.
+        // twiggy splits data entries into sub-items by heuristic — the WASM binary has
+        // 3 actual data section entries. Our byte total (1,913,196) differs from twiggy's
+        // (1,531,520) because twiggy may exclude certain segments or use different sizing.
+        assertEquals(3, result.dataSegmentEntries.size, "3 WASM data section entries")
+        assertTrue(result.dataSegmentWastedBytes > 0, "Data segments should have non-zero size")
     }
 }

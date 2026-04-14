@@ -34,12 +34,20 @@ data class GarbageTypeEntry(
     val description: String,
 )
 
+data class GarbageDataSegmentEntry(
+    val index: Int,
+    val dataSize: Int,
+    val recordSize: Int,
+)
+
 data class GarbageResult(
     val entries: List<GarbageEntry>,
     val totalWastedBytes: Long,
     val codeSectionTotalBytes: Long,
     val typeEntries: List<GarbageTypeEntry> = emptyList(),
     val typeWastedBytes: Long = 0L,
+    val dataSegmentEntries: List<GarbageDataSegmentEntry> = emptyList(),
+    val dataSegmentWastedBytes: Long = 0L,
 )
 
 class GarbageAnalyzer(
@@ -53,12 +61,18 @@ class GarbageAnalyzer(
     fun analyze(): GarbageResult {
         val funcEntries = analyzeFunctions()
         val typeEntries = analyzeTypes()
+        val dataSegEntries = analyzeDataSegments()
 
         val totalWasted = funcEntries.sumOf { it.size.toLong() }
         val totalCode = codeOffsets.sumOf { it.size.toLong() }
         val typeWasted = typeEntries.sumOf { it.size.toLong() }
+        val dataSegWasted = dataSegEntries.sumOf { it.dataSize.toLong() }
 
-        return GarbageResult(funcEntries, totalWasted, totalCode, typeEntries, typeWasted)
+        return GarbageResult(
+            funcEntries, totalWasted, totalCode,
+            typeEntries, typeWasted,
+            dataSegEntries, dataSegWasted,
+        )
     }
 
     private fun analyzeFunctions(): List<GarbageEntry> {
@@ -184,6 +198,26 @@ class GarbageAnalyzer(
                 GarbageTypeEntry(idx, type.size, describeType(types[idx]))
             }
             .sortedByDescending { it.size }
+    }
+
+    /**
+     * Reports all data segments as potential false-positive garbage.
+     *
+     * Active data segments are copied into linear memory at instantiation time
+     * by the WASM runtime — no instruction references them by index.
+     * Static analysis cannot determine if a data segment's memory region is
+     * actually read, so all segments are reported as "potential" garbage
+     * (matching twiggy's behavior).
+     */
+    private fun analyzeDataSegments(): List<GarbageDataSegmentEntry> {
+        val buf = buffer ?: return emptyList()
+        val mod = module ?: return emptyList()
+        val dataSection = mod.dataSection ?: return emptyList()
+
+        val records = with(dataSection) { buf.scan() }
+        return records.mapIndexed { index, record ->
+            GarbageDataSegmentEntry(index, record.data.size, record.recordLength)
+        }
     }
 
     private fun collectTypeRefsFromOpcodes(opcodes: List<OpCode>, refs: MutableSet<Int>) {
