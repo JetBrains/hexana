@@ -31,7 +31,6 @@ data class GarbageEntry(
 data class GarbageTypeEntry(
     val typeIndex: Int,
     val size: Int,
-    val description: String,
 )
 
 data class GarbageDataSegmentEntry(
@@ -217,10 +216,7 @@ class GarbageAnalyzer(
         // Find unreferenced types
         return types.indices
             .filter { it !in referencedTypes }
-            .map { idx ->
-                val type = types[idx]
-                GarbageTypeEntry(idx, type.size, describeType(types[idx]))
-            }
+            .map { idx -> GarbageTypeEntry(idx, types[idx].size) }
             .sortedByDescending { it.size }
     }
 
@@ -255,17 +251,4 @@ class GarbageAnalyzer(
         }
     }
 
-    private fun describeType(type: WasmTypeRecord): String {
-        return when (type) {
-            is org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord -> {
-                val params = type.params.joinToString(", ") { it.toString() }
-                val ret = type.retTypes.joinToString(", ") { it.toString() }
-                "($params) -> ${if (ret.isEmpty()) "nil" else ret}"
-            }
-            is WasmStructTypeRecord -> "struct (${type.fields.size} fields)"
-            is org.jetbrains.hexana.wasm.sections.WasmArrayTypeRecord -> "array"
-            is WasmRecursiveTypeRecord -> "rec (${type.entries.size} entries)"
-            else -> type.toString()
-        }
-    }
 }

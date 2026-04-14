@@ -145,7 +145,7 @@ fun WasmPanelGarbage(
             GarbageViewMode.Functions -> GarbageFunctionsTable(
                 garbage, importFuncCount, codeOffsets, state, onShowInDominators, onShowCallers,
             )
-            GarbageViewMode.Types -> GarbageTypesTable(garbage)
+            GarbageViewMode.Types -> GarbageTypesTable(garbage, provider)
             GarbageViewMode.Data -> GarbageDataTable(garbage)
         }
     }
@@ -236,7 +236,7 @@ private fun GarbageFunctionsTable(
 }
 
 @Composable
-private fun GarbageTypesTable(garbage: GarbageResult) {
+private fun GarbageTypesTable(garbage: GarbageResult, provider: WasmBinaryProvider) {
     val entries = garbage.typeEntries
     if (entries.isEmpty()) {
         Box(modifier = Modifier.padding(8.dp)) {
@@ -244,6 +244,12 @@ private fun GarbageTypesTable(garbage: GarbageResult) {
         }
         return
     }
+
+    val types = remember(provider) {
+        val typesSection = provider.wasmModule?.typesSection ?: return@remember emptyList()
+        with(typesSection) { provider.bytes.parseTypes() }
+    }
+    val typeNames = remember(provider) { provider.nameSection?.typesSection?.namemap }
 
     val textMeasurer = rememberTextMeasurer()
     val indexColumnWidth = textMeasurer.measureWidthMonospace("Index")
@@ -265,7 +271,8 @@ private fun GarbageTypesTable(garbage: GarbageResult) {
                 TableCellValue(entries[index].size, "${entries[index].size} B")
             },
             TableColumn("Signature", modifier = Modifier.fillMaxWidth()) { index ->
-                val desc = entries[index].description
+                val typeIdx = entries[index].typeIndex
+                val desc = types.getOrNull(typeIdx)?.getDescription(typeIdx, typeNames) ?: "type[$typeIdx]"
                 TableCellValue(desc, tooltip = desc)
             },
         )

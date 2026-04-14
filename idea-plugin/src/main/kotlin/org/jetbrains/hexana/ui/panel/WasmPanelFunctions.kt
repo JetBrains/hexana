@@ -77,7 +77,7 @@ fun WasmPanelFunctions(
 }
 
 
-private fun WasmTypeRecord.getDescription(index: Int, typeNames: Map<Int, String>?): String {
+internal fun WasmTypeRecord.getDescription(index: Int, typeNames: Map<Int, String>? = null): String {
     return when (this) {
         is WasmSectionFunctionTypeRecord -> "(${(this.params.map { it.getDescription(typeNames) }).joinToString(", ")}) -> " + (this.retTypes.firstOrNull()?.getDescription(typeNames) ?: "void")
         is WasmStructTypeRecord -> {
@@ -95,7 +95,7 @@ private fun WasmTypeRecord.getDescription(index: Int, typeNames: Map<Int, String
 }
 
 
-private fun WasmValueType<*>.getDescription(typeNames: Map<Int, String>?): String {
+internal fun WasmValueType<*>.getDescription(typeNames: Map<Int, String>? = null): String {
     return when (this) {
         WasmI32Type -> "i32"
         WasmF32Type -> "f32"
