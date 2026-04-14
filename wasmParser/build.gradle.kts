@@ -74,6 +74,12 @@ kotlin {
             }
         }
 
+        jvmTest {
+            dependencies {
+                implementation(project(":graalwasm:wat2wasm"))
+            }
+        }
+
         webMain {
             dependencies {
                 implementation(libs.kotlinx.browser)
