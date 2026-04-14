@@ -2,10 +2,12 @@ package org.jetbrains.hexana.javascript
 
 import com.intellij.lang.javascript.JSStringUtil
 import com.intellij.lang.javascript.index.FrameworkIndexingHandler
-import com.intellij.lang.javascript.psi.*
+import com.intellij.lang.javascript.psi.JSCallExpression
+import com.intellij.lang.javascript.psi.JSLiteralExpression
+import com.intellij.lang.javascript.psi.JSReferenceExpression
+import com.intellij.lang.javascript.psi.JSType
 import com.intellij.lang.javascript.psi.resolve.JSEvaluateContext
 import com.intellij.lang.javascript.psi.types.*
-import com.intellij.lang.javascript.psi.types.evaluable.JSUnwrapPromiseType
 import com.intellij.lang.javascript.psi.types.recordImpl.PropertySignatureImpl
 import com.intellij.psi.SyntaxTraverser
 import org.jetbrains.hexana.io.CommonByteBuffer
@@ -21,10 +23,19 @@ import org.jetbrains.hexana.wasm.components.*
 
 class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
     override fun adjustTypeBeforeAdd(type: JSType, context: JSEvaluateContext): JSType {
-        if (type !is JSUnwrapPromiseType) return type
-        val expr = (type.sourceElement as? JSPrefixExpression)?.expression
-        if (expr !is JSCallExpression) return type
-        val callee = (expr.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName
+        if (type is JSGenericTypeImpl && type.arguments.size == 1) {
+            val first = type.arguments.first() as? JSTypeImpl ?: return type
+            if (first.qualifiedName.qualifiedName == "WebAssemblyInstantiatedSource") {
+                val call = context.processedExpression?.parent as? JSCallExpression ?: return type
+                return JSGenericTypeImpl(type.source,
+                    type.type, listOf(adjustUnwrapPromise(type, call)))
+            }
+        }
+        return type
+    }
+
+    private fun adjustUnwrapPromise(type: JSType, expr: JSCallExpression?): JSType {
+        val callee = (expr?.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName
         if (callee != "instantiateStreaming") return type
         val arg = expr.arguments.firstOrNull() ?: return type
         val wasmLiteral = SyntaxTraverser.psiTraverser(arg).filterIsInstance<JSLiteralExpression>().map { it.value }
@@ -34,17 +45,26 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         if (wasmLiteral != null) {
             expr.containingFile.originalFile.virtualFile?.parent?.findFileByRelativePath(wasmLiteral)?.let {
                 val buffer = it.toCommonByteBuffer() ?: return type
-                if (WasmBinaryProviderSelector.select(buffer) == BinaryProviderType.WasmComponent) {
-                    ((WasmParser().parse(buffer) as? WasmParseSuccess)?.wasmModule as? WasmComponent)?.let {
-                        return createCustomWasmType(type, it, buffer)
-                    }
-                }
+                return createTypeFromBinary(type, buffer)
             }
         }
         return type
     }
 
-    private fun createCustomWasmType(type: JSUnwrapPromiseType, component: WasmComponent, buffer: CommonByteBuffer): JSRecordTypeImpl {
+    private fun createTypeFromBinary(type: JSType, buffer: CommonByteBuffer): JSType {
+        when (WasmBinaryProviderSelector.select(buffer)) {
+            BinaryProviderType.Generic -> return type
+            BinaryProviderType.WasmComponent -> {
+                ((WasmParser().parse(buffer) as? WasmParseSuccess)?.wasmModule as? WasmComponent)?.let {
+                    return createCustomWasmType(type, it, buffer)
+                }
+            }
+            BinaryProviderType.Wasm -> TODO()
+        }
+        return type
+    }
+
+    private fun createCustomWasmType(type: JSType, component: WasmComponent, buffer: CommonByteBuffer): JSRecordTypeImpl {
         val allTypes = buildComponentTypeIndex(component.sections, buffer)
 
         val allCoreInstances = component.coreInstanceSection.flatMap {
