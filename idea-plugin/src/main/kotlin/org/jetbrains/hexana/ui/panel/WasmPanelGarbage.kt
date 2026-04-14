@@ -119,7 +119,7 @@ fun WasmPanelGarbage(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "${entries.size} unreachable functions, ${formatSize(garbage.totalWastedBytes.toInt())} wasted ($pct of code)",
+                "${entries.size} unreachable functions, ${formatSize(garbage.totalWastedBytes)} wasted ($pct of code)",
                 style = TextStyle(fontFamily = FontFamily.Monospace),
                 modifier = Modifier.weight(1f),
             )

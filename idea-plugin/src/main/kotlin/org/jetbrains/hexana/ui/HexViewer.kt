@@ -528,7 +528,7 @@ internal fun HexViewer(
                                                 absoluteIndex.toLong() in range
                                             }
 
-                                            val isHighlighted = state.highlightRanges.any { range ->
+                                            val highlightRange = state.highlightRanges.firstOrNull { range ->
                                                 absoluteIndex.toLong() in range.offset until (range.offset + range.size)
                                             }
 
@@ -536,10 +536,8 @@ internal fun HexViewer(
                                                 HexanaTheme.hexCellActiveColor
                                             } else if (isHover) {
                                                 HexanaTheme.hexCellHoverColor
-                                            } else if (isHighlighted) {
-                                                state.highlightRanges.first { range ->
-                                                    absoluteIndex.toLong() in range.offset until (range.offset + range.size)
-                                                }.color
+                                            } else if (highlightRange != null) {
+                                                highlightRange.color
                                             } else {
                                                 Color.Unspecified
                                             }
@@ -639,7 +637,7 @@ internal fun HexViewer(
                                             (rowIndex * bytesPerRow + byteIndex).toLong() in range
                                         }
 
-                                        val isHighlighted = state.highlightRanges.any { range ->
+                                        val highlightRange = state.highlightRanges.firstOrNull { range ->
                                             (rowIndex * bytesPerRow + byteIndex).toLong() in range.offset until (range.offset + range.size)
                                         }
 
@@ -647,10 +645,8 @@ internal fun HexViewer(
                                             HexanaTheme.hexCellActiveColor
                                         } else if (isHover) {
                                             HexanaTheme.hexCellHoverColor
-                                        } else if (isHighlighted) {
-                                            state.highlightRanges.first { range ->
-                                                (rowIndex * bytesPerRow + byteIndex).toLong() in range.offset until (range.offset + range.size)
-                                            }.color
+                                        } else if (highlightRange != null) {
+                                            highlightRange.color
                                         } else {
                                             Color.Unspecified
                                         }

@@ -159,3 +159,11 @@ internal fun formatSize(bytes: Int): String {
         else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
     }
 }
+
+internal fun formatSize(bytes: Long): String {
+    return when {
+        bytes < 1024L -> "$bytes B"
+        bytes < 1024L * 1024 -> "%.1f KB".format(bytes / 1024.0)
+        else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
+    }
+}
