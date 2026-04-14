@@ -25,6 +25,8 @@ import org.jetbrains.hexana.ui.panel.WasmPanelCustom
 import org.jetbrains.hexana.ui.panel.PathsNavigationState
 import org.jetbrains.hexana.ui.panel.WasmPanelDominators
 import org.jetbrains.hexana.ui.panel.WasmPanelSize
+import org.jetbrains.hexana.ui.panel.WasmPanelMonos
+import org.jetbrains.hexana.ui.panel.WasmPanelGarbage
 import org.jetbrains.hexana.ui.panel.WasmPanelData
 import org.jetbrains.hexana.ui.panel.WasmPanelExports
 import org.jetbrains.hexana.ui.panel.WasmPanelImports
@@ -142,6 +144,8 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: Pa
                 Panel("Functions") { WasmPanelFunctions(this, state) },
                 Panel("Custom") { WasmPanelCustom(this, state) },
                 Panel("Size") { WasmPanelSize(this, state) },
+                Panel("Monos") { WasmPanelMonos(this, state) },
+                Panel("Garbage") { WasmPanelGarbage(this, state) },
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 Panel("Wat") { WasmPanelWat(this, state) },
                 *dwarfPanels(this, state).toTypedArray()
@@ -168,6 +172,8 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: Pa
                 Panel("Functions") { WasmPanelFunctions(this, state) },
                 Panel("Custom") { WasmPanelCustom(this, state) },
                 Panel("Size") { WasmPanelSize(this, state) },
+                Panel("Monos") { WasmPanelMonos(this, state) },
+                Panel("Garbage") { WasmPanelGarbage(this, state) },
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 *dwarfPanels(this, state).toTypedArray()
             ) else emptyArray()
@@ -193,6 +199,24 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: Pa
                 pathsNav.targetFuncIndex = fIdx
                 state.setSelectedTab(domIndex)
             }
+        }
+    }
+    // Wire Garbage → Dominators cross-panel navigation
+    val garbageIndex = panels.indexOfFirst { it.description == "Garbage" }
+    if (garbageIndex >= 0 && domIndex >= 0 && this is WasmBinaryProvider) {
+        val provider = this
+        panels[garbageIndex] = Panel("Garbage") {
+            WasmPanelGarbage(
+                provider, state,
+                onShowInDominators = { fIdx ->
+                    pathsNav.targetFuncIndex = fIdx
+                    state.setSelectedTab(domIndex)
+                },
+                onShowCallers = { fIdx ->
+                    pathsNav.targetFuncIndex = fIdx
+                    state.setSelectedTab(domIndex)
+                },
+            )
         }
     }
     return panels
