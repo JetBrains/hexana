@@ -74,13 +74,14 @@ dependencies {
     implementation(project(":graalwasm:common"))
     implementation(project(":graalwasm:wat2wasm"))
     implementation(libs.kotlin.reflect)
-    implementation(libs.kotlinx.serialization.json)
+    compileOnly(libs.kotlinx.serialization.json)
     implementation(libs.bundles.graalvm)
     implementation(libs.jackson.module.kotlin)
 
     // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
     compileOnly(compose.desktop.currentOs)
     testImplementation(libs.junit4)
+    testImplementation(libs.ktor.client.cio.jvm)
     testImplementation(libs.kotlinx.serialization.json)
     testRuntimeOnly(libs.bundles.graalvm)
     implementation(libs.gson)

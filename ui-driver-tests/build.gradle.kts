@@ -21,6 +21,8 @@ dependencies {
     testImplementation(libs.intellij.starter.junit5) {
         exclude(group = "com.jetbrains.intellij.platform", module = "test-framework-junit5")
     }
+    testImplementation(libs.mcp.kotlin.sdk.jvm)
+    testImplementation(libs.ktor.client.cio.jvm)
     testImplementation(libs.kotlinx.serialization.json)
 
     testImplementation(platform(libs.junit.bom))
