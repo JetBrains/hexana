@@ -3,6 +3,7 @@ package org.jetbrains.hexana
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.Color
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.channels.BufferOverflow
@@ -35,6 +36,12 @@ sealed class HexViewMode {
     object Hex : HexViewMode()
     object Wat : HexViewMode()
 }
+
+data class HexHighlightRange(
+    val offset: Long,
+    val size: Int,
+    val color: Color,
+)
 
 class HexViewStateHolder(
     val project: Project,
@@ -82,6 +89,17 @@ class HexViewStateHolder(
 
     private val _conversionState = MutableStateFlow<WatConversionState?>(null)
     internal val conversionStateFlow = _conversionState.asStateFlow()
+
+    private val _highlightRanges = mutableStateOf<List<HexHighlightRange>>(emptyList())
+    val highlightRanges: List<HexHighlightRange> get() = _highlightRanges.value
+
+    fun setHighlightRanges(ranges: List<HexHighlightRange>) {
+        _highlightRanges.value = ranges
+    }
+
+    fun clearHighlightRanges() {
+        _highlightRanges.value = emptyList()
+    }
 
     private val _showAscii = mutableStateOf(true)
     val showAscii: Boolean get() = _showAscii.value

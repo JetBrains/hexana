@@ -32,4 +32,8 @@ object HexanaTheme {
     val searchResultColor: Color
         @Composable
         get() = if (JewelTheme.isDark) Color(153, 115, 0) else Color(255, 235, 59)
+
+    val garbageHighlightColor: Color
+        @Composable
+        get() = if (JewelTheme.isDark) Color(255, 96, 96, 48) else Color(255, 60, 60, 40)
 }
