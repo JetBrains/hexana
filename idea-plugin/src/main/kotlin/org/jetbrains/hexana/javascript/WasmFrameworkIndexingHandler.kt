@@ -2,15 +2,14 @@ package org.jetbrains.hexana.javascript
 
 import com.intellij.lang.javascript.JSStringUtil
 import com.intellij.lang.javascript.index.FrameworkIndexingHandler
-import com.intellij.lang.javascript.psi.JSCallExpression
-import com.intellij.lang.javascript.psi.JSLiteralExpression
-import com.intellij.lang.javascript.psi.JSReferenceExpression
-import com.intellij.lang.javascript.psi.JSType
+import com.intellij.lang.javascript.psi.*
 import com.intellij.lang.javascript.psi.resolve.JSEvaluateContext
 import com.intellij.lang.javascript.psi.resolve.JSResolveUtil
 import com.intellij.lang.javascript.psi.types.*
 import com.intellij.lang.javascript.psi.types.recordImpl.PropertySignatureImpl
 import com.intellij.psi.SyntaxTraverser
+import com.intellij.psi.util.descendantsOfType
+import com.intellij.psi.util.parentOfType
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.looksLikeWitInterfaceExport
 import org.jetbrains.hexana.providers.BinaryProviderType
@@ -53,24 +52,46 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         val callee = (expr?.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName
         if (callee != "instantiateStreaming"
             && callee != "instantiate"
-            && callee != "compileStreaming") return type
+            && callee != "compileStreaming"
+            && callee != "compile") return type
         val arg = expr.arguments.firstOrNull() ?: return type
-        val wasmLiteral = SyntaxTraverser.psiTraverser(arg).filterIsInstance<JSLiteralExpression>().map { it.value }
-            .firstOrNull { it is String && it.contains(".wasm") }?.let { it as? String }?.let {
-                JSStringUtil.unquoteAndUnescapeString(it)
-            }
+        val wasmLiteral = findWasmLiteral(arg)
         if (wasmLiteral != null) {
-            expr.containingFile.originalFile.virtualFile?.parent?.findFileByRelativePath(wasmLiteral)?.let {
-                val buffer = it.toCommonByteBuffer() ?: return type
-                return createTypeFromBinary(type, buffer)
-            }
+            return createFromLiteral(expr, wasmLiteral, type)
         }
         val resolvedType = JSResolveUtil.getExpressionJSType(arg)
         if (resolvedType is JSRecordTypeImpl) {
             return resolvedType.properties.firstOrNull { it.memberName == "instance" }?.jsType ?: type
         }
+        // hack for instantiating from bytes - try to infer from the call chain
+        if (resolvedType is JSTypeImpl && resolvedType.qualifiedName.qualifiedName == "ArrayBuffer") {
+            expr.parentOfType<JSCallExpression>()?.descendantsOfType<JSCallExpression>()
+                ?.firstOrNull { (it.stubSafeMethodExpression as? JSReferenceExpression)?.referenceName == "fetch" }
+                ?.arguments?.firstOrNull()?.let { arg ->
+                    val wasmLiteral = findWasmLiteral(arg)
+                    if (wasmLiteral != null) {
+                        return createFromLiteral(expr, wasmLiteral, type)
+                    }
+                }
+        }
         return type
     }
+
+    private fun createFromLiteral(
+        expr: JSCallExpression,
+        wasmLiteral: String,
+        type: JSType
+    ): JSType = expr.containingFile.originalFile.virtualFile?.parent?.findFileByRelativePath(wasmLiteral)?.let {
+        it.toCommonByteBuffer()?.let { buffer ->
+            createTypeFromBinary(type, buffer)
+        }
+    } ?: type
+
+    private fun findWasmLiteral(arg: JSExpression): String? =
+        SyntaxTraverser.psiTraverser(arg).filterIsInstance<JSLiteralExpression>().map { it.value }
+            .firstOrNull { it is String && it.contains(".wasm") }?.let { it as? String }?.let {
+                JSStringUtil.unquoteAndUnescapeString(it)
+            }
 
     private fun createTypeFromBinary(type: JSType, buffer: CommonByteBuffer): JSType {
         when (WasmBinaryProviderSelector.select(buffer)) {

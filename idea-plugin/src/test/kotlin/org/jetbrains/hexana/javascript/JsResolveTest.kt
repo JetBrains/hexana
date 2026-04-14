@@ -65,8 +65,16 @@ class JsResolveTest : BasePlatformTestCase() {
     }
 
     fun testCompileStreaming() {
+        doTestSimpleWasm("compileStreaming.js")
+    }
+
+    fun testInstantiateBytesHack() {
+        doTestSimpleWasm("instantiateBytesHack.js")
+    }
+
+    private fun doTestSimpleWasm(jsFile: String) {
         myFixture.copyFileToProject("simple.wasm")
-        val psiFile = myFixture.configureByFile("compileStreaming.js")
+        val psiFile = myFixture.configureByFile(jsFile)
         assert(psiFile is JSFile)
 
         val callExpr = SyntaxTraverser.psiTraverser(psiFile)
