@@ -290,7 +290,7 @@ open class WasmBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProv
     val garbageAnalysis: GarbageResult? by lazy {
         val cg = callGraphResult ?: return@lazy null
         val dom = callGraphDominators ?: return@lazy null
-        GarbageAnalyzer(cg, dom, codeOffsets, importFuncCount).analyze()
+        GarbageAnalyzer(cg, dom, codeOffsets, importFuncCount, bytes, wasmModule).analyze()
     }
 
     fun getCodeRecordByIndex(index: Int): WasmCodeRecord? {

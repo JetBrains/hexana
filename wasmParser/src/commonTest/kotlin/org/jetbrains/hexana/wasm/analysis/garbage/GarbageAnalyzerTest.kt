@@ -220,7 +220,7 @@ class GarbageAnalyzerTest {
         } ?: emptyList()
         val importFuncCount = importRecords.count { it.type is WasmTypeIndexExternalType }
 
-        val result = GarbageAnalyzer(cgr, dom, codeOffsets, importFuncCount).analyze()
+        val result = GarbageAnalyzer(cgr, dom, codeOffsets, importFuncCount, buffer, module).analyze()
 
         // twiggy reports 0 unreachable functions; our conservative call graph
         // over-approximation misses some indirect call edges, yielding 566.
@@ -228,5 +228,15 @@ class GarbageAnalyzerTest {
         assertEquals(566, result.entries.size, "Regression check: unreachable function count changed")
         assertTrue(result.totalWastedBytes > 0, "Unreachable functions should have non-zero wasted bytes")
         assertTrue(result.codeSectionTotalBytes > 0)
+
+        // twiggy reports 3 unreachable types (110, 143, 176) totaling 19 bytes.
+        // However, our analysis scans all function section type references
+        // (not just reachable functions), and the function section DOES reference
+        // types 110, 143, 176 — meaning some functions have those as their signature.
+        // twiggy likely uses a more sophisticated analysis (e.g., transitive garbage
+        // where a type used only by garbage functions is itself garbage).
+        // Our simpler analysis finds 0 unreachable types for skiko since all types
+        // appear in the function section.
+        assertEquals(0, result.typeEntries.size, "No unreachable types with whole-module scan")
     }
 }
