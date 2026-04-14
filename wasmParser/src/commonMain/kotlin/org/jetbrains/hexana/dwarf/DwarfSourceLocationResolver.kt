@@ -143,7 +143,8 @@ class DwarfSourceLocationResolver(val dwarfAccessor: DwarfAccessor) {
     }
 
     fun CommonByteBuffer.resolveLocation(offset: Int): SourceLocation? {
-        val infos = with(dwarfAccessor.debugInfoSection()!!){
+        val debugInfoSection = dwarfAccessor.debugInfoSection() ?: return null
+        val infos = with(debugInfoSection){
             scanDwarfInfo()
         }
         val targetDie = infos.find {
