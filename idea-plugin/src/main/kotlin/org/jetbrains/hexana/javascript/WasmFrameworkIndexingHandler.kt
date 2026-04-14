@@ -24,6 +24,8 @@ import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.sections.*
 
 class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
+    private val acceptedCallNames = setOf("instantiateStreaming", "instantiate", "compileStreaming", "compile")
+
     override fun adjustTypeBeforeAdd(type: JSType, context: JSEvaluateContext): JSType {
         if (type is JSGenericTypeImpl && type.arguments.size == 1) {
             if ((type.type as? JSTypeImpl)?.qualifiedName?.qualifiedName != "Promise") return type
@@ -55,11 +57,8 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
 
     private fun adjustWasmType(typeSource: JSTypeSource, expr: JSCallExpression?): JSType? {
         val callee = (expr?.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName
-        if (callee != "instantiateStreaming"
-            && callee != "instantiate"
-            && callee != "compileStreaming"
-            && callee != "compile") return null
-        val arg = expr.arguments.firstOrNull() ?: return null
+        if (!acceptedCallNames.contains(callee)) return null
+        val arg = expr!!.arguments.firstOrNull() ?: return null
         val wasmLiteral = findWasmLiteral(arg)
         if (wasmLiteral != null) {
             return createFromLiteral(expr, wasmLiteral, typeSource)
@@ -132,10 +131,10 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                 false, false
             )
         }
-        return coreWasmShell(typeSource, properties)
+        return createWasmModuleRecordType(typeSource, properties)
     }
 
-    private fun coreWasmShell(typeSource: JSTypeSource, exportProperties: List<PropertySignatureImpl>): JSRecordTypeImpl {
+    private fun createWasmModuleRecordType(typeSource: JSTypeSource, exportProperties: List<PropertySignatureImpl>): JSRecordTypeImpl {
         return JSRecordTypeImpl(
             typeSource,
             listOf(
@@ -218,38 +217,19 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
             }
         }
 
-        return JSRecordTypeImpl(
-            typeSource,
-            listOf(
+        return createWasmModuleRecordType(typeSource, component.exportSection.flatMap {
+            with(it) {
+                buffer.scan()
+            }.map { export ->
                 PropertySignatureImpl(
-                    "instance",
-                    JSRecordTypeImpl(
-                        typeSource,
-                        listOf(PropertySignatureImpl("exports",
-                            JSContextualUnionTypeImpl(typeSource, listOf(
-                                JSRecordTypeImpl(typeSource, component.exportSection.flatMap {
-                                    with(it) {
-                                        buffer.scan()
-                                    }.map { export ->
-                                        PropertySignatureImpl(export.exportName
-                                            .substringAfter('/').substringBefore('@'),
-                                            resolveExportType(export, allTypes,
-                                                allComponentInstances, typeSource), false, false)
-                                    }
-                                }),
-                                JSNamedTypeFactory.createType("WebAssembly.Instance.Exports", typeSource, JSTypeContext.INSTANCE, false),
-                            ))
-                            , false, false))
-                    ),
-                    false, false
-                ),
-                PropertySignatureImpl(
-                    "module",
-                    JSNamedTypeFactory.createType("WebAssembly.Module", typeSource, JSTypeContext.INSTANCE, false),
-                    false, false
+                    export.exportName.substringAfter('/').substringBefore('@'),
+                    resolveExportType(
+                        export, allTypes,
+                        allComponentInstances, typeSource
+                    ), false, false
                 )
-            )
-        )
+            }
+        })
     }
 
     private fun resolveExportType(export: WasmComponentExport, allTypes: List<ComponentDefType>,
