@@ -5,6 +5,10 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
+import org.jetbrains.hexana.wasm.analysis.MonosAnalyzer
+import org.jetbrains.hexana.wasm.analysis.MonosResult
+import org.jetbrains.hexana.wasm.analysis.garbage.GarbageAnalyzer
+import org.jetbrains.hexana.wasm.analysis.garbage.GarbageResult
 import org.jetbrains.hexana.wasm.analysis.SizeAnalysisBuilder
 import org.jetbrains.hexana.wasm.analysis.SizeNode
 import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphBuilder
@@ -265,6 +269,28 @@ open class WasmBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProv
 
     val callGraphDominators: DominatorResult? by lazy {
         callGraphResult?.let { DominatorTree.compute(it.graph) }
+    }
+
+    val importFuncCount: Int by lazy {
+        val importRecords = wasmModule?.importSection?.let { section ->
+            with(section) { bytes.getImportRecords() }
+        } ?: emptyList()
+        importRecords.count { it.type is org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType }
+    }
+
+    val monosAnalysis: MonosResult? by lazy {
+        val names = nameSection?.functionSubsection?.namemap ?: return@lazy null
+        val sizes = mutableMapOf<Int, Int>()
+        codeOffsets.forEachIndexed { codeIdx, entry ->
+            sizes[importFuncCount + codeIdx] = entry.size
+        }
+        MonosAnalyzer.analyze(names, sizes)
+    }
+
+    val garbageAnalysis: GarbageResult? by lazy {
+        val cg = callGraphResult ?: return@lazy null
+        val dom = callGraphDominators ?: return@lazy null
+        GarbageAnalyzer(cg, dom, codeOffsets, importFuncCount).analyze()
     }
 
     fun getCodeRecordByIndex(index: Int): WasmCodeRecord? {
