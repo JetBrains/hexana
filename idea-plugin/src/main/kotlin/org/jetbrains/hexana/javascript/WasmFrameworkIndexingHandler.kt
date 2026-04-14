@@ -3,13 +3,14 @@ package org.jetbrains.hexana.javascript
 import com.intellij.lang.javascript.JSStringUtil
 import com.intellij.lang.javascript.index.FrameworkIndexingHandler
 import com.intellij.lang.javascript.psi.*
+import com.intellij.lang.javascript.psi.ecma6.TypeScriptModule
 import com.intellij.lang.javascript.psi.resolve.JSEvaluateContext
 import com.intellij.lang.javascript.psi.resolve.JSResolveUtil
 import com.intellij.lang.javascript.psi.types.*
 import com.intellij.lang.javascript.psi.types.recordImpl.PropertySignatureImpl
 import com.intellij.psi.SyntaxTraverser
+import com.intellij.psi.util.contextOfType
 import com.intellij.psi.util.descendantsOfType
-import com.intellij.psi.util.parentOfType
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.looksLikeWitInterfaceExport
 import org.jetbrains.hexana.providers.BinaryProviderType
@@ -26,10 +27,10 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
     override fun adjustTypeBeforeAdd(type: JSType, context: JSEvaluateContext): JSType {
         if (type is JSGenericTypeImpl && type.arguments.size == 1) {
             if ((type.type as? JSTypeImpl)?.qualifiedName?.qualifiedName != "Promise") return type
-            val first = type.arguments.first() as? JSTypeImpl ?: return type
-            if (isAcceptableContext(first, context)) {
-                val call = context.processedExpression?.parent as? JSCallExpression ?: return type
-                val wasmType = adjustWasmType(type, call)
+            val processedType = type.arguments.first() as? JSTypeImpl ?: return type
+            if (isAcceptableType(processedType)) {
+                val call = context.processedExpression?.context as? JSCallExpression ?: return type
+                val wasmType = adjustWasmType(type.source, call)
                 if (wasmType != null) {
                     return JSGenericTypeImpl(type.source, type.type, listOf(wasmType))
                 }
@@ -38,18 +39,21 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         return type
     }
 
-    private fun isAcceptableContext(
-        first: JSTypeImpl,
-        context: JSEvaluateContext
+    private fun isAcceptableType(
+        type: JSTypeImpl
     ): Boolean {
-        if (first.qualifiedName.qualifiedName == "WebAssemblyInstantiatedSource") return true
-        if (first.qualifiedName.qualifiedName == "Instance") return true
-        if (first.qualifiedName.qualifiedName == "Module") return true
-        if (first.qualifiedName.qualifiedName == "ByteArray") return true
+        if (type.qualifiedName.qualifiedName == "WebAssemblyInstantiatedSource") return true
+        if (type.qualifiedName.qualifiedName == "Instance") {
+            return type.sourceElement?.contextOfType<TypeScriptModule>()?.name == "WebAssembly"
+        }
+        if (type.qualifiedName.qualifiedName == "Module") {
+            return type.sourceElement?.contextOfType<TypeScriptModule>()?.name == "WebAssembly"
+        }
+        if (type.qualifiedName.qualifiedName == "ByteArray") return true
         return false
     }
 
-    private fun adjustWasmType(type: JSType, expr: JSCallExpression?): JSType? {
+    private fun adjustWasmType(typeSource: JSTypeSource, expr: JSCallExpression?): JSType? {
         val callee = (expr?.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName
         if (callee != "instantiateStreaming"
             && callee != "instantiate"
@@ -58,7 +62,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         val arg = expr.arguments.firstOrNull() ?: return null
         val wasmLiteral = findWasmLiteral(arg)
         if (wasmLiteral != null) {
-            return createFromLiteral(expr, wasmLiteral, type.source)
+            return createFromLiteral(expr, wasmLiteral, typeSource)
         }
         val resolvedType = JSResolveUtil.getExpressionJSType(arg)
         if (resolvedType is JSRecordTypeImpl) {
@@ -66,12 +70,12 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         }
         // hack for instantiating from bytes - try to infer from the call chain
         if (resolvedType is JSTypeImpl && resolvedType.qualifiedName.qualifiedName == "ArrayBuffer") {
-            expr.parentOfType<JSCallExpression>()?.descendantsOfType<JSCallExpression>()
+            expr.contextOfType<JSCallExpression>()?.descendantsOfType<JSCallExpression>()
                 ?.firstOrNull { (it.stubSafeMethodExpression as? JSReferenceExpression)?.referenceName == "fetch" }
                 ?.arguments?.firstOrNull()?.let { arg ->
                     val wasmLiteral = findWasmLiteral(arg)
                     if (wasmLiteral != null) {
-                        return createFromLiteral(expr, wasmLiteral, type.source)
+                        return createFromLiteral(expr, wasmLiteral, typeSource)
                     }
                 }
         }
@@ -205,14 +209,8 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
     }
 
     private fun createComponentWasmType(component: WasmComponent, buffer: CommonByteBuffer,
-                                        typeSource: JSTypeSource): JSRecordTypeImpl? {
+                                        typeSource: JSTypeSource): JSRecordTypeImpl {
         val allTypes = buildComponentTypeIndex(component.sections, buffer)
-
-        val allCoreInstances = component.coreInstanceSection.flatMap {
-            with(it) {
-                buffer.parseCoreInstances()
-            }
-        }
 
         val allComponentInstances = component.instanceSection.flatMap {
             with(it) {
@@ -235,7 +233,8 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                                     }.map { export ->
                                         PropertySignatureImpl(export.exportName
                                             .substringAfter('/').substringBefore('@'),
-                                            resolveExportType(export, allTypes, allCoreInstances, allComponentInstances, component.moduleSection, buffer, typeSource), false, false)
+                                            resolveExportType(export, allTypes,
+                                                allComponentInstances, typeSource), false, false)
                                     }
                                 }),
                                 JSNamedTypeFactory.createType("WebAssembly.Instance.Exports", typeSource, JSTypeContext.INSTANCE, false),
@@ -253,8 +252,9 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         )
     }
 
-    private fun resolveExportType(export: WasmComponentExport, allTypes: List<ComponentDefType>, allCoreInstances: List<InstanceCoreExpression>, allComponentInstances: List<InstanceExpression>, allModuleSections: List<WasmComponentModuleSection>, buffer: CommonByteBuffer, source: JSTypeSource): JSType {
-        val defType = resolveDefType(export, allTypes, allCoreInstances, allComponentInstances, allModuleSections, buffer) ?: return JSAnyType.get(source)
+    private fun resolveExportType(export: WasmComponentExport, allTypes: List<ComponentDefType>,
+                                  allComponentInstances: List<InstanceExpression>, source: JSTypeSource): JSType {
+        val defType = resolveDefType(export, allTypes, allComponentInstances) ?: return JSAnyType.get(source)
         val jsType = mapComponentDefTypeToJsType(defType, allTypes, source, mutableSetOf())
         if (jsType is JSRecordTypeImpl && (defType is ComponentType || defType is ComponentInstanceType)) {
             val exportName = export.exportName.substringAfter('/').substringBefore('@')
@@ -266,7 +266,9 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         return jsType
     }
 
-    private fun resolveDefType(export: WasmComponentExport, allTypes: List<ComponentDefType>, allCoreInstances: List<InstanceCoreExpression>, allComponentInstances: List<InstanceExpression>, allModuleSections: List<WasmComponentModuleSection>, buffer: CommonByteBuffer): ComponentDefType? {
+    private fun resolveDefType(export: WasmComponentExport, allTypes: List<ComponentDefType>,
+                               allComponentInstances: List<InstanceExpression>
+    ): ComponentDefType? {
         val externDesc = export.externDescription
         if (externDesc != null) {
             return when (externDesc) {
@@ -277,7 +279,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                 else -> null
             }
         }
-        return when (val sort = export.sortIndex.sort) {
+        return when (export.sortIndex.sort) {
             is ComponentSort.Type -> allTypes.getOrNull(export.sortIndex.index.toInt())
             is ComponentSort.Instance -> {
                 val resolved = resolveComponentInstanceType(export.sortIndex.index, allTypes, allComponentInstances)
@@ -290,7 +292,8 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                     allTypes.filterIsInstance<ComponentRoutineType>().firstOrNull()
                 } else null
             }
-            is ComponentSort.Func -> resolveComponentFuncType(export.sortIndex.index, allTypes, allCoreInstances, allModuleSections, buffer)
+            is ComponentSort.Func -> resolveComponentFuncType(export.sortIndex.index, allTypes
+            )
             is ComponentSort.Component,
             is ComponentSort.Value,
             is ComponentSortWithCoreSort -> null
@@ -323,54 +326,9 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         }
     }
 
-    private fun resolveComponentFuncType(funcIndex: UInt, allTypes: List<ComponentDefType>, allCoreInstances: List<InstanceCoreExpression>, allModuleSections: List<WasmComponentModuleSection>, buffer: CommonByteBuffer): ComponentDefType? {
+    private fun resolveComponentFuncType(funcIndex: UInt, allTypes: List<ComponentDefType>
+    ): ComponentDefType? {
         return allTypes.getOrNull(funcIndex.toInt())
-    }
-
-    private fun resolveCoreInstanceType(instanceIndex: UInt, allTypes: List<ComponentDefType>, allCoreInstances: List<InstanceCoreExpression>, allModuleSections: List<WasmComponentModuleSection>, buffer: CommonByteBuffer): ComponentDefType? {
-        return when (val instance = allCoreInstances.getOrNull(instanceIndex.toInt())) {
-            is InlineInstanceCoreExpression -> {
-                val exportDeclarations = instance.e.mapNotNull { inlineExport ->
-                    resolveCoreInlineExportToDeclaration(inlineExport, allTypes)
-                }
-                ComponentInstanceType(exportDeclarations)
-            }
-            is ModuleInstanceCoreExpression -> {
-                val moduleSec = allModuleSections.getOrNull(instance.moduleIndex.toInt()) ?: return null
-                val coreModule = with(moduleSec) { buffer.scan() }
-                val moduleBuffer = buffer.slice(coreModule.contentOffset until coreModule.contentOffset + coreModule.contentSize)
-                val parseResult = WasmParser().parse(moduleBuffer)
-                val coreWasmModule = (parseResult as? WasmParseSuccess)?.wasmModule as? WasmModule ?: return null
-                val coreExportSection = coreWasmModule.exportSection ?: return null
-                val coreExports = with(coreExportSection) { moduleBuffer.scan() }
-                val exportDeclarations = coreExports.map { coreExport ->
-                    ExportDeclaration(coreExport.name, ComponentExternType(0u))
-                }
-                ComponentInstanceType(exportDeclarations)
-            }
-            null -> null
-        }
-    }
-
-    private fun resolveCoreInlineExportToDeclaration(inlineExport: InlineInstanceCoreInlineExpression, allTypes: List<ComponentDefType>): ExportDeclaration? {
-        return when (inlineExport) {
-            is FuncInlineCoreExpression -> {
-                ExportDeclaration(inlineExport.name, ComponentExternType(inlineExport.index))
-            }
-            is TypeInlineCoreExpression -> {
-                ExportDeclaration(inlineExport.name, ComponentExternType(inlineExport.index))
-            }
-            is InstanceInlineCoreExpression -> {
-                val instanceType = allTypes.getOrNull(inlineExport.index.toInt())
-                if (instanceType != null) {
-                    ExportDeclaration(inlineExport.name, ComponentExternInstance(inlineExport.index))
-                } else null
-            }
-            is GlobalInlineCoreExpression,
-            is MemoryInlineCoreExpression,
-            is ModuleInlineCoreExpression,
-            is TableInlineCoreExpression -> null
-        }
     }
 
     private fun mapComponentDefTypeToJsType(defType: ComponentDefType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
@@ -391,7 +349,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
             is ComponentResultType -> mapResultTypeToJs(defType, allTypes, source, visited)
             is ComponentTupleType -> mapTupleTypeToJs(defType, allTypes, source, visited)
             is ComponentEnumType -> mapEnumTypeToJs(defType, source)
-            is ComponentFlagType -> mapFlagTypeToJs(defType, allTypes, source, visited)
+            is ComponentFlagType -> mapFlagTypeToJs(defType, source)
             is ComponentVariantType -> mapVariantTypeToJs(defType, allTypes, source, visited)
             is ComponentType -> mapComponentTypeToJs(defType, allTypes, source, visited)
             is ComponentOwnType -> JSAnyType.get(source)
@@ -510,7 +468,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         return JSContextualUnionTypeImpl(source, literalTypes)
     }
 
-    private fun mapFlagTypeToJs(flagType: ComponentFlagType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
+    private fun mapFlagTypeToJs(flagType: ComponentFlagType, source: JSTypeSource): JSType {
         val properties = flagType.flags.map { flag ->
             PropertySignatureImpl(flag, JSNamedTypeFactory.createType("boolean", source, JSTypeContext.INSTANCE, false), false, false)
         }
