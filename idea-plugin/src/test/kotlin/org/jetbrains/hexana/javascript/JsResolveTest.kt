@@ -55,12 +55,31 @@ class JsResolveTest : BasePlatformTestCase() {
 
         val methodRef = callExpr!!.methodExpression as JSReferenceExpression
         val jsType = JSResolveUtil.getExpressionJSType(methodRef)
-        assertNotNull("calculate reference has no JS type", jsType)
+        assertNotNull("add reference has no JS type", jsType)
         assertInstanceOf(jsType, JSFunctionTypeImpl::class.java)
 
         val functionType = jsType as JSFunctionTypeImpl
         assertEquals("add should have 2 parameters", 2, functionType.parameters.size)
         assert(functionType.parameters[0].simpleType is JSNumberType)
         assert(functionType.parameters[1].simpleType is JSNumberType)
+    }
+
+    fun testCompileStreaming() {
+        myFixture.copyFileToProject("simple.wasm")
+        val psiFile = myFixture.configureByFile("compileStreaming.js")
+        assert(psiFile is JSFile)
+
+        val callExpr = SyntaxTraverser.psiTraverser(psiFile)
+            .filterIsInstance<JSCallExpression>()
+            .find { (it.methodExpression as? JSReferenceExpression)?.referencedName == "exported_func" }
+        assertNotNull("Could not find exported_func() call expression", callExpr)
+
+        val methodRef = callExpr!!.methodExpression as JSReferenceExpression
+        val jsType = JSResolveUtil.getExpressionJSType(methodRef)
+        assertNotNull("exported_func reference has no JS type", jsType)
+        assertInstanceOf(jsType, JSFunctionTypeImpl::class.java)
+
+        val functionType = jsType as JSFunctionTypeImpl
+        assertEquals("add should have 0 parameters", 0, functionType.parameters.size)
     }
 }
