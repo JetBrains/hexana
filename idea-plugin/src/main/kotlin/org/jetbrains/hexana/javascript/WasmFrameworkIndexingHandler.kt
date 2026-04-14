@@ -29,39 +29,44 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
             val first = type.arguments.first() as? JSTypeImpl ?: return type
             if (first.qualifiedName.qualifiedName == "WebAssemblyInstantiatedSource") {
                 val call = context.processedExpression?.parent as? JSCallExpression ?: return type
-                return JSGenericTypeImpl(type.source,
-                    type.type, listOf(adjustUnwrapPromise(type, call)))
+                val wasmType = adjustWasmType(type, call)
+                if (wasmType != null) {
+                    return JSGenericTypeImpl(type.source,
+                        type.type, listOf(wasmType))
+                }
             }
             if (first.qualifiedName.qualifiedName == "Module") {
                 val call = context.processedExpression?.parent as? JSCallExpression ?: return type
-                val unwrapPromise = adjustUnwrapPromise(type, call)
-                if (unwrapPromise is JSRecordTypeImpl) {
-                    return JSGenericTypeImpl(type.source, type.type, listOf(unwrapPromise))
+                val wasmType = adjustWasmType(type, call)
+                if (wasmType is JSRecordTypeImpl) {
+                    return JSGenericTypeImpl(type.source, type.type, listOf(wasmType))
                 }
             }
             if (first.qualifiedName.qualifiedName == "Instance") {
                 val call = context.processedExpression?.parent as? JSCallExpression ?: return type
-                val unwrapPromise = adjustUnwrapPromise(type, call)
-                return JSGenericTypeImpl(type.source, type.type, listOf(unwrapPromise))
+                val wasmType = adjustWasmType(type, call)
+                if (wasmType != null) {
+                    return JSGenericTypeImpl(type.source, type.type, listOf(wasmType))
+                }
             }
         }
         return type
     }
 
-    private fun adjustUnwrapPromise(type: JSType, expr: JSCallExpression?): JSType {
+    private fun adjustWasmType(type: JSType, expr: JSCallExpression?): JSType? {
         val callee = (expr?.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName
         if (callee != "instantiateStreaming"
             && callee != "instantiate"
             && callee != "compileStreaming"
-            && callee != "compile") return type
-        val arg = expr.arguments.firstOrNull() ?: return type
+            && callee != "compile") return null
+        val arg = expr.arguments.firstOrNull() ?: return null
         val wasmLiteral = findWasmLiteral(arg)
         if (wasmLiteral != null) {
-            return createFromLiteral(expr, wasmLiteral, type)
+            return createFromLiteral(expr, wasmLiteral, type.source)
         }
         val resolvedType = JSResolveUtil.getExpressionJSType(arg)
         if (resolvedType is JSRecordTypeImpl) {
-            return resolvedType.properties.firstOrNull { it.memberName == "instance" }?.jsType ?: type
+            return resolvedType.properties.firstOrNull { it.memberName == "instance" }?.jsType
         }
         // hack for instantiating from bytes - try to infer from the call chain
         if (resolvedType is JSTypeImpl && resolvedType.qualifiedName.qualifiedName == "ArrayBuffer") {
@@ -70,22 +75,22 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                 ?.arguments?.firstOrNull()?.let { arg ->
                     val wasmLiteral = findWasmLiteral(arg)
                     if (wasmLiteral != null) {
-                        return createFromLiteral(expr, wasmLiteral, type)
+                        return createFromLiteral(expr, wasmLiteral, type.source)
                     }
                 }
         }
-        return type
+        return null
     }
 
     private fun createFromLiteral(
         expr: JSCallExpression,
         wasmLiteral: String,
-        type: JSType
-    ): JSType = expr.containingFile.originalFile.virtualFile?.parent?.findFileByRelativePath(wasmLiteral)?.let {
+        typeSource: JSTypeSource
+    ): JSType? = expr.containingFile.originalFile.virtualFile?.parent?.findFileByRelativePath(wasmLiteral)?.let {
         it.toCommonByteBuffer()?.let { buffer ->
-            createTypeFromBinary(type, buffer)
+            createTypeFromBinary(buffer, typeSource)
         }
-    } ?: type
+    }
 
     private fun findWasmLiteral(arg: JSExpression): String? =
         SyntaxTraverser.psiTraverser(arg).filterIsInstance<JSLiteralExpression>().map { it.value }
@@ -93,25 +98,25 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                 JSStringUtil.unquoteAndUnescapeString(it)
             }
 
-    private fun createTypeFromBinary(type: JSType, buffer: CommonByteBuffer): JSType {
+    private fun createTypeFromBinary(buffer: CommonByteBuffer, source: JSTypeSource): JSType? {
         when (WasmBinaryProviderSelector.select(buffer)) {
-            BinaryProviderType.Generic -> return type
+            BinaryProviderType.Generic -> return null
             BinaryProviderType.WasmComponent -> {
                 ((WasmParser().parse(buffer) as? WasmParseSuccess)?.wasmModule as? WasmComponent)?.let {
-                    return createCustomWasmType(type, it, buffer)
+                    return createComponentWasmType(it, buffer, source)
                 }
             }
             BinaryProviderType.Wasm -> {
                 ((WasmParser().parse(buffer) as? WasmParseSuccess)?.wasmModule as? WasmModule)?.let {
-                    return createCoreWasmType(type, it, buffer)
+                    return createCoreWasmType(it, buffer, source)
                 }
             }
         }
-        return type
+        return null
     }
 
-    private fun createCoreWasmType(type: JSType, module: WasmModule, buffer: CommonByteBuffer): JSRecordTypeImpl {
-        val exportSection = module.exportSection ?: return coreWasmShell(type, emptyList())
+    private fun createCoreWasmType(module: WasmModule, buffer: CommonByteBuffer, typeSource: JSTypeSource): JSRecordTypeImpl? {
+        val exportSection = module.exportSection ?: return null
         val exports = with(exportSection) { buffer.scan() }
 
         val typeRecords = module.typesSection?.let { with(it) { buffer.parseTypes() } } ?: emptyList()
@@ -123,25 +128,25 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         val properties = exports.map { export ->
             PropertySignatureImpl(
                 export.name,
-                mapCoreExportToJsType(export, typeRecords, funcTypeIndices, importedFunctions, type.source),
+                mapCoreExportToJsType(export, typeRecords, funcTypeIndices, importedFunctions, typeSource),
                 false, false
             )
         }
-        return coreWasmShell(type, properties)
+        return coreWasmShell(typeSource, properties)
     }
 
-    private fun coreWasmShell(type: JSType, exportProperties: List<PropertySignatureImpl>): JSRecordTypeImpl {
+    private fun coreWasmShell(typeSource: JSTypeSource, exportProperties: List<PropertySignatureImpl>): JSRecordTypeImpl {
         return JSRecordTypeImpl(
-            type.source,
+            typeSource,
             listOf(
                 PropertySignatureImpl(
                     "instance",
                     JSRecordTypeImpl(
-                        type.source,
+                        typeSource,
                         listOf(PropertySignatureImpl("exports",
-                            JSContextualUnionTypeImpl(type.source, listOf(
-                                JSRecordTypeImpl(type.source, exportProperties),
-                                JSNamedTypeFactory.createType("WebAssembly.Instance.Exports", type.source, JSTypeContext.INSTANCE, false),
+                            JSContextualUnionTypeImpl(typeSource, listOf(
+                                JSRecordTypeImpl(typeSource, exportProperties),
+                                JSNamedTypeFactory.createType("WebAssembly.Instance.Exports", typeSource, JSTypeContext.INSTANCE, false),
                             ))
                             , false, false))
                     ),
@@ -149,7 +154,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                 ),
                 PropertySignatureImpl(
                     "module",
-                    JSNamedTypeFactory.createType("WebAssembly.Module", type.source, JSTypeContext.INSTANCE, false),
+                    JSNamedTypeFactory.createType("WebAssembly.Module", typeSource, JSTypeContext.INSTANCE, false),
                     false, false
                 )
             )
@@ -203,7 +208,8 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         }
     }
 
-    private fun createCustomWasmType(type: JSType, component: WasmComponent, buffer: CommonByteBuffer): JSRecordTypeImpl {
+    private fun createComponentWasmType(component: WasmComponent, buffer: CommonByteBuffer,
+                                        typeSource: JSTypeSource): JSRecordTypeImpl? {
         val allTypes = buildComponentTypeIndex(component.sections, buffer)
 
         val allCoreInstances = component.coreInstanceSection.flatMap {
@@ -219,24 +225,24 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         }
 
         return JSRecordTypeImpl(
-            type.source,
+            typeSource,
             listOf(
                 PropertySignatureImpl(
                     "instance",
                     JSRecordTypeImpl(
-                        type.source,
+                        typeSource,
                         listOf(PropertySignatureImpl("exports",
-                            JSContextualUnionTypeImpl(type.source, listOf(
-                                JSRecordTypeImpl(type.source, component.exportSection.flatMap {
+                            JSContextualUnionTypeImpl(typeSource, listOf(
+                                JSRecordTypeImpl(typeSource, component.exportSection.flatMap {
                                     with(it) {
                                         buffer.scan()
                                     }.map { export ->
                                         PropertySignatureImpl(export.exportName
                                             .substringAfter('/').substringBefore('@'),
-                                            resolveExportType(export, allTypes, allCoreInstances, allComponentInstances, component.moduleSection, buffer, type.source), false, false)
+                                            resolveExportType(export, allTypes, allCoreInstances, allComponentInstances, component.moduleSection, buffer, typeSource), false, false)
                                     }
                                 }),
-                                JSNamedTypeFactory.createType("WebAssembly.Instance.Exports", type.source, JSTypeContext.INSTANCE, false),
+                                JSNamedTypeFactory.createType("WebAssembly.Instance.Exports", typeSource, JSTypeContext.INSTANCE, false),
                             ))
                             , false, false))
                     ),
@@ -244,7 +250,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                 ),
                 PropertySignatureImpl(
                     "module",
-                    JSNamedTypeFactory.createType("WebAssembly.Module", type.source, JSTypeContext.INSTANCE, false),
+                    JSNamedTypeFactory.createType("WebAssembly.Module", typeSource, JSTypeContext.INSTANCE, false),
                     false, false
                 )
             )
