@@ -16,6 +16,21 @@ fun KotlinJsTest.passTestFlagsToEnvironment() {
     }
 }
 
+val copyWat2WasmForWebTests by tasks.registering(Copy::class) {
+    from(rootProject.file("wasm-modules/wat2wasm/target/wasm32-unknown-unknown/release/wat2wasm_full.wasm"))
+    into(layout.buildDirectory.dir("processedResources/js/test"))
+    doLast {
+        copy {
+            from(rootProject.file("wasm-modules/wat2wasm/target/wasm32-unknown-unknown/release/wat2wasm_full.wasm"))
+            into(layout.buildDirectory.dir("processedResources/wasmJs/test"))
+        }
+    }
+}
+
+tasks.matching { it.name == "jsTest" || it.name == "wasmJsTest" }.configureEach {
+    dependsOn(copyWat2WasmForWebTests)
+}
+
 kotlin {
     jvm {
         testRuns.all {
