@@ -229,15 +229,20 @@ class GarbageAnalyzerTest {
         assertTrue(result.totalWastedBytes > 0, "Unreachable functions should have non-zero wasted bytes")
         assertTrue(result.codeSectionTotalBytes > 0)
 
-        // twiggy reports 3 unreachable types (110, 143, 176) totaling 19 bytes.
-        // However, our analysis scans all function section type references
-        // (not just reachable functions), and the function section DOES reference
-        // types 110, 143, 176 — meaning some functions have those as their signature.
-        // twiggy likely uses a more sophisticated analysis (e.g., transitive garbage
-        // where a type used only by garbage functions is itself garbage).
-        // Our simpler analysis finds 0 unreachable types for skiko since all types
-        // appear in the function section.
-        assertEquals(0, result.typeEntries.size, "No unreachable types with whole-module scan")
+        // Transitive type garbage: types referenced only by unreachable functions.
+        // twiggy reports 3 garbage types (110, 143, 176) but considers all functions
+        // reachable. Our analysis has 566 unreachable functions, so types used ONLY by
+        // those functions are also garbage. We find 6 garbage types.
+        // twiggy's types 110, 143, 176 are NOT in our set because some reachable
+        // functions also reference them — the divergence stems from different function
+        // reachability results, not from the transitive logic itself.
+        assertEquals(6, result.typeEntries.size, "Regression: transitive garbage type count")
+        assertEquals(
+            setOf(165, 254, 282, 283, 288, 338),
+            result.typeEntries.map { it.typeIndex }.toSet(),
+            "Regression: transitive garbage type indices",
+        )
+        assertTrue(result.typeWastedBytes > 0)
 
         // twiggy reports "4185 potential false-positive data segments" totaling 1,531,520 bytes.
         // twiggy splits data entries into sub-items by heuristic — the WASM binary has

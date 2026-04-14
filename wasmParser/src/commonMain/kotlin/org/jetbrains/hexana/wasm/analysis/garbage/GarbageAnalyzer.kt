@@ -122,16 +122,17 @@ class GarbageAnalyzer(
     }
 
     /**
-     * Finds type definitions not referenced by any item in the module.
+     * Finds type definitions referenced only by unreachable code (transitive garbage).
      *
-     * This is independent of function reachability — a type is garbage only if
-     * NO function signature, import, or instruction references it.
+     * A type is garbage if the only functions that reference it (via signature,
+     * call_indirect, etc.) are themselves unreachable. This matches twiggy's
+     * transitive garbage semantics.
      *
-     * Collects type references from:
-     * - Function section (all func → type mappings)
-     * - Import section (all function import type indices)
-     * - call_indirect / return_call_indirect instructions (all code)
-     * - Struct supertype lists
+     * Collects type references from reachable items only:
+     * - Function section (reachable func → type mappings)
+     * - Import section (reachable function import type indices)
+     * - call_indirect / return_call_indirect in reachable code
+     * - Struct supertype lists (always counted — structural, not code-dependent)
      * - Recursive type group entries
      */
     private fun analyzeTypes(): List<GarbageTypeEntry> {
@@ -142,34 +143,57 @@ class GarbageAnalyzer(
         val types: List<WasmTypeRecord> = with(typesSection) { buf.parseTypes() }
         if (types.isEmpty()) return emptyList()
 
-        val referencedTypes = HashSet<Int>(types.size * 2)
-
-        // 1. Function section: each entry is a type index
-        mod.functionSection?.let { funcSection ->
-            val typeRefs = with(funcSection) { buf.parseFunctions() }
-            referencedTypes.addAll(typeRefs)
+        // Build set of unreachable function indices for filtering
+        val unreachableFuncIndices = HashSet<Int>()
+        for (nodeId in dominators.unreachable) {
+            val node = callGraphResult.nodeMap[nodeId] ?: continue
+            when (node) {
+                is CallGraphNode.DefinedFunction -> unreachableFuncIndices.add(node.funcIndex)
+                is CallGraphNode.ImportedFunction -> unreachableFuncIndices.add(node.id)
+                else -> {}
+            }
         }
 
-        // 2. Import section: function imports reference a type index
-        mod.importSection?.let { importSection ->
-            val imports = with(importSection) { buf.getImportRecords() }
-            for (record in imports) {
-                val type = record.type
-                if (type is WasmTypeIndexExternalType) {
-                    referencedTypes.add(type.index.toInt())
+        val referencedTypes = HashSet<Int>(types.size * 2)
+
+        // 1. Function section: only count type refs from reachable functions
+        mod.functionSection?.let { funcSection ->
+            val typeRefs = with(funcSection) { buf.parseFunctions() }
+            for ((codeIdx, typeIdx) in typeRefs.withIndex()) {
+                val funcIdx = importFuncCount + codeIdx
+                if (funcIdx !in unreachableFuncIndices) {
+                    referencedTypes.add(typeIdx)
                 }
             }
         }
 
-        // 3. Scan all code for call_indirect / return_call_indirect type operands
-        if (mod.codeSection != null) {
-            for (entry in codeOffsets) {
-                val record = buf.parseCodeEntry(entry.offset)
-                collectTypeRefsFromOpcodes(record.opCodes, referencedTypes)
+        // 2. Import section: only count reachable function imports
+        mod.importSection?.let { importSection ->
+            val imports = with(importSection) { buf.getImportRecords() }
+            var funcIdx = 0
+            for (record in imports) {
+                val type = record.type
+                if (type is WasmTypeIndexExternalType) {
+                    if (funcIdx !in unreachableFuncIndices) {
+                        referencedTypes.add(type.index.toInt())
+                    }
+                    funcIdx++
+                }
             }
         }
 
-        // 4. Struct supertype references and recursive group expansion
+        // 3. Scan only reachable code for call_indirect / return_call_indirect
+        if (mod.codeSection != null) {
+            for ((codeIdx, entry) in codeOffsets.withIndex()) {
+                val funcIdx = importFuncCount + codeIdx
+                if (funcIdx !in unreachableFuncIndices) {
+                    val record = buf.parseCodeEntry(entry.offset)
+                    collectTypeRefsFromOpcodes(record.opCodes, referencedTypes)
+                }
+            }
+        }
+
+        // 4. Struct supertype references (structural — always counted)
         for (type in types) {
             when (type) {
                 is WasmStructTypeRecord -> {
