@@ -528,10 +528,18 @@ internal fun HexViewer(
                                                 absoluteIndex.toLong() in range
                                             }
 
+                                            val isHighlighted = state.highlightRanges.any { range ->
+                                                absoluteIndex.toLong() in range.offset until (range.offset + range.size)
+                                            }
+
                                             val backgroundColor = if (isUnderCursor) {
                                                 HexanaTheme.hexCellActiveColor
                                             } else if (isHover) {
                                                 HexanaTheme.hexCellHoverColor
+                                            } else if (isHighlighted) {
+                                                state.highlightRanges.first { range ->
+                                                    absoluteIndex.toLong() in range.offset until (range.offset + range.size)
+                                                }.color
                                             } else {
                                                 Color.Unspecified
                                             }
@@ -631,10 +639,18 @@ internal fun HexViewer(
                                             (rowIndex * bytesPerRow + byteIndex).toLong() in range
                                         }
 
+                                        val isHighlighted = state.highlightRanges.any { range ->
+                                            (rowIndex * bytesPerRow + byteIndex).toLong() in range.offset until (range.offset + range.size)
+                                        }
+
                                         val backgroundColor = if (isUnderCursor) {
                                             HexanaTheme.hexCellActiveColor
                                         } else if (isHover) {
                                             HexanaTheme.hexCellHoverColor
+                                        } else if (isHighlighted) {
+                                            state.highlightRanges.first { range ->
+                                                (rowIndex * bytesPerRow + byteIndex).toLong() in range.offset until (range.offset + range.size)
+                                            }.color
                                         } else {
                                             Color.Unspecified
                                         }
