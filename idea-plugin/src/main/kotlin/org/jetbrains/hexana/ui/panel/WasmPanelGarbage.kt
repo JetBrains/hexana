@@ -36,7 +36,6 @@ import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageReason
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageResult
-import org.jetbrains.jewel.ui.component.IconButton
 import org.jetbrains.jewel.ui.component.Text
 
 private enum class GarbageViewMode { Functions, Types, Data }
@@ -129,12 +128,16 @@ fun WasmPanelGarbage(
             Box(modifier = Modifier.weight(1f))
 
             if (viewMode == GarbageViewMode.Functions) {
-                IconButton(onClick = { overlayEnabled = !overlayEnabled }) {
-                    Text(
-                        if (overlayEnabled) "\u2B1B" else "\u2B1C",
-                        style = TextStyle(fontFamily = FontFamily.Monospace),
-                    )
-                }
+                Text(
+                    (if (overlayEnabled) "\u2B1B" else "\u2B1C") + " Highlight in hex",
+                    modifier = Modifier
+                        .clickable { overlayEnabled = !overlayEnabled }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        color = if (overlayEnabled) Color.White else Color.Gray,
+                    ),
+                )
             }
         }
 
@@ -284,7 +287,6 @@ private fun GarbageDataTable(garbage: GarbageResult) {
     val textMeasurer = rememberTextMeasurer()
     val indexColumnWidth = textMeasurer.measureWidthMonospace("Index")
     val sizeColumnWidth = textMeasurer.measureWidthMonospace("00000.0 KB")
-    val recordColumnWidth = textMeasurer.measureWidthMonospace("00000.0 KB")
 
     Column {
         Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
