@@ -72,6 +72,10 @@ class JsResolveTest : BasePlatformTestCase() {
         doTestSimpleWasm("instantiateBytesHack.js")
     }
 
+    fun testTrickyInstantiate() {
+        doTestSimpleWasm("trickyInstantiate.js")
+    }
+
     private fun doTestSimpleWasm(jsFile: String) {
         myFixture.copyFileToProject("simple.wasm")
         val psiFile = myFixture.configureByFile(jsFile)

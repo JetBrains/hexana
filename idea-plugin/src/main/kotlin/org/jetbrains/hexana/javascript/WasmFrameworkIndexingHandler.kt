@@ -27,22 +27,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         if (type is JSGenericTypeImpl && type.arguments.size == 1) {
             if ((type.type as? JSTypeImpl)?.qualifiedName?.qualifiedName != "Promise") return type
             val first = type.arguments.first() as? JSTypeImpl ?: return type
-            if (first.qualifiedName.qualifiedName == "WebAssemblyInstantiatedSource") {
-                val call = context.processedExpression?.parent as? JSCallExpression ?: return type
-                val wasmType = adjustWasmType(type, call)
-                if (wasmType != null) {
-                    return JSGenericTypeImpl(type.source,
-                        type.type, listOf(wasmType))
-                }
-            }
-            if (first.qualifiedName.qualifiedName == "Module") {
-                val call = context.processedExpression?.parent as? JSCallExpression ?: return type
-                val wasmType = adjustWasmType(type, call)
-                if (wasmType is JSRecordTypeImpl) {
-                    return JSGenericTypeImpl(type.source, type.type, listOf(wasmType))
-                }
-            }
-            if (first.qualifiedName.qualifiedName == "Instance") {
+            if (isAcceptableContext(first, context)) {
                 val call = context.processedExpression?.parent as? JSCallExpression ?: return type
                 val wasmType = adjustWasmType(type, call)
                 if (wasmType != null) {
@@ -51,6 +36,17 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
             }
         }
         return type
+    }
+
+    private fun isAcceptableContext(
+        first: JSTypeImpl,
+        context: JSEvaluateContext
+    ): Boolean {
+        if (first.qualifiedName.qualifiedName == "WebAssemblyInstantiatedSource") return true
+        if (first.qualifiedName.qualifiedName == "Instance") return true
+        if (first.qualifiedName.qualifiedName == "Module") return true
+        if (first.qualifiedName.qualifiedName == "ByteArray") return true
+        return false
     }
 
     private fun adjustWasmType(type: JSType, expr: JSCallExpression?): JSType? {
