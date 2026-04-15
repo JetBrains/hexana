@@ -7,7 +7,8 @@ enum class OpcodeCategory {
     Arithmetic,
     GC,
     SIMD,
-    Other
+    Other,
+    Unparsed
 }
 
 enum class PartKind { Locals, Body }

@@ -117,10 +117,6 @@ class ExceptionInstructionTest {
         assertEquals("myexn", tagExport.name)
     }
 
-    // --- try_table (0x1F) — not yet supported ---
-    // These tests verify that the WAT compiles to valid WASM (via wat2wasm)
-    // and document expected parse failure until try_table support is added.
-
     @Test
     fun `try_table catch`() = runTest {
         val module = parseWatResource("wat/exceptions/try_table_catch.wat")
@@ -138,53 +134,89 @@ class ExceptionInstructionTest {
     }
 
     @Test
-    fun `try_table catch_all — compiles but parser does not support yet`() = runTest {
-        val buffer = watResourceToBuffer("wat/exceptions/try_table_catch_all.wat")
+    fun `try_table catch_all`() = runTest {
+        val wat = "wat/exceptions/try_table_catch_all.wat"
+        val module = parseWatResource(wat)
+        val buffer = watResourceToBuffer(wat)
         val result = WasmParser().parse(buffer)
-        assertTrue(
-            result is WasmParseSuccess || result is WasmParseFailure,
-            "Parser should either succeed or fail gracefully"
-        )
+        assertTrue( result is WasmParseSuccess )
+        val records = with(module.codeSection!!) { buffer.scan() }
+        val op = records.single().opCodes.first()
+        assertIs<OpCodes.Flow.TryTable>(op)
+        val catch = op.catches.single()
+        assertIs<OpCodes.Flow.CatchType.CatchAll>( catch)
+        assertIs<OpCodes.I32.Const>(op.code[0])
+        assertIs<OpCodes.Flow.Trow>(op.code[1])
+        assertIs<OpCodes.I32.Const>(op.code[2])
     }
 
     @Test
-    fun `try_table catch_ref — compiles but parser does not support yet`() = runTest {
-        val buffer = watResourceToBuffer("wat/exceptions/try_table_catch_ref.wat")
+    fun `try_table catch_ref`() = runTest {
+        val wat = "wat/exceptions/try_table_catch_ref.wat"
+        val module = parseWatResource(wat)
+        val buffer = watResourceToBuffer(wat)
         val result = WasmParser().parse(buffer)
-        assertTrue(
-            result is WasmParseSuccess || result is WasmParseFailure,
-            "Parser should either succeed or fail gracefully"
-        )
+        assertTrue( result is WasmParseSuccess )
+        val records = with(module.codeSection!!) { buffer.scan() }
+        val op = records.single().opCodes.first()
+        assertIs<OpCodes.Flow.TryTable>(op)
+        val catch = op.catches.single()
+        assertIs<OpCodes.Flow.CatchType.CatchRef>( catch)
+        assertIs<OpCodes.I32.Const>(op.code[0])
+        assertIs<OpCodes.Flow.Trow>(op.code[1])
+        assertIs<OpCodes.I32.Const>(op.code[2])
     }
 
     @Test
-    fun `try_table catch_all_ref — compiles but parser does not support yet`() = runTest {
-        val buffer = watResourceToBuffer("wat/exceptions/try_table_catch_all_ref.wat")
+    fun `try_table catch_all_ref`() = runTest {
+        val wat = "wat/exceptions/try_table_catch_all_ref.wat"
+        val module = parseWatResource(wat)
+        val buffer = watResourceToBuffer(wat)
         val result = WasmParser().parse(buffer)
-        assertTrue(
-            result is WasmParseSuccess || result is WasmParseFailure,
-            "Parser should either succeed or fail gracefully"
-        )
+        assertTrue( result is WasmParseSuccess )
+        val records = with(module.codeSection!!) { buffer.scan() }
+        val op = records.single().opCodes.first()
+        assertIs<OpCodes.Flow.TryTable>(op)
+        val catch = op.catches.single()
+        assertIs<OpCodes.Flow.CatchType.CatchAllRef>( catch)
+        assertIs<OpCodes.I32.Const>(op.code[0])
+        assertIs<OpCodes.Flow.Trow>(op.code[1])
+        assertIs<OpCodes.I32.Const>(op.code[2])
     }
 
     @Test
-    fun `try_table nested — compiles but parser does not support yet`() = runTest {
-        val buffer = watResourceToBuffer("wat/exceptions/try_table_nested.wat")
+    fun `try_table nested`() = runTest {
+        val wat = "wat/exceptions/try_table_nested.wat"
+        val module = parseWatResource(wat)
+        val buffer = watResourceToBuffer(wat)
         val result = WasmParser().parse(buffer)
-        assertTrue(
-            result is WasmParseSuccess || result is WasmParseFailure,
-            "Parser should either succeed or fail gracefully"
-        )
+        assertTrue( result is WasmParseSuccess )
+        val records = with(module.codeSection!!) { buffer.scan() }
+        val op = records.single().opCodes.first()
+        assertIs<OpCodes.Flow.TryTable>(op)
+        val catch = op.catches.single()
+        assertIs<OpCodes.Flow.CatchType.Catch>( catch)
+        val tryTableOpNested = op.code[0]
+        assertIs<OpCodes.Flow.TryTable>(tryTableOpNested)
+        val nestedCatch = tryTableOpNested.catches.single()
+        assertIs<OpCodes.Flow.CatchType.Catch>( nestedCatch)
+        assertIs<OpCodes.I32.Const>(op.code[1])
     }
 
     @Test
-    fun `throw_ref — compiles but parser does not support yet`() = runTest {
-        val buffer = watResourceToBuffer("wat/exceptions/throw_ref.wat")
+    fun `throw_ref`() = runTest {
+        val wat = "wat/exceptions/throw_ref.wat"
+        val module = parseWatResource(wat)
+        val buffer = watResourceToBuffer(wat)
         val result = WasmParser().parse(buffer)
-        // throw_ref (0x0A) IS supported, but the try_table wrapping it is not.
-        assertTrue(
-            result is WasmParseSuccess || result is WasmParseFailure,
-            "Parser should either succeed or fail gracefully"
-        )
+        assertTrue( result is WasmParseSuccess )
+        val records = with(module.codeSection!!) { buffer.scan() }
+        val op = records.single().opCodes.first()
+        assertIs<OpCodes.Flow.TryTable>(op)
+        val catch = op.catches.single()
+        assertIs<OpCodes.Flow.CatchType.CatchRef>( catch)
+        assertIs<OpCodes.I32.Const>(op.code[0])
+        assertIs<OpCodes.Flow.Trow>(op.code[1])
+        assertIs<OpCodes.I32.Const>(op.code[2])
     }
 }
