@@ -61,6 +61,15 @@ fun WasmSectionFunctionTypeRecord.toSignature(): ParameterSignature {
 }
 
 // see https://webassembly.github.io/spec/core/text/types.html
+fun StandardTypesParser.WasmBlockType.toSignature(): String {
+    return when (this) {
+        is StandardTypesParser.WasmBlockType.Empty -> "void"
+        is WasmValueType<*> -> toSignature()
+        is StandardTypesParser.WasmBlockType.S33 -> "S33"
+        else -> "BlockType (${this::class.simpleName})"
+    }
+}
+
 fun WasmValueType<*>.toSignature(): String {
     // Note: Do not insert there just else. This will be refactored soon, we shouldn't have branches with types and unresolved text.
     return when (this) {
