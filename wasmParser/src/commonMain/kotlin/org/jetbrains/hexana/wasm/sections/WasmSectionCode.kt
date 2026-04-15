@@ -118,7 +118,7 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
 fun CommonByteBuffer.consumeLocals(locals: MutableList<WasmCodeLocalRecord>) {
     consumeArray { localIndex ->
         val local = getULEB128().toInt()
-        val type = valueType()
+        val type = valueType()!!
         locals.add(WasmCodeLocalRecord(local, type))
     }
 }

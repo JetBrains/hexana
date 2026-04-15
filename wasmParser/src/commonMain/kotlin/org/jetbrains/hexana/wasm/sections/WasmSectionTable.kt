@@ -49,7 +49,7 @@ class WasmSectionTable(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
     }
 
     private fun CommonByteBuffer.tableType(): WasmTableType {
-        return WasmTableType(referenceType(), limits())
+        return WasmTableType(referenceType()!!, limits())
     }
 }
 

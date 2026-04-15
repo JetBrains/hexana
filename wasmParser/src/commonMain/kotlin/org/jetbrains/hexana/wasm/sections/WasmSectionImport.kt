@@ -51,14 +51,14 @@ fun CommonByteBuffer.importRecord(): WasmImportRecord {
     val type = when (rawType) {
         0x00.toByte() -> WasmTypeIndexExternalType(getULEB128())
         0x01.toByte() -> {
-            val refType = referenceType()
+            val refType = referenceType()!!
             val limits = limits()
             WasmTableExternalType(refType, limits)
         }
 
         0x02.toByte() -> WasmMemType(limits())
         0x03.toByte() -> {
-            WasmGlobalType(valueType(), get() != 0x00.toByte())
+            WasmGlobalType(valueType()!!, get() != 0x00.toByte())
         }
 
         0x04.toByte() -> {

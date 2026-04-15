@@ -29,7 +29,7 @@ class WasmSectionGlobal(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
         val records = mutableListOf<WasmGlobalRecord>()
         consumeArray {
             val offset = position()
-            val globalType = WasmGlobalType(valueType(), get() == 0x01.toByte())
+            val globalType = WasmGlobalType(valueType()!!, get() == 0x01.toByte())
             val expression = parseOpCodes()
             records.add(WasmGlobalRecord(offset, sizeFromOffset(offset), globalType, expression))
         }

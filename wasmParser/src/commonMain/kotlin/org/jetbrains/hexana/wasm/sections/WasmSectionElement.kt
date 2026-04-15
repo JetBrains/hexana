@@ -63,7 +63,7 @@ class WasmSectionElement(sectionSize: Int, sectionOffset: Int, contentSize: Int,
                     elements.add(ExprWasmElementSegment.ActiveDefault(offset, sizeFromOffset(offset), opcodes, exprList))
                 }
                 5 -> {
-                    val refType = referenceType()
+                    val refType = referenceType()!!
                     val exprList = consumeExpressionList()
                     elements.add(ExprWasmElementSegment.Passive(offset, sizeFromOffset(offset), refType, exprList))
                 }
@@ -75,7 +75,7 @@ class WasmSectionElement(sectionSize: Int, sectionOffset: Int, contentSize: Int,
                     elements.add(ExprWasmElementSegment.ActiveExplicit(offset, sizeFromOffset(offset), tableindx, expression, exprList))
                 }
                 7 -> {
-                    val refType = referenceType()
+                    val refType = referenceType()!!
                     val exprList = consumeExpressionList()
                     elements.add(ExprWasmElementSegment.Declare(offset, sizeFromOffset(offset), refType, exprList))
                 }

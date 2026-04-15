@@ -102,12 +102,12 @@ object StandardTypesParser {
     private fun CommonByteBuffer.funcType(offset: Int): WasmTypeRecord {
         val params = mutableListOf<WasmValueType<*>>()
         consumeArray {
-            params.add(valueType())
+            params.add(valueType()!!)
         }
 
         val retTypes = mutableListOf<WasmValueType<*>>()
         consumeArray {
-            retTypes.add(valueType())
+            retTypes.add(valueType()!!)
         }
         return WasmSectionFunctionTypeRecord(offset, sizeFromOffset(offset), params, retTypes)
     }
@@ -121,7 +121,7 @@ object StandardTypesParser {
     private fun CommonByteBuffer.storageType(): WasmValueType<*> {
         return pactType() ?: run {
             position(position() - 1)
-            valueType()
+            valueType()!!
         }
     }
 
@@ -132,7 +132,7 @@ object StandardTypesParser {
             else -> null
         }
     }
-    fun CommonByteBuffer.referenceType(): WasmReferenceType {
+    fun CommonByteBuffer.referenceType(): WasmReferenceType? {
         return when (get()) {
             0x63.toByte() -> {
                 WasmNullableReferenceType(heapType())
@@ -144,7 +144,9 @@ object StandardTypesParser {
 
             else -> {
                 position(position() - 1)
-                WasmReferenceHeapType(heapType())
+                absHeapType()?.let {
+                    WasmReferenceHeapType(it)
+                }
             }
         }
     }
@@ -164,7 +166,7 @@ object StandardTypesParser {
         }
     }
 
-    fun CommonByteBuffer.valueType(): WasmValueType<*> {
+    fun CommonByteBuffer.valueType(): WasmValueType<*>? {
         return when (val code = get()) {
             WasmVecType.code -> WasmVecType
             else -> {
@@ -174,12 +176,13 @@ object StandardTypesParser {
                 } else {
                     position(position() - 1)
                     WasmRefType(referenceType())
+                    referenceType()?.let { WasmRefType(it) }
                 }
             }
         }
     }
 
-    fun CommonByteBuffer.heapType(): WasmHeapType {
+    fun CommonByteBuffer.absHeapType() : WasmAbsHeapType? {
         return when (get()) {
             0x69.toByte() -> WasmExnRefHeapType
             0x6a.toByte() -> WasmArrayRefHeapType
@@ -193,10 +196,14 @@ object StandardTypesParser {
             0x72.toByte() -> WasmNoExternRefHeapType
             0x73.toByte() -> WasmNoFuncHeapType
             0x74.toByte() -> WasmNoExnHeapType
-            else -> {
+            else -> null
+        }
+    }
+
+    fun CommonByteBuffer.heapType(): WasmHeapType {
+        return absHeapType() ?: run {
                 position(position() - 1)
                 WasmIndexHeapType(getULEB128())
-            }
         }
     }
 }
@@ -278,22 +285,33 @@ sealed interface WasmReferenceType {
     val heapType: WasmHeapType
 }
 
+interface WasmS33 {
+    val value: UInt
+}
+
 /**
  * spec 5.3.3
  */
 sealed class WasmHeapType(val type: Long)
-object WasmExnRefHeapType: WasmHeapType(0x69)
-object WasmArrayRefHeapType: WasmHeapType(0x6a)
-object WasmStructRefHeapType: WasmHeapType(0x6b)
-object WasmI31RefHeapType: WasmHeapType(0x6c)
-object WasmEqRefHeapType: WasmHeapType(0x6d)
-object WasmAnyRefHeapType: WasmHeapType(0x6e)
-object WasmExternRefHeapType: WasmHeapType(0x6f)
-object WasmFuncHeapType: WasmHeapType(0x70)
-object WasmNoneHeapType: WasmHeapType(0x71)
-object WasmNoExternRefHeapType: WasmHeapType(0x72)
-object WasmNoFuncHeapType: WasmHeapType(0x73)
-object WasmNoExnHeapType: WasmHeapType(0x74)
+sealed class WasmAbsHeapType(type: Long) : WasmHeapType(type)
+sealed class WasmHeapS33(type: Long) : WasmHeapType(type), WasmS33 {
+    override val value: UInt
+        get() = type.toUInt()
+}
+
+object WasmExnRefHeapType: WasmAbsHeapType(0x69)
+object WasmArrayRefHeapType: WasmAbsHeapType(0x6a)
+object WasmStructRefHeapType: WasmAbsHeapType(0x6b)
+object WasmI31RefHeapType: WasmAbsHeapType(0x6c)
+object WasmEqRefHeapType: WasmAbsHeapType(0x6d)
+object WasmAnyRefHeapType: WasmAbsHeapType(0x6e)
+object WasmExternRefHeapType: WasmAbsHeapType(0x6f)
+object WasmFuncHeapType: WasmAbsHeapType(0x70)
+object WasmNoneHeapType: WasmAbsHeapType(0x71)
+object WasmNoExternRefHeapType: WasmAbsHeapType(0x72)
+object WasmNoFuncHeapType: WasmAbsHeapType(0x73)
+object WasmNoExnHeapType: WasmAbsHeapType(0x74)
+
 class WasmIndexHeapType(type: Long): WasmHeapType(type) {
     override fun equals(other: Any?): Boolean {
         val b = other as? WasmIndexHeapType ?: return false
