@@ -8,6 +8,7 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes.I32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.I64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Local
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Ref
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser.blockType
 import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.heapType
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.valueType
@@ -17,19 +18,19 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
         0x00u -> Flow.Unreachable
         0x01u -> Flow.Nop
         0x02u -> {
-            Flow.Block(valueType(), consumeBlock())
+            Flow.Block(blockType(), consumeBlock())
         }
         0x03u -> {
-            Flow.Loop(valueType(),consumeBlock())
+            Flow.Loop(blockType(),consumeBlock())
         }
         0x04u -> {
-            Flow.If(valueType(), consumeBlock())
+            Flow.If(blockType(), consumeBlock())
         }
         0x05u -> {
             val opCodes = parseOpCodes()
             // If and Else sections share terminal OpCode - that said, we just (sort of) give it back to parent If declaration
             position(position() - 1)
-            Flow.Else(null,opCodes)
+            Flow.Else(opCodes)
         }
         0x06u,
         0x07u -> ReservedOpCode(code)

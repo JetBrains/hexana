@@ -175,8 +175,30 @@ object StandardTypesParser {
                     numType
                 } else {
                     position(position() - 1)
-                    WasmRefType(referenceType())
                     referenceType()?.let { WasmRefType(it) }
+                }
+            }
+        }
+    }
+
+    interface WasmBlockType {
+        object Empty : WasmBlockType
+        class S33(private val _value: UInt) : WasmBlockType, WasmS33 {
+            override val value: UInt
+                get() = _value
+        }
+
+    }
+
+
+    fun CommonByteBuffer.blockType(): WasmBlockType {
+        return when (val code = get()) {
+            0x40.toByte() -> WasmBlockType.Empty
+            else -> {
+                position(position() - 1)
+                valueType()?: run {
+                    position(position() - 1)
+                    WasmBlockType.S33(getULEB128().toUInt())
                 }
             }
         }
@@ -239,7 +261,7 @@ data class WasmSectionFunctionTypeRecord(
     val retTypes: List<WasmValueType<*>>
 ) : WasmTypeRecord
 
-sealed class  WasmValueType<T>(open val code: T)
+sealed class  WasmValueType<T>(open val code: T) : StandardTypesParser.WasmBlockType
 
 sealed class WasmNumType(code: Byte) : WasmValueType<Byte>(code)
 object WasmF32Type : WasmNumType(0x7d)

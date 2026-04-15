@@ -1,7 +1,7 @@
 package org.jetbrains.hexana.wasm.opcodes
 
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser
 import org.jetbrains.hexana.wasm.sections.WasmHeapType
-import org.jetbrains.hexana.wasm.sections.WasmValueType
 import kotlin.jvm.JvmInline
 
 object OpCodes {
@@ -82,25 +82,25 @@ object OpCodes {
             }
         }
 
-        open class Block(val type: WasmValueType<*>?, value: List<OpCode>) : OpCodeWithValue<List<OpCode>>(value) {
+        open class Block(val type: StandardTypesParser.WasmBlockType?, value: List<OpCode>) : OpCodeWithValue<List<OpCode>>(value) {
             companion object {
                 const val code: UByte = 0x02u
             }
         }
 
-        class Loop(type: WasmValueType<*>, value: List<OpCode>) : Block(type, value) {
+        class Loop(type: StandardTypesParser.WasmBlockType, value: List<OpCode>) : Block(type, value) {
             companion object {
                 const val code: UByte = 0x03u
             }
         }
 
-        class If(type: WasmValueType<*>, value: List<OpCode>) : Block(type, value) {
+        class If(type: StandardTypesParser.WasmBlockType, value: List<OpCode>) : Block(type, value) {
             companion object {
                 const val code: UByte = 0x04u
             }
         }
 
-        class Else(type: WasmValueType<*>?, value: List<OpCode>) :  Block(type, value){
+        class Else(value: List<OpCode>) :  Block(null, value){
             companion object {
                 const val code: UByte = 0x05u
             }

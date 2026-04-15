@@ -1088,7 +1088,7 @@ class WasmParserTests {
                             OpCodes.Flow.If(WasmI32Type,listOf(
                                 OpCodes.I32.Const(1),
                                 OpCodes.Flow.Call(0u),
-                                OpCodes.Flow.Else(WasmI32Type, listOf(
+                                OpCodes.Flow.Else(listOf(
                                     OpCodes.I32.Const(0),
                                     OpCodes.Flow.Call(0u),
                                 ))
