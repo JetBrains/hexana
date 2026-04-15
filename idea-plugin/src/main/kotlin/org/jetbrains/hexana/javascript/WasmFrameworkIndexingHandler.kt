@@ -20,8 +20,9 @@ import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.sections.*
 
 class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
-    private val allAcceptedCallNames = setOf("instantiateStreaming", "instantiate", "compileStreaming", "compile")
     private val instantiateCallNames = setOf("instantiateStreaming", "instantiate")
+    private val compileCallNames = setOf("compileStreaming", "compile")
+    private val allAcceptedCallNames = instantiateCallNames + compileCallNames
 
     override fun addContextType(info: JSTypeInfo?, context: PsiElement?) {
         if (info == null || context == null) return
@@ -115,13 +116,25 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         val callee = (expr.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName
         if (!allAcceptedCallNames.contains(callee)) return null
         return handleStaticallyPossibleCases(expr, {
-            (it as? JSRecordType)?.properties?.firstOrNull { it.memberName == "instance" }?.jsType
-        }, { createFromLiteral(expr, it, typeSource) })
+            val type = when (it) {
+                is WasmWrapperType -> createFromLiteral(expr, it.wasmFilePath, typeSource)
+                else -> it
+            }
+            (type as? JSRecordType)?.properties?.firstOrNull { it.memberName == "instance" }?.jsType
+        }, { wasmLiteral ->
+            if (compileCallNames.contains(callee)) {
+                createModuleWrapperFromLiteral(wasmLiteral, typeSource)
+            } else {
+                createFromLiteral(expr, wasmLiteral, typeSource)
+            }
+        })
     }
 
     private fun resolveImportsType(typeSource: JSTypeSource, call: JSCallExpression): JSRecordType? {
         val parsedData = handleStaticallyPossibleCases(call, {
-            null /* we have already lost the file information here; todo augment the type and preserve that */
+            (it as? WasmWrapperType)?.let {
+                resolveWasmDataFromLiteral(call, it.wasmFilePath)
+            }
         }, { resolveWasmDataFromLiteral(call, it) }) ?: return null
         return createImportsTypeFromParsedData(parsedData, typeSource)
     }
@@ -188,6 +201,14 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
             typeSource.language,
             typeSource.isStrict
         ))
+    }
+
+    private fun createModuleWrapperFromLiteral(
+        wasmLiteral: String,
+        typeSource: JSTypeSource
+    ): JSType {
+        val moduleType = JSNamedTypeFactory.createType("WebAssembly.Module", typeSource, JSTypeContext.INSTANCE, false)
+        return WasmWrapperType(moduleType, wasmLiteral, typeSource)
     }
 
     private fun createTypeFromParsedData(data: ParsedWasmData, source: JSTypeSource): JSType? {
@@ -602,3 +623,29 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
 }
 
 class WasmImplicitElementImpl(name: String, provider: PsiElement?): JSImplicitElementImpl(name, provider)
+
+class WasmWrapperType(
+    private val delegateType: JSType,
+    val wasmFilePath: String,
+    source: JSTypeSource
+) : JSTypeBaseImpl(source), JSWrapperType {
+    override fun copyWithNewSource(source: JSTypeSource): JSType = WasmWrapperType(delegateType, wasmFilePath, source)
+    override fun buildTypeTextImpl(format: JSType.TypeTextFormat, builder: JSTypeTextBuilder) {
+        delegateType.buildTypeText(format, builder)
+    }
+    override fun acceptChildren(visitor: JSRecursiveTypeVisitor) {
+        delegateType.accept(visitor)
+    }
+    override fun hashCodeImpl(): Int = 31 * delegateType.hashCode() + wasmFilePath.hashCode()
+    override fun isEquivalentToWithSameClass(type: JSType, context: com.intellij.util.ProcessingContext?, allowResolve: Boolean): Boolean {
+        return type is WasmWrapperType && type.wasmFilePath == wasmFilePath && type.delegateType.isEquivalentTo(delegateType, context, allowResolve)
+    }
+
+    override fun getOriginalType(): JSType {
+        return delegateType
+    }
+
+    override fun distributeType(): JSType {
+        return this
+    }
+}
