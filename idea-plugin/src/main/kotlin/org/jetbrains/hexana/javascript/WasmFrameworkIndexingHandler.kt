@@ -324,7 +324,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
     private fun resolveExportType(export: WasmComponentExport, allTypes: List<ComponentDefType>,
                                   allComponentInstances: List<InstanceExpression>, source: JSTypeSource): JSType {
         val defType = resolveDefType(export, allTypes, allComponentInstances) ?: return JSAnyType.get(source)
-        val jsType = mapComponentDefTypeToJsType(defType, allTypes, source, mutableSetOf())
+        val jsType = mapComponentDefTypeToJsType(defType, allTypes, source, mutableMapOf())
         if (jsType is JSRecordTypeImpl && (defType is ComponentType || defType is ComponentInstanceType)) {
             val exportName = export.exportName.substringAfter('/').substringBefore('@')
             val matchedType = jsType.properties.singleOrNull { it.memberName == exportName }?.jsType
@@ -400,46 +400,56 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         return allTypes.getOrNull(funcIndex.toInt())
     }
 
-    private fun mapComponentDefTypeToJsType(defType: ComponentDefType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
+    private fun mapComponentDefTypeToJsType(defType: ComponentDefType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
         return when (defType) {
-            is ComponentRoutineType -> mapFunctionTypeToJs(defType, allTypes, source, visited)
-            is ComponentInstanceType -> mapInstanceTypeToJs(defType, allTypes, source, visited)
+            is ComponentRoutineType -> mapFunctionTypeToJs(defType, allTypes, source, cache)
+            is ComponentInstanceType -> mapInstanceTypeToJs(defType, allTypes, source, cache)
             is ComponentPrimitiveType -> mapPrimitiveToJs(defType, source)
             is ComponentValueIdxType -> {
-                val idx = defType.idx.toInt()
-                if (!visited.add(idx)) return JSAnyType.get(source)
-                val resolved = allTypes.getOrNull(idx)
-                if (resolved != null) mapComponentDefTypeToJsType(resolved, allTypes, source, visited) else JSAnyType.get(source)
+                resolveIndexedType(defType.idx.toInt(), allTypes, source, cache)
             }
             is ComponentPrimitiveValueType -> mapPrimitiveToJs(defType.type, source)
-            is ComponentRecordType -> mapRecordTypeToJs(defType, allTypes, source, visited)
-            is ComponentListType -> mapListTypeToJs(defType, allTypes, source, visited)
-            is ComponentOptionType -> mapOptionTypeToJs(defType, allTypes, source, visited)
-            is ComponentResultType -> mapResultTypeToJs(defType, allTypes, source, visited)
-            is ComponentTupleType -> mapTupleTypeToJs(defType, allTypes, source, visited)
+            is ComponentRecordType -> mapRecordTypeToJs(defType, allTypes, source, cache)
+            is ComponentListType -> mapListTypeToJs(defType, allTypes, source, cache)
+            is ComponentOptionType -> mapOptionTypeToJs(defType, allTypes, source, cache)
+            is ComponentResultType -> mapResultTypeToJs(defType, allTypes, source, cache)
+            is ComponentTupleType -> mapTupleTypeToJs(defType, allTypes, source, cache)
             is ComponentEnumType -> mapEnumTypeToJs(defType, source)
             is ComponentFlagType -> mapFlagTypeToJs(defType, source)
-            is ComponentVariantType -> mapVariantTypeToJs(defType, allTypes, source, visited)
-            is ComponentType -> mapComponentTypeToJs(defType, allTypes, source, visited)
+            is ComponentVariantType -> mapVariantTypeToJs(defType, allTypes, source, cache)
+            is ComponentType -> mapComponentTypeToJs(defType, allTypes, source, cache)
             is ComponentOwnType -> JSAnyType.get(source)
             is ComponentBorrowType -> JSAnyType.get(source)
             is ComponentResourceType -> JSAnyType.get(source)
             is ComponentStreamType -> JSAnyType.get(source)
             is ComponentFutureType -> JSAnyType.get(source)
-            is ComponentArrayType -> mapArrayTypeToJs(defType, allTypes, source, visited)
+            is ComponentArrayType -> mapArrayTypeToJs(defType, allTypes, source, cache)
             is ComponentAliasedType -> {
                 val target = defType.alias.aliasTarget
                 if (target is AliasTarget.Outer) {
-                    val idx = target.outerIndex.toInt()
-                    if (!visited.add(idx)) return JSAnyType.get(source)
-                    val resolved = allTypes.getOrNull(idx)
-                    if (resolved != null) mapComponentDefTypeToJsType(resolved, allTypes, source, visited) else JSAnyType.get(source)
+                    resolveIndexedType(target.outerIndex.toInt(), allTypes, source, cache)
                 } else {
                     JSAnyType.get(source)
                 }
             }
-            is ComponentImportedType -> resolveExternDescriptionType(defType.import.externDescription, allTypes, source, visited)
+            is ComponentImportedType -> resolveExternDescriptionType(defType.import.externDescription, allTypes, source, cache)
         }
+    }
+
+    private fun resolveIndexedType(idx: Int, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
+        cache[idx]?.let { cached ->
+            @Suppress("SuspiciousEqualsCombination")
+            return if (cached === SENTINEL_TYPE) JSAnyType.get(source) else cached
+        }
+        val resolved = allTypes.getOrNull(idx) ?: return JSAnyType.get(source)
+        cache[idx] = SENTINEL_TYPE
+        val result = mapComponentDefTypeToJsType(resolved, allTypes, source, cache)
+        cache[idx] = result
+        return result
+    }
+
+    companion object {
+        private val SENTINEL_TYPE: JSType = JSAnyType.get(JSTypeSource.EMPTY)
     }
 
     private fun mapPrimitiveToJs(primitive: ComponentPrimitiveType, source: JSTypeSource): JSType {
@@ -461,61 +471,58 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         }
     }
 
-    private fun mapFunctionTypeToJs(funcType: ComponentRoutineType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
+    private fun mapFunctionTypeToJs(funcType: ComponentRoutineType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
         val paramTypes = funcType.params.map { param ->
-            PropertySignatureImpl(param.label, mapValueTypeToJs(param.value, allTypes, source, visited), false, false)
+            PropertySignatureImpl(param.label, mapValueTypeToJs(param.value, allTypes, source, cache), false, false)
         }
-        val returnType = mapReturnTypeToJs(funcType.ret, allTypes, source, visited)
+        val returnType = mapReturnTypeToJs(funcType.ret, allTypes, source, cache)
         return JSFunctionTypeImpl(source, paramTypes.map { JSParameterTypeDecoratorImpl(it.memberName, it.jsType, false, false, true) }, returnType)
     }
 
-    private fun mapValueTypeToJs(valueType: ComponentValueType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
+    private fun mapValueTypeToJs(valueType: ComponentValueType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
         return when (valueType) {
             is ComponentPrimitiveValueType -> mapPrimitiveToJs(valueType.type, source)
             is ComponentValueIdxType -> {
-                val idx = valueType.idx.toInt()
-                if (!visited.add(idx)) return JSAnyType.get(source)
-                val resolved = allTypes.getOrNull(idx)
-                if (resolved != null) mapComponentDefTypeToJsType(resolved, allTypes, source, visited) else JSAnyType.get(source)
+                resolveIndexedType(valueType.idx.toInt(), allTypes, source, cache)
             }
         }
     }
 
-    private fun mapReturnTypeToJs(returnType: ComponentReturnType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
+    private fun mapReturnTypeToJs(returnType: ComponentReturnType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
         return when (returnType) {
             is ComponentVoidType -> JSNamedTypeFactory.createType("void", source, JSTypeContext.INSTANCE, false)
-            is ComponentValueType -> mapValueTypeToJs(returnType, allTypes, source, visited)
+            is ComponentValueType -> mapValueTypeToJs(returnType, allTypes, source, cache)
             else -> JSAnyType.get(source)
         }
     }
 
-    private fun mapRecordTypeToJs(recordType: ComponentRecordType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
+    private fun mapRecordTypeToJs(recordType: ComponentRecordType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
         val properties = recordType.fields.map { field ->
-            PropertySignatureImpl(field.label, mapValueTypeToJs(field.value, allTypes, source, visited), false, false)
+            PropertySignatureImpl(field.label, mapValueTypeToJs(field.value, allTypes, source, cache), false, false)
         }
         return JSRecordTypeImpl(source, properties)
     }
 
-    private fun mapListTypeToJs(listType: ComponentListType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
-        val elementType = mapValueTypeToJs(listType.elementType, allTypes, source, visited)
+    private fun mapListTypeToJs(listType: ComponentListType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
+        val elementType = mapValueTypeToJs(listType.elementType, allTypes, source, cache)
         return JSArrayTypeImpl(elementType, source)
     }
 
-    private fun mapArrayTypeToJs(arrayType: ComponentArrayType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
-        val elementType = mapValueTypeToJs(arrayType.elementType, allTypes, source, visited)
+    private fun mapArrayTypeToJs(arrayType: ComponentArrayType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
+        val elementType = mapValueTypeToJs(arrayType.elementType, allTypes, source, cache)
         return JSArrayTypeImpl(elementType, source)
     }
 
-    private fun mapOptionTypeToJs(optionType: ComponentOptionType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
-        val innerType = mapValueTypeToJs(optionType.option, allTypes, source, visited)
+    private fun mapOptionTypeToJs(optionType: ComponentOptionType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
+        val innerType = mapValueTypeToJs(optionType.option, allTypes, source, cache)
         val undefinedType = JSNamedTypeFactory.createType("undefined", source, JSTypeContext.INSTANCE, false)
         return JSContextualUnionTypeImpl(source, listOf(innerType, undefinedType))
     }
 
-    private fun mapResultTypeToJs(resultType: ComponentResultType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
-        val okType = resultType.result?.let { mapValueTypeToJs(it, allTypes, source, visited) }
+    private fun mapResultTypeToJs(resultType: ComponentResultType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
+        val okType = resultType.result?.let { mapValueTypeToJs(it, allTypes, source, cache) }
             ?: JSNamedTypeFactory.createType("void", source, JSTypeContext.INSTANCE, false)
-        val errType = resultType.error?.let { mapValueTypeToJs(it, allTypes, source, visited) }
+        val errType = resultType.error?.let { mapValueTypeToJs(it, allTypes, source, cache) }
         return if (errType != null) {
             JSContextualUnionTypeImpl(source, listOf(okType, errType))
         } else {
@@ -523,8 +530,8 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         }
     }
 
-    private fun mapTupleTypeToJs(tupleType: ComponentTupleType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
-        val elementTypes = tupleType.elementTypes.map { mapValueTypeToJs(it, allTypes, source, visited) }
+    private fun mapTupleTypeToJs(tupleType: ComponentTupleType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
+        val elementTypes = tupleType.elementTypes.map { mapValueTypeToJs(it, allTypes, source, cache) }
         val unionType = if (elementTypes.size == 1) elementTypes.first()
         else JSContextualUnionTypeImpl(source, elementTypes)
         return JSArrayTypeImpl(unionType, source)
@@ -544,20 +551,20 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         return JSRecordTypeImpl(source, properties)
     }
 
-    private fun mapVariantTypeToJs(variantType: ComponentVariantType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
+    private fun mapVariantTypeToJs(variantType: ComponentVariantType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
         val caseTypes = variantType.variants.map { variant ->
             val tagProperty = PropertySignatureImpl("tag", JSStringLiteralTypeImpl(variant.label, false, source), false, false)
             val properties = mutableListOf(tagProperty)
             val variantValue = variant.value
             if (variantValue != null) {
-                properties.add(PropertySignatureImpl("val", mapValueTypeToJs(variantValue, allTypes, source, visited), false, false))
+                properties.add(PropertySignatureImpl("val", mapValueTypeToJs(variantValue, allTypes, source, cache), false, false))
             }
             JSRecordTypeImpl(source, properties)
         }
         return JSContextualUnionTypeImpl(source, caseTypes)
     }
 
-    private fun mapComponentTypeToJs(componentType: ComponentType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
+    private fun mapComponentTypeToJs(componentType: ComponentType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
         val exportDeclarations = componentType.cd.mapNotNull { decl ->
             when (decl) {
                 is ComponentInstanceDeclaration -> decl.id as? ExportDeclaration
@@ -565,58 +572,33 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
             }
         }
         val properties = exportDeclarations.map { exportDecl ->
-            val memberType = resolveExternDescriptionType(exportDecl.ed, allTypes, source, visited)
+            val memberType = resolveExternDescriptionType(exportDecl.ed, allTypes, source, cache)
             PropertySignatureImpl(exportDecl.exportName.substringAfter('/').substringBefore('@'), memberType, false, false)
         }
         return JSRecordTypeImpl(source, properties)
     }
 
-    private fun mapInstanceTypeToJs(instanceType: ComponentInstanceType, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
+    private fun mapInstanceTypeToJs(instanceType: ComponentInstanceType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
         val properties = instanceType.cd.filterIsInstance<ExportDeclaration>().map { exportDecl ->
-            val memberType = resolveExternDescriptionType(exportDecl.ed, allTypes, source, visited)
+            val memberType = resolveExternDescriptionType(exportDecl.ed, allTypes, source, cache)
             PropertySignatureImpl(exportDecl.exportName.substringAfter('/').substringBefore('@'), memberType, false, false)
         }
         return JSRecordTypeImpl(source, properties)
     }
 
-    private fun resolveExternDescriptionType(ed: ComponentExternDescription, allTypes: List<ComponentDefType>, source: JSTypeSource, visited: MutableSet<Int>): JSType {
+    private fun resolveExternDescriptionType(ed: ComponentExternDescription, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
         return when (ed) {
-            is ComponentExternType -> {
-                val idx = ed.idx.toInt()
-                if (!visited.add(idx)) return JSAnyType.get(source)
-                val resolved = allTypes.getOrNull(idx)
-                if (resolved != null) mapComponentDefTypeToJsType(resolved, allTypes, source, visited) else JSAnyType.get(source)
-            }
-            is ComponentExternCoreType -> {
-                val idx = ed.idx.toInt()
-                if (!visited.add(idx)) return JSAnyType.get(source)
-                val resolved = allTypes.getOrNull(idx)
-                if (resolved != null) mapComponentDefTypeToJsType(resolved, allTypes, source, visited) else JSAnyType.get(source)
-            }
+            is ComponentExternType -> resolveIndexedType(ed.idx.toInt(), allTypes, source, cache)
+            is ComponentExternCoreType -> resolveIndexedType(ed.idx.toInt(), allTypes, source, cache)
             is ComponentExternValueBound -> {
                 when (val bound = ed.bound) {
-                    is ValueBoundType -> {
-                        val idx = bound.idx.toInt()
-                        if (!visited.add(idx)) return JSAnyType.get(source)
-                        val resolved = allTypes.getOrNull(idx)
-                        if (resolved != null) mapComponentDefTypeToJsType(resolved, allTypes, source, visited) else JSAnyType.get(source)
-                    }
-                    is ValueBoundValue -> mapValueTypeToJs(bound.type, allTypes, source, visited)
+                    is ValueBoundType -> resolveIndexedType(bound.idx.toInt(), allTypes, source, cache)
+                    is ValueBoundValue -> mapValueTypeToJs(bound.type, allTypes, source, cache)
                 }
             }
             is ComponentExternTypeBound -> JSAnyType.get(source)
-            is ComponentExternComponent -> {
-                val idx = ed.idx.toInt()
-                if (!visited.add(idx)) return JSAnyType.get(source)
-                val resolved = allTypes.getOrNull(idx)
-                if (resolved != null) mapComponentDefTypeToJsType(resolved, allTypes, source, visited) else JSAnyType.get(source)
-            }
-            is ComponentExternInstance -> {
-                val idx = ed.idx.toInt()
-                if (!visited.add(idx)) return JSAnyType.get(source)
-                val resolved = allTypes.getOrNull(idx)
-                if (resolved != null) mapComponentDefTypeToJsType(resolved, allTypes, source, visited) else JSAnyType.get(source)
-            }
+            is ComponentExternComponent -> resolveIndexedType(ed.idx.toInt(), allTypes, source, cache)
+            is ComponentExternInstance -> resolveIndexedType(ed.idx.toInt(), allTypes, source, cache)
         }
     }
 
