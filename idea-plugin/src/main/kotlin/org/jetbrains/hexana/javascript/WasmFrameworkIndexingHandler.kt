@@ -6,6 +6,7 @@ import com.intellij.lang.javascript.psi.*
 import com.intellij.lang.javascript.psi.ecma6.TypeScriptModule
 import com.intellij.lang.javascript.psi.resolve.JSEvaluateContext
 import com.intellij.lang.javascript.psi.resolve.JSResolveUtil
+import com.intellij.lang.javascript.psi.resolve.JSTypeInfo
 import com.intellij.lang.javascript.psi.stubs.impl.JSImplicitElementImpl
 import com.intellij.lang.javascript.psi.types.*
 import com.intellij.lang.javascript.psi.types.recordImpl.PropertySignatureImpl
@@ -19,7 +20,33 @@ import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.sections.*
 
 class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
-    private val acceptedCallNames = setOf("instantiateStreaming", "instantiate", "compileStreaming", "compile")
+    private val allAcceptedCallNames = setOf("instantiateStreaming", "instantiate", "compileStreaming", "compile")
+    private val instantiateCallNames = setOf("instantiateStreaming", "instantiate")
+
+    override fun addContextType(info: JSTypeInfo?, context: PsiElement?) {
+        if (info == null || context == null) return
+        val parent = context.parent
+        if (parent !is JSObjectLiteralExpression) return
+        val nameStack = ArrayDeque<String>()
+        var current = parent
+        while (current.parent is JSProperty) {
+            nameStack.add((current.parent as JSProperty).name ?: "")
+            current = current.parent.parent
+        }
+        val args = current.parent as? JSArgumentList ?: return
+        if (args.arguments.indexOf(current) != 1) return
+        val call = args.parent as? JSCallExpression ?: return
+        if (!instantiateCallNames.contains((call.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName)) return
+        val typeSource = JSTypeSource(context, JSTypeSource.SourceLanguage.JS, false)
+        var importsType = resolveImportsType(typeSource, call)
+        if (importsType != null) {
+            while (!nameStack.isEmpty()) {
+                importsType = importsType?.properties?.firstOrNull { it.memberName == nameStack.removeLast() }?.jsType as? JSRecordType ?: return
+            }
+            info.addRecordType(importsType)
+        }
+        super.addContextType(info, context)
+    }
 
     override fun adjustTypeBeforeAdd(type: JSType, context: JSEvaluateContext): JSType {
         if (type !is JSGenericTypeImpl || type.arguments.size != 1) return type
@@ -51,7 +78,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
 
     private fun adjustWasmType(typeSource: JSTypeSource, expr: JSCallExpression?): JSType? {
         val callee = (expr?.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName
-        if (!acceptedCallNames.contains(callee)) return null
+        if (!allAcceptedCallNames.contains(callee)) return null
         val arg = expr!!.arguments.firstOrNull() ?: return null
         val wasmLiteral = findWasmLiteral(arg)
         if (wasmLiteral != null) {
@@ -73,6 +100,87 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                 }
         }
         return null
+    }
+
+    private fun resolveImportsType(typeSource: JSTypeSource, call: JSCallExpression): JSRecordType? {
+        val parsedData = resolveWasmData(call) ?: return null
+        return createImportsTypeFromParsedData(parsedData, typeSource)
+    }
+
+    private fun resolveWasmData(call: JSCallExpression): ParsedWasmData? {
+        val arg = call.arguments.firstOrNull() ?: return null
+        val wasmLiteral = findWasmLiteral(arg)
+        if (wasmLiteral != null) {
+            return resolveWasmDataFromLiteral(call, wasmLiteral)
+        }
+        val resolvedType = JSResolveUtil.getExpressionJSType(arg)
+        if (resolvedType is JSRecordTypeImpl) {
+            // The first argument resolved to a record type (e.g. result of compile/compileStreaming);
+            // we cannot extract import info from an already-instantiated result.
+            return null
+        }
+        if (resolvedType is JSTypeImpl && resolvedType.qualifiedName.qualifiedName == "ArrayBuffer") {
+            call.contextOfType<JSCallExpression>()?.descendantsOfType<JSCallExpression>()
+                ?.firstOrNull { (it.stubSafeMethodExpression as? JSReferenceExpression)?.referenceName == "fetch" }
+                ?.arguments?.firstOrNull()?.let { fetchArg ->
+                    val fetchLiteral = findWasmLiteral(fetchArg)
+                    if (fetchLiteral != null) {
+                        return resolveWasmDataFromLiteral(call, fetchLiteral)
+                    }
+                }
+        }
+        return null
+    }
+
+    private fun resolveWasmDataFromLiteral(expr: JSCallExpression, wasmLiteral: String): ParsedWasmData? {
+        return expr.containingFile.originalFile.virtualFile?.parent?.findFileByRelativePath(wasmLiteral)?.let { wasmFile ->
+            WasmBinaryDataCacheService.getInstance().getOrParseBinary(wasmFile)
+        }
+    }
+
+    private fun createImportsTypeFromParsedData(data: ParsedWasmData, source: JSTypeSource): JSRecordTypeImpl? {
+        return when (data) {
+            is CoreWasmData -> createCoreWasmImportsType(data, source)
+            is ComponentWasmData -> null
+        }
+    }
+
+    private fun createCoreWasmImportsType(data: CoreWasmData, typeSource: JSTypeSource): JSRecordTypeImpl? {
+        if (data.imports.isEmpty()) return null
+        val grouped = data.imports.groupBy { it.prefix }
+        val moduleProperties = grouped.map { (moduleName, imports) ->
+            val importProperties = imports.map { import ->
+                PropertySignatureImpl(
+                    import.name,
+                    mapCoreImportToJsType(import, data.typeRecords, typeSource),
+                    false, false
+                )
+            }
+            PropertySignatureImpl(
+                moduleName,
+                JSSimpleRecordTypeImpl(typeSource, importProperties),
+                false, false
+            )
+        }
+        return JSSimpleRecordTypeImpl(typeSource, moduleProperties)
+    }
+
+    private fun mapCoreImportToJsType(
+        import: WasmImportRecord,
+        typeRecords: List<WasmTypeRecord>,
+        source: JSTypeSource
+    ): JSType {
+        return when (val type = import.type) {
+            is WasmTypeIndexExternalType -> {
+                val funcType = typeRecords.getOrNull(type.index.toInt()) as? WasmSectionFunctionTypeRecord
+                    ?: return JSAnyType.get(source)
+                mapCoreFuncTypeToJs(funcType, source)
+            }
+            is WasmTableExternalType -> JSNamedTypeFactory.createType("WebAssembly.Table", source, JSTypeContext.INSTANCE, false)
+            is WasmMemType -> JSNamedTypeFactory.createType("WebAssembly.Memory", source, JSTypeContext.INSTANCE, false)
+            is WasmGlobalType -> JSNamedTypeFactory.createType("WebAssembly.Global", source, JSTypeContext.INSTANCE, false)
+            is WasmTagType -> JSNamedTypeFactory.createType("WebAssembly.Tag", source, JSTypeContext.INSTANCE, false)
+        }
     }
 
     private fun createFromLiteral(

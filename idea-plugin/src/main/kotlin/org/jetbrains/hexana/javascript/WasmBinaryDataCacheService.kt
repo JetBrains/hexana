@@ -29,6 +29,7 @@ import org.jetbrains.hexana.wasm.components.InstanceExpression
 import org.jetbrains.hexana.wasm.components.WasmComponent
 import org.jetbrains.hexana.wasm.components.WasmComponentExport
 import org.jetbrains.hexana.wasm.sections.WasmExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
 import java.io.DataInput
@@ -43,6 +44,7 @@ internal class CoreWasmData(
     val typeRecords: List<WasmTypeRecord>,
     val funcTypeIndices: List<Int>,
     val importedFunctions: Int,
+    val imports: List<WasmImportRecord>,
 ) : ParsedWasmData()
 
 internal class ComponentWasmData(
@@ -170,13 +172,15 @@ internal class WasmBinaryDataCacheService : Disposable {
                 val module = (WasmParser().parse(buffer) as? WasmParseSuccess)?.wasmModule as? WasmModule
                     ?: return null
                 val exportSection = module.exportSection ?: return null
+                val importRecords = module.importSection?.let { sec ->
+                    with(sec) { buffer.getImportRecords() }
+                } ?: emptyList()
                 CoreWasmData(
                     exports = with(exportSection) { buffer.scan() },
                     typeRecords = module.typesSection?.let { with(it) { buffer.parseTypes() } } ?: emptyList(),
                     funcTypeIndices = module.functionSection?.let { with(it) { buffer.parseFunctions() } } ?: emptyList(),
-                    importedFunctions = module.importSection?.let { sec ->
-                        with(sec) { buffer.getImportRecords() }.count { it.type is WasmTypeIndexExternalType }
-                    } ?: 0,
+                    importedFunctions = importRecords.count { it.type is WasmTypeIndexExternalType },
+                    imports = importRecords,
                 )
             }
         }

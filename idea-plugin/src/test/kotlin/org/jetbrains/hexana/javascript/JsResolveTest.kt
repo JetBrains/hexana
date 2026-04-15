@@ -2,10 +2,13 @@ package org.jetbrains.hexana.javascript
 
 import com.intellij.lang.javascript.psi.JSCallExpression
 import com.intellij.lang.javascript.psi.JSFile
+import com.intellij.lang.javascript.psi.JSObjectLiteralExpression
 import com.intellij.lang.javascript.psi.JSReferenceExpression
 import com.intellij.lang.javascript.psi.resolve.JSResolveUtil
+import com.intellij.lang.javascript.psi.resolve.JSTypeInfo
 import com.intellij.lang.javascript.psi.types.JSContextualUnionTypeImpl
 import com.intellij.lang.javascript.psi.types.JSFunctionTypeImpl
+import com.intellij.lang.javascript.psi.types.JSRecordTypeImpl
 import com.intellij.lang.javascript.psi.types.JSStringLiteralTypeImpl
 import com.intellij.lang.javascript.psi.types.primitives.JSNumberType
 import com.intellij.psi.SyntaxTraverser
@@ -74,6 +77,48 @@ class JsResolveTest : BasePlatformTestCase() {
 
     fun testTrickyInstantiate() {
         doTestSimpleWasm("trickyInstantiate.js")
+    }
+
+    fun testInstantiateImportContext() {
+        doTestImportContext("instantiateImportContext.js")
+    }
+
+    fun testInstantiateBytesImportContext() {
+        doTestImportContext("instantiateBytesImportContext.js")
+    }
+
+    private fun doTestImportContext(jsFile: String) {
+        myFixture.copyFileToProject("simple.wasm")
+        val psiFile = myFixture.configureByFile(jsFile)
+        assert(psiFile is JSFile)
+
+        val objectLiteral = SyntaxTraverser.psiTraverser(psiFile)
+            .filterIsInstance<JSObjectLiteralExpression>()
+            .first()
+        assertNotNull("Could not find import object literal", objectLiteral)
+
+        val handler = WasmFrameworkIndexingHandler()
+        val info = JSTypeInfo(JSTypeInfo.GlobalStatusHint.UNKNOWN)
+        handler.addContextType(info, objectLiteral.firstChild)
+
+        val recordTypes = info.recordTypes
+        assertFalse("Expected non-empty record types from addContextType", recordTypes.isEmpty())
+
+        val recordType = recordTypes.first() as JSRecordTypeImpl
+        val moduleProperty = recordType.properties.firstOrNull { it.memberName == "my_namespace" }
+        assertNotNull("Expected property 'my_namespace' in import type", moduleProperty)
+
+        val moduleType = moduleProperty!!.jsType as? JSRecordTypeImpl
+        assertNotNull("Expected record type for module 'my_namespace'", moduleType)
+
+        val funcProperty = moduleType!!.properties.firstOrNull { it.memberName == "imported_func" }
+        assertNotNull("Expected property 'imported_func' in module type", funcProperty)
+
+        val funcType = funcProperty!!.jsType
+        assertInstanceOf(funcType, JSFunctionTypeImpl::class.java)
+        val func = funcType as JSFunctionTypeImpl
+        assertEquals("imported_func should have 1 parameter", 1, func.parameters.size)
+        assert(func.parameters[0].simpleType is JSNumberType)
     }
 
     private fun doTestSimpleWasm(jsFile: String) {
