@@ -25,17 +25,20 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
 
     override fun addContextType(info: JSTypeInfo?, context: PsiElement?) {
         if (info == null || context == null) return
-        val parent = context.parent
+        val parent = context.context
         if (parent !is JSObjectLiteralExpression) return
+        // sadly, webstorm type inference doesn't automatically support
+        //  contextual type evaluation from nested properties,
+        //  so we have to do that here manually
         val nameStack = ArrayDeque<String>()
         var current = parent
-        while (current.parent is JSProperty) {
-            nameStack.add((current.parent as JSProperty).name ?: "")
-            current = current.parent.parent
+        while (current?.context is JSProperty) {
+            nameStack.add((current.context as JSProperty).name ?: "")
+            current = current.context?.context
         }
-        val args = current.parent as? JSArgumentList ?: return
+        val args = current?.context as? JSArgumentList ?: return
         if (args.arguments.indexOf(current) != 1) return
-        val call = args.parent as? JSCallExpression ?: return
+        val call = args.context as? JSCallExpression ?: return
         if (!instantiateCallNames.contains((call.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName)) return
         val typeSource = JSTypeSource(context, JSTypeSource.SourceLanguage.JS, false)
         var importsType = resolveImportsType(typeSource, call)
@@ -55,7 +58,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         val processedType = type.arguments.first() as? JSTypeImpl ?: return type
         if (!isAcceptableType(processedType)) return type
         val call = context.processedExpression?.context as? JSCallExpression ?: return type
-        val wasmType = adjustWasmType(typeSource, call)
+        val wasmType = resolveExportsType(typeSource, call)
         if (wasmType != null) {
             return JSGenericTypeImpl(typeSource, type.type, listOf(wasmType))
         }
@@ -76,60 +79,51 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         return false
     }
 
-    private fun adjustWasmType(typeSource: JSTypeSource, expr: JSCallExpression?): JSType? {
-        val callee = (expr?.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName
-        if (!allAcceptedCallNames.contains(callee)) return null
-        val arg = expr!!.arguments.firstOrNull() ?: return null
-        val wasmLiteral = findWasmLiteral(arg)
+    // we can only provide inference in statically possible cases
+    //  i.e., when we have the name of the wasm file directly specified somewhere
+    private fun <T> handleStaticallyPossibleCases(callExpression: JSCallExpression,
+                                              handleType: (JSType) -> T?,
+                                              handleLiteral: (String) -> T?): T? {
+        val firstArg = callExpression.arguments.firstOrNull() ?: return null
+
+        // if we have a wasm file path directly specified, just use it
+        val wasmLiteral = findWasmLiteral(firstArg)
         if (wasmLiteral != null) {
-            return createFromLiteral(expr, wasmLiteral, typeSource)
+            return handleLiteral(wasmLiteral)
         }
-        val resolvedType = JSResolveUtil.getExpressionJSType(arg)
-        if (resolvedType is JSRecordTypeImpl) {
-            return resolvedType.properties.firstOrNull { it.memberName == "instance" }?.jsType
-        }
-        // hack for instantiating from bytes - try to infer from the call chain
+
+        // if we can infer information from the first argument
+        //  (i.e., it's already an inferred type), use it
+        val resolvedType = JSResolveUtil.getExpressionJSType(firstArg) ?: return null
+        handleType(resolvedType)?.let { return it }
+
+        // last resort - hack for instantiating from bytes - try to infer from the call chain
         if (resolvedType is JSTypeImpl && resolvedType.qualifiedName.qualifiedName == "ArrayBuffer") {
-            expr.contextOfType<JSCallExpression>()?.descendantsOfType<JSCallExpression>()
+            callExpression.contextOfType<JSCallExpression>()?.descendantsOfType<JSCallExpression>()
                 ?.firstOrNull { (it.stubSafeMethodExpression as? JSReferenceExpression)?.referenceName == "fetch" }
                 ?.arguments?.firstOrNull()?.let { arg ->
                     val wasmLiteral = findWasmLiteral(arg)
                     if (wasmLiteral != null) {
-                        return createFromLiteral(expr, wasmLiteral, typeSource)
+                        return handleLiteral(wasmLiteral)
                     }
                 }
         }
         return null
+    }
+
+    private fun resolveExportsType(typeSource: JSTypeSource, expr: JSCallExpression): JSType? {
+        val callee = (expr.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName
+        if (!allAcceptedCallNames.contains(callee)) return null
+        return handleStaticallyPossibleCases(expr, {
+            (it as? JSRecordType)?.properties?.firstOrNull { it.memberName == "instance" }?.jsType
+        }, { createFromLiteral(expr, it, typeSource) })
     }
 
     private fun resolveImportsType(typeSource: JSTypeSource, call: JSCallExpression): JSRecordType? {
-        val parsedData = resolveWasmData(call) ?: return null
+        val parsedData = handleStaticallyPossibleCases(call, {
+            null /* we have already lost the file information here; todo augment the type and preserve that */
+        }, { resolveWasmDataFromLiteral(call, it) }) ?: return null
         return createImportsTypeFromParsedData(parsedData, typeSource)
-    }
-
-    private fun resolveWasmData(call: JSCallExpression): ParsedWasmData? {
-        val arg = call.arguments.firstOrNull() ?: return null
-        val wasmLiteral = findWasmLiteral(arg)
-        if (wasmLiteral != null) {
-            return resolveWasmDataFromLiteral(call, wasmLiteral)
-        }
-        val resolvedType = JSResolveUtil.getExpressionJSType(arg)
-        if (resolvedType is JSRecordTypeImpl) {
-            // The first argument resolved to a record type (e.g. result of compile/compileStreaming);
-            // we cannot extract import info from an already-instantiated result.
-            return null
-        }
-        if (resolvedType is JSTypeImpl && resolvedType.qualifiedName.qualifiedName == "ArrayBuffer") {
-            call.contextOfType<JSCallExpression>()?.descendantsOfType<JSCallExpression>()
-                ?.firstOrNull { (it.stubSafeMethodExpression as? JSReferenceExpression)?.referenceName == "fetch" }
-                ?.arguments?.firstOrNull()?.let { fetchArg ->
-                    val fetchLiteral = findWasmLiteral(fetchArg)
-                    if (fetchLiteral != null) {
-                        return resolveWasmDataFromLiteral(call, fetchLiteral)
-                    }
-                }
-        }
-        return null
     }
 
     private fun resolveWasmDataFromLiteral(expr: JSCallExpression, wasmLiteral: String): ParsedWasmData? {
