@@ -1289,7 +1289,7 @@ class WasmParserTests {
         assertIs<ComponentPrimitiveU32Type>((type.params[1].value as ComponentPrimitiveValueType).type)
         assertEquals("y", type.params[1].label)
         assertIs<ComponentPrimitiveValueType>(type.ret)
-        assertIs<ComponentPrimitiveU32Type>((type.ret as ComponentPrimitiveValueType).type)
+        assertIs<ComponentPrimitiveU32Type>(type.ret.type)
 
         val moduleSection = wasmModule.moduleSection
         assertNotNull(moduleSection)
