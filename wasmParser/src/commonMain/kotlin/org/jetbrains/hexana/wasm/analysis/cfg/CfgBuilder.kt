@@ -259,7 +259,7 @@ object CfgBuilder {
                         curBlockId = TERMINATED
                     }
 
-                    is OpCodes.Flow.Unreachable -> {
+                    is OpCodes.ParametricInstructions.Unreachable -> {
                         updateBlockEnd(curBlockId, idx + 1)
                         curBlockId = TERMINATED
                     }

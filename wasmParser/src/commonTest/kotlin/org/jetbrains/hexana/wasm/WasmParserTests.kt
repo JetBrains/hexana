@@ -433,7 +433,7 @@ class WasmParserTests {
                         1,
                         emptyList(),
                         listOf(
-                            OpCodes.Flow.Unreachable,
+                            OpCodes.ParametricInstructions.Unreachable,
                         )
                     )
                 )
@@ -452,7 +452,7 @@ class WasmParserTests {
                         1,
                         emptyList(),
                         listOf(
-                            OpCodes.Flow.Nop,
+                            OpCodes.ParametricInstructions.Nop,
                         )
                     )
                 )
@@ -883,7 +883,7 @@ class WasmParserTests {
                         listOf(
                             OpCodes.I32.Const(10),
                             OpCodes.I32.Const(20),
-                            OpCodes.Flow.Drop,
+                            OpCodes.ParametricInstructions.Drop,
                             OpCodes.Flow.Call(0u)
                         )
                     )

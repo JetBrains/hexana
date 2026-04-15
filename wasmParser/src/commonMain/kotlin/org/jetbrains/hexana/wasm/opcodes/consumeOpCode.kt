@@ -12,11 +12,12 @@ import org.jetbrains.hexana.wasm.sections.StandardTypesParser.blockType
 import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.heapType
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.valueType
+import org.jetbrains.hexana.wasm.sections.WasmValueType
 
 fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
     return when (val code = bcode.toUInt()) {
-        0x00u -> Flow.Unreachable
-        0x01u -> Flow.Nop
+        0x00u -> OpCodes.ParametricInstructions.Unreachable
+        0x01u -> OpCodes.ParametricInstructions.Nop
         0x02u -> {
             Flow.Block(blockType(), consumeBlock())
         }
@@ -58,9 +59,7 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
         0x14u -> Flow.CallRef(consumeInt())
         0x15u -> Flow.ReturnCallRef(consumeInt())
         0x16u, 0x17u, 0x18u, 0x19u -> ReservedOpCode(code)
-        0x1Au -> Flow.Drop
-        0x1Bu -> Flow.Select
-        0x1Cu, 0x1Du, 0x1Eu -> ReservedOpCode(code)
+        0x1Au -> OpCodes.ParametricInstructions.Drop
 
         0x20u -> Local.Get(consumeInt())
         0x21u -> Local.Set(consumeInt())

@@ -83,12 +83,12 @@ class OpcodeClassifierTest {
 
     @Test
     fun `nop classified as Control`() {
-        assertEquals(OpcodeCategory.Control, classifyOpcode(OpCodes.Flow.Nop))
+        assertEquals(OpcodeCategory.Control, classifyOpcode(OpCodes.ParametricInstructions.Nop))
     }
 
     @Test
     fun `select classified as Control`() {
-        assertEquals(OpcodeCategory.Control, classifyOpcode(OpCodes.Flow.Select))
+        assertEquals(OpcodeCategory.Control, classifyOpcode(OpCodes.ParametricInstructions.Select))
     }
 
     @Test

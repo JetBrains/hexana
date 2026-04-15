@@ -36,10 +36,11 @@ fun classifyOpcode(opcode: OpCode): OpcodeCategory = when (opcode) {
     is OpCodes.Flow.Trow -> OpcodeCategory.Control
     OpCodes.Flow.Terminal -> OpcodeCategory.Control
     OpCodes.Flow.Return -> OpcodeCategory.Control
-    OpCodes.Flow.Drop -> OpcodeCategory.Control
-    OpCodes.Flow.Select -> OpcodeCategory.Control
-    OpCodes.Flow.Unreachable -> OpcodeCategory.Control
-    OpCodes.Flow.Nop -> OpcodeCategory.Control
+    OpCodes.ParametricInstructions.Drop -> OpcodeCategory.Control
+    OpCodes.ParametricInstructions.Select -> OpcodeCategory.Control
+    OpCodes.ParametricInstructions.SelectWithType -> OpcodeCategory.Control
+    OpCodes.ParametricInstructions.Unreachable -> OpcodeCategory.Control
+    OpCodes.ParametricInstructions.Nop -> OpcodeCategory.Control
     OpCodes.Flow.ThrowRef -> OpcodeCategory.Control
 
     // --- Memory: Load/Store from I32, I64, F32, F64 ---

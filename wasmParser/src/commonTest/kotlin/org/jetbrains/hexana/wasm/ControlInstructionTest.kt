@@ -47,7 +47,7 @@ class ControlInstructionTest {
         // Once fixed, this should assert: assertNull(block.type)
         assertNotNull(block.type, "Known issue: 0x40 parsed as WasmRefType instead of null")
         // Block body still parses correctly
-        assertTrue(block.value.any { it is OpCodes.Flow.Nop })
+        assertTrue(block.value.any { it is OpCodes.ParametricInstructions.Nop })
     }
 
     @Test
@@ -119,7 +119,7 @@ class ControlInstructionTest {
         val ifOp = ops.filterIsInstance<OpCodes.Flow.If>().firstOrNull()
         assertNotNull(ifOp)
         // If body should contain nop
-        assertTrue(ifOp.value.any { it is OpCodes.Flow.Nop })
+        assertTrue(ifOp.value.any { it is OpCodes.ParametricInstructions.Nop })
     }
 
     @Test
@@ -215,7 +215,7 @@ class ControlInstructionTest {
     @Test
     fun `unreachable — trap instruction`() = runTest {
         val ops = parseOpcodes("wat/control/unreachable_trap.wat")
-        val unreachable = ops.filterIsInstance<OpCodes.Flow.Unreachable>().firstOrNull()
+        val unreachable = ops.filterIsInstance<OpCodes.ParametricInstructions.Unreachable>().firstOrNull()
         assertNotNull(unreachable)
     }
 
@@ -318,7 +318,7 @@ class ControlInstructionTest {
         """.trimIndent())
         val module = (WasmParser().parse(buffer) as WasmParseSuccess).wasmModule as WasmModule
         val records = with(module.codeSection!!) { buffer.scan() }
-        val nops = records[0].opCodes.filterIsInstance<OpCodes.Flow.Nop>()
+        val nops = records[0].opCodes.filterIsInstance<OpCodes.ParametricInstructions.Nop>()
         assertEquals(3, nops.size)
     }
 
@@ -333,7 +333,7 @@ class ControlInstructionTest {
         """.trimIndent())
         val module = (WasmParser().parse(buffer) as WasmParseSuccess).wasmModule as WasmModule
         val records = with(module.codeSection!!) { buffer.scan() }
-        val drop = records[0].opCodes.filterIsInstance<OpCodes.Flow.Drop>().firstOrNull()
+        val drop = records[0].opCodes.filterIsInstance<OpCodes.ParametricInstructions.Drop>().firstOrNull()
         assertNotNull(drop)
     }
 }

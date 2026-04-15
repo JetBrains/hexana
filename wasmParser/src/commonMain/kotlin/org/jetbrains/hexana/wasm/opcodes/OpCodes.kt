@@ -2,9 +2,27 @@ package org.jetbrains.hexana.wasm.opcodes
 
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser
 import org.jetbrains.hexana.wasm.sections.WasmHeapType
+import org.jetbrains.hexana.wasm.sections.WasmValueType
 import kotlin.jvm.JvmInline
 
 object OpCodes {
+    object ParametricInstructions {
+        object Unreachable : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x00u
+        }
+
+        object Nop : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x01u
+        }
+
+        object Drop : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x1Au
+        }
+
+        object Select : OpCodeWithValue<Unit>(Unit) {
+            const val code: UByte = 0x1Bu
+        }
+    }
     object Flow {
         object Terminal : OpCodeWithValue<Unit>(Unit) {
             const val code: UByte = 0x0Bu
@@ -16,22 +34,6 @@ object OpCodes {
 
         object ReturnCall : OpCodeWithValue<Unit>(Unit) {
             const val code: UByte = 0x12u
-        }
-
-        object Drop : OpCodeWithValue<Unit>(Unit) {
-            const val code: UByte = 0x1Au
-        }
-
-        object Select : OpCodeWithValue<Unit>(Unit) {
-            const val code: UByte = 0x1Bu
-        }
-
-        object Unreachable : OpCodeWithValue<Unit>(Unit) {
-            const val code: UByte = 0x00u
-        }
-
-        object Nop : OpCodeWithValue<Unit>(Unit) {
-            const val code: UByte = 0x01u
         }
 
         class Call(value: UInt) : OpCodeWithValue<UInt>(value) {
