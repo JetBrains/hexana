@@ -8,6 +8,7 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes.I32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.I64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Local
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Ref
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.blockType
 import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.heapType
@@ -69,7 +70,21 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
             OpCodes.ParametricInstructions.SelectWithType(list.toList())
         }
         0x1Du, 0x1Eu -> ReservedOpCode(code)
-
+        0x1Fu -> {
+            val blockType = blockType()
+            val catches = mutableListOf<Flow.CatchType>()
+            consumeArray {
+                when (val catchType = get()) {
+                    0x0.toByte() -> catches.add(Flow.CatchType.Catch(getULEB128().toUInt(), getULEB128().toUInt()))
+                    0x1.toByte() -> catches.add(Flow.CatchType.CatchRef(getULEB128().toUInt(), getULEB128().toUInt()))
+                    0x2.toByte() -> catches.add(Flow.CatchType.CatchAll(getULEB128().toUInt()))
+                    0x3.toByte() -> catches.add(Flow.CatchType.CatchAllRef(getULEB128().toUInt()))
+                    else -> throw UnsupportedOpsException(code, position())
+                }
+            }
+            val opcodes = parseOpCodes()
+            Flow.TryTable(blockType, catches.toList(), opcodes)
+        }
         0x20u -> Local.Get(consumeInt())
         0x21u -> Local.Set(consumeInt())
         0x22u -> Local.Tee(consumeInt())

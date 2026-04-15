@@ -122,17 +122,19 @@ class ExceptionInstructionTest {
     // and document expected parse failure until try_table support is added.
 
     @Test
-    fun `try_table catch — compiles but parser does not support yet`() = runTest {
+    fun `try_table catch`() = runTest {
+        val module = parseWatResource("wat/exceptions/try_table_catch.wat")
         val buffer = watResourceToBuffer("wat/exceptions/try_table_catch.wat")
         val result = WasmParser().parse(buffer)
-        // try_table (0x1F) is not handled — parser will either throw
-        // UnsupportedOpsException or produce an incomplete parse.
-        // Once try_table support is added, change this to assertIs<WasmParseSuccess>
-        // and verify the catch handler structure.
-        assertTrue(
-            result is WasmParseSuccess || result is WasmParseFailure,
-            "Parser should either succeed (once implemented) or fail gracefully"
-        )
+        val records = with(module.codeSection!!) { buffer.scan() }
+        val op = records.single().opCodes.single()
+        assertIs<OpCodes.Flow.TryTable>(op)
+        val catch = op.catches.single()
+        assertIs<OpCodes.Flow.CatchType.Catch>( catch)
+        assertIs<OpCodes.I32.Const>(op.code[0])
+        assertIs<OpCodes.Flow.Trow>(op.code[1])
+        assertIs<OpCodes.I32.Const>(op.code[2])
+        assertTrue( result is WasmParseSuccess )
     }
 
     @Test

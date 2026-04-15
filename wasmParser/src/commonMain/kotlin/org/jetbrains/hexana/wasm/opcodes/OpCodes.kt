@@ -135,6 +135,19 @@ object OpCodes {
         object ThrowRef: OpCode {
             const val code: UByte = 0x0Au
         }
+
+        class TryTable(val blockType: StandardTypesParser.WasmBlockType, val catches: List<CatchType>, val code: List<OpCode>) : OpCode {
+            companion object {
+                const val code: UByte = 0x1Fu
+            }
+        }
+
+        sealed class CatchType(val labelIdx: UInt) {
+            class Catch(val tagIdx: UInt, labelIdx: UInt) : CatchType(labelIdx)
+            class CatchRef(val tagIdx: UInt, labelIdx: UInt) : CatchType(labelIdx)
+            class CatchAll(labelIdx: UInt) : CatchType(labelIdx)
+            class CatchAllRef(labelIdx: UInt) : CatchType(labelIdx)
+        }
     }
 
     object Local {
