@@ -22,6 +22,12 @@ object OpCodes {
         object Select : OpCodeWithValue<Unit>(Unit) {
             const val code: UByte = 0x1Bu
         }
+
+        class SelectWithType(value: List<WasmValueType<*>>) : OpCodeWithValue<List<WasmValueType<*>>>(value) {
+            companion object{
+                const val code: UByte = 0x1Cu
+            }
+        }
     }
     object Flow {
         object Terminal : OpCodeWithValue<Unit>(Unit) {

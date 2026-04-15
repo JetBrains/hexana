@@ -251,16 +251,13 @@ class ControlInstructionTest {
     fun `select typed — externref`() = runTest {
         val buffer = watResourceToBuffer("wat/control/select_typed.wat")
         val result = WasmParser().parse(buffer)
-        // Typed select may use 0x1C opcode which is currently ReservedOpCode
-        // If it parses successfully, verify the select instruction exists
-        if (result is WasmParseSuccess) {
-            val module = result.wasmModule as WasmModule
-            val records = with(module.codeSection!!) { buffer.scan() }
-            val ops = records.last().opCodes
-            assertTrue(ops.isNotEmpty())
-        }
-        // Typed select (0x1C) may not be supported yet — either outcome is valid
-        assertTrue(result is WasmParseSuccess || result is WasmParseFailure)
+        assertIs<WasmParseSuccess>(result)
+        val module = result.wasmModule as WasmModule
+        val records = with(module.codeSection!!) { buffer.scan() }
+        val ops = records.last().opCodes
+        assertTrue(ops.isNotEmpty())
+        assertIs<OpCodes.ParametricInstructions.SelectWithType>(ops[3])
+        assertIs<WasmReferenceHeapType>((ops[3] as OpCodes.ParametricInstructions.SelectWithType).value.single().code)
     }
 
     // --- Nested control flow ---

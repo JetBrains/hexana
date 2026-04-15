@@ -60,6 +60,15 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
         0x15u -> Flow.ReturnCallRef(consumeInt())
         0x16u, 0x17u, 0x18u, 0x19u -> ReservedOpCode(code)
         0x1Au -> OpCodes.ParametricInstructions.Drop
+        0x1Bu -> OpCodes.ParametricInstructions.Select
+        0x1Cu -> {
+            val list = mutableListOf<WasmValueType<*>>()
+            consumeArray {
+                valueType()?.let { element -> list.add(element) }
+            }
+            OpCodes.ParametricInstructions.SelectWithType(list.toList())
+        }
+        0x1Du, 0x1Eu -> ReservedOpCode(code)
 
         0x20u -> Local.Get(consumeInt())
         0x21u -> Local.Set(consumeInt())
