@@ -333,4 +333,160 @@ class ControlInstructionTest {
         val drop = records[0].opCodes.filterIsInstance<OpCodes.ParametricInstructions.Drop>().firstOrNull()
         assertNotNull(drop)
     }
+
+    // --- Inline nested block tests ---
+
+    @Test
+    fun `inline — block inside block`() = runTest {
+        val buffer = watStringToBuffer("""
+            (module
+              (func (export "f") (result i32)
+                (block (result i32)
+                  (block (result i32)
+                    (i32.const 42)
+                  )
+                )
+              )
+            )
+        """.trimIndent())
+        val module = (WasmParser().parse(buffer) as WasmParseSuccess).wasmModule as WasmModule
+        val records = with(module.codeSection!!) { buffer.scan() }
+        val outer = records[0].opCodes.filterIsInstance<OpCodes.Flow.Block>().first()
+        assertIs<WasmI32Type>(outer.type)
+        val inner = outer.value.filterIsInstance<OpCodes.Flow.Block>().first()
+        assertIs<WasmI32Type>(inner.type)
+        assertIs<OpCodes.I32.Const>(inner.value[0])
+    }
+
+    @Test
+    fun `inline — loop inside block with br back`() = runTest {
+        val buffer = watStringToBuffer("""
+            (module
+              (func (export "f") (param i32) (result i32)
+                (block ${'$'}exit (result i32)
+                  (loop ${'$'}again
+                    (local.get 0)
+                    (i32.const 1)
+                    (i32.sub)
+                    (local.tee 0)
+                    (br_if ${'$'}again)
+                  )
+                  (local.get 0)
+                )
+              )
+            )
+        """.trimIndent())
+        val module = (WasmParser().parse(buffer) as WasmParseSuccess).wasmModule as WasmModule
+        val records = with(module.codeSection!!) { buffer.scan() }
+        val block = records[0].opCodes.filterIsInstance<OpCodes.Flow.Block>().first()
+        assertIs<WasmI32Type>(block.type)
+        val loop = block.value.filterIsInstance<OpCodes.Flow.Loop>().first()
+        val brIf = loop.value.filterIsInstance<OpCodes.Flow.BrIf>().first()
+        assertEquals(0u, brIf.value, "br_if 0 should target the loop header")
+    }
+
+    @Test
+    fun `inline — if-else inside loop inside block`() = runTest {
+        val buffer = watStringToBuffer("""
+            (module
+              (func (export "f") (param i32) (result i32)
+                (local i32)
+                (block ${'$'}done (result i32)
+                  (loop ${'$'}repeat
+                    (if (i32.gt_s (local.get 0) (i32.const 0))
+                      (then
+                        (local.set 1 (i32.add (local.get 1) (local.get 0)))
+                        (local.set 0 (i32.sub (local.get 0) (i32.const 1)))
+                        (br ${'$'}repeat)
+                      )
+                    )
+                  )
+                  (local.get 1)
+                )
+              )
+            )
+        """.trimIndent())
+        val module = (WasmParser().parse(buffer) as WasmParseSuccess).wasmModule as WasmModule
+        val records = with(module.codeSection!!) { buffer.scan() }
+        val block = records[0].opCodes.filterIsInstance<OpCodes.Flow.Block>().first()
+        val loop = block.value.filterIsInstance<OpCodes.Flow.Loop>().first()
+        val ifOp = loop.value.filterIsInstance<OpCodes.Flow.If>().first()
+        assertNotNull(ifOp)
+        // The then-branch should contain br $repeat (label index 1 from if's perspective)
+        val br = ifOp.value.filterIsInstance<OpCodes.Flow.Br>().firstOrNull()
+        assertNotNull(br, "then-branch should contain br to loop")
+    }
+
+    @Test
+    fun `inline — three-deep block nesting with br to each level`() = runTest {
+        val buffer = watStringToBuffer("""
+            (module
+              (func (export "f") (param i32) (result i32)
+                (block ${'$'}b0 (result i32)
+                  (block ${'$'}b1 (result i32)
+                    (block ${'$'}b2 (result i32)
+                      (local.get 0)
+                      (i32.const 0)
+                      (i32.eq)
+                      (if (then (i32.const 0) (br ${'$'}b0))
+                      )
+                      (local.get 0)
+                      (i32.const 1)
+                      (i32.eq)
+                      (if (then (i32.const 1) (br ${'$'}b1))
+                      )
+                      (i32.const 2)
+                    )
+                  )
+                )
+              )
+            )
+        """.trimIndent())
+        val module = (WasmParser().parse(buffer) as WasmParseSuccess).wasmModule as WasmModule
+        val records = with(module.codeSection!!) { buffer.scan() }
+        val b0 = records[0].opCodes.filterIsInstance<OpCodes.Flow.Block>().first()
+        val b1 = b0.value.filterIsInstance<OpCodes.Flow.Block>().first()
+        val b2 = b1.value.filterIsInstance<OpCodes.Flow.Block>().first()
+
+        // Find all br instructions in b2's subtree
+        fun collectBr(ops: List<org.jetbrains.hexana.wasm.opcodes.OpCode>): List<OpCodes.Flow.Br> {
+            val result = mutableListOf<OpCodes.Flow.Br>()
+            for (op in ops) {
+                if (op is OpCodes.Flow.Br) result.add(op)
+                if (op is OpCodes.Flow.Block) result.addAll(collectBr(op.value))
+                if (op is OpCodes.Flow.If) result.addAll(collectBr(op.value))
+            }
+            return result
+        }
+        val branches = collectBr(b2.value)
+        assertTrue(branches.size >= 2, "Should have at least 2 br instructions")
+        // br $b0 from inside b2 = label index 2, br $b1 = label index 1
+        // (but if wrapped in if, add 1 more for the if label)
+    }
+
+    @Test
+    fun `inline — block-loop-block with mixed types`() = runTest {
+        val buffer = watStringToBuffer("""
+            (module
+              (func (export "f") (result i64)
+                (block (result i64)
+                  (loop (result i64)
+                    (block (result i64)
+                      (i64.const 999)
+                    )
+                  )
+                )
+              )
+            )
+        """.trimIndent())
+        val module = (WasmParser().parse(buffer) as WasmParseSuccess).wasmModule as WasmModule
+        val records = with(module.codeSection!!) { buffer.scan() }
+        val outerBlock = records[0].opCodes.filterIsInstance<OpCodes.Flow.Block>().first()
+        assertIs<WasmI64Type>(outerBlock.type)
+        val loop = outerBlock.value.filterIsInstance<OpCodes.Flow.Loop>().first()
+        assertIs<WasmI64Type>(loop.type)
+        val innerBlock = loop.value.filterIsInstance<OpCodes.Flow.Block>().first()
+        assertIs<WasmI64Type>(innerBlock.type)
+        assertIs<OpCodes.I64.Const>(innerBlock.value[0])
+    }
 }
