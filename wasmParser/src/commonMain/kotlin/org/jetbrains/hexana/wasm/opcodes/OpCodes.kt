@@ -84,7 +84,7 @@ object OpCodes {
             }
         }
 
-        class BrTable(values: List<Int>) : OpCodeWithValue<List<Int>>(values) {
+        class BrTable(values: List<UInt>, val labelIdx: UInt) : OpCodeWithValue<List<UInt>>(values) {
             companion object {
                 const val code: UByte = 0x0Eu
             }

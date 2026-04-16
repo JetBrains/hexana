@@ -45,8 +45,8 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
         0x0Eu -> {
             Flow.BrTable(buildList {
                 // TODO: 🐛 without this@consumeOpCode this will fail in JS (and it shouldn't)
-                consumeArray { add(this@consumeOpCode.get().toInt()) }
-            })
+                consumeArray { add(getULEB128().toUInt()) }
+            }, getULEB128().toUInt())
         }
         0x0Fu -> Flow.Return
 
