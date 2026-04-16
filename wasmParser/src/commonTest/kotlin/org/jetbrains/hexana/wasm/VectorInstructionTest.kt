@@ -15,161 +15,90 @@ import kotlin.test.assertTrue
 /**
  * Tests for WASM vector (SIMD) instructions — v128 prefix 0xFD.
  *
- * The parser does not yet implement SIMD instruction decoding (consumeMultibyteOpCode
- * throws UnsupportedOpsException for 0xFD prefix). Functions containing SIMD
- * instructions produce UnparsedOpCode for the entire function body.
- *
- * These tests document current behavior and verify graceful degradation:
- * - Module-level parse succeeds (WasmParseSuccess)
- * - Functions with SIMD produce UnparsedOpCode (not a crash)
- * - Functions without SIMD in the same module parse normally
- * - Section metadata (type, import, export, memory) is still accessible
+ * Each test verifies that the parser produces no UnparsedOpCode for the
+ * given SIMD instruction. Tests will fail until SIMD decoding is implemented
+ * in consumeMultibyteOpCode.
  */
 class VectorInstructionTest {
 
-    private suspend fun parseModule(wat: String): Pair<WasmModule, org.jetbrains.hexana.io.CommonByteBuffer> {
+    private suspend fun parseInlineOpcodes(wat: String): List<OpCode> {
         val buffer = watStringToBuffer(wat)
-        val result = WasmParser().parse(buffer)
-        assertIs<WasmParseSuccess>(result)
-        return (result.wasmModule as WasmModule) to buffer
+        val module = (WasmParser().parse(buffer) as WasmParseSuccess).wasmModule as WasmModule
+        val records = with(module.codeSection!!) { buffer.scan() }
+        return records[0].opCodes
     }
 
     private suspend fun parseAllFunctions(wat: String): List<List<OpCode>> {
-        val (module, buffer) = parseModule(wat)
+        val buffer = watStringToBuffer(wat)
+        val module = (WasmParser().parse(buffer) as WasmParseSuccess).wasmModule as WasmModule
         val records = with(module.codeSection!!) { buffer.scan() }
         return records.map { it.opCodes }
     }
 
+    private fun assertNoUnparsed(ops: List<OpCode>) {
+        val unparsed = ops.filterIsInstance<UnparsedOpCode>()
+        assertTrue(unparsed.isEmpty(), "No instructions should be unparsed: ${unparsed.firstOrNull()?.e?.message}")
+    }
+
     // ========================================================================
-    // v128.const — produces UnparsedOpCode
+    // v128.const
     // ========================================================================
 
     @Test
-    fun `v128 const — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `v128 const — i32x4`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
               (func (export "f") (result v128)
                 v128.const i32x4 1 2 3 4
               )
             )
         """.trimIndent())
-        val ops = allOps[0]
-        assertTrue(ops.any { it is UnparsedOpCode }, "SIMD function should produce UnparsedOpCode")
+        assertNoUnparsed(ops)
     }
 
     @Test
-    fun `v128 const — module parse succeeds`() = runTest {
-        val (module, _) = parseModule("""
+    fun `v128 const — i64x2`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
               (func (export "f") (result v128)
-                v128.const i32x4 0 0 0 0
+                v128.const i64x2 100 200
               )
             )
         """.trimIndent())
-        assertNotNull(module.codeSection)
+        assertNoUnparsed(ops)
     }
 
-    // ========================================================================
-    // i32x4 arithmetic — produces UnparsedOpCode
-    // ========================================================================
-
     @Test
-    fun `i32x4 add — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `v128 const — f32x4`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
-              (func (export "f") (param v128 v128) (result v128)
-                local.get 0
-                local.get 1
-                i32x4.add
+              (func (export "f") (result v128)
+                v128.const f32x4 1.0 2.0 3.0 4.0
               )
             )
         """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
     }
 
     @Test
-    fun `i32x4 mul — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `v128 const — f64x2`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
-              (func (export "f") (param v128 v128) (result v128)
-                local.get 0
-                local.get 1
-                i32x4.mul
+              (func (export "f") (result v128)
+                v128.const f64x2 1.5 2.5
               )
             )
         """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
     }
 
     // ========================================================================
-    // f32x4 operations — produces UnparsedOpCode
+    // v128 memory — load and store
     // ========================================================================
 
     @Test
-    fun `f32x4 add — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
-            (module
-              (func (export "f") (param v128 v128) (result v128)
-                local.get 0
-                local.get 1
-                f32x4.add
-              )
-            )
-        """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
-    }
-
-    @Test
-    fun `f32x4 sqrt — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
-            (module
-              (func (export "f") (param v128) (result v128)
-                local.get 0
-                f32x4.sqrt
-              )
-            )
-        """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
-    }
-
-    // ========================================================================
-    // i8x16 / i16x8 — produces UnparsedOpCode
-    // ========================================================================
-
-    @Test
-    fun `i8x16 splat — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
-            (module
-              (func (export "f") (param i32) (result v128)
-                local.get 0
-                i8x16.splat
-              )
-            )
-        """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
-    }
-
-    @Test
-    fun `i16x8 add — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
-            (module
-              (func (export "f") (param v128 v128) (result v128)
-                local.get 0
-                local.get 1
-                i16x8.add
-              )
-            )
-        """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
-    }
-
-    // ========================================================================
-    // v128 memory — produces UnparsedOpCode
-    // ========================================================================
-
-    @Test
-    fun `v128 load — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `v128 load`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
               (memory 1)
               (func (export "f") (param i32) (result v128)
@@ -178,12 +107,12 @@ class VectorInstructionTest {
               )
             )
         """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
     }
 
     @Test
-    fun `v128 store — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `v128 store`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
               (memory 1)
               (func (export "f") (param i32 v128)
@@ -193,79 +122,98 @@ class VectorInstructionTest {
               )
             )
         """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
     }
 
     // ========================================================================
-    // v128 bitwise — produces UnparsedOpCode
+    // splat — broadcast scalar to all lanes
     // ========================================================================
 
     @Test
-    fun `v128 and — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `i8x16 splat`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
-              (func (export "f") (param v128 v128) (result v128)
+              (func (export "f") (param i32) (result v128)
                 local.get 0
-                local.get 1
-                v128.and
+                i8x16.splat
               )
             )
         """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
     }
 
     @Test
-    fun `v128 or — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `i16x8 splat`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
-              (func (export "f") (param v128 v128) (result v128)
+              (func (export "f") (param i32) (result v128)
                 local.get 0
-                local.get 1
-                v128.or
+                i16x8.splat
               )
             )
         """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
     }
 
     @Test
-    fun `v128 not — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `i32x4 splat`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
-              (func (export "f") (param v128) (result v128)
+              (func (export "f") (param i32) (result v128)
                 local.get 0
-                v128.not
+                i32x4.splat
               )
             )
         """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
     }
 
-    // ========================================================================
-    // f64x2 — produces UnparsedOpCode
-    // ========================================================================
-
     @Test
-    fun `f64x2 add — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `i64x2 splat`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
-              (func (export "f") (param v128 v128) (result v128)
+              (func (export "f") (param i64) (result v128)
                 local.get 0
-                local.get 1
-                f64x2.add
+                i64x2.splat
               )
             )
         """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `f32x4 splat`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param f32) (result v128)
+                local.get 0
+                f32x4.splat
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `f64x2 splat`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param f64) (result v128)
+                local.get 0
+                f64x2.splat
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
     }
 
     // ========================================================================
-    // i32x4 extract/replace lane — produces UnparsedOpCode
+    // extract_lane / replace_lane
     // ========================================================================
 
     @Test
-    fun `i32x4 extract_lane — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `i32x4 extract_lane`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
               (func (export "f") (param v128) (result i32)
                 local.get 0
@@ -273,12 +221,12 @@ class VectorInstructionTest {
               )
             )
         """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
     }
 
     @Test
-    fun `i32x4 replace_lane — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `i32x4 replace_lane`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
               (func (export "f") (param v128 i32) (result v128)
                 local.get 0
@@ -287,106 +235,42 @@ class VectorInstructionTest {
               )
             )
         """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
     }
 
-    // ========================================================================
-    // mixed module — SIMD and non-SIMD functions coexist
-    // ========================================================================
-
     @Test
-    fun `mixed module — non-SIMD function parses normally`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `f64x2 extract_lane`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
-              (func (export "scalar_add") (param i32 i32) (result i32)
+              (func (export "f") (param v128) (result f64)
                 local.get 0
-                local.get 1
-                i32.add
-              )
-              (func (export "vector_add") (param v128 v128) (result v128)
-                local.get 0
-                local.get 1
-                i32x4.add
+                f64x2.extract_lane 1
               )
             )
         """.trimIndent())
-        // First function (scalar) should parse normally
-        val scalarOps = allOps[0]
-        assertEquals(3, scalarOps.size)
-        assertIs<OpCodes.Local.Get>(scalarOps[0])
-        assertIs<OpCodes.Local.Get>(scalarOps[1])
-        assertIs<I32.Add>(scalarOps[2])
-        // Second function (SIMD) should produce UnparsedOpCode
-        val vectorOps = allOps[1]
-        assertTrue(vectorOps.any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
     }
 
     @Test
-    fun `mixed module — multiple scalar functions around SIMD`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `i8x16 extract_lane_s`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
-              (func (export "before") (param i32) (result i32)
+              (func (export "f") (param v128) (result i32)
                 local.get 0
-                i32.const 1
-                i32.add
-              )
-              (func (export "simd") (param v128) (result v128)
-                local.get 0
-                v128.not
-              )
-              (func (export "after") (param i32) (result i32)
-                local.get 0
-                i32.const 2
-                i32.mul
+                i8x16.extract_lane_s 5
               )
             )
         """.trimIndent())
-        // "before" parses normally
-        assertEquals(3, allOps[0].size)
-        assertIs<I32.Add>(allOps[0][2])
-        // "simd" produces UnparsedOpCode
-        assertTrue(allOps[1].any { it is UnparsedOpCode })
-        // "after" parses normally
-        assertEquals(3, allOps[2].size)
-        assertIs<I32.Mul>(allOps[2][2])
+        assertNoUnparsed(ops)
     }
 
     // ========================================================================
-    // section metadata — accessible despite SIMD functions
+    // i32x4 arithmetic
     // ========================================================================
 
     @Test
-    fun `exports — accessible despite SIMD function`() = runTest {
-        val (module, buffer) = parseModule("""
-            (module
-              (func (export "vec_const") (result v128)
-                v128.const i32x4 1 2 3 4
-              )
-            )
-        """.trimIndent())
-        val exportSection = module.exportSection
-        assertNotNull(exportSection)
-        val exports = with(exportSection) { buffer.scan() }
-        assertTrue(exports.any { it.name == "vec_const" })
-    }
-
-    @Test
-    fun `memory section — accessible with SIMD load store`() = runTest {
-        val (module, _) = parseModule("""
-            (module
-              (memory 1)
-              (func (export "f") (param i32) (result v128)
-                local.get 0
-                v128.load
-              )
-            )
-        """.trimIndent())
-        assertNotNull(module.memorySection)
-    }
-
-    @Test
-    fun `type section — v128 param and result types`() = runTest {
-        val (module, buffer) = parseModule("""
+    fun `i32x4 add`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
               (func (export "f") (param v128 v128) (result v128)
                 local.get 0
@@ -395,17 +279,76 @@ class VectorInstructionTest {
               )
             )
         """.trimIndent())
-        val types = with(module.typesSection!!) { buffer.parseTypes() }
-        assertTrue(types.isNotEmpty())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `i32x4 sub`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                i32x4.sub
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `i32x4 mul`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                i32x4.mul
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
     }
 
     // ========================================================================
-    // i64x2 operations — produces UnparsedOpCode
+    // i16x8 arithmetic
     // ========================================================================
 
     @Test
-    fun `i64x2 add — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `i16x8 add`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                i16x8.add
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `i16x8 mul`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                i16x8.mul
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    // ========================================================================
+    // i64x2 arithmetic
+    // ========================================================================
+
+    @Test
+    fun `i64x2 add`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
               (func (export "f") (param v128 v128) (result v128)
                 local.get 0
@@ -414,16 +357,267 @@ class VectorInstructionTest {
               )
             )
         """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `i64x2 sub`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                i64x2.sub
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `i64x2 mul`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                i64x2.mul
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
     }
 
     // ========================================================================
-    // v128 shuffle — produces UnparsedOpCode
+    // f32x4 arithmetic
     // ========================================================================
 
     @Test
-    fun `i8x16 shuffle — function produces UnparsedOpCode`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `f32x4 add`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                f32x4.add
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `f32x4 sub`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                f32x4.sub
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `f32x4 mul`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                f32x4.mul
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `f32x4 div`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                f32x4.div
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `f32x4 sqrt`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128) (result v128)
+                local.get 0
+                f32x4.sqrt
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    // ========================================================================
+    // f64x2 arithmetic
+    // ========================================================================
+
+    @Test
+    fun `f64x2 add`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                f64x2.add
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `f64x2 sub`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                f64x2.sub
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `f64x2 mul`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                f64x2.mul
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `f64x2 sqrt`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128) (result v128)
+                local.get 0
+                f64x2.sqrt
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    // ========================================================================
+    // v128 bitwise
+    // ========================================================================
+
+    @Test
+    fun `v128 and`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                v128.and
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `v128 or`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                v128.or
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `v128 xor`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                v128.xor
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `v128 not`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128) (result v128)
+                local.get 0
+                v128.not
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    // ========================================================================
+    // i32x4 comparison
+    // ========================================================================
+
+    @Test
+    fun `i32x4 eq`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                i32x4.eq
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `i32x4 ne`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                i32x4.ne
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    // ========================================================================
+    // i8x16 shuffle
+    // ========================================================================
+
+    @Test
+    fun `i8x16 shuffle`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
               (func (export "f") (param v128 v128) (result v128)
                 local.get 0
@@ -432,23 +626,84 @@ class VectorInstructionTest {
               )
             )
         """.trimIndent())
-        assertTrue(allOps[0].any { it is UnparsedOpCode })
+        assertNoUnparsed(ops)
     }
 
     // ========================================================================
-    // UnparsedOpCode error message
+    // i8x16 swizzle
     // ========================================================================
 
     @Test
-    fun `UnparsedOpCode — exception contains position info`() = runTest {
-        val allOps = parseAllFunctions("""
+    fun `i8x16 swizzle`() = runTest {
+        val ops = parseInlineOpcodes("""
             (module
-              (func (export "f") (result v128)
-                v128.const i32x4 1 2 3 4
+              (func (export "f") (param v128 v128) (result v128)
+                local.get 0
+                local.get 1
+                i8x16.swizzle
               )
             )
         """.trimIndent())
-        val unparsed = allOps[0].filterIsInstance<UnparsedOpCode>().single()
-        assertNotNull(unparsed.e, "UnparsedOpCode should carry the original exception")
+        assertNoUnparsed(ops)
+    }
+
+    // ========================================================================
+    // conversion — between integer and float lanes
+    // ========================================================================
+
+    @Test
+    fun `f32x4 convert_i32x4_s`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128) (result v128)
+                local.get 0
+                f32x4.convert_i32x4_s
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `i32x4 trunc_sat_f32x4_s`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128) (result v128)
+                local.get 0
+                i32x4.trunc_sat_f32x4_s
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    // ========================================================================
+    // v128 any_true / i32x4 all_true
+    // ========================================================================
+
+    @Test
+    fun `v128 any_true`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128) (result i32)
+                local.get 0
+                v128.any_true
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
+    }
+
+    @Test
+    fun `i32x4 all_true`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param v128) (result i32)
+                local.get 0
+                i32x4.all_true
+              )
+            )
+        """.trimIndent())
+        assertNoUnparsed(ops)
     }
 }
