@@ -180,6 +180,6 @@ open class I64 {
     }
 
     object TruncSatF64U : OpCodeWithValue<Unit>(Unit) {
-        const val code: UByte = 0x06u
+        const val code: UByte = 0x07u
     }
 }
