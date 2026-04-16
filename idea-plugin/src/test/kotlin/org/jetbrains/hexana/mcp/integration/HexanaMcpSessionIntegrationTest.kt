@@ -108,7 +108,7 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
         )
 
         assertEquals(true, result.isError)
-        assertEquals("Invalid segmentRange `to` must be >= `from`", result.requireSingleText())
+        assertEquals("Invalid entriesRange: `to` must be >= `from`", result.requireSingleText())
     }
 
     private fun callToolViaSession(toolName: String, input: JsonObject): CallToolResult {

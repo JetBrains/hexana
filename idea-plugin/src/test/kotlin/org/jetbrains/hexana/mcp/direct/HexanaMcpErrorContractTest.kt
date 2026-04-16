@@ -54,7 +54,7 @@ class HexanaMcpErrorContractTest : HexanaMcpToolsetDirectTestBase() {
         )
 
         assertTrue(result.isError)
-        assertEquals("Invalid segmentRange `to` must be >= `from`", result.textPayloads.single())
+        assertEquals("Invalid entriesRange: `to` must be >= `from`", result.textPayloads.single())
         assertNull(result.structuredContent)
     }
 }

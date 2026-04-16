@@ -27,6 +27,8 @@ Read these files before making structural changes:
 - Keep this module free of IntelliJ Platform APIs.
 - Do not add `VirtualFile`, project lookup, plugin.xml registration, or MCP tool annotations here.
 - IntelliJ-specific MCP integration stays in `idea-plugin/`.
+- If a tool needs richer input/output schema descriptions, add annotated wrapper DTOs in `idea-plugin/` rather than
+  coupling `mcp/core` result models to IntelliJ MCP annotations.
 - If a change requires file/path resolution or IDE state, define a clean input for it here and keep the actual IDE
   bridge in `idea-plugin`.
 
