@@ -6,6 +6,10 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.opcodes.numeric.F32
+import org.jetbrains.hexana.wasm.opcodes.numeric.F64
+import org.jetbrains.hexana.wasm.opcodes.numeric.I32
+import org.jetbrains.hexana.wasm.opcodes.numeric.I64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -42,27 +46,27 @@ class OpcodeClassifierTest {
 
     @Test
     fun `i32 add classified as Arithmetic`() {
-        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.NumericInstructions.i32.Add))
+        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(I32.Add))
     }
 
     @Test
     fun `i32 const classified as Arithmetic`() {
-        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.NumericInstructions.i32.Const(42)))
+        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(I32.Const(42)))
     }
 
     @Test
     fun `i64 mul classified as Arithmetic`() {
-        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.NumericInstructions.i64.Mul))
+        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(I64.Mul))
     }
 
     @Test
     fun `f32 sqrt classified as Arithmetic`() {
-        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.NumericInstructions.F32.Sqrt))
+        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(F32.Sqrt))
     }
 
     @Test
     fun `f64 const classified as Arithmetic`() {
-        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.NumericInstructions.F64.Const(3.14)))
+        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(F64.Const(3.14)))
     }
 
     @Test

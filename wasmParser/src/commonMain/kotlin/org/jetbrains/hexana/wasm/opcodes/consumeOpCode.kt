@@ -1,17 +1,17 @@
 package org.jetbrains.hexana.wasm.opcodes
 
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.wasm.opcodes.OpCodes.NumericInstructions.F32
-import org.jetbrains.hexana.wasm.opcodes.OpCodes.NumericInstructions.F64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Flow
-import org.jetbrains.hexana.wasm.opcodes.OpCodes.NumericInstructions.i32 as I32
-import org.jetbrains.hexana.wasm.opcodes.OpCodes.NumericInstructions.i64 as I64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Local
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Ref
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f64
+import org.jetbrains.hexana.wasm.opcodes.numeric.F32
+import org.jetbrains.hexana.wasm.opcodes.numeric.F64
+import org.jetbrains.hexana.wasm.opcodes.numeric.I32
+import org.jetbrains.hexana.wasm.opcodes.numeric.I64
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.blockType
 import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.heapType
@@ -158,7 +158,7 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
         0x5Fu -> F32.LE
 
         0x60u -> F32.GE
-        0x61u ->F64.EQ
+        0x61u -> F64.EQ
         0x62u -> F64.NE
         0x63u -> F64.LT
         0x64u -> F64.GT

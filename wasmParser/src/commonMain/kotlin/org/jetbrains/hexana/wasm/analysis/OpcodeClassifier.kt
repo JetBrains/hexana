@@ -7,6 +7,10 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f64
+import org.jetbrains.hexana.wasm.opcodes.numeric.F32
+import org.jetbrains.hexana.wasm.opcodes.numeric.F64
+import org.jetbrains.hexana.wasm.opcodes.numeric.I32
+import org.jetbrains.hexana.wasm.opcodes.numeric.I64
 
 /**
  * Classifies a WASM [OpCode] into a high-level [OpcodeCategory] for size analysis.
@@ -108,152 +112,152 @@ fun classifyOpcode(opcode: OpCode): OpcodeCategory = when (opcode) {
     OpCodes.GC.ExternConvertAny -> OpcodeCategory.GC
 
     // --- Arithmetic: remaining I32 opcodes ---
-    is OpCodes.NumericInstructions.i32.Const -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Add -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Sub -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Mul -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.DivS -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.DivU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.RemS -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.RemU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.And -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Or -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Xor -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Shl -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.ShrS -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.ShrU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Rotl -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Rotr -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Clz -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Ctz -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.PopCnt -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Eqz -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Eq -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Ne -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.LTS -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.LTU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.LES -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.LEU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.GTS -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.GTU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.GES -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.GEU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.WrapI64 -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Extend8S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.Extend16S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.ReinterpretF32 -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.TruncF32S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.TruncF32U -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.TruncF64S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.TruncF64U -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.TruncSatF32S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.TruncSatF32U -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.TruncSatF64S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i32.TruncSatF64U -> OpcodeCategory.Arithmetic
+    is I32.Const -> OpcodeCategory.Arithmetic
+    I32.Add -> OpcodeCategory.Arithmetic
+    I32.Sub -> OpcodeCategory.Arithmetic
+    I32.Mul -> OpcodeCategory.Arithmetic
+    I32.DivS -> OpcodeCategory.Arithmetic
+    I32.DivU -> OpcodeCategory.Arithmetic
+    I32.RemS -> OpcodeCategory.Arithmetic
+    I32.RemU -> OpcodeCategory.Arithmetic
+    I32.And -> OpcodeCategory.Arithmetic
+    I32.Or -> OpcodeCategory.Arithmetic
+    I32.Xor -> OpcodeCategory.Arithmetic
+    I32.Shl -> OpcodeCategory.Arithmetic
+    I32.ShrS -> OpcodeCategory.Arithmetic
+    I32.ShrU -> OpcodeCategory.Arithmetic
+    I32.Rotl -> OpcodeCategory.Arithmetic
+    I32.Rotr -> OpcodeCategory.Arithmetic
+    I32.Clz -> OpcodeCategory.Arithmetic
+    I32.Ctz -> OpcodeCategory.Arithmetic
+    I32.PopCnt -> OpcodeCategory.Arithmetic
+    I32.Eqz -> OpcodeCategory.Arithmetic
+    I32.Eq -> OpcodeCategory.Arithmetic
+    I32.Ne -> OpcodeCategory.Arithmetic
+    I32.LTS -> OpcodeCategory.Arithmetic
+    I32.LTU -> OpcodeCategory.Arithmetic
+    I32.LES -> OpcodeCategory.Arithmetic
+    I32.LEU -> OpcodeCategory.Arithmetic
+    I32.GTS -> OpcodeCategory.Arithmetic
+    I32.GTU -> OpcodeCategory.Arithmetic
+    I32.GES -> OpcodeCategory.Arithmetic
+    I32.GEU -> OpcodeCategory.Arithmetic
+    I32.WrapI64 -> OpcodeCategory.Arithmetic
+    I32.Extend8S -> OpcodeCategory.Arithmetic
+    I32.Extend16S -> OpcodeCategory.Arithmetic
+    I32.ReinterpretF32 -> OpcodeCategory.Arithmetic
+    I32.TruncF32S -> OpcodeCategory.Arithmetic
+    I32.TruncF32U -> OpcodeCategory.Arithmetic
+    I32.TruncF64S -> OpcodeCategory.Arithmetic
+    I32.TruncF64U -> OpcodeCategory.Arithmetic
+    I32.TruncSatF32S -> OpcodeCategory.Arithmetic
+    I32.TruncSatF32U -> OpcodeCategory.Arithmetic
+    I32.TruncSatF64S -> OpcodeCategory.Arithmetic
+    I32.TruncSatF64U -> OpcodeCategory.Arithmetic
 
     // --- Arithmetic: remaining I64 opcodes ---
-    is OpCodes.NumericInstructions.i64.Const -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Add -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Sub -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Mul -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.DivS -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.DivU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.RemS -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.RemU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.And -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Or -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Xor -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Shl -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.ShrS -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.ShrU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.RotL -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.RotR -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Clz -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Ctz -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.PopCnt -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Eqz -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.EQ -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.NE -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.LTS -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.LTU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.LES -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.LEU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.GTS -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.GTU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.GES -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.GEU -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Extend_I32_S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Extend_I32_U -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Extend8S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Extend16S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.Extend32S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.ReinterpretF64 -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.TruncF32S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.TruncF32U -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.TruncF64S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.TruncF64U -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.TruncSatF32S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.TruncSatF32U -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.TruncSatF64S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.i64.TruncSatF64U -> OpcodeCategory.Arithmetic
+    is I64.Const -> OpcodeCategory.Arithmetic
+    I64.Add -> OpcodeCategory.Arithmetic
+    I64.Sub -> OpcodeCategory.Arithmetic
+    I64.Mul -> OpcodeCategory.Arithmetic
+    I64.DivS -> OpcodeCategory.Arithmetic
+    I64.DivU -> OpcodeCategory.Arithmetic
+    I64.RemS -> OpcodeCategory.Arithmetic
+    I64.RemU -> OpcodeCategory.Arithmetic
+    I64.And -> OpcodeCategory.Arithmetic
+    I64.Or -> OpcodeCategory.Arithmetic
+    I64.Xor -> OpcodeCategory.Arithmetic
+    I64.Shl -> OpcodeCategory.Arithmetic
+    I64.ShrS -> OpcodeCategory.Arithmetic
+    I64.ShrU -> OpcodeCategory.Arithmetic
+    I64.RotL -> OpcodeCategory.Arithmetic
+    I64.RotR -> OpcodeCategory.Arithmetic
+    I64.Clz -> OpcodeCategory.Arithmetic
+    I64.Ctz -> OpcodeCategory.Arithmetic
+    I64.PopCnt -> OpcodeCategory.Arithmetic
+    I64.Eqz -> OpcodeCategory.Arithmetic
+    I64.EQ -> OpcodeCategory.Arithmetic
+    I64.NE -> OpcodeCategory.Arithmetic
+    I64.LTS -> OpcodeCategory.Arithmetic
+    I64.LTU -> OpcodeCategory.Arithmetic
+    I64.LES -> OpcodeCategory.Arithmetic
+    I64.LEU -> OpcodeCategory.Arithmetic
+    I64.GTS -> OpcodeCategory.Arithmetic
+    I64.GTU -> OpcodeCategory.Arithmetic
+    I64.GES -> OpcodeCategory.Arithmetic
+    I64.GEU -> OpcodeCategory.Arithmetic
+    I64.Extend_I32_S -> OpcodeCategory.Arithmetic
+    I64.Extend_I32_U -> OpcodeCategory.Arithmetic
+    I64.Extend8S -> OpcodeCategory.Arithmetic
+    I64.Extend16S -> OpcodeCategory.Arithmetic
+    I64.Extend32S -> OpcodeCategory.Arithmetic
+    I64.ReinterpretF64 -> OpcodeCategory.Arithmetic
+    I64.TruncF32S -> OpcodeCategory.Arithmetic
+    I64.TruncF32U -> OpcodeCategory.Arithmetic
+    I64.TruncF64S -> OpcodeCategory.Arithmetic
+    I64.TruncF64U -> OpcodeCategory.Arithmetic
+    I64.TruncSatF32S -> OpcodeCategory.Arithmetic
+    I64.TruncSatF32U -> OpcodeCategory.Arithmetic
+    I64.TruncSatF64S -> OpcodeCategory.Arithmetic
+    I64.TruncSatF64U -> OpcodeCategory.Arithmetic
 
     // --- Arithmetic: remaining F32 opcodes ---
-    is OpCodes.NumericInstructions.F32.Const -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Add -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Sub -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Mul -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Div -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Min -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Max -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Sqrt -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Abs -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Neg -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Ceil -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Floor -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Trunc -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.Nearest -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.CopySign -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.EQ -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.NE -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.LT -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.GT -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.LE -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.GE -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.DemoteF64 -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.ReinterpretI32 -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.ConvertI32S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.ConvertI32U -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.ConvertI64S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F32.ConvertI64U -> OpcodeCategory.Arithmetic
+    is F32.Const -> OpcodeCategory.Arithmetic
+    F32.Add -> OpcodeCategory.Arithmetic
+    F32.Sub -> OpcodeCategory.Arithmetic
+    F32.Mul -> OpcodeCategory.Arithmetic
+    F32.Div -> OpcodeCategory.Arithmetic
+    F32.Min -> OpcodeCategory.Arithmetic
+    F32.Max -> OpcodeCategory.Arithmetic
+    F32.Sqrt -> OpcodeCategory.Arithmetic
+    F32.Abs -> OpcodeCategory.Arithmetic
+    F32.Neg -> OpcodeCategory.Arithmetic
+    F32.Ceil -> OpcodeCategory.Arithmetic
+    F32.Floor -> OpcodeCategory.Arithmetic
+    F32.Trunc -> OpcodeCategory.Arithmetic
+    F32.Nearest -> OpcodeCategory.Arithmetic
+    F32.CopySign -> OpcodeCategory.Arithmetic
+    F32.EQ -> OpcodeCategory.Arithmetic
+    F32.NE -> OpcodeCategory.Arithmetic
+    F32.LT -> OpcodeCategory.Arithmetic
+    F32.GT -> OpcodeCategory.Arithmetic
+    F32.LE -> OpcodeCategory.Arithmetic
+    F32.GE -> OpcodeCategory.Arithmetic
+    F32.DemoteF64 -> OpcodeCategory.Arithmetic
+    F32.ReinterpretI32 -> OpcodeCategory.Arithmetic
+    F32.ConvertI32S -> OpcodeCategory.Arithmetic
+    F32.ConvertI32U -> OpcodeCategory.Arithmetic
+    F32.ConvertI64S -> OpcodeCategory.Arithmetic
+    F32.ConvertI64U -> OpcodeCategory.Arithmetic
 
     // --- Arithmetic: remaining F64 opcodes ---
-    is OpCodes.NumericInstructions.F64.Const -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Add -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Sub -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Mul -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Div -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Min -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Max -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Sqrt -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Abs -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Neg -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Ceil -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Floor -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Trunc -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Nearest -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.Copysign -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.EQ -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.NE -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.LT -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.GT -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.LE -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.GE -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.PromoteF32 -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.ReinterpretI64 -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.ConvertI32S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.ConvertI32U -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.ConvertI64S -> OpcodeCategory.Arithmetic
-    OpCodes.NumericInstructions.F64.ConvertI64U -> OpcodeCategory.Arithmetic
+    is F64.Const -> OpcodeCategory.Arithmetic
+    F64.Add -> OpcodeCategory.Arithmetic
+    F64.Sub -> OpcodeCategory.Arithmetic
+    F64.Mul -> OpcodeCategory.Arithmetic
+    F64.Div -> OpcodeCategory.Arithmetic
+    F64.Min -> OpcodeCategory.Arithmetic
+    F64.Max -> OpcodeCategory.Arithmetic
+    F64.Sqrt -> OpcodeCategory.Arithmetic
+    F64.Abs -> OpcodeCategory.Arithmetic
+    F64.Neg -> OpcodeCategory.Arithmetic
+    F64.Ceil -> OpcodeCategory.Arithmetic
+    F64.Floor -> OpcodeCategory.Arithmetic
+    F64.Trunc -> OpcodeCategory.Arithmetic
+    F64.Nearest -> OpcodeCategory.Arithmetic
+    F64.Copysign -> OpcodeCategory.Arithmetic
+    F64.EQ -> OpcodeCategory.Arithmetic
+    F64.NE -> OpcodeCategory.Arithmetic
+    F64.LT -> OpcodeCategory.Arithmetic
+    F64.GT -> OpcodeCategory.Arithmetic
+    F64.LE -> OpcodeCategory.Arithmetic
+    F64.GE -> OpcodeCategory.Arithmetic
+    F64.PromoteF32 -> OpcodeCategory.Arithmetic
+    F64.ReinterpretI64 -> OpcodeCategory.Arithmetic
+    F64.ConvertI32S -> OpcodeCategory.Arithmetic
+    F64.ConvertI32U -> OpcodeCategory.Arithmetic
+    F64.ConvertI64S -> OpcodeCategory.Arithmetic
+    F64.ConvertI64U -> OpcodeCategory.Arithmetic
     is UnparsedOpCode -> OpcodeCategory.Unparsed
 
     // --- Other: Local, Global, Table, Ref, Reserved ---

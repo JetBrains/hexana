@@ -9,6 +9,7 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f64
+import org.jetbrains.hexana.wasm.opcodes.numeric.I32
 import org.jetbrains.hexana.wasm.sections.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -584,7 +585,7 @@ class MemoryInstructionTest {
         """.trimIndent())
         assertIs<OpCodes.Memory.Size>(ops[0])
         assertIs<OpCodes.ParametricInstructions.Drop>(ops[1])
-        assertIs<OpCodes.NumericInstructions.i32.Const>(ops[2])
+        assertIs<I32.Const>(ops[2])
         assertIs<OpCodes.Memory.Grow>(ops[3])
     }
 

@@ -6,6 +6,8 @@ import org.jetbrains.hexana.tests.watResourceToBuffer
 import org.jetbrains.hexana.tests.watStringToBuffer
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.opcodes.numeric.I32
+import org.jetbrains.hexana.wasm.opcodes.numeric.I64
 import org.jetbrains.hexana.wasm.sections.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -65,14 +67,14 @@ class MultibyteInstructionTest {
     @Test
     fun `i32 trunc_sat_f32_s — resource`() = runTest {
         val ops = parseFunctionOpcodes("wat/multibyte/trunc_sat_i32_f32.wat", 0)
-        val truncSat = ops.filterIsInstance<OpCodes.NumericInstructions.i32.TruncSatF32S>()
+        val truncSat = ops.filterIsInstance<I32.TruncSatF32S>()
         assertTrue(truncSat.isNotEmpty(), "Should parse i32.trunc_sat_f32_s")
     }
 
     @Test
     fun `i32 trunc_sat_f32_u — resource`() = runTest {
         val ops = parseFunctionOpcodes("wat/multibyte/trunc_sat_i32_f32.wat", 1)
-        val truncSat = ops.filterIsInstance<OpCodes.NumericInstructions.i32.TruncSatF32U>()
+        val truncSat = ops.filterIsInstance<I32.TruncSatF32U>()
         assertTrue(truncSat.isNotEmpty(), "Should parse i32.trunc_sat_f32_u")
     }
 
@@ -81,14 +83,14 @@ class MultibyteInstructionTest {
     @Test
     fun `i32 trunc_sat_f64_s — resource`() = runTest {
         val ops = parseFunctionOpcodes("wat/multibyte/trunc_sat_i32_f64.wat", 0)
-        val truncSat = ops.filterIsInstance<OpCodes.NumericInstructions.i32.TruncSatF64S>()
+        val truncSat = ops.filterIsInstance<I32.TruncSatF64S>()
         assertTrue(truncSat.isNotEmpty(), "Should parse i32.trunc_sat_f64_s")
     }
 
     @Test
     fun `i32 trunc_sat_f64_u — resource`() = runTest {
         val ops = parseFunctionOpcodes("wat/multibyte/trunc_sat_i32_f64.wat", 1)
-        val truncSat = ops.filterIsInstance<OpCodes.NumericInstructions.i32.TruncSatF64U>()
+        val truncSat = ops.filterIsInstance<I32.TruncSatF64U>()
         assertTrue(truncSat.isNotEmpty(), "Should parse i32.trunc_sat_f64_u")
     }
 
@@ -97,14 +99,14 @@ class MultibyteInstructionTest {
     @Test
     fun `i64 trunc_sat_f32_s — resource`() = runTest {
         val ops = parseFunctionOpcodes("wat/multibyte/trunc_sat_i64_f32.wat", 0)
-        val truncSat = ops.filterIsInstance<OpCodes.NumericInstructions.i64.TruncSatF32S>()
+        val truncSat = ops.filterIsInstance<I64.TruncSatF32S>()
         assertTrue(truncSat.isNotEmpty(), "Should parse i64.trunc_sat_f32_s")
     }
 
     @Test
     fun `i64 trunc_sat_f32_u — resource`() = runTest {
         val ops = parseFunctionOpcodes("wat/multibyte/trunc_sat_i64_f32.wat", 1)
-        val truncSat = ops.filterIsInstance<OpCodes.NumericInstructions.i64.TruncSatF32U>()
+        val truncSat = ops.filterIsInstance<I64.TruncSatF32U>()
         assertTrue(truncSat.isNotEmpty(), "Should parse i64.trunc_sat_f32_u")
     }
 
@@ -113,14 +115,14 @@ class MultibyteInstructionTest {
     @Test
     fun `i64 trunc_sat_f64_s — resource`() = runTest {
         val ops = parseFunctionOpcodes("wat/multibyte/trunc_sat_i64_f64.wat", 0)
-        val truncSat = ops.filterIsInstance<OpCodes.NumericInstructions.i64.TruncSatF64S>()
+        val truncSat = ops.filterIsInstance<I64.TruncSatF64S>()
         assertTrue(truncSat.isNotEmpty(), "Should parse i64.trunc_sat_f64_s")
     }
 
     @Test
     fun `i64 trunc_sat_f64_u — resource`() = runTest {
         val ops = parseFunctionOpcodes("wat/multibyte/trunc_sat_i64_f64.wat", 1)
-        val truncSat = ops.filterIsInstance<OpCodes.NumericInstructions.i64.TruncSatF64U>()
+        val truncSat = ops.filterIsInstance<I64.TruncSatF64U>()
         assertTrue(truncSat.isNotEmpty(), "Should parse i64.trunc_sat_f64_u")
     }
 
@@ -132,14 +134,14 @@ class MultibyteInstructionTest {
         val unparsed = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsed.isEmpty(), "No instructions should fail to parse: ${unparsed.firstOrNull()?.e?.message}")
 
-        assertTrue(ops.any { it is OpCodes.NumericInstructions.i32.TruncSatF32S }, "Missing i32.trunc_sat_f32_s")
-        assertTrue(ops.any { it is OpCodes.NumericInstructions.i32.TruncSatF32U }, "Missing i32.trunc_sat_f32_u")
-        assertTrue(ops.any { it is OpCodes.NumericInstructions.i32.TruncSatF64S }, "Missing i32.trunc_sat_f64_s")
-        assertTrue(ops.any { it is OpCodes.NumericInstructions.i32.TruncSatF64U }, "Missing i32.trunc_sat_f64_u")
-        assertTrue(ops.any { it is OpCodes.NumericInstructions.i64.TruncSatF32S }, "Missing i64.trunc_sat_f32_s")
-        assertTrue(ops.any { it is OpCodes.NumericInstructions.i64.TruncSatF32U }, "Missing i64.trunc_sat_f32_u")
-        assertTrue(ops.any { it is OpCodes.NumericInstructions.i64.TruncSatF64S }, "Missing i64.trunc_sat_f64_s")
-        assertTrue(ops.any { it is OpCodes.NumericInstructions.i64.TruncSatF64U }, "Missing i64.trunc_sat_f64_u")
+        assertTrue(ops.any { it is I32.TruncSatF32S }, "Missing i32.trunc_sat_f32_s")
+        assertTrue(ops.any { it is I32.TruncSatF32U }, "Missing i32.trunc_sat_f32_u")
+        assertTrue(ops.any { it is I32.TruncSatF64S }, "Missing i32.trunc_sat_f64_s")
+        assertTrue(ops.any { it is I32.TruncSatF64U }, "Missing i32.trunc_sat_f64_u")
+        assertTrue(ops.any { it is I64.TruncSatF32S }, "Missing i64.trunc_sat_f32_s")
+        assertTrue(ops.any { it is I64.TruncSatF32U }, "Missing i64.trunc_sat_f32_u")
+        assertTrue(ops.any { it is I64.TruncSatF64S }, "Missing i64.trunc_sat_f64_s")
+        assertTrue(ops.any { it is I64.TruncSatF64U }, "Missing i64.trunc_sat_f64_u")
     }
 
     // --- Inline WAT trunc_sat ---
@@ -157,7 +159,7 @@ class MultibyteInstructionTest {
         val unparsed = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsed.isEmpty(), "FC-prefix i32.trunc_sat_f32_s produced UnparsedOpCode: ${unparsed.firstOrNull()?.e?.message}")
         assertIs<OpCodes.Local.Get>(ops[0])
-        assertIs<OpCodes.NumericInstructions.i32.TruncSatF32S>(ops[1])
+        assertIs<I32.TruncSatF32S>(ops[1])
     }
 
     @Test
@@ -173,7 +175,7 @@ class MultibyteInstructionTest {
         val unparsed = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsed.isEmpty(), "FC-prefix i64.trunc_sat_f64_u produced UnparsedOpCode: ${unparsed.firstOrNull()?.e?.message}")
         assertIs<OpCodes.Local.Get>(ops[0])
-        assertIs<OpCodes.NumericInstructions.i64.TruncSatF64U>(ops[1])
+        assertIs<I64.TruncSatF64U>(ops[1])
     }
 
     @Test
@@ -191,9 +193,9 @@ class MultibyteInstructionTest {
         """.trimIndent())
         val unparsed = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsed.isEmpty(), "FC-prefix trunc_sat mix produced UnparsedOpCode: ${unparsed.firstOrNull()?.e?.message}")
-        assertIs<OpCodes.NumericInstructions.i32.TruncSatF32S>(ops[1])
-        assertIs<OpCodes.NumericInstructions.i32.TruncSatF64U>(ops[3])
-        assertIs<OpCodes.NumericInstructions.i32.Add>(ops[4])
+        assertIs<I32.TruncSatF32S>(ops[1])
+        assertIs<I32.TruncSatF64U>(ops[3])
+        assertIs<I32.Add>(ops[4])
     }
 
     // ========================================================================
