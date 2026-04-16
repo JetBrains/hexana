@@ -904,4 +904,115 @@ class MemoryInstructionTest {
         assertTrue(all.any { it is OpCodes.I32.Load8_U }, "Missing i32.load8_u")
         assertTrue(all.any { it is OpCodes.I32.Store8 }, "Missing i32.store8")
     }
+
+    // ========================================================================
+    // Bulk memory operations (0xFC prefix)
+    // ========================================================================
+
+    @Test
+    fun `memory init — copy from data segment`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (memory 1)
+              (data ${'$'}d "\01\02\03\04")
+              (func (export "f")
+                i32.const 0
+                i32.const 0
+                i32.const 4
+                memory.init ${'$'}d
+              )
+            )
+        """.trimIndent())
+        val unparsed = ops.filterIsInstance<UnparsedOpCode>()
+        assertTrue(unparsed.isEmpty(), "memory.init produced UnparsedOpCode: ${unparsed.firstOrNull()?.e?.message}")
+    }
+
+    @Test
+    fun `data drop — discard data segment`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (memory 1)
+              (data ${'$'}d "\01\02\03\04")
+              (func (export "f")
+                data.drop ${'$'}d
+              )
+            )
+        """.trimIndent())
+        val unparsed = ops.filterIsInstance<UnparsedOpCode>()
+        assertTrue(unparsed.isEmpty(), "data.drop produced UnparsedOpCode: ${unparsed.firstOrNull()?.e?.message}")
+    }
+
+    @Test
+    fun `memory copy`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (memory 1)
+              (func (export "f")
+                i32.const 0
+                i32.const 100
+                i32.const 50
+                memory.copy
+              )
+            )
+        """.trimIndent())
+        val unparsed = ops.filterIsInstance<UnparsedOpCode>()
+        assertTrue(unparsed.isEmpty(), "memory.copy produced UnparsedOpCode: ${unparsed.firstOrNull()?.e?.message}")
+    }
+
+    @Test
+    fun `memory fill`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (memory 1)
+              (func (export "f")
+                i32.const 0
+                i32.const 0
+                i32.const 256
+                memory.fill
+              )
+            )
+        """.trimIndent())
+        val unparsed = ops.filterIsInstance<UnparsedOpCode>()
+        assertTrue(unparsed.isEmpty(), "memory.fill produced UnparsedOpCode: ${unparsed.firstOrNull()?.e?.message}")
+    }
+
+    @Test
+    fun `memory init then data drop — typical init pattern`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (memory 1)
+              (data ${'$'}d "\01\02\03\04")
+              (func (export "f")
+                i32.const 0
+                i32.const 0
+                i32.const 4
+                memory.init ${'$'}d
+                data.drop ${'$'}d
+              )
+            )
+        """.trimIndent())
+        val unparsed = ops.filterIsInstance<UnparsedOpCode>()
+        assertTrue(unparsed.isEmpty(), "memory.init+data.drop produced UnparsedOpCode: ${unparsed.firstOrNull()?.e?.message}")
+    }
+
+    @Test
+    fun `memory fill then copy — bulk ops combined`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (memory 1)
+              (func (export "f")
+                i32.const 0
+                i32.const 0
+                i32.const 64
+                memory.fill
+                i32.const 64
+                i32.const 0
+                i32.const 64
+                memory.copy
+              )
+            )
+        """.trimIndent())
+        val unparsed = ops.filterIsInstance<UnparsedOpCode>()
+        assertTrue(unparsed.isEmpty(), "memory.fill+copy produced UnparsedOpCode: ${unparsed.firstOrNull()?.e?.message}")
+    }
 }
