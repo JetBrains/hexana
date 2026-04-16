@@ -3,6 +3,10 @@ package org.jetbrains.hexana.wasm.analysis
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i64
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f64
 
 /**
  * Classifies a WASM [OpCode] into a high-level [OpcodeCategory] for size analysis.
@@ -46,35 +50,40 @@ fun classifyOpcode(opcode: OpCode): OpcodeCategory = when (opcode) {
     OpCodes.Flow.ThrowRef -> OpcodeCategory.Control
 
     // --- Memory: Load/Store from I32, I64, F32, F64 ---
-    is OpCodes.I32.Load -> OpcodeCategory.Memory
-    is OpCodes.I32.Load8_S -> OpcodeCategory.Memory
-    is OpCodes.I32.Load8_U -> OpcodeCategory.Memory
-    is OpCodes.I32.Load16_S -> OpcodeCategory.Memory
-    is OpCodes.I32.Load16_U -> OpcodeCategory.Memory
-    is OpCodes.I32.Store -> OpcodeCategory.Memory
-    is OpCodes.I32.Store8 -> OpcodeCategory.Memory
-    is OpCodes.I32.Store16 -> OpcodeCategory.Memory
+    is i32.Load -> OpcodeCategory.Memory
+    is i32.Load8_S -> OpcodeCategory.Memory
+    is i32.Load8_U -> OpcodeCategory.Memory
+    is i32.Load16_S -> OpcodeCategory.Memory
+    is i32.Load16_U -> OpcodeCategory.Memory
+    is i32.Store -> OpcodeCategory.Memory
+    is i32.Store8 -> OpcodeCategory.Memory
+    is i32.Store16 -> OpcodeCategory.Memory
 
-    is OpCodes.I64.Load -> OpcodeCategory.Memory
-    is OpCodes.I64.Load8_S -> OpcodeCategory.Memory
-    is OpCodes.I64.Load8_U -> OpcodeCategory.Memory
-    is OpCodes.I64.Load16_S -> OpcodeCategory.Memory
-    is OpCodes.I64.Load16_U -> OpcodeCategory.Memory
-    is OpCodes.I64.Load32_S -> OpcodeCategory.Memory
-    is OpCodes.I64.Load32_U -> OpcodeCategory.Memory
-    is OpCodes.I64.Store -> OpcodeCategory.Memory
-    is OpCodes.I64.Store8 -> OpcodeCategory.Memory
-    is OpCodes.I64.Store16 -> OpcodeCategory.Memory
-    is OpCodes.I64.Store32 -> OpcodeCategory.Memory
+    is i64.Load -> OpcodeCategory.Memory
+    is i64.Load8_S -> OpcodeCategory.Memory
+    is i64.Load8_U -> OpcodeCategory.Memory
+    is i64.Load16_S -> OpcodeCategory.Memory
+    is i64.Load16_U -> OpcodeCategory.Memory
+    is i64.Load32_S -> OpcodeCategory.Memory
+    is i64.Load32_U -> OpcodeCategory.Memory
+    is i64.Store -> OpcodeCategory.Memory
+    is i64.Store8 -> OpcodeCategory.Memory
+    is i64.Store16 -> OpcodeCategory.Memory
+    is i64.Store32 -> OpcodeCategory.Memory
 
-    is OpCodes.F32.Load -> OpcodeCategory.Memory
-    is OpCodes.F32.Store -> OpcodeCategory.Memory
+    is f32.Load -> OpcodeCategory.Memory
+    is f32.Store -> OpcodeCategory.Memory
 
-    is OpCodes.F64.Load -> OpcodeCategory.Memory
-    is OpCodes.F64.Store -> OpcodeCategory.Memory
+    is f64.Load -> OpcodeCategory.Memory
+    is f64.Store -> OpcodeCategory.Memory
 
     is OpCodes.Memory.Size -> OpcodeCategory.Memory
     is OpCodes.Memory.Grow -> OpcodeCategory.Memory
+
+    is OpCodes.Memory.Init -> OpcodeCategory.Memory
+    is OpCodes.Memory.Copy -> OpcodeCategory.Memory
+    is OpCodes.Memory.Fill -> OpcodeCategory.Memory
+    is OpCodes.Memory.Data.Drop -> OpcodeCategory.Memory
 
     // --- GC ---
     is OpCodes.GC.StructNew -> OpcodeCategory.GC

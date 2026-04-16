@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.wasm
 
 import kotlinx.coroutines.test.runTest
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f32
 import org.jetbrains.hexana.tests.watResourceToBuffer
 import org.jetbrains.hexana.tests.watStringToBuffer
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
@@ -564,10 +566,10 @@ class ControlInstructionTest {
         assertTrue(b1BrIf.size >= 1, "label1 block should have br_if")
 
         // b1 body: i32.load8_u, local.tee, i32.extend8_s, select, br_if $label0
-        val loads = b1.value.filterIsInstance<OpCodes.I32.Load>()
+        val loads = b1.value.filterIsInstance<i32.Load>()
         assertTrue(loads.isNotEmpty(), "Should have i32.load instructions")
 
-        val load8u = b1.value.filterIsInstance<OpCodes.I32.Load8_U>()
+        val load8u = b1.value.filterIsInstance<i32.Load8_U>()
         assertTrue(load8u.isNotEmpty(), "Should have i32.load8_u instruction")
 
         val extend8s = b1.value.filterIsInstance<OpCodes.I32.Extend8S>()
@@ -577,11 +579,11 @@ class ControlInstructionTest {
         assertTrue(selects.isNotEmpty(), "Should have select instruction")
 
         // b0 body (after b1): f32.load offset=396, f32.store offset=400
-        val f32Loads = b0.value.filterIsInstance<OpCodes.F32.Load>()
+        val f32Loads = b0.value.filterIsInstance<f32.Load>()
         assertTrue(f32Loads.isNotEmpty(), "Should have f32.load instruction")
         assertEquals(396, f32Loads[0].value.offset, "f32.load offset should be 396")
 
-        val f32Stores = b0.value.filterIsInstance<OpCodes.F32.Store>()
+        val f32Stores = b0.value.filterIsInstance<f32.Store>()
         assertTrue(f32Stores.isNotEmpty(), "Should have f32.store instruction")
         assertEquals(400, f32Stores[0].value.offset, "f32.store offset should be 400")
     }

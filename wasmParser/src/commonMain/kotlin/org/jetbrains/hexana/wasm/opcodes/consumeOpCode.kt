@@ -8,7 +8,10 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes.I32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.I64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Local
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Ref
-import org.jetbrains.hexana.wasm.sections.StandardTypesParser
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i64
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f64
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.blockType
 import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.heapType
@@ -93,31 +96,31 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
         0x25u -> OpCodes.Table.Get(consumeInt())
         0x26u -> OpCodes.Table.Set(consumeInt())
         0x27u -> ReservedOpCode(code)
-        0x28u -> I32.Load(consumeMemArg())
-        0x29u -> I64.Load(consumeMemArg(),)
-        0x2Au -> F32.Load(consumeMemArg())
-        0x2Bu -> F64.Load(consumeMemArg())
-        0x2Cu -> I32.Load8_S(consumeMemArg())
-        0x2Du -> I32.Load8_U(consumeMemArg())
-        0x2Eu -> I32.Load16_S(consumeMemArg())
-        0x2Fu -> I32.Load16_U(consumeMemArg())
+        0x28u -> i32.Load(consumeMemArg())
+        0x29u -> i64.Load(consumeMemArg(),)
+        0x2Au -> f32.Load(consumeMemArg())
+        0x2Bu -> f64.Load(consumeMemArg())
+        0x2Cu -> i32.Load8_S(consumeMemArg())
+        0x2Du -> i32.Load8_U(consumeMemArg())
+        0x2Eu -> i32.Load16_S(consumeMemArg())
+        0x2Fu -> i32.Load16_U(consumeMemArg())
 
-        0x30u -> I64.Load8_S(consumeMemArg())
-        0x31u -> I64.Load8_U(consumeMemArg())
-        0x32u -> I64.Load16_S(consumeMemArg())
-        0x33u -> I64.Load16_U(consumeMemArg())
-        0x34u -> I64.Load32_S(consumeMemArg())
-        0x35u -> I64.Load32_U(consumeMemArg())
-        0x36u -> I32.Store(consumeMemArg())
-        0x37u -> I64.Store(consumeMemArg())
-        0x38u -> F32.Store(consumeMemArg())
-        0x39u -> F64.Store(consumeMemArg())
+        0x30u -> i64.Load8_S(consumeMemArg())
+        0x31u -> i64.Load8_U(consumeMemArg())
+        0x32u -> i64.Load16_S(consumeMemArg())
+        0x33u -> i64.Load16_U(consumeMemArg())
+        0x34u -> i64.Load32_S(consumeMemArg())
+        0x35u -> i64.Load32_U(consumeMemArg())
+        0x36u -> i32.Store(consumeMemArg())
+        0x37u -> i64.Store(consumeMemArg())
+        0x38u -> f32.Store(consumeMemArg())
+        0x39u -> f64.Store(consumeMemArg())
 
-        0x3Au -> I32.Store8(consumeMemArg())
-        0x3Bu -> I32.Store16(consumeMemArg())
-        0x3Cu -> I64.Store8(consumeMemArg())
-        0x3Du -> I64.Store16(consumeMemArg())
-        0x3Eu -> I64.Store32(consumeMemArg())
+        0x3Au -> i32.Store8(consumeMemArg())
+        0x3Bu -> i32.Store16(consumeMemArg())
+        0x3Cu -> i64.Store8(consumeMemArg())
+        0x3Du -> i64.Store16(consumeMemArg())
+        0x3Eu -> i64.Store32(consumeMemArg())
         0x3Fu -> OpCodes.Memory.Size(consumeInt())
 
         0x40u -> OpCodes.Memory.Grow(consumeInt())
@@ -274,8 +277,11 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
         0xFBu -> {
             consumeGCOpCode(code.shl(8).or(get().toUInt()))
         }
+        0xFCu -> {
+            consumeFCBasedOpCode(get().toUByte())
+        }
 
-        0xFCu, 0xFDu, 0xFFu -> {
+        0xFDu, 0xFFu -> {
             position(position() - 1)
             consumeMultibyteOpCode(getULEB128())
         }

@@ -11,6 +11,7 @@ import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.*
 import kotlin.test.*
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
 
 class WasmParserTests {
 
@@ -710,7 +711,7 @@ class WasmParserTests {
                         emptyList(),
                         listOf(
                             OpCodes.I32.Const(0),
-                            OpCodes.I32.Load(MemArg(2, 0)),
+                            i32.Load(MemArg(2, 0)),
                         )
                     )
                 )

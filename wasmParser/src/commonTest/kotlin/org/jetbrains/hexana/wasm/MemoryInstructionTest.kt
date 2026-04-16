@@ -5,6 +5,10 @@ import org.jetbrains.hexana.tests.watStringToBuffer
 import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i64
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f64
 import org.jetbrains.hexana.wasm.sections.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -48,7 +52,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.I32.Load>().single()
+        val load = ops.filterIsInstance< i32.Load>().single()
         assertEquals(MemArg(2, 0), load.value, "i32.load default: align=2, offset=0")
     }
 
@@ -63,7 +67,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.I32.Load>().single()
+        val load = ops.filterIsInstance<i32.Load>().single()
         assertEquals(16, load.value.offset, "offset should be 16")
     }
 
@@ -78,7 +82,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.I32.Load>().single()
+        val load = ops.filterIsInstance< OpCodes.Memory.i32.Load>().single()
         assertEquals(0, load.value.align, "align=1 encodes as log2(1)=0")
     }
 
@@ -93,7 +97,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.I32.Load>().single()
+        val load = ops.filterIsInstance<OpCodes.Memory.i32.Load>().single()
         assertEquals(100, load.value.offset)
         assertEquals(1, load.value.align, "align=2 encodes as log2(2)=1")
     }
@@ -109,7 +113,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I32.Load8_S>(ops.last())
+        assertIs<OpCodes.Memory.i32.Load8_S>(ops.last())
     }
 
     @Test
@@ -123,7 +127,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I32.Load8_U>(ops.last())
+        assertIs<i32.Load8_U>(ops.last())
     }
 
     @Test
@@ -137,7 +141,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I32.Load16_S>(ops.last())
+        assertIs<i32.Load16_S>(ops.last())
     }
 
     @Test
@@ -151,7 +155,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I32.Load16_U>(ops.last())
+        assertIs<i32.Load16_U>(ops.last())
     }
 
     @Test
@@ -165,7 +169,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.I32.Load8_U>().single()
+        val load = ops.filterIsInstance<i32.Load8_U>().single()
         assertEquals(343, load.value.offset)
     }
 
@@ -185,7 +189,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val store = ops.filterIsInstance<OpCodes.I32.Store>().single()
+        val store = ops.filterIsInstance<i32.Store>().single()
         assertEquals(MemArg(2, 0), store.value, "i32.store default: align=2, offset=0")
     }
 
@@ -201,7 +205,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val store = ops.filterIsInstance<OpCodes.I32.Store>().single()
+        val store = ops.filterIsInstance<i32.Store>().single()
         assertEquals(400, store.value.offset)
     }
 
@@ -217,7 +221,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I32.Store8>(ops.last())
+        assertIs<i32.Store8>(ops.last())
     }
 
     @Test
@@ -232,7 +236,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I32.Store16>(ops.last())
+        assertIs<i32.Store16>(ops.last())
     }
 
     // ========================================================================
@@ -250,7 +254,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.I64.Load>().single()
+        val load = ops.filterIsInstance<i64.Load>().single()
         assertEquals(MemArg(3, 0), load.value, "i64.load default: align=3, offset=0")
     }
 
@@ -265,7 +269,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.I64.Load>().single()
+        val load = ops.filterIsInstance<i64.Load>().single()
         assertEquals(256, load.value.offset)
     }
 
@@ -280,7 +284,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I64.Load8_S>(ops.last())
+        assertIs<i64.Load8_S>(ops.last())
     }
 
     @Test
@@ -294,7 +298,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I64.Load8_U>(ops.last())
+        assertIs<i64.Load8_U>(ops.last())
     }
 
     @Test
@@ -308,7 +312,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I64.Load16_S>(ops.last())
+        assertIs<i64.Load16_S>(ops.last())
     }
 
     @Test
@@ -322,7 +326,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I64.Load16_U>(ops.last())
+        assertIs<i64.Load16_U>(ops.last())
     }
 
     @Test
@@ -336,7 +340,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I64.Load32_S>(ops.last())
+        assertIs<i64.Load32_S>(ops.last())
     }
 
     @Test
@@ -350,7 +354,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I64.Load32_U>(ops.last())
+        assertIs<i64.Load32_U>(ops.last())
     }
 
     // ========================================================================
@@ -369,7 +373,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val store = ops.filterIsInstance<OpCodes.I64.Store>().single()
+        val store = ops.filterIsInstance<i64.Store>().single()
         assertEquals(MemArg(3, 0), store.value, "i64.store default: align=3, offset=0")
     }
 
@@ -385,7 +389,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I64.Store8>(ops.last())
+        assertIs<i64.Store8>(ops.last())
     }
 
     @Test
@@ -400,7 +404,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I64.Store16>(ops.last())
+        assertIs<i64.Store16>(ops.last())
     }
 
     @Test
@@ -415,7 +419,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        assertIs<OpCodes.I64.Store32>(ops.last())
+        assertIs<i64.Store32>(ops.last())
     }
 
     // ========================================================================
@@ -433,7 +437,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.F32.Load>().single()
+        val load = ops.filterIsInstance<f32.Load>().single()
         assertEquals(MemArg(2, 0), load.value, "f32.load default: align=2, offset=0")
     }
 
@@ -448,7 +452,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.F32.Load>().single()
+        val load = ops.filterIsInstance<f32.Load>().single()
         assertEquals(396, load.value.offset)
     }
 
@@ -464,7 +468,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val store = ops.filterIsInstance<OpCodes.F32.Store>().single()
+        val store = ops.filterIsInstance<f32.Store>().single()
         assertEquals(MemArg(2, 0), store.value)
     }
 
@@ -480,7 +484,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val store = ops.filterIsInstance<OpCodes.F32.Store>().single()
+        val store = ops.filterIsInstance<f32.Store>().single()
         assertEquals(400, store.value.offset)
     }
 
@@ -499,7 +503,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.F64.Load>().single()
+        val load = ops.filterIsInstance<f64.Load>().single()
         assertEquals(MemArg(3, 0), load.value, "f64.load default: align=3, offset=0")
     }
 
@@ -515,7 +519,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val store = ops.filterIsInstance<OpCodes.F64.Store>().single()
+        val store = ops.filterIsInstance<f64.Store>().single()
         assertEquals(MemArg(3, 0), store.value, "f64.store default: align=3, offset=0")
     }
 
@@ -530,7 +534,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.F64.Load>().single()
+        val load = ops.filterIsInstance<f64.Load>().single()
         assertEquals(65536, load.value.offset)
     }
 
@@ -599,7 +603,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.I32.Load>().single()
+        val load = ops.filterIsInstance<i32.Load>().single()
         assertEquals(0, load.value.align, "align=1 → log2(1)=0")
     }
 
@@ -614,7 +618,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.I32.Load>().single()
+        val load = ops.filterIsInstance<i32.Load>().single()
         assertEquals(2, load.value.align, "align=4 → log2(4)=2")
     }
 
@@ -629,7 +633,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.I64.Load>().single()
+        val load = ops.filterIsInstance<i64.Load>().single()
         assertEquals(3, load.value.align, "align=8 → log2(8)=3")
     }
 
@@ -644,7 +648,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val load = ops.filterIsInstance<OpCodes.I32.Load>().single()
+        val load = ops.filterIsInstance<i32.Load>().single()
         assertEquals(0, load.value.offset)
     }
 
@@ -669,8 +673,8 @@ class MemoryInstructionTest {
         """.trimIndent())
         val unparsed = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsed.isEmpty(), "All ops should parse: ${unparsed.firstOrNull()?.e?.message}")
-        assertTrue(ops.any { it is OpCodes.I32.Store })
-        assertTrue(ops.any { it is OpCodes.I32.Load })
+        assertTrue(ops.any { it is i32.Store })
+        assertTrue(ops.any { it is i32.Load })
     }
 
     @Test
@@ -698,11 +702,11 @@ class MemoryInstructionTest {
         """.trimIndent())
         val unparsed = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsed.isEmpty(), "No unparsed: ${unparsed.firstOrNull()?.e?.message}")
-        assertTrue(ops.any { it is OpCodes.I32.Load }, "Missing i32.load")
-        assertTrue(ops.any { it is OpCodes.I32.Load8_S }, "Missing i32.load8_s")
-        assertTrue(ops.any { it is OpCodes.I32.Load8_U }, "Missing i32.load8_u")
-        assertTrue(ops.any { it is OpCodes.I32.Load16_S }, "Missing i32.load16_s")
-        assertTrue(ops.any { it is OpCodes.I32.Load16_U }, "Missing i32.load16_u")
+        assertTrue(ops.any { it is i32.Load }, "Missing i32.load")
+        assertTrue(ops.any { it is i32.Load8_S }, "Missing i32.load8_s")
+        assertTrue(ops.any { it is i32.Load8_U }, "Missing i32.load8_u")
+        assertTrue(ops.any { it is i32.Load16_S }, "Missing i32.load16_s")
+        assertTrue(ops.any { it is i32.Load16_U }, "Missing i32.load16_u")
     }
 
     @Test
@@ -736,13 +740,13 @@ class MemoryInstructionTest {
         """.trimIndent())
         val unparsed = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsed.isEmpty(), "No unparsed: ${unparsed.firstOrNull()?.e?.message}")
-        assertTrue(ops.any { it is OpCodes.I64.Load }, "Missing i64.load")
-        assertTrue(ops.any { it is OpCodes.I64.Load8_S }, "Missing i64.load8_s")
-        assertTrue(ops.any { it is OpCodes.I64.Load8_U }, "Missing i64.load8_u")
-        assertTrue(ops.any { it is OpCodes.I64.Load16_S }, "Missing i64.load16_s")
-        assertTrue(ops.any { it is OpCodes.I64.Load16_U }, "Missing i64.load16_u")
-        assertTrue(ops.any { it is OpCodes.I64.Load32_S }, "Missing i64.load32_s")
-        assertTrue(ops.any { it is OpCodes.I64.Load32_U }, "Missing i64.load32_u")
+        assertTrue(ops.any { it is i64.Load }, "Missing i64.load")
+        assertTrue(ops.any { it is i64.Load8_S }, "Missing i64.load8_s")
+        assertTrue(ops.any { it is i64.Load8_U }, "Missing i64.load8_u")
+        assertTrue(ops.any { it is i64.Load16_S }, "Missing i64.load16_s")
+        assertTrue(ops.any { it is i64.Load16_U }, "Missing i64.load16_u")
+        assertTrue(ops.any { it is i64.Load32_S }, "Missing i64.load32_s")
+        assertTrue(ops.any { it is i64.Load32_U }, "Missing i64.load32_u")
     }
 
     @Test
@@ -765,9 +769,9 @@ class MemoryInstructionTest {
         """.trimIndent())
         val unparsed = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsed.isEmpty(), "No unparsed: ${unparsed.firstOrNull()?.e?.message}")
-        assertTrue(ops.any { it is OpCodes.I32.Store }, "Missing i32.store")
-        assertTrue(ops.any { it is OpCodes.I32.Store8 }, "Missing i32.store8")
-        assertTrue(ops.any { it is OpCodes.I32.Store16 }, "Missing i32.store16")
+        assertTrue(ops.any { it is i32.Store }, "Missing i32.store")
+        assertTrue(ops.any { it is i32.Store8 }, "Missing i32.store8")
+        assertTrue(ops.any { it is i32.Store16 }, "Missing i32.store16")
     }
 
     @Test
@@ -793,10 +797,10 @@ class MemoryInstructionTest {
         """.trimIndent())
         val unparsed = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsed.isEmpty(), "No unparsed: ${unparsed.firstOrNull()?.e?.message}")
-        assertTrue(ops.any { it is OpCodes.I64.Store }, "Missing i64.store")
-        assertTrue(ops.any { it is OpCodes.I64.Store8 }, "Missing i64.store8")
-        assertTrue(ops.any { it is OpCodes.I64.Store16 }, "Missing i64.store16")
-        assertTrue(ops.any { it is OpCodes.I64.Store32 }, "Missing i64.store32")
+        assertTrue(ops.any { it is i64.Store }, "Missing i64.store")
+        assertTrue(ops.any { it is i64.Store8 }, "Missing i64.store8")
+        assertTrue(ops.any { it is i64.Store16 }, "Missing i64.store16")
+        assertTrue(ops.any { it is i64.Store32 }, "Missing i64.store32")
     }
 
     // ========================================================================
@@ -818,7 +822,7 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val loads = ops.filterIsInstance<OpCodes.I32.Load>()
+        val loads = ops.filterIsInstance<i32.Load>()
         assertEquals(3, loads.size)
         assertEquals(328, loads[0].value.offset)
         assertEquals(344, loads[1].value.offset)
@@ -842,10 +846,10 @@ class MemoryInstructionTest {
               )
             )
         """.trimIndent())
-        val f32Load = ops.filterIsInstance<OpCodes.F32.Load>().single()
-        val f32Store = ops.filterIsInstance<OpCodes.F32.Store>().single()
-        val f64Load = ops.filterIsInstance<OpCodes.F64.Load>().single()
-        val f64Store = ops.filterIsInstance<OpCodes.F64.Store>().single()
+        val f32Load = ops.filterIsInstance<f32.Load>().single()
+        val f32Store = ops.filterIsInstance<f32.Store>().single()
+        val f64Load = ops.filterIsInstance<f64.Load>().single()
+        val f64Store = ops.filterIsInstance<f64.Store>().single()
         assertEquals(396, f32Load.value.offset)
         assertEquals(400, f32Store.value.offset)
         assertEquals(500, f64Load.value.offset)
@@ -901,8 +905,8 @@ class MemoryInstructionTest {
         }
 
         val all = flatOps(ops)
-        assertTrue(all.any { it is OpCodes.I32.Load8_U }, "Missing i32.load8_u")
-        assertTrue(all.any { it is OpCodes.I32.Store8 }, "Missing i32.store8")
+        assertTrue(all.any { it is i32.Load8_U }, "Missing i32.load8_u")
+        assertTrue(all.any { it is i32.Store8 }, "Missing i32.store8")
     }
 
     // ========================================================================

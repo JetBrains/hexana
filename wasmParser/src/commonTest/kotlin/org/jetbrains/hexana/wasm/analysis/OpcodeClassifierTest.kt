@@ -1,6 +1,10 @@
 package org.jetbrains.hexana.wasm.analysis
 
 import org.jetbrains.hexana.wasm.opcodes.MemArg
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i64
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -93,27 +97,27 @@ class OpcodeClassifierTest {
 
     @Test
     fun `i32 load classified as Memory`() {
-        assertEquals(OpcodeCategory.Memory, classifyOpcode(OpCodes.I32.Load(MemArg(0, 0))))
+        assertEquals(OpcodeCategory.Memory, classifyOpcode(i32.Load(MemArg(0, 0))))
     }
 
     @Test
     fun `i64 store classified as Memory`() {
-        assertEquals(OpcodeCategory.Memory, classifyOpcode(OpCodes.I64.Store(MemArg(0, 0))))
+        assertEquals(OpcodeCategory.Memory, classifyOpcode(i64.Store(MemArg(0, 0))))
     }
 
     @Test
     fun `i32 load8_s classified as Memory`() {
-        assertEquals(OpcodeCategory.Memory, classifyOpcode(OpCodes.I32.Load8_S(MemArg(0, 0))))
+        assertEquals(OpcodeCategory.Memory, classifyOpcode(i32.Load8_S(MemArg(0, 0))))
     }
 
     @Test
     fun `f32 load classified as Memory`() {
-        assertEquals(OpcodeCategory.Memory, classifyOpcode(OpCodes.F32.Load(MemArg(0, 0))))
+        assertEquals(OpcodeCategory.Memory, classifyOpcode(f32.Load(MemArg(0, 0))))
     }
 
     @Test
     fun `f64 store classified as Memory`() {
-        assertEquals(OpcodeCategory.Memory, classifyOpcode(OpCodes.F64.Store(MemArg(0, 0))))
+        assertEquals(OpcodeCategory.Memory, classifyOpcode(f64.Store(MemArg(0, 0))))
     }
 
     @Test

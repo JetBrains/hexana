@@ -1,6 +1,10 @@
 package org.jetbrains.hexana.mcp
 
 import org.jetbrains.hexana.wasm.opcodes.*
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i64
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f64
 import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
 import org.jetbrains.hexana.wasm.sections.WasmHeapType
 import org.jetbrains.hexana.wasm.sections.WasmValueType
@@ -36,13 +40,13 @@ internal fun OpCode.watString(): CharSequence {
         is OpCodes.Memory.Size -> "memory.size${value.takeIf { it != 0u }?.let { " $it" } ?: ""}"
         is OpCodes.Memory.Grow -> "memory.grow${value.takeIf { it != 0u }?.let { " $it" } ?: ""}"
         /* i32 */
-        is OpCodes.I32.Load -> "i32.load ${value.watString()}"
-        is OpCodes.I32.Load8_S -> "i32.load8_s ${value.watString()}"
-        is OpCodes.I32.Load8_U -> "i32.load8_u ${value.watString()}"
-        is OpCodes.I32.Load16_U -> "i32.load16_u ${value.watString()}"
-        is OpCodes.I32.Store -> "i32.store ${value.watString()}"
-        is OpCodes.I32.Store8 -> "i32.store8 ${value.watString()}"
-        is OpCodes.I32.Store16 -> "i32.store16 ${value.watString()}"
+        is i32.Load -> "i32.load ${value.watString()}"
+        is i32.Load8_S -> "i32.load8_s ${value.watString()}"
+        is i32.Load8_U -> "i32.load8_u ${value.watString()}"
+        is i32.Load16_U -> "i32.load16_u ${value.watString()}"
+        is i32.Store -> "i32.store ${value.watString()}"
+        is i32.Store8 -> "i32.store8 ${value.watString()}"
+        is i32.Store16 -> "i32.store16 ${value.watString()}"
         is OpCodes.I32.Const -> "i32.const $value"
         is OpCodes.I32.Shl -> "i32.shl"
         is OpCodes.I32.PopCnt -> "i32.popcnt"
@@ -81,13 +85,13 @@ internal fun OpCode.watString(): CharSequence {
         is OpCodes.I32.ShrU -> "i32.shr_u"
         is OpCodes.I32.ShrS -> "i32.shr_s"
         /* i64 */
-        is OpCodes.I64.Load -> "i64.load ${value.watString()}"
-        is OpCodes.I64.Load8_S -> "i64.load8_s ${value.watString()}"
-        is OpCodes.I64.Load8_U -> "i64.load8_u ${value.watString()}"
-        is OpCodes.I64.Load16_U -> "i64.load16_u ${value.watString()}"
-        is OpCodes.I64.Store -> "i64.store ${value.watString()}"
-        is OpCodes.I64.Store8 -> "i64.store8 ${value.watString()}"
-        is OpCodes.I64.Store16 -> "i64.store16 ${value.watString()}"
+        is i64.Load -> "i64.load ${value.watString()}"
+        is i64.Load8_S -> "i64.load8_s ${value.watString()}"
+        is i64.Load8_U -> "i64.load8_u ${value.watString()}"
+        is i64.Load16_U -> "i64.load16_u ${value.watString()}"
+        is i64.Store -> "i64.store ${value.watString()}"
+        is i64.Store8 -> "i64.store8 ${value.watString()}"
+        is i64.Store16 -> "i64.store16 ${value.watString()}"
         is OpCodes.I64.Const -> "i64.const $value"
         is OpCodes.I64.Shl -> "i64.shl"
         is OpCodes.I64.PopCnt -> "i64.popcnt"
@@ -134,8 +138,8 @@ internal fun OpCode.watString(): CharSequence {
         is OpCodes.F32.Mul -> "f32.mul"
         is OpCodes.F32.Trunc -> "f32.trunc"
         is OpCodes.F32.CopySign -> "f32.copysign"
-        is OpCodes.F32.Load -> "f32.load ${value.watString()}"
-        is OpCodes.F32.Store -> "f32.store ${value.watString()}"
+        is f32.Load -> "f32.load ${value.watString()}"
+        is f32.Store -> "f32.store ${value.watString()}"
         is OpCodes.F32.Sqrt -> "f32.sqrt"
         is OpCodes.F32.Add -> "f32.add"
         is OpCodes.F32.Div -> "f32.div"

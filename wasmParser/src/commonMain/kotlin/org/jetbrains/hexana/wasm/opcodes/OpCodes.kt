@@ -6,6 +6,7 @@ import org.jetbrains.hexana.wasm.sections.WasmValueType
 import kotlin.jvm.JvmInline
 
 object OpCodes {
+    // Wasm spec 5.4.1
     object ParametricInstructions {
         object Unreachable : OpCodeWithValue<Unit>(Unit) {
             const val code: UByte = 0x00u
@@ -170,7 +171,152 @@ object OpCodes {
         }
     }
 
+    // Wasm spec 5.4.5
     object Memory {
+        object i32 {
+            class Load(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x28u
+                }
+            }
+
+            class Load8_S(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x2Cu
+                }
+            }
+
+            class Load8_U(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x2Du
+                }
+            }
+
+            class Load16_S(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x2Eu
+                }
+            }
+
+            class Load16_U(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x2Fu
+                }
+            }
+
+            class Store8(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x3Au
+                }
+            }
+
+            class Store16(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x3Bu
+                }
+            }
+
+            class Store(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x36u
+                }
+            }
+
+        }
+        object i64 {
+            class Load(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x29u
+                }
+            }
+
+            class Load8_S(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x30u
+                }
+            }
+
+            class Load8_U(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x31u
+                }
+            }
+
+            class Load16_S(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x32u
+                }
+            }
+
+            class Load16_U(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x33u
+                }
+            }
+
+            class Load32_S(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x34u
+                }
+            }
+
+            class Load32_U(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x35u
+                }
+            }
+
+            class Store(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x37u
+                }
+            }
+
+            class Store8(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x3Cu
+                }
+            }
+
+            class Store16(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x3Du
+                }
+            }
+
+            class Store32(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x3Eu
+                }
+            }
+        }
+
+        object f32 {
+            class Load(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x2Au
+                }
+            }
+
+            class Store(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    const val code: UByte = 0x38u
+                }
+            }
+        }
+        object f64 {
+            class Load(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    val code: UByte = 0x2Bu
+                }
+            }
+
+            class Store(value: MemArg) : OpCodeWithValue<MemArg>(value) {
+                companion object {
+                    val code: UByte = 0x39u
+                }
+            }
+        }
         class Size(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x3Fu
@@ -179,6 +325,32 @@ object OpCodes {
         class Grow(value: UInt) : OpCodeWithValue<UInt>(value) {
             companion object {
                 const val code: UByte = 0x40u
+            }
+        }
+
+        class Init(val dataIdx: UInt, val memIdx: UInt) : OpCode {
+            companion object {
+                const val code: UByte = 0x08u
+            }
+        }
+
+        class Copy(val memIdxY: UInt, val memIdxX: UInt): OpCode {
+            companion object {
+                const val code: UByte = 0x0au
+            }
+        }
+
+        class Fill(val memIdx: UInt): OpCode {
+            companion object {
+                const val code: UByte = 0x0bu
+            }
+        }
+
+        object Data {
+            class Drop (val dataIdx: UInt): OpCode {
+                companion object {
+                    const val code: UByte = 0x09u
+                }
             }
         }
     }
@@ -212,54 +384,6 @@ object OpCodes {
     }
 
     object I32 {
-        class Load(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x28u
-            }
-        }
-
-        class Load8_S(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x2Cu
-            }
-        }
-
-        class Load8_U(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x2Du
-            }
-        }
-
-        class Load16_S(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x2Eu
-            }
-        }
-
-        class Load16_U(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x2Fu
-            }
-        }
-
-        class Store8(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x3Au
-            }
-        }
-
-        class Store16(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x3Bu
-            }
-        }
-
-        class Store(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x36u
-            }
-        }
-
         object Shl : OpCodeWithValue<Unit>(Unit) {
             const val code: UByte = 0x74u
         }
@@ -440,71 +564,6 @@ object OpCodes {
             }
         }
 
-        class Load(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x29u
-            }
-        }
-
-        class Load8_S(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x30u
-            }
-        }
-
-        class Load8_U(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x31u
-            }
-        }
-
-        class Load16_S(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x32u
-            }
-        }
-
-        class Load16_U(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x33u
-            }
-        }
-
-        class Load32_S(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x34u
-            }
-        }
-
-        class Load32_U(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x35u
-            }
-        }
-
-        class Store(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x37u
-            }
-        }
-
-        class Store8(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x3Cu
-            }
-        }
-
-        class Store16(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x3Du
-            }
-        }
-
-        class Store32(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x3Eu
-            }
-        }
 
         object Eqz : OpCodeWithValue<Unit>(Unit) {
             const val code: UByte = 0x50u
@@ -723,18 +782,6 @@ object OpCodes {
             const val code: UByte = 0x98u
         }
 
-        class Load(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x2Au
-            }
-        }
-
-        class Store(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                const val code: UByte = 0x38u
-            }
-        }
-
         object Sqrt : OpCodeWithValue<Unit>(Unit) {
             const val code: UByte = 0x91u
         }
@@ -805,18 +852,6 @@ object OpCodes {
     }
 
     object F64 {
-        class Load(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                val code: UByte = 0x2Bu
-            }
-        }
-
-        class Store(value: MemArg) : OpCodeWithValue<MemArg>(value) {
-            companion object {
-                val code: UByte = 0x39u
-            }
-        }
-
         object EQ : OpCodeWithValue<Unit>(Unit) {
             const val code: UByte = 0x61u
         }
