@@ -241,11 +241,11 @@ object CfgBuilder {
 
                     is OpCodes.Flow.BrTable -> {
                         updateBlockEnd(curBlockId, idx + 1)
-                        val targets = opcode.value
+                        val targets = listOf(*opcode.value.toTypedArray(), opcode.labelIdx)
                         val seen = mutableSetOf<Int>()
                         for (depth in targets) {
-                            if (depth < 0 || depth >= labelStack.size) continue
-                            val targetLabel = labelStack[labelStack.size - 1 - depth]
+                            if (depth < 0u || depth >= labelStack.size.toUInt()) continue
+                            val targetLabel = labelStack[(labelStack.size.toUInt() - 1u - depth).toInt()]
                             if (seen.add(targetLabel.brTargetId)) {
                                 addEdge(curBlockId, targetLabel.brTargetId)
                             }

@@ -2,6 +2,7 @@ package org.jetbrains.hexana.wasm.analysis
 
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
 
 /**
  * Classifies a WASM [OpCode] into a high-level [OpcodeCategory] for size analysis.
@@ -34,6 +35,7 @@ fun classifyOpcode(opcode: OpCode): OpcodeCategory = when (opcode) {
     is OpCodes.Flow.BrOnNull -> OpcodeCategory.Control
     is OpCodes.Flow.BrOnNonNull -> OpcodeCategory.Control
     is OpCodes.Flow.Trow -> OpcodeCategory.Control
+    is OpCodes.Flow.TryTable -> OpcodeCategory.Control
     OpCodes.Flow.Terminal -> OpcodeCategory.Control
     OpCodes.Flow.Return -> OpcodeCategory.Control
     OpCodes.ParametricInstructions.Drop -> OpcodeCategory.Control
@@ -243,6 +245,7 @@ fun classifyOpcode(opcode: OpCode): OpcodeCategory = when (opcode) {
     OpCodes.F64.ConvertI32U -> OpcodeCategory.Arithmetic
     OpCodes.F64.ConvertI64S -> OpcodeCategory.Arithmetic
     OpCodes.F64.ConvertI64U -> OpcodeCategory.Arithmetic
+    is UnparsedOpCode -> OpcodeCategory.Unparsed
 
     // --- Other: Local, Global, Table, Ref, Reserved ---
     else -> OpcodeCategory.Other
