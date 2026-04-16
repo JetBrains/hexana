@@ -174,6 +174,7 @@
         <configurationType implementation="org.jetbrains.hexana.run.WasmRunConfigurationType"/>
         <runConfigurationProducer implementation="org.jetbrains.hexana.run.WasmRunConfigurationProducer"/>
         <programRunner implementation="org.jetbrains.hexana.run.WasmDebugRunner"/>
+        <xdebugger.breakpointType implementation="org.jetbrains.hexana.run.WasmLineBreakpointType"/>
 
     </extensions>
 

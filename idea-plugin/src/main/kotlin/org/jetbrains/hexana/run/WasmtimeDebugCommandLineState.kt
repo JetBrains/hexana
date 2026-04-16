@@ -29,84 +29,11 @@ class WasmtimeDebugCommandLineState(
 
     override fun startProcess(): ProcessHandler {
         val wasmtimePath = configuration.wasmtimePath.ifBlank { WasmtimeCommandLineState.resolveDefaultWasmtimePath() }
-
-        val wasmFile = File(configuration.wasmFilePath)
-        val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
-        val resolvedDeps = configuration.dependencies
-            .mapNotNull { entry ->
-                val parts = entry.split("=", limit = 2)
-                if (parts.size == 2) parts[0] to parts[1] else null
-            }
-            .toMap()
-
-        val coreModuleDeps = mutableMapOf<String, String>()
-        val componentDeps = mutableMapOf<String, String>()
-        for ((name, path) in resolvedDeps) {
-            val depFile = File(path)
-            if (depFile.exists()) {
-                when (WasmBinaryProviderSelector.select(depFile.readBytes().toCommonByteBuffer())) {
-                    is BinaryProviderType.Wasm -> coreModuleDeps[name] = path
-                    is BinaryProviderType.WasmComponent -> componentDeps[name] = path
-                    else -> {}
-                }
-            }
-        }
-
-        val effectiveWasmPath = if (componentDeps.isNotEmpty()) {
-            val result = WacComponentComposer.compose(configuration.wasmFilePath, componentDeps)
-            if (!result.composed && result.error != null) {
-                LOG.warn("Component composition failed: ${result.error}")
-            }
-            result.wasmPath
-        } else {
-            configuration.wasmFilePath
-        }
+        val result = buildWasmtimeArguments(configuration)
 
         val commandLine = GeneralCommandLine().apply {
             exePath = wasmtimePath
-            addParameter("run")
-
-            // Enable DWARF debug-info translation for native debuggers
-            addParameter("-D")
-            addParameter("debug-info")
-
-            val options = configuration.wasmtimeOptions.trim()
-            if (options.isNotEmpty()) {
-                addParameters(ParametersListUtil.parse(options))
-            }
-
-            for ((name, path) in coreModuleDeps) {
-                addParameter("--preload")
-                addParameter("$name=$path")
-            }
-
-            if (wasmBytes != null && WasmImportStubGenerator.hasImports(wasmBytes)) {
-                addParameter("-W")
-                addParameter("unknown-imports-default")
-
-                if (WasmImportStubGenerator.hasNonFunctionImports(wasmBytes)) {
-                    val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasmBytes)
-                        .filter { it.moduleName !in coreModuleDeps.keys }
-                    if (stubs.isNotEmpty()) {
-                        val tempDir = Files.createTempDirectory("hexana-wasm-stubs").toFile()
-                        tempDir.deleteOnExit()
-                        for (stub in stubs) {
-                            val stubFile = File(tempDir, "${stub.moduleName}.wasm")
-                            stubFile.writeBytes(stub.wasmBytes)
-                            stubFile.deleteOnExit()
-                            addParameter("--preload")
-                            addParameter("${stub.moduleName}=${stubFile.absolutePath}")
-                        }
-                    }
-                }
-            }
-
-            addParameter(effectiveWasmPath)
-
-            val args = configuration.programArguments.trim()
-            if (args.isNotEmpty()) {
-                addParameters(args.split("\\s+".toRegex()))
-            }
+            addParameters(result.arguments)
 
             val workDir = configuration.workingDirectory.ifBlank { null }
             if (workDir != null) {
@@ -123,5 +50,130 @@ class WasmtimeDebugCommandLineState(
 
     companion object {
         private val LOG = Logger.getInstance(WasmtimeDebugCommandLineState::class.java)
+
+        /**
+         * Builds the wasmtime argument list for a debug run.
+         *
+         * This is extracted as a companion function so that [WasmDebugRunner]
+         * can reuse the same argument construction when wrapping wasmtime
+         * inside LLDB.
+         *
+         * @return a [DebugBuildResult] containing the argument list and
+         *         metadata about whether component composition was used
+         *         (which strips DWARF debug info).
+         */
+        fun buildWasmtimeArguments(configuration: WasmRunConfiguration): DebugBuildResult {
+            val args = mutableListOf<String>()
+
+            val wasmFile = File(configuration.wasmFilePath)
+            val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
+            val resolvedDeps = configuration.dependencies
+                .mapNotNull { entry ->
+                    val parts = entry.split("=", limit = 2)
+                    if (parts.size == 2) parts[0] to parts[1] else null
+                }
+                .toMap()
+
+            val coreModuleDeps = mutableMapOf<String, String>()
+            val componentDeps = mutableMapOf<String, String>()
+            for ((name, path) in resolvedDeps) {
+                val depFile = File(path)
+                if (depFile.exists()) {
+                    when (WasmBinaryProviderSelector.select(depFile.readBytes().toCommonByteBuffer())) {
+                        is BinaryProviderType.Wasm -> coreModuleDeps[name] = path
+                        is BinaryProviderType.WasmComponent -> componentDeps[name] = path
+                        else -> {}
+                    }
+                }
+            }
+
+            // Component dependencies must be composed so the binary can
+            // run. Composition tools (wasm-tools compose, wac plug) strip
+            // DWARF custom sections, which means breakpoints will not
+            // resolve for composed binaries. We track whether composition
+            // happened so the debug runner can warn the user.
+            var compositionUsed = false
+            val effectiveWasmPath = if (componentDeps.isNotEmpty()) {
+                val result = WacComponentComposer.compose(configuration.wasmFilePath, componentDeps)
+                if (!result.composed && result.error != null) {
+                    LOG.warn("Component composition failed: ${result.error}")
+                } else if (result.composed) {
+                    compositionUsed = true
+                    LOG.info(
+                        "Debug run: component composition was performed. " +
+                                "DWARF debug info is likely stripped; " +
+                                "breakpoints may not resolve."
+                    )
+                }
+                result.wasmPath
+            } else {
+                configuration.wasmFilePath
+            }
+
+            args.add("run")
+
+            // Enable DWARF debug-info translation for native debuggers
+            args.add("-D")
+            args.add("debug-info")
+
+            // Disable optimizations for better variable inspection
+            args.add("-O")
+            args.add("opt-level=0")
+
+            val options = configuration.wasmtimeOptions.trim()
+            if (options.isNotEmpty()) {
+                args.addAll(ParametersListUtil.parse(options))
+            }
+
+            for ((name, path) in coreModuleDeps) {
+                args.add("--preload")
+                args.add("$name=$path")
+            }
+
+            if (wasmBytes != null && WasmImportStubGenerator.hasImports(wasmBytes)) {
+                args.add("-W")
+                args.add("unknown-imports-default")
+
+                if (WasmImportStubGenerator.hasNonFunctionImports(wasmBytes)) {
+                    val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasmBytes)
+                        .filter { it.moduleName !in coreModuleDeps.keys }
+                    if (stubs.isNotEmpty()) {
+                        val tempDir = Files.createTempDirectory("hexana-wasm-stubs").toFile()
+                        tempDir.deleteOnExit()
+                        for (stub in stubs) {
+                            val stubFile = File(tempDir, "${stub.moduleName}.wasm")
+                            stubFile.writeBytes(stub.wasmBytes)
+                            stubFile.deleteOnExit()
+                            args.add("--preload")
+                            args.add("${stub.moduleName}=${stubFile.absolutePath}")
+                        }
+                    }
+                }
+            }
+
+            args.add(effectiveWasmPath)
+
+            val programArgs = configuration.programArguments.trim()
+            if (programArgs.isNotEmpty()) {
+                args.addAll(programArgs.split("\\s+".toRegex()))
+            }
+
+            return DebugBuildResult(
+                arguments = args,
+                compositionUsed = compositionUsed,
+            )
+        }
+
+        /**
+         * Result of building wasmtime debug arguments.
+         *
+         * @property arguments the command-line arguments for wasmtime
+         * @property compositionUsed `true` when component dependencies
+         *           were composed, which strips DWARF debug info
+         */
+        data class DebugBuildResult(
+            val arguments: List<String>,
+            val compositionUsed: Boolean,
+        )
     }
 }

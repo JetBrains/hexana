@@ -5,6 +5,9 @@ import com.intellij.execution.RunManager
 import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.execution.configurations.ConfigurationTypeUtil
 import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.VirtualFile
@@ -118,11 +121,20 @@ fun showEnginePopup(isComponentModel: Boolean = false, onSelected: (WasmEngine) 
 }
 
 private fun doRun(file: VirtualFile, project: Project, settings: RunnerAndConfigurationSettings, runManager: RunManager) {
-    val wasmBytes = file.contentsToByteArray()
-    val resolved = WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = file)
-    (settings.configuration as? WasmRunConfiguration)?.dependencies =
-        resolved.map { (name, path) -> "$name=$path" }
+    ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Resolving Wasm dependencies\u2026", false) {
+        private var resolved: Map<String, String> = emptyMap()
 
-    runManager.selectedConfiguration = settings
-    ProgramRunnerUtil.executeConfiguration(settings, DefaultRunExecutor.getRunExecutorInstance())
+        override fun run(indicator: ProgressIndicator) {
+            val wasmBytes = file.contentsToByteArray()
+            resolved = WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = file)
+        }
+
+        override fun onSuccess() {
+            (settings.configuration as? WasmRunConfiguration)?.dependencies =
+                resolved.map { (name, path) -> "$name=$path" }
+
+            runManager.selectedConfiguration = settings
+            ProgramRunnerUtil.executeConfiguration(settings, DefaultRunExecutor.getRunExecutorInstance())
+        }
+    })
 }

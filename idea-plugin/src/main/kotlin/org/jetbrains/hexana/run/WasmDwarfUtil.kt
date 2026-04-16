@@ -1,7 +1,10 @@
 package org.jetbrains.hexana.run
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 
 internal object WasmDwarfUtil {
 
@@ -16,16 +19,62 @@ internal object WasmDwarfUtil {
      * Returns `true` when the given Wasm binary contains at least a
      * `.debug_info` custom section, which indicates that DWARF debug
      * metadata is embedded and a native debugger can use it.
+     *
+     * For component model binaries, this checks the embedded core
+     * modules for DWARF sections.
      */
     fun hasDwarfInfo(wasmBytes: ByteArray): Boolean {
-        val module = try {
+        val buffer = wasmBytes.toCommonByteBuffer()
+        return when (WasmBinaryProviderSelector.select(buffer)) {
+            is BinaryProviderType.Wasm -> hasDwarfInCoreModule(wasmBytes)
+            is BinaryProviderType.WasmComponent -> hasDwarfInComponent(wasmBytes)
+            else -> false
+        }
+    }
+
+    /**
+     * Checks whether a core Wasm module contains a `.debug_info` custom section.
+     */
+    private fun hasDwarfInCoreModule(wasmBytes: ByteArray): Boolean {
+        return try {
             val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
-            if (!provider.canProvideWasmModule()) return false
-            provider.wasmModule
+            val module = provider.wasmModule
+            module != null && module.customSections.any { it.name == ".debug_info" }
         } catch (_: Exception) {
-            return false
-        } ?: return false
-        return module.customSections.any { it.name == ".debug_info" }
+            false
+        }
+    }
+
+    /**
+     * Checks whether a component binary contains DWARF `.debug_info`
+     * sections, either at the top-level (component custom sections) or
+     * inside any embedded core module.
+     */
+    private fun hasDwarfInComponent(wasmBytes: ByteArray): Boolean {
+        try {
+            val buffer = wasmBytes.toCommonByteBuffer()
+            val provider = WasmComponentBinaryProvider(buffer)
+            if (!provider.canProvideWasmModule()) return false
+
+            // Check top-level component custom sections first
+            val component = provider.wasmModule
+            if (component != null && component.customSections.any { it.name == ".debug_info" }) {
+                return true
+            }
+
+            // Then check embedded core modules
+            for (coreModule in provider.modules) {
+                val moduleBytes = ByteArray(coreModule.contentSize)
+                buffer.position(coreModule.contentOffset)
+                buffer.get(moduleBytes, 0, coreModule.contentSize)
+                if (hasDwarfInCoreModule(moduleBytes)) {
+                    return true
+                }
+            }
+        } catch (_: Exception) {
+            // Not a valid component or parsing failed
+        }
+        return false
     }
 
     /**
