@@ -537,7 +537,7 @@ class ControlInstructionTest {
         val ops = records[0].opCodes
 
         // Verify structured parsing — no UnparsedOpCode
-        val unparsed = ops.filterIsInstance<org.jetbrains.hexana.wasm.sections.UnparsedOpCode>()
+        val unparsed = ops.filterIsInstance<UnparsedOpCode>()
         if (unparsed.isNotEmpty()) {
             // Parser currently fails on this pattern — document the exception
             println("Parser produced UnparsedOpCode: ${unparsed[0].e.message}")
@@ -556,7 +556,8 @@ class ControlInstructionTest {
 
         // b2 body: local.get, i32.load, i32.const, i32.add, br_table
         val brTable = b2.value.filterIsInstance<OpCodes.Flow.BrTable>().first()
-        assertEquals(4, brTable.value.size, "br_table should have 4 label indices")
+        // br_table has two opcodes: list of labelidx and labelidx
+        assertEquals(3, brTable.value.size, "br_table should have 4 label indices")
 
         // b1 body (after b2): i32.load offset=344, i32.load, br_if $label1
         val b1BrIf = b1.value.filterIsInstance<OpCodes.Flow.BrIf>()

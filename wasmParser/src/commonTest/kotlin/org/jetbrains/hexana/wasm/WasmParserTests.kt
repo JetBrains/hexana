@@ -2111,6 +2111,24 @@ class WasmParserTests {
         assertEquals(ComponentSort.Type, exports[1].sortIndex.sort)
         assertEquals(2.toUInt(), exports[1].sortIndex.index)
     }
+
+    @Test
+    fun `function_1381 of skiko`() = runTest {
+        val buffer = resourceAsByteBuffer("1381.skiko.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+
+
+        val wasmModule = wasmParseResult.wasmModule as WasmModule
+
+        val records = with(wasmModule.codeSection!!) {
+            buffer.scan()
+        }
+        assertEquals(1, records.size)
+        val ops = records.single().opCodes
+        val unparsedOpCodes = ops.filterIsInstance<UnparsedOpCode>()
+        assertTrue(unparsedOpCodes.isEmpty())
+    }
 }
 
 
