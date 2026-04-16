@@ -340,26 +340,26 @@ object OpCodes {
 
         class Init(val dataIdx: UInt, val memIdx: UInt) : OpCode {
             companion object {
-                const val code: UByte = 0x08u
+                const val code: UInt = 0x08u
             }
         }
 
         class Copy(val memIdxY: UInt, val memIdxX: UInt): OpCode {
             companion object {
-                const val code: UByte = 0x0au
+                const val code: UInt = 0x0au
             }
         }
 
         class Fill(val memIdx: UInt): OpCode {
             companion object {
-                const val code: UByte = 0x0bu
+                const val code: UInt = 0x0bu
             }
         }
 
         object Data {
             class Drop (val dataIdx: UInt): OpCode {
                 companion object {
-                    const val code: UByte = 0x09u
+                    const val code: UInt = 0x09u
                 }
             }
         }

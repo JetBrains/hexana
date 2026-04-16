@@ -153,19 +153,19 @@ open class I32 {
 
     // FC Multibyte Opcodes
     object TruncSatF32S : OpCodeWithValue<Unit>(Unit) {
-        const val code: UByte = 0x00u
+        const val code: UInt = 0x00u
     }
 
     object TruncSatF32U : OpCodeWithValue<Unit>(Unit) {
-        const val code: UByte = 0x01u
+        const val code: UInt = 0x01u
     }
 
     object TruncSatF64S : OpCodeWithValue<Unit>(Unit) {
-        const val code: UByte = 0x02u
+        const val code: UInt = 0x02u
     }
 
     object TruncSatF64U : OpCodeWithValue<Unit>(Unit) {
-        const val code: UByte = 0x03u
+        const val code: UInt = 0x03u
     }
 
     class Const(value: Int) : OpCodeWithValue<Int>(value) {

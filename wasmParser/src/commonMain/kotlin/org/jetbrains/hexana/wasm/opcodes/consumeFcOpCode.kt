@@ -9,7 +9,7 @@ fun CommonByteBuffer.consumeMultibyteOpCode(opcode: Long): OpCode {
     throw UnsupportedOpsException(opcode.toUInt(), position())
 }
 
-fun CommonByteBuffer.consumeFCBasedOpCode(code: UByte): OpCode {
+fun CommonByteBuffer.consumeFCBasedOpCode(code: UInt): OpCode {
     return when(code) {
         I32.TruncSatF32S.code -> I32.TruncSatF32S
         I32.TruncSatF32U.code -> I32.TruncSatF32U

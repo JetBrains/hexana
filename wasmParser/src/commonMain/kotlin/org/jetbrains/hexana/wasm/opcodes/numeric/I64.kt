@@ -168,18 +168,18 @@ open class I64 {
 
     // FC Multibyte Opcodes
     object TruncSatF32S : OpCodeWithValue<Unit>(Unit) {
-        const val code: UByte = 0x04u
+        const val code: UInt = 0x04u
     }
 
     object TruncSatF32U : OpCodeWithValue<Unit>(Unit) {
-        const val code: UByte = 0x05u
+        const val code: UInt = 0x05u
     }
 
     object TruncSatF64S : OpCodeWithValue<Unit>(Unit) {
-        const val code: UByte = 0x06u
+        const val code: UInt = 0x06u
     }
 
     object TruncSatF64U : OpCodeWithValue<Unit>(Unit) {
-        const val code: UByte = 0x07u
+        const val code: UInt = 0x07u
     }
 }
