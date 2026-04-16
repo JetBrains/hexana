@@ -1,7 +1,7 @@
 package org.jetbrains.hexana.wasm.opcodes
 
 
-data class MemArg(val offset: Int, val align: Int)
+data class MemArg(val align: Int, val offset: Int)
 
 interface OpCode
 
