@@ -14,7 +14,7 @@ class ElementTest : WasmTest() {
             FuncIdxWasmElementSegment.ActiveDefault(
                 offset = 28,
                 size = 7,
-                offsetExpr = listOf(OpCodes.I32.Const(0)),
+                offsetExpr = listOf(OpCodes.NumericInstructions.i32.Const(0)),
                 funcs = listOf(0u, 1u)
             ), elems[0]
         )

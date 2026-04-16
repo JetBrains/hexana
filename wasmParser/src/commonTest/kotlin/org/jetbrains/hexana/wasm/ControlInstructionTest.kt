@@ -357,7 +357,7 @@ class ControlInstructionTest {
         assertIs<WasmI32Type>(outer.type)
         val inner = outer.value.filterIsInstance<OpCodes.Flow.Block>().first()
         assertIs<WasmI32Type>(inner.type)
-        assertIs<OpCodes.I32.Const>(inner.value[0])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(inner.value[0])
     }
 
     @Test
@@ -489,7 +489,7 @@ class ControlInstructionTest {
         assertIs<WasmI64Type>(loop.type)
         val innerBlock = loop.value.filterIsInstance<OpCodes.Flow.Block>().first()
         assertIs<WasmI64Type>(innerBlock.type)
-        assertIs<OpCodes.I64.Const>(innerBlock.value[0])
+        assertIs<OpCodes.NumericInstructions.i64.Const>(innerBlock.value[0])
     }
 
     @Test
@@ -572,7 +572,7 @@ class ControlInstructionTest {
         val load8u = b1.value.filterIsInstance<i32.Load8_U>()
         assertTrue(load8u.isNotEmpty(), "Should have i32.load8_u instruction")
 
-        val extend8s = b1.value.filterIsInstance<OpCodes.I32.Extend8S>()
+        val extend8s = b1.value.filterIsInstance<OpCodes.NumericInstructions.i32.Extend8S>()
         assertTrue(extend8s.isNotEmpty(), "Should have i32.extend8_s instruction")
 
         val selects = b1.value.filterIsInstance<OpCodes.ParametricInstructions.Select>()

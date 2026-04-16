@@ -1,11 +1,11 @@
 package org.jetbrains.hexana.wasm.opcodes
 
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.wasm.opcodes.OpCodes.F32
-import org.jetbrains.hexana.wasm.opcodes.OpCodes.F64
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.NumericInstructions.F32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.NumericInstructions.F64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Flow
-import org.jetbrains.hexana.wasm.opcodes.OpCodes.I32
-import org.jetbrains.hexana.wasm.opcodes.OpCodes.I64
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.NumericInstructions.i32 as I32
+import org.jetbrains.hexana.wasm.opcodes.OpCodes.NumericInstructions.i64 as I64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Local
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Ref
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32

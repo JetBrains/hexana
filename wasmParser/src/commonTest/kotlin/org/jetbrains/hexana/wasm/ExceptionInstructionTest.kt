@@ -127,9 +127,9 @@ class ExceptionInstructionTest {
         assertIs<OpCodes.Flow.TryTable>(op)
         val catch = op.catches.single()
         assertIs<OpCodes.Flow.CatchType.Catch>( catch)
-        assertIs<OpCodes.I32.Const>(op.code[0])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(op.code[0])
         assertIs<OpCodes.Flow.Trow>(op.code[1])
-        assertIs<OpCodes.I32.Const>(op.code[2])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(op.code[2])
         assertTrue( result is WasmParseSuccess )
     }
 
@@ -145,9 +145,9 @@ class ExceptionInstructionTest {
         assertIs<OpCodes.Flow.TryTable>(op)
         val catch = op.catches.single()
         assertIs<OpCodes.Flow.CatchType.CatchAll>( catch)
-        assertIs<OpCodes.I32.Const>(op.code[0])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(op.code[0])
         assertIs<OpCodes.Flow.Trow>(op.code[1])
-        assertIs<OpCodes.I32.Const>(op.code[2])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(op.code[2])
     }
 
     @Test
@@ -162,9 +162,9 @@ class ExceptionInstructionTest {
         assertIs<OpCodes.Flow.TryTable>(op)
         val catch = op.catches.single()
         assertIs<OpCodes.Flow.CatchType.CatchRef>( catch)
-        assertIs<OpCodes.I32.Const>(op.code[0])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(op.code[0])
         assertIs<OpCodes.Flow.Trow>(op.code[1])
-        assertIs<OpCodes.I32.Const>(op.code[2])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(op.code[2])
     }
 
     @Test
@@ -179,9 +179,9 @@ class ExceptionInstructionTest {
         assertIs<OpCodes.Flow.TryTable>(op)
         val catch = op.catches.single()
         assertIs<OpCodes.Flow.CatchType.CatchAllRef>( catch)
-        assertIs<OpCodes.I32.Const>(op.code[0])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(op.code[0])
         assertIs<OpCodes.Flow.Trow>(op.code[1])
-        assertIs<OpCodes.I32.Const>(op.code[2])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(op.code[2])
     }
 
     @Test
@@ -200,7 +200,7 @@ class ExceptionInstructionTest {
         assertIs<OpCodes.Flow.TryTable>(tryTableOpNested)
         val nestedCatch = tryTableOpNested.catches.single()
         assertIs<OpCodes.Flow.CatchType.Catch>( nestedCatch)
-        assertIs<OpCodes.I32.Const>(op.code[1])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(op.code[1])
     }
 
     @Test
@@ -215,8 +215,8 @@ class ExceptionInstructionTest {
         assertIs<OpCodes.Flow.TryTable>(op)
         val catch = op.catches.single()
         assertIs<OpCodes.Flow.CatchType.CatchRef>( catch)
-        assertIs<OpCodes.I32.Const>(op.code[0])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(op.code[0])
         assertIs<OpCodes.Flow.Trow>(op.code[1])
-        assertIs<OpCodes.I32.Const>(op.code[2])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(op.code[2])
     }
 }

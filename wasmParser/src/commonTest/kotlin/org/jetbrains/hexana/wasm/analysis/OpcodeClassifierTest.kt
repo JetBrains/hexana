@@ -42,27 +42,27 @@ class OpcodeClassifierTest {
 
     @Test
     fun `i32 add classified as Arithmetic`() {
-        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.I32.Add))
+        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.NumericInstructions.i32.Add))
     }
 
     @Test
     fun `i32 const classified as Arithmetic`() {
-        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.I32.Const(42)))
+        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.NumericInstructions.i32.Const(42)))
     }
 
     @Test
     fun `i64 mul classified as Arithmetic`() {
-        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.I64.Mul))
+        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.NumericInstructions.i64.Mul))
     }
 
     @Test
     fun `f32 sqrt classified as Arithmetic`() {
-        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.F32.Sqrt))
+        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.NumericInstructions.F32.Sqrt))
     }
 
     @Test
     fun `f64 const classified as Arithmetic`() {
-        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.F64.Const(3.14)))
+        assertEquals(OpcodeCategory.Arithmetic, classifyOpcode(OpCodes.NumericInstructions.F64.Const(3.14)))
     }
 
     @Test

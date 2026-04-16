@@ -9,14 +9,14 @@ fun CommonByteBuffer.consumeMultibyteOpCode(opcode: Long): OpCode {
 
 fun CommonByteBuffer.consumeFCBasedOpCode(code: UByte): OpCode {
     return when(code) {
-        0x00.toUByte() -> OpCodes.I32.TruncSatF32S
-        0x01.toUByte() -> OpCodes.I32.TruncSatF32U
-        0x02.toUByte() -> OpCodes.I32.TruncSatF64U
-        0x03.toUByte() -> OpCodes.I32.TruncSatF64S
-        0x04.toUByte() -> OpCodes.I64.TruncSatF32S
-        0x05.toUByte() -> OpCodes.I64.TruncSatF32U
-        0x06.toUByte() -> OpCodes.I64.TruncSatF64S
-        0x07.toUByte() -> OpCodes.I64.TruncSatF64U
+        0x00.toUByte() -> OpCodes.NumericInstructions.i32.TruncSatF32S
+        0x01.toUByte() -> OpCodes.NumericInstructions.i32.TruncSatF32U
+        0x02.toUByte() -> OpCodes.NumericInstructions.i32.TruncSatF64U
+        0x03.toUByte() -> OpCodes.NumericInstructions.i32.TruncSatF64S
+        0x04.toUByte() -> OpCodes.NumericInstructions.i64.TruncSatF32S
+        0x05.toUByte() -> OpCodes.NumericInstructions.i64.TruncSatF32U
+        0x06.toUByte() -> OpCodes.NumericInstructions.i64.TruncSatF64S
+        0x07.toUByte() -> OpCodes.NumericInstructions.i64.TruncSatF64U
         Memory.Init.code -> Memory.Init(getULEB128().toUInt(), getULEB128().toUInt())
         Memory.Data.Drop.code -> Memory.Data.Drop(getULEB128().toUInt())
         Memory.Copy.code -> Memory.Copy(getULEB128().toUInt(), getULEB128().toUInt())

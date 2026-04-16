@@ -584,7 +584,7 @@ class MemoryInstructionTest {
         """.trimIndent())
         assertIs<OpCodes.Memory.Size>(ops[0])
         assertIs<OpCodes.ParametricInstructions.Drop>(ops[1])
-        assertIs<OpCodes.I32.Const>(ops[2])
+        assertIs<OpCodes.NumericInstructions.i32.Const>(ops[2])
         assertIs<OpCodes.Memory.Grow>(ops[3])
     }
 
