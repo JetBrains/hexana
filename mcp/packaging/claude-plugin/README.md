@@ -4,35 +4,57 @@ This package is the Claude Code wrapper for the standalone Hexana MCP runtime in
 
 ## What is bundled
 
-- `.claude-plugin/plugin.json`: required Claude Code plugin manifest
+- `.claude-plugin/plugin.json`: required Claude Code plugin manifest (version rendered at assembly time from `mcp/server/gradle.properties:mcpServerVersion`)
 - `.mcp.json`: MCP server configuration using `${CLAUDE_PLUGIN_ROOT}` for portable path resolution
-- `bin/hexana-mcp`: thin launcher that delegates to the bundled standalone server
+- `bin/hexana-mcp`: POSIX launcher that delegates to the bundled standalone server
+- `bin/hexana-mcp.cmd`: Windows launcher equivalent
 - `skills/wasm-inspector/`: bundled skill for WebAssembly inspection workflows
 
-## Repo-local install flow
+## Install flows
 
-```bash
-./gradlew :mcp:installRepoLocalClaudePlugin
+### Official Anthropic marketplace (once listed)
+
+```
+/plugin install hexana
 ```
 
-That task installs the assembled plugin to `plugins/hexana/` with the bundled server runtime.
+Once the Hexana plugin is accepted into the Anthropic marketplace, this is the recommended path for end users.
 
-After running the task, point Claude Code at the plugin directory:
+### Manual ZIP install
 
-```bash
+1. Download `hexana-claude-plugin-<version>.zip` from the GitHub Release for that version.
+2. Unzip it somewhere stable, for example `~/claude-plugins/hexana/`.
+3. Point Claude Code at the unzipped directory:
+
+   ```
+   claude --plugin-dir ~/claude-plugins/hexana
+   ```
+
+`.mcp.json` uses `${CLAUDE_PLUGIN_ROOT}`, so the plugin resolves correctly regardless of where it is unzipped.
+
+### Repo-local development
+
+```
+./gradlew :mcp:installRepoLocalClaudePlugin
 claude --plugin-dir plugins/hexana
 ```
 
-## Assembly (for distribution)
+That task installs the assembled plugin to `plugins/hexana/` with the bundled server runtime. The same path is also used by `installRepoLocalCodexPlugin`, so run whichever you need last.
 
-```bash
+## Assembly and distribution
+
+```
 ./gradlew :mcp:assembleMcpPackaging
 ```
 
-The assembled Claude plugin lands in `mcp/build/packaging/claude-plugin/` with the bundled server runtime. The `.mcp.json` uses `${CLAUDE_PLUGIN_ROOT}` so it resolves correctly when installed as a Claude Code plugin.
+Produces:
+
+- `mcp/build/packaging/claude-plugin/` — assembled, ready to `--plugin-dir` directly.
+- `mcp/build/distributions/hexana-claude-plugin-<version>.zip` — distributable archive with executable bits preserved on `bin/hexana-mcp` and `server/bin/server`.
 
 ## Notes
 
 - The `.mcp.json` uses Claude's native `${CLAUDE_PLUGIN_ROOT}` variable substitution, so no build-time path rewriting is needed.
-- `bin/hexana-mcp` supports a `HEXANA_SERVER_BIN` environment variable override for development.
+- `bin/hexana-mcp` and `bin/hexana-mcp.cmd` both honour the `HEXANA_SERVER_BIN` environment variable for development.
 - The `wasm-inspector` skill guides Claude to prefer Hexana MCP tools over shell tooling for WebAssembly analysis.
+- Bundled server footprint is ~130 MB; the runtime is a self-contained Gradle `installDist` layout of the `mcp/server` module.

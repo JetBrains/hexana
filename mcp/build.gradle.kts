@@ -157,10 +157,45 @@ tasks.register<Sync>("installRepoLocalCodexPlugin") {
     }
 }
 
+fun registerPluginZip(
+    taskName: String,
+    assembleTaskName: String,
+    packagingDirName: String,
+    archiveBaseNameValue: String,
+) = tasks.register<Zip>(taskName) {
+    group = "distribution"
+    description = "Zip the assembled $packagingDirName wrapper into mcp/build/distributions."
+    dependsOn(assembleTaskName)
+    from(layout.buildDirectory.dir("packaging/$packagingDirName")) {
+        filesMatching(listOf("bin/hexana-mcp", "server/bin/*")) {
+            if (!name.endsWith(".bat") && !name.endsWith(".cmd")) {
+                permissions { unix("rwxr-xr-x") }
+            }
+        }
+    }
+    archiveBaseName.set(archiveBaseNameValue)
+    archiveVersion.set(mcpServerVersion)
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+}
+
+val zipClaudePlugin = registerPluginZip(
+    taskName = "zipClaudePlugin",
+    assembleTaskName = "assembleClaudePluginPackage",
+    packagingDirName = "claude-plugin",
+    archiveBaseNameValue = "hexana-claude-plugin",
+)
+
+val zipCodexPlugin = registerPluginZip(
+    taskName = "zipCodexPlugin",
+    assembleTaskName = "assembleCodexPluginPackage",
+    packagingDirName = "codex-plugin",
+    archiveBaseNameValue = "hexana-codex-plugin",
+)
+
 tasks.register("assembleMcpPackaging") {
     group = "distribution"
-    description = "Assemble self-contained Claude and Codex MCP wrapper layouts under mcp/build/packaging."
-    dependsOn(assembleClaudePluginPackage, assembleCodexPluginPackage)
+    description = "Assemble self-contained Claude and Codex MCP wrapper layouts under mcp/build/packaging and their distributable ZIPs."
+    dependsOn(assembleClaudePluginPackage, assembleCodexPluginPackage, zipClaudePlugin, zipCodexPlugin)
 }
 
 val GENERATED_VERSION_TOKEN = "__GENERATED_BY_ASSEMBLY__"
