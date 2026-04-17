@@ -40,7 +40,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         val args = current?.context as? JSArgumentList ?: return
         if (args.arguments.indexOf(current) != 1) return
         val call = args.context as? JSCallExpression ?: return
-        if (!instantiateCallNames.contains((call.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName)) return
+        if (!instantiateCallNames.contains((call.stubSafeMethodExpression as? JSReferenceExpression)?.referenceName)) return
         val typeSource = JSTypeSource(context, JSTypeSource.SourceLanguage.JS, false)
         var importsType = resolveImportsType(typeSource, call)
         if (importsType != null) {
@@ -113,7 +113,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
     }
 
     private fun resolveExportsType(typeSource: JSTypeSource, expr: JSCallExpression): JSType? {
-        val callee = (expr.stubSafeMethodExpression as? JSReferenceExpression)?.referencedName
+        val callee = (expr.stubSafeMethodExpression as? JSReferenceExpression)?.referenceName
         if (!allAcceptedCallNames.contains(callee)) return null
         return handleStaticallyPossibleCases(expr, {
             val type = when (it) {
