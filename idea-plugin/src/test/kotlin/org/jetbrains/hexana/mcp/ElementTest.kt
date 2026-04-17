@@ -1,7 +1,7 @@
 package org.jetbrains.hexana.mcp
 
-import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Ref
+import org.jetbrains.hexana.wasm.opcodes.numeric.I32
 import org.jetbrains.hexana.wasm.sections.ExprWasmElementSegment
 import org.jetbrains.hexana.wasm.sections.FuncIdxWasmElementSegment
 import org.jetbrains.hexana.wasm.sections.WasmFuncHeapType
@@ -14,7 +14,7 @@ class ElementTest : WasmTest() {
             FuncIdxWasmElementSegment.ActiveDefault(
                 offset = 28,
                 size = 7,
-                offsetExpr = listOf(OpCodes.NumericInstructions.i32.Const(0)),
+                offsetExpr = listOf(I32.Const(0)),
                 funcs = listOf(0u, 1u)
             ), elems[0]
         )

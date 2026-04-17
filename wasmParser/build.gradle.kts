@@ -32,6 +32,8 @@ tasks.matching { it.name == "jsTest" || it.name == "wasmJsTest" }.configureEach 
 }
 
 kotlin {
+    jvmToolchain(21)
+
     jvm {
         testRuns.all {
             executionTask.configure {

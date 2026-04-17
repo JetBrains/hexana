@@ -49,7 +49,7 @@ class FunctionTest: WasmTest() {
             assertNotNull(ops)
             assertEquals(8, ops!!.size)
             assertEquals(OpCodes.Local.Get(0u), ops[0])
-            assertEquals(OpCodes.Flow.Drop, ops[6])
+            assertEquals(OpCodes.ParametricInstructions.Drop, ops[6])
         }
         doLocalsInFunctionTest(0) { locals ->
             assertNotNull(locals)
