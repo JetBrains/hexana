@@ -45,7 +45,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         var importsType = resolveImportsType(typeSource, call)
         if (importsType != null) {
             while (!nameStack.isEmpty()) {
-                importsType = importsType?.properties?.firstOrNull { it.memberName == nameStack.removeLast() }?.jsType as? JSRecordType ?: return
+                importsType = importsType?.findPropertySignature(nameStack.removeLast())?.jsType as? JSRecordType ?: return
             }
             info.addRecordType(importsType)
         }
@@ -245,10 +245,11 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
                     JSRecordTypeImpl(
                         typeSource,
                         listOf(PropertySignatureImpl("exports",
-                            JSContextualUnionTypeImpl(typeSource, listOf(
+                            JSCompositeTypeFactory.createContextualUnionType(
+                                listOf(
                                 JSRecordTypeImpl(typeSource, exportProperties),
                                 JSNamedTypeFactory.createType("WebAssembly.Instance.Exports", typeSource, JSTypeContext.INSTANCE, false),
-                            ))
+                            ), typeSource)
                             , false, false))
                     ),
                     false, false
@@ -292,7 +293,10 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
             0 -> JSNamedTypeFactory.createType("void", source, JSTypeContext.INSTANCE, false)
             1 -> mapWasmValueTypeToJsType(funcType.retTypes.first(), source)
             else -> JSArrayTypeImpl(
-                JSContextualUnionTypeImpl(source, funcType.retTypes.map { mapWasmValueTypeToJsType(it, source) }),
+                JSCompositeTypeFactory.createContextualUnionType(
+                    funcType.retTypes.map { mapWasmValueTypeToJsType(it, source) },
+                    source
+                ),
                 source
             )
         }
@@ -516,7 +520,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
     private fun mapOptionTypeToJs(optionType: ComponentOptionType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
         val innerType = mapValueTypeToJs(optionType.option, allTypes, source, cache)
         val undefinedType = JSNamedTypeFactory.createType("undefined", source, JSTypeContext.INSTANCE, false)
-        return JSContextualUnionTypeImpl(source, listOf(innerType, undefinedType))
+        return JSCompositeTypeFactory.createContextualUnionType(listOf(innerType, undefinedType), source)
     }
 
     private fun mapResultTypeToJs(resultType: ComponentResultType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
@@ -524,7 +528,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
             ?: JSNamedTypeFactory.createType("void", source, JSTypeContext.INSTANCE, false)
         val errType = resultType.error?.let { mapValueTypeToJs(it, allTypes, source, cache) }
         return if (errType != null) {
-            JSContextualUnionTypeImpl(source, listOf(okType, errType))
+            JSCompositeTypeFactory.createContextualUnionType(listOf(okType, errType), source)
         } else {
             okType
         }
@@ -533,7 +537,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
     private fun mapTupleTypeToJs(tupleType: ComponentTupleType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
         val elementTypes = tupleType.elementTypes.map { mapValueTypeToJs(it, allTypes, source, cache) }
         val unionType = if (elementTypes.size == 1) elementTypes.first()
-        else JSContextualUnionTypeImpl(source, elementTypes)
+        else JSCompositeTypeFactory.createContextualUnionType(elementTypes, source)
         return JSArrayTypeImpl(unionType, source)
     }
 
@@ -541,7 +545,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
         val literalTypes = enumType.entries.map { entry ->
             JSStringLiteralTypeImpl(entry, false, source)
         }
-        return JSContextualUnionTypeImpl(source, literalTypes)
+        return JSCompositeTypeFactory.createContextualUnionType(literalTypes, source)
     }
 
     private fun mapFlagTypeToJs(flagType: ComponentFlagType, source: JSTypeSource): JSType {
@@ -561,7 +565,7 @@ class WasmFrameworkIndexingHandler: FrameworkIndexingHandler() {
             }
             JSRecordTypeImpl(source, properties)
         }
-        return JSContextualUnionTypeImpl(source, caseTypes)
+        return JSCompositeTypeFactory.createContextualUnionType(caseTypes, source)
     }
 
     private fun mapComponentTypeToJs(componentType: ComponentType, allTypes: List<ComponentDefType>, source: JSTypeSource, cache: MutableMap<Int, JSType>): JSType {
