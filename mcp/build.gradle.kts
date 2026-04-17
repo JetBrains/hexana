@@ -89,10 +89,15 @@ jib {
 fun registerPackagingSync(
     taskName: String,
     packagingDirName: String,
+    pluginManifestPath: String,
     rewriteMcpJson: Boolean = true,
 ) = tasks.register<Sync>(taskName) {
     dependsOn(":mcp:server:installDist")
-    from(layout.projectDirectory.dir("packaging/$packagingDirName"))
+    from(layout.projectDirectory.dir("packaging/$packagingDirName")) {
+        filesMatching(pluginManifestPath) {
+            filter { line -> line.replace(GENERATED_VERSION_TOKEN, mcpServerVersion) }
+        }
+    }
     from(standaloneInstallDir) {
         into("server")
     }
@@ -108,19 +113,25 @@ fun registerPackagingSync(
 val assembleClaudePluginPackage = registerPackagingSync(
     taskName = "assembleClaudePluginPackage",
     packagingDirName = "claude-plugin",
+    pluginManifestPath = ".claude-plugin/plugin.json",
     rewriteMcpJson = false,
 )
 
 val assembleCodexPluginPackage = registerPackagingSync(
     taskName = "assembleCodexPluginPackage",
-    packagingDirName = "codex-plugin"
+    packagingDirName = "codex-plugin",
+    pluginManifestPath = ".codex-plugin/plugin.json",
 )
 
 tasks.register<Sync>("installRepoLocalClaudePlugin") {
     group = "distribution"
     description = "Install the assembled Claude plugin into the repo-local plugins/hexana path for /plugin testing."
     dependsOn(":mcp:server:installDist")
-    from(layout.projectDirectory.dir("packaging/claude-plugin"))
+    from(layout.projectDirectory.dir("packaging/claude-plugin")) {
+        filesMatching(".claude-plugin/plugin.json") {
+            filter { line -> line.replace(GENERATED_VERSION_TOKEN, mcpServerVersion) }
+        }
+    }
     from(standaloneInstallDir) {
         into("server")
     }
@@ -131,7 +142,11 @@ tasks.register<Sync>("installRepoLocalCodexPlugin") {
     group = "distribution"
     description = "Install the assembled Codex plugin into the repo-local plugins/hexana path for /plugins testing."
     dependsOn(":mcp:server:installDist")
-    from(layout.projectDirectory.dir("packaging/codex-plugin"))
+    from(layout.projectDirectory.dir("packaging/codex-plugin")) {
+        filesMatching(".codex-plugin/plugin.json") {
+            filter { line -> line.replace(GENERATED_VERSION_TOKEN, mcpServerVersion) }
+        }
+    }
     from(standaloneInstallDir) {
         into("server")
     }
@@ -147,6 +162,8 @@ tasks.register("assembleMcpPackaging") {
     description = "Assemble self-contained Claude and Codex MCP wrapper layouts under mcp/build/packaging."
     dependsOn(assembleClaudePluginPackage, assembleCodexPluginPackage)
 }
+
+val GENERATED_VERSION_TOKEN = "__GENERATED_BY_ASSEMBLY__"
 
 fun renderMcpConfig(commandPath: String): String {
     val escapedCommandPath = commandPath.replace("\\", "\\\\")
