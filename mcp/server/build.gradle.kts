@@ -66,6 +66,7 @@ tasks.register<Test>("integrationTest") {
     description = "Runs black-box HTTP and stdio integration tests against the installed standalone MCP server."
     group = "verification"
     dependsOn(tasks.named("installDist"))
+    dependsOn(":mcp:assembleClaudePluginPackage")
     shouldRunAfter(tasks.named("test"))
     testClassesDirs = integrationTestSourceSet.output.classesDirs
     classpath = integrationTestSourceSet.runtimeClasspath
@@ -76,6 +77,10 @@ tasks.register<Test>("integrationTest") {
     systemProperty(
         "hexana.integration.installDir",
         layout.buildDirectory.dir("install/${application.applicationName}").get().asFile.absolutePath
+    )
+    systemProperty(
+        "hexana.integration.claudePluginDir",
+        project(":mcp").layout.buildDirectory.dir("packaging/claude-plugin").get().asFile.absolutePath
     )
 }
 

@@ -16,6 +16,28 @@ import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.milliseconds
 
+internal data class StdioLauncher(
+    val installDirSystemProperty: String,
+    val unixRelativePath: String,
+    val windowsRelativePath: String,
+    val clientName: String,
+) {
+    companion object {
+        val Server = StdioLauncher(
+            installDirSystemProperty = "hexana.integration.installDir",
+            unixRelativePath = "bin/server",
+            windowsRelativePath = "bin/server.bat",
+            clientName = "hexana-integration-test",
+        )
+        val ClaudePluginWrapper = StdioLauncher(
+            installDirSystemProperty = "hexana.integration.claudePluginDir",
+            unixRelativePath = "bin/hexana-mcp",
+            windowsRelativePath = "bin/hexana-mcp.cmd",
+            clientName = "hexana-claude-plugin-integration-test",
+        )
+    }
+}
+
 internal class HexanaInstalledStdioClient private constructor(
     private val installDir: Path,
     private val command: List<String>,
@@ -64,9 +86,12 @@ internal class HexanaInstalledStdioClient private constructor(
 
         private val logger = LoggerFactory.getLogger(HexanaInstalledStdioClient::class.java)
 
-        suspend fun start(logLevel: HexanaLogLevel = HexanaLogLevel.INFO): HexanaInstalledStdioClient {
-            val installDir = integrationInstallDir()
-            val command = buildCommand(installDir, logLevel)
+        suspend fun start(
+            logLevel: HexanaLogLevel = HexanaLogLevel.INFO,
+            launcher: StdioLauncher = StdioLauncher.Server,
+        ): HexanaInstalledStdioClient {
+            val installDir = integrationInstallDir(launcher.installDirSystemProperty)
+            val command = buildCommand(installDir, logLevel, launcher)
             logger.info(
                 "Starting installed stdio server from {} with logLevel={} command={}",
                 installDir,
@@ -92,7 +117,7 @@ internal class HexanaInstalledStdioClient private constructor(
                     StdioClientTransport.StderrSeverity.IGNORE
                 }
             )
-            val client = Client(Implementation(name = "hexana-integration-test", version = "1.0"))
+            val client = Client(Implementation(name = launcher.clientName, version = "1.0"))
 
             try {
                 logger.info("Connecting MCP stdio client to pid={}", process.pid())
@@ -124,9 +149,9 @@ internal class HexanaInstalledStdioClient private constructor(
             }
         }
 
-        private fun integrationInstallDir(): Path {
-            val rawPath = System.getProperty("hexana.integration.installDir")
-                ?: error("Missing `hexana.integration.installDir` system property")
+        private fun integrationInstallDir(systemPropertyName: String): Path {
+            val rawPath = System.getProperty(systemPropertyName)
+                ?: error("Missing `$systemPropertyName` system property")
             val path = Path.of(rawPath)
             require(Files.isDirectory(path)) { "Install directory does not exist: $path" }
             return path
@@ -134,21 +159,21 @@ internal class HexanaInstalledStdioClient private constructor(
 
         private fun buildCommand(
             installDir: Path,
-            logLevel: HexanaLogLevel
+            logLevel: HexanaLogLevel,
+            launcher: StdioLauncher,
         ): List<String> {
-            val binDir = installDir.resolve("bin")
             return if (isWindows()) {
                 listOf(
                     "cmd.exe",
                     "/c",
-                    binDir.resolve("server.bat").toString(),
+                    installDir.resolve(launcher.windowsRelativePath).toString(),
                     "stdio",
                     "--log-level",
                     logLevel.cliValue()
                 )
             } else {
                 listOf(
-                    binDir.resolve("server").toString(),
+                    installDir.resolve(launcher.unixRelativePath).toString(),
                     "stdio",
                     "--log-level",
                     logLevel.cliValue()
@@ -193,9 +218,10 @@ internal class HexanaInstalledStdioClient private constructor(
 
 internal suspend inline fun <T> withInstalledStdioClient(
     logLevel: HexanaLogLevel = HexanaLogLevel.INFO,
+    launcher: StdioLauncher = StdioLauncher.Server,
     crossinline block: suspend (HexanaInstalledStdioClient) -> T
 ): T {
-    val server = HexanaInstalledStdioClient.start(logLevel = logLevel)
+    val server = HexanaInstalledStdioClient.start(logLevel = logLevel, launcher = launcher)
     return try {
         block(server)
     } finally {
