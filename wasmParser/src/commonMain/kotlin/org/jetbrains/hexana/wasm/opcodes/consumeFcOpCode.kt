@@ -5,11 +5,19 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
 import org.jetbrains.hexana.wasm.opcodes.numeric.I64
 
-fun CommonByteBuffer.consumeMultibyteOpCode(opcode: Long): OpCode {
-    throw UnsupportedOpsException(opcode.toUInt(), position())
+fun CommonByteBuffer.consumeMultibyteOpCode(offset: Int, base: UByte, opcode: UInt): OpCode {
+    return when (base) {
+        0xFCu.toUByte() -> {
+            consumeFCBasedOpCode(offset, opcode)
+        }
+        0xFDu.toUByte() -> {
+            consumeFDBasedOpCode(offset, opcode)
+        }
+        else -> throw UnsupportedOpsException(opcode, offset)
+    }
 }
 
-fun CommonByteBuffer.consumeFCBasedOpCode(code: UInt): OpCode {
+fun CommonByteBuffer.consumeFCBasedOpCode(offset: Int, code: UInt): OpCode {
     return when(code) {
         I32.TruncSatF32S.code -> I32.TruncSatF32S
         I32.TruncSatF32U.code -> I32.TruncSatF32U
@@ -23,6 +31,6 @@ fun CommonByteBuffer.consumeFCBasedOpCode(code: UInt): OpCode {
         Memory.Data.Drop.code -> Memory.Data.Drop(getULEB128().toUInt())
         Memory.Copy.code -> Memory.Copy(getULEB128().toUInt(), getULEB128().toUInt())
         Memory.Fill.code -> Memory.Fill(getULEB128().toUInt())
-        else -> throw UnsupportedOpsException(code.toUInt(), position())
+        else -> throw UnsupportedOpsException(code, offset)
     }
 }
