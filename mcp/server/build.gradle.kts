@@ -62,11 +62,15 @@ tasks.jar {
     }
 }
 
+val overrideClaudePluginDir = providers.gradleProperty("hexanaClaudePluginDir").orNull
+
 tasks.register<Test>("integrationTest") {
     description = "Runs black-box HTTP and stdio integration tests against the installed standalone MCP server."
     group = "verification"
     dependsOn(tasks.named("installDist"))
-    dependsOn(":mcp:assembleClaudePluginPackage")
+    if (overrideClaudePluginDir == null) {
+        dependsOn(":mcp:assembleClaudePluginPackage")
+    }
     shouldRunAfter(tasks.named("test"))
     testClassesDirs = integrationTestSourceSet.output.classesDirs
     classpath = integrationTestSourceSet.runtimeClasspath
@@ -80,7 +84,8 @@ tasks.register<Test>("integrationTest") {
     )
     systemProperty(
         "hexana.integration.claudePluginDir",
-        project(":mcp").layout.buildDirectory.dir("packaging/claude-plugin").get().asFile.absolutePath
+        overrideClaudePluginDir
+            ?: project(":mcp").layout.buildDirectory.dir("packaging/claude-plugin").get().asFile.absolutePath
     )
 }
 
