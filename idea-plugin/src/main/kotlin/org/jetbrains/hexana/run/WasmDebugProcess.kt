@@ -138,11 +138,19 @@ class WasmDebugProcess(
         val filePath = position.file.path
         val line = position.line + 1 // LLDB uses 1-based lines
         registeredBreakpoints[breakpoint] = filePath to line
-        // Use file basename for the LLDB breakpoint command because DWARF
-        // debug info inside composed/JIT-compiled Wasm binaries often
-        // contains source paths that differ from the IDE's absolute paths.
-        // Basename matching lets LLDB resolve the breakpoint against any
-        // compilation unit whose file name matches.
+        // Use the file basename for the LLDB breakpoint command because
+        // DWARF debug info inside composed/JIT-compiled Wasm binaries
+        // records relative source paths (e.g. "src/lib.rs"). LLDB's
+        // `breakpoint set --file` matches against compilation-unit
+        // filenames, so a full absolute IDE path would fail to resolve
+        // when the DWARF path is relative.
+        //
+        // Basename matching means that files with the same name in
+        // different directories (e.g. "calculator/lib.rs" and
+        // "adder/lib.rs") will both get LLDB breakpoints. We
+        // disambiguate in handleStop() by comparing the resolved stop
+        // location against the intended IDE file path and automatically
+        // resuming past stops that hit the wrong file.
         val fileName = position.file.name
         lldb?.sendBreakpoint(fileName, line)
         session.setBreakpointVerified(breakpoint)
@@ -220,6 +228,13 @@ class WasmDebugProcess(
      * Called when LLDB reports a stop (breakpoint or step).
      * Parses the frame location from recent LLDB output and suspends
      * the debug session at that source position.
+     *
+     * Because LLDB breakpoints are set by basename, a single IDE
+     * breakpoint on `calculator/src/lib.rs:11` also creates an LLDB
+     * breakpoint in `adder/src/lib.rs:11` (same basename). When the
+     * stop location does not match any registered IDE breakpoint
+     * (full-path check), the stop is treated as a "wrong file" hit
+     * and execution is automatically resumed.
      */
     private fun handleStop() {
         // The stop event output from LLDB usually already contains the
@@ -253,27 +268,72 @@ class WasmDebugProcess(
 
         LOG.debug("handleStop: sourcePosition=$sourcePosition, function=$functionName, lines=$lines")
 
-        val frame = WasmStackFrame(sourcePosition, functionName)
-        val context = WasmSuspendContext(frame)
-
-        // Find the breakpoint that was hit and notify the session
+        // Find the breakpoint that was hit by comparing the resolved
+        // stop location against registered breakpoint paths. Because
+        // LLDB breakpoints use basenames, a stop may land in the wrong
+        // file (same basename, different directory). We use suffix
+        // matching with a path-separator boundary so that
+        // "calculator/src/lib.rs" does not match "adder/src/lib.rs".
         if (sourcePosition != null) {
+            val stoppedPath = sourcePosition.file.path
             val hitBreakpoint = registeredBreakpoints.entries.firstOrNull { (_, loc) ->
                 loc.second == sourcePosition.line + 1 &&
-                    sourcePosition.file.path.endsWith(loc.first.substringAfterLast('/'))
+                    pathMatchesBreakpointLocation(stoppedPath, loc.first)
             }?.key
 
             if (hitBreakpoint != null) {
+                val frame = WasmStackFrame(sourcePosition, functionName, lldb)
+                val context = WasmSuspendContext(frame, lldb, this)
                 ApplicationManager.getApplication().invokeLater {
                     session.breakpointReached(hitBreakpoint, null, context)
                 }
                 return
             }
+
+            // Check whether the stop is at a line that *some* breakpoint
+            // targets but in the wrong file (basename collision). If so,
+            // this is a spurious LLDB stop — resume automatically.
+            val isSpuriousBreakpoint = registeredBreakpoints.values.any { loc ->
+                loc.second == sourcePosition.line + 1 &&
+                    stoppedPath.substringAfterLast('/') == loc.first.substringAfterLast('/') &&
+                    !pathMatchesBreakpointLocation(stoppedPath, loc.first)
+            }
+            if (isSpuriousBreakpoint) {
+                LOG.info(
+                    "Skipping spurious breakpoint hit in wrong file: " +
+                        "stopped at $stoppedPath:${sourcePosition.line + 1}, " +
+                        "no matching IDE breakpoint — resuming"
+                )
+                lldb?.resume()
+                return
+            }
         }
 
+        val frame = WasmStackFrame(sourcePosition, functionName, lldb)
+        val context = WasmSuspendContext(frame, lldb, this)
         ApplicationManager.getApplication().invokeLater {
             session.positionReached(context)
         }
+    }
+
+    /**
+     * Checks whether [stoppedPath] (the resolved file path from the
+     * stop location) matches the [breakpointPath] (the full IDE path
+     * stored when the breakpoint was registered).
+     *
+     * An exact match is tried first. When the stopped path comes from
+     * DWARF (possibly relative), it is also accepted if the breakpoint
+     * path ends with it preceded by a path separator, so that DWARF
+     * "src/lib.rs" matches IDE "/home/user/calculator/src/lib.rs" but
+     * not "/home/user/adder/src/lib.rs".
+     */
+    private fun pathMatchesBreakpointLocation(stoppedPath: String, breakpointPath: String): Boolean {
+        if (stoppedPath == breakpointPath) return true
+        // stoppedPath is a suffix of breakpointPath (DWARF relative resolved to IDE absolute)
+        if (breakpointPath.endsWith("/$stoppedPath")) return true
+        // breakpointPath is a suffix of stoppedPath (IDE path is a suffix of resolved path)
+        if (stoppedPath.endsWith("/$breakpointPath")) return true
+        return false
     }
 
     /**
@@ -317,13 +377,18 @@ class WasmDebugProcess(
      * Attempts to find a local [VirtualFile] that matches the given DWARF
      * path by checking registered breakpoint locations. When the DWARF
      * path is relative (e.g. `src/lib.rs`) this matches it against full
-     * IDE paths that end with the same suffix.
+     * IDE paths that end with the same suffix, requiring a path-separator
+     * boundary so that `adder/src/lib.rs` does not accidentally match
+     * a breakpoint set in `calculator/src/lib.rs`.
      */
-    private fun resolveFileByDwarfPath(dwarfPath: String): com.intellij.openapi.vfs.VirtualFile? {
+    internal fun resolveFileByDwarfPath(dwarfPath: String): com.intellij.openapi.vfs.VirtualFile? {
         val normalised = dwarfPath.replace('\\', '/')
         for ((_, loc) in registeredBreakpoints) {
             val idePath = loc.first
-            if (idePath.endsWith(normalised) || normalised.endsWith(idePath.substringAfterLast('/'))) {
+            // The IDE path ends with the DWARF path preceded by a separator
+            // (e.g. IDE "/home/user/calculator/src/lib.rs" ends with
+            // "/src/lib.rs" when DWARF reports "src/lib.rs").
+            if (idePath.endsWith("/$normalised") || idePath == normalised) {
                 return LocalFileSystem.getInstance().findFileByPath(idePath)
             }
         }

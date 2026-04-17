@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.run
 
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.xdebugger.frame.XExecutionStack
 import com.intellij.xdebugger.frame.XStackFrame
 import com.intellij.xdebugger.frame.XSuspendContext
@@ -9,30 +10,161 @@ import com.intellij.xdebugger.frame.XSuspendContext
  * step completed, signal, etc.).
  *
  * It provides a single execution stack whose top frame points at the
- * source location reported by LLDB.
+ * source location reported by LLDB. When an [LldbCommunicator] is
+ * available, the full backtrace is retrieved from LLDB's `bt` command.
  */
 class WasmSuspendContext(
-    private val topFrame: XStackFrame,
+    private val topFrame: WasmStackFrame,
+    private val lldb: LldbCommunicator? = null,
+    private val debugProcess: WasmDebugProcess? = null,
 ) : XSuspendContext() {
 
-    private val executionStack = WasmExecutionStack(topFrame)
+    private val executionStack = WasmExecutionStack(topFrame, lldb, debugProcess)
 
     override fun getActiveExecutionStack(): XExecutionStack = executionStack
 
     override fun getExecutionStacks(): Array<XExecutionStack> = arrayOf(executionStack)
 }
 
-private class WasmExecutionStack(
-    private val topFrame: XStackFrame,
+internal class WasmExecutionStack(
+    private val topFrame: WasmStackFrame,
+    private val lldb: LldbCommunicator?,
+    private val debugProcess: WasmDebugProcess?,
 ) : XExecutionStack("Wasm Thread") {
 
     override fun getTopFrame(): XStackFrame = topFrame
 
     override fun computeStackFrames(firstFrameIndex: Int, container: XStackFrameContainer?) {
-        if (firstFrameIndex == 0) {
-            container?.addStackFrames(listOf(topFrame), true)
-        } else {
-            container?.addStackFrames(emptyList(), true)
+        if (container == null) return
+
+        val communicator = lldb
+        if (communicator == null) {
+            if (firstFrameIndex == 0) {
+                container.addStackFrames(listOf(topFrame), true)
+            } else {
+                container.addStackFrames(emptyList(), true)
+            }
+            return
         }
+
+        com.intellij.openapi.application.ApplicationManager.getApplication()
+            .executeOnPooledThread {
+                try {
+                    val lines = communicator.sendCommandAndCollectOutput("bt")
+                    val frames = parseBacktrace(lines)
+                    if (frames.isEmpty()) {
+                        container.addStackFrames(listOf(topFrame), true)
+                    } else {
+                        val result = if (firstFrameIndex < frames.size) {
+                            frames.subList(firstFrameIndex, frames.size)
+                        } else {
+                            emptyList()
+                        }
+                        container.addStackFrames(result, true)
+                    }
+                } catch (e: Exception) {
+                    LOG.warn("Failed to retrieve backtrace", e)
+                    if (firstFrameIndex == 0) {
+                        container.addStackFrames(listOf(topFrame), true)
+                    } else {
+                        container.addStackFrames(emptyList(), true)
+                    }
+                }
+            }
+    }
+
+    /**
+     * Parses LLDB `bt` output into [WasmStackFrame] instances.
+     *
+     * Typical `bt` output:
+     * ```
+     * * thread #1, stop reason = breakpoint 1.1
+     *   * frame #0: 0x... wasmtime`calc::add(x=1, y=2) at lib.rs:5:3
+     *     frame #1: 0x... wasmtime`main at main.rs:10:5
+     *     frame #2: 0x... wasmtime`_start
+     * ```
+     */
+    private fun parseBacktrace(lines: List<String>): List<WasmStackFrame> {
+        val frames = mutableListOf<WasmStackFrame>()
+        for (line in lines) {
+            val parsed = parseBacktraceLine(line)
+            if (parsed != null) {
+                frames.add(parsed)
+            }
+        }
+        return frames
+    }
+
+    /**
+     * Parses a single `bt` frame line. The format is:
+     * ```
+     *   * frame #0: 0x1234 module`function at file.rs:10:3
+     *     frame #1: 0x5678 module`function
+     * ```
+     */
+    private fun parseBacktraceLine(line: String): WasmStackFrame? {
+        val match = BACKTRACE_FRAME_PATTERN.find(line) ?: return null
+        val frameIndex = match.groupValues[1].toIntOrNull() ?: return null
+        val description = match.groupValues[2].trim()
+
+        // Parse function name: after "module`" up to " at " or end
+        val funcName = parseFunctionFromDescription(description)
+        val sourcePos = parseSourceFromDescription(description)
+
+        return WasmStackFrame(
+            sourcePosition = sourcePos,
+            functionName = funcName,
+            lldb = lldb,
+            frameIndex = frameIndex,
+        )
+    }
+
+    private fun parseFunctionFromDescription(description: String): String? {
+        // Format: "0xaddr module`function(...) at file:line:col"
+        // or: "0xaddr module`function at file:line:col"
+        // or: "0xaddr module`function"
+        val backtickIdx = description.indexOf('`')
+        if (backtickIdx < 0) return null
+
+        val afterBacktick = description.substring(backtickIdx + 1)
+        val atIdx = afterBacktick.indexOf(" at ")
+        return if (atIdx >= 0) {
+            afterBacktick.substring(0, atIdx).trim()
+        } else {
+            afterBacktick.trim()
+        }
+    }
+
+    private fun parseSourceFromDescription(description: String): com.intellij.xdebugger.XSourcePosition? {
+        val atIdx = description.indexOf(" at ")
+        if (atIdx < 0) return null
+        val locationPart = description.substring(atIdx + 4).trim()
+
+        // locationPart = "file.rs:10:3" or "file.rs:10"
+        val parts = locationPart.split(":")
+        if (parts.size < 2) return null
+        val filePath = parts[0]
+        val lineNum = parts[1].toIntOrNull() ?: return null
+
+        val file = debugProcess?.resolveFileByDwarfPath(filePath)
+        if (file != null) {
+            return com.intellij.xdebugger.XDebuggerUtil.getInstance()
+                .createPosition(file, lineNum - 1)
+        }
+        return null
+    }
+
+    companion object {
+        private val LOG = Logger.getInstance(WasmExecutionStack::class.java)
+
+        /**
+         * Matches a frame line in `bt` output:
+         * ```
+         *   * frame #0: ...
+         *     frame #1: ...
+         * ```
+         */
+        private val BACKTRACE_FRAME_PATTERN =
+            """\s*\*?\s*frame #(\d+):\s+(.+)""".toRegex()
     }
 }

@@ -7,6 +7,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.util.Key
 import java.io.BufferedWriter
 import java.io.OutputStreamWriter
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
@@ -26,6 +27,16 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
 
     private val stopEvents = LinkedBlockingQueue<StopEvent>()
 
+    /**
+     * Lock protecting command-response collection state.
+     * When a caller uses [sendCommandAndCollectOutput], incoming output
+     * lines between the start and end fence markers are captured here.
+     */
+    private val responseLock = Any()
+    private var responseCollector: MutableList<String>? = null
+    private var responseLatch: CountDownLatch? = null
+    private var responseEndMarker: String? = null
+
     @Volatile
     var isRunning = false
         private set
@@ -42,6 +53,17 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
                 for (line in text.lines()) {
                     if (line.isBlank()) continue
                     LOG.debug("LLDB: $line")
+                    synchronized(responseLock) {
+                        val endMarker = responseEndMarker
+                        if (endMarker != null) {
+                            if (line.trim() == endMarker) {
+                                responseEndMarker = null
+                                responseLatch?.countDown()
+                            } else {
+                                responseCollector?.add(line)
+                            }
+                        }
+                    }
                     val stopEvent = parseStopEvent(line)
                     if (stopEvent != null) {
                         stopEvents.offer(stopEvent)
@@ -133,6 +155,50 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     fun launchStoppedAtEntry() {
         isRunning = true
         sendCommand("process launch --stop-at-entry")
+    }
+
+    /**
+     * Sends [command] to LLDB and collects the output lines produced
+     * by that command. A unique end-of-response marker is emitted after
+     * the real command so the collector knows when all output has arrived.
+     *
+     * This method blocks the calling thread until the response is
+     * fully collected or the [timeoutMs] expires.
+     *
+     * @return the collected output lines, or an empty list on timeout.
+     */
+    fun sendCommandAndCollectOutput(
+        command: String,
+        timeoutMs: Long = 5_000,
+    ): List<String> {
+        val marker = "__HEXANA_END_${System.nanoTime()}__"
+        val latch = CountDownLatch(1)
+        val collector = mutableListOf<String>()
+
+        synchronized(responseLock) {
+            responseCollector = collector
+            responseLatch = latch
+            responseEndMarker = marker
+        }
+
+        sendCommand(command)
+        // The marker is printed by LLDB's built-in Python, so it
+        // appears in the normal output stream right after the command
+        // output finishes.
+        sendCommand("script print(\"$marker\")")
+
+        val completed = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+
+        synchronized(responseLock) {
+            responseCollector = null
+            responseLatch = null
+            responseEndMarker = null
+        }
+
+        if (!completed) {
+            LOG.warn("Timed out collecting output for LLDB command: $command")
+        }
+        return collector.toList()
     }
 
     fun destroy() {
