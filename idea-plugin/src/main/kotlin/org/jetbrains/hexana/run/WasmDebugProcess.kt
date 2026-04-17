@@ -43,6 +43,7 @@ class WasmDebugProcess(
     private val processHandler: ProcessHandler,
     private val lldb: LldbCommunicator?,
     private val compositionUsed: Boolean = false,
+    private val dwarfInjected: Boolean = false,
 ) : XDebugProcess(session) {
 
     private val breakpointHandler = WasmBreakpointHandler(this)
@@ -75,13 +76,22 @@ class WasmDebugProcess(
             installOutputCollector()
 
             if (compositionUsed) {
-                session.reportMessage(
-                    "Note: component composition was used to satisfy dependencies. " +
-                            "Composition tools strip DWARF debug info, so source-level " +
-                            "breakpoints may not resolve. To debug with breakpoints, " +
-                            "use a single-component binary compiled with debug info (-g).",
-                    com.intellij.openapi.ui.MessageType.WARNING,
-                )
+                if (dwarfInjected) {
+                    session.reportMessage(
+                        "Note: component composition was used to satisfy dependencies. " +
+                                "DWARF debug info from source files has been transferred " +
+                                "into the composed binary.",
+                        com.intellij.openapi.ui.MessageType.INFO,
+                    )
+                } else {
+                    session.reportMessage(
+                        "Note: component composition was used to satisfy dependencies. " +
+                                "Composition tools strip DWARF debug info, so source-level " +
+                                "breakpoints may not resolve. To debug with breakpoints, " +
+                                "compile your Wasm binary with debug info (-g).",
+                        com.intellij.openapi.ui.MessageType.WARNING,
+                    )
+                }
             }
 
             // Start the inferior *after* all existing breakpoints have been

@@ -101,7 +101,8 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     console,
                     processHandler,
                     lldb,
-                    buildResult.compositionUsed,
+                    compositionUsed = buildResult.compositionUsed,
+                    dwarfInjected = buildResult.dwarfInjected,
                 )
             }
         }

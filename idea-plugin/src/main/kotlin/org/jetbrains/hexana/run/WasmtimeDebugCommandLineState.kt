@@ -89,21 +89,44 @@ class WasmtimeDebugCommandLineState(
 
             // Component dependencies must be composed so the binary can
             // run. Composition tools (wasm-tools compose, wac plug) strip
-            // DWARF custom sections, which means breakpoints will not
-            // resolve for composed binaries. We track whether composition
-            // happened so the debug runner can warn the user.
+            // DWARF custom sections, so after composition we re-inject
+            // DWARF sections from the original source files into the
+            // composed binary. We track whether composition happened and
+            // whether DWARF injection succeeded.
             var compositionUsed = false
+            var dwarfInjected = false
             val effectiveWasmPath = if (componentDeps.isNotEmpty()) {
                 val result = WacComponentComposer.compose(configuration.wasmFilePath, componentDeps)
                 if (!result.composed && result.error != null) {
                     LOG.warn("Component composition failed: ${result.error}")
                 } else if (result.composed) {
                     compositionUsed = true
-                    LOG.info(
-                        "Debug run: component composition was performed. " +
-                                "DWARF debug info is likely stripped; " +
-                                "breakpoints may not resolve."
+
+                    // Collect all source files that may contain DWARF info:
+                    // the main wasm file and all component dependencies.
+                    val sourceFiles = buildList {
+                        add(File(configuration.wasmFilePath))
+                        for ((_, path) in componentDeps) {
+                            add(File(path))
+                        }
+                    }
+
+                    dwarfInjected = WasmDwarfInjector.injectDwarfSections(
+                        composedFile = File(result.wasmPath),
+                        sourceFiles = sourceFiles,
                     )
+                    if (dwarfInjected) {
+                        LOG.info(
+                            "Debug run: DWARF debug info was transferred " +
+                                    "into the composed binary."
+                        )
+                    } else {
+                        LOG.info(
+                            "Debug run: component composition was performed " +
+                                    "but no DWARF debug info was found in " +
+                                    "source files to transfer."
+                        )
+                    }
                 }
                 result.wasmPath
             } else {
@@ -161,6 +184,7 @@ class WasmtimeDebugCommandLineState(
             return DebugBuildResult(
                 arguments = args,
                 compositionUsed = compositionUsed,
+                dwarfInjected = dwarfInjected,
             )
         }
 
@@ -170,10 +194,14 @@ class WasmtimeDebugCommandLineState(
          * @property arguments the command-line arguments for wasmtime
          * @property compositionUsed `true` when component dependencies
          *           were composed, which strips DWARF debug info
+         * @property dwarfInjected `true` when DWARF debug sections from
+         *           source files were successfully injected into the
+         *           composed binary
          */
         data class DebugBuildResult(
             val arguments: List<String>,
             val compositionUsed: Boolean,
+            val dwarfInjected: Boolean = false,
         )
     }
 }
