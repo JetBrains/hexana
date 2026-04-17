@@ -17,4 +17,10 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
 
 - Run `./gradlew :mcp:assembleMcpPackaging` before smoke-testing assembled wrappers.
 - Do not point clients at the source-tree `.mcp.json` templates; they intentionally contain assembly placeholders.
-- Prefer smoke checks like `mcp/build/packaging/claude-plugin/bin/hexana-mcp version` over ad hoc script edits.
+- Prefer smoke checks like `mcp/build/packaging/claude-plugin/bin/hexana-mcp version` and
+  `mcp/build/packaging/codex-plugin/bin/hexana-mcp version` over ad hoc script edits.
+- For Codex repo-local install-flow changes, run `./gradlew :mcp:installRepoLocalCodexPlugin` and verify the installed
+  layout under `plugins/hexana/` plus `.agents/plugins/marketplace.json`.
+- If a Codex packaging change could affect plugin discovery, installation, or bundled MCP wiring, also run the UI smoke
+  test `./gradlew :idea-plugin:buildPlugin :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaMcpPackagedSmokeTest`
+  with `HEXANA_USE_LOCAL_PLUGIN=true` and `HEXANA_LOCAL_PLUGIN_ZIP` pointing at the built IntelliJ plugin ZIP.

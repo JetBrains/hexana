@@ -123,6 +123,11 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
 - `mcp/core/` changes: run `:mcp:core:build` and the affected `:idea-plugin:test` coverage when the plugin bridge or
   tool contracts change.
 - `mcp/server/` changes: run `:mcp:server:build` and the narrowest affected `mcp/core` or plugin MCP coverage.
+- `mcp/packaging/` changes: run `:mcp:assembleMcpPackaging` and smoke-test the affected packaged launcher under
+  `mcp/build/packaging/*/bin/hexana-mcp version`.
+- Codex packaging or repo-local marketplace/install-flow changes: also run `:mcp:installRepoLocalCodexPlugin` and the
+  packaged MCP UI smoke test under `ui-driver-tests` when the change could affect Codex discovery, installation, or
+  bundled skill/MCP wiring.
 - `wasmParser/` changes: run at least the relevant parser tests and any affected plugin tests.
 - `mcp/` changes in the plugin: run the direct MCP tests under `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp/direct`.
 - `graalwasm/` or embedded converter changes: run the directly affected plugin tests and the existing `:graalwasm:wat2wasm:test` run configuration if relevant.
