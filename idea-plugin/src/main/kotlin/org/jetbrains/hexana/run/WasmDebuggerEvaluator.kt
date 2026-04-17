@@ -18,6 +18,7 @@ import javax.swing.Icon
  */
 class WasmDebuggerEvaluator(
     private val lldb: LldbCommunicator,
+    private val frameIndex: Int = 0,
 ) : XDebuggerEvaluator() {
 
     override fun evaluate(
@@ -39,6 +40,10 @@ class WasmDebuggerEvaluator(
     }
 
     private fun doEvaluate(expression: String, callback: XEvaluationCallback) {
+        // Select the correct frame so the expression is evaluated in
+        // the context of the stack frame this evaluator belongs to.
+        lldb.sendCommandAndCollectOutput("frame select $frameIndex")
+
         // Initialize the Wasmtime VM context so that Wasm pointers and
         // variables can be resolved. Errors are ignored because the
         // call may legitimately fail in non-Wasm frames.

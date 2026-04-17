@@ -74,7 +74,9 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
                             if (line.trim() == endMarker) {
                                 responseEndMarker = null
                                 responseLatch?.countDown()
-                            } else {
+                            } else if (!line.trimStart().startsWith(LLDB_PROMPT_PREFIX)) {
+                                // Skip LLDB command echoes (e.g. "(lldb) expression -- x")
+                                // so they don't leak into collected output.
                                 responseCollector?.add(line)
                             }
                         }
@@ -304,6 +306,13 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
 
     companion object {
         private val LOG = Logger.getInstance(LldbCommunicator::class.java)
+
+        /**
+         * Prefix that LLDB uses when echoing commands back in output.
+         * Lines starting with this prefix are command echoes and should
+         * be filtered out of collected command responses.
+         */
+        private const val LLDB_PROMPT_PREFIX = "(lldb) "
 
         private val BREAKPOINT_STOP_PATTERN =
             """thread #(\d+).*stop reason = breakpoint (\d+\.\d+)""".toRegex()

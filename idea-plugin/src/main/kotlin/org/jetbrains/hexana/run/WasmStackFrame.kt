@@ -33,7 +33,7 @@ class WasmStackFrame(
     override fun getSourcePosition(): XSourcePosition? = sourcePosition
 
     override fun getEvaluator(): XDebuggerEvaluator? =
-        lldb?.let { WasmDebuggerEvaluator(it) }
+        lldb?.let { WasmDebuggerEvaluator(it, frameIndex) }
 
     override fun customizePresentation(component: ColoredTextContainer) {
         val name = functionName ?: sourcePosition?.file?.name ?: "unknown"
@@ -51,11 +51,11 @@ class WasmStackFrame(
         com.intellij.openapi.application.ApplicationManager.getApplication()
             .executeOnPooledThread {
                 try {
-                    // Select the correct frame before querying variables,
-                    // so non-top stack frames report the right locals.
-                    if (frameIndex != 0) {
-                        communicator.sendCommandAndCollectOutput("frame select $frameIndex")
-                    }
+                    // Always select the correct frame before querying
+                    // variables. This is needed even for frame #0 because
+                    // the user may have navigated to a different frame
+                    // previously, leaving LLDB's selected frame out of sync.
+                    communicator.sendCommandAndCollectOutput("frame select $frameIndex")
 
                     // Wasmtime requires __vmctx->set() to be called before
                     // inspecting variables — it sets the current Wasm instance
