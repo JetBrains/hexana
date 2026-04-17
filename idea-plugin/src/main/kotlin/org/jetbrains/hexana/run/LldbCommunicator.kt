@@ -37,6 +37,19 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     private var responseLatch: CountDownLatch? = null
     private var responseEndMarker: String? = null
 
+    /**
+     * When `true`, stop-event parsing is suppressed so that output
+     * from informational commands (like `bt`, `frame info`, `frame variable`)
+     * is not mistaken for a real process stop. Without this guard,
+     * a `bt` response that contains `stop reason = breakpoint 1.1`
+     * would feed a spurious [StopEvent] into the queue and cause
+     * the event loop to trigger [WasmDebugProcess.handleStop] again,
+     * which in turn issues another `bt` — creating an infinite loop.
+     */
+    @Volatile
+    @PublishedApi
+    internal var suppressStopEvents = false
+
     @Volatile
     var isRunning = false
         private set
@@ -53,9 +66,11 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
                 for (line in text.lines()) {
                     if (line.isBlank()) continue
                     LOG.debug("LLDB: $line")
+                    var insideResponse = false
                     synchronized(responseLock) {
                         val endMarker = responseEndMarker
                         if (endMarker != null) {
+                            insideResponse = true
                             if (line.trim() == endMarker) {
                                 responseEndMarker = null
                                 responseLatch?.countDown()
@@ -64,9 +79,16 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
                             }
                         }
                     }
-                    val stopEvent = parseStopEvent(line)
-                    if (stopEvent != null) {
-                        stopEvents.offer(stopEvent)
+                    // Skip stop-event detection for lines that are part
+                    // of a command response or while suppression is active.
+                    // Without this guard, `bt` or `frame info` output that
+                    // echoes "stop reason = breakpoint" would be
+                    // misinterpreted as a new process stop.
+                    if (!insideResponse && !suppressStopEvents) {
+                        val stopEvent = parseStopEvent(line)
+                        if (stopEvent != null) {
+                            stopEvents.offer(stopEvent)
+                        }
                     }
                 }
             }
@@ -158,9 +180,29 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     }
 
     /**
+     * Temporarily suppresses stop-event detection on incoming LLDB
+     * output lines for the duration of [block]. This is intended for
+     * code paths that issue informational LLDB commands (like
+     * `frame info`) whose output may echo stop reasons but should
+     * not be treated as new process stops.
+     */
+    internal inline fun <T> withStopEventsSuppressed(block: () -> T): T {
+        suppressStopEvents = true
+        try {
+            return block()
+        } finally {
+            suppressStopEvents = false
+        }
+    }
+
+    /**
      * Sends [command] to LLDB and collects the output lines produced
      * by that command. A unique end-of-response marker is emitted after
      * the real command so the collector knows when all output has arrived.
+     *
+     * Stop-event detection is suppressed while the response is being
+     * collected so that output echoing stop reasons (e.g. `bt` printing
+     * `stop reason = breakpoint 1.1`) does not trigger spurious events.
      *
      * This method blocks the calling thread until the response is
      * fully collected or the [timeoutMs] expires.

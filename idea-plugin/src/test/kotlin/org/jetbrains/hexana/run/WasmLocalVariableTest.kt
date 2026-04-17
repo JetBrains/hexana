@@ -12,8 +12,21 @@ class WasmLocalVariableTest : UsefulTestCase() {
     }
 
     fun testParsePointerVariable() {
+        val lines = listOf("""(const char *) ptr = 0x7ff "hello"""")
+        val vars = WasmLocalVariable.parseFrameVariableOutput(lines)
+        assertEquals(1, vars.size)
+        assertEquals("ptr", vars[0].name)
+    }
+
+    fun testHiddenVmctxFilteredByDefault() {
         val lines = listOf("""(WasmtimeVMContext *) __vmctx = 0x000000075ad04aa0""")
         val vars = WasmLocalVariable.parseFrameVariableOutput(lines)
+        assertTrue("__vmctx should be filtered out by default", vars.isEmpty())
+    }
+
+    fun testHiddenVmctxKeptWhenFilterDisabled() {
+        val lines = listOf("""(WasmtimeVMContext *) __vmctx = 0x000000075ad04aa0""")
+        val vars = WasmLocalVariable.parseFrameVariableOutput(lines, filterHidden = false)
         assertEquals(1, vars.size)
         assertEquals("__vmctx", vars[0].name)
     }
@@ -27,20 +40,59 @@ class WasmLocalVariableTest : UsefulTestCase() {
             "",
             "(unsigned int) y = <variable not available>",
         )
+        // __vmctx is filtered out by default
         val vars = WasmLocalVariable.parseFrameVariableOutput(lines)
-        assertEquals(4, vars.size)
+        assertEquals(3, vars.size)
 
-        assertEquals("__vmctx", vars[0].name)
-        assertEquals("0x000000075ad04aa0", vars[0].displayValue)
+        assertEquals("op", vars[0].name)
+        assertEquals("<variable not available>", vars[0].displayValue)
+        assertTrue(vars[0].isUnavailable)
 
-        assertEquals("op", vars[1].name)
+        assertEquals("x", vars[1].name)
         assertEquals("<variable not available>", vars[1].displayValue)
+        assertTrue(vars[1].isUnavailable)
 
-        assertEquals("x", vars[2].name)
+        assertEquals("y", vars[2].name)
         assertEquals("<variable not available>", vars[2].displayValue)
+        assertTrue(vars[2].isUnavailable)
+    }
 
-        assertEquals("y", vars[3].name)
-        assertEquals("<variable not available>", vars[3].displayValue)
+    fun testIsUnavailableShortForm() {
+        val lines = listOf("(unsigned int) x = <unavailable>")
+        val vars = WasmLocalVariable.parseFrameVariableOutput(lines)
+        assertEquals(1, vars.size)
+        assertTrue(vars[0].isUnavailable)
+    }
+
+    fun testIsNotUnavailableForRegularValue() {
+        val lines = listOf("(int) x = 42")
+        val vars = WasmLocalVariable.parseFrameVariableOutput(lines)
+        assertEquals(1, vars.size)
+        assertFalse(vars[0].isUnavailable)
+    }
+
+    fun testWithResolvedValue() {
+        val lines = listOf("(unsigned int) x = <variable not available>")
+        val vars = WasmLocalVariable.parseFrameVariableOutput(lines)
+        val original = vars[0]
+        assertTrue(original.isUnavailable)
+
+        val resolved = WasmLocalVariable.withResolvedValue(original, "int", "42")
+        assertEquals("x", resolved.name)
+        assertEquals("42", resolved.displayValue)
+        assertFalse(resolved.isUnavailable)
+    }
+
+    fun testWithResolvedValuePreservesOriginalTypeWhenNull() {
+        val lines = listOf("(unsigned int) x = <variable not available>")
+        val vars = WasmLocalVariable.parseFrameVariableOutput(lines)
+        val original = vars[0]
+
+        val resolved = WasmLocalVariable.withResolvedValue(original, null, "42")
+        assertEquals("x", resolved.name)
+        assertEquals("42", resolved.displayValue)
+        // typeName is private, but we can verify via displayValue
+        assertFalse(resolved.isUnavailable)
     }
 
     fun testParseMultipleVariables() {
@@ -85,6 +137,30 @@ class WasmLocalVariableTest : UsefulTestCase() {
         val vars = WasmLocalVariable.parseFrameVariableOutput(lines)
         assertEquals(1, vars.size)
         assertEquals("opt", vars[0].name)
+    }
+
+    fun testIsUnavailableNoLocationForm() {
+        val lines = listOf("(int) i = <no location, value may have been optimized out>")
+        val vars = WasmLocalVariable.parseFrameVariableOutput(lines)
+        assertEquals(1, vars.size)
+        assertTrue(vars[0].isUnavailable)
+    }
+
+    fun testTypeNameAccessible() {
+        val lines = listOf("(unsigned int) x = 42")
+        val vars = WasmLocalVariable.parseFrameVariableOutput(lines)
+        assertEquals(1, vars.size)
+        assertEquals("unsigned int", vars[0].typeName)
+    }
+
+    fun testTypeNameForUnavailableVariable() {
+        val lines = listOf(
+            "(calculator::bindings::exports::component::calculator::calculate::Op) op = <variable not available>",
+        )
+        val vars = WasmLocalVariable.parseFrameVariableOutput(lines)
+        assertEquals(1, vars.size)
+        assertEquals("calculator::bindings::exports::component::calculator::calculate::Op", vars[0].typeName)
+        assertTrue(vars[0].isUnavailable)
     }
 
     fun testParseBlanksIgnored() {

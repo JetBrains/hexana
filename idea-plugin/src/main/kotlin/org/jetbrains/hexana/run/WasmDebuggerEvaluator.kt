@@ -39,6 +39,15 @@ class WasmDebuggerEvaluator(
     }
 
     private fun doEvaluate(expression: String, callback: XEvaluationCallback) {
+        // Initialize the Wasmtime VM context so that Wasm pointers and
+        // variables can be resolved. Errors are ignored because the
+        // call may legitimately fail in non-Wasm frames.
+        try {
+            lldb.sendCommandAndCollectOutput("expression -- __vmctx->set()", timeoutMs = 2_000)
+        } catch (_: Exception) {
+            // expected in non-Wasm frames
+        }
+
         val lines = lldb.sendCommandAndCollectOutput("expression -- $expression")
         if (lines.isEmpty()) {
             callback.errorOccurred("No response from LLDB")

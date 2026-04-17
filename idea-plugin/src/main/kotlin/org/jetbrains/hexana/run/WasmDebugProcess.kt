@@ -1,7 +1,5 @@
 package org.jetbrains.hexana.run
 
-import com.intellij.execution.process.ProcessAdapter
-import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.openapi.application.ApplicationManager
@@ -10,7 +8,6 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugSession
@@ -52,13 +49,6 @@ class WasmDebugProcess(
     private val registeredBreakpoints =
         mutableMapOf<XLineBreakpoint<WasmBreakpointProperties>, Pair<String, Int>>()
 
-    /**
-     * Collects recent output lines from LLDB so that frame location
-     * can be parsed after a stop event.
-     */
-    private val recentOutputLines = mutableListOf<String>()
-    private val outputLock = Any()
-
     @Volatile
     private var eventLoopThread: Thread? = null
 
@@ -73,8 +63,6 @@ class WasmDebugProcess(
     override fun sessionInitialized() {
         super.sessionInitialized()
         if (lldb != null) {
-            installOutputCollector()
-
             if (compositionUsed) {
                 if (dwarfInjected) {
                     session.reportMessage(
@@ -108,29 +96,6 @@ class WasmDebugProcess(
             lldb.runProcess()
             startEventLoop()
         }
-    }
-
-    /**
-     * Installs a listener that collects output lines so we can parse
-     * frame locations when a stop event occurs.
-     */
-    private fun installOutputCollector() {
-        processHandler.addProcessListener(object : ProcessAdapter() {
-            override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
-                val text = event.text ?: return
-                synchronized(outputLock) {
-                    for (line in text.lines()) {
-                        if (line.isNotBlank()) {
-                            recentOutputLines.add(line)
-                            // Keep a bounded window
-                            if (recentOutputLines.size > MAX_OUTPUT_WINDOW) {
-                                recentOutputLines.removeAt(0)
-                            }
-                        }
-                    }
-                }
-            }
-        })
     }
 
     fun registerBreakpointInLldb(breakpoint: XLineBreakpoint<WasmBreakpointProperties>) {
@@ -237,34 +202,24 @@ class WasmDebugProcess(
      * and execution is automatically resumed.
      */
     private fun handleStop() {
-        // The stop event output from LLDB usually already contains the
-        // frame location (e.g. "frame #0: 0x... module`func at file.c:42").
-        // We also explicitly request `frame info` in case the location
-        // wasn't part of the initial stop output. We then poll the
-        // collected output lines with a few retries to account for
-        // asynchronous delivery of LLDB output through the process handler.
-        lldb?.sendCommand("frame info")
-
-        var sourcePosition: XSourcePosition? = null
-        var functionName: String? = null
-        var lines: List<String> = emptyList()
-
-        // Retry a few times to give LLDB output time to arrive
-        for (attempt in 1..FRAME_PARSE_RETRIES) {
-            Thread.sleep(FRAME_PARSE_DELAY_MS)
-
-            synchronized(outputLock) {
-                lines = recentOutputLines.toList()
-            }
-
-            sourcePosition = parseSourcePosition(lines)
-            functionName = parseFunctionName(lines)
-            if (sourcePosition != null) break
+        // Suppress stop-event detection while we issue informational
+        // commands (`frame info`). Without this, the `frame info` output
+        // echoes `stop reason = breakpoint ...` which would be
+        // misinterpreted as a brand-new stop event, re-entering
+        // handleStop() and creating an infinite loop.
+        val communicator = lldb ?: return
+        communicator.withStopEventsSuppressed {
+            handleStopImpl(communicator)
         }
+    }
 
-        synchronized(outputLock) {
-            recentOutputLines.clear()
-        }
+    private fun handleStopImpl(communicator: LldbCommunicator) {
+        // Use sendCommandAndCollectOutput so the response is fenced
+        // and stop-event detection is suppressed for the output lines.
+        val lines = communicator.sendCommandAndCollectOutput("frame info")
+
+        val sourcePosition = parseSourcePosition(lines)
+        val functionName = parseFunctionName(lines)
 
         LOG.debug("handleStop: sourcePosition=$sourcePosition, function=$functionName, lines=$lines")
 
@@ -304,7 +259,7 @@ class WasmDebugProcess(
                         "stopped at $stoppedPath:${sourcePosition.line + 1}, " +
                         "no matching IDE breakpoint — resuming"
                 )
-                lldb?.resume()
+                communicator.resume()
                 return
             }
         }
@@ -414,13 +369,6 @@ class WasmDebugProcess(
 
     companion object {
         private val LOG = Logger.getInstance(WasmDebugProcess::class.java)
-        private const val MAX_OUTPUT_WINDOW = 200
-
-        /** Number of retries when waiting for LLDB `frame info` output. */
-        private const val FRAME_PARSE_RETRIES = 5
-
-        /** Delay in milliseconds between frame-parse retries. */
-        private const val FRAME_PARSE_DELAY_MS = 200L
 
         /**
          * Matches LLDB frame location: `at /path/to/file.c:42` or `at /path/to/file.c:42:5`

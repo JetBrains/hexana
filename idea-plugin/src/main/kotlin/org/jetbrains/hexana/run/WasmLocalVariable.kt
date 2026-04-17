@@ -19,10 +19,20 @@ import javax.swing.Icon
  */
 internal class WasmLocalVariable(
     val name: String,
-    private val typeName: String?,
+    val typeName: String?,
     private val displayValue: String,
     private val children: List<WasmLocalVariable> = emptyList(),
 ) : XValue() {
+
+    /**
+     * `true` when LLDB reported the variable as `<variable not available>`
+     * or `<unavailable>`. The caller may attempt alternative retrieval
+     * strategies (e.g. `expression` command) before presenting the value.
+     */
+    val isUnavailable: Boolean
+        get() = displayValue == UNAVAILABLE_MARKER ||
+            displayValue == UNAVAILABLE_SHORT ||
+            displayValue.contains(NO_LOCATION_MARKER)
 
     override fun computePresentation(node: XValueNode, place: XValuePlace) {
         node.setPresentation(
@@ -64,13 +74,22 @@ internal class WasmLocalVariable(
          * }
          * ```
          */
-        internal fun parseFrameVariableOutput(lines: List<String>): List<WasmLocalVariable> {
+        internal fun parseFrameVariableOutput(
+            lines: List<String>,
+            filterHidden: Boolean = true,
+        ): List<WasmLocalVariable> {
             val variables = mutableListOf<WasmLocalVariable>()
             var i = 0
             while (i < lines.size) {
                 val line = lines[i]
                 val parsed = parseVariableLine(line)
                 if (parsed != null) {
+                    // Skip internal runtime variables (e.g. __vmctx).
+                    if (filterHidden && parsed.name in HIDDEN_VARIABLE_NAMES) {
+                        i++
+                        continue
+                    }
+
                     // Check if the value ends with '{' indicating a multi-line value
                     if (parsed.displayValue.trimEnd().endsWith("{")) {
                         val braceLines = mutableListOf(parsed.displayValue)
@@ -109,6 +128,34 @@ internal class WasmLocalVariable(
             }
             return variables
         }
+
+        private const val UNAVAILABLE_MARKER = "<variable not available>"
+        private const val UNAVAILABLE_SHORT = "<unavailable>"
+        private const val NO_LOCATION_MARKER = "<no location, value may have been optimized out>"
+
+        /**
+         * Internal runtime parameters injected by Wasmtime that are
+         * not meaningful to the user and should be hidden from the
+         * Variables pane.
+         */
+        private val HIDDEN_VARIABLE_NAMES = setOf("__vmctx")
+
+        /**
+         * Creates a new [WasmLocalVariable] that keeps the original
+         * variable's name but replaces the type and display value with
+         * data obtained from an alternative source (e.g. LLDB
+         * `expression` evaluation).
+         */
+        internal fun withResolvedValue(
+            original: WasmLocalVariable,
+            typeName: String?,
+            displayValue: String,
+        ): WasmLocalVariable = WasmLocalVariable(
+            name = original.name,
+            typeName = typeName ?: original.typeName,
+            displayValue = displayValue,
+            children = original.children,
+        )
 
         /**
          * The pattern for a single `frame variable` line:
