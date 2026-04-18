@@ -73,7 +73,16 @@ class WasmStackFrame(
                     // (it uses a different code path for location lookup).
                     val resolved = variables.map { variable ->
                         if (!variable.isUnavailable) return@map variable
-                        tryResolveViaExpression(communicator, variable)
+                        val attempted = tryResolveViaExpression(communicator, variable)
+                        if (!attempted.isUnavailable) return@map attempted
+                        // Both retrieval strategies failed. Check whether
+                        // DWARF location metadata is missing so we can show
+                        // a more informative message to the user.
+                        if (isDwarfLocationMissing(communicator, variable)) {
+                            WasmLocalVariable.withDwarfMissingMessage(attempted)
+                        } else {
+                            attempted
+                        }
                     }
 
                     val list = XValueChildrenList()
@@ -101,6 +110,40 @@ class WasmStackFrame(
             )
         } catch (e: Exception) {
             LOG.debug("__vmctx->set() failed (expected in non-Wasm frames): ${e.message}")
+        }
+    }
+
+    /**
+     * Checks whether the DWARF debug info for the given variable is
+     * missing the location attribute (`DW_AT_location`). When LLDB
+     * reports a variable as unavailable, this distinguishes between
+     * "the DWARF entry exists but has no location" and "the value
+     * is temporarily unavailable for other reasons".
+     *
+     * Uses LLDB's Python scripting API to query the variable's
+     * [SBValue.GetLocation()](https://lldb.llvm.org/python_api/lldb.SBValue.html)
+     * — if it is empty or absent the location metadata is missing.
+     */
+    private fun isDwarfLocationMissing(
+        communicator: LldbCommunicator,
+        variable: WasmLocalVariable,
+    ): Boolean {
+        return try {
+            val lines = communicator.sendCommandAndCollectOutput(
+                "script v = lldb.frame.FindVariable('${variable.name}'); " +
+                    "print('valid=' + str(v.IsValid()) + ' loc=' + str(v.location))",
+                timeoutMs = 2_000,
+            )
+            val joined = lines.joinToString(" ").trim()
+            // When the variable has no DWARF location, LLDB returns
+            // an invalid SBValue or an empty / None location string.
+            if (joined.contains("valid=False")) return true
+            if (joined.contains("loc=None")) return true
+            if (joined.contains("loc=") && !joined.contains("loc=DW_OP")) return true
+            false
+        } catch (e: Exception) {
+            LOG.debug("DWARF location check failed for '${variable.name}': ${e.message}")
+            false
         }
     }
 

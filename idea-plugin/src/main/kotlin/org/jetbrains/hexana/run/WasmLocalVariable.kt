@@ -32,7 +32,18 @@ internal class WasmLocalVariable(
     val isUnavailable: Boolean
         get() = displayValue == UNAVAILABLE_MARKER ||
             displayValue == UNAVAILABLE_SHORT ||
-            displayValue.contains(NO_LOCATION_MARKER)
+            displayValue.contains(NO_LOCATION_MARKER) ||
+            displayValue == DWARF_MISSING_MARKER
+
+    /**
+     * `true` when the variable's value could not be resolved because
+     * the DWARF debug info does not contain a location expression
+     * for it (DW_AT_location is absent or empty). This is a more
+     * specific diagnosis than [isUnavailable] and is set after all
+     * fallback resolution attempts have been exhausted.
+     */
+    val isDwarfMetadataMissing: Boolean
+        get() = displayValue == DWARF_MISSING_MARKER
 
     override fun computePresentation(node: XValueNode, place: XValuePlace) {
         node.setPresentation(
@@ -132,6 +143,7 @@ internal class WasmLocalVariable(
         private const val UNAVAILABLE_MARKER = "<variable not available>"
         private const val UNAVAILABLE_SHORT = "<unavailable>"
         private const val NO_LOCATION_MARKER = "<no location, value may have been optimized out>"
+        internal const val DWARF_MISSING_MARKER = "<DWARF metadata missing>"
 
         /**
          * Internal runtime parameters injected by Wasmtime that are
@@ -154,6 +166,21 @@ internal class WasmLocalVariable(
             name = original.name,
             typeName = typeName ?: original.typeName,
             displayValue = displayValue,
+            children = original.children,
+        )
+
+        /**
+         * Creates a copy of the given variable with its display value
+         * replaced by [DWARF_MISSING_MARKER], indicating that the
+         * variable could not be resolved because the required DWARF
+         * location metadata is absent.
+         */
+        internal fun withDwarfMissingMessage(
+            original: WasmLocalVariable,
+        ): WasmLocalVariable = WasmLocalVariable(
+            name = original.name,
+            typeName = original.typeName,
+            displayValue = DWARF_MISSING_MARKER,
             children = original.children,
         )
 

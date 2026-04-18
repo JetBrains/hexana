@@ -163,6 +163,50 @@ class WasmLocalVariableTest : UsefulTestCase() {
         assertTrue(vars[0].isUnavailable)
     }
 
+    fun testDwarfMissingMarker() {
+        val original = WasmLocalVariable.parseFrameVariableOutput(
+            listOf("(unsigned int) x = <variable not available>")
+        )[0]
+        assertTrue(original.isUnavailable)
+        assertFalse(original.isDwarfMetadataMissing)
+
+        val dwarfMissing = WasmLocalVariable.withDwarfMissingMessage(original)
+        assertEquals("x", dwarfMissing.name)
+        assertEquals("unsigned int", dwarfMissing.typeName)
+        assertEquals(WasmLocalVariable.DWARF_MISSING_MARKER, dwarfMissing.displayValue)
+        assertTrue(dwarfMissing.isUnavailable)
+        assertTrue(dwarfMissing.isDwarfMetadataMissing)
+    }
+
+    fun testDwarfMissingMarkerIsNotSetForRegularValues() {
+        val lines = listOf("(int) x = 42")
+        val vars = WasmLocalVariable.parseFrameVariableOutput(lines)
+        assertEquals(1, vars.size)
+        assertFalse(vars[0].isDwarfMetadataMissing)
+        assertFalse(vars[0].isUnavailable)
+    }
+
+    fun testDwarfMissingPreservesTypeName() {
+        val original = WasmLocalVariable.parseFrameVariableOutput(
+            listOf("(calculator::Op) op = <variable not available>")
+        )[0]
+        val dwarfMissing = WasmLocalVariable.withDwarfMissingMessage(original)
+        assertEquals("calculator::Op", dwarfMissing.typeName)
+        assertEquals("<DWARF metadata missing>", dwarfMissing.displayValue)
+    }
+
+    fun testWithResolvedValueOverridesDwarfMissing() {
+        val original = WasmLocalVariable.parseFrameVariableOutput(
+            listOf("(unsigned int) x = <variable not available>")
+        )[0]
+        val dwarfMissing = WasmLocalVariable.withDwarfMissingMessage(original)
+        assertTrue(dwarfMissing.isDwarfMetadataMissing)
+
+        val resolved = WasmLocalVariable.withResolvedValue(dwarfMissing, "int", "42")
+        assertFalse(resolved.isDwarfMetadataMissing)
+        assertFalse(resolved.isUnavailable)
+    }
+
     fun testParseBlanksIgnored() {
         val lines = listOf(
             "",
