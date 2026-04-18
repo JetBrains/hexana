@@ -50,7 +50,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
 
         val starter = object : XDebugProcessStarter() {
             override fun start(session: XDebugSession): XDebugProcess {
-                val buildResult = WasmtimeDebugCommandLineState.buildWasmtimeArguments(configuration)
+                val buildResult = WasmtimeDebugCommandLineState.buildWasmtimeArguments(configuration, environment.project)
                 val wasmtimePath = configuration.wasmtimePath.ifBlank {
                     WasmtimeCommandLineState.resolveDefaultWasmtimePath()
                 }

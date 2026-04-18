@@ -7,6 +7,7 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.util.execution.ParametersListUtil
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
@@ -24,12 +25,7 @@ class WasmtimeCommandLineState(
 
         val wasmFile = File(configuration.wasmFilePath)
         val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
-        val resolvedDeps = configuration.dependencies
-            .mapNotNull { entry ->
-                val parts = entry.split("=", limit = 2)
-                if (parts.size == 2) parts[0] to parts[1] else null
-            }
-            .toMap()
+        val resolvedDeps = resolveDeps(wasmBytes)
 
         val coreModuleDeps = mutableMapOf<String, String>()
         val componentDeps = mutableMapOf<String, String>()
@@ -107,6 +103,26 @@ class WasmtimeCommandLineState(
         val handler = OSProcessHandler(commandLine)
         ProcessTerminatedListener.attach(handler)
         return handler
+    }
+
+    /**
+     * Resolves dependencies from the configuration, falling back to
+     * [WasmDependencyResolver] when the stored list is empty so that
+     * runs triggered from the IDE toolbar (which bypass [doRun]) still
+     * compose component dependencies via WAC.
+     */
+    private fun resolveDeps(wasmBytes: ByteArray?): Map<String, String> {
+        val stored = configuration.dependencies
+            .mapNotNull { entry ->
+                val parts = entry.split("=", limit = 2)
+                if (parts.size == 2) parts[0] to parts[1] else null
+            }
+            .toMap()
+        if (stored.isNotEmpty() || wasmBytes == null) return stored
+
+        val project = environment.project
+        val vFile = LocalFileSystem.getInstance().findFileByPath(configuration.wasmFilePath)
+        return WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = vFile)
     }
 
     companion object {

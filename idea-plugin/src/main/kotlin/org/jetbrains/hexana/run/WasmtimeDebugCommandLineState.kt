@@ -7,6 +7,8 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.util.execution.ParametersListUtil
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
@@ -29,7 +31,7 @@ class WasmtimeDebugCommandLineState(
 
     override fun startProcess(): ProcessHandler {
         val wasmtimePath = configuration.wasmtimePath.ifBlank { WasmtimeCommandLineState.resolveDefaultWasmtimePath() }
-        val result = buildWasmtimeArguments(configuration)
+        val result = buildWasmtimeArguments(configuration, environment.project)
 
         val commandLine = GeneralCommandLine().apply {
             exePath = wasmtimePath
@@ -62,17 +64,12 @@ class WasmtimeDebugCommandLineState(
          *         metadata about whether component composition was used
          *         (which strips DWARF debug info).
          */
-        fun buildWasmtimeArguments(configuration: WasmRunConfiguration): DebugBuildResult {
+        fun buildWasmtimeArguments(configuration: WasmRunConfiguration, project: Project): DebugBuildResult {
             val args = mutableListOf<String>()
 
             val wasmFile = File(configuration.wasmFilePath)
             val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
-            val resolvedDeps = configuration.dependencies
-                .mapNotNull { entry ->
-                    val parts = entry.split("=", limit = 2)
-                    if (parts.size == 2) parts[0] to parts[1] else null
-                }
-                .toMap()
+            val resolvedDeps = resolveDeps(configuration, wasmBytes, project)
 
             val coreModuleDeps = mutableMapOf<String, String>()
             val componentDeps = mutableMapOf<String, String>()
@@ -186,6 +183,29 @@ class WasmtimeDebugCommandLineState(
                 compositionUsed = compositionUsed,
                 dwarfInjected = dwarfInjected,
             )
+        }
+
+        /**
+         * Resolves dependencies from the configuration, falling back to
+         * [WasmDependencyResolver] when the stored list is empty so that
+         * debug runs triggered from the IDE toolbar still compose
+         * component dependencies via WAC.
+         */
+        private fun resolveDeps(
+            configuration: WasmRunConfiguration,
+            wasmBytes: ByteArray?,
+            project: Project,
+        ): Map<String, String> {
+            val stored = configuration.dependencies
+                .mapNotNull { entry ->
+                    val parts = entry.split("=", limit = 2)
+                    if (parts.size == 2) parts[0] to parts[1] else null
+                }
+                .toMap()
+            if (stored.isNotEmpty() || wasmBytes == null) return stored
+
+            val vFile = LocalFileSystem.getInstance().findFileByPath(configuration.wasmFilePath)
+            return WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = vFile)
         }
 
         /**

@@ -61,10 +61,6 @@ class WasmDependencyResolverTest : UsefulTestCase() {
         assertTrue("Calculator should import subtractor",
             calculatorImports.any { it.contains("component:subtractor/subtract") })
 
-        // Simulate what the old resolver would do for a main module that only
-        // imports calculator: it would only resolve calculator, missing the
-        // transitive adder/subtractor deps.
-        // The new resolver should also collect adder and subtractor.
         val adderBytes = loadWasmResource("component/add.component.wasm")
         val adderProvider = WasmComponentBinaryProvider(adderBytes.toCommonByteBuffer())
         assertTrue(adderProvider.canProvideWasmModule())
@@ -72,5 +68,48 @@ class WasmDependencyResolverTest : UsefulTestCase() {
         val adderExports = adderProvider.exports.map { it.exportName }
         assertTrue("Adder should export docs:adder/add or component:adder/add",
             adderExports.any { it.contains("adder/add") })
+    }
+
+    fun testIsRuntimeImport() {
+        assertTrue("wasi: imports should be runtime",
+            WasmDependencyResolver.isRuntimeImport("wasi:cli/run@0.2.3"))
+        assertTrue("wasi:io/streams should be runtime",
+            WasmDependencyResolver.isRuntimeImport("wasi:io/streams@0.2.3"))
+        assertFalse("component: imports should not be runtime",
+            WasmDependencyResolver.isRuntimeImport("component:calculator/calculate@0.1.0"))
+        assertFalse("plain names should not be runtime",
+            WasmDependencyResolver.isRuntimeImport("my-module"))
+    }
+
+    fun testFindWorkspaceRoot() {
+        val sampleRoot = File("/Users/user/Downloads/sample-wasm-component-model-main")
+        if (!sampleRoot.exists()) {
+            println("[DEBUG_LOG] Sample project not found, skipping")
+            return
+        }
+        val appWasm = File(sampleRoot, "target/wasm32-wasip1/debug/app.wasm")
+        if (!appWasm.exists()) {
+            println("[DEBUG_LOG] app.wasm not found, skipping")
+            return
+        }
+
+        val root = WasmDependencyResolver.findWorkspaceRoot(appWasm)
+        assertNotNull("Should find workspace root", root)
+        assertEquals("Workspace root should be sample project root",
+            sampleRoot.absolutePath, root!!.absolutePath)
+    }
+
+    fun testBuildScanRootsFromWasmFilePath() {
+        val sampleRoot = File("/Users/user/Downloads/sample-wasm-component-model-main")
+        if (!sampleRoot.exists()) {
+            println("[DEBUG_LOG] Sample project not found, skipping")
+            return
+        }
+        val appWasmPath = File(sampleRoot, "target/wasm32-wasip1/debug/app.wasm").absolutePath
+
+        val roots = WasmDependencyResolver.buildScanRoots(null, appWasmPath)
+        assertTrue("Should have at least one scan root", roots.isNotEmpty())
+        assertTrue("Scan roots should contain the workspace root",
+            roots.any { it.absolutePath == sampleRoot.absolutePath })
     }
 }

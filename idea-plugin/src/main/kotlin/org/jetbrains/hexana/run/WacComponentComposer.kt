@@ -1,6 +1,10 @@
 package org.jetbrains.hexana.run
 
 import com.intellij.openapi.diagnostic.Logger
+import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import java.io.File
 import java.nio.file.Files
 
@@ -21,9 +25,19 @@ internal object WacComponentComposer {
 
     private val LOG = Logger.getInstance(WacComponentComposer::class.java)
 
+    /** Maximum number of iterative compose passes to prevent infinite loops. */
+    private const val MAX_COMPOSE_PASSES = 10
+
     /**
      * Composes the given component dependencies into the main wasm file,
      * returning the path to the composed output file.
+     *
+     * Because `wasm-tools compose` (and `wac plug`) only satisfy the
+     * **direct** imports of the input component, transitive dependencies
+     * require iterative composition: after each pass the output is checked
+     * for remaining non-runtime component imports, and composition is
+     * repeated until all imports are satisfied or no further progress can
+     * be made.
      *
      * @param mainWasmPath path to the main wasm component file
      * @param componentDeps map of import name → file path for component dependencies
@@ -35,13 +49,13 @@ internal object WacComponentComposer {
 
         val tempDir = Files.createTempDirectory("hexana-wac-compose").toFile()
         tempDir.deleteOnExit()
-        val outputFile = File(tempDir, "composed.wasm")
-        outputFile.deleteOnExit()
 
         // Try wasm-tools compose first (more commonly available)
         val wasmToolsPath = resolveWasmToolsPath()
         if (wasmToolsPath != null) {
-            val result = composeWithWasmTools(wasmToolsPath, mainWasmPath, componentDeps, outputFile)
+            val result = composeIteratively(tempDir, mainWasmPath, componentDeps) { input, deps, output ->
+                composeWithWasmTools(wasmToolsPath, input, deps, output)
+            }
             if (result.composed) return result
             LOG.info("wasm-tools compose failed: ${result.error}, trying wac plug")
         }
@@ -49,7 +63,9 @@ internal object WacComponentComposer {
         // Fall back to wac plug
         val wacPath = resolveWacPath()
         if (wacPath != null) {
-            val result = composeWithWac(wacPath, mainWasmPath, componentDeps, outputFile)
+            val result = composeIteratively(tempDir, mainWasmPath, componentDeps) { input, deps, output ->
+                composeWithWac(wacPath, input, deps, output)
+            }
             if (result.composed) return result
             LOG.info("wac plug failed: ${result.error}")
         }
@@ -64,6 +80,71 @@ internal object WacComponentComposer {
             "Component composition failed with ${toolNames.joinToString(" and ")}."
         }
         return ComposeResult(mainWasmPath, composed = false, error = errorMsg)
+    }
+
+    /**
+     * Runs the given [composeFn] iteratively until all non-runtime component
+     * imports are satisfied or no further progress is made.
+     */
+    private fun composeIteratively(
+        tempDir: File,
+        mainWasmPath: String,
+        componentDeps: Map<String, String>,
+        composeFn: (inputPath: String, deps: Map<String, String>, outputFile: File) -> ComposeResult,
+    ): ComposeResult {
+        var currentInput = mainWasmPath
+        var remainingDeps = componentDeps
+        var lastResult: ComposeResult? = null
+
+        for (pass in 1..MAX_COMPOSE_PASSES) {
+            val outputFile = File(tempDir, "composed_pass$pass.wasm")
+            outputFile.deleteOnExit()
+
+            val result = composeFn(currentInput, remainingDeps, outputFile)
+            if (!result.composed) return result
+
+            lastResult = result
+            val unresolvedImports = findUnresolvedComponentImports(File(result.wasmPath))
+            if (unresolvedImports.isEmpty()) {
+                LOG.info("All component imports resolved after $pass pass(es)")
+                return result
+            }
+
+            val nextDeps = remainingDeps.filter { (name, _) -> name in unresolvedImports }
+            if (nextDeps.isEmpty() || nextDeps == remainingDeps) {
+                LOG.info("No further progress possible after $pass pass(es), " +
+                    "remaining unresolved imports: $unresolvedImports")
+                return result
+            }
+
+            LOG.info("Pass $pass: ${unresolvedImports.size} unresolved imports remain, composing again")
+            currentInput = result.wasmPath
+            remainingDeps = nextDeps
+        }
+
+        return lastResult ?: ComposeResult(mainWasmPath, composed = false, error = "max compose passes reached")
+    }
+
+    /**
+     * Parses the given wasm file and returns the set of non-runtime component
+     * import names that are still unresolved.
+     */
+    private fun findUnresolvedComponentImports(wasmFile: File): Set<String> {
+        if (!wasmFile.exists()) return emptySet()
+        return try {
+            val bytes = wasmFile.readBytes()
+            if (WasmBinaryProviderSelector.select(bytes.toCommonByteBuffer()) != BinaryProviderType.WasmComponent) {
+                return emptySet()
+            }
+            val provider = WasmComponentBinaryProvider(bytes.toCommonByteBuffer())
+            if (!provider.canProvideWasmModule()) return emptySet()
+            provider.imports.map { it.importName }.distinct()
+                .filter { !WasmDependencyResolver.isRuntimeImport(it) }
+                .toSet()
+        } catch (e: Exception) {
+            LOG.debug("Failed to parse composed output ${wasmFile.absolutePath}: ${e.message}")
+            emptySet()
+        }
     }
 
     /**
