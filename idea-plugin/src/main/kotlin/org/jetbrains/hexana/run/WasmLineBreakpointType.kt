@@ -2,7 +2,9 @@ package org.jetbrains.hexana.run
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.util.indexing.FileBasedIndex
 import com.intellij.xdebugger.breakpoints.XLineBreakpointType
+import org.jetbrains.hexana.DwarfIndexId
 import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.wat.WatFileType
 
@@ -10,8 +12,8 @@ import org.jetbrains.hexana.wat.WatFileType
  * Line breakpoint type for WebAssembly debugging.
  *
  * Breakpoints can be placed in WAT files and in any text-based source
- * file (C, Rust, etc.) that might be referenced by DWARF debug
- * information embedded in the Wasm binary.  The native debugger
+ * file (C, Rust, etc.) that is referenced by DWARF debug information
+ * embedded in a Wasm binary present in the project.  The native debugger
  * (LLDB/GDB) attached to the wasmtime process uses these source
  * locations when DWARF metadata is present.
  */
@@ -26,7 +28,11 @@ class WasmLineBreakpointType :
         if (file.fileType is WatFileType) return true
 
         val extension = file.extension?.lowercase() ?: return false
-        return extension in SOURCE_EXTENSIONS
+        if (extension !in SOURCE_EXTENSIONS) return false
+
+        val fileName = file.name
+        val allKeys = FileBasedIndex.getInstance().getAllKeys(DwarfIndexId, project)
+        return allKeys.any { it.endsWith("/$fileName") || it == fileName }
     }
 
     companion object {
