@@ -210,8 +210,8 @@ class WasmDebugProcess(
                 while (lldb != null && processHandler.isProcessTerminated.not()) {
                     val event = lldb.waitForStopEvent(1_000) ?: continue
                     when (event) {
-                        is LldbCommunicator.StopEvent.BreakpointHit -> handleStop()
-                        is LldbCommunicator.StopEvent.Stepped -> handleStop()
+                        is LldbCommunicator.StopEvent.BreakpointHit -> handleStop(event)
+                        is LldbCommunicator.StopEvent.Stepped -> handleStop(event)
                         is LldbCommunicator.StopEvent.StoppedAtEntry -> {
                             // Unexpected stop at entry; resume automatically.
                             LOG.info("Process stopped at entry; continuing execution")
@@ -244,7 +244,7 @@ class WasmDebugProcess(
      * (full-path check), the stop is treated as a "wrong file" hit
      * and execution is automatically resumed.
      */
-    private fun handleStop() {
+    private fun handleStop(event: LldbCommunicator.StopEvent) {
         // Suppress stop-event detection while we issue informational
         // commands (`frame info`). Without this, the `frame info` output
         // echoes `stop reason = breakpoint ...` which would be
@@ -252,11 +252,11 @@ class WasmDebugProcess(
         // handleStop() and creating an infinite loop.
         val communicator = lldb ?: return
         communicator.withStopEventsSuppressed {
-            handleStopImpl(communicator)
+            handleStopImpl(communicator, event)
         }
     }
 
-    private fun handleStopImpl(communicator: LldbCommunicator) {
+    private fun handleStopImpl(communicator: LldbCommunicator, event: LldbCommunicator.StopEvent) {
         // Use sendCommandAndCollectOutput so the response is fenced
         // and stop-event detection is suppressed for the output lines.
         val lines = communicator.sendCommandAndCollectOutput("frame info")
@@ -416,6 +416,23 @@ class WasmDebugProcess(
                 resumePastTrap(communicator)
                 return
             }
+        }
+
+        // If this stop came from a BreakpointHit event (real LLDB
+        // breakpoint or EXC_BREAKPOINT) but no registered IDE breakpoint
+        // matched the location, this is most likely a wasmtime-internal
+        // trap (e.g. `unreachable`, bounds check, or other JIT-emitted
+        // `brk` instruction) — not a user breakpoint.  Auto-resume
+        // instead of pausing the IDE.
+        if (event is LldbCommunicator.StopEvent.BreakpointHit) {
+            LOG.info(
+                "No matching IDE breakpoint for stop at " +
+                    "${verifiedPath ?: rawDwarfPath}:${rawDwarfLine ?: "?"} " +
+                    "(breakpointId='${event.breakpointId}') — " +
+                    "likely wasmtime-internal trap, resuming"
+            )
+            resumePastTrap(communicator)
+            return
         }
 
         val frame = WasmStackFrame(sourcePosition, functionName, lldb)
