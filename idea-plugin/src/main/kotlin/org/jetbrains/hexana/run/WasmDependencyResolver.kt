@@ -20,41 +20,18 @@ import org.jetbrains.hexana.wit.psi.WitResolver
  * for a wasm component that exports that name. When a unique match is found,
  * the corresponding file path is returned so it can be supplied as a
  * dependency (e.g. via wasmtime `--preload`).
+ *
+ * Component dependencies are resolved transitively: when a resolved
+ * dependency is itself a component with imports, those imports are also
+ * resolved so that composition tools receive the full dependency graph.
  */
 internal object WasmDependencyResolver {
 
     /**
-     * Resolves dependencies for a core wasm module by looking up each distinct
-     * import module name (`prefix`) in the [WasmIndexId].
-     *
-     * @return a map of import module name → absolute file path for every
-     *         import whose provider was found in the project index.
-     */
-    fun resolveCoreDependencies(wasmBytes: ByteArray, project: Project, excludeFile: VirtualFile? = null): Map<String, String> {
-        val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
-        if (!provider.canProvideWasmModule()) return emptyMap()
-
-        val importModuleNames = provider.imports.map { it.prefix }.distinct()
-        return resolveImportNames(importModuleNames, project, excludeFile)
-    }
-
-    /**
-     * Resolves dependencies for a wasm component by looking up each distinct
-     * import name in the [WasmIndexId].
-     *
-     * @return a map of import name → absolute file path for every
-     *         import whose provider was found in the project index.
-     */
-    fun resolveComponentDependencies(wasmBytes: ByteArray, project: Project, excludeFile: VirtualFile? = null): Map<String, String> {
-        val provider = WasmComponentBinaryProvider(wasmBytes.toCommonByteBuffer())
-        if (!provider.canProvideWasmModule()) return emptyMap()
-        val importNames = provider.imports.map { it.importName }.distinct()
-        return resolveImportNames(importNames, project, excludeFile)
-    }
-
-    /**
      * Resolves dependencies for a wasm file, auto-detecting whether it is
-     * a core module or component.
+     * a core module or component. Component dependencies are resolved
+     * transitively so that the full dependency graph is available for
+     * composition.
      */
     fun resolveDependencies(wasmBytes: ByteArray, project: Project, excludeFile: VirtualFile? = null): Map<String, String> {
         return when (WasmBinaryProviderSelector.select(wasmBytes.toCommonByteBuffer())) {
@@ -62,7 +39,8 @@ internal object WasmDependencyResolver {
                 val provider = WasmComponentBinaryProvider(wasmBytes.toCommonByteBuffer())
                 if (!provider.canProvideWasmModule()) return emptyMap()
                 val importNames = provider.imports.map { it.importName }.distinct()
-                resolveImportNames(importNames, project, excludeFile)
+                val resolved = resolveImportNames(importNames, project, excludeFile)
+                resolveTransitiveDependencies(resolved, project, excludeFile)
             }
             BinaryProviderType.Wasm -> {
                 val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
@@ -72,6 +50,51 @@ internal object WasmDependencyResolver {
             }
             else -> emptyMap()
         }
+    }
+
+    /**
+     * Transitively resolves component dependencies. For each resolved file
+     * that is itself a component, its imports are resolved too. Already
+     * visited files are skipped to avoid cycles.
+     */
+    private fun resolveTransitiveDependencies(
+        directDeps: Map<String, String>,
+        project: Project,
+        excludeFile: VirtualFile?,
+    ): Map<String, String> {
+        val allResolved = LinkedHashMap(directDeps)
+        val visitedPaths = mutableSetOf<String>()
+        excludeFile?.path?.let { visitedPaths.add(it) }
+
+        val queue = ArrayDeque(directDeps.values.distinct())
+
+        while (queue.isNotEmpty()) {
+            val depPath = queue.removeFirst()
+            if (!visitedPaths.add(depPath)) continue
+
+            val depFile = java.io.File(depPath)
+            if (!depFile.exists()) continue
+
+            val depBytes = depFile.readBytes()
+            if (WasmBinaryProviderSelector.select(depBytes.toCommonByteBuffer()) != BinaryProviderType.WasmComponent) continue
+
+            val depProvider = WasmComponentBinaryProvider(depBytes.toCommonByteBuffer())
+            if (!depProvider.canProvideWasmModule()) continue
+
+            val transImportNames = depProvider.imports.map { it.importName }.distinct()
+                .filter { it !in allResolved }
+            if (transImportNames.isEmpty()) continue
+
+            val transResolved = resolveImportNames(transImportNames, project, excludeFile)
+            for ((name, path) in transResolved) {
+                if (name !in allResolved) {
+                    allResolved[name] = path
+                    queue.add(path)
+                }
+            }
+        }
+
+        return allResolved
     }
 
     private fun resolveImportNames(
