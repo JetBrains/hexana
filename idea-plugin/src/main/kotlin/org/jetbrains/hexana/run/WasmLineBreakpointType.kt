@@ -42,6 +42,7 @@ class WasmLineBreakpointType :
             "rs",
             "zig",
             "wat",
+            "go"
         )
     }
 }
