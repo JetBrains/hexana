@@ -709,4 +709,151 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         val lines = listOf("some random output without frame info")
         assertNull(WasmDebugProcess.parseFunctionName(lines))
     }
+
+    // ---------------------------------------------------------------
+    // parseFunctionName: classic wasm modules (no backtick between
+    // JIT module identifier and function name).
+    // ---------------------------------------------------------------
+
+    fun testParseFunctionNameClassicWasmWithArgs() {
+        // Classic wasm module frame — no backtick separator.
+        val lines = listOf(
+            "frame #0: 0x0000000107f20308 JIT(0x991400000)" +
+                "hello_world::add::hcfbbdf8271862188" +
+                "(a=<unavailable>, b=<unavailable>) at lib.rs:10:12"
+        )
+        assertEquals(
+            "hello_world::add::hcfbbdf8271862188",
+            WasmDebugProcess.parseFunctionName(lines),
+        )
+    }
+
+    fun testParseFunctionNameClassicWasmWithoutArgs() {
+        // Classic wasm module frame without parenthesized arguments.
+        val lines = listOf(
+            "frame #0: 0x0000000107f20308 JIT(0x991400000)" +
+                "hello_world::add::hcfbbdf8271862188 at lib.rs:10:12"
+        )
+        assertEquals(
+            "hello_world::add::hcfbbdf8271862188",
+            WasmDebugProcess.parseFunctionName(lines),
+        )
+    }
+
+    fun testParseFunctionNameClassicWasmWithOffset() {
+        // Classic wasm module frame with offset instead of source location.
+        val lines = listOf(
+            "frame #0: 0x0000000107f20308 JIT(0x991400000)" +
+                "hello_world::add::hcfbbdf8271862188 + 42"
+        )
+        assertEquals(
+            "hello_world::add::hcfbbdf8271862188",
+            WasmDebugProcess.parseFunctionName(lines),
+        )
+    }
+
+    fun testExtractCrateNameClassicWasm() {
+        // Plain Rust symbol from classic wasm module: crate::func::hash.
+        assertEquals(
+            "hello_world",
+            WasmDebugProcess.extractCrateName("hello_world::add::hcfbbdf8271862188"),
+        )
+    }
+
+    // ---------------------------------------------------------------
+    // stripCuHashSuffix: LLDB appends `/@/<hash>` to CU paths for
+    // classic wasm JIT compilation units.
+    // ---------------------------------------------------------------
+
+    fun testStripCuHashSuffix() {
+        assertEquals(
+            "/Users/dev/project/src/lib.rs",
+            WasmDebugProcess.stripCuHashSuffix(
+                "/Users/dev/project/src/lib.rs/@/9le4nom1b1hdoeh9b7lbjqyuq"
+            ),
+        )
+    }
+
+    fun testStripCuHashSuffixNoHash() {
+        // Normal CU paths without hash suffix are returned unchanged.
+        assertEquals(
+            "/Users/dev/project/src/lib.rs",
+            WasmDebugProcess.stripCuHashSuffix("/Users/dev/project/src/lib.rs"),
+        )
+    }
+
+    fun testStripCuHashSuffixPreservesAtInPath() {
+        // Literal '@' not followed by `/<hash>` pattern is preserved.
+        assertEquals(
+            "/Users/user@host/src/lib.rs",
+            WasmDebugProcess.stripCuHashSuffix("/Users/user@host/src/lib.rs"),
+        )
+    }
+
+    // ---------------------------------------------------------------
+    // CU path verification with hash-stripped paths: after stripping
+    // the hash, cuPathMatchesIdePath should accept the path.
+    // ---------------------------------------------------------------
+
+    fun testCuPathMatchesAfterHashStrip() {
+        val cuRaw = "/Users/dev/project/src/lib.rs/@/9le4nom1b1hdoeh9b7lbjqyuq"
+        val stripped = WasmDebugProcess.stripCuHashSuffix(cuRaw)
+        val idePath = "/Users/dev/project/src/lib.rs"
+        assertTrue(WasmDebugProcess.cuPathMatchesIdePath(stripped, idePath))
+    }
+
+    // ---------------------------------------------------------------
+    // functionNameMatchesIdePath: Rust crate name hyphen/underscore
+    // normalisation. Cargo crate "hello-world" becomes `hello_world`
+    // in symbol names; the IDE path retains the original hyphen.
+    // ---------------------------------------------------------------
+
+    fun testFunctionNameMatchesIdePathWithHyphenatedCrate() {
+        assertTrue(
+            WasmDebugProcess.functionNameMatchesIdePath(
+                "hello_world::add::hcfbbdf8271862188",
+                "/Users/dev/hello-world/src/lib.rs",
+            )
+        )
+    }
+
+    fun testFunctionNameMatchesIdePathWithUnderscoreCrate() {
+        // When the directory already uses underscores, the direct
+        // match should still work.
+        assertTrue(
+            WasmDebugProcess.functionNameMatchesIdePath(
+                "hello_world::add::hcfbbdf8271862188",
+                "/Users/dev/hello_world/src/lib.rs",
+            )
+        )
+    }
+
+    fun testFunctionNameDoesNotMatchDifferentCrateClassicWasm() {
+        assertFalse(
+            WasmDebugProcess.functionNameMatchesIdePath(
+                "hello_world::add::hcfbbdf8271862188",
+                "/Users/dev/other_crate/src/lib.rs",
+            )
+        )
+    }
+
+    // ---------------------------------------------------------------
+    // Full combined verification for classic wasm: CU hash suffix
+    // stripped + hyphenated crate name normalisation.
+    // ---------------------------------------------------------------
+
+    fun testFullVerificationClassicWasmWithCuHashAndHyphenatedCrate() {
+        // Exact scenario from the bug report: CU path has /@/<hash>,
+        // crate is "hello-world" (hyphen) but symbol uses "hello_world".
+        val cuRaw = "/Users/dev/hello-world/src/lib.rs/@/9le4nom1b1hdoeh9b7lbjqyuq"
+        val cuStripped = WasmDebugProcess.stripCuHashSuffix(cuRaw)
+        assertTrue(
+            fullVerification(
+                cuPath = cuStripped,
+                idePath = "/Users/dev/hello-world/src/lib.rs",
+                projectRelative = "hello-world/src/lib.rs",
+                functionName = "hello_world::add::hcfbbdf8271862188",
+            )
+        )
+    }
 }

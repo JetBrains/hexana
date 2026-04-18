@@ -259,14 +259,24 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
      *
      * Common patterns:
      * - `* thread #1, stop reason = breakpoint 1.1`
+     * - `* thread #1, stop reason = EXC_BREAKPOINT (code=1, subcode=0x...)`
      * - `* thread #1, stop reason = step in`
      * - `* thread #1, stop reason = plan complete`
      * - `* thread #1, stop reason = signal SIGSTOP` (stop-at-entry)
      * - `Process 12345 exited with status = 0 (0x00000000)`
+     *
+     * Wasmtime JIT on macOS/ARM may report `EXC_BREAKPOINT`
+     * (a Mach exception from a hardware trap instruction) instead
+     * of a regular `breakpoint N.M` stop reason. This happens
+     * when LLDB cannot step past the JIT breakpoint instruction
+     * and re-hits the trap. We treat `EXC_BREAKPOINT` as a
+     * breakpoint hit so the event loop can process it.
      */
     private fun parseStopEvent(line: String): StopEvent? {
         val trimmed = line.trim()
-        if (trimmed.contains("stop reason = breakpoint")) {
+        if (trimmed.contains("stop reason = breakpoint") ||
+            trimmed.contains("stop reason = EXC_BREAKPOINT")
+        ) {
             val match = BREAKPOINT_STOP_PATTERN.find(trimmed)
             isRunning = false
             return if (match != null) {

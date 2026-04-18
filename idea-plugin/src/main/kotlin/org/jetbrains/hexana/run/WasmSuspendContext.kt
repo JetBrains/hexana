@@ -120,19 +120,28 @@ internal class WasmExecutionStack(
     }
 
     private fun parseFunctionFromDescription(description: String): String? {
-        // Format: "0xaddr module`function(...) at file:line:col"
-        // or: "0xaddr module`function at file:line:col"
-        // or: "0xaddr module`function"
+        // Component-model format (backtick delimiter):
+        //   "0xaddr JIT(0x...)`function(...) at file:line:col"
+        // Classic wasm format (no backtick — function name directly
+        // follows the closing parenthesis of the module identifier):
+        //   "0xaddr JIT(0x...)function(...) at file:line:col"
         val backtickIdx = description.indexOf('`')
-        if (backtickIdx < 0) return null
-
-        val afterBacktick = description.substring(backtickIdx + 1)
-        val atIdx = afterBacktick.indexOf(" at ")
-        return if (atIdx >= 0) {
-            afterBacktick.substring(0, atIdx).trim()
+        val afterDelimiter = if (backtickIdx >= 0) {
+            description.substring(backtickIdx + 1)
         } else {
-            afterBacktick.trim()
+            // No backtick — try the closing ')' of a JIT(...) module id.
+            val parenIdx = description.indexOf(')')
+            if (parenIdx < 0) return null
+            description.substring(parenIdx + 1)
         }
+
+        val atIdx = afterDelimiter.indexOf(" at ")
+        val raw = if (atIdx >= 0) {
+            afterDelimiter.substring(0, atIdx).trim()
+        } else {
+            afterDelimiter.trim()
+        }
+        return raw.ifEmpty { null }
     }
 
     private fun parseSourceFromDescription(description: String): com.intellij.xdebugger.XSourcePosition? {

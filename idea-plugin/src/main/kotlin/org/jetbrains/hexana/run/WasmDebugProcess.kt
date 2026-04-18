@@ -132,7 +132,7 @@ class WasmDebugProcess(
     }
 
     override fun resume(context: XSuspendContext?) {
-        lldb?.resume() ?: LOG.debug("No LLDB communicator — cannot resume")
+        advancePcPastTrapThen { lldb?.resume() }
     }
 
     override fun startPausing() {
@@ -140,15 +140,58 @@ class WasmDebugProcess(
     }
 
     override fun startStepOver(context: XSuspendContext?) {
-        lldb?.stepOver() ?: LOG.debug("No LLDB communicator — cannot step over")
+        advancePcPastTrapThen { lldb?.stepOver() }
     }
 
     override fun startStepInto(context: XSuspendContext?) {
-        lldb?.stepInto() ?: LOG.debug("No LLDB communicator — cannot step into")
+        advancePcPastTrapThen { lldb?.stepInto() }
     }
 
     override fun startStepOut(context: XSuspendContext?) {
-        lldb?.stepOut() ?: LOG.debug("No LLDB communicator — cannot step out")
+        advancePcPastTrapThen { lldb?.stepOut() }
+    }
+
+    /**
+     * Advances the program counter past a wasmtime JIT trap
+     * instruction, then executes the given [action] (e.g. resume,
+     * step-over, step-into).
+     *
+     * Wasmtime JIT on macOS/ARM emits `brk` (trap) instructions
+     * at breakpoint sites. When LLDB stops on such a trap, the
+     * PC still points at the `brk` instruction. A simple
+     * `continue` or `thread step-inst` would re-execute the same
+     * trap, causing an infinite `EXC_BREAKPOINT` loop.
+     *
+     * The fix is to advance the PC past the 4-byte `brk`
+     * instruction via LLDB's Python API before issuing the real
+     * command. This is done through a fire-and-forget
+     * `sendCommand` (no blocking wait for output), so the call
+     * returns instantly and does not freeze the EDT.
+     *
+     * Stop-event detection is suppressed while the PC is adjusted
+     * to prevent any intermediate LLDB output from being
+     * misinterpreted as a user-visible stop.
+     */
+    private fun advancePcPastTrapThen(action: () -> Unit) {
+        val communicator = lldb ?: run {
+            LOG.debug("No LLDB communicator — cannot step")
+            return
+        }
+        communicator.withStopEventsSuppressed {
+            communicator.sendCommand(ADVANCE_PC_PAST_TRAP_CMD)
+        }
+        action()
+    }
+
+    /**
+     * Advances the PC past the current trap instruction during
+     * auto-resume (called from [handleStopImpl] which already
+     * runs inside [LldbCommunicator.withStopEventsSuppressed]),
+     * then resumes execution.
+     */
+    private fun resumePastTrap(communicator: LldbCommunicator) {
+        communicator.sendCommand(ADVANCE_PC_PAST_TRAP_CMD)
+        communicator.resume()
     }
 
     override fun stop() {
@@ -332,7 +375,7 @@ class WasmDebugProcess(
                         "function='$functionName', " +
                         "rawDwarf='$rawDwarfPath' — spurious suffix match, resuming"
                 )
-                communicator.resume()
+                resumePastTrap(communicator)
                 return
             }
             verifiedPath = sourcePosition?.file?.path
@@ -370,7 +413,7 @@ class WasmDebugProcess(
                         "stopped at $verifiedPath:${resolvedPosition.line + 1}, " +
                         "no matching IDE breakpoint — resuming"
                 )
-                communicator.resume()
+                resumePastTrap(communicator)
                 return
             }
         }
@@ -463,7 +506,12 @@ class WasmDebugProcess(
             ?.trim()
         if (cuPath.isNullOrEmpty()) return null
         LOG.debug("Compilation-unit path from LLDB: $cuPath")
-        return cuPath
+        // Classic Wasm JIT compilation units may have an opaque
+        // hash suffix appended by LLDB, e.g.
+        //   /path/to/src/lib.rs/@/9le4nom1b1hdoeh9b7lbjqyuq
+        // Strip the `/@/<hash>` tail so downstream path comparisons
+        // work against normal filesystem paths.
+        return stripCuHashSuffix(cuPath)
     }
 
     private fun pathMatchesBreakpointLocation(stoppedPath: String, breakpointPath: String): Boolean =
@@ -793,8 +841,15 @@ class WasmDebugProcess(
         ): Boolean {
             val crate = extractCrateName(functionName) ?: return false
             val normIde = idePath.replace('\\', '/').lowercase()
-            // The crate name must appear as a directory component in the IDE path.
-            return normIde.contains("/$crate/")
+            // The crate name must appear as a directory component in
+            // the IDE path. Rust normalises crate names by replacing
+            // hyphens with underscores (e.g. crate "hello-world"
+            // becomes `hello_world` in symbol names), so we compare
+            // with both the original crate name and a hyphen variant.
+            if (normIde.contains("/$crate/")) return true
+            val hyphenated = crate.replace('_', '-')
+            if (hyphenated != crate && normIde.contains("/$hyphenated/")) return true
+            return false
         }
 
         /**
@@ -804,16 +859,24 @@ class WasmDebugProcess(
             """\bat\s+(.+?):(\d+)(?::\d+)?""".toRegex()
 
         /**
-         * Matches function name in LLDB frame output like:
-         * `frame #0: 0x... module`func_name at file.c:42`
-         * `frame #0: 0x... module`func_name(args) at file.c:42`
+         * Matches function name in LLDB frame output.
          *
-         * The function name may be followed by parenthesized arguments
-         * before `at` or `+`, so the pattern uses a lazy `\S+?` for
-         * the name and an optional `(...)` group.
+         * Component-model (backtick delimiter):
+         * `frame #0: 0x... JIT(0x...)`func_name(args) at file.c:42`
+         *
+         * Classic wasm module (no backtick — function name follows
+         * the closing parenthesis of the JIT module identifier):
+         * `frame #0: 0x... JIT(0x...)func_name(args) at file.c:42`
+         *
+         * The `[)\x60]\x60?` prefix consumes the closing `)` or
+         * backtick (or both when a backtick follows `)`) so the
+         * captured group contains only the function name. The name
+         * may be followed by parenthesized arguments before `at` or
+         * `+`, so the pattern uses a lazy `\S+?` and an optional
+         * `(...)` group.
          */
         private val FUNCTION_NAME_PATTERN =
-            """`(\S+?)(?:\(.*?\))?\s+(?:at|[+])""".toRegex()
+            """[)`]`?(\S+?)(?:\(.*?\))?\s+(?:at|[+])""".toRegex()
 
         /**
          * Extracts crate name from Rust component-model mangled symbols.
@@ -827,6 +890,37 @@ class WasmDebugProcess(
          */
         private val CRATE_FROM_PLAIN_PATTERN =
             """^(\w+)::""".toRegex()
+
+        /**
+         * Matches the opaque hash suffix that LLDB appends to
+         * compilation-unit paths for classic Wasm JIT frames:
+         * `/@/<alphanumeric_hash>` at the end of the path.
+         *
+         * Example:
+         * `/path/src/lib.rs/@/9le4nom1b1hdoeh9b7lbjqyuq`
+         * → stripped to `/path/src/lib.rs`
+         */
+        private val CU_HASH_SUFFIX_PATTERN =
+            """/@/[A-Za-z0-9]+$""".toRegex()
+
+        internal fun stripCuHashSuffix(cuPath: String): String =
+            cuPath.replace(CU_HASH_SUFFIX_PATTERN, "")
+
+        /**
+         * LLDB command that advances the program counter past the
+         * current instruction. On macOS/ARM64, wasmtime JIT emits
+         * 4-byte `brk` (trap) instructions at breakpoint sites.
+         * When LLDB stops on such a trap, the PC still points at
+         * the `brk`; this command moves it forward by 4 bytes so
+         * that a subsequent `continue` or `next` does not re-hit
+         * the same trap.
+         *
+         * Uses LLDB's built-in Python interpreter so it works
+         * reliably across LLDB versions (unlike `register write
+         * pc \`$pc+4\`` which broke in some Xcode releases).
+         */
+        private const val ADVANCE_PC_PAST_TRAP_CMD =
+            "script lldb.frame.SetPC(lldb.frame.GetPC() + 4)"
     }
 }
 
