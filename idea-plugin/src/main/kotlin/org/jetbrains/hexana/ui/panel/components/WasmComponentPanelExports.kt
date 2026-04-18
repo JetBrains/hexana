@@ -30,6 +30,7 @@ import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
 import org.jetbrains.hexana.ui.panel.FunctionArgDescriptor
 import org.jetbrains.hexana.ui.panel.FunctionArgsDialog
+import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
 import org.jetbrains.hexana.ui.panel.scrollHexViewTo
 import org.jetbrains.hexana.ui.panel.universalQualifiedNameMeasure
 import org.jetbrains.hexana.wasm.components.*
@@ -88,7 +89,7 @@ fun WasmComponentPanelExports(binaryProvider: BinaryProvider,
             )},
         actionColumn = if (canRun) { { index ->
             val export = exports[index]
-            if (isComponentFunctionExport(export, wasmBinaryProvider)) {
+            if (isWasiCliRunExport(export) || isComponentFunctionExport(export, wasmBinaryProvider)) {
                 Tooltip(tooltip = { Text("Run '${export.exportName}'") }) {
                     Icon(
                         AllIconsKeys.Actions.Execute,
@@ -99,7 +100,11 @@ fun WasmComponentPanelExports(binaryProvider: BinaryProvider,
                             indication = null,
                         ) {
                             showEnginePopup(isComponentModel = true) { engine ->
-                                runComponentExportedFunction(binaryProvider, wasmBinaryProvider, state, export, engine)
+                                if (isWasiCliRunExport(export)) {
+                                    runWasiCliComponent(binaryProvider, state, export, engine)
+                                } else {
+                                    runComponentExportedFunction(binaryProvider, wasmBinaryProvider, state, export, engine)
+                                }
                             }
                         },
                     )
@@ -155,6 +160,21 @@ private fun validateComponentArg(text: String, type: ComponentValueType, types: 
         is ComponentPrimitiveString -> null
         else -> null
     }
+}
+
+private fun runWasiCliComponent(
+    binaryProvider: BinaryProvider,
+    state: HexViewStateHolder,
+    export: WasmComponentExport,
+    engine: WasmEngine,
+) {
+    val project = state.project
+    val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return
+
+    val dialog = ProgramArgsDialog(project, export.exportName)
+    if (!dialog.showAndGet()) return
+
+    runWasmConfiguration(project, file, "", dialog.programArgs, "", engine)
 }
 
 private fun runComponentExportedFunction(

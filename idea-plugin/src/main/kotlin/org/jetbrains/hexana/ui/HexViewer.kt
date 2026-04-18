@@ -51,11 +51,16 @@ import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toByteBuffer
+import org.jetbrains.hexana.hasWasiCliRunExport
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.HexanaSourceLocationProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.run.runWasmFile
 import org.jetbrains.hexana.run.showEnginePopup
+import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
+import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wat.psi.getDataByIndex
 import org.jetbrains.hexana.wat.psi.getDefinedFunctionByIndex
@@ -351,9 +356,15 @@ internal fun HexViewer(
                     export is WasmFunctionExportRecordEntry &&
                         (export.name == "_start" || export.name == "_initialize")
                 }
+            } else if (binaryProvider is WasmComponentBinaryProvider) {
+                hasWasiCliRunExport(binaryProvider)
             } else {
                 false
             }
+        }
+
+        val isComponentCliRun = remember(binaryProvider) {
+            binaryProvider is WasmComponentBinaryProvider && hasWasiCliRunExport(binaryProvider)
         }
 
         Column(modifier = Modifier.fillMaxSize()) {
@@ -369,8 +380,17 @@ internal fun HexViewer(
                         if (isRunnable) {
                             Tooltip(tooltip = { Text("Run Wasm module") }) {
                                 IconButton(onClick = {
-                                    showEnginePopup { engine ->
-                                        runWasmFile(binaryProvider, state, engine)
+                                    if (isComponentCliRun) {
+                                        showEnginePopup(isComponentModel = true) { engine ->
+                                            val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return@showEnginePopup
+                                            val dialog = ProgramArgsDialog(state.project, "wasi:cli/run")
+                                            if (!dialog.showAndGet()) return@showEnginePopup
+                                            runWasmConfiguration(state.project, file, "", dialog.programArgs, "", engine)
+                                        }
+                                    } else {
+                                        showEnginePopup { engine ->
+                                            runWasmFile(binaryProvider, state, engine)
+                                        }
                                     }
                                 }) {
                                     Icon(

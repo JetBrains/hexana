@@ -96,10 +96,18 @@ fun isTrivialComponentType(type: ComponentValueType, types: List<ComponentDefTyp
 
 internal val WIT_INTERFACE_PATTERN = Regex("^[a-zA-Z][a-zA-Z0-9-]*:[a-zA-Z][a-zA-Z0-9-]*/([a-zA-Z][a-zA-Z0-9-]*)(@.+)?$")
 
+private val WASI_CLI_RUN_PATTERN = Regex("^wasi:cli/run(@.+)?$")
+
 internal fun looksLikeWitInterfaceExport(name: String): Boolean = WIT_INTERFACE_PATTERN.matches(name)
 
 internal fun extractNameFromWitExport(name: String): String? =
     WIT_INTERFACE_PATTERN.matchEntire(name)?.groupValues?.get(1)
+
+fun isWasiCliRunExport(export: WasmComponentExport): Boolean =
+    WASI_CLI_RUN_PATTERN.matches(export.exportName)
+
+fun hasWasiCliRunExport(provider: WasmComponentBinaryProvider): Boolean =
+    provider.exports.any { isWasiCliRunExport(it) }
 
 fun resolveComponentFunctionType(
     export: WasmComponentExport,
