@@ -27,12 +27,15 @@ class WasmLineBreakpointType :
     override fun canPutAt(file: VirtualFile, line: Int, project: Project): Boolean {
         if (file.fileType is WatFileType) return true
 
-        val extension = file.extension?.lowercase() ?: return false
+        return false
+        // disabled as it can potentially affect setting regular breakpoints for those languages
+        // todo enable when debug is fully ready
+        /*val extension = file.extension?.lowercase() ?: return false
         if (extension !in SOURCE_EXTENSIONS) return false
 
         val fileName = file.name
         val allKeys = FileBasedIndex.getInstance().getAllKeys(DwarfIndexId, project)
-        return allKeys.any { it.endsWith("/$fileName") || it == fileName }
+        return allKeys.any { it.endsWith("/$fileName") || it == fileName }*/
     }
 
     companion object {
