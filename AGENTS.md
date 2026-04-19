@@ -24,6 +24,8 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 - `mcp/core/`: JVM-only Wasm MCP query/model library extracted from the plugin. It contains pure MCP-facing Wasm
   analysis logic, not IntelliJ registration or file-system integration.
 - `mcp/server/`: standalone Kotlin/JVM MCP runtime that exposes `mcp/core` over `stdio` and HTTP transports.
+- `mcp/tools-generator/`: single source of truth for Hexana MCP tool definitions (DSL + KotlinPoet generators for
+  `idea-plugin`'s `HexanaToolset.kt` and `mcp/server`'s `HexanaToolDispatcher.kt`).
 - `mcp/packaging/`: thin Claude/Codex wrapper layouts that point at the standalone runtime from `mcp/server/`.
 - `wasmParser/`: Kotlin Multiplatform parser for core Wasm and component-model binaries.
 - `binaryProvider/`: thin provider layer that wraps parsed Wasm data for the UI and navigation features.
@@ -64,6 +66,8 @@ Run the narrowest command that proves your change.
 - Run plugin tests: `./gradlew :idea-plugin:test`
 - Build the extracted MCP core module: `./gradlew :mcp:core:build`
 - Build the standalone MCP server: `./gradlew :mcp:server:build`
+- Regenerate the idea-plugin toolset: `./gradlew :idea-plugin:generateHexanaToolset`
+- Regenerate the standalone server dispatcher: `./gradlew :mcp:server:generateHexanaToolDispatcher`
 - Build the plugin ZIP: `./gradlew :idea-plugin:buildPlugin`
 - Build the FUS scheme artifact: `./gradlew :idea-plugin:buildEventsScheme`
 - Run JVM parser tests: `./gradlew :wasmParser:jvmTest`
@@ -93,9 +97,13 @@ Existing IDE run configurations currently include:
 
 ## Generated And Derived Files
 
-- `idea-plugin/src/main/gen/**` is generated WIT PSI/parser output. Do not hand-edit it as the primary source of truth.
-- The WIT grammar source is `idea-plugin/src/main/java/org/jetbrains/hexana/wit/psi/wit.bnf`.
-- The repo does not declare a checked-in Gradle task for regenerating WIT PSI. If you change the grammar, update the grammar sources and regenerated files together, and document how generation was done.
+- `idea-plugin/src/main/gen/**` holds generated output that is checked in. Do not hand-edit it as the primary source of truth.
+  - WIT PSI/parser: grammar source `idea-plugin/src/main/java/org/jetbrains/hexana/wit/psi/wit.bnf`; no checked-in regen task.
+  - `HexanaToolset.kt`: DSL source `mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt`;
+    regenerate with `./gradlew :idea-plugin:generateHexanaToolset`.
+- `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from the same DSL; regenerate with
+  `./gradlew :mcp:server:generateHexanaToolDispatcher`. If you change a tool's name, description, input shape, or output
+  shape, edit the DSL and rerun both generators in the same change.
 - Embedded converter binaries live here:
   - `graalwasm/wasmprinter/src/main/resources/wasmprinter_wrapper.wasm`
   - `graalwasm/wat2wasm/src/main/resources/wat2wasm_full.wasm`

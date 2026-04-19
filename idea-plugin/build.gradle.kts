@@ -191,6 +191,7 @@ tasks {
 }
 
 val generatedToolsetDir = layout.projectDirectory.dir("src/main/gen")
+val verifiedToolsetDir = layout.buildDirectory.dir("generator-verify/toolset")
 
 tasks.register<JavaExec>("generateHexanaToolset") {
     description = "Regenerates HexanaToolset.kt into src/main/gen; the output is checked into git."
@@ -208,6 +209,50 @@ tasks.register<JavaExec>("generateHexanaToolset") {
     outputs.file(generatedToolsetDir.file("org/jetbrains/hexana/mcp/HexanaToolset.kt"))
 
     dependsOn(":mcp:tools-generator:classes")
+}
+
+val regenerateHexanaToolsetForVerification = tasks.register<JavaExec>("regenerateHexanaToolsetForVerification") {
+    description = "Re-emits HexanaToolset.kt into build/ so verifyHexanaToolsetUpToDate can diff it."
+    group = "verification"
+
+    classpath = project(":mcp:tools-generator").extensions
+        .getByType<SourceSetContainer>()
+        .named("main").get().runtimeClasspath
+    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.ToolsetMainKt")
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf(verifiedToolsetDir.get().asFile.absolutePath)
+    })
+    doFirst { verifiedToolsetDir.get().asFile.deleteRecursively() }
+
+    dependsOn(":mcp:tools-generator:classes")
+}
+
+tasks.register("verifyHexanaToolsetUpToDate") {
+    description = "Fails if src/main/gen/HexanaToolset.kt drifts from the tools-generator DSL."
+    group = "verification"
+    dependsOn(regenerateHexanaToolsetForVerification)
+    mustRunAfter(tasks.named("generateHexanaToolset"))
+
+    val committed = generatedToolsetDir.file("org/jetbrains/hexana/mcp/HexanaToolset.kt").asFile
+    val fresh = verifiedToolsetDir.map { it.file("org/jetbrains/hexana/mcp/HexanaToolset.kt").asFile }
+
+    inputs.file(committed)
+    inputs.dir(verifiedToolsetDir)
+
+    doLast {
+        if (!committed.exists()) {
+            error("Committed HexanaToolset.kt is missing at $committed. Run :idea-plugin:generateHexanaToolset.")
+        }
+        val freshFile = fresh.get()
+        if (committed.readText().replace("\r\n", "\n") != freshFile.readText().replace("\r\n", "\n")) {
+            error(
+                "HexanaToolset.kt is out of date with the tools-generator DSL.\n" +
+                    "  Committed:   ${committed.absolutePath}\n" +
+                    "  Regenerated: ${freshFile.absolutePath}\n" +
+                    "  Fix: ./gradlew :idea-plugin:generateHexanaToolset, then commit src/main/gen/."
+            )
+        }
+    }
 }
 
 kotlin {

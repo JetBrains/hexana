@@ -12,7 +12,9 @@ Read these files before making structural changes:
 - `src/main/kotlin/org/jetbrains/hexana/HexanaFileEditorProvider.kt`
 - `src/main/kotlin/org/jetbrains/hexana/HexanaFileEditor.kt`
 - `src/main/kotlin/org/jetbrains/hexana/HexanaService.kt`
-- `src/main/kotlin/org/jetbrains/hexana/mcp/HexanaToolset.kt`
+- `src/main/gen/org/jetbrains/hexana/mcp/HexanaToolset.kt` (generated — do not hand-edit; DSL source is
+  `../mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt`)
+- `src/main/kotlin/org/jetbrains/hexana/mcp/ToolsetHelpers.kt` (hand-written IntelliJ-side helpers the generated toolset calls)
 - `../mcp/core/src/main/kotlin/org/jetbrains/hexana/mcp/query`
 
 ## Module Map
@@ -87,6 +89,8 @@ This module compiles sources from three locations:
   - `src/main/gen/org/jetbrains/hexana/wit/psi`
 - The grammar source is:
   - `src/main/java/org/jetbrains/hexana/wit/psi/wit.bnf`
+- `src/main/gen/` also holds the generated `HexanaToolset.kt` (DSL source lives in `mcp/tools-generator/`). Regenerate via
+  `./gradlew :idea-plugin:generateHexanaToolset`.
 - Do not treat `src/main/gen` as the place to make the primary change.
 - If you update WIT grammar or PSI contracts, update the handwritten grammar/mixin/util files and regenerate `src/main/gen` output in the same change.
 
@@ -98,11 +102,13 @@ This module compiles sources from three locations:
 
 ### MCP Tooling
 
-- `HexanaToolset.kt` is the registration surface for all plugin MCP tools.
+- `HexanaToolset.kt` is the registration surface for all plugin MCP tools. It is generated from the DSL in
+  `mcp/tools-generator/` — do not hand-edit it; regenerate with `./gradlew :idea-plugin:generateHexanaToolset`.
+- `ToolsetHelpers.kt` is hand-written and holds the IntelliJ-side helpers the generated toolset calls
+  (`requireWasmFile`, `contentsToCommonByteBuffer`, `requireParsedWasmModule`, range helpers).
 - The extracted pure query/model library lives in the sibling `mcp/core` module.
 - This module should keep only IntelliJ-specific MCP integration concerns such as:
-    - tool registration and descriptions
-    - `VirtualFile` and project-relative path resolution
+    - `VirtualFile` and project-relative path resolution (in `ToolsetHelpers.kt`)
     - MCP plugin wiring through `plugin.xml`
 - For tool semantics around binary/module structure, use the official core spec as the source of truth:
   - `https://webassembly.github.io/spec/core/intro/overview.html`
@@ -111,13 +117,16 @@ This module compiles sources from three locations:
 
 When adding or changing an MCP tool:
 
-- Keep registration in `HexanaToolset.kt`.
+- Edit the DSL in `mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt`; both the plugin
+  toolset and the standalone-server dispatcher are generated from it.
 - Put the real decode/query logic in the extracted `mcp/core` module, not in the descriptor body.
 - Add or update a result model under the extracted `mcp/core` model package when the response shape is non-trivial.
 - Prefer typed structured content over hand-built strings.
 - Keep `@McpDescription` concise and token-aware. Do not embed example payloads, CLI walkthroughs, or field-by-field
   schema dumps in runtime tool descriptions; rely on generated schemas, model types, tests, and code comments for
   detailed structure.
+- After DSL changes, run both `./gradlew :idea-plugin:generateHexanaToolset` and `:mcp:server:generateHexanaToolDispatcher`,
+  and commit the regenerated `src/main/gen/` output together with the DSL change.
 - Use the existing direct MCP test base to create `.wat` fixtures and call tools through the real MCP layer.
 
 ## Tests

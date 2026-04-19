@@ -12,11 +12,16 @@ Read these files before making structural changes:
 - `src/main/kotlin/org/jetbrains/hexana/mcp/server/Main.kt`
 - `src/main/kotlin/org/jetbrains/hexana/mcp/server/HexanaMcpServer.kt`
 - `src/main/kotlin/org/jetbrains/hexana/mcp/server/HexanaToolHandlers.kt`
+- `src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` (generated — do not hand-edit; DSL source is
+  `../tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt`)
 - `../core/src/main/kotlin/org/jetbrains/hexana/mcp/HexanaAnalysisService.kt`
 
 ## Ownership Boundary
 
-- Keep MCP transport wiring, CLI parsing, and tool registration here.
+- Keep MCP transport wiring and CLI parsing here.
+- Tool registration (`Server.registerHexanaTools`) is generated from the DSL in `mcp/tools-generator/`. To change a
+  tool's name, description, input, or output shape, edit the DSL and regenerate with
+  `./gradlew :mcp:server:generateHexanaToolDispatcher`; commit the regenerated file under `src/main/gen/`.
 - Use the shared JVM CLI/logging stack here rather than ad hoc parsing or `System.err.println` wrappers.
 - Keep Wasm parsing, query semantics, and result DTOs in `mcp/core`.
 - Do not add IntelliJ APIs, `VirtualFile`, or plugin.xml-style registration here.
