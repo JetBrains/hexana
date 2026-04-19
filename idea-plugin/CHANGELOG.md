@@ -18,7 +18,7 @@
 
 ### Fixed
 - [IJPL-242167 IAE: WasmModuleKt.fromSections via WasmIndex](https://youtrack.jetbrains.com/issue/IJPL-242167)
-
+- [ClassCastException in WitStaticFuncItemMixin](https://github.com/JetBrains/hexana/issues/84)
 ### Security
 
 ## 0.7 - 2026-03-31
