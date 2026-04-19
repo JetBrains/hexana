@@ -1,9 +1,9 @@
 package org.jetbrains.hexana.analytics
 
-import com.intellij.internal.statistic.utils.StatisticsUploadAssistant
+import org.jetbrains.hexana.HexanaSettings
 
 class IntellijConsentProvider : ConsentProvider {
     override fun isAnalyticsAllowed(): Boolean {
-        return StatisticsUploadAssistant.isSendAllowed()
+        return HexanaSettings.getInstance().sendAnalytics
     }
 }

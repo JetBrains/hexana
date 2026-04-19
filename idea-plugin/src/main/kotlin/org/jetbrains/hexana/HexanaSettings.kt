@@ -44,6 +44,12 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
             state.showOffsets = value?:false
         }
 
+    var sendAnalytics: Boolean
+        get() = state.sendAnalytics
+        set(value) {
+            state.sendAnalytics = value
+        }
+
     val wasmToolsPath: String
         get() = wasmToolsPathInUi ?: "wasm-tools"
 
@@ -53,6 +59,7 @@ class HexanaSettingsState : BaseState() {
     var wasmToolsPath: String? by string()
     var useBuiltInWasmTools: Boolean by property(false)
     var showOffsets: Boolean by property(false)
+    var sendAnalytics: Boolean by property(true)
 }
 
 class HexanaConfigurableProvider : ConfigurableProvider() {
@@ -93,6 +100,14 @@ class HexanaConfigurable : DslConfigurableBase(), SearchableConfigurable {
                     .align(AlignX.FILL)
                     .comment(HexanaBundle.message("hexana.settings.showOffsetsComment"))
                     .bindSelected(settings::showOffsets.toNonNullableProperty(false))
+            }
+            separator()
+            row {
+                checkBox(HexanaBundle.message("hexana.settings.sendAnalytics"))
+                    .align(AlignY.TOP)
+                    .align(AlignX.FILL)
+                    .comment(HexanaBundle.message("hexana.settings.sendAnalyticsComment"))
+                    .bindSelected(settings::sendAnalytics)
             }
         }
     }
