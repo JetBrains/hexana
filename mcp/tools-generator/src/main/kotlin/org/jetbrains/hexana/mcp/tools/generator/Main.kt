@@ -7,6 +7,8 @@ import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.ParameterSpec
 import org.jetbrains.hexana.mcp.tools.ClassSpec
+import org.jetbrains.hexana.mcp.tools.FieldSpec
+import org.jetbrains.hexana.mcp.tools.FieldType
 import org.jetbrains.hexana.mcp.tools.HexanaTools
 import org.jetbrains.hexana.mcp.tools.ToolSpec
 import java.nio.file.Files
@@ -19,6 +21,9 @@ private val SERVER_CLASS = ClassName("io.modelcontextprotocol.kotlin.sdk.server"
 private val TOOL_CLASS = ClassName("io.modelcontextprotocol.kotlin.sdk.types", "Tool")
 private val CALL_TOOL_REQUEST = ClassName("io.modelcontextprotocol.kotlin.sdk.types", "CallToolRequest")
 private val TOOL_HANDLERS = ClassName(SERVER_PACKAGE, "HexanaToolHandlers")
+private val TOOL_SCHEMA = ClassName("io.modelcontextprotocol.kotlin.sdk.types", "ToolSchema")
+private val JSON_PRIMITIVE = ClassName("kotlinx.serialization.json", "JsonPrimitive")
+private val BUILD_JSON_OBJECT = MemberName("kotlinx.serialization.json", "buildJsonObject")
 
 fun main(args: Array<String>) {
     val outputRoot = args.firstOrNull()?.let(Path::of) ?: run {
@@ -61,17 +66,100 @@ private fun buildDispatcherFile(tools: List<ToolSpec>): FileSpec {
 
 private fun renderAddToolCall(spec: ToolSpec): CodeBlock {
     val handlerMethod = spec.name.toCamelCase()
-    val schema = schemaInvocation(spec.input)
+    val inputSchema = schemaInvocation(spec.input)
+    val outputSchema = buildOutputSchema(spec.output)
 
     return CodeBlock.builder()
         .add(
-            "addTool(tool = %T(\n  name = %S,\n  description = %S,\n  inputSchema = %L,\n))",
-            TOOL_CLASS, spec.name, spec.summary, schema,
+            "addTool(tool = %T(\n  name = %S,\n  description = %S,\n  inputSchema = %L,\n  outputSchema = %L,\n))",
+            TOOL_CLASS, spec.name, spec.summary, inputSchema, outputSchema,
         )
         .beginControlFlow(" ")
         .addStatement("request: %T -> handlers.%N(request.arguments)", CALL_TOOL_REQUEST, handlerMethod)
         .endControlFlow()
         .build()
+}
+
+/**
+ * Emits a full `ToolSchema(...)` expression for the tool's output type.
+ * Nested classes are inlined into the schema — the generated file is verbose
+ * but self-contained.
+ */
+private fun buildOutputSchema(cls: ClassSpec): CodeBlock {
+    val builder = CodeBlock.builder()
+    builder.add("%T(\n", TOOL_SCHEMA)
+    builder.add("  properties = %M {\n", BUILD_JSON_OBJECT)
+    cls.fields.forEach { field ->
+        builder.add("    put(%S, ", field.schemaKey)
+        builder.add(fieldSchemaObject(field))
+        builder.add(")\n")
+    }
+    builder.add("  },\n")
+    builder.add("  required = listOf(")
+    val required = cls.fields.filter { !it.nullable && it.default == null }.map { it.schemaKey }
+    required.forEachIndexed { index, key ->
+        if (index > 0) builder.add(", ")
+        builder.add("%S", key)
+    }
+    builder.add(")\n)")
+    return builder.build()
+}
+
+private fun fieldSchemaObject(field: FieldSpec): CodeBlock {
+    val b = CodeBlock.builder()
+    b.add("%M {\n", BUILD_JSON_OBJECT)
+    emitTypeSchema(field.type, b, indent = "      ")
+    field.describe?.let {
+        b.add("      put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, it)
+    }
+    b.add("    }")
+    return b.build()
+}
+
+/** Emits the JSON Schema properties (`type`, `items`, nested `properties`/`required`) for a [FieldType]. */
+private fun emitTypeSchema(type: FieldType, builder: CodeBlock.Builder, indent: String) {
+    when (type) {
+        FieldType.Int32,
+        FieldType.Int64,
+        FieldType.UInt32,
+        FieldType.ByteT -> builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "integer")
+
+        FieldType.BooleanT ->
+            builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "boolean")
+
+        FieldType.StringT,
+        FieldType.ByteArrayT ->
+            builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "string")
+
+        is FieldType.ListOf -> {
+            builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "array")
+            builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
+            emitTypeSchema(type.element, builder, indent = "$indent  ")
+            builder.add("${indent}})\n")
+        }
+
+        is FieldType.ClassRef -> {
+            builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "object")
+            builder.add("${indent}put(%S, %M {\n", "properties", BUILD_JSON_OBJECT)
+            type.clazz.fields.forEach { nested ->
+                builder.add("$indent  put(%S, %M {\n", nested.schemaKey, BUILD_JSON_OBJECT)
+                emitTypeSchema(nested.type, builder, indent = "$indent    ")
+                nested.describe?.let {
+                    builder.add("$indent    put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, it)
+                }
+                builder.add("$indent  })\n")
+            }
+            builder.add("${indent}})\n")
+            val requiredFields = type.clazz.fields.filter { !it.nullable && it.default == null }
+            if (requiredFields.isNotEmpty()) {
+                builder.add("${indent}put(%S, %M {\n", "required", MemberName("kotlinx.serialization.json", "buildJsonArray"))
+                requiredFields.forEach { req ->
+                    builder.add("$indent  add(%T(%S))\n", JSON_PRIMITIVE, req.schemaKey)
+                }
+                builder.add("${indent}})\n")
+            }
+        }
+    }
 }
 
 /**
