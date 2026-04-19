@@ -216,10 +216,10 @@ class HexanaToolHandlers(
 
     private fun wasmInput(arguments: JsonObject?): WasmInput {
         val path = arguments.optionalNonBlankString("path")
-        val bytesBase64 = arguments.optionalNonBlankString("bytesBase64")
+        val bytesBase64Decoded = arguments.optionalNonBlankString("bytesBase64")?.let(::decodeInlineBase64)
         val bytes = arguments.optionalByteArray("bytes")
 
-        val providedInputs = listOf(path, bytesBase64, bytes).count { it != null }
+        val providedInputs = listOf(path, bytesBase64Decoded, bytes).count { it != null }
         if (providedInputs == 0) {
             throw ToolInputException("Exactly one of `path`, `bytesBase64`, or `bytes` is required")
         }
@@ -229,10 +229,31 @@ class HexanaToolHandlers(
 
         return when {
             path != null -> WasmInput.FilePath(path)
-            bytesBase64 != null -> WasmInput.InlineBytes(bytesBase64)
+            bytesBase64Decoded != null -> WasmInput.RawBytes(bytesBase64Decoded)
             bytes != null -> WasmInput.RawBytes(bytes)
             else -> error("Unreachable input state")
         }
+    }
+
+    private fun decodeInlineBase64(encoded: String): ByteArray {
+        val nonWhitespaceLen = encoded.count { !it.isWhitespace() }
+        val upperBoundDecoded = (nonWhitespaceLen.toLong() * 3L + 3L) / 4L
+        if (upperBoundDecoded > maxInlineInputBytes.toLong()) {
+            throw ToolInputException(
+                "`bytesBase64` exceeds maximum decoded size of $maxInlineInputBytes bytes"
+            )
+        }
+        val decoded = try {
+            java.util.Base64.getMimeDecoder().decode(encoded)
+        } catch (_: IllegalArgumentException) {
+            throw ToolInputException("`bytesBase64` must be valid base64")
+        }
+        if (decoded.size > maxInlineInputBytes) {
+            throw ToolInputException(
+                "`bytesBase64` exceeds maximum decoded size of $maxInlineInputBytes bytes"
+            )
+        }
+        return decoded
     }
 
     private fun JsonObject?.optionalNonBlankString(name: String): String? {

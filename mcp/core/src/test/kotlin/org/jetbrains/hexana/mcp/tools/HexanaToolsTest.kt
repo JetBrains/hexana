@@ -37,55 +37,86 @@ class HexanaToolsTest {
     }
 
     @Test
-    fun `every tool declares a summary and a handler`() {
+    fun `every tool declares summary, input, output, handler`() {
         for (spec in HexanaTools) {
             assertTrue(spec.summary.isNotBlank(), "summary blank for ${spec.name}")
             assertNotNull(spec.handler, "handler null for ${spec.name}")
+            assertTrue(spec.input.fields.isNotEmpty(), "empty input class for ${spec.name}")
+            assertTrue(spec.output.fields.isNotEmpty() || spec.output.name == "DataSegmentLinkingMetadataResult",
+                "empty output class for ${spec.name}")
         }
     }
 
     @Test
-    fun `list_functions declares offset and limit int parameters`() {
+    fun `wasmInputClass carries a oneOf constraint`() {
+        assertEquals(listOf("path", "bytesBase64", "bytes"), WasmInputClass.oneOf)
+    }
+
+    @Test
+    fun `list_functions composes wasm input with offset and limit`() {
         val spec = HexanaTools.single { it.name == "list_functions" }
-        val params = spec.input.parameters.filterIsInstance<InputParameter.IntParam>()
-        assertEquals(listOf("offset", "limit"), params.map { it.name })
-        assertEquals(0, params[0].default)
-        assertEquals(200, params[1].default)
+        val fieldNames = spec.input.fields.map { it.name }
+        assertTrue(fieldNames.containsAll(listOf("path", "bytesBase64", "bytes", "offset", "limit")))
     }
 
     @Test
-    fun `functions_for_indices declares an intList named indices`() {
+    fun `functions_for_indices composes wasm input with indices list`() {
         val spec = HexanaTools.single { it.name == "functions_for_indices" }
-        val params = spec.input.parameters.filterIsInstance<InputParameter.IntListParam>()
-        assertEquals(listOf("indices"), params.map { it.name })
-        assertEquals(1, params.single().minSize)
+        val indices = spec.input.fields.single { it.name == "indices" }
+        val element = (indices.type as FieldType.ListOf).element
+        assertEquals(FieldType.Int32, element)
     }
 
     @Test
-    fun `list_exported_functions declares a closed range on entriesRange`() {
+    fun `list_exported_functions embeds a closed range object`() {
         val spec = HexanaTools.single { it.name == "list_exported_functions" }
-        val params = spec.input.parameters.filterIsInstance<InputParameter.ClosedRangeParam>()
-        assertEquals(listOf("entriesRange"), params.map { it.name })
+        val range = spec.input.fields.single { it.name == "entriesRange" }
+        val clazz = (range.type as FieldType.ClassRef).clazz
+        assertEquals("ClosedIntRange", clazz.name)
+        assertEquals(listOf("from", "to"), clazz.fields.map { it.name })
+    }
+
+    @Test
+    fun `list_imports output references ImportFunctionResult`() {
+        val spec = HexanaTools.single { it.name == "list_imports" }
+        val imports = spec.output.fields.single { it.name == "imports" }
+        val list = imports.type as FieldType.ListOf
+        val clazz = (list.element as FieldType.ClassRef).clazz
+        assertEquals("ImportFunctionResult", clazz.name)
+    }
+
+    @Test
+    fun `ImportFunctionSignature applies serialName override on ret`() {
+        val ret = ImportFunctionSignatureClass.fields.single { it.name == "ret" }
+        assertEquals("return", ret.serialName)
+    }
+
+    @Test
+    fun `with() rejects redeclaration of a seeded field`() {
+        val parent = class_("Parent") { nullable("path", string()) }
+        assertFailsWith<IllegalArgumentException> {
+            parent.with("Child") { nullable("path", string()) }
+        }
+    }
+
+    @Test
+    fun `with() rejects redeclaration of a grandparent-seeded field`() {
+        val grandparent = class_("Grandparent") { nullable("path", string()) }
+        val parent = grandparent.with("Parent") { int("offset", default = 0) }
+        assertFailsWith<IllegalArgumentException> {
+            parent.with("Child") { nullable("path", string()) }
+        }
     }
 
     @Test
     fun `duplicate tool names are rejected`() {
         assertFailsWith<IllegalArgumentException> {
             tools {
-                tool("dup") { summary = "s"; input { wasmModule() }; handler = sampleHandler }
-                tool("dup") { summary = "t"; input { wasmModule() }; handler = sampleHandler }
-            }
-        }
-    }
-
-    @Test
-    fun `input block without wasmModule is rejected`() {
-        assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("broken") {
-                    summary = "bad"
-                    input { /* missing wasmModule() */ }
-                    handler = sampleHandler
+                tool("dup") {
+                    summary = "s"; input = WasmInputClass; output = WasmInputClass; handler = sampleHandler
+                }
+                tool("dup") {
+                    summary = "t"; input = WasmInputClass; output = WasmInputClass; handler = sampleHandler
                 }
             }
         }
@@ -96,7 +127,21 @@ class HexanaToolsTest {
         assertFailsWith<IllegalArgumentException> {
             tools {
                 tool("broken") {
-                    input { wasmModule() }
+                    input = WasmInputClass
+                    output = WasmInputClass
+                    handler = sampleHandler
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `tool without output is rejected`() {
+        assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("broken") {
+                    summary = "s"
+                    input = WasmInputClass
                     handler = sampleHandler
                 }
             }

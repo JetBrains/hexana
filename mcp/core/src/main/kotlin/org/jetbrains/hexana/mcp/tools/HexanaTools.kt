@@ -19,6 +19,390 @@ import org.jetbrains.hexana.mcp.query.readModuleSummary
 import org.jetbrains.hexana.mcp.query.readTypes
 import org.jetbrains.hexana.mcp.query.readTypesByIndices
 
+private const val WASM_INPUT_VALIDATION =
+    "Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."
+
+val WasmInputClass = class_("WasmInput") {
+    nullable("path", string())
+        .describe("Path to a local `.wasm` file readable by the Hexana MCP server. $WASM_INPUT_VALIDATION")
+    nullable("bytesBase64", string())
+        .describe("Base64-encoded `.wasm` bytes. $WASM_INPUT_VALIDATION")
+    nullable("bytes", list(of = int()))
+        .describe("Raw `.wasm` bytes as integers in the range 0..255. $WASM_INPUT_VALIDATION")
+    oneOf("path", "bytesBase64", "bytes")
+}
+
+private val ClosedIntRange = class_("ClosedIntRange") {
+    int("from").describe("Inclusive zero-based lower bound.")
+    int("to").describe("Inclusive zero-based upper bound.")
+}
+
+private val HalfOpenIntRange = class_("HalfOpenIntRange") {
+    int("from").describe("Inclusive zero-based lower bound.")
+    nullable("to", int()).describe("Optional exclusive upper bound.")
+}
+
+val ListFunctionsInput = WasmInputClass.with("ListFunctionsInput") {
+    int("offset", default = 0)
+        .describe("Offset into the unified function index space")
+    int("limit", default = 200)
+        .describe("Maximum number of entries to return")
+}
+
+private fun indicesInput(name: String, indicesDescription: String): ClassSpec =
+    WasmInputClass.with(name) {
+        list("indices", of = int())
+            .describe(indicesDescription)
+    }
+
+val FunctionsForIndicesInput = indicesInput(
+    "FunctionsForIndicesInput",
+    "List of unified function indices (`funcidx`) to resolve.",
+)
+val GetGlobalsForIndicesInput = indicesInput(
+    "GetGlobalsForIndicesInput",
+    "List of global indices (`globalidx`) to return.",
+)
+val GetMemoryForIndicesInput = indicesInput(
+    "GetMemoryForIndicesInput",
+    "List of memory indices (`memidx`) to return.",
+)
+val GetTypesForIndicesInput = indicesInput(
+    "GetTypesForIndicesInput",
+    "List of type indices (`typeidx`) to return.",
+)
+val GetLocalsForFunctionsInput = indicesInput(
+    "GetLocalsForFunctionsInput",
+    "List of unified function indices (`funcidx`) whose locals should be returned.",
+)
+val GetInstructionsForFunctionsInput = indicesInput(
+    "GetInstructionsForFunctionsInput",
+    "List of unified function indices (`funcidx`) whose instructions should be returned.",
+)
+
+val ListExportedFunctionsInput = WasmInputClass.with("ListExportedFunctionsInput") {
+    embed("entriesRange", of = ClosedIntRange)
+        .describe("Closed zero-based export slice. Pass `entriesRange = { from, to }`; both bounds are inclusive.")
+}
+
+val ListDataInput = WasmInputClass.with("ListDataInput") {
+    embed("entriesRange", of = ClosedIntRange)
+        .describe("Closed zero-based data-segment slice. Requires `from` and `to`, both inclusive.")
+}
+
+val ListDataSegmentsInput = WasmInputClass.with("ListDataSegmentsInput") {
+    embed("segmentRange", of = HalfOpenIntRange)
+        .describe("Half-open zero-based data-segment slice. `from` is required; `to` is optional and treated as exclusive.")
+    boolean("includeExports", default = false)
+        .describe("Include exported symbols associated with the returned segments.")
+    boolean("includeGlobals", default = true)
+        .describe("Include globals referenced by segment offset expressions.")
+    nullable("minByteLength", int())
+        .describe("Optional minimum raw byte length for returned segments.")
+}
+
+// Imports
+
+val ImportFunctionSignatureClass = class_("ImportFunctionSignature") {
+    list("params", of = string()).describe("Parameter types, in declaration order.")
+    list("ret", of = string()).serialName("return").describe("Return types, in declaration order.")
+}
+
+val ImportFunctionResultClass = class_("ImportFunctionResult") {
+    int("funcidx").describe("Funcidx in the unified function index space.")
+    string("module").describe("Imported module name.")
+    string("name").describe("Imported field name.")
+    nullable("signature", of = ImportFunctionSignatureClass)
+        .describe("Parsed signature, when available.")
+}
+
+val ListImportsResultClass = class_("ListImportsResult") {
+    list("imports", of = ImportFunctionResultClass)
+        .describe("Imported functions declared by the module.")
+}
+
+// Exports --------------------------------------------------------------------
+
+val ExportResultClass = class_("ExportResult") {
+    string("name").describe("Export field name.")
+    long("externIndex").describe("Index into the exported address space (funcidx, tableidx, memidx, or globalidx).")
+    byte("kind").describe("WebAssembly export kind byte (0=func, 1=table, 2=memory, 3=global).")
+}
+
+val ListExportsResultClass = class_("ListExportsResult") {
+    list("exports", of = ExportResultClass)
+        .describe("Exports declared by the module.")
+}
+
+val ExportedFunctionSignatureResultClass = class_("ExportedFunctionSignatureResult") {
+    list("params", of = string()).describe("Parameter types.")
+    list("ret", of = string()).serialName("return").describe("Return types.")
+}
+
+val ExportedFunctionEntryResultClass = class_("ExportedFunctionEntryResult") {
+    int("funcidx").describe("Funcidx in the unified function index space.")
+    nullable("module", string()).describe("Import module name, when the export resolves to an imported function.")
+    nullable("name", string()).describe("Import field name, when applicable.")
+    nullable("signature", of = ExportedFunctionSignatureResultClass).describe("Parsed signature when available.")
+    list("exportedAs", of = string()).describe("All export names pointing at this function.")
+    nullable("definedIn", string()).describe("Which section the function body lives in.")
+    nullable("codeOffset", long()).describe("Byte offset of the function body in the module.")
+    nullable("codeSize", long()).describe("Size of the function body in bytes.")
+    nullable("instructionCount", long()).describe("Number of decoded instructions in the body.")
+}
+
+val ExportedFunctionResultClass = class_("ExportedFunctionResult") {
+    string("name").describe("Export name.")
+    embed("entry", of = ExportedFunctionEntryResultClass).describe("Resolved function entry for the export.")
+}
+
+val ListExportedFunctionsResultClass = class_("ListExportedFunctionsResult") {
+    int("from").describe("Inclusive lower bound that was requested.")
+    int("to").describe("Inclusive upper bound that was requested.")
+    list("returned", of = ExportedFunctionResultClass).describe("Entries inside the requested range.")
+    int("total").describe("Total number of exported functions in the module.")
+    boolean("truncate").describe("True when the range was clipped to the module's export count.")
+    nullable("nextOffset", int()).describe("Next offset to continue pagination; null when the range was exhausted.")
+}
+
+// Functions
+
+val FunctionImportResultClass = class_("FunctionImportResult") {
+    string("module").describe("Import module name.")
+    string("name").describe("Import field name.")
+}
+
+val FunctionSignatureResultClass = class_("FunctionSignatureResult") {
+    list("params", of = string()).describe("Parameter types, in declaration order.")
+    list("ret", of = string()).serialName("return").describe("Return types, in declaration order.")
+}
+
+val FunctionSummaryResultClass = class_("FunctionSummaryResult") {
+    int("funcidx").describe("Funcidx in the unified function index space.")
+    nullable("signature", of = FunctionSignatureResultClass).describe("Parsed signature when available.")
+    nullable("importInfo", of = FunctionImportResultClass).serialName("import")
+        .describe("Import descriptor when the function is imported.")
+    list("exportedAs", of = string()).describe("Export names pointing at this function.")
+    string("definedIn").describe("Which section the function lives in.")
+    nullable("codeOffset", long()).describe("Byte offset of the function body in the module.")
+    nullable("codeSize", long()).describe("Size of the function body in bytes.")
+    nullable("instructionCount", long()).describe("Number of decoded instructions in the body.")
+}
+
+val FunctionsResultClass = class_("FunctionsResult") {
+    list("functions", of = FunctionSummaryResultClass)
+        .describe("Resolved function entries.")
+}
+
+val FunctionInstructionsResultClass = class_("FunctionInstructionsResult") {
+    int("funcidx").describe("Funcidx whose body was decoded.")
+    list("instructions", of = string()).describe("Decoded instruction text, one entry per instruction.")
+}
+
+val GetInstructionsForFunctionsResultClass = class_("GetInstructionsForFunctionsResult") {
+    list("functions", of = FunctionInstructionsResultClass)
+        .describe("Per-function decoded instructions.")
+}
+
+val LocalDeclarationResultClass = class_("LocalDeclarationResult") {
+    int("local").describe("Local slot index.")
+    string("type").describe("Local type (`i32`, `i64`, `f32`, `f64`, etc.).")
+}
+
+val FunctionLocalsResultClass = class_("FunctionLocalsResult") {
+    int("funcidx").describe("Funcidx whose locals were resolved.")
+    list("locals", of = LocalDeclarationResultClass).describe("Grouped local declarations for the function.")
+}
+
+val GetLocalsForFunctionsResultClass = class_("GetLocalsForFunctionsResult") {
+    list("functions", of = FunctionLocalsResultClass)
+        .describe("Per-function local declarations.")
+}
+
+// Globals
+
+val GlobalResultClass = class_("GlobalResult") {
+    int("globalIdx").describe("Global index in the unified global index space.")
+    nullable("prefix", string()).describe("Import module prefix, when the global is imported.")
+    nullable("name", string()).describe("Import or exported name, when applicable.")
+    string("type").describe("Global value type (`i32`, `i64`, `f32`, `f64`, ...).")
+    boolean("mutability").describe("True when the global is mutable.")
+    nullable("expression", string()).describe("Initialization expression in WAT syntax.")
+    string("definedIn").describe("Section the global is declared in.")
+}
+
+val ListGlobalsResultClass = class_("ListGlobalsResult") {
+    list("globals", of = GlobalResultClass).describe("Globals declared or imported by the module.")
+}
+
+// Memory
+
+val MemoryLimitsResultClass = class_("MemoryLimitsResult") {
+    string("addressType").describe("Address space type (`i32` or `i64`).")
+    long("min").describe("Minimum number of pages.")
+    nullable("max", long()).describe("Maximum number of pages, when the memory is bounded.")
+    boolean("hasMax").describe("True when an explicit upper bound was declared.")
+    string("range").describe("Human-readable range such as `1..ε`.")
+    string("flag").describe("Raw limits flag byte as hex (`0x00`, `0x01`, etc.).")
+}
+
+val MemoryResultClass = class_("MemoryResult") {
+    int("memoryIdx").describe("Index in the unified memory index space.")
+    embed("limit", of = MemoryLimitsResultClass).describe("Page limits for the memory.")
+    string("definedIn").describe("Section the memory is declared in.")
+}
+
+val ListMemoryResultClass = class_("ListMemoryResult") {
+    list("memories", of = MemoryResultClass).describe("Imported and defined memories.")
+}
+
+// Types
+
+val TypeFieldResultClass = class_("TypeFieldResult") {
+    string("type").describe("Field storage type.")
+    boolean("mutable").describe("True when the field is mutable.")
+}
+
+val TypeResultClass = class_("TypeResult") {
+    string("kind").describe("Type kind (`func`, `struct`, `array`, etc.).")
+    int("typeidx").describe("Type index.")
+    nullable("elementType", of = TypeFieldResultClass).describe("Array element type, when applicable.")
+    nullable("superTypes", of = list(of = uint())).describe("Supertype indices for subtyping, when applicable.")
+    nullable("fields", of = list(of = TypeFieldResultClass)).describe("Struct fields, when applicable.")
+    nullable("entries", of = list(of = string())).describe("Entry signatures, when applicable.")
+    nullable("params", of = list(of = string())).describe("Function parameter types, when applicable.")
+    nullable("retTypes", of = list(of = string())).describe("Function return types, when applicable.")
+}
+
+val TypesResultClass = class_("TypesResult") {
+    list("types", of = TypeResultClass).describe("Declared type entries.")
+}
+
+// Elements
+
+val ElementSegmentResultClass = class_("ElementSegmentResult") {
+    int("elementidx").describe("Element segment index.")
+    int("kind").describe("Raw element segment kind byte.")
+    string("mode").describe("Segment mode (`active`, `passive`, `declarative`).")
+    nullable("tableIdx", int()).describe("Target table index for active segments.")
+    nullable("offsetExpr", of = list(of = string())).describe("Offset expression tokens for active segments.")
+    string("elementType").describe("Element reference type.")
+    nullable("elements", of = list(of = string())).describe("Element expressions or funcidx list.")
+}
+
+val ListElementSegmentsResultClass = class_("ListElementSegmentsResult") {
+    list("segments", of = ElementSegmentResultClass).describe("Element segments declared by the module.")
+}
+
+// Data
+
+val DataEntryResultClass = class_("DataEntryResult") {
+    int("kind").describe("Raw data-entry kind byte.")
+    int("index").describe("Data-entry index within the returned slice.")
+    long("offset").describe("Byte offset of the entry in the module.")
+    bytes("data")
+        .describe("Raw data payload (serialised as Base64).")
+        .withSerializer("org.jetbrains.hexana.mcp.serialization.Base64ByteArraySerializer")
+    nullable("memoryIndex", long()).describe("Target memory index for active entries.")
+    nullable("expression", string()).describe("Offset expression for active entries.")
+}
+
+val ListDataSectionsResultClass = class_("ListDataSectionsResult") {
+    int("from").describe("Inclusive lower bound that was requested.")
+    int("to").describe("Inclusive upper bound that was requested.")
+    list("returned", of = DataEntryResultClass).describe("Entries inside the requested range.")
+    int("totalSegments").serialName("total_segments")
+        .describe("Total number of data-section entries in the module.")
+    boolean("truncate").describe("True when the range was clipped.")
+    nullable("nextOffset", int()).describe("Next offset to continue pagination; null when exhausted.")
+}
+
+val DataSegmentMemoryLimitsResultClass = class_("DataSegmentMemoryLimitsResult") {
+    string("addressType").describe("Address space type.")
+    long("min").describe("Minimum number of pages.")
+    nullable("max", long()).describe("Maximum number of pages, when bounded.")
+    boolean("hasMax").describe("True when an explicit upper bound was declared.")
+    string("range").describe("Human-readable range.")
+    string("flag").describe("Raw limits flag byte as hex.")
+}
+
+val DataSegmentMemoryResultClass = class_("DataSegmentMemoryResult") {
+    int("memidx").describe("Memory index.")
+    embed("limits", of = DataSegmentMemoryLimitsResultClass).describe("Page limits for the memory.")
+    string("definedIn").describe("Section the memory is declared in.")
+}
+
+val DataSegmentGlobalResultClass = class_("DataSegmentGlobalResult") {
+    int("globalidx").describe("Global index.")
+    nullable("module", string()).describe("Import module name when the global is imported.")
+    nullable("name", string()).describe("Import or exported name when applicable.")
+    string("type").describe("Global value type.")
+    boolean("mutable").describe("True when the global is mutable.")
+    nullable("initExpr", string()).describe("Initialization expression in WAT syntax.")
+    string("definedIn").describe("Section the global is declared in.")
+    list("exportedAs", of = string()).describe("Export names pointing at this global.")
+}
+
+val DataSegmentResultClass = class_("DataSegmentResult") {
+    int("dataidx").describe("Data segment index.")
+    string("mode").describe("Segment mode (`active`, `passive`).")
+    nullable("memory", int()).describe("Target memory index for active segments.")
+    nullable("offsetExpr", string()).describe("Offset expression for active segments.")
+    int("byteLength").describe("Byte length of the segment payload.")
+    nullable("hexPreview", string()).describe("Hex-encoded preview of the first bytes.")
+    nullable("utf8Preview", string()).describe("Best-effort UTF-8 preview of the segment content.")
+    boolean("rawAvailable").describe("True when the raw bytes are available via `list_data`.")
+}
+
+val DataSegmentsSummaryResultClass = class_("DataSegmentsSummaryResult") {
+    int("totalSegments").describe("Total segment count.")
+    int("activeSegments").describe("Count of active segments.")
+    int("passiveSegments").describe("Count of passive segments.")
+    int("memories").describe("Number of memories referenced by segments.")
+}
+
+/**
+ * Placeholder class kept for forward-compat with the MCP wire shape: `ListDataSegmentsResult.linkingMetadata`
+ * will eventually carry linker/CG-produced section metadata (e.g. DWARF, wasm-ld link info). For now we expose
+ * the nullable field so clients can parse payloads without flinching when the field is absent.
+ */
+val DataSegmentLinkingMetadataResultClass = class_("DataSegmentLinkingMetadataResult") {
+    // Intentionally empty — schema holds no fields yet; the class exists to reserve the name.
+}
+
+val ListDataSegmentsResultClass = class_("ListDataSegmentsResult") {
+    list("memory", of = DataSegmentMemoryResultClass).describe("Memories referenced by the segments.")
+    list("globals", of = DataSegmentGlobalResultClass).describe("Globals referenced by segment offset expressions.")
+    list("segments", of = DataSegmentResultClass).describe("Data segment metadata.")
+    nullable("linkingMetadata", of = DataSegmentLinkingMetadataResultClass).describe("Optional linker/CG metadata block.")
+    list("exportedSymbols", of = string()).describe("Exported symbol names, when `includeExports` was requested.")
+    embed("summary", of = DataSegmentsSummaryResultClass).describe("Counts across the returned segments.")
+}
+
+// Summary
+
+val SummarizeModuleImportsClass = class_("SummarizeModuleImports") {
+    int("functions").describe("Number of imported functions.")
+    int("memories").describe("Number of imported memories.")
+    int("tables").describe("Number of imported tables.")
+    int("globals").describe("Number of imported globals.")
+}
+
+val SummarizeModuleResultClass = class_("SummarizeModuleResult") {
+    int("functions").describe("Total function count (imports + defined).")
+    int("exports").describe("Number of exports declared by the module.")
+    int("memories").describe("Number of memories declared by the module.")
+    int("globals").describe("Number of globals declared by the module.")
+    int("tables").describe("Number of tables declared by the module.")
+    int("types").describe("Number of type entries declared by the module.")
+    embed("imports", of = SummarizeModuleImportsClass).describe("Import breakdown by kind.")
+    int("moduleSize").describe("Size of the module binary in bytes.")
+}
+
+// ==============================================================================
+// Tool catalog.
+// ==============================================================================
+
 val HexanaTools: List<ToolSpec> = tools {
 
     tool("summarize_module") {
@@ -29,7 +413,8 @@ val HexanaTools: List<ToolSpec> = tools {
             For Wasm analysis tasks, this is usually the best first MCP call before choosing more specific import, export, or instruction tools.
             After this overview, prefer `list_imports` for import/link analysis, `list_exported_functions` for export analysis, and `get_instructions_for_functions` for body analysis.
         """
-        input { wasmModule() }
+        input = WasmInputClass
+        output = SummarizeModuleResultClass
         handler = CommonByteBuffer::readModuleSummary
     }
 
@@ -41,7 +426,8 @@ val HexanaTools: List<ToolSpec> = tools {
             Returns only function imports from the unified function index space, including the `funcidx` values needed to map direct `call` targets back to imports.
             For direct host-call analysis, pair these `funcidx` values with `get_instructions_for_functions` to resolve `call N` back to `module.name` imports.
         """
-        input { wasmModule() }
+        input = WasmInputClass
+        output = ListImportsResultClass
         handler = CommonByteBuffer::readImportFunctions
     }
 
@@ -54,7 +440,8 @@ val HexanaTools: List<ToolSpec> = tools {
             Use this when you only need exported names, kinds, or raw external indices.
             If you need function signatures or origins, skip directly to `list_exported_functions`.
         """
-        input { wasmModule() }
+        input = WasmInputClass
+        output = ListExportsResultClass
         handler = CommonByteBuffer::readExports
     }
 
@@ -64,7 +451,8 @@ val HexanaTools: List<ToolSpec> = tools {
             List imported and defined globals declared by a WebAssembly (.wasm) module.
             Returns each global with its value type, mutability, and normalized initializer expression.
         """
-        input { wasmModule() }
+        input = WasmInputClass
+        output = ListGlobalsResultClass
         handler = CommonByteBuffer::readGlobals
     }
 
@@ -74,7 +462,8 @@ val HexanaTools: List<ToolSpec> = tools {
             List type entries declared by a WebAssembly (.wasm) module.
             Includes function types and GC-related composite types when present.
         """
-        input { wasmModule() }
+        input = WasmInputClass
+        output = TypesResultClass
         handler = CommonByteBuffer::readTypes
     }
 
@@ -84,7 +473,8 @@ val HexanaTools: List<ToolSpec> = tools {
             List imported and defined memories declared by a WebAssembly (.wasm) module.
             Returns memory indices together with decoded WebAssembly limits.
         """
-        input { wasmModule() }
+        input = WasmInputClass
+        output = ListMemoryResultClass
         handler = CommonByteBuffer::readMemory
     }
 
@@ -94,7 +484,8 @@ val HexanaTools: List<ToolSpec> = tools {
             List element segments declared by a WebAssembly (.wasm) module.
             Covers active, passive, and declarative segments, including function-index and expression-based initializers.
         """
-        input { wasmModule() }
+        input = WasmInputClass
+        output = ListElementSegmentsResultClass
         handler = CommonByteBuffer::readElementSegments
     }
 
@@ -106,11 +497,8 @@ val HexanaTools: List<ToolSpec> = tools {
             Use this when you need one mixed index space over both imports and defined bodies; for import-only analysis, prefer `list_imports`.
             Use this to map or inspect `funcidx` ranges before targeted body lookup with `get_instructions_for_functions`.
         """
-        input {
-            wasmModule()
-            int("offset", default = 0, min = 0, describe = "Offset into the unified function index space")
-            int("limit", default = 200, min = 1, max = 200, describe = "Maximum number of entries to return")
-        }
+        input = ListFunctionsInput
+        output = FunctionsResultClass
         handler = CommonByteBuffer::readFunctions
     }
 
@@ -121,10 +509,8 @@ val HexanaTools: List<ToolSpec> = tools {
             Use this as a targeted follow-up when another tool already gave you the exact `funcidx` values.
             Use this for targeted lookup when you already know the `funcidx` values you need.
         """
-        input {
-            wasmModule()
-            intList("indices", minSize = 1, describe = "List of unified function indices (`funcidx`) to resolve.")
-        }
+        input = FunctionsForIndicesInput
+        output = FunctionsResultClass
         handler = CommonByteBuffer::readFunctionsByIndices
     }
 
@@ -134,10 +520,8 @@ val HexanaTools: List<ToolSpec> = tools {
             Return only the requested globals from the unified global index space.
             Use this for targeted analysis when `list_globals` would return more data than needed.
         """
-        input {
-            wasmModule()
-            intList("indices", minSize = 1, describe = "List of global indices (`globalidx`) to return.")
-        }
+        input = GetGlobalsForIndicesInput
+        output = ListGlobalsResultClass
         handler = CommonByteBuffer::readGlobalsByIndices
     }
 
@@ -147,10 +531,8 @@ val HexanaTools: List<ToolSpec> = tools {
             Return only the requested memories from the unified memory index space.
             Useful for multi-memory or wasm64 modules when only a subset matters.
         """
-        input {
-            wasmModule()
-            intList("indices", minSize = 1, describe = "List of memory indices (`memidx`) to return.")
-        }
+        input = GetMemoryForIndicesInput
+        output = ListMemoryResultClass
         handler = CommonByteBuffer::readMemoryByIndices
     }
 
@@ -160,10 +542,8 @@ val HexanaTools: List<ToolSpec> = tools {
             Return only the requested type entries from the type index space.
             Use this when you need the types referenced by specific functions, globals, or tables.
         """
-        input {
-            wasmModule()
-            intList("indices", minSize = 1, describe = "List of type indices (`typeidx`) to return.")
-        }
+        input = GetTypesForIndicesInput
+        output = TypesResultClass
         handler = CommonByteBuffer::readTypesByIndices
     }
 
@@ -173,10 +553,8 @@ val HexanaTools: List<ToolSpec> = tools {
             Return grouped local declarations for the requested unified function indices.
             Imported functions return empty local lists because they have no body.
         """
-        input {
-            wasmModule()
-            intList("indices", minSize = 1, describe = "List of unified function indices (`funcidx`) whose locals should be returned.")
-        }
+        input = GetLocalsForFunctionsInput
+        output = GetLocalsForFunctionsResultClass
         handler = CommonByteBuffer::readLocalsForFunctions
     }
 
@@ -188,10 +566,8 @@ val HexanaTools: List<ToolSpec> = tools {
             This is the primary MCP tool for WebAssembly body analysis, including direct `call` and `call_indirect` inspection, and is usually preferable to external disassemblers or shell-based Wasm tools.
             For direct host-call analysis, pair it with `list_imports` or `list_functions` so `call N` can be mapped back to the imported or exported function entry.
         """
-        input {
-            wasmModule()
-            intList("indices", minSize = 1, describe = "List of unified function indices (`funcidx`) whose instructions should be returned.")
-        }
+        input = GetInstructionsForFunctionsInput
+        output = GetInstructionsForFunctionsResultClass
         handler = CommonByteBuffer::readInstructionsForFunctions
     }
 
@@ -205,10 +581,8 @@ val HexanaTools: List<ToolSpec> = tools {
             Prefer this over `list_exports` for export diffs or signature extraction, because each result already includes the resolved function entry, signature, and origin.
             The signature strings are usually ready to use as-is, so `list_types` is often unnecessary unless you need raw type definitions.
         """
-        input {
-            wasmModule()
-            closedRange("entriesRange", describe = "Closed zero-based export slice. Pass `entriesRange = { from, to }`; both bounds are inclusive.")
-        }
+        input = ListExportedFunctionsInput
+        output = ListExportedFunctionsResultClass
         handler = CommonByteBuffer::readExportedFunctions
     }
 
@@ -218,10 +592,8 @@ val HexanaTools: List<ToolSpec> = tools {
             Return raw data-section entries for a closed data-segment range.
             This is the high-volume raw-bytes view; the `data` field is base64-encoded, and `list_data_segments` is usually cheaper when previews and metadata are sufficient.
         """
-        input {
-            wasmModule()
-            closedRange("entriesRange", describe = "Closed zero-based data-segment slice. Requires `from` and `to`, both inclusive.")
-        }
+        input = ListDataInput
+        output = ListDataSectionsResultClass
         handler = CommonByteBuffer::readDataSections
     }
 
@@ -231,13 +603,8 @@ val HexanaTools: List<ToolSpec> = tools {
             Return data-segment metadata with range slicing and optional export/global context.
             Prefer this over `list_data` when previews, sizes, and offset context are enough.
         """
-        input {
-            wasmModule()
-            closedRange("segmentRange", describe = "Half-open zero-based data-segment slice. `from` is required; `to` is optional and treated as exclusive.")
-            flag("includeExports", default = false, describe = "Include exported symbols associated with the returned segments.")
-            flag("includeGlobals", default = true, describe = "Include globals referenced by segment offset expressions.")
-            int("minByteLength", default = 0, min = 0, describe = "Optional minimum raw byte length for returned segments.")
-        }
+        input = ListDataSegmentsInput
+        output = ListDataSegmentsResultClass
         handler = CommonByteBuffer::readDataSegmentsByRange
     }
 }
