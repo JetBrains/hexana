@@ -1,23 +1,5 @@
 package org.jetbrains.hexana.mcp.tools
 
-import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.mcp.query.readDataSections
-import org.jetbrains.hexana.mcp.query.readDataSegmentsByRange
-import org.jetbrains.hexana.mcp.query.readElementSegments
-import org.jetbrains.hexana.mcp.query.readExportedFunctions
-import org.jetbrains.hexana.mcp.query.readExports
-import org.jetbrains.hexana.mcp.query.readFunctions
-import org.jetbrains.hexana.mcp.query.readFunctionsByIndices
-import org.jetbrains.hexana.mcp.query.readGlobals
-import org.jetbrains.hexana.mcp.query.readGlobalsByIndices
-import org.jetbrains.hexana.mcp.query.readImportFunctions
-import org.jetbrains.hexana.mcp.query.readInstructionsForFunctions
-import org.jetbrains.hexana.mcp.query.readLocalsForFunctions
-import org.jetbrains.hexana.mcp.query.readMemory
-import org.jetbrains.hexana.mcp.query.readMemoryByIndices
-import org.jetbrains.hexana.mcp.query.readModuleSummary
-import org.jetbrains.hexana.mcp.query.readTypes
-import org.jetbrains.hexana.mcp.query.readTypesByIndices
 
 private const val WASM_INPUT_VALIDATION =
     "Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."
@@ -415,7 +397,7 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = WasmInputClass
         output = SummarizeModuleResultClass
-        handler = CommonByteBuffer::readModuleSummary
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readModuleSummary"
     }
 
     tool("list_imports") {
@@ -428,13 +410,12 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = WasmInputClass
         output = ListImportsResultClass
-        handler = CommonByteBuffer::readImportFunctions
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readImportFunctions"
     }
 
     tool("list_exports") {
         summary = "List exports declared by a `.wasm` module."
         guidance = """
-            List exports declared by a WebAssembly (.wasm) module.
             Includes exported functions, tables, memories, and globals; `kind` uses the standard tags 0=function, 1=table, 2=memory, 3=global.
             This is the light name-and-kind view of exports.
             Use this when you only need exported names, kinds, or raw external indices.
@@ -442,7 +423,7 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = WasmInputClass
         output = ListExportsResultClass
-        handler = CommonByteBuffer::readExports
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readExports"
     }
 
     tool("list_globals") {
@@ -453,7 +434,7 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = WasmInputClass
         output = ListGlobalsResultClass
-        handler = CommonByteBuffer::readGlobals
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readGlobals"
     }
 
     tool("list_types") {
@@ -464,7 +445,7 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = WasmInputClass
         output = TypesResultClass
-        handler = CommonByteBuffer::readTypes
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readTypes"
     }
 
     tool("list_memory") {
@@ -475,7 +456,7 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = WasmInputClass
         output = ListMemoryResultClass
-        handler = CommonByteBuffer::readMemory
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readMemory"
     }
 
     tool("list_element_segments") {
@@ -486,7 +467,7 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = WasmInputClass
         output = ListElementSegmentsResultClass
-        handler = CommonByteBuffer::readElementSegments
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readElementSegments"
     }
 
     tool("list_functions") {
@@ -499,19 +480,18 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = ListFunctionsInput
         output = FunctionsResultClass
-        handler = CommonByteBuffer::readFunctions
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctions"
     }
 
     tool("functions_for_indices") {
         summary = "Resolve function entries for the given unified function indices."
         guidance = """
             Resolve imported and defined function entries for the requested unified function indices.
-            Use this as a targeted follow-up when another tool already gave you the exact `funcidx` values.
-            Use this for targeted lookup when you already know the `funcidx` values you need.
+            Use this as a targeted follow-up when you already know the exact `funcidx` values you need.
         """
         input = FunctionsForIndicesInput
         output = FunctionsResultClass
-        handler = CommonByteBuffer::readFunctionsByIndices
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionsByIndices"
     }
 
     tool("get_globals_for_indices") {
@@ -522,7 +502,7 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = GetGlobalsForIndicesInput
         output = ListGlobalsResultClass
-        handler = CommonByteBuffer::readGlobalsByIndices
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readGlobalsByIndices"
     }
 
     tool("get_memory_for_indices") {
@@ -533,7 +513,7 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = GetMemoryForIndicesInput
         output = ListMemoryResultClass
-        handler = CommonByteBuffer::readMemoryByIndices
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readMemoryByIndices"
     }
 
     tool("get_types_for_indices") {
@@ -544,7 +524,7 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = GetTypesForIndicesInput
         output = TypesResultClass
-        handler = CommonByteBuffer::readTypesByIndices
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readTypesByIndices"
     }
 
     tool("get_locals_for_functions") {
@@ -555,7 +535,7 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = GetLocalsForFunctionsInput
         output = GetLocalsForFunctionsResultClass
-        handler = CommonByteBuffer::readLocalsForFunctions
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readLocalsForFunctions"
     }
 
     tool("get_instructions_for_functions") {
@@ -568,7 +548,7 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = GetInstructionsForFunctionsInput
         output = GetInstructionsForFunctionsResultClass
-        handler = CommonByteBuffer::readInstructionsForFunctions
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readInstructionsForFunctions"
     }
 
     tool("list_exported_functions") {
@@ -583,28 +563,28 @@ val HexanaTools: List<ToolSpec> = tools {
         """
         input = ListExportedFunctionsInput
         output = ListExportedFunctionsResultClass
-        handler = CommonByteBuffer::readExportedFunctions
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readExportedFunctions"
     }
 
     tool("list_data") {
         summary = "Return raw data-section entries for a closed data-segment range."
         guidance = """
-            Return raw data-section entries for a closed data-segment range.
+            Range `entriesRange` is closed: both `from` and `to` are inclusive zero-based segment indices.
             This is the high-volume raw-bytes view; the `data` field is base64-encoded, and `list_data_segments` is usually cheaper when previews and metadata are sufficient.
         """
         input = ListDataInput
         output = ListDataSectionsResultClass
-        handler = CommonByteBuffer::readDataSections
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readDataSections"
     }
 
     tool("list_data_segments") {
         summary = "Return data-segment metadata with range slicing and optional export/global context."
         guidance = """
-            Return data-segment metadata with range slicing and optional export/global context.
+            Range `segmentRange` is half-open: `from` is inclusive, `to` is exclusive (omit `to` to read to the end).
             Prefer this over `list_data` when previews, sizes, and offset context are enough.
         """
         input = ListDataSegmentsInput
         output = ListDataSegmentsResultClass
-        handler = CommonByteBuffer::readDataSegmentsByRange
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readDataSegmentsByRange"
     }
 }

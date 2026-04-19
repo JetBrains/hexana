@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 
 class HexanaToolsTest {
 
-    private val sampleHandler = HexanaTools.first().handler
+    private val sampleHandler = HexanaTools.single { it.name == "summarize_module" }.handlerFqn
 
     @Test
     fun `registry exposes the expected tool names`() {
@@ -37,10 +37,27 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `critical Wasm-analysis tools are always present`() {
+        // Guard against accidental removal of the headline tools even as the full registry grows.
+        val names = HexanaTools.map { it.name }.toSet()
+        listOf("summarize_module", "list_imports", "list_functions", "get_instructions_for_functions").forEach {
+            assertTrue(it in names, "critical tool `$it` missing from HexanaTools")
+        }
+    }
+
+    @Test
+    fun `tool names use snake_case`() {
+        val snakeCase = Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
+        HexanaTools.forEach { spec ->
+            assertTrue(snakeCase.matches(spec.name), "tool name `${spec.name}` is not snake_case")
+        }
+    }
+
+    @Test
     fun `every tool declares summary, input, output, handler`() {
         for (spec in HexanaTools) {
             assertTrue(spec.summary.isNotBlank(), "summary blank for ${spec.name}")
-            assertNotNull(spec.handler, "handler null for ${spec.name}")
+            assertTrue(spec.handlerFqn.isNotBlank(), "handlerFqn blank for ${spec.name}")
             assertTrue(spec.input.fields.isNotEmpty(), "empty input class for ${spec.name}")
             assertTrue(spec.output.fields.isNotEmpty() || spec.output.name == "DataSegmentLinkingMetadataResult",
                 "empty output class for ${spec.name}")
@@ -113,10 +130,10 @@ class HexanaToolsTest {
         assertFailsWith<IllegalArgumentException> {
             tools {
                 tool("dup") {
-                    summary = "s"; input = WasmInputClass; output = WasmInputClass; handler = sampleHandler
+                    summary = "s"; input = WasmInputClass; output = WasmInputClass; handlerFqn = sampleHandler
                 }
                 tool("dup") {
-                    summary = "t"; input = WasmInputClass; output = WasmInputClass; handler = sampleHandler
+                    summary = "t"; input = WasmInputClass; output = WasmInputClass; handlerFqn = sampleHandler
                 }
             }
         }
@@ -129,7 +146,7 @@ class HexanaToolsTest {
                 tool("broken") {
                     input = WasmInputClass
                     output = WasmInputClass
-                    handler = sampleHandler
+                    handlerFqn = sampleHandler
                 }
             }
         }
@@ -142,7 +159,7 @@ class HexanaToolsTest {
                 tool("broken") {
                     summary = "s"
                     input = WasmInputClass
-                    handler = sampleHandler
+                    handlerFqn = sampleHandler
                 }
             }
         }

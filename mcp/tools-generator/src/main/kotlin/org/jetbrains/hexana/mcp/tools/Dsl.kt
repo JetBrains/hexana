@@ -1,7 +1,5 @@
 package org.jetbrains.hexana.mcp.tools
 
-import kotlin.reflect.KFunction
-
 // ---------- Types ----------
 
 sealed class FieldType {
@@ -193,7 +191,13 @@ data class ToolSpec(
     val guidance: String?,
     val input: ClassSpec,
     val output: ClassSpec,
-    val handler: KFunction<*>,
+    /**
+     * Fully-qualified name of the top-level handler function that backs this tool.
+     * Expressed as a string so the DSL has zero compile-time dependency on the
+     * function's home module. Downstream generators validate FQN resolvability
+     * when they emit the dispatcher code that references it.
+     */
+    val handlerFqn: String,
 )
 
 @HexanaToolsDsl
@@ -206,11 +210,13 @@ class ToolsBuilder internal constructor() {
     }
 
     internal fun build(): List<ToolSpec> {
-        val duplicates = specs.groupingBy { it.name }.eachCount().filterValues { it > 1 }.keys
+        val duplicates = specs.groupBy { it.name }.filterValues { it.size > 1 }.keys
         require(duplicates.isEmpty()) { "Duplicate tool names: $duplicates" }
         return specs.toList()
     }
 }
+
+private val HANDLER_FQN_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$")
 
 @HexanaToolsDsl
 class ToolBuilder internal constructor(private val name: String) {
@@ -218,20 +224,23 @@ class ToolBuilder internal constructor(private val name: String) {
     var guidance: String? = null
     var input: ClassSpec? = null
     var output: ClassSpec? = null
-    var handler: KFunction<*>? = null
+    var handlerFqn: String? = null
 
     internal fun build(): ToolSpec {
         val resolvedSummary = requireNotNull(summary) { "Tool '$name' is missing `summary`." }
         val resolvedInput = requireNotNull(input) { "Tool '$name' is missing `input = `." }
         val resolvedOutput = requireNotNull(output) { "Tool '$name' is missing `output = `." }
-        val resolvedHandler = requireNotNull(handler) { "Tool '$name' is missing `handler = `." }
+        val resolvedHandler = requireNotNull(handlerFqn) { "Tool '$name' is missing `handlerFqn = `." }
+        require(HANDLER_FQN_REGEX.matches(resolvedHandler)) {
+            "Tool '$name' handlerFqn must be a fully-qualified function name (`pkg.subpkg.fn`), got `$resolvedHandler`."
+        }
         return ToolSpec(
             name = name,
             summary = resolvedSummary.trim(),
             guidance = guidance?.trimIndent()?.trim()?.takeIf { it.isNotEmpty() },
             input = resolvedInput,
             output = resolvedOutput,
-            handler = resolvedHandler,
+            handlerFqn = resolvedHandler,
         )
     }
 }
