@@ -21,9 +21,7 @@ class HexanaService(
     init {
         coroutineScope.launch(Dispatchers.IO) {
             HexanaAnalytics.initialize(
-                config = AnalyticsConfig(
-                    apiKey = System.getenv("HEXANA_POSTHOG_KEY") ?: return@launch
-                ),
+                config = AnalyticsConfig(),
                 consentProvider = IntellijConsentProvider(),
                 distinctIdProvider = IdeDistinctIdProvider()
             )

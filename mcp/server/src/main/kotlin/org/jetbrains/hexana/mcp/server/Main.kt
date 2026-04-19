@@ -84,10 +84,10 @@ private fun initializeAnalytics(command: HexanaCommand) {
         is HexanaCommand.Stdio -> command.analyticsKey
         is HexanaCommand.Http -> command.analyticsKey
         else -> null
-    } ?: return
+    }
 
     HexanaAnalytics.initialize(
-        config = AnalyticsConfig(apiKey = analyticsKey),
+        config = AnalyticsConfig(apiKey = analyticsKey ?: AnalyticsConfig.DEFAULT_API_KEY),
         consentProvider = ConsentProvider { true },
         distinctIdProvider = UuidDistinctIdProvider()
     )
