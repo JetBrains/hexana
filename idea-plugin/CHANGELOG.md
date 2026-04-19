@@ -6,6 +6,9 @@
 - [DWARF section detection and parsing](https://github.com/JetBrains/hexana/issues/49)
 - [Explorer integration](https://github.com/JetBrains/hexana/issues/52)
 - [Source mapping via DWARF](https://github.com/JetBrains/hexana/issues/48)
+- [JS interop - code completion and type inference of instance.exports.](https://github.com/JetBrains/hexana/issues/18)
+- [JS interop - code completion of namespaces and property names for imports](https://github.com/JetBrains/hexana/issues/17)
+- [Run configurations for WASM - run with Wasmtime or GraalVM (only run is supported for now, no debug yet)](https://github.com/JetBrains/hexana/issues/69)
 
 ### Changed
 
