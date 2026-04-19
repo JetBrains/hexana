@@ -207,6 +207,47 @@ class WasmLocalVariableTest : UsefulTestCase() {
         assertFalse(resolved.isUnavailable)
     }
 
+    fun testDwarfLocationHint() {
+        val original = WasmLocalVariable.parseFrameVariableOutput(
+            listOf("(unsigned int) x = <variable not available>")
+        )[0]
+        assertTrue(original.isUnavailable)
+
+        val hinted = WasmLocalVariable.withDwarfLocationHint(
+            original,
+            "wasm local[3]",
+            "wasm-local[3], DW_OP_stack_value",
+        )
+        assertEquals("x", hinted.name)
+        assertEquals("unsigned int", hinted.typeName)
+        val hintedValue = hinted.displayValue
+        assertTrue(
+            "Should contain storage kind: $hintedValue",
+            hintedValue.contains("wasm local[3]"),
+        )
+        assertTrue(
+            "Should contain location description: $hintedValue",
+            hintedValue.contains("wasm-local[3]"),
+        )
+    }
+
+    fun testDwarfLocationHintIsNotUnavailable() {
+        val original = WasmLocalVariable.parseFrameVariableOutput(
+            listOf("(int) y = <variable not available>")
+        )[0]
+        val hinted = WasmLocalVariable.withDwarfLocationHint(
+            original,
+            "wasm global[0]",
+            "wasm-global[0], DW_OP_stack_value",
+        )
+        // Location hints are informational — the variable's value is still
+        // not truly resolved, but the hint is not an "unavailable" marker.
+        assertFalse(
+            "DWARF location hint should not be considered unavailable",
+            hinted.isUnavailable,
+        )
+    }
+
     fun testParseBlanksIgnored() {
         val lines = listOf(
             "",

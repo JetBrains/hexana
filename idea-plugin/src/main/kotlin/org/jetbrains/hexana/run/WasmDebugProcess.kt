@@ -43,6 +43,13 @@ class WasmDebugProcess(
     private val dwarfInjected: Boolean = false,
 ) : XDebugProcess(session) {
 
+    /**
+     * Parsed DWARF variable location metadata from the Wasm binary.
+     * Set during debug session creation; used by [WasmStackFrame] to
+     * resolve variables that LLDB's standard `frame variable` cannot.
+     */
+    internal var dwarfVariableResolver: WasmDwarfVariableResolver? = null
+
     private val breakpointHandler = WasmBreakpointHandler(this)
 
     /** Maps registered breakpoints to the file+line used in LLDB. */
@@ -391,7 +398,10 @@ class WasmDebugProcess(
             }?.key
 
             if (hitBreakpoint != null) {
-                val frame = WasmStackFrame(resolvedPosition, functionName, lldb)
+                val frame = WasmStackFrame(
+                    resolvedPosition, functionName, lldb,
+                    dwarfVariableResolver = dwarfVariableResolver,
+                )
                 val context = WasmSuspendContext(frame, lldb, this)
                 ApplicationManager.getApplication().invokeLater {
                     session.breakpointReached(hitBreakpoint, null, context)
@@ -435,7 +445,10 @@ class WasmDebugProcess(
             return
         }
 
-        val frame = WasmStackFrame(sourcePosition, functionName, lldb)
+        val frame = WasmStackFrame(
+            sourcePosition, functionName, lldb,
+            dwarfVariableResolver = dwarfVariableResolver,
+        )
         val context = WasmSuspendContext(frame, lldb, this)
         ApplicationManager.getApplication().invokeLater {
             session.positionReached(context)

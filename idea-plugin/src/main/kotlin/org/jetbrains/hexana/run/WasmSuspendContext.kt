@@ -13,7 +13,7 @@ import com.intellij.xdebugger.frame.XSuspendContext
  * source location reported by LLDB. When an [LldbCommunicator] is
  * available, the full backtrace is retrieved from LLDB's `bt` command.
  */
-class WasmSuspendContext(
+internal class WasmSuspendContext(
     private val topFrame: WasmStackFrame,
     private val lldb: LldbCommunicator? = null,
     private val debugProcess: WasmDebugProcess? = null,
@@ -31,6 +31,9 @@ internal class WasmExecutionStack(
     private val lldb: LldbCommunicator?,
     private val debugProcess: WasmDebugProcess?,
 ) : XExecutionStack("Wasm Thread") {
+
+    private val dwarfVariableResolver: WasmDwarfVariableResolver?
+        get() = debugProcess?.dwarfVariableResolver
 
     override fun getTopFrame(): XStackFrame = topFrame
 
@@ -116,6 +119,7 @@ internal class WasmExecutionStack(
             functionName = funcName,
             lldb = lldb,
             frameIndex = frameIndex,
+            dwarfVariableResolver = dwarfVariableResolver,
         )
     }
 

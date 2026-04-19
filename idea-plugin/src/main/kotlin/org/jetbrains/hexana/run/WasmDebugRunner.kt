@@ -17,6 +17,7 @@ import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugProcessStarter
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.XDebuggerManager
+import java.io.File
 
 /**
  * A [GenericProgramRunner] that handles the **Debug** executor for
@@ -96,6 +97,19 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                 // We start the inferior in sessionInitialized() so that all
                 // breakpoints are already set in LLDB when wasmtime launches.
 
+                // Parse DWARF variable metadata from the Wasm binary so
+                // the debugger can use location descriptions to resolve
+                // variables that LLDB's standard `frame variable` cannot.
+                val dwarfResolver = try {
+                    val wasmFile = File(configuration.wasmFilePath)
+                    if (wasmFile.exists()) {
+                        WasmDwarfVariableResolver.create(wasmFile.readBytes())
+                    } else null
+                } catch (e: Exception) {
+                    LOG.debug("Failed to create DWARF variable resolver: ${e.message}")
+                    null
+                }
+
                 return WasmDebugProcess(
                     session,
                     console,
@@ -103,7 +117,9 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     lldb,
                     compositionUsed = buildResult.compositionUsed,
                     dwarfInjected = buildResult.dwarfInjected,
-                )
+                ).also {
+                    it.dwarfVariableResolver = dwarfResolver
+                }
             }
         }
 

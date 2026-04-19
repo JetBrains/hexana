@@ -185,6 +185,30 @@ internal class WasmLocalVariable(
         )
 
         /**
+         * Creates a copy of the given variable with its display value
+         * replaced by a DWARF location hint, showing where in the Wasm
+         * runtime the variable is stored according to DWARF metadata.
+         * This provides more informative feedback than a plain
+         * "unavailable" message when the value cannot be read.
+         *
+         * @param storageKind short label like "wasm local[3]" or "wasm global[0]"
+         * @param locationDesc full DWARF location description from [DwarfLocationDescription.describe]
+         */
+        internal fun withDwarfLocationHint(
+            original: WasmLocalVariable,
+            storageKind: String,
+            locationDesc: String,
+        ): WasmLocalVariable = WasmLocalVariable(
+            name = original.name,
+            typeName = original.typeName,
+            displayValue = "$DWARF_LOCATION_PREFIX$storageKind — $locationDesc)",
+            children = original.children,
+        )
+
+        private const val DWARF_LOCATION_PREFIX = "<stored in "
+        internal const val DWARF_LOCATION_HINT_MARKER = DWARF_LOCATION_PREFIX
+
+        /**
          * The pattern for a single `frame variable` line:
          * ```
          * (type) name = value

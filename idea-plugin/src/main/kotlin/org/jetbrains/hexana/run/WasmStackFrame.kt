@@ -23,11 +23,12 @@ import com.intellij.xdebugger.frame.XValueChildrenList
  *                   Used when selecting a non-top frame before
  *                   querying variables.
  */
-class WasmStackFrame(
+internal class WasmStackFrame(
     private val sourcePosition: XSourcePosition?,
     private val functionName: String? = null,
     private val lldb: LldbCommunicator? = null,
     private val frameIndex: Int = 0,
+    private val dwarfVariableResolver: WasmDwarfVariableResolver? = null,
 ) : XStackFrame() {
 
     override fun getSourcePosition(): XSourcePosition? = sourcePosition
@@ -75,13 +76,41 @@ class WasmStackFrame(
                         if (!variable.isUnavailable) return@map variable
                         val attempted = tryResolveViaExpression(communicator, variable)
                         if (!attempted.isUnavailable) return@map attempted
-                        // Both retrieval strategies failed. Check whether
+
+                        // Try DWARF-based resolution using parsed location
+                        // metadata from the Wasm binary. This can resolve
+                        // variables whose locations are described by
+                        // DW_OP_addr, DW_OP_fbreg, or DW_OP_WASM_location
+                        // even when LLDB's standard paths fail.
+                        val resolver = dwarfVariableResolver
+                        if (resolver != null) {
+                            val dwarfResolved = resolver.resolveVariable(
+                                communicator, attempted, functionName,
+                            )
+                            if (!dwarfResolved.isUnavailable) return@map dwarfResolved
+                        }
+
+                        // All retrieval strategies failed. Check whether
                         // DWARF location metadata is missing so we can show
                         // a more informative message to the user.
                         if (isDwarfLocationMissing(communicator, variable)) {
                             WasmLocalVariable.withDwarfMissingMessage(attempted)
                         } else {
-                            attempted
+                            // If we have DWARF location info, show a hint
+                            // about where the variable is stored even though
+                            // we couldn't read the value.
+                            val locationDesc = resolver?.describeVariableLocation(
+                                variable.name, functionName,
+                            )
+                            if (locationDesc != null) {
+                                WasmLocalVariable.withDwarfLocationHint(
+                                    attempted,
+                                    locationDesc.substringBefore(","),
+                                    locationDesc,
+                                )
+                            } else {
+                                attempted
+                            }
                         }
                     }
 
