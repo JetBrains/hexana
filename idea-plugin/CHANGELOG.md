@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- [Code-Size Profiler for WebAssembly Binaries](https://github.com/JetBrains/hexana/issues/70)
 - [DWARF section detection and parsing](https://github.com/JetBrains/hexana/issues/49)
 - [Explorer integration](https://github.com/JetBrains/hexana/issues/52)
 - [Source mapping via DWARF](https://github.com/JetBrains/hexana/issues/48)
