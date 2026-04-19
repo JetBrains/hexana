@@ -17,6 +17,24 @@ fun CommonByteBuffer.readDataSegments(
     return readDataSegments(start, endExclusive, wasmModule, includeExports, includeGlobals, minByteLength)
 }
 
+/**
+ * Tool-friendly entry point that adapts an MCP `minByteLength` (non-nullable, 0 = "no filter")
+ * to the internal nullable semantics (null = "no filter", positive = minimum segment byte length).
+ */
+fun CommonByteBuffer.readDataSegmentsByRange(
+    wasmModule: WasmModule,
+    range: IntRange,
+    includeExports: Boolean,
+    includeGlobals: Boolean,
+    minByteLength: Int,
+): ListDataSegmentsResult = readDataSegments(
+    segmentRange = range,
+    wasmModule = wasmModule,
+    includeExports = includeExports,
+    includeGlobals = includeGlobals,
+    minByteLength = minByteLength.takeIf { it > 0 },
+)
+
 fun CommonByteBuffer.readDataSegments(
     segmentStartInclusive: Int,
     segmentEndExclusive: Int,
