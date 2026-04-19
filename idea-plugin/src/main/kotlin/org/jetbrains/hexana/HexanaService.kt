@@ -6,6 +6,9 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.jetbrains.hexana.analytics.*
 import org.jetbrains.hexana.graalwasm.wasmprinter.printWat
 import java.io.File
 import java.io.FileInputStream
@@ -14,6 +17,18 @@ import java.io.FileInputStream
 class HexanaService(
     val coroutineScope : CoroutineScope,
 ) {
+
+    init {
+        coroutineScope.launch(Dispatchers.IO) {
+            HexanaAnalytics.initialize(
+                config = AnalyticsConfig(
+                    apiKey = System.getenv("HEXANA_POSTHOG_KEY") ?: return@launch
+                ),
+                consentProvider = IntellijConsentProvider(),
+                distinctIdProvider = IdeDistinctIdProvider()
+            )
+        }
+    }
 
     companion object {
         @JvmStatic

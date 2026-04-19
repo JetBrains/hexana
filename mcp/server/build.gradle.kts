@@ -28,6 +28,7 @@ configurations.named(integrationTestSourceSet.runtimeOnlyConfigurationName) {
 }
 
 dependencies {
+    implementation(project(":analytics"))
     implementation(project(":mcp:core"))
     implementation(libs.clikt)
     implementation(libs.kotlin.logging.jvm)

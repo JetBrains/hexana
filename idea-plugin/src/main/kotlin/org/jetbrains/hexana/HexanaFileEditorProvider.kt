@@ -7,6 +7,8 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.annotations.NonNls
+import org.jetbrains.hexana.analytics.HexanaAnalytics
+import org.jetbrains.hexana.analytics.HexanaEvent
 import org.jetbrains.hexana.statistics.HexanaCounterUsagesCollector
 
 class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
@@ -27,6 +29,9 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
     ): FileEditor {
         if (file.fileType is WasmFileType) {
             HexanaCounterUsagesCollector.logWasmFileOpened(project)
+            HexanaAnalytics.client.capture(
+                HexanaEvent.WasmFileOpened(file.length, HexanaEvent.Surface.IDE_PLUGIN)
+            )
         }
         return HexanaFileEditor(project, file)
     }

@@ -16,6 +16,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.io.asSink
 import kotlinx.io.asSource
 import kotlinx.io.buffered
+import org.jetbrains.hexana.analytics.*
 import org.slf4j.LoggerFactory
 import kotlin.system.exitProcess
 
@@ -34,6 +35,8 @@ fun main(args: Array<String>) {
     val version = hexanaServerVersion()
 
     developmentVersionWarning(command, version)?.let(logger::warn)
+
+    initializeAnalytics(command)
 
     try {
         when (command) {
@@ -74,6 +77,33 @@ internal fun developmentVersionWarning(command: HexanaCommand, version: String):
                 "Set -Dhexana.version or package the server with an implementation version."
         }
     }
+}
+
+private fun initializeAnalytics(command: HexanaCommand) {
+    val analyticsKey = when (command) {
+        is HexanaCommand.Stdio -> command.analyticsKey
+        is HexanaCommand.Http -> command.analyticsKey
+        else -> null
+    } ?: return
+
+    HexanaAnalytics.initialize(
+        config = AnalyticsConfig(apiKey = analyticsKey),
+        consentProvider = ConsentProvider { true },
+        distinctIdProvider = UuidDistinctIdProvider()
+    )
+
+    val transport = when (command) {
+        is HexanaCommand.Stdio -> HexanaEvent.McpTransport.STDIO
+        is HexanaCommand.Http -> HexanaEvent.McpTransport.HTTP
+        else -> return
+    }
+    HexanaAnalytics.client.capture(
+        HexanaEvent.McpServerStarted(transport = transport, embeddedInIde = false)
+    )
+
+    Runtime.getRuntime().addShutdownHook(Thread {
+        HexanaAnalytics.shutdown()
+    })
 }
 
 private suspend fun runStdio(command: HexanaCommand.Stdio) {

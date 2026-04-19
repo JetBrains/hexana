@@ -24,6 +24,10 @@ allprojects {
     }
 }
 
+plugins.withType<org.jetbrains.kotlin.gradle.targets.js.yarn.YarnPlugin> {
+    the<org.jetbrains.kotlin.gradle.targets.js.yarn.YarnRootExtension>().yarnLockAutoReplace = true
+}
+
 subprojects {
     // We will enable this for tests on teamcity, because we are already fetching test failure there
     tasks.withType<AbstractTestTask>().configureEach {

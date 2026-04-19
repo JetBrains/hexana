@@ -67,6 +67,7 @@ dependencies {
         composeUI()
     }
 
+    implementation(project(":analytics"))
     implementation(project(":encdec"))
     implementation(project(":wasmParser"))
     implementation(project(":binaryProvider"))

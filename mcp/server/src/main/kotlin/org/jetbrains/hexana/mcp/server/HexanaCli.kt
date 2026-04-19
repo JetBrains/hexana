@@ -6,13 +6,14 @@ import com.github.ajalt.clikt.parameters.types.int
 import java.net.InetAddress
 
 sealed interface HexanaCommand {
-    data class Stdio(val logLevel: HexanaLogLevel) : HexanaCommand
+    data class Stdio(val logLevel: HexanaLogLevel, val analyticsKey: String?) : HexanaCommand
     data class Http(
         val host: String,
         val port: Int,
         val endpoint: String,
         val allowPublicBind: Boolean,
-        val logLevel: HexanaLogLevel
+        val logLevel: HexanaLogLevel,
+        val analyticsKey: String?
     ) : HexanaCommand
 
     data object Version : HexanaCommand
@@ -65,8 +66,14 @@ class HexanaCli {
             help = "Human-readable stderr logging level."
         ).convert("quiet|info|debug") { parseLogLevel(it) }.default(HexanaLogLevel.INFO)
 
+        private val analyticsKey by option(
+            "--analytics-key",
+            help = "PostHog project API key. Enables anonymous usage analytics when provided.",
+            envvar = "HEXANA_POSTHOG_KEY"
+        )
+
         override fun run() {
-            sink(HexanaCommand.Stdio(logLevel = logLevel))
+            sink(HexanaCommand.Stdio(logLevel = logLevel, analyticsKey = analyticsKey))
         }
     }
 
@@ -102,6 +109,12 @@ class HexanaCli {
             help = "Human-readable stderr logging level."
         ).convert("quiet|info|debug") { parseLogLevel(it) }.default(HexanaLogLevel.INFO)
 
+        private val analyticsKey by option(
+            "--analytics-key",
+            help = "PostHog project API key. Enables anonymous usage analytics when provided.",
+            envvar = "HEXANA_POSTHOG_KEY"
+        )
+
         override fun run() {
             if (!allowPublicBind && !host.isLoopbackHost()) {
                 throw UsageError("Public HTTP bind requires --allow-public-bind")
@@ -113,7 +126,8 @@ class HexanaCli {
                     port = port,
                     endpoint = endpoint.prependIfMissing("/"),
                     allowPublicBind = allowPublicBind,
-                    logLevel = logLevel
+                    logLevel = logLevel,
+                    analyticsKey = analyticsKey
                 )
             )
         }

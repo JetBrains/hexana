@@ -3,6 +3,8 @@ package org.jetbrains.hexana.mcp.server
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.serialization.json.*
+import org.jetbrains.hexana.analytics.HexanaAnalytics
+import org.jetbrains.hexana.analytics.HexanaEvent
 import org.jetbrains.hexana.mcp.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -151,26 +153,42 @@ class HexanaToolHandlers(
     }
 
     private inline fun <reified T> execute(toolName: String, block: () -> T): CallToolResult {
+        val startTime = System.currentTimeMillis()
         return try {
             val result = block()
             val jsonResult = encodeHexanaJson(result)
             val structuredContent = encodeHexanaJsonElement(result) as? JsonObject
+            captureToolEvent(toolName, startTime, success = true)
             CallToolResult(
                 content = listOf(TextContent(jsonResult)),
                 structuredContent = structuredContent
             )
         } catch (error: HexanaAnalysisException) {
+            captureToolEvent(toolName, startTime, success = false)
             logAnalysisFailure(toolName, error)
             errorResult(error.code, error.message)
         } catch (error: ToolInputException) {
+            captureToolEvent(toolName, startTime, success = false)
             errorResult(HexanaAnalysisErrorCode.INVALID_INPUT, error.message ?: "Invalid input")
         } catch (error: Exception) {
+            captureToolEvent(toolName, startTime, success = false)
             logger.error("Unexpected failure while executing MCP tool `{}`", toolName, error)
             errorResult(
                 HexanaAnalysisErrorCode.INTERNAL_ERROR,
                 "Internal error while executing `$toolName`. See server logs for details."
             )
         }
+    }
+
+    private fun captureToolEvent(toolName: String, startTime: Long, success: Boolean) {
+        HexanaAnalytics.client.capture(
+            HexanaEvent.McpToolInvoked(
+                toolName = toolName,
+                transport = HexanaEvent.McpTransport.STDIO,
+                durationMs = System.currentTimeMillis() - startTime,
+                success = success
+            )
+        )
     }
 
     private fun errorResult(code: HexanaAnalysisErrorCode, message: String): CallToolResult {
