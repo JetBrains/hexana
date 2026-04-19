@@ -2,6 +2,7 @@
 changelog = "2.4.0"
 kotlin = "2.2.21"
 kotlinLogging = "8.0.01"
+kotlinPoet = "2.2.0"
 composeMultiplatform = "1.9.0"
 graalvm = "25.0.0"
 gson = "2.13.1"
@@ -38,6 +39,7 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 kotlin-logging-jvm = { module = "io.github.oshai:kotlin-logging-jvm", version.ref = "kotlinLogging" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+kotlinpoet-jvm = { module = "com.squareup:kotlinpoet-jvm", version.ref = "kotlinPoet" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 mcp-kotlin-sdk-jvm = { module = "io.modelcontextprotocol:kotlin-sdk-jvm", version.ref = "mcpKotlinSdk" }
 posthog-server = { module = "com.posthog:posthog-server", version.ref = "posthog-server" }

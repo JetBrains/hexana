@@ -27,6 +27,30 @@ configurations.named(integrationTestSourceSet.runtimeOnlyConfigurationName) {
     extendsFrom(configurations.named("testRuntimeOnly").get())
 }
 
+val generatedToolDispatcherDir = layout.buildDirectory.dir("generated/tool-dispatcher/kotlin")
+
+val generateHexanaToolDispatcher = tasks.register<JavaExec>("generateHexanaToolDispatcher") {
+    description = "Generates HexanaToolDispatcherGenerated.kt from the HexanaTools DSL."
+    group = "build"
+
+    classpath = project(":mcp:tools-generator").extensions
+        .getByType<SourceSetContainer>()
+        .named("main").get().runtimeClasspath
+    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.MainKt")
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf(generatedToolDispatcherDir.get().asFile.absolutePath)
+    })
+
+    inputs.files(
+        project(":mcp:tools-generator").extensions
+            .getByType<SourceSetContainer>()
+            .named("main").get().output,
+    )
+    outputs.dir(generatedToolDispatcherDir)
+
+    dependsOn(":mcp:tools-generator:classes")
+}
+
 dependencies {
     implementation(project(":analytics"))
     implementation(project(":mcp:core"))
@@ -91,4 +115,7 @@ tasks.register<Test>("integrationTest") {
 
 kotlin {
     jvmToolchain(21)
+    sourceSets.named("main") {
+        kotlin.srcDir(generateHexanaToolDispatcher)
+    }
 }

@@ -10,6 +10,7 @@ import kotlinx.serialization.json.buildJsonObject
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.HexanaAnalysisService
 import org.jetbrains.hexana.mcp.HexanaAnalysisServices
+import org.jetbrains.hexana.mcp.server.gen.registerHexanaTools
 
 fun createHexanaMcpServer(
     analysisService: HexanaAnalysisService = HexanaAnalysisServices.default
@@ -24,182 +25,17 @@ fun createHexanaMcpServer(
             )
         )
     ) {
-        addTool(
-            tool = Tool(
-                name = "summarize_module",
-                description = "Summarize a WebAssembly module provided as a local `.wasm` path or inline bytes.",
-                inputSchema = wasmInputToolSchema()
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.summarizeModule(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "list_imports",
-                description = "List imported functions declared by a `.wasm` module from a path or inline bytes.",
-                inputSchema = wasmInputToolSchema()
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.listImports(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "list_exports",
-                description = "List exports declared by a `.wasm` module from a path or inline bytes.",
-                inputSchema = wasmInputToolSchema()
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.listExports(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "list_functions",
-                description = "List functions from a `.wasm` module using offset/limit pagination.",
-                inputSchema = listFunctionsSchema()
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.listFunctions(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "list_exported_functions",
-                description = "List exported functions from a `.wasm` module using a closed export-range slice.",
-                inputSchema = listExportedFunctionsSchema()
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.listExportedFunctions(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "functions_for_indices",
-                description = "Resolve imported and defined function entries for the requested unified function indices.",
-                inputSchema = pathAndIndicesSchema("Unified function indices (`funcidx`) to resolve.")
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.functionsForIndices(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "list_globals",
-                description = "List imported and defined globals declared by a `.wasm` module.",
-                inputSchema = wasmInputToolSchema()
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.listGlobals(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "list_types",
-                description = "List type entries declared by a `.wasm` module.",
-                inputSchema = wasmInputToolSchema()
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.listTypes(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "list_memory",
-                description = "List imported and defined memories declared by a `.wasm` module.",
-                inputSchema = wasmInputToolSchema()
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.listMemory(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "get_globals_for_indices",
-                description = "Return only the requested globals from the unified global index space.",
-                inputSchema = pathAndIndicesSchema("Unified global indices (`globalidx`) to return.")
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.getGlobalsForIndices(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "list_data",
-                description = "Return raw data-section entries for a closed data-segment range.",
-                inputSchema = listDataSchema()
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.listData(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "list_data_segments",
-                description = "Return data-segment metadata with range slicing and optional export/global context.",
-                inputSchema = listDataSegmentsSchema()
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.listDataSegments(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "get_memory_for_indices",
-                description = "Return only the requested memories from the unified memory index space.",
-                inputSchema = pathAndIndicesSchema("Unified memory indices (`memidx`) to return.")
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.getMemoryForIndices(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "get_types_for_indices",
-                description = "Return only the requested type entries from the type index space.",
-                inputSchema = pathAndIndicesSchema("Type indices (`typeidx`) to return.")
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.getTypesForIndices(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "get_locals_for_functions",
-                description = "Return grouped local declarations for the requested unified function indices.",
-                inputSchema = pathAndIndicesSchema("Unified function indices (`funcidx`) whose locals should be returned.")
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.getLocalsForFunctions(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "get_instructions_for_functions",
-                description = "Return decoded instruction text for the requested unified function indices.",
-                inputSchema = pathAndIndicesSchema("Unified function indices (`funcidx`) whose instructions should be returned.")
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.getInstructionsForFunctions(request.arguments)
-        }
-
-        addTool(
-            tool = Tool(
-                name = "list_element_segments",
-                description = "List element segments declared by a `.wasm` module.",
-                inputSchema = wasmInputToolSchema()
-            )
-        ) { request: CallToolRequest ->
-            toolHandlers.listElementSegments(request.arguments)
-        }
+        registerHexanaTools(toolHandlers)
     }
 }
 
 private const val WASM_INPUT_RUNTIME_VALIDATION =
     "Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."
 
-private fun wasmInputToolSchema(
+// The `*Schema()` helpers below are `internal` (not `private`) because `HexanaToolDispatcher.kt` —
+// generated into the same package from `mcp/tools-generator` — calls them at registration time.
+// Keep them `internal` and in-package; do not inline into the generated dispatcher.
+internal fun wasmInputToolSchema(
     required: List<String> = emptyList(),
     extraProperties: JsonObjectBuilder.() -> Unit = {}
 ): ToolSchema {
@@ -212,7 +48,7 @@ private fun wasmInputToolSchema(
     )
 }
 
-private fun listFunctionsSchema(): ToolSchema {
+internal fun listFunctionsSchema(): ToolSchema {
     return wasmInputToolSchema {
         put(
             "offset",
@@ -231,7 +67,7 @@ private fun listFunctionsSchema(): ToolSchema {
     }
 }
 
-private fun listExportedFunctionsSchema(): ToolSchema {
+internal fun listExportedFunctionsSchema(): ToolSchema {
     return wasmInputToolSchema(required = listOf("entriesRange")) {
         put(
             "entriesRange",
@@ -242,7 +78,7 @@ private fun listExportedFunctionsSchema(): ToolSchema {
     }
 }
 
-private fun pathAndIndicesSchema(indicesDescription: String): ToolSchema {
+internal fun pathAndIndicesSchema(indicesDescription: String): ToolSchema {
     return wasmInputToolSchema(required = listOf("indices")) {
         put(
             "indices",
@@ -261,7 +97,7 @@ private fun pathAndIndicesSchema(indicesDescription: String): ToolSchema {
     }
 }
 
-private fun listDataSchema(): ToolSchema {
+internal fun listDataSchema(): ToolSchema {
     return wasmInputToolSchema(required = listOf("entriesRange")) {
         put(
             "entriesRange",
@@ -272,7 +108,7 @@ private fun listDataSchema(): ToolSchema {
     }
 }
 
-private fun listDataSegmentsSchema(): ToolSchema {
+internal fun listDataSegmentsSchema(): ToolSchema {
     return wasmInputToolSchema(required = listOf("segmentRange")) {
         put(
             "segmentRange",
