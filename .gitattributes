@@ -1,0 +1,2 @@
+idea-plugin/src/main/gen/org/jetbrains/hexana/mcp/HexanaToolset.kt linguist-generated=true
+mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt linguist-generated=true

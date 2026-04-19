@@ -10,7 +10,6 @@ import kotlinx.serialization.json.buildJsonObject
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.HexanaAnalysisService
 import org.jetbrains.hexana.mcp.HexanaAnalysisServices
-import org.jetbrains.hexana.mcp.server.gen.registerHexanaTools
 
 fun createHexanaMcpServer(
     analysisService: HexanaAnalysisService = HexanaAnalysisServices.default
