@@ -68,7 +68,7 @@ class HexanaConfigurableProvider : ConfigurableProvider() {
     }
 
     override fun canCreateConfigurable(): Boolean {
-        return false
+        return true
     }
 }
 
