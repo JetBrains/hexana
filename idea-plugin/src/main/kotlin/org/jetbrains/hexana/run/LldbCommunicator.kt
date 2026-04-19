@@ -245,6 +245,24 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         return collector.toList()
     }
 
+    /**
+     * Drains all pending stop events from the queue without blocking.
+     *
+     * This is useful before starting the event loop in scenarios where
+     * LLDB has already produced stop events (e.g. the initial
+     * `stop reason = trace` from a `process connect` to WAMR) that
+     * should not be processed as user-visible stops.
+     */
+    fun drainPendingStopEvents() {
+        var count = 0
+        while (stopEvents.poll() != null) {
+            count++
+        }
+        if (count > 0) {
+            LOG.debug("Drained $count pending stop event(s)")
+        }
+    }
+
     fun destroy() {
         try {
             sendCommand("process kill")

@@ -29,6 +29,7 @@ internal class WasmStackFrame(
     private val lldb: LldbCommunicator? = null,
     private val frameIndex: Int = 0,
     private val dwarfVariableResolver: WasmDwarfVariableResolver? = null,
+    private val engine: WasmEngine = WasmEngine.WASMTIME,
 ) : XStackFrame() {
 
     override fun getSourcePosition(): XSourcePosition? = sourcePosition
@@ -62,7 +63,10 @@ internal class WasmStackFrame(
                     // inspecting variables — it sets the current Wasm instance
                     // context that LLDB needs for memory and pointer access.
                     // See https://docs.wasmtime.dev/examples-debugging-native-debugger.html
-                    initializeVmContext(communicator)
+                    // This is not needed for WAMR which uses a GDB remote stub.
+                    if (engine == WasmEngine.WASMTIME) {
+                        initializeVmContext(communicator)
+                    }
 
                     val lines = communicator.sendCommandAndCollectOutput("frame variable")
                     val variables = WasmLocalVariable.parseFrameVariableOutput(lines)

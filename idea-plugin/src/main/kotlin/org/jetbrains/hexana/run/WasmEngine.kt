@@ -2,6 +2,7 @@ package org.jetbrains.hexana.run
 
 enum class WasmEngine(val displayName: String, val supportsComponentsModel: Boolean) {
     WASMTIME("Wasmtime", true),
+    WAMR("WAMR", false),
     GRAALWASM("GraalWasm", false),
     ;
 

@@ -46,6 +46,18 @@ class WasmRunConfiguration(
         get() = options.getWasmtimeOptions()
         set(value) { options.setWasmtimeOptions(value) }
 
+    var wamrPath: String
+        get() = options.getWamrPath()
+        set(value) { options.setWamrPath(value) }
+
+    var wamrOptions: String
+        get() = options.getWamrOptions()
+        set(value) { options.setWamrOptions(value) }
+
+    var lldbPath: String
+        get() = options.getLldbPath()
+        set(value) { options.setLldbPath(value) }
+
     var exportName: String
         get() = options.getExportName()
         set(value) { options.setExportName(value) }
@@ -63,11 +75,11 @@ class WasmRunConfiguration(
         if (!file.exists()) {
             throw RuntimeConfigurationError("Wasm file not found: $path")
         }
-        if (engine == WasmEngine.GRAALWASM) {
+        if (engine == WasmEngine.GRAALWASM || engine == WasmEngine.WAMR) {
             val binaryType = WasmBinaryProviderSelector.select(file.readBytes().toCommonByteBuffer())
             if (binaryType is BinaryProviderType.WasmComponent) {
                 throw RuntimeConfigurationError(
-                    "GraalWasm does not support the WebAssembly Component Model. " +
+                    "${engine.displayName} does not support the WebAssembly Component Model. " +
                             "Please use the Wasmtime engine to run component modules."
                 )
             }
@@ -80,6 +92,7 @@ class WasmRunConfiguration(
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState {
         return when (engine) {
             WasmEngine.WASMTIME -> WasmtimeCommandLineState(this, environment)
+            WasmEngine.WAMR -> WamrCommandLineState(this, environment)
             WasmEngine.GRAALWASM -> GraalWasmCommandLineState(this, environment)
         }
     }

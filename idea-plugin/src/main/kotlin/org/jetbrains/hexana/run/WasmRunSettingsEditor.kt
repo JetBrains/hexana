@@ -83,6 +83,9 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private val wasmFileField = TextFieldWithBrowseButton()
     private val wasmtimePathField = TextFieldWithBrowseButton()
     private val wasmtimeOptionsField = RawCommandLineEditor()
+    private val wamrPathField = TextFieldWithBrowseButton()
+    private val wamrOptionsField = RawCommandLineEditor()
+    private val lldbPathField = TextFieldWithBrowseButton()
     private val exportNameField = JBTextField()
     private val programArgumentsField = RawCommandLineEditor()
     private val workingDirectoryField = TextFieldWithBrowseButton()
@@ -90,6 +93,9 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
 
     private var wasmtimePathRow: Row? = null
     private var wasmtimeOptionsRow: Row? = null
+    private var wamrPathRow: Row? = null
+    private var wamrOptionsRow: Row? = null
+    private var lldbPathRow: Row? = null
     private var exportNameRow: Row? = null
 
     init {
@@ -103,6 +109,16 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
             FileChooserDescriptorFactory.singleFile(),
         )
         (wasmtimePathField.childComponent as? JBTextField)?.emptyText?.setText(WasmtimeCommandLineState.DEFAULT_WASMTIME_PATH)
+        wamrPathField.addBrowseFolderListener(
+            project,
+            FileChooserDescriptorFactory.singleFile(),
+        )
+        (wamrPathField.childComponent as? JBTextField)?.emptyText?.setText(WamrCommandLineState.DEFAULT_WAMR_PATH)
+        lldbPathField.addBrowseFolderListener(
+            project,
+            FileChooserDescriptorFactory.singleFile(),
+        )
+        (lldbPathField.childComponent as? JBTextField)?.emptyText?.setText("lldb")
         workingDirectoryField.addBrowseFolderListener(
             project,
             FileChooserDescriptor(false, true, false, false, false, false),
@@ -124,6 +140,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private fun migrateInvokeArgs(newEngine: WasmEngine) {
         when (newEngine) {
             WasmEngine.GRAALWASM -> migrateWasmtimeToGraalWasm()
+            WasmEngine.WAMR -> migrateWasmtimeToGraalWasm()
             WasmEngine.WASMTIME -> migrateGraalWasmToWasmtime()
         }
     }
@@ -154,9 +171,14 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
 
 
     private fun updateFieldsVisibility() {
-        val isWasmtime = engineCombo.item == WasmEngine.WASMTIME
+        val selected = engineCombo.item
+        val isWasmtime = selected == WasmEngine.WASMTIME
+        val isWamr = selected == WasmEngine.WAMR
         wasmtimePathRow?.visible(isWasmtime)
         wasmtimeOptionsRow?.visible(isWasmtime)
+        wamrPathRow?.visible(isWamr)
+        wamrOptionsRow?.visible(isWamr)
+        lldbPathRow?.visible(isWasmtime || isWamr)
         exportNameRow?.visible(!isWasmtime)
     }
 
@@ -165,6 +187,9 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         wasmFileField.text = configuration.wasmFilePath
         wasmtimePathField.text = configuration.wasmtimePath
         wasmtimeOptionsField.text = configuration.wasmtimeOptions
+        wamrPathField.text = configuration.wamrPath
+        wamrOptionsField.text = configuration.wamrOptions
+        lldbPathField.text = configuration.lldbPath
         exportNameField.text = configuration.exportName
         programArgumentsField.text = configuration.programArguments
         workingDirectoryField.text = configuration.workingDirectory
@@ -177,6 +202,9 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         configuration.wasmFilePath = wasmFileField.text
         configuration.wasmtimePath = wasmtimePathField.text
         configuration.wasmtimeOptions = wasmtimeOptionsField.text
+        configuration.wamrPath = wamrPathField.text
+        configuration.wamrOptions = wamrOptionsField.text
+        configuration.lldbPath = lldbPathField.text
         configuration.exportName = exportNameField.text
         configuration.programArguments = programArgumentsField.text
         configuration.workingDirectory = workingDirectoryField.text
@@ -194,6 +222,15 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         }
         wasmtimeOptionsRow = row(HexanaBundle.message("wasm.run.configuration.wasmtime.options")) {
             cell(wasmtimeOptionsField).align(AlignX.FILL)
+        }
+        wamrPathRow = row(HexanaBundle.message("wasm.run.configuration.wamr.path")) {
+            cell(wamrPathField).align(AlignX.FILL)
+        }
+        wamrOptionsRow = row(HexanaBundle.message("wasm.run.configuration.wamr.options")) {
+            cell(wamrOptionsField).align(AlignX.FILL)
+        }
+        lldbPathRow = row(HexanaBundle.message("wasm.run.configuration.lldb.path")) {
+            cell(lldbPathField).align(AlignX.FILL)
         }
         exportNameRow = row(HexanaBundle.message("wasm.run.configuration.exportName")) {
             cell(exportNameField).align(AlignX.FILL)

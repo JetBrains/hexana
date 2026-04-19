@@ -120,6 +120,7 @@ internal class WasmExecutionStack(
             lldb = lldb,
             frameIndex = frameIndex,
             dwarfVariableResolver = dwarfVariableResolver,
+            engine = debugProcess?.engine ?: WasmEngine.WASMTIME,
         )
     }
 

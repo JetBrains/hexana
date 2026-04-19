@@ -9,6 +9,9 @@ class WasmRunConfigurationOptions : RunConfigurationOptions() {
     private val workingDirectory = string("").provideDelegate(this, "workingDirectory")
     private val wasmtimePath = string("").provideDelegate(this, "wasmtimePath")
     private val wasmtimeOptions = string("").provideDelegate(this, "wasmtimeOptions")
+    private val wamrPath = string("").provideDelegate(this, "wamrPath")
+    private val wamrOptions = string("").provideDelegate(this, "wamrOptions")
+    private val lldbPath = string("").provideDelegate(this, "lldbPath")
     private val exportName = string("").provideDelegate(this, "exportName")
     private val dependencies = list<String>().provideDelegate(this, "dependencies")
 
@@ -29,6 +32,15 @@ class WasmRunConfigurationOptions : RunConfigurationOptions() {
 
     fun getWasmtimeOptions(): String = wasmtimeOptions.getValue(this) ?: ""
     fun setWasmtimeOptions(value: String) { wasmtimeOptions.setValue(this, value) }
+
+    fun getWamrPath(): String = wamrPath.getValue(this) ?: ""
+    fun setWamrPath(value: String) { wamrPath.setValue(this, value) }
+
+    fun getWamrOptions(): String = wamrOptions.getValue(this) ?: ""
+    fun setWamrOptions(value: String) { wamrOptions.setValue(this, value) }
+
+    fun getLldbPath(): String = lldbPath.getValue(this) ?: ""
+    fun setLldbPath(value: String) { lldbPath.setValue(this, value) }
 
     fun getExportName(): String = exportName.getValue(this) ?: ""
     fun setExportName(value: String) { exportName.setValue(this, value) }

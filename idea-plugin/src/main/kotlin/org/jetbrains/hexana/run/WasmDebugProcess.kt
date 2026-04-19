@@ -34,13 +34,14 @@ import com.intellij.xdebugger.impl.XDebuggerUtilImpl
  * see symbols in JIT-compiled code; this is done automatically
  * via `settings set plugin.jit-loader.gdb.enable on`.
  */
-class WasmDebugProcess(
+open class WasmDebugProcess(
     session: XDebugSession,
     private val console: ExecutionConsole,
     private val processHandler: ProcessHandler,
     private val lldb: LldbCommunicator?,
     private val compositionUsed: Boolean = false,
     private val dwarfInjected: Boolean = false,
+    internal val engine: WasmEngine = WasmEngine.WASMTIME,
 ) : XDebugProcess(session) {
 
     /**
@@ -56,8 +57,23 @@ class WasmDebugProcess(
     private val registeredBreakpoints =
         mutableMapOf<XLineBreakpoint<WasmBreakpointProperties>, Pair<String, Int>>()
 
+    /**
+     * When `true`, [registerBreakpointInLldb] stores breakpoints but
+     * does NOT send them to LLDB. The subclass must call
+     * [replayBreakpointsToLldb] after the LLDB connection is ready.
+     *
+     * This is needed for WAMR because the `process connect --plugin wasm`
+     * command must be the first LLDB command — any `breakpoint set`
+     * commands issued beforehand create a "dummy target" that prevents
+     * the wasm process plugin from creating a proper process.
+     */
+    protected var deferBreakpointsToLldb: Boolean = false
+
     @Volatile
     private var eventLoopThread: Thread? = null
+
+    /** Provides access to the LLDB communicator for subclasses. */
+    internal fun getLldb(): LldbCommunicator? = lldb
 
     override fun getEditorsProvider(): XDebuggerEditorsProvider = WasmDebuggerEditorsProvider()
 
@@ -123,9 +139,23 @@ class WasmDebugProcess(
         // disambiguate in handleStop() by comparing the resolved stop
         // location against the intended IDE file path and automatically
         // resuming past stops that hit the wrong file.
-        val fileName = position.file.name
-        lldb?.sendBreakpoint(fileName, line)
+        if (!deferBreakpointsToLldb) {
+            val fileName = position.file.name
+            lldb?.sendBreakpoint(fileName, line)
+        }
         session.setBreakpointVerified(breakpoint)
+    }
+
+    /**
+     * Sends all stored breakpoints to LLDB. Called by subclasses
+     * (e.g. [WamrDebugProcess]) after the LLDB connection is
+     * established and breakpoint commands can be accepted.
+     */
+    protected fun replayBreakpointsToLldb() {
+        for ((_, loc) in registeredBreakpoints) {
+            val baseName = loc.first.substringAfterLast('/')
+            lldb?.sendBreakpoint(baseName, loc.second)
+        }
     }
 
     fun unregisterBreakpointInLldb(breakpoint: XLineBreakpoint<WasmBreakpointProperties>) {
@@ -139,7 +169,11 @@ class WasmDebugProcess(
     }
 
     override fun resume(context: XSuspendContext?) {
-        advancePcPastTrapThen { lldb?.resume() }
+        if (engine == WasmEngine.WASMTIME) {
+            advancePcPastTrapThen { lldb?.resume() }
+        } else {
+            lldb?.resume()
+        }
     }
 
     override fun startPausing() {
@@ -147,15 +181,27 @@ class WasmDebugProcess(
     }
 
     override fun startStepOver(context: XSuspendContext?) {
-        advancePcPastTrapThen { lldb?.stepOver() }
+        if (engine == WasmEngine.WASMTIME) {
+            advancePcPastTrapThen { lldb?.stepOver() }
+        } else {
+            lldb?.stepOver()
+        }
     }
 
     override fun startStepInto(context: XSuspendContext?) {
-        advancePcPastTrapThen { lldb?.stepInto() }
+        if (engine == WasmEngine.WASMTIME) {
+            advancePcPastTrapThen { lldb?.stepInto() }
+        } else {
+            lldb?.stepInto()
+        }
     }
 
     override fun startStepOut(context: XSuspendContext?) {
-        advancePcPastTrapThen { lldb?.stepOut() }
+        if (engine == WasmEngine.WASMTIME) {
+            advancePcPastTrapThen { lldb?.stepOut() }
+        } else {
+            lldb?.stepOut()
+        }
     }
 
     /**
@@ -195,9 +241,15 @@ class WasmDebugProcess(
      * auto-resume (called from [handleStopImpl] which already
      * runs inside [LldbCommunicator.withStopEventsSuppressed]),
      * then resumes execution.
+     *
+     * The PC adjustment is only needed for Wasmtime on macOS/ARM
+     * where JIT-emitted `brk` instructions require skipping. For
+     * WAMR (interpreter-based GDB stub), a plain resume suffices.
      */
     private fun resumePastTrap(communicator: LldbCommunicator) {
-        communicator.sendCommand(ADVANCE_PC_PAST_TRAP_CMD)
+        if (engine == WasmEngine.WASMTIME) {
+            communicator.sendCommand(ADVANCE_PC_PAST_TRAP_CMD)
+        }
         communicator.resume()
     }
 
@@ -205,6 +257,11 @@ class WasmDebugProcess(
         eventLoopThread?.interrupt()
         lldb?.destroy()
         processHandler.destroyProcess()
+    }
+
+    /** Starts the background event loop that watches for LLDB stop events. */
+    protected fun startEventLoopForSession() {
+        startEventLoop()
     }
 
     /**
@@ -401,6 +458,7 @@ class WasmDebugProcess(
                 val frame = WasmStackFrame(
                     resolvedPosition, functionName, lldb,
                     dwarfVariableResolver = dwarfVariableResolver,
+                    engine = engine,
                 )
                 val context = WasmSuspendContext(frame, lldb, this)
                 ApplicationManager.getApplication().invokeLater {
@@ -448,6 +506,7 @@ class WasmDebugProcess(
         val frame = WasmStackFrame(
             sourcePosition, functionName, lldb,
             dwarfVariableResolver = dwarfVariableResolver,
+            engine = engine,
         )
         val context = WasmSuspendContext(frame, lldb, this)
         ApplicationManager.getApplication().invokeLater {
