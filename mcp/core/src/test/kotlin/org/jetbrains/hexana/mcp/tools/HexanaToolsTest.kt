@@ -50,7 +50,7 @@ class HexanaToolsTest {
         val params = spec.input.parameters.filterIsInstance<InputParameter.IntParam>()
         assertEquals(listOf("offset", "limit"), params.map { it.name })
         assertEquals(0, params[0].default)
-        assertEquals(50, params[1].default)
+        assertEquals(200, params[1].default)
     }
 
     @Test
@@ -62,10 +62,10 @@ class HexanaToolsTest {
     }
 
     @Test
-    fun `list_exported_functions declares a closed range on exportIdx`() {
+    fun `list_exported_functions declares a closed range on entriesRange`() {
         val spec = HexanaTools.single { it.name == "list_exported_functions" }
         val params = spec.input.parameters.filterIsInstance<InputParameter.ClosedRangeParam>()
-        assertEquals(listOf("exportIdx"), params.map { it.name })
+        assertEquals(listOf("entriesRange"), params.map { it.name })
     }
 
     @Test
