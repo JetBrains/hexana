@@ -71,6 +71,7 @@ enum class Op(val value: UByte) {
   DW_OP_reinterpret(0xa9.ub),
   DW_OP_lo_user(0xe0.ub),
   DW_OP_GNU_push_tls_address(0xe0.ub),
+  DW_OP_WASM_location(0xed.ub),
   DW_OP_GNU_implicit_pointer(0xf2.ub),
   DW_OP_GNU_entry_value(0xf3.ub),
   DW_OP_GNU_const_type(0xf4.ub),
