@@ -90,6 +90,17 @@ sealed class HexanaEvent {
         override val properties = mapOf("tab_name" to tabName)
     }
 
+    data class WasmUnparsedOpcodes(
+        val unparsedCount: Int,
+        val totalFunctions: Int
+    ) : HexanaEvent() {
+        override val name = "wasm_unparsed_opcodes"
+        override val properties = mapOf(
+            "unparsed_count" to unparsedCount,
+            "total_functions" to totalFunctions
+        )
+    }
+
     // -- Enums --
 
     enum class Surface(val value: String) {

@@ -1,5 +1,6 @@
 package org.jetbrains.hexana
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorPolicy
 import com.intellij.openapi.fileEditor.FileEditorProvider
@@ -9,7 +10,9 @@ import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.annotations.NonNls
 import org.jetbrains.hexana.analytics.HexanaAnalytics
 import org.jetbrains.hexana.analytics.HexanaEvent
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.statistics.HexanaCounterUsagesCollector
+import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
 
 class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
     companion object {
@@ -33,7 +36,11 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
                 HexanaEvent.WasmFileOpened(file.length, HexanaEvent.Surface.IDE_PLUGIN)
             )
         }
-        return HexanaFileEditor(project, file)
+        val editor = HexanaFileEditor(project, file)
+        if (file.fileType is WasmFileType) {
+            reportUnparsedOpcodes(editor)
+        }
+        return editor
     }
 
     override fun getEditorTypeId(): @NonNls String {
@@ -42,5 +49,24 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
 
     override fun getPolicy(): FileEditorPolicy {
         return FileEditorPolicy.PLACE_BEFORE_DEFAULT_EDITOR
+    }
+
+    private fun reportUnparsedOpcodes(editor: HexanaFileEditor) {
+        val provider = editor.binaryProvider as? WasmBinaryProvider ?: return
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val codeRecords = provider.codeRecords
+            val totalFunctions = codeRecords.size
+            val unparsedCount = codeRecords.count { record ->
+                record.opCodes.any { it is UnparsedOpCode }
+            }
+            if (unparsedCount > 0) {
+                HexanaAnalytics.client.capture(
+                    HexanaEvent.WasmUnparsedOpcodes(
+                        unparsedCount = unparsedCount,
+                        totalFunctions = totalFunctions
+                    )
+                )
+            }
+        }
     }
 }

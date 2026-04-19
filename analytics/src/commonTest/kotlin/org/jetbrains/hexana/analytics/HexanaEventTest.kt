@@ -97,6 +97,14 @@ class HexanaEventTest {
     }
 
     @Test
+    fun wasmUnparsedOpcodesEvent() {
+        val event = HexanaEvent.WasmUnparsedOpcodes(unparsedCount = 3, totalFunctions = 14000)
+        assertEquals("wasm_unparsed_opcodes", event.name)
+        assertEquals(3, event.properties["unparsed_count"])
+        assertEquals(14000, event.properties["total_functions"])
+    }
+
+    @Test
     fun fakeClientCapturesEvents() {
         val client = FakeAnalyticsClient()
         val event = HexanaEvent.WasmFileOpened(512L, HexanaEvent.Surface.MCP_SERVER)
@@ -123,7 +131,8 @@ class HexanaEventTest {
             HexanaEvent.McpServerStarted(HexanaEvent.McpTransport.HTTP, false),
             HexanaEvent.WatViewActivated(HexanaEvent.Surface.IDE_PLUGIN),
             HexanaEvent.HexViewActivated(HexanaEvent.Surface.IDE_PLUGIN),
-            HexanaEvent.HexTabSelected("Test")
+            HexanaEvent.HexTabSelected("Test"),
+            HexanaEvent.WasmUnparsedOpcodes(1, 100)
         )
         val snakeCaseRegex = Regex("^[a-z][a-z0-9_]*$")
         for (event in events) {
