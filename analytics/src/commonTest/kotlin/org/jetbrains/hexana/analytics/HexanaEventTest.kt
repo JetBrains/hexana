@@ -90,6 +90,13 @@ class HexanaEventTest {
     }
 
     @Test
+    fun hexTabSelectedEvent() {
+        val event = HexanaEvent.HexTabSelected(tabName = "Functions")
+        assertEquals("hex_tab_selected", event.name)
+        assertEquals("Functions", event.properties["tab_name"])
+    }
+
+    @Test
     fun fakeClientCapturesEvents() {
         val client = FakeAnalyticsClient()
         val event = HexanaEvent.WasmFileOpened(512L, HexanaEvent.Surface.MCP_SERVER)
@@ -115,7 +122,8 @@ class HexanaEventTest {
             HexanaEvent.McpToolInvoked("test", HexanaEvent.McpTransport.STDIO, 0L, true),
             HexanaEvent.McpServerStarted(HexanaEvent.McpTransport.HTTP, false),
             HexanaEvent.WatViewActivated(HexanaEvent.Surface.IDE_PLUGIN),
-            HexanaEvent.HexViewActivated(HexanaEvent.Surface.IDE_PLUGIN)
+            HexanaEvent.HexViewActivated(HexanaEvent.Surface.IDE_PLUGIN),
+            HexanaEvent.HexTabSelected("Test")
         )
         val snakeCaseRegex = Regex("^[a-z][a-z0-9_]*$")
         for (event in events) {

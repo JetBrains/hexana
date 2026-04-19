@@ -11,6 +11,8 @@ import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.analytics.HexanaAnalytics
+import org.jetbrains.hexana.analytics.HexanaEvent
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
@@ -65,6 +67,9 @@ internal fun BinaryEditorView(
                 }
             }, onTabSelect = { index: Int ->
                 state.setSelectedTab(index)
+                panels.getOrNull(index)?.let { panel ->
+                    HexanaAnalytics.client.capture(HexanaEvent.HexTabSelected(panel.description))
+                }
             })
         })
     }

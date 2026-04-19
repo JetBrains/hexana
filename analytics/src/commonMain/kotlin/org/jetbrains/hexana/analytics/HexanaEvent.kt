@@ -83,6 +83,13 @@ sealed class HexanaEvent {
         override val properties = mapOf("surface" to surface.value)
     }
 
+    data class HexTabSelected(
+        val tabName: String
+    ) : HexanaEvent() {
+        override val name = "hex_tab_selected"
+        override val properties = mapOf("tab_name" to tabName)
+    }
+
     // -- Enums --
 
     enum class Surface(val value: String) {
