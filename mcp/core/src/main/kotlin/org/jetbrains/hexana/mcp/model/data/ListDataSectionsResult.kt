@@ -32,6 +32,20 @@ data class DataEntryResult(
     val expression: String? = null
 )
 
+/**
+ * Serializes [ByteArray] as a base64-encoded JSON string.
+ *
+ * TODO(hexana-72): this is a compatibility shim, not a long-term MCP contract. The old Jackson-based
+ *  `list_data` path emitted `DataEntry.data: ByteArray` through `objectMapper.writeValueAsString(...)`,
+ *  and Jackson's default `byte[]` encoding is base64. kotlinx.serialization's default is a JSON array
+ *  of bytes, so we pin the old wire shape explicitly here.
+ *
+ *  Regression guard: `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp/direct/HexanaMcpDataToolTest.kt`
+ *  asserts `returned[0].data == "SGVsbG8="` for `(data (i32.const 0) "Hello")`.
+ *
+ *  When we redesign the `list_data` payload, drop this serializer together with the direct tests and
+ *  any MCP clients that depend on the base64 shape — it should be one explicit behaviour-change step.
+ */
 object Base64ByteArraySerializer : KSerializer<ByteArray> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("Base64ByteArray", PrimitiveKind.STRING)

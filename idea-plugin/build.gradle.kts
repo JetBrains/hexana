@@ -190,6 +190,26 @@ tasks {
     }
 }
 
+val generatedToolsetDir = layout.projectDirectory.dir("src/main/gen")
+
+tasks.register<JavaExec>("generateHexanaToolset") {
+    description = "Regenerates HexanaToolset.kt into src/main/gen; the output is checked into git."
+    group = "generation"
+
+    classpath = project(":mcp:tools-generator").extensions
+        .getByType<SourceSetContainer>()
+        .named("main").get().runtimeClasspath
+    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.ToolsetMainKt")
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf(generatedToolsetDir.asFile.absolutePath)
+    })
+
+    inputs.files(project(":mcp:tools-generator").tasks.named("classes"))
+    outputs.file(generatedToolsetDir.file("org/jetbrains/hexana/mcp/HexanaToolset.kt"))
+
+    dependsOn(":mcp:tools-generator:classes")
+}
+
 kotlin {
     jvmToolchain(21)
 }

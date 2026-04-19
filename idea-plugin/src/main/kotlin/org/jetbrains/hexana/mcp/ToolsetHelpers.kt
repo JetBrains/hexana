@@ -1,0 +1,63 @@
+/**
+ * Hand-written helpers consumed by the generated `HexanaToolset.kt`.
+ *
+ * This file is NOT regenerated. The `:idea-plugin:generateHexanaToolset` task only writes
+ * `src/main/gen/.../HexanaToolset.kt`; if you delete or rename anything here, update the
+ * call sites emitted by `mcp/tools-generator/.../IdeaToolsetMain.kt` (see the `MemberName`
+ * constants at the bottom of that file) in the same change.
+ */
+package org.jetbrains.hexana.mcp
+
+import com.intellij.mcpserver.mcpFail
+import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.hexana.WasmFileType
+import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.wasm.WasmModule
+import org.jetbrains.hexana.wasm.WasmParseSuccess
+import org.jetbrains.hexana.wasm.WasmParser
+
+/**
+ * Shared helpers consumed by [HexanaToolset]. Kept hand-written because
+ * they wrap IntelliJ VirtualFile resolution and `mcpFail` — behaviour, not shape.
+ */
+
+internal fun VirtualFile.contentsToCommonByteBuffer(): CommonByteBuffer =
+    contentsToByteArray().toCommonByteBuffer()
+
+internal fun CommonByteBuffer.requireParsedWasmModule(): WasmModule {
+    return WasmParser().parseOrNull(this) ?: mcpFail("Failed to parse .wasm file")
+}
+
+internal fun requireWasmFile(path: String): VirtualFile {
+    val file = resolveWasmVirtualFile(path) ?: mcpFail("File not found")
+    if (file.fileType != WasmFileType.INSTANCE) {
+        mcpFail("Not a .wasm file")
+    }
+    return file
+}
+
+internal fun requireClosedRange(entriesRange: Map<String, Int>, fieldName: String): IntRange {
+    val from = entriesRange["from"] ?: mcpFail("Invalid $fieldName: missing `from`")
+    val to = entriesRange["to"] ?: mcpFail("Invalid $fieldName: missing `to`")
+    if (to < from) {
+        mcpFail("Invalid $fieldName: `to` must be >= `from`")
+    }
+    return from..to
+}
+
+internal fun requireHalfOpenSegmentRange(segmentRange: Map<String, Int>): Pair<Int, Int> {
+    val from = segmentRange["from"] ?: mcpFail("Invalid segmentRange no `from`")
+    val to = segmentRange["to"] ?: Int.MAX_VALUE
+    if (from > to) {
+        mcpFail("Invalid segmentRange `to` must be >= `from`")
+    }
+    return from to to
+}
+
+private fun WasmParser.parseOrNull(buffer: CommonByteBuffer): WasmModule? {
+    return when (val parseResult = parse(buffer)) {
+        is WasmParseSuccess -> parseResult.wasmModule as? WasmModule
+        else -> null
+    }
+}
