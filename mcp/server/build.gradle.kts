@@ -2,7 +2,16 @@ import java.util.*
 
 plugins {
     application
+    idea
     alias(libs.plugins.kotlin.jvm)
+}
+
+// Mark `src/main/gen` (generated HexanaToolDispatcher.kt) as generated so IntelliJ dims the file,
+// keeps it out of default Find-in-Path scope, and warns on hand edits.
+idea {
+    module {
+        generatedSourceDirs.add(file("src/main/gen"))
+    }
 }
 
 group = "org.jetbrains.hexana"

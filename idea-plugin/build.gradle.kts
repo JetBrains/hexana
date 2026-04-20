@@ -8,6 +8,7 @@ import org.jetbrains.intellij.platform.gradle.tasks.aware.SplitModeAware
 
 plugins {
     id("java")
+    idea
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.intellij.platform)
@@ -15,6 +16,14 @@ plugins {
     // Compose compiler plugin from version catalog
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.compose.multiplatform)
+}
+
+// Mark `src/main/gen` (generated WIT PSI + generated HexanaToolset.kt) as generated so IntelliJ
+// dims those files, keeps them out of default Find-in-Path scope, and warns on hand edits.
+idea {
+    module {
+        generatedSourceDirs.add(file("src/main/gen"))
+    }
 }
 
 apply(from = project.file("gradle/mcp-token-counter.gradle.kts"))
