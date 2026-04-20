@@ -32,14 +32,13 @@ private class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer 
     }
 
     override fun put(value: Byte) {
-        Int8Array(buffer)[cursorPosition] = value
+        dataView.setInt8(cursorPosition, value)
         cursorPosition++
     }
 
     override fun put(src: ByteArray, offset: Int, size: Int) {
-        val target = Int8Array(buffer)
         for (i in 0 until size) {
-            target[cursorPosition + i] = src[offset + i]
+            dataView.setInt8(cursorPosition + i, src[offset + i])
         }
         cursorPosition += size
     }
