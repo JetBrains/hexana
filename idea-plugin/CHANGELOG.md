@@ -3,6 +3,20 @@
 ## Unreleased
 
 ### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## 0.8 - 2026-04-21
+
+### Added
 - [Code-Size Profiler for WebAssembly Binaries](https://github.com/JetBrains/hexana/issues/70)
 - [DWARF section detection and parsing](https://github.com/JetBrains/hexana/issues/49)
 - [Explorer integration](https://github.com/JetBrains/hexana/issues/52)
@@ -15,14 +29,9 @@
 
 - MCP tools descriptions optimized
 
-### Deprecated
-
-### Removed
-
 ### Fixed
 - [IJPL-242167 IAE: WasmModuleKt.fromSections via WasmIndex](https://youtrack.jetbrains.com/issue/IJPL-242167)
 - [ClassCastException in WitStaticFuncItemMixin](https://github.com/JetBrains/hexana/issues/84)
-### Security
 
 ## 0.7.1 - 2026-04-09
 
