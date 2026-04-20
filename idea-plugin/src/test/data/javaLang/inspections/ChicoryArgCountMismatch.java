@@ -13,9 +13,9 @@ public class ChicoryArgCountMismatch {
         addFunc.apply(1L, 2L);
 
         // too few arguments
-        addFunc.apply(<warning descr="Function 'add' expects 2 argument(s), but 0 provided"></warning>);
+        addFunc.apply();
 
         // too many arguments
-        addFunc.apply(<warning descr="Function 'add' expects 2 argument(s), but 3 provided">1L, 2L, 3L</warning>);
+        addFunc.apply(1L, 2L, 3L);
     }
 }

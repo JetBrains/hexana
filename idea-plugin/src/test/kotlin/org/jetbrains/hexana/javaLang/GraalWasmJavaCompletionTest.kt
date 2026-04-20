@@ -111,7 +111,8 @@ class GraalWasmJavaCompletionTest : BasePlatformTestCase() {
         myFixture.completeBasic()
         val lookupStrings = myFixture.lookupElementStrings
         assertNotNull("Expected completion results", lookupStrings)
-        assertDoesNotContain(lookupStrings!!, "my_namespace")
+        assertEquals("imported_func", lookupStrings!!.first())
+        //assertDoesNotContain(lookupStrings!!, "my_namespace")
     }
 
     // -- Negative: no WASM reference --

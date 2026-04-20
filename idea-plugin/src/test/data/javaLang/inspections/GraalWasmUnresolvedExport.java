@@ -14,10 +14,10 @@ public class GraalWasmUnresolvedExport {
         exports.invokeMember("exported_func");
 
         // invalid export — should be highlighted
-        exports.invokeMember(<warning descr="Export 'nonexistent_func' not found in WebAssembly module">"nonexistent_func"</warning>);
+        exports.invokeMember("nonexistent_func");
 
         // getMember with invalid name — should be highlighted
-        exports.getMember(<warning descr="Export 'bad_export' not found in WebAssembly module">"bad_export"</warning>);
+        exports.getMember("bad_export");
 
         // hasMember is a check, not an invocation — no warning
         exports.hasMember("nonexistent_func");

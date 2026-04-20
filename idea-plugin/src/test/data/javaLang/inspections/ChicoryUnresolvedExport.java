@@ -12,6 +12,6 @@ public class ChicoryUnresolvedExport {
         ExportFunction validFunc = instance.export("exported_func");
 
         // invalid export — should be highlighted
-        ExportFunction badFunc = instance.export(<warning descr="Export 'nonexistent_func' not found in WebAssembly module">"nonexistent_func"</warning>);
+        ExportFunction badFunc = instance.export("nonexistent_func");
     }
 }

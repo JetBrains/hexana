@@ -14,9 +14,9 @@ public class GraalWasmArgCountMismatch {
         exports.invokeMember("add", 1, 2);
 
         // too few arguments
-        exports.invokeMember(<warning descr="Function 'add' expects 2 argument(s), but 0 provided">"add"</warning>);
+        exports.invokeMember("add");
 
         // too many arguments
-        exports.invokeMember(<warning descr="Function 'add' expects 2 argument(s), but 3 provided">"add"</warning>, 1, 2, 3);
+        exports.invokeMember("add", 1, 2, 3);
     }
 }

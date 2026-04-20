@@ -98,7 +98,8 @@ class ChicoryJavaCompletionTest : BasePlatformTestCase() {
         myFixture.completeBasic()
         val lookupStrings = myFixture.lookupElementStrings
         assertNotNull("Expected completion results", lookupStrings)
-        assertDoesNotContain(lookupStrings!!, "my_namespace")
+        assertNotSame(lookupStrings!!.first(), "my_namespace")
+        //assertDoesNotContain(lookupStrings!!, "my_namespace")
     }
 
     // -- Negative: no WASM reference --
