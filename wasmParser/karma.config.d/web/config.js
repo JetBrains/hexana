@@ -1,15 +1,22 @@
 const path = require("node:path");
 const {basePath} = config;
 
-const resourcesPath = path.resolve(basePath, "kotlin", "**", "*.wasm");
+const wasmResourcesPath = path.resolve(basePath, "kotlin", "**", "*.wasm");
+const watResourcesPath = path.resolve(basePath, "kotlin", "**", "*.wat");
 
 config.files.push(
     {
-        pattern: resourcesPath,
+        pattern: wasmResourcesPath,
         included: false,
         served: true,
         watched: false,
         type: "wasm"
+    },
+    {
+        pattern: watResourcesPath,
+        included: false,
+        served: true,
+        watched: false,
     },
 );
 

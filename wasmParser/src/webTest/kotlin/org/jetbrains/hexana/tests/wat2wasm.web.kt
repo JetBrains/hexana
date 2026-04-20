@@ -13,7 +13,7 @@ import kotlin.js.js
 private val defaultFetchInit: RequestInit = js("{}")
 
 // Top-level JS interop helpers — Kotlin/Wasm requires js() in top-level function bodies or property initializers
-private fun newJsObject(): JsAny = js("{}")
+private fun newJsObject(): JsAny = js("({})")
 private fun jsSet(obj: JsAny, key: String, value: JsAny): Unit = js("obj[key] = value")
 private fun jsGet(obj: JsAny, key: String): JsAny = js("obj[key]")
 private fun jsSetFn(obj: JsAny, key: String, fn: (Int, Int) -> Unit): Unit = js("obj[key] = fn")
