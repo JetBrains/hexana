@@ -14,7 +14,9 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.sse.*
 import io.ktor.client.request.*
 import io.modelcontextprotocol.kotlin.sdk.client.Client
+import io.modelcontextprotocol.kotlin.sdk.client.SseClientTransport
 import io.modelcontextprotocol.kotlin.sdk.client.StreamableHttpClientTransport
+import io.modelcontextprotocol.kotlin.sdk.shared.Transport
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ListToolsRequest
 import kotlinx.coroutines.delay
@@ -69,7 +71,7 @@ internal object HexanaUiDriverTestSupport {
         return context
     }
 
-    fun <T> withGlobalMcpClient(projectDir: Path, streamUrl: String, action: suspend (Client) -> T): T =
+    fun <T> withGlobalMcpClient(projectDir: Path, serverUrl: String, action: suspend (Client) -> T): T =
         runBlocking {
             val deadline = TimeSource.Monotonic.markNow() + 2.minutes
             var lastFailure: Throwable? = null
@@ -78,9 +80,7 @@ internal object HexanaUiDriverTestSupport {
                 val httpClient = HttpClient(CIO) {
                     install(SSE)
                 }
-                val transport = StreamableHttpClientTransport(httpClient, streamUrl) {
-                    header(projectPathHeader, projectDir.toString())
-                }
+                val transport = createTransport(httpClient, serverUrl, projectDir)
                 val client = Client(Implementation(name = "hexana-ui-driver-mcp-client", version = "1.0"))
 
                 try {
@@ -96,8 +96,19 @@ internal object HexanaUiDriverTestSupport {
                 }
             }
 
-            error("Failed to connect to IDE MCP server at $streamUrl for project $projectDir: ${lastFailure?.message}")
+            error("Failed to connect to IDE MCP server at $serverUrl for project $projectDir: ${lastFailure?.message}")
         }
+
+    private fun createTransport(httpClient: HttpClient, serverUrl: String, projectDir: Path): Transport {
+        val requestBuilder: HttpRequestBuilder.() -> Unit = {
+            header(projectPathHeader, projectDir.toString())
+        }
+        return if (serverUrl.substringBefore('?').endsWith("/sse")) {
+            SseClientTransport(httpClient, serverUrl, requestBuilder = requestBuilder)
+        } else {
+            StreamableHttpClientTransport(httpClient, serverUrl, requestBuilder = requestBuilder)
+        }
+    }
 
     private fun resolveProjectDir(): Path =
         Path.of("testData", "projects", projectName)

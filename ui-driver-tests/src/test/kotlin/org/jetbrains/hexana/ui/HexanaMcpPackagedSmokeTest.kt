@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.ui
 
 import com.intellij.driver.client.Remote
+import com.intellij.driver.client.impl.DriverCallException
 import com.intellij.driver.sdk.waitForIndicators
 import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
@@ -26,9 +27,9 @@ class HexanaMcpPackagedSmokeTest {
         context.runIdeWithDriver(runTimeout = 20.minutes) { withScreenRecording() }
             .useDriverAndCloseIde {
                 waitForIndicators(5.minutes)
-                val streamUrl = service(McpServerServiceRef::class).serverStreamUrl
+                val serverUrl = service(McpServerServiceRef::class).resolveServerUrl()
 
-                HexanaUiDriverTestSupport.withGlobalMcpClient(context.resolvedProjectHome, streamUrl) { client ->
+                HexanaUiDriverTestSupport.withGlobalMcpClient(context.resolvedProjectHome, serverUrl) { client ->
                     val toolNames = client.listTools(ListToolsRequest()).tools.map { it.name }.toSet()
                     assertTrue(
                         toolNames.contains("summarize_module"),
@@ -77,8 +78,22 @@ class HexanaMcpPackagedSmokeTest {
         return getValue(name).jsonPrimitive.int
     }
 
+    private fun McpServerServiceRef.resolveServerUrl(): String {
+        return try {
+            serverStreamUrl
+        } catch (streamFailure: DriverCallException) {
+            try {
+                serverSseUrl
+            } catch (sseFailure: DriverCallException) {
+                streamFailure.addSuppressed(sseFailure)
+                throw streamFailure
+            }
+        }
+    }
+
     @Remote("com.intellij.mcpserver.impl.McpServerService", plugin = "com.intellij.mcpServer")
     interface McpServerServiceRef {
         val serverStreamUrl: String
+        val serverSseUrl: String
     }
 }
