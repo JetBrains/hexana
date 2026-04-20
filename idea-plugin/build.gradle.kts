@@ -91,7 +91,7 @@ dependencies {
 
 changelog {
     version = baseVersion
-    headerParserRegex = """(\d+\.\d+)""".toRegex()
+    headerParserRegex = """(\d+[\.\d+]*)""".trimMargin().toRegex()
 }
 
 intellijPlatform {
