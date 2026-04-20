@@ -1,0 +1,38 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <completion.contributor language="JAVA"
+                                implementationClass="org.jetbrains.hexana.javaLang.GraalWasmJavaCompletionContributor"
+                                order="first"/>
+        <completion.contributor language="JAVA"
+                                implementationClass="org.jetbrains.hexana.javaLang.ChicoryJavaCompletionContributor"
+                                order="first"/>
+        <localInspection language="JAVA"
+                         groupName="WebAssembly"
+                         shortName="WasmExportInspection"
+                         displayName="Unresolved WebAssembly export name"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         implementationClass="org.jetbrains.hexana.javaLang.WasmExportInspection"/>
+        <localInspection language="JAVA"
+                         groupName="WebAssembly"
+                         shortName="WasmExportArgCountInspection"
+                         displayName="WebAssembly export argument count mismatch"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         implementationClass="org.jetbrains.hexana.javaLang.WasmExportArgCountInspection"/>
+        <localInspection language="JAVA"
+                         groupName="WebAssembly"
+                         shortName="WasmImportInspection"
+                         displayName="Unresolved WebAssembly import name"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         implementationClass="org.jetbrains.hexana.javaLang.WasmImportInspection"/>
+        <localInspection language="JAVA"
+                         groupName="WebAssembly"
+                         shortName="WasmExportArgTypeInspection"
+                         displayName="WebAssembly export argument type mismatch"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         implementationClass="org.jetbrains.hexana.javaLang.WasmExportArgTypeInspection"/>
+    </extensions>
+</idea-plugin>
