@@ -102,6 +102,39 @@ class ChicoryJavaCompletionTest : BasePlatformTestCase() {
         //assertDoesNotContain(lookupStrings!!, "my_namespace")
     }
 
+    // -- Advanced: instance stored in a field, export called in another method --
+
+    fun testExportFromFieldCompletion() {
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("ExportFromField.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results for field-based instance", lookupStrings)
+        assertContainsElements(lookupStrings!!, "exported_func")
+    }
+
+    // -- Advanced: instance returned from a helper method --
+
+    fun testExportFromMethodReturnCompletion() {
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("ExportFromMethodReturn.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results for method-returned instance", lookupStrings)
+        assertContainsElements(lookupStrings!!, "exported_func")
+    }
+
+    // -- Advanced: HostFunction created in a separate method --
+
+    fun testHostFunctionInSeparateMethodCompletion() {
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("HostFunctionInSeparateMethod.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results for HostFunction in separate method", lookupStrings)
+        assertContainsElements(lookupStrings!!, "my_namespace")
+    }
+
     // -- Negative: no WASM reference --
 
     fun testNoCompletionWithoutWasmReference() {

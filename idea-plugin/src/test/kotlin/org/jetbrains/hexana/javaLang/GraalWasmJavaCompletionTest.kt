@@ -115,6 +115,61 @@ class GraalWasmJavaCompletionTest : BasePlatformTestCase() {
         //assertDoesNotContain(lookupStrings!!, "my_namespace")
     }
 
+    // -- Advanced: exports stored in a field, used in another method --
+
+    fun testExportFromFieldCompletion() {
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("ExportFromField.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results for field-based exports", lookupStrings)
+        assertContainsElements(lookupStrings!!, "exported_func")
+    }
+
+    // -- Advanced: exports returned from a helper method --
+
+    fun testExportFromMethodReturnCompletion() {
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("ExportFromMethodReturn.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results for method-returned exports", lookupStrings)
+        assertContainsElements(lookupStrings!!, "exported_func")
+    }
+
+    // -- Advanced: chained call without intermediate exports variable --
+
+    fun testExportChainedCallCompletion() {
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("ExportChainedCall.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results for chained exports call", lookupStrings)
+        assertContainsElements(lookupStrings!!, "exported_func")
+    }
+
+    // -- Advanced: import map built as a variable, not inline --
+
+    fun testImportMapAsVariableCompletion() {
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("ImportMapAsVariable.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results for variable-based import map", lookupStrings)
+        assertContainsElements(lookupStrings!!, "imported_func")
+    }
+
+    // -- Advanced: import map passed as parameter to init method --
+
+    fun testImportMapPassedToMethodCompletion() {
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("ImportMapPassedToMethod.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results for parameter-passed import map", lookupStrings)
+        assertContainsElements(lookupStrings!!, "my_namespace")
+    }
+
     // -- Negative: no WASM reference --
 
     fun testNoCompletionWithoutWasmReference() {
