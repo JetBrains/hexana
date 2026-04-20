@@ -19,7 +19,7 @@ class HexanaVersionWarningTest {
     fun noWarningForNonDevVersion() {
         assertNull(
             developmentVersionWarning(
-                HexanaCommand.Stdio(HexanaLogLevel.INFO),
+                HexanaCommand.Stdio(HexanaLogLevel.INFO, analyticsKey = null),
                 "0.7"
             )
         )
@@ -33,7 +33,8 @@ class HexanaVersionWarningTest {
                 port = 8080,
                 endpoint = "/mcp",
                 allowPublicBind = false,
-                logLevel = HexanaLogLevel.INFO
+                logLevel = HexanaLogLevel.INFO,
+                analyticsKey = null
             ),
             "dev"
         )
