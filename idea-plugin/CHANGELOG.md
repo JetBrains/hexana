@@ -22,6 +22,18 @@
 - [ClassCastException in WitStaticFuncItemMixin](https://github.com/JetBrains/hexana/issues/84)
 ### Security
 
+## 0.7.1 - 2026-04-09
+
+### Fixed
+
+- [IJPL-242167 IAE: WasmModuleKt.fromSections via WasmIndex](https://youtrack.jetbrains.com/issue/IJPL-242167)
+- [Fixed handling of WASM/WAT files via http (local debug scenario)](https://github.com/JetBrains/hexana/issues/79)
+- [Fixed unbalanced tree in WAT parsing](https://github.com/JetBrains/hexana/issues/78)
+- [Fixed handling of empty ranges in WIT folding](https://github.com/JetBrains/hexana/issues/80)
+- [Editor control in the WAT tab now properly handles IDE zoom](https://github.com/JetBrains/hexana/issues/81)
+- [Text selection now works in both hex and text panels of the hex view, and also it's possible to use arrow keys](https://github.com/JetBrains/hexana/issues/82)
+- [Big WAT files are now displayed in an editor with line numbers, text selection, search and scrolling](https://github.com/JetBrains/hexana/issues/83)
+
 ## 0.7 - 2026-03-31
 
 ### Added
