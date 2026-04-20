@@ -8,6 +8,7 @@ import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.intellij.openapi.application.ApplicationInfo
 import org.jetbrains.hexana.analytics.*
 import org.jetbrains.hexana.graalwasm.wasmprinter.printWat
 import java.io.File
@@ -20,10 +21,15 @@ class HexanaService(
 
     init {
         coroutineScope.launch(Dispatchers.IO) {
+            val appInfo = ApplicationInfo.getInstance()
             HexanaAnalytics.initialize(
                 config = AnalyticsConfig(),
                 consentProvider = IntellijConsentProvider(),
-                distinctIdProvider = IdeDistinctIdProvider()
+                distinctIdProvider = IdeDistinctIdProvider(),
+                globalProperties = mapOf(
+                    "ide_type" to appInfo.versionName,
+                    "ide_build" to appInfo.build.asString()
+                )
             )
         }
     }

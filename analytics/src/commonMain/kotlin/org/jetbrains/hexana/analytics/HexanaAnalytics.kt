@@ -11,9 +11,10 @@ object HexanaAnalytics {
     fun initialize(
         config: AnalyticsConfig,
         consentProvider: ConsentProvider,
-        distinctIdProvider: DistinctIdProvider
+        distinctIdProvider: DistinctIdProvider,
+        globalProperties: Map<String, Any> = emptyMap()
     ) {
-        _client = createPlatformClient(config, consentProvider, distinctIdProvider)
+        _client = createPlatformClient(config, consentProvider, distinctIdProvider, globalProperties)
     }
 
     fun shutdown() {
@@ -25,7 +26,8 @@ object HexanaAnalytics {
 internal expect fun createPlatformClient(
     config: AnalyticsConfig,
     consentProvider: ConsentProvider,
-    distinctIdProvider: DistinctIdProvider
+    distinctIdProvider: DistinctIdProvider,
+    globalProperties: Map<String, Any>
 ): AnalyticsClient
 
 internal object NoOpAnalyticsClient : AnalyticsClient {

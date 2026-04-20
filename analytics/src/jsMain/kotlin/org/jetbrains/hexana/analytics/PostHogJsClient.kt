@@ -44,5 +44,6 @@ internal class PostHogJsClient(
 internal actual fun createPlatformClient(
     config: AnalyticsConfig,
     consentProvider: ConsentProvider,
-    distinctIdProvider: DistinctIdProvider
+    distinctIdProvider: DistinctIdProvider,
+    globalProperties: Map<String, Any>
 ): AnalyticsClient = PostHogJsClient(config, consentProvider, distinctIdProvider)
