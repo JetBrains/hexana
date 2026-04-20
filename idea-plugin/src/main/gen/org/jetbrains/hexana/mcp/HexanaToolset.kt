@@ -208,6 +208,6 @@ public class HexanaToolset : McpToolset {
     val range = requireHalfOpenSegmentRange(segmentRange)
     val buffer = file.contentsToCommonByteBuffer()
     val module = buffer.requireParsedWasmModule()
-    return buffer.readDataSegmentsByRange(module, range.first..(range.second - 1), includeExports, includeGlobals, minByteLength ?: 0)
+    return buffer.readDataSegmentsByRange(module, range, includeExports, includeGlobals, minByteLength ?: 0)
   }
 }

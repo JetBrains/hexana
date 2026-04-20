@@ -209,7 +209,7 @@ tasks.register<JavaExec>("generateHexanaToolset") {
     classpath = project(":mcp:tools-generator").extensions
         .getByType<SourceSetContainer>()
         .named("main").get().runtimeClasspath
-    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.ToolsetMainKt")
+    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.IdeaToolsetMainKt")
     argumentProviders.add(CommandLineArgumentProvider {
         listOf(generatedToolsetDir.asFile.absolutePath)
     })
@@ -227,7 +227,7 @@ val regenerateHexanaToolsetForVerification = tasks.register<JavaExec>("regenerat
     classpath = project(":mcp:tools-generator").extensions
         .getByType<SourceSetContainer>()
         .named("main").get().runtimeClasspath
-    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.ToolsetMainKt")
+    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.IdeaToolsetMainKt")
     argumentProviders.add(CommandLineArgumentProvider {
         listOf(verifiedToolsetDir.get().asFile.absolutePath)
     })

@@ -155,7 +155,7 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec, handlerSimpleName:
         "GetLocalsForFunctionsInput",
         "GetInstructionsForFunctionsInput" -> "(module, indices)"
         "ListExportedFunctionsInput", "ListDataInput" -> "(module, range)"
-        "ListDataSegmentsInput" -> "(module, range.first..(range.second - 1), includeExports, includeGlobals, minByteLength ?: 0)"
+        "ListDataSegmentsInput" -> "(module, range, includeExports, includeGlobals, minByteLength ?: 0)"
         else -> error("unreachable")
     }
     code.addStatement("return buffer.%M$callArgs", queryMember)

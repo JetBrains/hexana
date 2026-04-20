@@ -46,13 +46,13 @@ internal fun requireClosedRange(entriesRange: Map<String, Int>, fieldName: Strin
     return from..to
 }
 
-internal fun requireHalfOpenSegmentRange(segmentRange: Map<String, Int>): Pair<Int, Int> {
+internal fun requireHalfOpenSegmentRange(segmentRange: Map<String, Int>): IntRange {
     val from = segmentRange["from"] ?: mcpFail("Invalid segmentRange no `from`")
-    val to = segmentRange["to"] ?: Int.MAX_VALUE
-    if (from > to) {
+    val toExclusive = segmentRange["to"] ?: Int.MAX_VALUE
+    if (from > toExclusive) {
         mcpFail("Invalid segmentRange `to` must be >= `from`")
     }
-    return from to to
+    return from until toExclusive
 }
 
 private fun WasmParser.parseOrNull(buffer: CommonByteBuffer): WasmModule? {

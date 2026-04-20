@@ -46,7 +46,7 @@ tasks.register<JavaExec>("generateHexanaToolDispatcher") {
     classpath = project(":mcp:tools-generator").extensions
         .getByType<SourceSetContainer>()
         .named("main").get().runtimeClasspath
-    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.MainKt")
+    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.StandaloneToolsetMainKt")
     argumentProviders.add(CommandLineArgumentProvider {
         listOf(generatedToolDispatcherDir.asFile.absolutePath)
     })
@@ -64,7 +64,7 @@ val regenerateHexanaToolDispatcherForVerification = tasks.register<JavaExec>("re
     classpath = project(":mcp:tools-generator").extensions
         .getByType<SourceSetContainer>()
         .named("main").get().runtimeClasspath
-    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.MainKt")
+    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.StandaloneToolsetMainKt")
     argumentProviders.add(CommandLineArgumentProvider {
         listOf(verifiedToolDispatcherDir.get().asFile.absolutePath)
     })
