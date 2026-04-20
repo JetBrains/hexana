@@ -13,6 +13,8 @@
 
 ### Changed
 
+- MCP tools descriptions optimized
+
 ### Deprecated
 
 ### Removed
