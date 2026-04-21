@@ -65,6 +65,15 @@ internal class WasmDwarfVariableResolver private constructor(
             if (resolved != null) return resolved
         }
 
+        // Last resort: try direct LLDB Python FindVariable lookup.
+        // For Wasmtime JIT code, Cranelift transforms original DWARF
+        // locations into native register-based locations that LLDB's
+        // FindVariable can resolve even when our DWARF matching above
+        // fails (e.g. due to function name mismatch or unsupported
+        // location ops).
+        val directResult = tryDirectVariableLookup(communicator, variable)
+        if (directResult != null) return directResult
+
         return variable
     }
 

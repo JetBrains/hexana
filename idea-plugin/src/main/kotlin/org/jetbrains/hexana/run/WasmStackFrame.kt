@@ -156,6 +156,11 @@ internal class WasmStackFrame(
      * Uses LLDB's Python scripting API to query the variable's
      * [SBValue.GetLocation()](https://lldb.llvm.org/python_api/lldb.SBValue.html)
      * — if it is empty or absent the location metadata is missing.
+     *
+     * Note: for Wasmtime JIT-compiled code, Cranelift transforms
+     * original DWARF `DW_OP_WASM_location` expressions into native
+     * register-based locations (e.g. `rdi+0x10`, `[rsp+0x20]`).
+     * These are valid locations and must NOT be treated as missing.
      */
     private fun isDwarfLocationMissing(
         communicator: LldbCommunicator,
@@ -172,7 +177,17 @@ internal class WasmStackFrame(
             // an invalid SBValue or an empty / None location string.
             if (joined.contains("valid=False")) return true
             if (joined.contains("loc=None")) return true
-            if (joined.contains("loc=") && !joined.contains("loc=DW_OP")) return true
+            if (joined.contains("loc=")) {
+                // Extract the location value after "loc="
+                val locValue = joined.substringAfter("loc=").trim()
+                // Empty or whitespace-only location means missing
+                if (locValue.isEmpty() || locValue.isBlank()) return true
+                // Any non-empty location string (DW_OP expressions,
+                // native register names, stack slots, etc.) means the
+                // DWARF metadata IS present — the variable just
+                // couldn't be read for another reason.
+                return false
+            }
             false
         } catch (e: Exception) {
             LOG.debug("DWARF location check failed for '${variable.name}': ${e.message}")
