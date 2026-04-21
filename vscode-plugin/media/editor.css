@@ -39,6 +39,24 @@ html, body {
     opacity: 0.5;
 }
 
+/* Scrollbar styling for the hex viewer */
+.hex-viewer-scroll::-webkit-scrollbar {
+    width: 10px;
+}
+.hex-viewer-scroll::-webkit-scrollbar-track {
+    background: var(--vscode-scrollbar-shadow, rgba(0, 0, 0, 0.1));
+}
+.hex-viewer-scroll::-webkit-scrollbar-thumb {
+    background: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.4));
+    border-radius: 4px;
+}
+.hex-viewer-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.7));
+}
+.hex-viewer-scroll::-webkit-scrollbar-thumb:active {
+    background: var(--vscode-scrollbarSlider-activeBackground, rgba(191, 191, 191, 0.4));
+}
+
 /* Hex viewer row hover */
 .hex-row:hover {
     background: rgba(255, 255, 255, 0.03);

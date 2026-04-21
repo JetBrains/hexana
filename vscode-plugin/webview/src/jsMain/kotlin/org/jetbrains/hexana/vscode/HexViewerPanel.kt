@@ -165,7 +165,7 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
     Div({
         classes("hex-viewer-scroll")
         style {
-            property("overflow-y", "auto")
+            property("overflow-y", "scroll")
             width(100.percent)
             property("flex", "1")
             property("font-family", "var(--hexana-font, monospace)")
@@ -249,7 +249,6 @@ private fun HexColumnHeader() {
         Span({
             classes("hex-bytes-header")
             style {
-                property("flex", "1")
                 display(DisplayStyle.Flex)
                 property("gap", "0")
             }
@@ -271,7 +270,6 @@ private fun HexColumnHeader() {
             classes("hex-ascii-header")
             style {
                 property("padding-left", "12px")
-                property("min-width", "${BYTES_PER_ROW * 8.5}px")
             }
         }) {
             Text("ASCII")
@@ -315,7 +313,6 @@ private fun HexRow(
         Span({
             classes("hex-bytes")
             style {
-                property("flex", "1")
                 display(DisplayStyle.Flex)
                 property("gap", "0")
             }
