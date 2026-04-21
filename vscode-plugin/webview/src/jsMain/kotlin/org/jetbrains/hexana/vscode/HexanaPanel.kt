@@ -8,6 +8,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 
 enum class HexanaTab(val label: String) {
+    Summary("Summary"),
     Exports("Exports"),
     Imports("Imports"),
     Modules("Modules"),
@@ -22,7 +23,24 @@ fun HexanaPanel(
     selection: HexSelectionState,
     fileName: String,
 ) {
-    var activeTab by remember { mutableStateOf(HexanaTab.Exports) }
+    val visibleTabs = remember(providerType) {
+        buildList {
+            add(HexanaTab.Summary)
+            add(HexanaTab.Exports)
+            add(HexanaTab.Imports)
+            if (providerType is BinaryProviderType.WasmComponent) {
+                add(HexanaTab.Modules)
+            }
+            add(HexanaTab.Wat)
+        }
+    }
+
+    var activeTab by remember { mutableStateOf(HexanaTab.Summary) }
+
+    // If the active tab was removed (e.g. switching from component to core), reset
+    if (activeTab !in visibleTabs) {
+        activeTab = HexanaTab.Summary
+    }
 
     Div({
         classes("hexana-panel")
@@ -47,7 +65,7 @@ fun HexanaPanel(
                 property("background", "var(--hexana-tab-bg, rgba(255,255,255,0.03))")
             }
         }) {
-            for (tab in HexanaTab.entries) {
+            for (tab in visibleTabs) {
                 val isActive = tab == activeTab
                 Div({
                     classes("hexana-tab")
@@ -79,6 +97,7 @@ fun HexanaPanel(
             }
         }) {
             when (activeTab) {
+                HexanaTab.Summary -> SummaryTabContent(buffer, providerType, selection)
                 HexanaTab.Exports -> ExportsTabContent(buffer, providerType, selection)
                 HexanaTab.Imports -> ImportsTabContent(buffer, providerType, selection)
                 HexanaTab.Modules -> ModulesTabContent(buffer, providerType, selection, fileName)

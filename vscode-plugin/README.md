@@ -23,12 +23,14 @@ VS Code extension that opens `.wasm` files in a custom editor powered by Compose
 │  EditorToolbar.kt      ─  file name, size, type badge│
 │  HexViewerPanel.kt     ─  virtual-scroll hex dump    │
 │  SelectionStatusBar.kt ─  cursor / selection info     │
-│  HexanaPanel.kt        ─  tabbed panel (Exports,     │
-│                           Imports, Modules, WAT)      │
+│  HexanaPanel.kt        ─  tabbed panel (Summary,     │
+│                           Exports, Imports,            │
+│                           Modules*, WAT)               │
+│  SummaryTab.kt         ─  sections table + stats      │
 │  ExportsTab.kt         ─  exports table with sigs    │
 │  ImportsTab.kt         ─  imports table              │
-│  ModulesTab.kt         ─  clickable module list /     │
-│                           sections for core Wasm       │
+│  ModulesTab.kt         ─  clickable module list       │
+│                           (component model only)       │
 │  WatTab.kt             ─  WAT text representation    │
 └──────────────────────────────────────────────────────┘
 ```
@@ -64,7 +66,8 @@ vscode-plugin/
         ├── HexanaPanel.kt             # tabbed panel container
         ├── ExportsTab.kt              # exports tab content
         ├── ImportsTab.kt              # imports tab content
-        ├── ModulesTab.kt              # modules/sections tab content
+        ├── SummaryTab.kt              # summary (sections + stats) tab
+        ├── ModulesTab.kt              # modules tab (component model only)
         ├── WatTab.kt                  # WAT text representation tab
         ├── PanelTable.kt              # shared table composables
         ├── ComponentDescriptionUtils.kt # component model label helpers
@@ -120,10 +123,11 @@ This is a **draft scaffold**. Key items remaining:
 - [x] Keyboard navigation (arrow keys, shift+arrows for selection).
 - [x] Selection synchronisation — clicking a section row highlights its bytes.
 - [x] Status bar showing cursor offset and selection range.
-- [x] Tabbed Hexana panel (Exports, Imports, Modules, WAT).
+- [x] Tabbed Hexana panel (Summary, Exports, Imports, Modules, WAT).
 - [x] Exports tab with kind, name, index, and function signatures.
 - [x] Imports tab with kind, module, and name.
-- [x] Modules tab with clickable nested module list (opens in new tab) and core Wasm sections.
+- [x] Summary tab with sections table and statistics (shown for all binary types).
+- [x] Modules tab with clickable nested module list (component model only, opens in new tab).
 - [x] WAT tab with structural text representation from parser data.
 - [ ] Theme integration (map VS Code CSS variables into Compose styles).
 - [ ] Search within the hex view.
