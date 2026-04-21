@@ -230,17 +230,29 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     val details = buildString {
                         append("WAMR (iwasm) process terminated before debug ")
                         append("server started (exit code $exitCode).")
-                        if (output.isNotEmpty()) {
-                            append("\n\niwasm output:\n")
-                            append(output)
+                        if (looksLikeDebugNotSupported(output)) {
+                            append("\n\nThe installed iwasm does not support ")
+                            append("the \"-g\" debug option. This means it ")
+                            append("was built without debug interpreter ")
+                            append("support.")
+                            append("\n\nRebuild iwasm with:")
+                            append("\n  cmake .. -DWAMR_BUILD_DEBUG_INTERP=1")
+                            append("\n  make")
+                            append("\n\nSee: https://bytecodealliance.github.io")
+                            append("/wamr.dev/blog/wamr-source-debugging-basic/")
+                        } else {
+                            if (output.isNotEmpty()) {
+                                append("\n\niwasm output:\n")
+                                append(output)
+                            }
+                            append("\n\nCommand: ${iwasmCommandLine.commandLineString}")
+                            append("\n\nPossible causes:")
+                            append("\n  - iwasm was not built with debug ")
+                            append("support (-DWAMR_BUILD_DEBUG_INTERP=1)")
+                            append("\n  - The Wasm module path is incorrect ")
+                            append("or the module has missing imports")
+                            append("\n  - The debug port is already in use")
                         }
-                        append("\n\nCommand: ${iwasmCommandLine.commandLineString}")
-                        append("\n\nPossible causes:")
-                        append("\n  - iwasm was not built with debug support ")
-                        append("(WAMR_BUILD_DEBUG_INTERP=1)")
-                        append("\n  - The Wasm module path is incorrect or ")
-                        append("the module has missing imports")
-                        append("\n  - The debug port is already in use")
                     }
                     LOG.warn(details)
                     throw ExecutionException(details)
@@ -332,6 +344,29 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
         fun resolveLldbPath(configuration: WasmRunConfiguration): String {
             val configured = configuration.lldbPath.trim()
             return configured.ifBlank { DEFAULT_LLDB_PATH }
+        }
+
+        /**
+         * Detects whether iwasm output indicates the `-g` debug
+         * option is not supported by the current build.
+         *
+         * When iwasm is built without `WAMR_BUILD_DEBUG_INTERP=1`,
+         * the `-g=ip:port` argument is unrecognized. iwasm then
+         * prints its help/usage text and exits. The help text from
+         * a non-debug build will contain the usage header (e.g.
+         * "Usage:" or "iwasm") but will NOT contain the `-g=`
+         * option description, because that line is conditionally
+         * compiled only when `WASM_ENABLE_DEBUG_INTERP != 0`.
+         */
+        fun looksLikeDebugNotSupported(output: String): Boolean {
+            if (output.isBlank()) return false
+            // iwasm help text contains "Usage:" and lists options.
+            // If we see help-like output but the `-g=` option is
+            // absent, the build lacks debug interpreter support.
+            val looksLikeHelp = output.contains("Usage:") ||
+                output.contains("iwasm") && output.contains("--")
+            val hasDebugOption = output.contains("-g=")
+            return looksLikeHelp && !hasDebugOption
         }
     }
 }
