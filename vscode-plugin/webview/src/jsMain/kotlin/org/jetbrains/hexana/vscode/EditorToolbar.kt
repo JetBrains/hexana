@@ -1,21 +1,50 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 
 /**
- * Top toolbar that shows the file name, size, and detected binary kind.
+ * Top toolbar that shows the file name, size, detected binary kind,
+ * and an optional run button for runnable modules.
  */
 @Composable
 fun EditorToolbar(
     fileName: String,
     size: Int,
     providerType: BinaryProviderType,
+    buffer: CommonByteBuffer? = null,
 ) {
+    val isRunnable = remember(buffer, providerType) {
+        if (buffer == null) return@remember false
+        when (providerType) {
+            is BinaryProviderType.Wasm -> {
+                buffer.position(0)
+                val provider = WasmBinaryProvider(buffer)
+                provider.canProvideWasmModule() && provider.exports.any { export ->
+                    export is WasmFunctionExportRecordEntry &&
+                        (export.name == "_start" || export.name == "_initialize")
+                }
+            }
+            is BinaryProviderType.WasmComponent -> {
+                buffer.position(0)
+                val provider = WasmComponentBinaryProvider(buffer)
+                provider.canProvideWasmModule() && hasWasiCliRunExport(provider)
+            }
+            else -> false
+        }
+    }
+
+    val isComponent = providerType is BinaryProviderType.WasmComponent
+
     Div({
         classes("hexana-toolbar")
         style {
@@ -50,6 +79,18 @@ fun EditorToolbar(
                     is BinaryProviderType.Wasm -> "Core Wasm"
                     is BinaryProviderType.WasmComponent -> "Component Model"
                     is BinaryProviderType.Generic -> "Binary"
+                }
+            )
+        }
+
+        if (isRunnable) {
+            RunArrowButton(
+                tooltip = "Run Wasm module",
+                onClick = {
+                    postRunExportToHost(
+                        exportName = "",
+                        isComponent = isComponent,
+                    )
                 }
             )
         }

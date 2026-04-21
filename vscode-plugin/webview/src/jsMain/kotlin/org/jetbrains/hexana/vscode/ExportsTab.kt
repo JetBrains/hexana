@@ -3,13 +3,12 @@ package org.jetbrains.hexana.vscode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import org.jetbrains.compose.web.css.*
-import org.jetbrains.compose.web.dom.Div
-import org.jetbrains.compose.web.dom.Td
-import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.sections.*
 
 @Composable
@@ -49,14 +48,16 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
     }
 
     PanelTable(
-        headers = listOf("Kind", "Name", "Index", "Signature"),
-        columnAligns = listOf("left", "left", "right", "left"),
+        headers = listOf("", "Kind", "Name", "Index", "Signature"),
+        columnAligns = listOf("center", "left", "left", "right", "left"),
     ) {
         for (export in exports) {
             val kind = exportKindLabel(export)
             val sig = if (export is WasmFunctionExportRecordEntry) {
                 resolveCoreSignature(export, functions, importFuncCount)
             } else ""
+
+            val isRunnable = export is WasmFunctionExportRecordEntry && !export.name.startsWith("__")
 
             PanelTableRow(
                 isHighlighted = selection.hasSelection &&
@@ -69,6 +70,19 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
                     scrollHexViewerTo(export.offset)
                 },
             ) {
+                Td({ style { property("padding", "2px 4px"); property("width", "24px") } }) {
+                    if (isRunnable) {
+                        RunArrowButton(
+                            tooltip = "Run '${export.name}'",
+                            onClick = {
+                                postRunExportToHost(
+                                    exportName = export.name,
+                                    invokeArgs = "--invoke ${export.name}",
+                                )
+                            }
+                        )
+                    }
+                }
                 Td({ style { property("padding", "2px 8px") } }) { Text(kind) }
                 Td({ style { property("padding", "2px 8px") } }) { Text(export.name) }
                 Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
@@ -102,10 +116,14 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
     }
 
     PanelTable(
-        headers = listOf("Name", "Sort Index", "Description"),
-        columnAligns = listOf("left", "left", "left"),
+        headers = listOf("", "Name", "Sort Index", "Description"),
+        columnAligns = listOf("center", "left", "left", "left"),
     ) {
         for (export in exports) {
+            val isWasiCliRun = isWasiCliRunExportName(export.exportName)
+            val isFunctionExport = isComponentFuncExport(export, provider)
+            val isRunnable = isWasiCliRun || isFunctionExport
+
             PanelTableRow(
                 isHighlighted = selection.hasSelection &&
                     selection.selectionStart == export.offset &&
@@ -117,6 +135,19 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
                     scrollHexViewerTo(export.offset)
                 },
             ) {
+                Td({ style { property("padding", "2px 4px"); property("width", "24px") } }) {
+                    if (isRunnable) {
+                        RunArrowButton(
+                            tooltip = "Run '${export.exportName}'",
+                            onClick = {
+                                postRunExportToHost(
+                                    exportName = export.exportName,
+                                    isComponent = true,
+                                )
+                            }
+                        )
+                    }
+                }
                 Td({ style { property("padding", "2px 8px") } }) {
                     Text(export.exportName + (export.version?.let { " $it" } ?: ""))
                 }
@@ -130,6 +161,71 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
         }
     }
 }
+
+/**
+ * Small play-arrow button used as a run indicator in table rows.
+ * Uses a Unicode play triangle (▶) styled to match VS Code's green run icon.
+ */
+@Composable
+internal fun RunArrowButton(tooltip: String = "Run", onClick: () -> Unit) {
+    Span({
+        classes("hexana-run-arrow")
+        attr("title", tooltip)
+        style {
+            property("cursor", "pointer")
+            property("display", "inline-flex")
+            property("align-items", "center")
+            property("justify-content", "center")
+            property("width", "16px")
+            property("height", "16px")
+            property("border-radius", "3px")
+            property("font-size", "12px")
+            property("color", "var(--vscode-debugIcon-startForeground, #89d185)")
+        }
+        onClick { event ->
+            event.stopPropagation()
+            onClick()
+        }
+    }) {
+        Text("\u25B6")
+    }
+}
+
+private val WASI_CLI_RUN_PATTERN = Regex("^wasi:cli/run(@.+)?$")
+
+internal fun isWasiCliRunExportName(name: String): Boolean =
+    WASI_CLI_RUN_PATTERN.matches(name)
+
+internal fun isComponentFuncExport(export: WasmComponentExport, provider: WasmComponentBinaryProvider): Boolean {
+    val sort = export.sortIndex.sort
+    if (sort is ComponentSort.Func ||
+        (sort is ComponentSortWithCoreSort && sort.cs is ComponentCoreSort.Func)) {
+        return true
+    }
+    if (sort is ComponentSort.Instance) {
+        val instance = provider.instances.getOrNull(export.sortIndex.index.toInt())
+        if (instance is InlineInstanceExpression) {
+            return instance.e.any { it is FuncInstanceInlineExport }
+        }
+        if (instance is ComponentInstanceExpression) {
+            val componentExports = provider.nestedComponentExports(instance.index.toInt())
+            return componentExports.any {
+                it.sortIndex.sort is ComponentSort.Func ||
+                    (it.sortIndex.sort is ComponentSortWithCoreSort && (it.sortIndex.sort as ComponentSortWithCoreSort).cs is ComponentCoreSort.Func)
+            }
+        }
+    }
+    if (sort is ComponentSortWithCoreSort && sort.cs is ComponentCoreSort.Instance) {
+        val coreInstance = provider.coreInstances.getOrNull(export.sortIndex.index.toInt())
+        if (coreInstance is InlineInstanceCoreExpression) {
+            return coreInstance.e.any { it is FuncInlineCoreExpression }
+        }
+    }
+    return false
+}
+
+internal fun hasWasiCliRunExport(provider: WasmComponentBinaryProvider): Boolean =
+    provider.exports.any { isWasiCliRunExportName(it.exportName) }
 
 private fun exportKindLabel(export: WasmExportRecordEntry): String = when (export) {
     is WasmFunctionExportRecordEntry -> "function"

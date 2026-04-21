@@ -67,7 +67,7 @@ fun WasmEditorContent(
             property("overflow", "hidden")
         }
     }) {
-        EditorToolbar(fileName = fileName, size = bytes.size, providerType = providerType)
+        EditorToolbar(fileName = fileName, size = bytes.size, providerType = providerType, buffer = buffer)
         HexViewerPanel(bytes = bytes, selection = selection)
         SelectionStatusBar(selection = selection, totalBytes = bytes.size)
         HexanaPanel(bytes = bytes, buffer = buffer, providerType = providerType, selection = selection, fileName = fileName)

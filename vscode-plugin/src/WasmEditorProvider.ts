@@ -1,3 +1,4 @@
+import * as path from "path";
 import * as vscode from "vscode";
 import { getWebviewContent } from "./webviewContent";
 
@@ -134,8 +135,44 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 });
             } else if (message.type === "open-module") {
                 this.openNestedModule(document, message);
+            } else if (message.type === "run-export") {
+                this.runExport(document, message);
             }
         });
+    }
+
+    /**
+     * Handles a `run-export` message from the webview by executing the Wasm
+     * module in a VS Code terminal using wasmtime.
+     */
+    private runExport(
+        document: WasmDocument,
+        message: { exportName: string; invokeArgs: string; programArgs: string; isComponent: boolean },
+    ): void {
+        const filePath = document.uri.fsPath;
+        if (!filePath) {
+            vscode.window.showErrorMessage("Cannot run: file path is not available for in-memory modules.");
+            return;
+        }
+
+        const args: string[] = ["run"];
+
+        if (message.invokeArgs) {
+            args.push(...message.invokeArgs.split(/\s+/));
+        }
+
+        args.push(filePath);
+
+        if (message.programArgs) {
+            args.push(...message.programArgs.split(/\s+/));
+        }
+
+        const exportName = message.exportName || path.basename(filePath, ".wasm");
+        const terminalName = `Wasm: ${exportName}`;
+
+        const terminal = vscode.window.createTerminal({ name: terminalName });
+        terminal.show();
+        terminal.sendText(`wasmtime ${args.map(a => shellEscape(a)).join(" ")}`);
     }
 
     /**
@@ -174,6 +211,16 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             );
         }
     }
+}
+
+/**
+ * Escapes a single shell argument for safe use in a terminal command.
+ */
+function shellEscape(arg: string): string {
+    if (/^[a-zA-Z0-9_./:=-]+$/.test(arg)) {
+        return arg;
+    }
+    return `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
 /**

@@ -32,6 +32,29 @@ fun postMessageToHost(type: String) {
 }
 
 /**
+ * Asks the extension host to run an exported Wasm function.
+ *
+ * [exportName] is the function name to invoke (e.g. `"add"` or `"_start"`).
+ * [invokeArgs] is the optional wasmtime `--invoke` argument string.
+ * [programArgs] is the optional program arguments string.
+ * [isComponent] indicates whether this is a component-model binary.
+ */
+fun postRunExportToHost(
+    exportName: String,
+    invokeArgs: String = "",
+    programArgs: String = "",
+    isComponent: Boolean = false,
+) {
+    val msg = js("{}")
+    msg.type = "run-export"
+    msg.exportName = exportName
+    msg.invokeArgs = invokeArgs
+    msg.programArgs = programArgs
+    msg.isComponent = isComponent
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open a nested module in a new editor tab.
  *
  * [moduleIndex] is the zero-based index of the module inside the component,
