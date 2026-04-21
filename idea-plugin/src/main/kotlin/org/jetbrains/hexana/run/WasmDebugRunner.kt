@@ -90,7 +90,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             override fun start(session: XDebugSession): XDebugProcess {
                 val buildResult = WasmtimeDebugCommandLineState.buildWasmtimeArguments(configuration, environment.project)
                 val wasmtimePath = configuration.wasmtimePath.ifBlank {
-                    WasmtimeCommandLineState.resolveDefaultWasmtimePath()
+                    WasmRuntimeSettings.getInstance().effectiveWasmtimePath()
                 }
 
                 val lldbExe = resolveLldbPath(configuration)
@@ -243,7 +243,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
     ): WamrPrepResult {
         val buildResult = WamrDebugCommandLineState.buildWamrArguments(configuration)
         val iwasmPath = configuration.wamrPath.ifBlank {
-            WamrCommandLineState.resolveDefaultWamrPath()
+            WasmRuntimeSettings.getInstance().effectiveWamrPath()
         }
 
         // Step 1: Start iwasm with debug server
@@ -372,7 +372,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
         private const val WAMR_DEBUG_SERVER_READY_TIMEOUT_MS = 10_000L
 
         /** Default LLDB executable name, resolved via PATH. */
-        private const val DEFAULT_LLDB_PATH = "lldb"
+        internal const val DEFAULT_LLDB_PATH = "lldb"
 
         /**
          * Resolves the LLDB executable path from the run configuration.
@@ -385,7 +385,8 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
          */
         fun resolveLldbPath(configuration: WasmRunConfiguration): String {
             val configured = configuration.lldbPath.trim()
-            return configured.ifBlank { DEFAULT_LLDB_PATH }
+            if (configured.isNotBlank()) return configured
+            return WasmRuntimeSettings.getInstance().effectiveLldbPath()
         }
 
         /**

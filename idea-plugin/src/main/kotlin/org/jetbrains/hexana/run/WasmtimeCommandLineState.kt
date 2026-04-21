@@ -21,7 +21,9 @@ class WasmtimeCommandLineState(
 ) : CommandLineState(environment) {
 
     override fun startProcess(): ProcessHandler {
-        val wasmtimePath = configuration.wasmtimePath.ifBlank { resolveDefaultWasmtimePath() }
+        val wasmtimePath = configuration.wasmtimePath.ifBlank {
+            WasmRuntimeSettings.getInstance().effectiveWasmtimePath()
+        }
 
         val wasmFile = File(configuration.wasmFilePath)
         val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null

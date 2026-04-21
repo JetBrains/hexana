@@ -26,7 +26,9 @@ class WamrCommandLineState(
 ) : CommandLineState(environment) {
 
     override fun startProcess(): ProcessHandler {
-        val iwasm = configuration.wamrPath.ifBlank { resolveDefaultWamrPath() }
+        val iwasm = configuration.wamrPath.ifBlank {
+            WasmRuntimeSettings.getInstance().effectiveWamrPath()
+        }
 
         val wasmFile = File(configuration.wasmFilePath)
         val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null

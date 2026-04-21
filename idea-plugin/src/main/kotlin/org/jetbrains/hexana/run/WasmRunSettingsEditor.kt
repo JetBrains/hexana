@@ -108,17 +108,23 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
             project,
             FileChooserDescriptorFactory.singleFile(),
         )
-        (wasmtimePathField.childComponent as? JBTextField)?.emptyText?.setText(WasmtimeCommandLineState.DEFAULT_WASMTIME_PATH)
+        (wasmtimePathField.childComponent as? JBTextField)?.emptyText?.setText(
+            WasmRuntimeSettings.getInstance().effectiveWasmtimePath()
+        )
         wamrPathField.addBrowseFolderListener(
             project,
             FileChooserDescriptorFactory.singleFile(),
         )
-        (wamrPathField.childComponent as? JBTextField)?.emptyText?.setText(WamrCommandLineState.DEFAULT_WAMR_PATH)
+        (wamrPathField.childComponent as? JBTextField)?.emptyText?.setText(
+            WasmRuntimeSettings.getInstance().effectiveWamrPath()
+        )
         lldbPathField.addBrowseFolderListener(
             project,
             FileChooserDescriptorFactory.singleFile(),
         )
-        (lldbPathField.childComponent as? JBTextField)?.emptyText?.setText("lldb")
+        (lldbPathField.childComponent as? JBTextField)?.emptyText?.setText(
+            WasmRuntimeSettings.getInstance().effectiveLldbPath()
+        )
         workingDirectoryField.addBrowseFolderListener(
             project,
             FileChooserDescriptor(false, true, false, false, false, false),

@@ -53,6 +53,14 @@
                                  key="hexana.settings.displayName"
                                  provider="org.jetbrains.hexana.HexanaConfigurableProvider"/>
 
+        <applicationConfigurable parentId="build"
+                                 id="wasm.runtime.settings"
+                                 bundle="messages.HexanaBundle"
+                                 key="wasm.runtime.settings.displayName"
+                                 instance="org.jetbrains.hexana.run.WasmRuntimeConfigurable"/>
+
+        <applicationService serviceImplementation="org.jetbrains.hexana.run.WasmRuntimeSettings"/>
+
         <fileType name="wasm"
                   implementationClass="org.jetbrains.hexana.WasmFileType"
                   fieldName="INSTANCE"
