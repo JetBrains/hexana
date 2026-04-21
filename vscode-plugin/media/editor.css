@@ -38,3 +38,22 @@ html, body {
     height: 100%;
     opacity: 0.5;
 }
+
+/* Hex viewer row hover */
+.hex-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+.hex-row.hex-header:hover {
+    background: transparent;
+}
+
+/* Hex byte cell hover */
+.hex-byte:hover,
+.hex-ascii-char:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Section table row hover */
+.hexana-sections tr:hover {
+    background: rgba(255, 255, 255, 0.05);
+}

@@ -20,9 +20,11 @@ VS Code extension that opens `.wasm` files in a custom editor powered by Compose
 │      receives bytes, wraps in CommonByteBuffer        │
 │      creates BinaryProvider (wasmParser + encdec)     │
 │                                                      │
-│  EditorToolbar.kt  ─  file name, size, type badge    │
-│  HexViewerPanel.kt ─  hex dump (offset | hex | ASCII)│
-│  SectionPanel.kt   ─  parsed section table + summary │
+│  EditorToolbar.kt      ─  file name, size, type badge│
+│  HexViewerPanel.kt     ─  virtual-scroll hex dump    │
+│  SelectionStatusBar.kt ─  cursor / selection info     │
+│  SectionPanel.kt       ─  section table + click-to-  │
+│                           highlight in hex viewer     │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -52,7 +54,8 @@ vscode-plugin/
         ├── Main.kt                # entry point, renderComposable
         ├── VscodeMessageBridge.kt # postMessage bridge
         ├── EditorToolbar.kt       # toolbar composable
-        ├── HexViewerPanel.kt      # hex viewer composable
+        ├── HexViewerPanel.kt      # virtual-scroll hex viewer
+        ├── SelectionStatusBar.kt  # cursor / selection status bar
         └── SectionPanel.kt        # section list composable
 ```
 
@@ -100,10 +103,12 @@ vscode-plugin/
 
 This is a **draft scaffold**. Key items remaining:
 
-- [ ] Virtual scrolling for the hex viewer (currently renders a fixed window).
+- [x] Virtual scrolling for the hex viewer (renders only visible rows + overscan).
+- [x] Byte selection via click, shift-click, and drag.
+- [x] Keyboard navigation (arrow keys, shift+arrows for selection).
+- [x] Selection synchronisation — clicking a section row highlights its bytes.
+- [x] Status bar showing cursor offset and selection range.
 - [ ] Full section detail views (imports, exports, functions, WAT disassembly).
-- [ ] Selection synchronisation between hex view and section panel.
 - [ ] Theme integration (map VS Code CSS variables into Compose styles).
 - [ ] Search within the hex view.
-- [ ] Keyboard navigation.
 - [ ] Tests for the Kotlin webview composables.

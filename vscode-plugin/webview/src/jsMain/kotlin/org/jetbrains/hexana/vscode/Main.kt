@@ -52,9 +52,12 @@ fun WasmEditorContent(
     bytes: ByteArray,
     providerType: BinaryProviderType,
 ) {
+    val selection = remember { HexSelectionState() }
+
     Div({ classes("hexana-editor") }) {
         EditorToolbar(fileName = fileName, size = bytes.size, providerType = providerType)
-        HexViewerPanel(bytes = bytes)
-        SectionPanel(bytes = bytes, providerType = providerType)
+        HexViewerPanel(bytes = bytes, selection = selection)
+        SelectionStatusBar(selection = selection, totalBytes = bytes.size)
+        SectionPanel(bytes = bytes, providerType = providerType, selection = selection)
     }
 }

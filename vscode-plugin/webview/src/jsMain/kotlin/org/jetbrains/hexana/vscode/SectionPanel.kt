@@ -10,14 +10,14 @@ import org.jetbrains.hexana.wasm.sections.WasmSection
 /**
  * Bottom panel that shows parsed Wasm sections (or component-model info).
  *
- * This is a draft scaffold — each section row currently shows type, offset,
- * and size.  Detailed per-section views (imports, exports, functions, etc.)
- * will be implemented incrementally.
+ * Clicking a section row selects the corresponding byte range in the hex viewer
+ * and scrolls the hex viewer to that offset.
  */
 @Composable
 fun SectionPanel(
     bytes: ByteArray,
     providerType: BinaryProviderType,
+    selection: HexSelectionState = remember { HexSelectionState() },
 ) {
     val buffer = remember(bytes) { bytes.toCommonByteBuffer() }
 
@@ -32,8 +32,8 @@ fun SectionPanel(
         }
     }) {
         when (providerType) {
-            is BinaryProviderType.Wasm -> CoreWasmSections(buffer)
-            is BinaryProviderType.WasmComponent -> ComponentSections(buffer)
+            is BinaryProviderType.Wasm -> CoreWasmSections(buffer, selection)
+            is BinaryProviderType.WasmComponent -> ComponentSections(buffer, selection)
             is BinaryProviderType.Generic -> {
                 Div { Text("Not a recognized WebAssembly binary.") }
             }
@@ -42,7 +42,10 @@ fun SectionPanel(
 }
 
 @Composable
-private fun CoreWasmSections(buffer: org.jetbrains.hexana.io.CommonByteBuffer) {
+private fun CoreWasmSections(
+    buffer: org.jetbrains.hexana.io.CommonByteBuffer,
+    selection: HexSelectionState,
+) {
     val provider = remember(buffer) {
         buffer.position(0)
         WasmBinaryProvider(buffer)
@@ -56,7 +59,7 @@ private fun CoreWasmSections(buffer: org.jetbrains.hexana.io.CommonByteBuffer) {
     H4 { Text("Sections") }
 
     val sections = provider.wasmModule?.sections ?: emptyList()
-    SectionTable(sections)
+    SectionTable(sections, selection)
 
     val importCount = provider.imports.size
     val exportCount = provider.exports.size
@@ -71,7 +74,10 @@ private fun CoreWasmSections(buffer: org.jetbrains.hexana.io.CommonByteBuffer) {
 }
 
 @Composable
-private fun ComponentSections(buffer: org.jetbrains.hexana.io.CommonByteBuffer) {
+private fun ComponentSections(
+    buffer: org.jetbrains.hexana.io.CommonByteBuffer,
+    selection: HexSelectionState,
+) {
     val provider = remember(buffer) {
         buffer.position(0)
         WasmComponentBinaryProvider(buffer)
@@ -85,7 +91,7 @@ private fun ComponentSections(buffer: org.jetbrains.hexana.io.CommonByteBuffer) 
     H4 { Text("Component Sections") }
 
     val sections = provider.wasmModule?.sections ?: emptyList()
-    SectionTable(sections)
+    SectionTable(sections, selection)
 
     val importCount = provider.imports.size
     val exportCount = provider.exports.size
@@ -99,7 +105,7 @@ private fun ComponentSections(buffer: org.jetbrains.hexana.io.CommonByteBuffer) 
 }
 
 @Composable
-private fun SectionTable(sections: List<WasmSection>) {
+private fun SectionTable(sections: List<WasmSection>, selection: HexSelectionState) {
     Table({
         style {
             width(100.percent)
@@ -116,7 +122,26 @@ private fun SectionTable(sections: List<WasmSection>) {
         }
         Tbody {
             for (section in sections) {
-                Tr {
+                val sectionStart = section.sectionOffset
+                val sectionEnd = sectionStart + section.sectionSize - 1
+                val isHighlighted = selection.hasSelection &&
+                    selection.selectionStart == sectionStart &&
+                    selection.selectionEnd == sectionEnd
+
+                Tr({
+                    style {
+                        property("cursor", "pointer")
+                        if (isHighlighted) {
+                            property("background", "var(--hexana-selection, rgba(156, 183, 255, 0.2))")
+                        }
+                    }
+                    onClick {
+                        selection.anchorIndex = sectionStart
+                        selection.activeIndex = sectionEnd
+                        selection.cursorIndex = sectionStart
+                        scrollHexViewerTo(sectionStart)
+                    }
+                }) {
                     Td({ style { property("padding", "2px 8px") } }) {
                         Text(section.name)
                     }
@@ -130,4 +155,14 @@ private fun SectionTable(sections: List<WasmSection>) {
             }
         }
     }
+}
+
+/**
+ * Scrolls the hex viewer container so the given byte offset is visible.
+ */
+private fun scrollHexViewerTo(byteOffset: Int) {
+    val row = byteOffset / 16
+    val targetScrollTop = row * ROW_HEIGHT_PX
+    val container = kotlinx.browser.document.querySelector(".hex-viewer-scroll") as? org.w3c.dom.HTMLElement
+    container?.scrollTop = targetScrollTop.toDouble()
 }
