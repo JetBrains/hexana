@@ -167,7 +167,8 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
         style {
             property("overflow-y", "scroll")
             width(100.percent)
-            property("flex", "1")
+            property("flex", "1 1 0%")
+            property("min-height", "120px")
             property("font-family", "var(--hexana-font, monospace)")
             property("font-size", "13px")
             property("line-height", "${ROW_HEIGHT_PX}px")

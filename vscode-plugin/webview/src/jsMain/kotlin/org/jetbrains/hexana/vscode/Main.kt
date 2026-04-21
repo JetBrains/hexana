@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.*
+import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.renderComposable
@@ -56,7 +57,16 @@ fun WasmEditorContent(
     val selection = remember { HexSelectionState() }
     val buffer = remember(bytes) { bytes.toCommonByteBuffer() }
 
-    Div({ classes("hexana-editor") }) {
+    Div({
+        classes("hexana-editor")
+        style {
+            display(DisplayStyle.Flex)
+            property("flex-direction", "column")
+            width(100.percent)
+            height(100.percent)
+            property("overflow", "hidden")
+        }
+    }) {
         EditorToolbar(fileName = fileName, size = bytes.size, providerType = providerType)
         HexViewerPanel(bytes = bytes, selection = selection)
         SelectionStatusBar(selection = selection, totalBytes = bytes.size)

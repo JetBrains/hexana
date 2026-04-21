@@ -27,10 +27,11 @@ fun HexanaPanel(
         classes("hexana-panel")
         style {
             property("border-top", "1px solid var(--hexana-border, #333)")
-            property("flex-shrink", "0")
-            property("max-height", "50%")
+            property("flex", "1 1 0%")
+            property("min-height", "120px")
             display(DisplayStyle.Flex)
             property("flex-direction", "column")
+            property("overflow", "hidden")
         }
     }) {
         // Tab bar
