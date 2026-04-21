@@ -15,7 +15,9 @@ import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.GenericProgramRunner
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.util.Key
+import com.intellij.openapi.util.ThrowableComputable
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugProcessStarter
 import com.intellij.xdebugger.XDebugSession
@@ -73,6 +75,17 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
         configuration: WasmRunConfiguration,
         environment: ExecutionEnvironment,
     ): RunContentDescriptor? {
+        // Pre-compute DWARF resolver in a modal progress task so that
+        // file I/O does not block the EDT. The modal dialog pumps UI
+        // events, keeping the IDE responsive.
+        val dwarfResolver = ProgressManager.getInstance()
+            .runProcessWithProgressSynchronously(
+                ThrowableComputable { createDwarfResolver(configuration) },
+                "Preparing Wasmtime debug session\u2026",
+                true,
+                environment.project,
+            )
+
         val starter = object : XDebugProcessStarter() {
             override fun start(session: XDebugSession): XDebugProcess {
                 val buildResult = WasmtimeDebugCommandLineState.buildWasmtimeArguments(configuration, environment.project)
@@ -122,11 +135,6 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                 // We start the inferior in sessionInitialized() so that all
                 // breakpoints are already set in LLDB when wasmtime launches.
 
-                // Parse DWARF variable metadata from the Wasm binary so
-                // the debugger can use location descriptions to resolve
-                // variables that LLDB's standard `frame variable` cannot.
-                val dwarfResolver = createDwarfResolver(configuration)
-
                 return WasmDebugProcess(
                     session,
                     console,
@@ -150,114 +158,34 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
     }
 
     /**
-     * Launches a WAMR debug session:
-     * 1. Starts `iwasm -g=host:port module.wasm` as a background process.
-     * 2. Starts a separate LLDB process.
-     * 3. Connects LLDB to the WAMR debug stub via
-     *    `process connect --plugin wasm connect://host:port`.
+     * Result holder for the blocking preparatory work that must
+     * complete before the WAMR debug session UI is created.
      */
+    private class WamrPrepResult(
+        val iwasmHandler: OSProcessHandler,
+        val dwarfResolver: WasmDwarfVariableResolver?,
+        val debugHost: String,
+        val debugPort: Int,
+    )
+
     private fun doExecuteWamr(
         configuration: WasmRunConfiguration,
         environment: ExecutionEnvironment,
     ): RunContentDescriptor? {
+        // All blocking preparatory work (iwasm launch, server
+        // readiness wait, DWARF parsing) runs inside a modal
+        // progress task. The modal dialog pumps UI events so the
+        // IDE stays responsive while we wait.
+        val prep = ProgressManager.getInstance()
+            .runProcessWithProgressSynchronously(
+                ThrowableComputable { prepareWamrSession(configuration) },
+                "Starting WAMR debug server\u2026",
+                true,
+                environment.project,
+            )
+
         val starter = object : XDebugProcessStarter() {
             override fun start(session: XDebugSession): XDebugProcess {
-                val buildResult = WamrDebugCommandLineState.buildWamrArguments(configuration)
-                val iwasmPath = configuration.wamrPath.ifBlank {
-                    WamrCommandLineState.resolveDefaultWamrPath()
-                }
-
-                // Step 1: Start iwasm with debug server
-                val iwasmCommandLine = GeneralCommandLine().apply {
-                    exePath = iwasmPath
-                    addParameters(buildResult.arguments)
-
-                    // When stub modules were generated, use the stub
-                    // directory as the working directory so WAMR can
-                    // find the <module_name>.wasm files.
-                    val workDir = buildResult.stubDir?.absolutePath
-                        ?: configuration.workingDirectory.ifBlank { null }
-                    if (workDir != null) {
-                        withWorkDirectory(workDir)
-                    }
-                    withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
-                }
-
-                LOG.info("Starting WAMR debug server: ${iwasmCommandLine.commandLineString}")
-
-                val iwasmHandler = OSProcessHandler(iwasmCommandLine)
-                ProcessTerminatedListener.attach(iwasmHandler)
-
-                // Wait for the WAMR debug server to start listening
-                // before launching LLDB. iwasm prints a line like
-                //   "Debug server listening on 127.0.0.1:1234"
-                // when the GDB remote stub is ready for connections.
-                // We also collect all output so that if iwasm exits
-                // early we can include the actual error in the message.
-                val serverReadyLatch = CountDownLatch(1)
-                val iwasmOutput = Collections.synchronizedList(mutableListOf<String>())
-                iwasmHandler.addProcessListener(object : ProcessAdapter() {
-                    override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
-                        val text = event.text ?: return
-                        iwasmOutput.add(text)
-                        if (text.contains("Debug server listening on") ||
-                            text.contains("debug server listening on")) {
-                            serverReadyLatch.countDown()
-                        }
-                    }
-
-                    override fun processTerminated(event: ProcessEvent) {
-                        // Unblock the latch if iwasm exits before we see
-                        // the listening message (e.g. bad arguments).
-                        serverReadyLatch.countDown()
-                    }
-                })
-                iwasmHandler.startNotify()
-
-                val serverReady = serverReadyLatch.await(
-                    WAMR_DEBUG_SERVER_READY_TIMEOUT_MS, TimeUnit.MILLISECONDS
-                )
-                if (!serverReady) {
-                    LOG.warn(
-                        "Timed out waiting for WAMR debug server to start " +
-                            "listening (${WAMR_DEBUG_SERVER_READY_TIMEOUT_MS}ms). " +
-                            "Proceeding with LLDB connection anyway."
-                    )
-                }
-                if (iwasmHandler.isProcessTerminated) {
-                    val output = iwasmOutput.joinToString("").trim()
-                    val exitCode = iwasmHandler.exitCode
-                    val details = buildString {
-                        append("WAMR (iwasm) process terminated before debug ")
-                        append("server started (exit code $exitCode).")
-                        if (looksLikeDebugNotSupported(output)) {
-                            append("\n\nThe installed iwasm does not support ")
-                            append("the \"-g\" debug option. This means it ")
-                            append("was built without debug interpreter ")
-                            append("support.")
-                            append("\n\nRebuild iwasm with:")
-                            append("\n  cmake .. -DWAMR_BUILD_DEBUG_INTERP=1")
-                            append("\n  make")
-                            append("\n\nSee: https://bytecodealliance.github.io")
-                            append("/wamr.dev/blog/wamr-source-debugging-basic/")
-                        } else {
-                            if (output.isNotEmpty()) {
-                                append("\n\niwasm output:\n")
-                                append(output)
-                            }
-                            append("\n\nCommand: ${iwasmCommandLine.commandLineString}")
-                            append("\n\nPossible causes:")
-                            append("\n  - iwasm was not built with debug ")
-                            append("support (-DWAMR_BUILD_DEBUG_INTERP=1)")
-                            append("\n  - The Wasm module path is incorrect ")
-                            append("or the module has missing imports")
-                            append("\n  - The debug port is already in use")
-                        }
-                    }
-                    LOG.warn(details)
-                    throw ExecutionException(details)
-                }
-
                 // Step 2: Start LLDB (no inferior — we'll connect remotely)
                 val lldbExe = resolveLldbPath(configuration)
                 val lldbCommandLine = GeneralCommandLine().apply {
@@ -280,19 +208,17 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     .console
                     .also { it.attachToProcess(lldbHandler) }
 
-                val dwarfResolver = createDwarfResolver(configuration)
-
                 return WamrDebugProcess(
                     session,
                     console,
                     lldbHandler,
-                    iwasmHandler,
+                    prep.iwasmHandler,
                     lldb,
-                    debugHost = buildResult.debugHost,
-                    debugPort = buildResult.debugPort,
+                    debugHost = prep.debugHost,
+                    debugPort = prep.debugPort,
                     engine = WasmEngine.WAMR,
                 ).also {
-                    it.dwarfVariableResolver = dwarfResolver
+                    it.dwarfVariableResolver = prep.dwarfResolver
                 }
             }
         }
@@ -303,6 +229,122 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             .startSession()
 
         return result.runContentDescriptor
+    }
+
+    /**
+     * Performs all blocking preparatory work for a WAMR debug
+     * session: launches iwasm, waits for the debug server to
+     * become ready, and pre-parses DWARF metadata. This method
+     * is intended to run inside a modal progress task so the
+     * EDT stays responsive.
+     */
+    private fun prepareWamrSession(
+        configuration: WasmRunConfiguration,
+    ): WamrPrepResult {
+        val buildResult = WamrDebugCommandLineState.buildWamrArguments(configuration)
+        val iwasmPath = configuration.wamrPath.ifBlank {
+            WamrCommandLineState.resolveDefaultWamrPath()
+        }
+
+        // Step 1: Start iwasm with debug server
+        val iwasmCommandLine = GeneralCommandLine().apply {
+            exePath = iwasmPath
+            addParameters(buildResult.arguments)
+
+            // When stub modules were generated, use the stub
+            // directory as the working directory so WAMR can
+            // find the <module_name>.wasm files.
+            val workDir = buildResult.stubDir?.absolutePath
+                ?: configuration.workingDirectory.ifBlank { null }
+            if (workDir != null) {
+                withWorkDirectory(workDir)
+            }
+            withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+        }
+
+        LOG.info("Starting WAMR debug server: ${iwasmCommandLine.commandLineString}")
+
+        val iwasmHandler = OSProcessHandler(iwasmCommandLine)
+        ProcessTerminatedListener.attach(iwasmHandler)
+
+        // Wait for the WAMR debug server to start listening
+        // before launching LLDB. iwasm prints a line like
+        //   "Debug server listening on 127.0.0.1:1234"
+        // when the GDB remote stub is ready for connections.
+        // We also collect all output so that if iwasm exits
+        // early we can include the actual error in the message.
+        val serverReadyLatch = CountDownLatch(1)
+        val iwasmOutput = Collections.synchronizedList(mutableListOf<String>())
+        iwasmHandler.addProcessListener(object : ProcessAdapter() {
+            override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                val text = event.text ?: return
+                iwasmOutput.add(text)
+                if (text.contains("Debug server listening on") ||
+                    text.contains("debug server listening on")) {
+                    serverReadyLatch.countDown()
+                }
+            }
+
+            override fun processTerminated(event: ProcessEvent) {
+                // Unblock the latch if iwasm exits before we see
+                // the listening message (e.g. bad arguments).
+                serverReadyLatch.countDown()
+            }
+        })
+        iwasmHandler.startNotify()
+
+        val serverReady = serverReadyLatch.await(
+            WAMR_DEBUG_SERVER_READY_TIMEOUT_MS, TimeUnit.MILLISECONDS
+        )
+        if (!serverReady) {
+            LOG.warn(
+                "Timed out waiting for WAMR debug server to start " +
+                    "listening (${WAMR_DEBUG_SERVER_READY_TIMEOUT_MS}ms). " +
+                    "Proceeding with LLDB connection anyway."
+            )
+        }
+        if (iwasmHandler.isProcessTerminated) {
+            val output = iwasmOutput.joinToString("").trim()
+            val exitCode = iwasmHandler.exitCode
+            val details = buildString {
+                append("WAMR (iwasm) process terminated before debug ")
+                append("server started (exit code $exitCode).")
+                if (looksLikeDebugNotSupported(output)) {
+                    append("\n\nThe installed iwasm does not support ")
+                    append("the \"-g\" debug option. This means it ")
+                    append("was built without debug interpreter ")
+                    append("support.")
+                    append("\n\nRebuild iwasm with:")
+                    append("\n  cmake .. -DWAMR_BUILD_DEBUG_INTERP=1")
+                    append("\n  make")
+                    append("\n\nSee: https://bytecodealliance.github.io")
+                    append("/wamr.dev/blog/wamr-source-debugging-basic/")
+                } else {
+                    if (output.isNotEmpty()) {
+                        append("\n\niwasm output:\n")
+                        append(output)
+                    }
+                    append("\n\nCommand: ${iwasmCommandLine.commandLineString}")
+                    append("\n\nPossible causes:")
+                    append("\n  - iwasm was not built with debug ")
+                    append("support (-DWAMR_BUILD_DEBUG_INTERP=1)")
+                    append("\n  - The Wasm module path is incorrect ")
+                    append("or the module has missing imports")
+                    append("\n  - The debug port is already in use")
+                }
+            }
+            LOG.warn(details)
+            throw ExecutionException(details)
+        }
+
+        val dwarfResolver = createDwarfResolver(configuration)
+
+        return WamrPrepResult(
+            iwasmHandler = iwasmHandler,
+            dwarfResolver = dwarfResolver,
+            debugHost = buildResult.debugHost,
+            debugPort = buildResult.debugPort,
+        )
     }
 
     private fun createDwarfResolver(configuration: WasmRunConfiguration): WasmDwarfVariableResolver? {
