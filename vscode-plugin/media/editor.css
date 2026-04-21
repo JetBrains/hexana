@@ -75,3 +75,31 @@ html, body {
 .hexana-sections tr:hover {
     background: rgba(255, 255, 255, 0.05);
 }
+
+/* Tab bar */
+.hexana-tab:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* Panel table row hover */
+.hexana-panel-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Tab content scrollbar */
+.hexana-tab-content::-webkit-scrollbar {
+    width: 10px;
+}
+.hexana-tab-content::-webkit-scrollbar-track {
+    background: var(--vscode-scrollbar-shadow, rgba(0, 0, 0, 0.1));
+}
+.hexana-tab-content::-webkit-scrollbar-thumb {
+    background: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.4));
+    border-radius: 4px;
+}
+.hexana-tab-content::-webkit-scrollbar-thumb:hover {
+    background: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.7));
+}
+.hexana-tab-content::-webkit-scrollbar-thumb:active {
+    background: var(--vscode-scrollbarSlider-activeBackground, rgba(191, 191, 191, 0.4));
+}

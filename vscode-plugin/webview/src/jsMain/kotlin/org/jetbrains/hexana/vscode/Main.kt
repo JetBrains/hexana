@@ -4,6 +4,7 @@ import androidx.compose.runtime.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.renderComposable
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
@@ -53,11 +54,12 @@ fun WasmEditorContent(
     providerType: BinaryProviderType,
 ) {
     val selection = remember { HexSelectionState() }
+    val buffer = remember(bytes) { bytes.toCommonByteBuffer() }
 
     Div({ classes("hexana-editor") }) {
         EditorToolbar(fileName = fileName, size = bytes.size, providerType = providerType)
         HexViewerPanel(bytes = bytes, selection = selection)
         SelectionStatusBar(selection = selection, totalBytes = bytes.size)
-        SectionPanel(bytes = bytes, providerType = providerType, selection = selection)
+        HexanaPanel(bytes = bytes, buffer = buffer, providerType = providerType, selection = selection)
     }
 }

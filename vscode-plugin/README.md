@@ -23,8 +23,12 @@ VS Code extension that opens `.wasm` files in a custom editor powered by Compose
 │  EditorToolbar.kt      ─  file name, size, type badge│
 │  HexViewerPanel.kt     ─  virtual-scroll hex dump    │
 │  SelectionStatusBar.kt ─  cursor / selection info     │
-│  SectionPanel.kt       ─  section table + click-to-  │
-│                           highlight in hex viewer     │
+│  HexanaPanel.kt        ─  tabbed panel (Exports,     │
+│                           Imports, Modules, WAT)      │
+│  ExportsTab.kt         ─  exports table with sigs    │
+│  ImportsTab.kt         ─  imports table              │
+│  ModulesTab.kt         ─  sections & module summary  │
+│  WatTab.kt             ─  WAT text representation    │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -51,12 +55,19 @@ vscode-plugin/
 └── webview/               # Kotlin/JS Compose for Web submodule
     ├── build.gradle.kts   # Gradle build (JS target, webpack)
     └── src/jsMain/kotlin/org/jetbrains/hexana/vscode/
-        ├── Main.kt                # entry point, renderComposable
-        ├── VscodeMessageBridge.kt # postMessage bridge
-        ├── EditorToolbar.kt       # toolbar composable
-        ├── HexViewerPanel.kt      # virtual-scroll hex viewer
-        ├── SelectionStatusBar.kt  # cursor / selection status bar
-        └── SectionPanel.kt        # section list composable
+        ├── Main.kt                    # entry point, renderComposable
+        ├── VscodeMessageBridge.kt     # postMessage bridge
+        ├── EditorToolbar.kt           # toolbar composable
+        ├── HexViewerPanel.kt          # virtual-scroll hex viewer
+        ├── SelectionStatusBar.kt      # cursor / selection status bar
+        ├── HexanaPanel.kt             # tabbed panel container
+        ├── ExportsTab.kt              # exports tab content
+        ├── ImportsTab.kt              # imports tab content
+        ├── ModulesTab.kt              # modules/sections tab content
+        ├── WatTab.kt                  # WAT text representation tab
+        ├── PanelTable.kt              # shared table composables
+        ├── ComponentDescriptionUtils.kt # component model label helpers
+        └── SectionPanel.kt            # legacy section list (kept for reference)
 ```
 
 ## Building
@@ -108,7 +119,11 @@ This is a **draft scaffold**. Key items remaining:
 - [x] Keyboard navigation (arrow keys, shift+arrows for selection).
 - [x] Selection synchronisation — clicking a section row highlights its bytes.
 - [x] Status bar showing cursor offset and selection range.
-- [ ] Full section detail views (imports, exports, functions, WAT disassembly).
+- [x] Tabbed Hexana panel (Exports, Imports, Modules, WAT).
+- [x] Exports tab with kind, name, index, and function signatures.
+- [x] Imports tab with kind, module, and name.
+- [x] Modules tab with section table and module summary.
+- [x] WAT tab with structural text representation from parser data.
 - [ ] Theme integration (map VS Code CSS variables into Compose styles).
 - [ ] Search within the hex view.
 - [ ] Tests for the Kotlin webview composables.
