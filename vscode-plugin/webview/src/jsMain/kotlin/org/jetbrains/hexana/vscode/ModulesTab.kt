@@ -18,10 +18,11 @@ fun ModulesTabContent(
     buffer: CommonByteBuffer,
     providerType: BinaryProviderType,
     selection: HexSelectionState,
+    parentFileName: String,
 ) {
     when (providerType) {
         is BinaryProviderType.Wasm -> CoreWasmModuleInfo(buffer, selection)
-        is BinaryProviderType.WasmComponent -> ComponentModuleInfo(buffer, selection)
+        is BinaryProviderType.WasmComponent -> ComponentModuleList(buffer, selection, parentFileName)
         is BinaryProviderType.Generic -> Div { Text("Not a recognized WebAssembly binary.") }
     }
 }
@@ -57,7 +58,11 @@ private fun CoreWasmModuleInfo(buffer: CommonByteBuffer, selection: HexSelection
 }
 
 @Composable
-private fun ComponentModuleInfo(buffer: CommonByteBuffer, selection: HexSelectionState) {
+private fun ComponentModuleList(
+    buffer: CommonByteBuffer,
+    selection: HexSelectionState,
+    parentFileName: String,
+) {
     val provider = remember(buffer) {
         buffer.position(0)
         WasmComponentBinaryProvider(buffer)
@@ -68,21 +73,56 @@ private fun ComponentModuleInfo(buffer: CommonByteBuffer, selection: HexSelectio
         return
     }
 
-    val sections = provider.wasmModule?.sections ?: emptyList()
-    val importCount = remember(provider) { provider.imports.size }
-    val exportCount = remember(provider) { provider.exports.size }
-    val moduleCount = remember(provider) { provider.modules.size }
+    val modules = remember(provider) { provider.modules }
 
-    H4({ style { property("margin", "0 0 8px 0") } }) { Text("Component Sections") }
+    if (modules.isEmpty()) {
+        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+            Text("No nested modules found.")
+        }
+        return
+    }
 
-    SectionsTable(sections, selection)
+    PanelTable(
+        headers = listOf("Module"),
+        columnAligns = listOf("left"),
+    ) {
+        for ((index, module) in modules.withIndex()) {
+            val hexOffset = module.contentOffset.toString(16)
+            val label = "module:@$hexOffset"
+            val baseName = parentFileName
+                .substringAfterLast('/')
+                .substringAfterLast('\\')
+                .substringBeforeLast('.')
+            val extension = parentFileName
+                .substringAfterLast('/')
+                .substringAfterLast('\\')
+                .let { name ->
+                    val dot = name.lastIndexOf('.')
+                    if (dot >= 0) name.substring(dot + 1) else "wasm"
+                }
+            val moduleFileName = "${baseName}_${index}@${hexOffset}.$extension"
 
-    H4({ style { property("margin", "16px 0 8px 0") } }) { Text("Summary") }
-    Div({ style { property("font-size", "12px"); property("line-height", "1.6") } }) {
-        Div { Text("Imports: $importCount") }
-        Div { Text("Exports: $exportCount") }
-        Div { Text("Nested modules: $moduleCount") }
-        Div { Text("Sections: ${sections.size}") }
+            PanelTableRow(
+                isHighlighted = false,
+                onClick = {
+                    // Read the module's byte range from the buffer and send to host
+                    val moduleBytes = ByteArray(module.contentSize)
+                    buffer.position(module.contentOffset)
+                    buffer.get(moduleBytes, 0, module.contentSize)
+                    postOpenModuleToHost(index, moduleFileName, moduleBytes)
+                },
+            ) {
+                Td({
+                    style {
+                        property("padding", "2px 8px")
+                        property("cursor", "pointer")
+                        color(Color("var(--vscode-textLink-foreground, #3794FF)"))
+                    }
+                }) {
+                    Text(label)
+                }
+            }
+        }
     }
 }
 

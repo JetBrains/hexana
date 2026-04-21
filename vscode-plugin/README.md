@@ -27,7 +27,8 @@ VS Code extension that opens `.wasm` files in a custom editor powered by Compose
 │                           Imports, Modules, WAT)      │
 │  ExportsTab.kt         ─  exports table with sigs    │
 │  ImportsTab.kt         ─  imports table              │
-│  ModulesTab.kt         ─  sections & module summary  │
+│  ModulesTab.kt         ─  clickable module list /     │
+│                           sections for core Wasm       │
 │  WatTab.kt             ─  WAT text representation    │
 └──────────────────────────────────────────────────────┘
 ```
@@ -122,7 +123,7 @@ This is a **draft scaffold**. Key items remaining:
 - [x] Tabbed Hexana panel (Exports, Imports, Modules, WAT).
 - [x] Exports tab with kind, name, index, and function signatures.
 - [x] Imports tab with kind, module, and name.
-- [x] Modules tab with section table and module summary.
+- [x] Modules tab with clickable nested module list (opens in new tab) and core Wasm sections.
 - [x] WAT tab with structural text representation from parser data.
 - [ ] Theme integration (map VS Code CSS variables into Compose styles).
 - [ ] Search within the hex view.

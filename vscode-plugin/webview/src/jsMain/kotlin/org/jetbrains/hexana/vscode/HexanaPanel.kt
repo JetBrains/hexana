@@ -20,6 +20,7 @@ fun HexanaPanel(
     buffer: CommonByteBuffer,
     providerType: BinaryProviderType,
     selection: HexSelectionState,
+    fileName: String,
 ) {
     var activeTab by remember { mutableStateOf(HexanaTab.Exports) }
 
@@ -80,7 +81,7 @@ fun HexanaPanel(
             when (activeTab) {
                 HexanaTab.Exports -> ExportsTabContent(buffer, providerType, selection)
                 HexanaTab.Imports -> ImportsTabContent(buffer, providerType, selection)
-                HexanaTab.Modules -> ModulesTabContent(buffer, providerType, selection)
+                HexanaTab.Modules -> ModulesTabContent(buffer, providerType, selection, fileName)
                 HexanaTab.Wat -> WatTabContent(bytes, buffer, providerType)
             }
         }

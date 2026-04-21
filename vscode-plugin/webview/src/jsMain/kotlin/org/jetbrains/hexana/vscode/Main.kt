@@ -70,6 +70,6 @@ fun WasmEditorContent(
         EditorToolbar(fileName = fileName, size = bytes.size, providerType = providerType)
         HexViewerPanel(bytes = bytes, selection = selection)
         SelectionStatusBar(selection = selection, totalBytes = bytes.size)
-        HexanaPanel(bytes = bytes, buffer = buffer, providerType = providerType, selection = selection)
+        HexanaPanel(bytes = bytes, buffer = buffer, providerType = providerType, selection = selection, fileName = fileName)
     }
 }

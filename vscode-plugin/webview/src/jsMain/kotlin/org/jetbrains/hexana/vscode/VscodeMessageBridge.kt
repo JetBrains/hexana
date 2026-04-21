@@ -32,6 +32,26 @@ fun postMessageToHost(type: String) {
 }
 
 /**
+ * Asks the extension host to open a nested module in a new editor tab.
+ *
+ * [moduleIndex] is the zero-based index of the module inside the component,
+ * [fileName] is the suggested tab title, and [data] is the raw byte content
+ * of the nested core module.
+ */
+fun postOpenModuleToHost(moduleIndex: Int, fileName: String, data: ByteArray) {
+    val msg = js("{}")
+    msg.type = "open-module"
+    msg.moduleIndex = moduleIndex
+    msg.fileName = fileName
+    val jsArray = js("[]").unsafeCast<dynamic>()
+    for (i in data.indices) {
+        jsArray.push(data[i].toInt() and 0xFF)
+    }
+    msg.data = jsArray
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Composable side-effect that listens for messages from the VS Code extension
  * host and converts them to [VscodeMessage] instances.
  *
