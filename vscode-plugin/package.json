@@ -1,0 +1,58 @@
+{
+  "name": "hexana-wasm",
+  "displayName": "Hexana WebAssembly",
+  "description": "WebAssembly binary viewer and analyzer with a Compose for Web custom editor",
+  "version": "0.0.1",
+  "publisher": "JetBrains",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization"
+  ],
+  "keywords": [
+    "wasm",
+    "webassembly",
+    "binary",
+    "hex"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "hexana.wasmEditor",
+        "displayName": "Hexana Wasm Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.wasm"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "languages": [
+      {
+        "id": "wasm",
+        "extensions": [
+          ".wasm"
+        ],
+        "aliases": [
+          "WebAssembly"
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./tsconfig.json",
+    "watch": "tsc -watch -p ./tsconfig.json",
+    "package": "npx @vscode/vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.3.0"
+  }
+}

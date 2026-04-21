@@ -1,0 +1,40 @@
+/* Base styles for the Hexana Wasm custom editor webview. */
+
+:root {
+    --hexana-bg: var(--vscode-editor-background);
+    --hexana-fg: var(--vscode-editor-foreground);
+    --hexana-border: var(--vscode-panel-border);
+    --hexana-tab-bg: var(--vscode-tab-inactiveBackground);
+    --hexana-tab-active-bg: var(--vscode-tab-activeBackground);
+    --hexana-selection: var(--vscode-editor-selectionBackground);
+    --hexana-font: var(--vscode-editor-font-family), monospace;
+    --hexana-font-size: var(--vscode-editor-font-size, 13px);
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--hexana-bg);
+    color: var(--hexana-fg);
+    font-family: var(--hexana-font);
+    font-size: var(--hexana-font-size);
+}
+
+#root {
+    width: 100%;
+    height: 100%;
+}
+
+/* Loading indicator shown before the Kotlin bundle initialises. */
+#root:empty::after {
+    content: "Loading Hexana…";
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    opacity: 0.5;
+}
