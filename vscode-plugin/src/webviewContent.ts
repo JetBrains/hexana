@@ -11,7 +11,7 @@ import * as vscode from "vscode";
  */
 export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri): string {
     const webviewDistPath = vscode.Uri.joinPath(
-        extensionUri, "webview", "build", "dist", "js", "productionExecutable",
+        extensionUri, "webview", "build", "kotlin-webpack", "js", "productionExecutable",
     );
     const scriptUri = webview.asWebviewUri(
         vscode.Uri.joinPath(webviewDistPath, "webview.js"),

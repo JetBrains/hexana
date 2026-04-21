@@ -43,7 +43,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             enableScripts: true,
             localResourceRoots: [
                 vscode.Uri.joinPath(this.context.extensionUri, "media"),
-                vscode.Uri.joinPath(this.context.extensionUri, "webview", "build", "dist", "js", "productionExecutable"),
+                vscode.Uri.joinPath(this.context.extensionUri, "webview", "build", "kotlin-webpack", "js", "productionExecutable"),
             ],
         };
 
