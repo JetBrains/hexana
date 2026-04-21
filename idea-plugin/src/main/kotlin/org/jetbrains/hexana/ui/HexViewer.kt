@@ -59,8 +59,8 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.run.runWasmFile
 import org.jetbrains.hexana.run.showEnginePopup
-import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
 import org.jetbrains.hexana.run.runWasmConfiguration
+import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wat.psi.getDataByIndex
 import org.jetbrains.hexana.wat.psi.getDefinedFunctionByIndex
@@ -381,15 +381,15 @@ internal fun HexViewer(
                             Tooltip(tooltip = { Text("Run Wasm module") }) {
                                 IconButton(onClick = {
                                     if (isComponentCliRun) {
-                                        showEnginePopup(isComponentModel = true) { engine ->
+                                        showEnginePopup(isComponentModel = true) { engine, mode ->
                                             val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return@showEnginePopup
                                             val dialog = ProgramArgsDialog(state.project, "wasi:cli/run")
                                             if (!dialog.showAndGet()) return@showEnginePopup
-                                            runWasmConfiguration(state.project, file, "", dialog.programArgs, "", engine)
+                                            runWasmConfiguration(state.project, file, "", dialog.programArgs, "", engine, mode)
                                         }
                                     } else {
-                                        showEnginePopup { engine ->
-                                            runWasmFile(binaryProvider, state, engine)
+                                        showEnginePopup { engine, mode ->
+                                            runWasmFile(binaryProvider, state, engine, mode)
                                         }
                                     }
                                 }) {

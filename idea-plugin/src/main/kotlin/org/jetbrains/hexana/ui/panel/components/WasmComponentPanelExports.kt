@@ -22,6 +22,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.run.WasmEngine
+import org.jetbrains.hexana.run.WasmRunMode
 import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.run.showEnginePopup
 import org.jetbrains.hexana.ui.components.Table
@@ -99,11 +100,11 @@ fun WasmComponentPanelExports(binaryProvider: BinaryProvider,
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                         ) {
-                            showEnginePopup(isComponentModel = true) { engine ->
+                            showEnginePopup(isComponentModel = true) { engine, mode ->
                                 if (isWasiCliRunExport(export)) {
-                                    runWasiCliComponent(binaryProvider, state, export, engine)
+                                    runWasiCliComponent(binaryProvider, state, export, engine, mode)
                                 } else {
-                                    runComponentExportedFunction(binaryProvider, wasmBinaryProvider, state, export, engine)
+                                    runComponentExportedFunction(binaryProvider, wasmBinaryProvider, state, export, engine, mode)
                                 }
                             }
                         },
@@ -167,6 +168,7 @@ private fun runWasiCliComponent(
     state: HexViewStateHolder,
     export: WasmComponentExport,
     engine: WasmEngine,
+    mode: WasmRunMode = WasmRunMode.RUN,
 ) {
     val project = state.project
     val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return
@@ -174,7 +176,7 @@ private fun runWasiCliComponent(
     val dialog = ProgramArgsDialog(project, export.exportName)
     if (!dialog.showAndGet()) return
 
-    runWasmConfiguration(project, file, "", dialog.programArgs, "", engine)
+    runWasmConfiguration(project, file, "", dialog.programArgs, "", engine, mode)
 }
 
 private fun runComponentExportedFunction(
@@ -183,6 +185,7 @@ private fun runComponentExportedFunction(
     state: HexViewStateHolder,
     export: WasmComponentExport,
     engine: WasmEngine,
+    mode: WasmRunMode = WasmRunMode.RUN,
 ) {
     val project = state.project
     val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return
@@ -199,5 +202,5 @@ private fun runComponentExportedFunction(
         argsString = dialog.argValues.joinToString(", ")
     }
 
-    runWasmConfiguration(project, file, invokeName, "", "--invoke \"${invokeName}($argsString)\"", engine)
+    runWasmConfiguration(project, file, invokeName, "", "--invoke \"${invokeName}($argsString)\"", engine, mode)
 }
