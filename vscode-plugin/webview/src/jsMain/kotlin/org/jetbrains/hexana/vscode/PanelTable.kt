@@ -20,6 +20,9 @@ internal fun PanelTable(
             width(100.percent)
             property("border-collapse", "collapse")
             property("font-size", "12px")
+            property("margin-left", "-8px")
+            property("margin-right", "-8px")
+            property("width", "calc(100% + 16px)")
         }
     }) {
         Thead {
@@ -33,13 +36,17 @@ internal fun PanelTable(
                     Th({
                         style {
                             property("text-align", align)
-                            property("padding", "4px 8px")
+                            property("padding", "4px 8px 4px")
                             property("font-weight", "600")
                             property("white-space", "nowrap")
                             property("position", "sticky")
-                            property("top", "0")
+                            property("top", "-8px")
                             property("background", "var(--hexana-bg, #1e1e1e)")
                             property("z-index", "1")
+                            if (header == "ID" || header == "") {
+                                property("width", "1%")
+                                property("padding", "4px 4px 4px")
+                            }
                         }
                     }) { Text(header) }
                 }

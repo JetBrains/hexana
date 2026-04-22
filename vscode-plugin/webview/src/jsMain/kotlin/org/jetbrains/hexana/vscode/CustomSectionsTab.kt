@@ -54,8 +54,8 @@ private fun CoreWasmCustomSections(buffer: CommonByteBuffer, selection: HexSelec
     }
 
     PanelTable(
-        headers = listOf("Name", "Payload"),
-        columnAligns = listOf("left", "left"),
+        headers = listOf("ID", "Name", "Payload"),
+        columnAligns = listOf("right", "left", "left"),
     ) {
         for ((index, section) in customSections.withIndex()) {
             PanelTableRow(
@@ -69,6 +69,9 @@ private fun CoreWasmCustomSections(buffer: CommonByteBuffer, selection: HexSelec
                     scrollHexViewerTo(section.sectionOffset)
                 },
             ) {
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                    Text(index.toString())
+                }
                 Td({ style { property("padding", "2px 8px") } }) { Text(section.name) }
                 Td({ style { property("padding", "2px 8px"); property("opacity", "0.7") } }) {
                     Text(payloads[index])

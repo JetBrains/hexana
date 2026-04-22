@@ -47,10 +47,10 @@ private fun CoreWasmImports(buffer: CommonByteBuffer, selection: HexSelectionSta
     }
 
     PanelTable(
-        headers = listOf("Kind", "Module", "Name"),
-        columnAligns = listOf("left", "left", "left"),
+        headers = listOf("ID", "Kind", "Module", "Name"),
+        columnAligns = listOf("right", "left", "left", "left"),
     ) {
-        for (imp in imports) {
+        for ((index, imp) in imports.withIndex()) {
             val kind = importKindLabel(imp.type)
 
             PanelTableRow(
@@ -64,6 +64,9 @@ private fun CoreWasmImports(buffer: CommonByteBuffer, selection: HexSelectionSta
                     scrollHexViewerTo(imp.offset)
                 },
             ) {
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                    Text(index.toString())
+                }
                 Td({ style { property("padding", "2px 8px") } }) { Text(kind) }
                 Td({ style { property("padding", "2px 8px"); property("opacity", "0.7") } }) { Text(imp.prefix) }
                 Td({ style { property("padding", "2px 8px") } }) { Text(imp.name) }
@@ -94,10 +97,10 @@ private fun ComponentImports(buffer: CommonByteBuffer, selection: HexSelectionSt
     }
 
     PanelTable(
-        headers = listOf("Name", "Description"),
-        columnAligns = listOf("left", "left"),
+        headers = listOf("ID", "Name", "Description"),
+        columnAligns = listOf("right", "left", "left"),
     ) {
-        for (imp in imports) {
+        for ((index, imp) in imports.withIndex()) {
             PanelTableRow(
                 isHighlighted = selection.hasSelection &&
                     selection.selectionStart == imp.offset &&
@@ -109,6 +112,9 @@ private fun ComponentImports(buffer: CommonByteBuffer, selection: HexSelectionSt
                     scrollHexViewerTo(imp.offset)
                 },
             ) {
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                    Text(index.toString())
+                }
                 Td({ style { property("padding", "2px 8px") } }) {
                     Text(imp.importName + (imp.version?.let { " $it" } ?: ""))
                 }

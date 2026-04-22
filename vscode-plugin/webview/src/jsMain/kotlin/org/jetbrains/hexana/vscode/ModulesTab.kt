@@ -49,8 +49,8 @@ private fun ComponentModuleList(
     }
 
     PanelTable(
-        headers = listOf("Module"),
-        columnAligns = listOf("left"),
+        headers = listOf("ID", "Module"),
+        columnAligns = listOf("right", "left"),
     ) {
         for ((index, module) in modules.withIndex()) {
             val hexOffset = module.contentOffset.toString(16)
@@ -77,6 +77,9 @@ private fun ComponentModuleList(
                     postOpenModuleToHost(index, moduleFileName, moduleBytes)
                 },
             ) {
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                    Text(index.toString())
+                }
                 Td({
                     style {
                         property("padding", "2px 8px")

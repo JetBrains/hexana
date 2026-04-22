@@ -51,7 +51,7 @@ private fun CoreWasmFunctions(buffer: CommonByteBuffer, selection: HexSelectionS
     val hasNames = functionNamesMap != null
 
     val headers = buildList {
-        add("Index")
+        add("ID")
         if (hasNames) add("Name")
         add("Signature")
     }
@@ -70,13 +70,13 @@ private fun CoreWasmFunctions(buffer: CommonByteBuffer, selection: HexSelectionS
                 isHighlighted = false,
                 onClick = {},
             ) {
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
                     Text(index.toString())
                 }
                 if (hasNames) {
-                    Td({ style { property("padding", "2px 8px") } }) { Text(name ?: "") }
+                    Td({ style { property("padding", "2px 8px"); property("word-break", "break-all") } }) { Text(name ?: "") }
                 }
-                Td({ style { property("padding", "2px 8px"); property("opacity", "0.7") } }) { Text(sig) }
+                Td({ style { property("padding", "2px 8px"); property("opacity", "0.7"); property("word-break", "break-all") } }) { Text(sig) }
             }
         }
     }

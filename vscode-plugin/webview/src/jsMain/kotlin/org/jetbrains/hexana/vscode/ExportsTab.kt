@@ -54,10 +54,10 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
     }
 
     PanelTable(
-        headers = listOf("", "Kind", "Name", "Index", "Signature"),
-        columnAligns = listOf("center", "left", "left", "right", "left"),
+        headers = listOf("", "ID", "Kind", "Name", "Index", "Signature"),
+        columnAligns = listOf("center", "right", "left", "left", "right", "left"),
     ) {
-        for (export in exports) {
+        for ((index, export) in exports.withIndex()) {
             val kind = exportKindLabel(export)
             val sig = if (export is WasmFunctionExportRecordEntry) {
                 resolveCoreSignature(export, functions, importFuncCount)
@@ -76,7 +76,7 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
                     scrollHexViewerTo(export.offset)
                 },
             ) {
-                Td({ style { property("padding", "2px 4px"); property("width", "24px") } }) {
+                Td({ style { property("padding", "2px 4px"); property("width", "12px") } }) {
                     if (isRunnable) {
                         RunArrowButton(
                             tooltip = "Run '${export.name}'",
@@ -88,6 +88,9 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
                             }
                         )
                     }
+                }
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                    Text(index.toString())
                 }
                 Td({ style { property("padding", "2px 8px") } }) { Text(kind) }
                 Td({ style { property("padding", "2px 8px") } }) { Text(export.name) }
@@ -122,10 +125,10 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
     }
 
     PanelTable(
-        headers = listOf("", "Name", "Sort Index", "Description"),
-        columnAligns = listOf("center", "left", "left", "left"),
+        headers = listOf("", "ID", "Name", "Sort Index", "Description"),
+        columnAligns = listOf("center", "right", "left", "left", "left"),
     ) {
-        for (export in exports) {
+        for ((index, export) in exports.withIndex()) {
             val isWasiCliRun = isWasiCliRunExportName(export.exportName)
             val isFunctionExport = isComponentFunctionExport(export, provider)
             val isRunnable = isWasiCliRun || isFunctionExport
@@ -141,7 +144,7 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
                     scrollHexViewerTo(export.offset)
                 },
             ) {
-                Td({ style { property("padding", "2px 4px"); property("width", "24px") } }) {
+                Td({ style { property("padding", "2px 4px"); property("width", "12px") } }) {
                     if (isRunnable) {
                         RunArrowButton(
                             tooltip = "Run '${export.exportName}'",
@@ -153,6 +156,9 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
                             }
                         )
                     }
+                }
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                    Text(index.toString())
                 }
                 Td({ style { property("padding", "2px 8px") } }) {
                     Text(export.exportName + (export.version?.let { " $it" } ?: ""))

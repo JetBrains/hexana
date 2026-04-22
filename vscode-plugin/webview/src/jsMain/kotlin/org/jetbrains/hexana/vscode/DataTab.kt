@@ -45,10 +45,10 @@ private fun CoreWasmData(buffer: CommonByteBuffer, selection: HexSelectionState)
     }
 
     PanelTable(
-        headers = listOf("Type", "Size"),
-        columnAligns = listOf("left", "right"),
+        headers = listOf("ID", "Type", "Size"),
+        columnAligns = listOf("right", "left", "right"),
     ) {
-        for (record in dataRecords) {
+        for ((index, record) in dataRecords.withIndex()) {
             PanelTableRow(
                 isHighlighted = selection.hasSelection &&
                     selection.selectionStart == record.offset &&
@@ -60,6 +60,9 @@ private fun CoreWasmData(buffer: CommonByteBuffer, selection: HexSelectionState)
                     scrollHexViewerTo(record.offset)
                 },
             ) {
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                    Text(index.toString())
+                }
                 Td({ style { property("padding", "2px 8px") } }) {
                     Text(dataSegmentTypeLabel(record.type))
                 }

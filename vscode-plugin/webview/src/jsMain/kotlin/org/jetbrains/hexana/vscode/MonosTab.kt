@@ -47,10 +47,10 @@ private fun CoreWasmMonos(buffer: CommonByteBuffer, selection: HexSelectionState
     }
 
     PanelTable(
-        headers = listOf("Base Name", "Count", "Total Size", "Avg Size"),
-        columnAligns = listOf("left", "right", "right", "right"),
+        headers = listOf("ID", "Base Name", "Count", "Total Size", "Avg Size"),
+        columnAligns = listOf("right", "left", "right", "right", "right"),
     ) {
-        for (group in monos.groups) {
+        for ((index, group) in monos.groups.withIndex()) {
             val firstFuncIdx = group.funcIndices.firstOrNull()
             val codeIdx = if (firstFuncIdx != null) firstFuncIdx - importFuncCount else -1
             val entry = codeOffsets.getOrNull(codeIdx)
@@ -68,6 +68,9 @@ private fun CoreWasmMonos(buffer: CommonByteBuffer, selection: HexSelectionState
                     }
                 },
             ) {
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                    Text(index.toString())
+                }
                 Td({ style { property("padding", "2px 8px") } }) { Text(group.baseName) }
                 Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
                     Text(group.count.toString())

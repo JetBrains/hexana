@@ -87,10 +87,10 @@ private fun SizeNodeTable(module: SizeNode.Module, selection: HexSelectionState)
     }
 
     PanelTable(
-        headers = listOf("Section", "Size", "%", "Offset"),
-        columnAligns = listOf("left", "right", "right", "right"),
+        headers = listOf("ID", "Section", "Size", "%", "Offset"),
+        columnAligns = listOf("right", "left", "right", "right", "right"),
     ) {
-        for (child in module.children) {
+        for ((index, child) in module.children.withIndex()) {
             val pct = child.percentage(module.size)
             val pctStr = "${((pct * 10).toInt() / 10)}.${((pct * 10).toInt() % 10)}%"
             val hex = "0x${child.offset.toString(16).uppercase()}"
@@ -108,6 +108,9 @@ private fun SizeNodeTable(module: SizeNode.Module, selection: HexSelectionState)
                     }
                 },
             ) {
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                    Text(index.toString())
+                }
                 Td({ style { property("padding", "2px 8px") } }) { Text(child.name) }
                 Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
                     Text(formatSize(child.size))

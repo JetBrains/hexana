@@ -79,10 +79,10 @@ private fun GarbageFunctionsSection(
     if (entries.isEmpty()) return
 
     PanelTable(
-        headers = listOf("Index", "Name", "Size", "Module", "Reason"),
-        columnAligns = listOf("right", "left", "right", "left", "left"),
+        headers = listOf("ID", "Index", "Name", "Size", "Module", "Reason"),
+        columnAligns = listOf("right", "right", "left", "right", "left", "left"),
     ) {
-        for (entry in entries) {
+        for ((rowIndex, entry) in entries.withIndex()) {
             val codeIdx = entry.funcIndex - importFuncCount
             val offset = codeOffsets.getOrNull(codeIdx)
 
@@ -99,6 +99,9 @@ private fun GarbageFunctionsSection(
                     }
                 },
             ) {
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                    Text(rowIndex.toString())
+                }
                 Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
                     Text(entry.funcIndex.toString())
                 }
@@ -126,11 +129,14 @@ private fun GarbageTypesSection(garbage: GarbageResult) {
     if (entries.isEmpty()) return
 
     PanelTable(
-        headers = listOf("Index", "Size"),
-        columnAligns = listOf("right", "right"),
+        headers = listOf("ID", "Index", "Size"),
+        columnAligns = listOf("right", "right", "right"),
     ) {
-        for (entry in entries) {
+        for ((rowIndex, entry) in entries.withIndex()) {
             PanelTableRow(isHighlighted = false, onClick = {}) {
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                    Text(rowIndex.toString())
+                }
                 Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
                     Text(entry.typeIndex.toString())
                 }
@@ -153,11 +159,14 @@ private fun GarbageDataSection(garbage: GarbageResult) {
     if (entries.isEmpty()) return
 
     PanelTable(
-        headers = listOf("Index", "Data Size", "Record Size"),
-        columnAligns = listOf("right", "right", "right"),
+        headers = listOf("ID", "Index", "Data Size", "Record Size"),
+        columnAligns = listOf("right", "right", "right", "right"),
     ) {
-        for (entry in entries) {
+        for ((rowIndex, entry) in entries.withIndex()) {
             PanelTableRow(isHighlighted = false, onClick = {}) {
+                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                    Text(rowIndex.toString())
+                }
                 Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
                     Text(entry.index.toString())
                 }
