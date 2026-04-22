@@ -16,14 +16,6 @@ internal fun PanelTable(
 ) {
     Table({
         classes("hexana-panel-table")
-        style {
-            width(100.percent)
-            property("border-collapse", "collapse")
-            property("font-size", "12px")
-            property("margin-left", "-8px")
-            property("margin-right", "-8px")
-            property("width", "calc(100% + 16px)")
-        }
     }) {
         Thead {
             Tr({

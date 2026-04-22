@@ -108,7 +108,6 @@ private fun ComponentSections(
 private fun SectionTable(sections: List<WasmSection>, selection: HexSelectionState) {
     Table({
         style {
-            width(100.percent)
             property("border-collapse", "collapse")
             property("font-size", "12px")
         }

@@ -81,6 +81,12 @@ html, body {
     background: rgba(255, 255, 255, 0.06);
 }
 
+/* Panel table base */
+.hexana-panel-table {
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
 /* Panel table row hover */
 .hexana-panel-row:hover {
     background: rgba(255, 255, 255, 0.05);
