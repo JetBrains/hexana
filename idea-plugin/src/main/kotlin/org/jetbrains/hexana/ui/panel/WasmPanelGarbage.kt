@@ -29,6 +29,7 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexHighlightRange
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.shared.getDescription
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue

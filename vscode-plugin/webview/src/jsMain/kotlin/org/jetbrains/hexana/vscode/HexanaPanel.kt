@@ -11,6 +11,12 @@ enum class HexanaTab(val label: String) {
     Summary("Summary"),
     Exports("Exports"),
     Imports("Imports"),
+    Functions("Functions"),
+    Data("Data"),
+    Custom("Custom"),
+    Size("Top"),
+    Monos("Monos"),
+    Garbage("Garbage"),
     Modules("Modules"),
     Wat("WAT"),
 }
@@ -29,6 +35,16 @@ fun HexanaPanel(
             add(HexanaTab.Summary)
             add(HexanaTab.Exports)
             add(HexanaTab.Imports)
+            if (providerType is BinaryProviderType.Wasm) {
+                add(HexanaTab.Functions)
+                add(HexanaTab.Data)
+                add(HexanaTab.Custom)
+            }
+            add(HexanaTab.Size)
+            if (providerType is BinaryProviderType.Wasm) {
+                add(HexanaTab.Monos)
+                add(HexanaTab.Garbage)
+            }
             if (providerType is BinaryProviderType.WasmComponent) {
                 add(HexanaTab.Modules)
             }
@@ -102,6 +118,12 @@ fun HexanaPanel(
                 HexanaTab.Summary -> SummaryTabContent(buffer, providerType, selection)
                 HexanaTab.Exports -> ExportsTabContent(buffer, providerType, selection)
                 HexanaTab.Imports -> ImportsTabContent(buffer, providerType, selection)
+                HexanaTab.Functions -> FunctionsTabContent(buffer, providerType, selection)
+                HexanaTab.Data -> DataTabContent(buffer, providerType, selection)
+                HexanaTab.Custom -> CustomSectionsTabContent(buffer, providerType, selection)
+                HexanaTab.Size -> SizeTabContent(buffer, providerType, selection)
+                HexanaTab.Monos -> MonosTabContent(buffer, providerType, selection)
+                HexanaTab.Garbage -> GarbageTabContent(buffer, providerType, selection)
                 HexanaTab.Modules -> ModulesTabContent(buffer, providerType, selection, fileName)
                 HexanaTab.Wat -> WatTabContent(bytes, buffer, providerType)
             }
