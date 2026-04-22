@@ -1,3 +1,6 @@
+echo "== Building Extension Lib =="
+../gradlew :vscode-plugin:extension-lib:jsBrowserProductionWebpack
+
 echo "== Building WebView =="
 ../gradlew :vscode-plugin:webview:jsBrowserProductionWebpack
 
