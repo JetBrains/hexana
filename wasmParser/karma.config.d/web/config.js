@@ -25,13 +25,22 @@ config.proxies = {
 }
 
 function configLaunchers(config) {
+    const isCi = Boolean(process.env["CI"] || process.env["TEAMCITY_VERSION"]);
+    const chromiumBase = isCi ? "ChromiumHeadless" : "Chromium";
+    const chromeBase = isCi ? "ChromeHeadless" : "Chrome";
+    const chromeFlags = [
+        "--disable-search-engine-choice-screen",
+        ...(isCi ? ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"] : [])
+    ];
+
     config.customLaunchers = {
         ChromeForTests: {
-            base: "Chrome",
-            flags: ["--disable-search-engine-choice-screen"]
+            base: chromeBase,
+            flags: chromeFlags
         },
         ChromiumForTests: {
-            base: "Chromium"
+            base: chromiumBase,
+            flags: isCi ? ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"] : []
         },
         FirefoxForTests: {
             base: "Firefox",

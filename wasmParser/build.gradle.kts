@@ -27,7 +27,13 @@ val copyWat2WasmForWebTests by tasks.registering(Copy::class) {
     }
 }
 
-tasks.matching { it.name == "jsTest" || it.name == "wasmJsTest" }.configureEach {
+tasks.matching {
+    it.name == "jsTest" ||
+            it.name == "wasmJsTest" ||
+            it.name == "jsBrowserTest" ||
+            it.name == "wasmJsBrowserTest" ||
+            it.name == "compileTestDevelopmentExecutableKotlinJs"
+}.configureEach {
     dependsOn(copyWat2WasmForWebTests)
 }
 
