@@ -1,9 +1,16 @@
+import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsEnvSpec
+import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
+import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsEnvSpec
+import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsRootPlugin
+
 plugins {
     alias(libs.plugins.kotlin.jvm) apply(false)
     alias(libs.plugins.kotlin.multiplatform) apply(false)
     alias(libs.plugins.compose.compiler) apply(false)
     alias(libs.plugins.compose.multiplatform) apply(false)
 }
+
+val kotlinNodeVersion = "22.22.0"
 
 repositories {
     maven("https://www.jetbrains.com/intellij-repository/releases")
@@ -26,6 +33,19 @@ allprojects {
 
 plugins.withType<org.jetbrains.kotlin.gradle.targets.js.yarn.YarnPlugin> {
     the<org.jetbrains.kotlin.gradle.targets.js.yarn.YarnRootExtension>().yarnLockAutoReplace = true
+}
+
+// Kotlin JS/Wasm tooling downloads its own Node distribution, so pin it at the root.
+plugins.withType<NodeJsRootPlugin> {
+    extensions.configure<NodeJsEnvSpec> {
+        version.set(kotlinNodeVersion)
+    }
+}
+
+plugins.withType<WasmNodeJsRootPlugin> {
+    extensions.configure<WasmNodeJsEnvSpec> {
+        version.set(kotlinNodeVersion)
+    }
 }
 
 subprojects {
