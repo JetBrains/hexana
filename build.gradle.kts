@@ -1,6 +1,8 @@
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsEnvSpec
+import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsPlugin
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsEnvSpec
+import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsPlugin
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsRootPlugin
 
 plugins {
@@ -54,6 +56,18 @@ subprojects {
         ignoreFailures = providers.gradleProperty("teamcityIgnoreTestFailures")
             .map(String::toBoolean)
             .getOrElse(false)
+    }
+
+    plugins.withType<NodeJsPlugin> {
+        extensions.configure<NodeJsEnvSpec> {
+            version.set(kotlinNodeVersion)
+        }
+    }
+
+    plugins.withType<WasmNodeJsPlugin> {
+        extensions.configure<WasmNodeJsEnvSpec> {
+            version.set(kotlinNodeVersion)
+        }
     }
 
     plugins.withId("org.jetbrains.kotlin.multiplatform") {
