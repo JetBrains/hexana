@@ -16,6 +16,9 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
     const scriptUri = webview.asWebviewUri(
         vscode.Uri.joinPath(webviewDistPath, "webview.js"),
     );
+    const wasmPrinterUri = webview.asWebviewUri(
+        vscode.Uri.joinPath(webviewDistPath, "wasmprinter_wrapper.wasm"),
+    );
     const cssUri = webview.asWebviewUri(
         vscode.Uri.joinPath(extensionUri, "media", "editor.css"),
     );
@@ -30,14 +33,16 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'none';
                    style-src ${webview.cspSource} 'unsafe-inline';
-                   script-src 'nonce-${nonce}';
+                   script-src 'nonce-${nonce}' 'wasm-unsafe-eval';
                    font-src ${webview.cspSource};
+                   connect-src ${webview.cspSource};
                    img-src ${webview.cspSource} data:;">
     <link rel="stylesheet" href="${cssUri}">
     <title>Hexana Wasm Editor</title>
 </head>
 <body>
     <div id="root"></div>
+    <script nonce="${nonce}">window.__wasmPrinterUri = "${wasmPrinterUri}";</script>
     <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

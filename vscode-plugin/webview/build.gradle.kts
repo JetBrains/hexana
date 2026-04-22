@@ -37,3 +37,24 @@ kotlin {
         }
     }
 }
+
+// Copy wasmprinter_wrapper.wasm into the webpack output directory so the webview
+// can fetch it at runtime via the browser WebAssembly API.
+val copyWasmPrinter by tasks.registering(Copy::class) {
+    from(rootProject.file("graalwasm/wasmprinter/src/main/resources/wasmprinter_wrapper.wasm"))
+    into(layout.buildDirectory.dir("kotlin-webpack/js/productionExecutable"))
+}
+
+tasks.named("jsBrowserProductionWebpack") {
+    finalizedBy(copyWasmPrinter)
+}
+
+// Also copy for development builds.
+val copyWasmPrinterDev by tasks.registering(Copy::class) {
+    from(rootProject.file("graalwasm/wasmprinter/src/main/resources/wasmprinter_wrapper.wasm"))
+    into(layout.buildDirectory.dir("kotlin-webpack/js/developmentExecutable"))
+}
+
+tasks.named("jsBrowserDevelopmentWebpack") {
+    finalizedBy(copyWasmPrinterDev)
+}

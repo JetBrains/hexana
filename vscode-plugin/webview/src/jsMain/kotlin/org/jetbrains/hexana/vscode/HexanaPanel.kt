@@ -125,7 +125,7 @@ fun HexanaPanel(
                 HexanaTab.Monos -> MonosTabContent(buffer, providerType, selection)
                 HexanaTab.Garbage -> GarbageTabContent(buffer, providerType, selection)
                 HexanaTab.Modules -> ModulesTabContent(buffer, providerType, selection, fileName)
-                HexanaTab.Wat -> WatTabContent(bytes, buffer, providerType)
+                HexanaTab.Wat -> WatTabContent(bytes, providerType)
             }
         }
     }
