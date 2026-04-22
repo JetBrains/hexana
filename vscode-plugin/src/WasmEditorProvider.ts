@@ -5,6 +5,57 @@ import * as vscode from "vscode";
 import { getWebviewContent } from "./webviewContent";
 import { execFileSync } from "child_process";
 
+// Kotlin/JS extension library — provides binary analysis, dependency resolution,
+// and shell utilities backed by the shared wasmParser / sharedUi modules.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const extensionLib: any = (() => {
+    try {
+        const mod = require("../extension-lib/build/kotlin-webpack/js/productionExecutable/extension-lib.js");
+        return mod.hexanaExtensionLib.org.jetbrains.hexana.vscode.lib;
+    } catch {
+        console.warn("[Hexana] extension-lib not found — falling back to built-in helpers");
+        return null;
+    }
+})();
+
+/**
+ * Node.js implementation of the FileSystemAccess interface expected by
+ * the Kotlin/JS dependency resolver.
+ */
+const nodeFileSystemAccess = {
+    listDirectory(dir: string): Array<{ name: string; isDirectory: boolean; isFile: boolean }> {
+        try {
+            return fs.readdirSync(dir, { withFileTypes: true }).map(e => ({
+                name: e.name,
+                isDirectory: e.isDirectory(),
+                isFile: e.isFile(),
+            }));
+        } catch {
+            return [];
+        }
+    },
+    readFile(p: string): Int8Array | null {
+        try {
+            const buf = fs.readFileSync(p);
+            return new Int8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+        } catch {
+            return null;
+        }
+    },
+    fileExists(p: string): boolean {
+        return fs.existsSync(p);
+    },
+    parentDir(p: string): string {
+        return path.dirname(p);
+    },
+    joinPath(...parts: string[]): string {
+        return path.join(...parts);
+    },
+    pathRoot(p: string): string {
+        return path.parse(p).root;
+    },
+};
+
 /**
  * In-memory store for nested module byte arrays.
  *
@@ -194,13 +245,13 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         }
 
         if (message.invokeArgs) {
-            args.push(...splitShellArgs(message.invokeArgs));
+            args.push(...extensionLib.splitShellArgs(message.invokeArgs));
         }
 
         args.push(filePath);
 
         if (message.programArgs) {
-            args.push(...splitShellArgs(message.programArgs));
+            args.push(...extensionLib.splitShellArgs(message.programArgs));
         }
 
         const exportName = message.exportName || path.basename(filePath, ".wasm");
@@ -208,7 +259,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
         const terminal = vscode.window.createTerminal({ name: terminalName });
         terminal.show();
-        terminal.sendText(`wasmtime ${args.map(a => shellEscape(a)).join(" ")}`);
+        terminal.sendText(`wasmtime ${args.map((a: string) => extensionLib.shellEscape(a)).join(" ")}`);
     }
 
     /**
@@ -230,10 +281,15 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const filePath = document.uri.fsPath;
         const componentImports = message.componentImports || [];
 
-        // Resolve dependencies from the filesystem (with transitive resolution)
+        // Resolve dependencies using the Kotlin/JS library
         const scanRoots = this.buildScanRoots(filePath);
-        const resolved = this.resolveComponentDeps(componentImports, scanRoots, filePath);
-        const allResolved = this.resolveTransitiveDeps(resolved, scanRoots, filePath);
+        const resolution = extensionLib.resolveAllDependencies(
+            componentImports, scanRoots, filePath, nodeFileSystemAccess,
+        );
+        const allResolved: Record<string, string> = {};
+        for (const dep of resolution.resolved) {
+            allResolved[dep.importName] = dep.filePath;
+        }
 
         let effectiveWasmPath = filePath;
 
@@ -251,13 +307,13 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const args: string[] = ["run"];
 
         if (message.invokeArgs) {
-            args.push(...splitShellArgs(message.invokeArgs));
+            args.push(...extensionLib.splitShellArgs(message.invokeArgs));
         }
 
         args.push(effectiveWasmPath);
 
         if (message.programArgs) {
-            args.push(...splitShellArgs(message.programArgs));
+            args.push(...extensionLib.splitShellArgs(message.programArgs));
         }
 
         const exportName = message.exportName || path.basename(filePath, ".wasm");
@@ -265,7 +321,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
         const terminal = vscode.window.createTerminal({ name: terminalName });
         terminal.show();
-        terminal.sendText(`wasmtime ${args.map(a => shellEscape(a)).join(" ")}`);
+        terminal.sendText(`wasmtime ${args.map((a: string) => extensionLib.shellEscape(a)).join(" ")}`);
     }
 
     /**
@@ -284,156 +340,13 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             }
         }
 
-        // Walk up from the wasm file to find a workspace root
-        const workspaceRoot = this.findWorkspaceRoot(wasmFilePath);
+        // Walk up from the wasm file to find a workspace root (delegated to Kotlin/JS)
+        const workspaceRoot: string | null = extensionLib.findWorkspaceRoot(wasmFilePath, nodeFileSystemAccess);
         if (workspaceRoot) {
             roots.add(workspaceRoot);
         }
 
         return Array.from(roots);
-    }
-
-    private static readonly WORKSPACE_MARKERS = ["Cargo.toml", "package.json", ".git"];
-
-    private findWorkspaceRoot(wasmFilePath: string): string | undefined {
-        let dir = path.dirname(wasmFilePath);
-        const root = path.parse(dir).root;
-        while (dir && dir !== root) {
-            for (const marker of WasmEditorProvider.WORKSPACE_MARKERS) {
-                if (fs.existsSync(path.join(dir, marker))) {
-                    return dir;
-                }
-            }
-            dir = path.dirname(dir);
-        }
-        return undefined;
-    }
-
-    /**
-     * Scans directories for `.wasm` component files whose exports match
-     * the given import names.  Uses a `needed` map from base name
-     * (without version) to the original import name so that version-
-     * mismatched names still resolve correctly.
-     */
-    private resolveComponentDeps(
-        importNames: string[],
-        scanRoots: string[],
-        excludePath: string,
-    ): Record<string, string> {
-        const resolved: Record<string, string> = {};
-        // Map: baseName (without @version) → original import name
-        const needed: Record<string, string> = {};
-        for (const name of importNames) {
-            needed[splitNameAndVersion(name)] = name;
-        }
-        const visited = new Set<string>([excludePath]);
-
-        for (const root of scanRoots) {
-            if (Object.keys(needed).length === Object.keys(resolved).length) {break;}
-            this.scanDirectory(root, needed, resolved, visited);
-        }
-
-        return resolved;
-    }
-
-    /**
-     * Transitively resolves component dependencies.  For each resolved
-     * file that is itself a component, its imports are resolved too.
-     * Already-visited files are skipped to avoid cycles.
-     */
-    private resolveTransitiveDeps(
-        directDeps: Record<string, string>,
-        scanRoots: string[],
-        excludePath: string,
-    ): Record<string, string> {
-        const allResolved: Record<string, string> = { ...directDeps };
-        const visitedPaths = new Set<string>([excludePath]);
-        const queue = [...new Set(Object.values(directDeps))];
-
-        while (queue.length > 0) {
-            const depPath = queue.shift()!;
-            if (visitedPaths.has(depPath)) {continue;}
-            visitedPaths.add(depPath);
-
-            let depBytes: Buffer;
-            try {
-                depBytes = fs.readFileSync(depPath);
-            } catch {
-                continue;
-            }
-
-            if (!isComponentBinary(depBytes)) {continue;}
-
-            const depExportNames = parseComponentExportNames(depBytes);
-            if (depExportNames.length === 0) {continue;}
-
-            const depImportNames = parseComponentImportNames(depBytes);
-            const transImports = depImportNames.filter(n => !(n in allResolved) && !isWasiRuntimeImport(n));
-            if (transImports.length === 0) {continue;}
-
-            const transResolved = this.resolveComponentDeps(transImports, scanRoots, excludePath);
-            for (const [name, filePath] of Object.entries(transResolved)) {
-                if (!(name in allResolved)) {
-                    allResolved[name] = filePath;
-                    queue.push(filePath);
-                }
-            }
-        }
-
-        return allResolved;
-    }
-
-    private scanDirectory(
-        dir: string,
-        needed: Record<string, string>,
-        resolved: Record<string, string>,
-        visited: Set<string>,
-    ): void {
-        let entries: fs.Dirent[];
-        try {
-            entries = fs.readdirSync(dir, { withFileTypes: true });
-        } catch {
-            return;
-        }
-
-        for (const entry of entries) {
-            if (Object.keys(resolved).length >= Object.keys(needed).length) {return;}
-            const fullPath = path.join(dir, entry.name);
-
-            if (entry.isDirectory()) {
-                this.scanDirectory(fullPath, needed, resolved, visited);
-            } else if (entry.name.endsWith(".wasm") && !visited.has(fullPath)) {
-                visited.add(fullPath);
-                this.matchComponentExports(fullPath, needed, resolved);
-            }
-        }
-    }
-
-    /**
-     * Checks if a `.wasm` file is a component whose exports satisfy any
-     * of the needed imports.  Uses proper binary parsing of the component
-     * export section (section ID 11) to extract export names.
-     */
-    private matchComponentExports(
-        filePath: string,
-        needed: Record<string, string>,
-        resolved: Record<string, string>,
-    ): void {
-        try {
-            const bytes = fs.readFileSync(filePath);
-            if (!isComponentBinary(bytes)) {return;}
-
-            const exportNames = parseComponentExportNames(bytes);
-            for (const exportName of exportNames) {
-                const baseExportName = splitNameAndVersion(exportName);
-                const originalImport = needed[baseExportName];
-                if (originalImport !== undefined && !(originalImport in resolved)) {
-                    resolved[originalImport] = filePath;
-                }
-            }
-        } catch {
-            // Skip files that can't be read or parsed
-        }
     }
 
     /**
@@ -582,314 +495,6 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             );
         }
     }
-}
-
-/**
- * Splits a string into shell-like arguments, respecting double-quoted segments.
- *
- * For example `--invoke "add(1, 2)"` becomes `["--invoke", "add(1, 2)"]`.
- * This is needed because the webview sends pre-formatted argument strings
- * that may contain quoted tokens with internal spaces.
- */
-function splitShellArgs(input: string): string[] {
-    const result: string[] = [];
-    let current = "";
-    let inQuotes = false;
-    for (let i = 0; i < input.length; i++) {
-        const ch = input[i];
-        if (ch === '"') {
-            inQuotes = !inQuotes;
-        } else if (ch === " " && !inQuotes) {
-            if (current.length > 0) {
-                result.push(current);
-                current = "";
-            }
-        } else {
-            current += ch;
-        }
-    }
-    if (current.length > 0) {
-        result.push(current);
-    }
-    return result;
-}
-
-/**
- * Escapes a single shell argument for safe use in a terminal command.
- */
-function shellEscape(arg: string): string {
-    if (/^[a-zA-Z0-9_./:=-]+$/.test(arg)) {
-        return arg;
-    }
-    return `'${arg.replace(/'/g, "'\\''")}'`;
-}
-
-// ---------------------------------------------------------------------------
-// Component binary helpers — minimal parsing of the Wasm component format
-// to extract import/export names without a full Wasm parser.
-// ---------------------------------------------------------------------------
-
-/** WASI namespace prefix provided by the runtime. */
-function isWasiRuntimeImport(name: string): boolean {
-    return name.startsWith("wasi:");
-}
-
-/**
- * Strips the `@version` suffix from a WIT name.
- * E.g. `component:foo/bar@0.1.0` → `component:foo/bar`.
- */
-function splitNameAndVersion(name: string): string {
-    const idx = name.lastIndexOf("@");
-    return idx >= 0 ? name.substring(0, idx) : name;
-}
-
-/**
- * Returns `true` when the buffer starts with the Wasm component magic:
- * `\0asm` with version byte `0x0d` and layer ≥ 1.
- */
-function isComponentBinary(bytes: Buffer | Uint8Array): boolean {
-    if (bytes.length < 8) {return false;}
-    if (bytes[0] !== 0x00 || bytes[1] !== 0x61 || bytes[2] !== 0x73 || bytes[3] !== 0x6d) {
-        return false;
-    }
-    // version field: bytes 4–7 as little-endian u32.
-    // Low 16 bits = version, high 16 bits = layer.
-    // Component: version == 0x0d, layer >= 1.
-    const version = bytes[4] | (bytes[5] << 8);
-    const layer = bytes[6] | (bytes[7] << 8);
-    return version === 0x0d && layer >= 1;
-}
-
-/** Reads an unsigned LEB128 value from `bytes` starting at `offset`. */
-function readLeb128(bytes: Buffer | Uint8Array, offset: number): { value: number; bytesRead: number } {
-    let value = 0;
-    let shift = 0;
-    let bytesRead = 0;
-    while (offset + bytesRead < bytes.length) {
-        const b = bytes[offset + bytesRead];
-        value |= (b & 0x7f) << shift;
-        bytesRead++;
-        if ((b & 0x80) === 0) {break;}
-        shift += 7;
-    }
-    return { value, bytesRead };
-}
-
-/** Reads a length-prefixed UTF-8 string from `bytes` at `offset`. */
-function readWasmString(bytes: Buffer | Uint8Array, offset: number): { value: string; bytesRead: number } {
-    const len = readLeb128(bytes, offset);
-    const start = offset + len.bytesRead;
-    const end = start + len.value;
-    if (end > bytes.length) {return { value: "", bytesRead: len.bytesRead };}
-    const strBytes = bytes.slice(start, end);
-    const value = Buffer.from(strBytes).toString("utf-8");
-    return { value, bytesRead: len.bytesRead + len.value };
-}
-
-/**
- * Iterates over the top-level sections in a Wasm component binary.
- * For each section yields the section ID, content offset, and content size.
- */
-function* iterateComponentSections(bytes: Buffer | Uint8Array): Generator<{ id: number; contentOffset: number; contentSize: number }> {
-    let offset = 8; // skip magic + version
-    while (offset < bytes.length) {
-        const id = bytes[offset];
-        offset++;
-        const size = readLeb128(bytes, offset);
-        const contentOffset = offset + size.bytesRead;
-        const contentSize = size.value;
-        yield { id, contentOffset, contentSize };
-        offset = contentOffset + contentSize;
-    }
-}
-
-/**
- * Skips a `componentSort` encoding.  Returns the number of bytes consumed.
- * Format: one byte; if the byte is 0x00 an additional `componentCoreSort`
- * byte follows.
- */
-function skipComponentSort(bytes: Buffer | Uint8Array, offset: number): number {
-    const b = bytes[offset];
-    // 0x00 means "core sort" — an extra discriminant byte follows
-    return b === 0x00 ? 2 : 1;
-}
-
-/**
- * Skips a `componentSortWithIndex` encoding (sort + u32 index).
- */
-function skipComponentSortWithIndex(bytes: Buffer | Uint8Array, offset: number): number {
-    const sortLen = skipComponentSort(bytes, offset);
-    const idx = readLeb128(bytes, offset + sortLen);
-    return sortLen + idx.bytesRead;
-}
-
-/**
- * Skips an `externDescription` encoding.  The encoding is:
- *   0x00 0x11 u32           — CoreType
- *   0x01 u32                — Type
- *   0x02 valueBound         — Value
- *   0x03 typeBound          — TypeBound
- *   0x04 u32                — Component
- *   0x05 u32                — Instance
- */
-function skipExternDescription(bytes: Buffer | Uint8Array, offset: number): number {
-    const kind = bytes[offset];
-    let off = offset + 1;
-    switch (kind) {
-        case 0x00: // CoreType: 0x11 byte + u32
-            off++; // 0x11
-            off += readLeb128(bytes, off).bytesRead;
-            break;
-        case 0x01: // Type: u32
-        case 0x04: // Component: u32
-        case 0x05: // Instance: u32
-            off += readLeb128(bytes, off).bytesRead;
-            break;
-        case 0x02: { // ValueBound
-            const vbKind = bytes[off];
-            off++;
-            if (vbKind === 0x00) {
-                off += readLeb128(bytes, off).bytesRead; // u32
-            } else {
-                // 0x01 = componentValueType — skip it
-                off += skipComponentValueType(bytes, off);
-            }
-            break;
-        }
-        case 0x03: { // TypeBound
-            const tbKind = bytes[off];
-            off++;
-            if (tbKind === 0x00) {
-                off += readLeb128(bytes, off).bytesRead; // u32
-            }
-            // 0x01 = SubResource — nothing more to read
-            break;
-        }
-        default:
-            // Unknown — bail out by returning what we have
-            break;
-    }
-    return off - offset;
-}
-
-/**
- * Skips a `componentValueType` encoding (primitive byte or index reference).
- */
-function skipComponentValueType(bytes: Buffer | Uint8Array, offset: number): number {
-    const b = bytes[offset];
-    // Primitive types are single bytes >= 0x40 in the component value type space.
-    // Index references are LEB128-encoded.
-    if (b >= 0x40) {
-        return 1; // single-byte primitive
-    }
-    return readLeb128(bytes, offset).bytesRead;
-}
-
-/**
- * Parses component export names from a Wasm component binary.
- * Reads section ID 11 (component export) and extracts the export
- * name strings.
- */
-function parseComponentExportNames(bytes: Buffer | Uint8Array): string[] {
-    const names: string[] = [];
-    const COMPONENT_EXPORT_SECTION_ID = 11;
-
-    for (const section of iterateComponentSections(bytes)) {
-        if (section.id !== COMPONENT_EXPORT_SECTION_ID) {continue;}
-
-        let off = section.contentOffset;
-        const sectionEnd = section.contentOffset + section.contentSize;
-
-        // Read vector count
-        const count = readLeb128(bytes, off);
-        off += count.bytesRead;
-
-        for (let i = 0; i < count.value && off < sectionEnd; i++) {
-            try {
-                // Each export record starts with a discriminant byte
-                const discriminant = bytes[off];
-                off++;
-
-                // Read export name
-                const name = readWasmString(bytes, off);
-                off += name.bytesRead;
-                const exportName = name.value;
-
-                if (discriminant === 0x01) {
-                    // Version string follows
-                    const version = readWasmString(bytes, off);
-                    off += version.bytesRead;
-                }
-
-                names.push(exportName);
-
-                // Skip sortIndex (componentSort + u32 index)
-                off += skipComponentSortWithIndex(bytes, off);
-
-                // Skip optional extern description: 0x00 = none, otherwise full externDescription
-                const edFlag = bytes[off];
-                off++;
-                if (edFlag !== 0x00) {
-                    off += skipExternDescription(bytes, off);
-                }
-            } catch {
-                break; // Bail out on parse errors
-            }
-        }
-    }
-    return names;
-}
-
-/**
- * Parses component import names from a Wasm component binary.
- * Reads section ID 10 (component import) and extracts the import
- * name strings.
- */
-function parseComponentImportNames(bytes: Buffer | Uint8Array): string[] {
-    const names: string[] = [];
-    const COMPONENT_IMPORT_SECTION_ID = 10;
-
-    for (const section of iterateComponentSections(bytes)) {
-        if (section.id !== COMPONENT_IMPORT_SECTION_ID) {continue;}
-
-        let off = section.contentOffset;
-        const sectionEnd = section.contentOffset + section.contentSize;
-
-        // Read vector count
-        const count = readLeb128(bytes, off);
-        off += count.bytesRead;
-
-        for (let i = 0; i < count.value && off < sectionEnd; i++) {
-            try {
-                // Each import record starts with a discriminant byte
-                const discriminant = bytes[off];
-                off++;
-
-                // Read import name
-                const name = readWasmString(bytes, off);
-                off += name.bytesRead;
-
-                let importName = name.value;
-
-                if (discriminant === 0x01) {
-                    // Version string follows — append it to form the full name
-                    const version = readWasmString(bytes, off);
-                    off += version.bytesRead;
-                    if (version.value) {
-                        importName = `${importName}@${version.value}`;
-                    }
-                }
-
-                names.push(importName);
-
-                // Skip extern description
-                off += skipExternDescription(bytes, off);
-            } catch {
-                break;
-            }
-        }
-    }
-    return names;
 }
 
 /**
