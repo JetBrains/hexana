@@ -124,6 +124,10 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
             val key = ke.key
             if (key !in listOf("ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight")) return@handler
 
+            // Skip when focus is inside a panel table so that row navigation works.
+            val target = ke.target as? HTMLElement
+            if (target?.closest(".hexana-panel-table") != null) return@handler
+
             ke.preventDefault()
             val cur = if (selection.cursorIndex >= 0) selection.cursorIndex else 0
             val totalBytes = bytes.size
@@ -496,6 +500,10 @@ private fun HexRow(
                     onMouseDown { event ->
                         if (event.button.toInt() != 0) return@onMouseDown
                         event.preventDefault()
+                        // Move focus to the hex viewer container so that any
+                        // focused panel-table row loses focus and stops
+                        // capturing arrow-key events.
+                        (document.querySelector(".hex-viewer-scroll") as? HTMLElement)?.focus()
                         val nativeMouseEvent = event.nativeEvent as? MouseEvent
 
                         if (nativeMouseEvent?.shiftKey == true) {
@@ -566,6 +574,7 @@ private fun HexRow(
                     onMouseDown { event ->
                         if (event.button.toInt() != 0) return@onMouseDown
                         event.preventDefault()
+                        (document.querySelector(".hex-viewer-scroll") as? HTMLElement)?.focus()
                         val nativeMouseEvent = event.nativeEvent as? MouseEvent
 
                         if (nativeMouseEvent?.shiftKey == true) {

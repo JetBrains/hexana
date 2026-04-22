@@ -3,6 +3,9 @@ package org.jetbrains.hexana.vscode
 import androidx.compose.runtime.Composable
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
+import org.w3c.dom.HTMLElement
+import org.w3c.dom.events.EventListener
+import org.w3c.dom.events.KeyboardEvent
 
 /**
  * Reusable table component for panel tabs. Renders a styled HTML <table>
@@ -44,6 +47,8 @@ internal fun PanelTable(
 
 /**
  * Reusable table row that supports click-to-highlight behaviour.
+ * Rows are focusable and support ArrowUp / ArrowDown keyboard navigation
+ * between sibling rows, preventing the hex viewer from stealing focus.
  */
 @Composable
 internal fun PanelTableRow(
@@ -53,6 +58,7 @@ internal fun PanelTableRow(
 ) {
     Tr({
         classes("hexana-panel-row")
+        tabIndex(0)
         style {
             property("cursor", "pointer")
             if (isHighlighted) {
@@ -60,6 +66,42 @@ internal fun PanelTableRow(
             }
         }
         onClick { onClick() }
+        // Attach keydown and click handlers directly on the DOM element so
+        // that preventDefault() fires before the browser performs native
+        // overflow-scroll on the parent container.
+        ref { element ->
+            val keyListener = EventListener { event ->
+                val ke = event as? KeyboardEvent ?: return@EventListener
+                val row = ke.currentTarget as? HTMLElement ?: return@EventListener
+                when (ke.key) {
+                    "ArrowDown" -> {
+                        ke.preventDefault()
+                        ke.stopPropagation()
+                        (row.nextElementSibling as? HTMLElement)?.let {
+                            it.focus()
+                            it.click()
+                        }
+                    }
+                    "ArrowUp" -> {
+                        ke.preventDefault()
+                        ke.stopPropagation()
+                        (row.previousElementSibling as? HTMLElement)?.let {
+                            it.focus()
+                            it.click()
+                        }
+                    }
+                    "Enter", " " -> {
+                        ke.preventDefault()
+                        ke.stopPropagation()
+                        onClick()
+                    }
+                }
+            }
+            element.addEventListener("keydown", keyListener)
+            onDispose {
+                element.removeEventListener("keydown", keyListener)
+            }
+        }
     }) {
         content()
     }
