@@ -107,10 +107,53 @@ fun EditorToolbar(
         }
 
         if (isRunnable) {
-            RunArrowButton(
+            ToolbarRunButton(
                 tooltip = "Run Wasm module",
                 onClick = { showArgsDialog = true }
             )
+        }
+    }
+}
+
+/**
+ * Button-styled run control for the editor toolbar.
+ * Displays a play arrow followed by a "Run" label, with a visible
+ * border and hover highlight so it reads as a clickable button.
+ */
+@Composable
+private fun ToolbarRunButton(tooltip: String = "Run", onClick: () -> Unit) {
+    Span({
+        attr("title", tooltip)
+        style {
+            property("cursor", "pointer")
+            property("display", "inline-flex")
+            property("align-items", "center")
+            property("gap", "4px")
+            property("padding", "3px 10px 3px 6px")
+            property("border-radius", "4px")
+            property("border", "1px solid var(--vscode-button-border, var(--vscode-contrastBorder, transparent))")
+            property("background", "var(--vscode-button-background, #0e639c)")
+            property("color", "var(--vscode-button-foreground, #fff)")
+            property("font-size", "12px")
+            property("line-height", "1")
+            property("user-select", "none")
+        }
+        onClick { event ->
+            event.stopPropagation()
+            onClick()
+        }
+    }) {
+        Span({
+            style {
+                property("font-size", "11px")
+                property("display", "inline-flex")
+                property("align-items", "center")
+            }
+        }) {
+            Text("\u25B6")
+        }
+        Span {
+            Text("Run")
         }
     }
 }
