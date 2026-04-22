@@ -110,6 +110,6 @@ class WasmDependencyResolverTest : UsefulTestCase() {
         val roots = WasmDependencyResolver.buildScanRoots(null, appWasmPath)
         assertTrue("Should have at least one scan root", roots.isNotEmpty())
         assertTrue("Scan roots should contain the workspace root",
-            roots.any { it.absolutePath == sampleRoot.absolutePath })
+            roots.any { it == sampleRoot.absolutePath })
     }
 }

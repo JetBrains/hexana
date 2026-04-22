@@ -2,10 +2,9 @@
 
 package org.jetbrains.hexana.vscode.lib
 
-import org.jetbrains.hexana.shared.componentExportNames
-import org.jetbrains.hexana.shared.componentImportNames
-import org.jetbrains.hexana.shared.isRuntimeImport
-import org.jetbrains.hexana.shared.splitNameAndVersion
+import org.jetbrains.hexana.shared.WasmDependencyResolver
+import org.jetbrains.hexana.shared.WasmFileEntry
+import org.jetbrains.hexana.shared.WasmFileSystem
 
 /**
  * A single resolved dependency: maps an import name to a file path.
@@ -64,26 +63,31 @@ external interface FileEntry {
     val isFile: Boolean
 }
 
-private val WORKSPACE_MARKERS = listOf("Cargo.toml", "package.json", ".git")
+/**
+ * Adapts a JS [FileSystemAccess] to the shared [WasmFileSystem] interface.
+ */
+private fun FileSystemAccess.toWasmFileSystem(): WasmFileSystem = object : WasmFileSystem {
+    override fun listEntries(dir: String): List<WasmFileEntry> =
+        listDirectory(dir).map { WasmFileEntry(it.name, it.isDirectory, it.isFile) }
+
+    override fun readFile(path: String): ByteArray? = this@toWasmFileSystem.readFile(path)
+
+    override fun fileExists(path: String): Boolean = this@toWasmFileSystem.fileExists(path)
+
+    override fun parentDir(path: String): String = this@toWasmFileSystem.parentDir(path)
+
+    override fun joinPath(base: String, child: String): String = this@toWasmFileSystem.joinPath(base, child)
+
+    override fun pathRoot(path: String): String = this@toWasmFileSystem.pathRoot(path)
+}
 
 /**
  * Walks up from [wasmFilePath] looking for a directory that contains
  * a workspace marker file (`Cargo.toml`, `package.json`, `.git`).
  */
 @JsExport
-fun findWorkspaceRoot(wasmFilePath: String, fs: FileSystemAccess): String? {
-    var dir = fs.parentDir(wasmFilePath)
-    val root = fs.pathRoot(dir)
-    while (dir.isNotEmpty() && dir != root) {
-        for (marker in WORKSPACE_MARKERS) {
-            if (fs.fileExists(fs.joinPath(dir, marker))) {
-                return dir
-            }
-        }
-        dir = fs.parentDir(dir)
-    }
-    return null
-}
+fun findWorkspaceRoot(wasmFilePath: String, fs: FileSystemAccess): String? =
+    WasmDependencyResolver.findWorkspaceRoot(wasmFilePath, fs.toWasmFileSystem())
 
 /**
  * Resolves component dependencies (including transitive) for the
@@ -102,112 +106,9 @@ fun resolveAllDependencies(
     wasmFilePath: String,
     fs: FileSystemAccess,
 ): DependencyResolution {
-    val directDeps = resolveComponentDeps(importNames.toList(), scanRoots.toList(), wasmFilePath, fs)
-    val allResolved = resolveTransitiveDeps(directDeps, scanRoots.toList(), wasmFilePath, fs)
+    val allResolved = WasmDependencyResolver.resolveAllDependencies(
+        importNames.toList(), scanRoots.toList(), wasmFilePath, fs.toWasmFileSystem(),
+    )
     val result = allResolved.map { (importName, filePath) -> ResolvedDep(importName, filePath) }
     return DependencyResolution(result.toTypedArray())
-}
-
-// ---------------------------------------------------------------------------
-// Internal resolution logic
-// ---------------------------------------------------------------------------
-
-private fun resolveComponentDeps(
-    importNames: List<String>,
-    scanRoots: List<String>,
-    excludePath: String,
-    fs: FileSystemAccess,
-): Map<String, String> {
-    val resolved = mutableMapOf<String, String>()
-    // Map: baseName (without @version) → original import name
-    val needed = mutableMapOf<String, String>()
-    for (name in importNames) {
-        needed[splitNameAndVersion(name).first] = name
-    }
-    val visited = mutableSetOf(excludePath)
-
-    for (root in scanRoots) {
-        if (resolved.size >= needed.size) break
-        scanDirectory(root, needed, resolved, visited, fs)
-    }
-
-    return resolved
-}
-
-private fun resolveTransitiveDeps(
-    directDeps: Map<String, String>,
-    scanRoots: List<String>,
-    excludePath: String,
-    fs: FileSystemAccess,
-): Map<String, String> {
-    val allResolved = directDeps.toMutableMap()
-    val visitedPaths = mutableSetOf(excludePath)
-    val queue = ArrayDeque(directDeps.values.toSet().toList())
-
-    while (queue.isNotEmpty()) {
-        val depPath = queue.removeFirst()
-        if (!visitedPaths.add(depPath)) continue
-
-        val depBytes = fs.readFile(depPath) ?: continue
-        if (!isComponentBinary(depBytes)) continue
-
-        val depExports = componentExportNames(depBytes)
-        if (depExports.isEmpty()) continue
-
-        val depImports = componentImportNames(depBytes)
-        val transImports = depImports.filter { it !in allResolved && !isRuntimeImport(it) }
-        if (transImports.isEmpty()) continue
-
-        val transResolved = resolveComponentDeps(transImports, scanRoots, excludePath, fs)
-        for ((name, filePath) in transResolved) {
-            if (name !in allResolved) {
-                allResolved[name] = filePath
-                queue.addLast(filePath)
-            }
-        }
-    }
-
-    return allResolved
-}
-
-private fun scanDirectory(
-    dir: String,
-    needed: Map<String, String>,
-    resolved: MutableMap<String, String>,
-    visited: MutableSet<String>,
-    fs: FileSystemAccess,
-) {
-    if (!visited.add(dir)) return
-
-    val entries = fs.listDirectory(dir)
-
-    for (entry in entries) {
-        if (resolved.size >= needed.size) return
-        val fullPath = fs.joinPath(dir, entry.name)
-
-        if (entry.isDirectory) {
-            scanDirectory(fullPath, needed, resolved, visited, fs)
-        } else if (entry.isFile && entry.name.endsWith(".wasm")) {
-            matchComponentExports(fullPath, needed, resolved, fs)
-        }
-    }
-}
-
-private fun matchComponentExports(
-    filePath: String,
-    needed: Map<String, String>,
-    resolved: MutableMap<String, String>,
-    fs: FileSystemAccess,
-) {
-    val bytes = fs.readFile(filePath) ?: return
-    if (!isComponentBinary(bytes)) return
-
-    val exportNames = componentExportNames(bytes)
-    for (exportName in exportNames) {
-        val baseExportName = splitNameAndVersion(exportName).first
-        val originalImport = needed[baseExportName] ?: continue
-        if (originalImport !in resolved) {
-            resolved[originalImport] = filePath
-        }
-    }
 }

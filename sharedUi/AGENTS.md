@@ -13,6 +13,9 @@ The module provides:
 - **Wasm type formatting** (`WasmTypeFormat.kt`) — value type names, export/import kind labels, signature resolution and formatting.
 - **Component resolve utilities** (`ComponentResolveUtil.kt`) — WASI CLI run detection, component function export detection, invoke name resolution, component type utilities.
 - **WAT text generation** (`WatTextGenerator.kt`) — structural WAT-like text output from parsed core Wasm and component-model binaries.
+- **Wasm run utilities** (`WasmRunUtil.kt`) — runtime import detection, component import/export name extraction, binary type detection, version-name splitting.
+- **Wasm dependency resolver** (`WasmDependencyResolver.kt`) — platform-independent filesystem-based component dependency resolution with `WasmFileSystem` abstraction; used by both `idea-plugin` (JVM `java.io.File` adapter) and `vscode-plugin:extension-lib` (Node.js adapter).
+- **Import stub generation** (`WasmImportStubGenerator.kt`, `WasmBinaryWriter.kt`) — generates stub Wasm modules for missing imports.
 
 ## KMP Targets
 
