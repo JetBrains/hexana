@@ -362,28 +362,39 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         return Array.from(roots);
     }
 
+    /** Maximum number of iterative compose passes to prevent infinite loops. */
+    private static readonly MAX_COMPOSE_PASSES = 10;
+
     /**
      * Attempts to compose component dependencies using `wasm-tools compose`
      * or `wac plug`.
+     *
+     * Because `wasm-tools compose` (and `wac plug`) only satisfy the
+     * **direct** imports of the input component, transitive dependencies
+     * require iterative composition: after each pass the output is checked
+     * for remaining non-runtime component imports, and composition is
+     * repeated until all imports are satisfied or no further progress can
+     * be made.
      */
     private composeComponents(
         mainWasmPath: string,
         deps: Record<string, string>,
     ): { wasmPath: string; composed: boolean; error?: string } {
         const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hexana-wac-compose-"));
-        const outputFile = path.join(tempDir, "composed.wasm");
 
         // Try wasm-tools compose first
         const wasmToolsPath = this.resolveToolPath("wasm-tools");
         if (wasmToolsPath) {
-            const result = this.composeWithWasmTools(wasmToolsPath, mainWasmPath, deps, outputFile);
+            const result = this.composeIteratively(tempDir, mainWasmPath, deps,
+                (input, d, output) => this.composeWithWasmTools(wasmToolsPath, input, d, output));
             if (result.composed) {return result;}
         }
 
         // Fall back to wac plug
         const wacPath = this.resolveToolPath("wac");
         if (wacPath) {
-            const result = this.composeWithWac(wacPath, mainWasmPath, deps, outputFile);
+            const result = this.composeIteratively(tempDir, mainWasmPath, deps,
+                (input, d, output) => this.composeWithWac(wacPath, input, d, output));
             if (result.composed) {return result;}
         }
 
@@ -392,6 +403,68 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             ? "No composition tool found. Install 'wasm-tools' (cargo install wasm-tools) or 'wac' (cargo install wac-cli)."
             : `Component composition failed with ${toolNames.join(" and ")}.`;
         return { wasmPath: mainWasmPath, composed: false, error: errorMsg };
+    }
+
+    /**
+     * Runs the given compose function iteratively until all non-runtime
+     * component imports are satisfied or no further progress can be made.
+     */
+    private composeIteratively(
+        tempDir: string,
+        mainWasmPath: string,
+        deps: Record<string, string>,
+        composeFn: (input: string, deps: Record<string, string>, output: string) => { wasmPath: string; composed: boolean; error?: string },
+    ): { wasmPath: string; composed: boolean; error?: string } {
+        let currentInput = mainWasmPath;
+        let remainingDeps = { ...deps };
+        let lastResult: { wasmPath: string; composed: boolean; error?: string } | undefined;
+
+        for (let pass = 1; pass <= WasmEditorProvider.MAX_COMPOSE_PASSES; pass++) {
+            const outputFile = path.join(tempDir, `composed_pass${pass}.wasm`);
+            const result = composeFn(currentInput, remainingDeps, outputFile);
+            if (!result.composed) {return result;}
+
+            lastResult = result;
+            const unresolvedImports = this.findUnresolvedComponentImports(result.wasmPath);
+            if (unresolvedImports.size === 0) {
+                return result;
+            }
+
+            const nextDeps: Record<string, string> = {};
+            for (const [name, filePath] of Object.entries(remainingDeps)) {
+                if (unresolvedImports.has(name)) {
+                    nextDeps[name] = filePath;
+                }
+            }
+            if (Object.keys(nextDeps).length === 0 ||
+                JSON.stringify(nextDeps) === JSON.stringify(remainingDeps)) {
+                return result;
+            }
+
+            currentInput = result.wasmPath;
+            remainingDeps = nextDeps;
+        }
+
+        return lastResult ?? { wasmPath: mainWasmPath, composed: false, error: "max compose passes reached" };
+    }
+
+    /**
+     * Parses the given wasm file and returns the set of non-runtime component
+     * import names that are still unresolved.
+     */
+    private findUnresolvedComponentImports(wasmPath: string): Set<string> {
+        if (!extensionLib) {return new Set();}
+        try {
+            const bytes = fs.readFileSync(wasmPath);
+            const int8 = new Int8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            if (!extensionLib.isComponentBinary(int8)) {return new Set();}
+            const importNames: string[] = Array.from(extensionLib.parseComponentImportNames(int8));
+            return new Set(
+                importNames.filter((name: string) => !extensionLib!.isWasiRuntimeImport(name)),
+            );
+        } catch {
+            return new Set();
+        }
     }
 
     private composeWithWasmTools(
