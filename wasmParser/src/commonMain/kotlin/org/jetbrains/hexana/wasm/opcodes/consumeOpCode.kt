@@ -274,10 +274,7 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
         0xD6u -> Flow.BrOnNonNull(consumeInt())
         in 0xD7u..0xFAu -> ReservedOpCode(code)
 
-        0xFBu -> {
-            consumeGCOpCode(code.shl(8).or(get().toUInt()))
-        }
-        0xFCu, 0xFDu, 0xFFu -> {
+        0xFBu, 0xFCu, 0xFDu, 0xFFu -> {
             consumeMultibyteOpCode(position() - 1,  code.toUByte(),getULEB128().toUInt())
         }
         else -> throw UnsupportedOpsException(code, position())

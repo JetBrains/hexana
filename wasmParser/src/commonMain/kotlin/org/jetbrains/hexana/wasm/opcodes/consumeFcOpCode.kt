@@ -7,6 +7,9 @@ import org.jetbrains.hexana.wasm.opcodes.numeric.I64
 
 fun CommonByteBuffer.consumeMultibyteOpCode(offset: Int, base: UByte, opcode: UInt): OpCode {
     return when (base) {
+        0xFBu.toUByte() -> {
+            consumeGCOpCode(offset, opcode)
+        }
         0xFCu.toUByte() -> {
             consumeFCBasedOpCode(offset, opcode)
         }
