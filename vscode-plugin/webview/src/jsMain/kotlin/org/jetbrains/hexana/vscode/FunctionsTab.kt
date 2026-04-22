@@ -1,7 +1,10 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Td
 import org.jetbrains.compose.web.dom.Text
@@ -48,6 +51,8 @@ private fun CoreWasmFunctions(buffer: CommonByteBuffer, selection: HexSelectionS
         return
     }
 
+    var selectedIndex by remember { mutableStateOf(-1) }
+
     val hasNames = functionNamesMap != null
 
     val headers = buildList {
@@ -67,8 +72,14 @@ private fun CoreWasmFunctions(buffer: CommonByteBuffer, selection: HexSelectionS
             val sig = func.getDescription(index, typeNames)
 
             PanelTableRow(
-                isHighlighted = false,
-                onClick = {},
+                isHighlighted = selectedIndex == index,
+                onClick = {
+                    selectedIndex = index
+                    selection.anchorIndex = func.offset
+                    selection.activeIndex = func.offset + func.size - 1
+                    selection.cursorIndex = func.offset
+                    scrollHexViewerTo(func.offset)
+                },
             ) {
                 Td({ classes("cell-id") }) {
                     Text(index.toString())
