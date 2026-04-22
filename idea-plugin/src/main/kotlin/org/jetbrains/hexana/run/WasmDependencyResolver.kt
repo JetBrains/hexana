@@ -34,9 +34,6 @@ internal object WasmDependencyResolver {
 
     private val LOG = Logger.getInstance(WasmDependencyResolver::class.java)
 
-    /** Well-known WASI namespace prefixes that are provided by the runtime. */
-    private val RUNTIME_PREFIXES = listOf("wasi:")
-
     /**
      * Resolves dependencies for a wasm file, auto-detecting whether it is
      * a core module or component. Component dependencies are resolved
@@ -121,7 +118,7 @@ internal object WasmDependencyResolver {
     ): Map<String, String> {
         val resolved = resolveViaIndex(names, project, excludeFile)
 
-        val unresolved = names.filter { it !in resolved && !isRuntimeImport(it) }
+        val unresolved = names.filter { it !in resolved && !org.jetbrains.hexana.shared.isRuntimeImport(it) }
         if (unresolved.isEmpty()) return resolved
 
         val scanRoots = buildScanRoots(project.basePath, wasmFilePath)
@@ -265,5 +262,5 @@ internal object WasmDependencyResolver {
     }
 
     internal fun isRuntimeImport(name: String): Boolean =
-        RUNTIME_PREFIXES.any { name.startsWith(it) }
+        org.jetbrains.hexana.shared.isRuntimeImport(name)
 }

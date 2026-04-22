@@ -1,37 +1,31 @@
 package org.jetbrains.hexana.vscode
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
-import org.jetbrains.hexana.shared.exportKindLabel
-import org.jetbrains.hexana.shared.exportIndex
-import org.jetbrains.hexana.shared.resolveCoreSignature
-import org.jetbrains.hexana.shared.isWasiCliRunExportName
-import org.jetbrains.hexana.shared.isComponentFunctionExport
-import org.jetbrains.hexana.shared.isInternalName
+import org.jetbrains.hexana.shared.*
+import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.sections.*
-import org.jetbrains.hexana.shared.componentExternDescriptionLabel
-import org.jetbrains.hexana.shared.componentSortIndexLabel
 
 @Composable
 fun ExportsTabContent(
     buffer: CommonByteBuffer,
     providerType: BinaryProviderType,
     selection: HexSelectionState,
+    wasmBytes: ByteArray? = null,
 ) {
     when (providerType) {
-        is BinaryProviderType.Wasm -> CoreWasmExports(buffer, selection)
-        is BinaryProviderType.WasmComponent -> ComponentExports(buffer, selection)
+        is BinaryProviderType.Wasm -> CoreWasmExports(buffer, selection, wasmBytes)
+        is BinaryProviderType.WasmComponent -> ComponentExports(buffer, selection, wasmBytes)
         is BinaryProviderType.Generic -> Div { Text("Not a recognized WebAssembly binary.") }
     }
 }
 
 @Composable
-private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionState) {
+private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionState, wasmBytes: ByteArray? = null) {
     val provider = remember(buffer) {
         buffer.position(0)
         WasmBinaryProvider(buffer)
@@ -51,6 +45,34 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
             Text("No exports found.")
         }
         return
+    }
+
+    // Dialog state: which export is pending argument input
+    var pendingExport by remember { mutableStateOf<WasmFunctionExportRecordEntry?>(null) }
+    var pendingParams by remember { mutableStateOf<List<WasmValueType<*>>>(emptyList()) }
+
+    // Show the function args dialog when a function with params is clicked
+    val pending = pendingExport
+    if (pending != null && pendingParams.isNotEmpty()) {
+        FunctionArgsDialog(
+            exportName = pending.name,
+            args = wasmArgDescriptors(pendingParams),
+            onConfirm = { argValues ->
+                val programArgs = argValues.joinToString(" ")
+                postRunExportToHost(
+                    exportName = pending.name,
+                    invokeArgs = "--invoke ${pending.name}",
+                    programArgs = programArgs,
+                    wasmBytes = wasmBytes,
+                )
+                pendingExport = null
+                pendingParams = emptyList()
+            },
+            onCancel = {
+                pendingExport = null
+                pendingParams = emptyList()
+            },
+        )
     }
 
     PanelTable(
@@ -81,10 +103,20 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
                         RunArrowButton(
                             tooltip = "Run '${export.name}'",
                             onClick = {
-                                postRunExportToHost(
-                                    exportName = export.name,
-                                    invokeArgs = "--invoke ${export.name}",
-                                )
+                                val funcExport = export as WasmFunctionExportRecordEntry
+                                val signature = resolveCoreExportSignature(funcExport, functions, importFuncCount)
+                                val params = signature?.params ?: emptyList()
+
+                                if (params.isNotEmpty() && params.all { isTrivialType(it) }) {
+                                    pendingExport = funcExport
+                                    pendingParams = params
+                                } else {
+                                    postRunExportToHost(
+                                        exportName = export.name,
+                                        invokeArgs = "--invoke ${export.name}",
+                                        wasmBytes = wasmBytes,
+                                    )
+                                }
                             }
                         )
                     }
@@ -104,7 +136,7 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
 }
 
 @Composable
-private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionState) {
+private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionState, wasmBytes: ByteArray? = null) {
     val provider = remember(buffer) {
         buffer.position(0)
         WasmComponentBinaryProvider(buffer)
@@ -116,12 +148,65 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
     }
 
     val exports = remember(provider) { provider.exports }
+    val types = remember(provider) { provider.types }
 
     if (exports.isEmpty()) {
         Div({ classes("empty-hint") }) {
             Text("No exports found.")
         }
         return
+    }
+
+    // Dialog state for wasi:cli/run program args
+    var pendingProgramArgsExport by remember { mutableStateOf<WasmComponentExport?>(null) }
+
+    // Dialog state for component function args
+    var pendingFuncExport by remember { mutableStateOf<WasmComponentExport?>(null) }
+    var pendingFuncInvokeName by remember { mutableStateOf("") }
+    var pendingFuncArgs by remember { mutableStateOf<List<FunctionArgDescriptor>>(emptyList()) }
+
+    // Show program args dialog for wasi:cli/run exports
+    val programArgsPending = pendingProgramArgsExport
+    if (programArgsPending != null) {
+        ProgramArgsDialog(
+            exportName = programArgsPending.exportName,
+            onConfirm = { programArgs ->
+                postRunExportToHost(
+                    exportName = programArgsPending.exportName,
+                    isComponent = true,
+                    programArgs = programArgs,
+                    wasmBytes = wasmBytes,
+                )
+                pendingProgramArgsExport = null
+            },
+            onCancel = { pendingProgramArgsExport = null },
+        )
+    }
+
+    // Show function args dialog for component function exports
+    val funcPending = pendingFuncExport
+    if (funcPending != null && pendingFuncArgs.isNotEmpty()) {
+        FunctionArgsDialog(
+            exportName = pendingFuncInvokeName,
+            args = pendingFuncArgs,
+            onConfirm = { argValues ->
+                val argsString = argValues.joinToString(", ")
+                postRunExportToHost(
+                    exportName = funcPending.exportName,
+                    isComponent = true,
+                    invokeArgs = "--invoke \"${pendingFuncInvokeName}($argsString)\"",
+                    wasmBytes = wasmBytes,
+                )
+                pendingFuncExport = null
+                pendingFuncInvokeName = ""
+                pendingFuncArgs = emptyList()
+            },
+            onCancel = {
+                pendingFuncExport = null
+                pendingFuncInvokeName = ""
+                pendingFuncArgs = emptyList()
+            },
+        )
     }
 
     PanelTable(
@@ -149,10 +234,26 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
                         RunArrowButton(
                             tooltip = "Run '${export.exportName}'",
                             onClick = {
-                                postRunExportToHost(
-                                    exportName = export.exportName,
-                                    isComponent = true,
-                                )
+                                if (isWasiCliRun) {
+                                    pendingProgramArgsExport = export
+                                } else {
+                                    val invokeName = resolveInvokeName(export, provider)
+                                    val funcType = resolveComponentFunctionType(export, provider)
+                                    val params = funcType?.params ?: emptyList()
+
+                                    if (params.isNotEmpty() && params.all { isTrivialComponentType(it.value, types) }) {
+                                        pendingFuncExport = export
+                                        pendingFuncInvokeName = invokeName
+                                        pendingFuncArgs = componentArgDescriptors(params, types)
+                                    } else {
+                                        postRunExportToHost(
+                                            exportName = export.exportName,
+                                            isComponent = true,
+                                            invokeArgs = if (!isWasiCliRun) "--invoke \"$invokeName\"" else "",
+                                            wasmBytes = wasmBytes,
+                                        )
+                                    }
+                                }
                             }
                         )
                     }
@@ -173,6 +274,61 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
         }
     }
 }
+
+/**
+ * Resolves the function type record for a core Wasm function export.
+ */
+private fun resolveCoreExportSignature(
+    export: WasmFunctionExportRecordEntry,
+    functions: List<WasmTypeRecord>,
+    importFuncCount: Int,
+): WasmSectionFunctionTypeRecord? {
+    val localIndex = export.index.toInt() - importFuncCount
+    if (localIndex < 0) return null
+    return functions.getOrNull(localIndex) as? WasmSectionFunctionTypeRecord
+}
+
+/**
+ * Builds argument descriptors for core Wasm function parameters.
+ */
+private fun wasmArgDescriptors(params: List<WasmValueType<*>>): List<FunctionArgDescriptor> =
+    params.mapIndexed { i, param ->
+        FunctionArgDescriptor(
+            label = "arg$i",
+            typeName = wasmValueTypeName(param),
+            validate = { text -> validateWasmArg(text, param) },
+        )
+    }
+
+private fun validateWasmArg(text: String, type: WasmValueType<*>): String? {
+    if (text.isBlank()) return "Value is required"
+    return when (type) {
+        is WasmI32Type -> if (text.toIntOrNull() == null) "Expected an i32 integer" else null
+        is WasmI64Type -> if (text.toLongOrNull() == null) "Expected an i64 integer" else null
+        is WasmF32Type -> if (text.toFloatOrNull() == null) "Expected an f32 number" else null
+        is WasmF64Type -> if (text.toDoubleOrNull() == null) "Expected an f64 number" else null
+        else -> null
+    }
+}
+
+/**
+ * Builds argument descriptors for component-model function parameters.
+ */
+private fun componentArgDescriptors(
+    params: List<LabelValueType>,
+    types: List<ComponentDefType>,
+): List<FunctionArgDescriptor> =
+    params.map { param ->
+        val resolved = resolveComponentValueType(param.value, types)
+        val enumEntries = (resolved as? ComponentEnumType)?.entries
+        FunctionArgDescriptor(
+            label = param.label,
+            typeName = componentTypeName(param.value, types),
+            defaultValue = if (enumEntries != null) enumEntries.firstOrNull() ?: "" else "0",
+            enumEntries = enumEntries,
+            validate = { text -> validateComponentArg(text, param.value, types) },
+        )
+    }
 
 /**
  * Small play-arrow button used as a run indicator in table rows.
@@ -200,5 +356,33 @@ internal fun RunArrowButton(tooltip: String = "Run", onClick: () -> Unit) {
         }
     }) {
         Text("\u25B6")
+    }
+}
+
+private fun validateComponentArg(text: String, type: ComponentValueType, types: List<ComponentDefType>): String? {
+    if (text.isBlank()) return "Value is required"
+    if (type is ComponentValueIdxType) {
+        val resolved = types.getOrNull(type.idx.toInt())
+        if (resolved is ComponentEnumType) {
+            return if (text !in resolved.entries) "Expected one of: ${resolved.entries.joinToString(", ")}" else null
+        }
+        return null
+    }
+    if (type !is ComponentPrimitiveValueType) return null
+    return when (type.type) {
+        is ComponentPrimitiveBoolType -> if (text != "true" && text != "false") "Expected 'true' or 'false'" else null
+        is ComponentPrimitiveU8Type -> if (text.toIntOrNull()?.let { it in 0..255 } != true) "Expected a u8 integer (0..255)" else null
+        is ComponentPrimitiveS8Type -> if (text.toIntOrNull()?.let { it in -128..127 } != true) "Expected an s8 integer (-128..127)" else null
+        is ComponentPrimitiveU16Type -> if (text.toIntOrNull()?.let { it in 0..65535 } != true) "Expected a u16 integer (0..65535)" else null
+        is ComponentPrimitiveS16Type -> if (text.toIntOrNull()?.let { it in -32768..32767 } != true) "Expected an s16 integer (-32768..32767)" else null
+        is ComponentPrimitiveU32Type -> if (text.toLongOrNull()?.let { it in 0..4294967295L } != true) "Expected a u32 integer" else null
+        is ComponentPrimitiveS32Type -> if (text.toIntOrNull() == null) "Expected an s32 integer" else null
+        is ComponentPrimitiveU64Type -> if (text.toULongOrNull() == null) "Expected a u64 integer" else null
+        is ComponentPrimitiveS64Type -> if (text.toLongOrNull() == null) "Expected an s64 integer" else null
+        is ComponentPrimitiveF32Type -> if (text.toFloatOrNull() == null) "Expected an f32 number" else null
+        is ComponentPrimitiveF64Type -> if (text.toDoubleOrNull() == null) "Expected an f64 number" else null
+        is ComponentPrimitiveCharType -> if (text.length != 1) "Expected a single character" else null
+        is ComponentPrimitiveString -> null
+        else -> null
     }
 }

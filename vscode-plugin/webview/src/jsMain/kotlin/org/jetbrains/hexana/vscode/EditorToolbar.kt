@@ -1,7 +1,6 @@
 package org.jetbrains.hexana.vscode
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Span
@@ -23,28 +22,51 @@ fun EditorToolbar(
     size: Int,
     providerType: BinaryProviderType,
     buffer: CommonByteBuffer? = null,
+    wasmBytes: ByteArray? = null,
 ) {
-    val isRunnable = remember(buffer, providerType) {
-        if (buffer == null) return@remember false
+    val runnableExportName = remember(buffer, providerType) {
+        if (buffer == null) return@remember null
         when (providerType) {
             is BinaryProviderType.Wasm -> {
                 buffer.position(0)
                 val provider = WasmBinaryProvider(buffer)
-                provider.canProvideWasmModule() && provider.exports.any { export ->
+                if (!provider.canProvideWasmModule()) return@remember null
+                val startExport = provider.exports.firstOrNull { export ->
                     export is WasmFunctionExportRecordEntry &&
                         (export.name == "_start" || export.name == "_initialize")
                 }
+                startExport?.name
             }
             is BinaryProviderType.WasmComponent -> {
                 buffer.position(0)
                 val provider = WasmComponentBinaryProvider(buffer)
-                provider.canProvideWasmModule() && hasWasiCliRunExport(provider)
+                if (!provider.canProvideWasmModule() || !hasWasiCliRunExport(provider)) return@remember null
+                "wasi:cli/run"
             }
-            else -> false
+            else -> null
         }
     }
 
+    val isRunnable = runnableExportName != null
     val isComponent = providerType is BinaryProviderType.WasmComponent
+
+    var showArgsDialog by remember { mutableStateOf(false) }
+
+    if (showArgsDialog && runnableExportName != null) {
+        ProgramArgsDialog(
+            exportName = runnableExportName,
+            onConfirm = { programArgs ->
+                postRunExportToHost(
+                    exportName = "",
+                    isComponent = isComponent,
+                    programArgs = programArgs,
+                    wasmBytes = wasmBytes,
+                )
+                showArgsDialog = false
+            },
+            onCancel = { showArgsDialog = false },
+        )
+    }
 
     Div({
         classes("hexana-toolbar")
@@ -87,12 +109,7 @@ fun EditorToolbar(
         if (isRunnable) {
             RunArrowButton(
                 tooltip = "Run Wasm module",
-                onClick = {
-                    postRunExportToHost(
-                        exportName = "",
-                        isComponent = isComponent,
-                    )
-                }
+                onClick = { showArgsDialog = true }
             )
         }
     }

@@ -164,6 +164,114 @@ html, body {
     padding: 4px 4px;
 }
 
+/* Function arguments dialog overlay */
+.hexana-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.hexana-dialog {
+    background: var(--vscode-editorWidget-background, #252526);
+    border: 1px solid var(--vscode-editorWidget-border, #454545);
+    border-radius: 6px;
+    min-width: 320px;
+    max-width: 480px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.hexana-dialog-title {
+    padding: 12px 16px;
+    font-weight: 600;
+    font-size: 13px;
+    border-bottom: 1px solid var(--hexana-border, #333);
+}
+
+.hexana-dialog-body {
+    padding: 12px 16px;
+}
+
+.hexana-dialog-field {
+    margin-bottom: 10px;
+}
+
+.hexana-dialog-field label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+    opacity: 0.85;
+}
+
+.hexana-dialog-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 8px;
+    font-size: 13px;
+    font-family: var(--hexana-font);
+    background: var(--vscode-input-background, #3c3c3c);
+    color: var(--vscode-input-foreground, #ccc);
+    border: 1px solid var(--vscode-input-border, #3c3c3c);
+    border-radius: 3px;
+    outline: none;
+}
+
+.hexana-dialog-input:focus {
+    border-color: var(--vscode-focusBorder, #007FD4);
+}
+
+.hexana-dialog-error {
+    color: var(--vscode-inputValidation-errorForeground, #f48771);
+    font-size: 11px;
+    margin-top: 2px;
+}
+
+.hexana-dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px 16px 12px;
+}
+
+.hexana-dialog-btn {
+    padding: 4px 14px;
+    font-size: 12px;
+    border-radius: 3px;
+    border: none;
+    cursor: pointer;
+    font-family: var(--hexana-font);
+}
+
+.hexana-dialog-btn-cancel {
+    background: transparent;
+    color: var(--hexana-fg);
+    border: 1px solid var(--hexana-border, #555);
+}
+
+.hexana-dialog-btn-cancel:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.hexana-dialog-btn-ok {
+    background: var(--vscode-button-background, #0e639c);
+    color: var(--vscode-button-foreground, #fff);
+}
+
+.hexana-dialog-btn-ok:hover {
+    background: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+.hexana-dialog-btn-ok[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* Tab content scrollbar */
 .hexana-tab-content::-webkit-scrollbar {
     width: 10px;

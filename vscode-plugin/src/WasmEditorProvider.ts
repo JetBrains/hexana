@@ -1,6 +1,9 @@
+import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 import { getWebviewContent } from "./webviewContent";
+import { execFileSync } from "child_process";
 
 /**
  * In-memory store for nested module byte arrays.
@@ -144,10 +147,24 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     /**
      * Handles a `run-export` message from the webview by executing the Wasm
      * module in a VS Code terminal using wasmtime.
+     *
+     * When the webview sends stub modules (for core-module non-function
+     * imports) or component import names, this method writes temporary
+     * stub files and passes `--preload` / `-W unknown-imports-default`
+     * flags, or attempts component composition via `wasm-tools compose`
+     * or `wac plug`.
      */
     private runExport(
         document: WasmDocument,
-        message: { exportName: string; invokeArgs: string; programArgs: string; isComponent: boolean },
+        message: {
+            exportName: string;
+            invokeArgs: string;
+            programArgs: string;
+            isComponent: boolean;
+            hasImports?: boolean;
+            stubs?: Array<{ moduleName: string; wasmBytes: number[] }>;
+            componentImports?: string[];
+        },
     ): void {
         const filePath = document.uri.fsPath;
         if (!filePath) {
@@ -155,16 +172,35 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             return;
         }
 
+        if (message.isComponent && message.componentImports && message.componentImports.length > 0) {
+            this.runComponentExport(document, message);
+            return;
+        }
+
         const args: string[] = ["run"];
 
+        // Handle core-module import stubs
+        if (!message.isComponent && message.hasImports) {
+            args.push("-W", "unknown-imports-default");
+
+            if (message.stubs && message.stubs.length > 0) {
+                const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hexana-wasm-stubs-"));
+                for (const stub of message.stubs) {
+                    const stubFile = path.join(tempDir, `${stub.moduleName}.wasm`);
+                    fs.writeFileSync(stubFile, Buffer.from(stub.wasmBytes));
+                    args.push("--preload", `${stub.moduleName}=${stubFile}`);
+                }
+            }
+        }
+
         if (message.invokeArgs) {
-            args.push(...message.invokeArgs.split(/\s+/));
+            args.push(...splitShellArgs(message.invokeArgs));
         }
 
         args.push(filePath);
 
         if (message.programArgs) {
-            args.push(...message.programArgs.split(/\s+/));
+            args.push(...splitShellArgs(message.programArgs));
         }
 
         const exportName = message.exportName || path.basename(filePath, ".wasm");
@@ -173,6 +209,297 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const terminal = vscode.window.createTerminal({ name: terminalName });
         terminal.show();
         terminal.sendText(`wasmtime ${args.map(a => shellEscape(a)).join(" ")}`);
+    }
+
+    /**
+     * Handles running a component-model export by first resolving
+     * dependencies from the filesystem, composing them using
+     * `wasm-tools compose` or `wac plug`, and then running the result.
+     */
+    private runComponentExport(
+        document: WasmDocument,
+        message: {
+            exportName: string;
+            invokeArgs: string;
+            programArgs: string;
+            isComponent: boolean;
+            componentImports?: string[];
+        },
+    ): void {
+        const filePath = document.uri.fsPath;
+        const componentImports = message.componentImports || [];
+
+        // Resolve dependencies from the filesystem
+        const scanRoots = this.buildScanRoots(filePath);
+        const resolved = this.resolveComponentDeps(componentImports, scanRoots, filePath);
+
+        let effectiveWasmPath = filePath;
+
+        if (Object.keys(resolved).length > 0) {
+            const composeResult = this.composeComponents(filePath, resolved);
+            if (composeResult.composed && composeResult.wasmPath) {
+                effectiveWasmPath = composeResult.wasmPath;
+            } else if (composeResult.error) {
+                vscode.window.showWarningMessage(
+                    `Component composition failed: ${composeResult.error}. Running original file.`,
+                );
+            }
+        }
+
+        const args: string[] = ["run"];
+
+        if (message.invokeArgs) {
+            args.push(...splitShellArgs(message.invokeArgs));
+        }
+
+        args.push(effectiveWasmPath);
+
+        if (message.programArgs) {
+            args.push(...splitShellArgs(message.programArgs));
+        }
+
+        const exportName = message.exportName || path.basename(filePath, ".wasm");
+        const terminalName = `Wasm: ${exportName}`;
+
+        const terminal = vscode.window.createTerminal({ name: terminalName });
+        terminal.show();
+        terminal.sendText(`wasmtime ${args.map(a => shellEscape(a)).join(" ")}`);
+    }
+
+    /**
+     * Builds a list of directories to scan for `.wasm` dependency files.
+     * Uses the workspace folder and walks up from the wasm file to find
+     * a likely workspace root (directory containing `Cargo.toml`,
+     * `package.json`, or `.git`).
+     */
+    private buildScanRoots(wasmFilePath: string): string[] {
+        const roots = new Set<string>();
+
+        // Add workspace folders
+        if (vscode.workspace.workspaceFolders) {
+            for (const folder of vscode.workspace.workspaceFolders) {
+                roots.add(folder.uri.fsPath);
+            }
+        }
+
+        // Walk up from the wasm file to find a workspace root
+        const workspaceRoot = this.findWorkspaceRoot(wasmFilePath);
+        if (workspaceRoot) {
+            roots.add(workspaceRoot);
+        }
+
+        return Array.from(roots);
+    }
+
+    private static readonly WORKSPACE_MARKERS = ["Cargo.toml", "package.json", ".git"];
+
+    private findWorkspaceRoot(wasmFilePath: string): string | undefined {
+        let dir = path.dirname(wasmFilePath);
+        const root = path.parse(dir).root;
+        while (dir && dir !== root) {
+            for (const marker of WasmEditorProvider.WORKSPACE_MARKERS) {
+                if (fs.existsSync(path.join(dir, marker))) {
+                    return dir;
+                }
+            }
+            dir = path.dirname(dir);
+        }
+        return undefined;
+    }
+
+    /**
+     * Scans directories for `.wasm` component files whose exports match
+     * the given import names.
+     */
+    private resolveComponentDeps(
+        importNames: string[],
+        scanRoots: string[],
+        excludePath: string,
+    ): Record<string, string> {
+        const resolved: Record<string, string> = {};
+        const needed = new Set(importNames);
+        const visited = new Set<string>([excludePath]);
+
+        for (const root of scanRoots) {
+            if (needed.size === 0) {break;}
+            this.scanDirectory(root, needed, resolved, visited);
+        }
+
+        return resolved;
+    }
+
+    private scanDirectory(
+        dir: string,
+        needed: Set<string>,
+        resolved: Record<string, string>,
+        visited: Set<string>,
+    ): void {
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+
+        for (const entry of entries) {
+            if (needed.size === 0) {return;}
+            const fullPath = path.join(dir, entry.name);
+
+            if (entry.isDirectory()) {
+                this.scanDirectory(fullPath, needed, resolved, visited);
+            } else if (entry.name.endsWith(".wasm") && !visited.has(fullPath)) {
+                visited.add(fullPath);
+                this.matchComponentExports(fullPath, needed, resolved);
+            }
+        }
+    }
+
+    /**
+     * Checks if a `.wasm` file is a component with exports matching needed imports.
+     * Uses a heuristic: reads the file and checks the component-model magic bytes,
+     * then scans for export names matching the needed imports.
+     */
+    private matchComponentExports(
+        filePath: string,
+        needed: Set<string>,
+        resolved: Record<string, string>,
+    ): void {
+        try {
+            const bytes = fs.readFileSync(filePath);
+            // Component-model magic: \0asm followed by version byte 0x0d (layer 1)
+            if (bytes.length < 8 || bytes[0] !== 0x00 || bytes[1] !== 0x61 ||
+                bytes[2] !== 0x73 || bytes[3] !== 0x6d) {
+                return;
+            }
+            // Check for component layer (version field byte at offset 4 is 0x0d for components)
+            if (bytes[4] !== 0x0d) {
+                return;
+            }
+
+            // Simple heuristic: search for export name strings in the binary.
+            // This is not a full parser but sufficient for matching well-known
+            // component export names against import names.
+            const content = bytes.toString("utf-8");
+            for (const name of needed) {
+                // Strip version suffix for matching (e.g., "component:foo/bar@0.1.0" → "component:foo/bar")
+                const baseName = name.replace(/@[\d.]+$/, "");
+                if (content.includes(baseName) && !(name in resolved)) {
+                    resolved[name] = filePath;
+                }
+            }
+        } catch {
+            // Skip files that can't be read
+        }
+    }
+
+    /**
+     * Attempts to compose component dependencies using `wasm-tools compose`
+     * or `wac plug`.
+     */
+    private composeComponents(
+        mainWasmPath: string,
+        deps: Record<string, string>,
+    ): { wasmPath: string; composed: boolean; error?: string } {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hexana-wac-compose-"));
+        const outputFile = path.join(tempDir, "composed.wasm");
+
+        // Try wasm-tools compose first
+        const wasmToolsPath = this.resolveToolPath("wasm-tools");
+        if (wasmToolsPath) {
+            const result = this.composeWithWasmTools(wasmToolsPath, mainWasmPath, deps, outputFile);
+            if (result.composed) {return result;}
+        }
+
+        // Fall back to wac plug
+        const wacPath = this.resolveToolPath("wac");
+        if (wacPath) {
+            const result = this.composeWithWac(wacPath, mainWasmPath, deps, outputFile);
+            if (result.composed) {return result;}
+        }
+
+        const toolNames = [wasmToolsPath ? "wasm-tools" : null, wacPath ? "wac" : null].filter(Boolean);
+        const errorMsg = toolNames.length === 0
+            ? "No composition tool found. Install 'wasm-tools' (cargo install wasm-tools) or 'wac' (cargo install wac-cli)."
+            : `Component composition failed with ${toolNames.join(" and ")}.`;
+        return { wasmPath: mainWasmPath, composed: false, error: errorMsg };
+    }
+
+    private composeWithWasmTools(
+        wasmToolsPath: string,
+        mainWasmPath: string,
+        deps: Record<string, string>,
+        outputFile: string,
+    ): { wasmPath: string; composed: boolean; error?: string } {
+        const command = [wasmToolsPath, "compose", mainWasmPath];
+        for (const depPath of Object.values(deps)) {
+            command.push("-d", depPath);
+        }
+        command.push("-o", outputFile);
+        return this.runTool(command, mainWasmPath, outputFile);
+    }
+
+    private composeWithWac(
+        wacPath: string,
+        mainWasmPath: string,
+        deps: Record<string, string>,
+        outputFile: string,
+    ): { wasmPath: string; composed: boolean; error?: string } {
+        const command = [wacPath, "plug", mainWasmPath];
+        for (const depPath of Object.values(deps)) {
+            command.push("--plug", depPath);
+        }
+        command.push("-o", outputFile);
+        return this.runTool(command, mainWasmPath, outputFile);
+    }
+
+    private runTool(
+        command: string[],
+        mainWasmPath: string,
+        outputFile: string,
+    ): { wasmPath: string; composed: boolean; error?: string } {
+        try {
+            execFileSync(command[0], command.slice(1), {
+                timeout: 30000,
+                stdio: ["pipe", "pipe", "pipe"],
+            });
+            if (fs.existsSync(outputFile)) {
+                return { wasmPath: outputFile, composed: true };
+            }
+            return { wasmPath: mainWasmPath, composed: false, error: "Output file not created" };
+        } catch (e: any) {
+            const stderr = e.stderr ? e.stderr.toString().trim() : "";
+            return {
+                wasmPath: mainWasmPath,
+                composed: false,
+                error: stderr || e.message || "unknown error",
+            };
+        }
+    }
+
+    /**
+     * Resolves the path to a CLI tool, checking common locations.
+     */
+    private resolveToolPath(toolName: string): string | undefined {
+        const home = os.homedir();
+        const candidates = [
+            path.join(home, ".cargo", "bin", toolName),
+            toolName,
+        ];
+
+        for (const candidate of candidates) {
+            try {
+                if (candidate === toolName) {
+                    // Check if it's on PATH
+                    execFileSync("which", [toolName], { stdio: "pipe" });
+                    return toolName;
+                } else if (fs.existsSync(candidate)) {
+                    return candidate;
+                }
+            } catch {
+                // Not found, try next
+            }
+        }
+        return undefined;
     }
 
     /**
@@ -211,6 +538,36 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             );
         }
     }
+}
+
+/**
+ * Splits a string into shell-like arguments, respecting double-quoted segments.
+ *
+ * For example `--invoke "add(1, 2)"` becomes `["--invoke", "add(1, 2)"]`.
+ * This is needed because the webview sends pre-formatted argument strings
+ * that may contain quoted tokens with internal spaces.
+ */
+function splitShellArgs(input: string): string[] {
+    const result: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (ch === '"') {
+            inQuotes = !inQuotes;
+        } else if (ch === " " && !inQuotes) {
+            if (current.length > 0) {
+                result.push(current);
+                current = "";
+            }
+        } else {
+            current += ch;
+        }
+    }
+    if (current.length > 0) {
+        result.push(current);
+    }
+    return result;
 }
 
 /**

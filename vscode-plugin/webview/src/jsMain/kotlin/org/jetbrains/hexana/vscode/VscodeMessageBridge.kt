@@ -3,6 +3,9 @@ package org.jetbrains.hexana.vscode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import kotlinx.browser.window
+import org.jetbrains.hexana.shared.WasmImportStubGenerator
+import org.jetbrains.hexana.shared.componentImportNames
+import org.jetbrains.hexana.shared.isRuntimeImport
 import org.w3c.dom.MessageEvent
 import org.w3c.dom.events.Event
 
@@ -38,12 +41,16 @@ fun postMessageToHost(type: String) {
  * [invokeArgs] is the optional wasmtime `--invoke` argument string.
  * [programArgs] is the optional program arguments string.
  * [isComponent] indicates whether this is a component-model binary.
+ * [wasmBytes] when provided, is used to generate import stubs and detect
+ * component imports so the extension host can resolve dependencies and
+ * compose components before running.
  */
 fun postRunExportToHost(
     exportName: String,
     invokeArgs: String = "",
     programArgs: String = "",
     isComponent: Boolean = false,
+    wasmBytes: ByteArray? = null,
 ) {
     val msg = js("{}")
     msg.type = "run-export"
@@ -51,6 +58,41 @@ fun postRunExportToHost(
     msg.invokeArgs = invokeArgs
     msg.programArgs = programArgs
     msg.isComponent = isComponent
+
+    if (wasmBytes != null) {
+        if (!isComponent) {
+            // Core module: generate stub modules for non-function imports
+            val hasImports = WasmImportStubGenerator.hasImports(wasmBytes)
+            msg.hasImports = hasImports
+            if (hasImports && WasmImportStubGenerator.hasNonFunctionImports(wasmBytes)) {
+                val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasmBytes)
+                val jsStubs = js("[]")
+                for (stub in stubs) {
+                    val jsStub = js("{}")
+                    jsStub.moduleName = stub.moduleName
+                    val jsBytes = js("[]")
+                    for (b in stub.wasmBytes) {
+                        jsBytes.push(b.toInt() and 0xFF)
+                    }
+                    jsStub.wasmBytes = jsBytes
+                    jsStubs.push(jsStub)
+                }
+                msg.stubs = jsStubs
+            }
+        } else {
+            // Component model: collect non-runtime import names for dependency resolution
+            val importNames = componentImportNames(wasmBytes)
+                .filter { !isRuntimeImport(it) }
+            if (importNames.isNotEmpty()) {
+                val jsNames = js("[]")
+                for (name in importNames) {
+                    jsNames.push(name)
+                }
+                msg.componentImports = jsNames
+            }
+        }
+    }
+
     vscodeApi.postMessage(msg)
 }
 
