@@ -2,7 +2,6 @@ package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
@@ -11,13 +10,12 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.exportKindLabel
 import org.jetbrains.hexana.shared.exportIndex
 import org.jetbrains.hexana.shared.resolveCoreSignature
-import org.jetbrains.hexana.shared.wasmValueTypeName
 import org.jetbrains.hexana.shared.isWasiCliRunExportName
 import org.jetbrains.hexana.shared.isComponentFunctionExport
-import org.jetbrains.hexana.shared.hasWasiCliRunExport as sharedHasWasiCliRunExport
 import org.jetbrains.hexana.shared.isInternalName
-import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.sections.*
+import org.jetbrains.hexana.shared.componentExternDescriptionLabel
+import org.jetbrains.hexana.shared.componentSortIndexLabel
 
 @Composable
 fun ExportsTabContent(
@@ -129,7 +127,7 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
     ) {
         for (export in exports) {
             val isWasiCliRun = isWasiCliRunExportName(export.exportName)
-            val isFunctionExport = isComponentFuncExport(export, provider)
+            val isFunctionExport = isComponentFunctionExport(export, provider)
             val isRunnable = isWasiCliRun || isFunctionExport
 
             PanelTableRow(
@@ -198,9 +196,3 @@ internal fun RunArrowButton(tooltip: String = "Run", onClick: () -> Unit) {
         Text("\u25B6")
     }
 }
-
-internal fun isComponentFuncExport(export: WasmComponentExport, provider: WasmComponentBinaryProvider): Boolean =
-    isComponentFunctionExport(export, provider)
-
-internal fun hasWasiCliRunExport(provider: WasmComponentBinaryProvider): Boolean =
-    sharedHasWasiCliRunExport(provider)

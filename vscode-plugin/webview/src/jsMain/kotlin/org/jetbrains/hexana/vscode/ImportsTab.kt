@@ -2,7 +2,6 @@ package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Td
 import org.jetbrains.compose.web.dom.Text
@@ -11,7 +10,7 @@ import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.importKindLabel
-import org.jetbrains.hexana.wasm.sections.*
+import org.jetbrains.hexana.shared.componentExternDescriptionLabel
 
 @Composable
 fun ImportsTabContent(

@@ -10,6 +10,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 
 /**

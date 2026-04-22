@@ -25,6 +25,15 @@ import org.jetbrains.hexana.run.WasmEngine
 import org.jetbrains.hexana.run.WasmRunMode
 import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.run.showEnginePopup
+import org.jetbrains.hexana.shared.componentExternDescriptionLabel
+import org.jetbrains.hexana.shared.componentSortIndexLabel
+import org.jetbrains.hexana.shared.componentTypeName
+import org.jetbrains.hexana.shared.isComponentFunctionExport
+import org.jetbrains.hexana.shared.isTrivialComponentType
+import org.jetbrains.hexana.shared.isWasiCliRunExport
+import org.jetbrains.hexana.shared.resolveComponentFunctionType
+import org.jetbrains.hexana.shared.resolveComponentValueType
+import org.jetbrains.hexana.shared.resolveInvokeName
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
@@ -69,11 +78,11 @@ fun WasmComponentPanelExports(binaryProvider: BinaryProvider,
         },
         TableColumn("Sort Index", modifier = Modifier.widthIn(min = sortIndexColumnWidth)) { index ->
             val exportRecord = exports[index]
-            TableCellValue(exportRecord.sortIndex.toStringRepresentation() ?: "")
+            TableCellValue(componentSortIndexLabel(exportRecord.sortIndex) ?: "")
         },
         TableColumn("Extern Description", modifier = Modifier.fillMaxWidth()) { index ->
             val exportRecord = exports[index]
-            TableCellValue(exportRecord.externDescription?.toStringRepresentation() ?: "")
+            TableCellValue(exportRecord.externDescription?.let { componentExternDescriptionLabel(it) } ?: "")
         },
 
         ), exports.size,

@@ -21,6 +21,11 @@ import org.jetbrains.hexana.run.WasmEngine
 import org.jetbrains.hexana.run.WasmRunMode
 import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.run.showEnginePopup
+import org.jetbrains.hexana.shared.formatSignature
+import org.jetbrains.hexana.shared.isInternalName
+import org.jetbrains.hexana.shared.isTrivialType
+import org.jetbrains.hexana.shared.resolveFunctionSignature
+import org.jetbrains.hexana.shared.wasmValueTypeName
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
@@ -122,7 +127,7 @@ private fun wasmArgDescriptors(params: List<WasmValueType<*>>): List<FunctionArg
     params.mapIndexed { i, param ->
         FunctionArgDescriptor(
             label = "arg$i",
-            typeName = wasmTypeName(param),
+            typeName = wasmValueTypeName(param),
             validate = { text -> validateWasmArg(text, param) },
         )
     }

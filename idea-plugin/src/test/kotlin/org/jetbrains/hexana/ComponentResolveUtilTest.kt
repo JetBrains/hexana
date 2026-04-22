@@ -1,5 +1,6 @@
 package org.jetbrains.hexana
 
+import org.jetbrains.hexana.shared.isWasiCliRunExport
 import org.jetbrains.hexana.wasm.components.ComponentSort
 import org.jetbrains.hexana.wasm.components.ComponentSortIndex
 import org.jetbrains.hexana.wasm.components.WasmComponentExport

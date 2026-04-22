@@ -2,6 +2,11 @@ package org.jetbrains.hexana.ui.components
 
 import com.intellij.testFramework.UsefulTestCase
 import org.jetbrains.hexana.*
+import org.jetbrains.hexana.shared.componentTypeName
+import org.jetbrains.hexana.shared.extractNameFromWitExport
+import org.jetbrains.hexana.shared.formatComponentSignature
+import org.jetbrains.hexana.shared.isTrivialComponentType
+import org.jetbrains.hexana.shared.looksLikeWitInterfaceExport
 import org.jetbrains.hexana.wasm.components.*
 
 class WitExportNameTest : UsefulTestCase() {

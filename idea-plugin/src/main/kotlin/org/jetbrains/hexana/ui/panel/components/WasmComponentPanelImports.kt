@@ -11,6 +11,7 @@ import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.application.runReadActionBlocking
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.shared.componentExternDescriptionLabel
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
@@ -35,7 +36,7 @@ internal fun WasmComponentPanelImports(
 
         TableColumn("Extern Description", modifier = Modifier.fillMaxWidth()) { index ->
             val importRecord = imports[index]
-            TableCellValue(importRecord.externDescription.toStringRepresentation())
+            TableCellValue(componentExternDescriptionLabel(importRecord.externDescription))
         },
 
         ), imports.size,
