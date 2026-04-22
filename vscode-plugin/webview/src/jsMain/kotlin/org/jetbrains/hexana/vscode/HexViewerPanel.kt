@@ -15,6 +15,7 @@ import org.w3c.dom.events.MouseEvent
 private const val BYTES_PER_ROW = 16
 internal const val ROW_HEIGHT_PX = 20
 private const val OVERSCAN_ROWS = 5
+private const val DRAG_THRESHOLD_PX = 3.0
 
 /**
  * Selection state for the hex viewer, tracking a range of selected bytes
@@ -69,6 +70,9 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
     var scrollTop by remember { mutableStateOf(0) }
     var viewportHeight by remember { mutableStateOf(600) }
     var isDragging by remember { mutableStateOf(false) }
+    // Pending drag: tracks the mousedown position to apply a movement threshold
+    // before committing to drag selection. Prevents accidental selection on click.
+    var pendingDragOrigin by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
     val firstVisibleRow = (scrollTop / ROW_HEIGHT_PX - OVERSCAN_ROWS).coerceAtLeast(0)
     val lastVisibleRow = ((scrollTop + viewportHeight) / ROW_HEIGHT_PX + OVERSCAN_ROWS).coerceAtMost(totalRows - 1)
@@ -118,40 +122,62 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
         onDispose { window.removeEventListener("keydown", handler) }
     }
 
-    // Global mousemove/mouseup for drag selection
-    DisposableEffect(isDragging) {
-        if (!isDragging) return@DisposableEffect onDispose {}
+    // Global mousemove/mouseup for pending drag detection and active drag selection.
+    // A drag threshold of DRAG_THRESHOLD_PX prevents accidental selections on simple clicks.
+    DisposableEffect(isDragging, pendingDragOrigin) {
+        if (!isDragging && pendingDragOrigin == null) return@DisposableEffect onDispose {}
 
-        val moveHandler: (Event) -> Unit = { event ->
-            val me = event as? MouseEvent
-            if (me != null) {
-                val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement
-                if (container != null) {
-                    val rect = container.getBoundingClientRect()
-                    // Subtract header row height since HexColumnHeader is inside the scroll container
-                    val relY = me.clientY - rect.top + container.scrollTop - ROW_HEIGHT_PX
-                    val relX = me.clientX - rect.left
-                    val row = (relY / ROW_HEIGHT_PX).toInt().coerceIn(0, totalRows - 1)
-                    val col = resolveColumn(relX, container.clientWidth.toDouble())
-                    val idx = (row * BYTES_PER_ROW + col).coerceIn(0, bytes.size - 1)
-                    selection.extendSelection(idx)
+        val moveHandler: (Event) -> Unit = handler@{ event ->
+            val me = event as? MouseEvent ?: return@handler
 
-                    // Auto-scroll when dragging near edges
-                    val edgeThreshold = 30.0
-                    val scrollDelta = when {
-                        me.clientY - rect.top < edgeThreshold -> -ROW_HEIGHT_PX.toDouble()
-                        me.clientY - rect.top > rect.height - edgeThreshold -> ROW_HEIGHT_PX.toDouble()
-                        else -> 0.0
-                    }
-                    if (scrollDelta != 0.0) {
-                        container.scrollTop += scrollDelta
-                    }
+            // Only perform selection while the primary mouse button is held down.
+            // buttons is a bitmask; bit 0 (value 1) = primary button.
+            if (me.buttons.toInt() and 1 == 0) {
+                if (pendingDragOrigin != null) pendingDragOrigin = null
+                if (isDragging) isDragging = false
+                return@handler
+            }
+
+            // If we have a pending drag, check if the mouse moved far enough to commit
+            val origin = pendingDragOrigin
+            if (origin != null && !isDragging) {
+                val dx = me.clientX - origin.first
+                val dy = me.clientY - origin.second
+                if (dx * dx + dy * dy >= DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
+                    isDragging = true
+                    pendingDragOrigin = null
+                } else {
+                    return@handler
                 }
+            }
+
+            if (!isDragging) return@handler
+
+            val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement ?: return@handler
+            val rect = container.getBoundingClientRect()
+            // Subtract header row height since HexColumnHeader is inside the scroll container
+            val relY = me.clientY - rect.top + container.scrollTop - ROW_HEIGHT_PX
+            val relX = me.clientX - rect.left
+            val row = (relY / ROW_HEIGHT_PX).toInt().coerceIn(0, totalRows - 1)
+            val col = resolveColumn(relX, container.clientWidth.toDouble())
+            val idx = (row * BYTES_PER_ROW + col).coerceIn(0, bytes.size - 1)
+            selection.extendSelection(idx)
+
+            // Auto-scroll when dragging near edges
+            val edgeThreshold = 30.0
+            val scrollDelta = when {
+                me.clientY - rect.top < edgeThreshold -> -ROW_HEIGHT_PX.toDouble()
+                me.clientY - rect.top > rect.height - edgeThreshold -> ROW_HEIGHT_PX.toDouble()
+                else -> 0.0
+            }
+            if (scrollDelta != 0.0) {
+                container.scrollTop += scrollDelta
             }
         }
 
         val upHandler: (Event) -> Unit = {
             isDragging = false
+            pendingDragOrigin = null
         }
 
         window.addEventListener("mousemove", moveHandler)
@@ -200,8 +226,8 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
 
             // Visible rows
             for (row in firstVisibleRow..lastVisibleRow) {
-                HexRow(bytes, row, selection, isDragging) { newDragging ->
-                    isDragging = newDragging
+                HexRow(bytes, row, selection, isDragging) { origin ->
+                    pendingDragOrigin = origin
                 }
             }
 
@@ -284,7 +310,7 @@ private fun HexRow(
     row: Int,
     selection: HexSelectionState,
     isDragging: Boolean,
-    onDragChange: (Boolean) -> Unit,
+    onPendingDrag: (Pair<Double, Double>) -> Unit,
 ) {
     val offset = row * BYTES_PER_ROW
     val end = minOf(offset + BYTES_PER_ROW, bytes.size)
@@ -329,7 +355,9 @@ private fun HexRow(
                     style {
                         property("width", "28px")
                         property("text-align", "center")
-                        property("border-radius", "2px")
+                        if (!isSelected) {
+                            property("border-radius", "2px")
+                        }
                         if (isSelected) {
                             property("background", "var(--hexana-selection, rgba(156, 183, 255, 0.4))")
                         }
@@ -350,7 +378,9 @@ private fun HexRow(
                             }
                         } else {
                             selection.startSelection(byteIndex)
-                            onDragChange(true)
+                            if (nativeMouseEvent != null) {
+                                onPendingDrag(nativeMouseEvent.clientX.toDouble() to nativeMouseEvent.clientY.toDouble())
+                            }
                         }
                     }
                 }) {
@@ -395,7 +425,9 @@ private fun HexRow(
                         property("width", "8.5px")
                         property("text-align", "center")
                         color(Color("#CE9178"))
-                        property("border-radius", "1px")
+                        if (!isSelected) {
+                            property("border-radius", "1px")
+                        }
                         if (isSelected) {
                             property("background", "var(--hexana-selection, rgba(156, 183, 255, 0.4))")
                         }
@@ -416,7 +448,9 @@ private fun HexRow(
                             }
                         } else {
                             selection.startSelection(byteIndex)
-                            onDragChange(true)
+                            if (nativeMouseEvent != null) {
+                                onPendingDrag(nativeMouseEvent.clientX.toDouble() to nativeMouseEvent.clientY.toDouble())
+                            }
                         }
                     }
                 }) {
