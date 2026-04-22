@@ -42,6 +42,16 @@ fun componentExportNames(wasmBytes: ByteArray): List<String> {
 }
 
 /**
+ * Splits a versioned WIT name (e.g. `component:foo/bar@0.1.0`) into the
+ * base name (`component:foo/bar`) and the version part (`0.1.0`).
+ *
+ * When no `@` is present the full name is returned as the base and the
+ * version string is empty.
+ */
+fun splitNameAndVersion(name: String): Pair<String, String> =
+    Pair(name.substringBeforeLast("@"), name.substringAfterLast("@", ""))
+
+/**
  * Determines the [BinaryProviderType] for the given raw Wasm bytes.
  */
 fun detectBinaryType(wasmBytes: ByteArray): BinaryProviderType =
