@@ -25,7 +25,7 @@ class HexanaService(
             HexanaAnalytics.initialize(
                 config = AnalyticsConfig(),
                 consentProvider = IntellijConsentProvider(),
-                distinctIdProvider = IdeDistinctIdProvider(),
+                distinctIdProvider = UuidDistinctIdProvider(),
                 globalProperties = mapOf(
                     "ide_type" to appInfo.versionName,
                     "ide_build" to appInfo.build.asString()
