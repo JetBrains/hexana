@@ -40,7 +40,7 @@ private fun CoreWasmSize(buffer: CommonByteBuffer, selection: HexSelectionState)
     val module = remember(provider) { provider.sizeAnalysis }
 
     if (module == null) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("Size analysis unavailable.")
         }
         return
@@ -64,7 +64,7 @@ private fun ComponentSize(buffer: CommonByteBuffer, selection: HexSelectionState
     val module = remember(provider) { provider.sizeAnalysis }
 
     if (module == null) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("Size analysis unavailable.")
         }
         return
@@ -80,7 +80,7 @@ private fun SizeNodeTable(module: SizeNode.Module, selection: HexSelectionState)
     }
 
     if (module.children.isEmpty()) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("No size data available.")
         }
         return
@@ -108,17 +108,17 @@ private fun SizeNodeTable(module: SizeNode.Module, selection: HexSelectionState)
                     }
                 },
             ) {
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(index.toString())
                 }
-                Td({ style { property("padding", "2px 8px") } }) { Text(child.name) }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell") }) { Text(child.name) }
+                Td({ classes("cell-right") }) {
                     Text(formatSize(child.size))
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell-right") }) {
                     Text(pctStr)
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px"); property("opacity", "0.7") } }) {
+                Td({ classes("cell-right-muted") }) {
                     Text(hex)
                 }
             }

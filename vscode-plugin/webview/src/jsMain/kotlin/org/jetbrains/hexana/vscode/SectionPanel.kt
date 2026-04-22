@@ -115,9 +115,9 @@ private fun SectionTable(sections: List<WasmSection>, selection: HexSelectionSta
     }) {
         Thead {
             Tr {
-                Th({ style { property("text-align", "left"); property("padding", "4px 8px") } }) { Text("Section") }
-                Th({ style { property("text-align", "right"); property("padding", "4px 8px") } }) { Text("Offset") }
-                Th({ style { property("text-align", "right"); property("padding", "4px 8px") } }) { Text("Size") }
+                Th({ classes("section-th-left") }) { Text("Section") }
+                Th({ classes("section-th-right") }) { Text("Offset") }
+                Th({ classes("section-th-right") }) { Text("Size") }
             }
         }
         Tbody {
@@ -142,13 +142,13 @@ private fun SectionTable(sections: List<WasmSection>, selection: HexSelectionSta
                         scrollHexViewerTo(sectionStart)
                     }
                 }) {
-                    Td({ style { property("padding", "2px 8px") } }) {
+                    Td({ classes("cell") }) {
                         Text(section.name)
                     }
-                    Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                    Td({ classes("cell-right") }) {
                         Text("0x${section.sectionOffset.toString(16)}")
                     }
-                    Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                    Td({ classes("cell-right") }) {
                         Text("${section.sectionSize} bytes")
                     }
                 }

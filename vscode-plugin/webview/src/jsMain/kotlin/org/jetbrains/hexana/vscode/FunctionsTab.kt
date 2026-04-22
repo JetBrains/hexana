@@ -42,7 +42,7 @@ private fun CoreWasmFunctions(buffer: CommonByteBuffer, selection: HexSelectionS
     val typeNames = nameSection?.typesSection?.namemap
 
     if (functions.isEmpty()) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("No functions found.")
         }
         return
@@ -70,13 +70,13 @@ private fun CoreWasmFunctions(buffer: CommonByteBuffer, selection: HexSelectionS
                 isHighlighted = false,
                 onClick = {},
             ) {
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(index.toString())
                 }
                 if (hasNames) {
-                    Td({ style { property("padding", "2px 8px"); property("word-break", "break-all") } }) { Text(name ?: "") }
+                    Td({ classes("cell"); style { property("word-break", "break-all") } }) { Text(name ?: "") }
                 }
-                Td({ style { property("padding", "2px 8px"); property("opacity", "0.7"); property("word-break", "break-all") } }) { Text(sig) }
+                Td({ classes("cell-muted"); style { property("word-break", "break-all") } }) { Text(sig) }
             }
         }
     }

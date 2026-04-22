@@ -43,7 +43,7 @@ private fun CoreWasmGarbage(buffer: CommonByteBuffer, selection: HexSelectionSta
     val codeOffsets = remember(provider) { provider.codeOffsets }
 
     if (garbage == null) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("Analysis unavailable.")
         }
         return
@@ -99,18 +99,18 @@ private fun GarbageFunctionsSection(
                     }
                 },
             ) {
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(rowIndex.toString())
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell-right") }) {
                     Text(entry.funcIndex.toString())
                 }
-                Td({ style { property("padding", "2px 8px") } }) { Text(entry.name) }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell") }) { Text(entry.name) }
+                Td({ classes("cell-right") }) {
                     Text(if (entry.size > 0) formatSize(entry.size) else "\u2014")
                 }
-                Td({ style { property("padding", "2px 8px") } }) { Text(entry.module ?: "") }
-                Td({ style { property("padding", "2px 8px"); property("opacity", "0.7") } }) {
+                Td({ classes("cell") }) { Text(entry.module ?: "") }
+                Td({ classes("cell-muted") }) {
                     Text(garbageReasonLabel(entry.reason))
                 }
             }
@@ -134,13 +134,13 @@ private fun GarbageTypesSection(garbage: GarbageResult) {
     ) {
         for ((rowIndex, entry) in entries.withIndex()) {
             PanelTableRow(isHighlighted = false, onClick = {}) {
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(rowIndex.toString())
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell-right") }) {
                     Text(entry.typeIndex.toString())
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell-right") }) {
                     Text("${entry.size} B")
                 }
             }
@@ -164,16 +164,16 @@ private fun GarbageDataSection(garbage: GarbageResult) {
     ) {
         for ((rowIndex, entry) in entries.withIndex()) {
             PanelTableRow(isHighlighted = false, onClick = {}) {
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(rowIndex.toString())
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell-right") }) {
                     Text(entry.index.toString())
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell-right") }) {
                     Text(formatSize(entry.dataSize))
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell-right") }) {
                     Text(formatSize(entry.recordSize))
                 }
             }

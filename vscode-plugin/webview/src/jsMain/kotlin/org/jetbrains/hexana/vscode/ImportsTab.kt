@@ -40,7 +40,7 @@ private fun CoreWasmImports(buffer: CommonByteBuffer, selection: HexSelectionSta
     val imports = remember(provider) { provider.imports }
 
     if (imports.isEmpty()) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("No imports found.")
         }
         return
@@ -64,12 +64,12 @@ private fun CoreWasmImports(buffer: CommonByteBuffer, selection: HexSelectionSta
                     scrollHexViewerTo(imp.offset)
                 },
             ) {
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(index.toString())
                 }
-                Td({ style { property("padding", "2px 8px") } }) { Text(kind) }
-                Td({ style { property("padding", "2px 8px"); property("opacity", "0.7") } }) { Text(imp.prefix) }
-                Td({ style { property("padding", "2px 8px") } }) { Text(imp.name) }
+                Td({ classes("cell") }) { Text(kind) }
+                Td({ classes("cell-muted") }) { Text(imp.prefix) }
+                Td({ classes("cell") }) { Text(imp.name) }
             }
         }
     }
@@ -90,7 +90,7 @@ private fun ComponentImports(buffer: CommonByteBuffer, selection: HexSelectionSt
     val imports = remember(provider) { provider.imports }
 
     if (imports.isEmpty()) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("No imports found.")
         }
         return
@@ -112,13 +112,13 @@ private fun ComponentImports(buffer: CommonByteBuffer, selection: HexSelectionSt
                     scrollHexViewerTo(imp.offset)
                 },
             ) {
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(index.toString())
                 }
-                Td({ style { property("padding", "2px 8px") } }) {
+                Td({ classes("cell") }) {
                     Text(imp.importName + (imp.version?.let { " $it" } ?: ""))
                 }
-                Td({ style { property("padding", "2px 8px"); property("opacity", "0.7") } }) {
+                Td({ classes("cell-muted") }) {
                     Text(componentExternDescriptionLabel(imp.externDescription))
                 }
             }

@@ -42,7 +42,7 @@ private fun ComponentModuleList(
     val modules = remember(provider) { provider.modules }
 
     if (modules.isEmpty()) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("No nested modules found.")
         }
         return
@@ -77,12 +77,12 @@ private fun ComponentModuleList(
                     postOpenModuleToHost(index, moduleFileName, moduleBytes)
                 },
             ) {
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(index.toString())
                 }
                 Td({
+                    classes("cell")
                     style {
-                        property("padding", "2px 8px")
                         property("cursor", "pointer")
                         color(Color("var(--vscode-textLink-foreground, #3794FF)"))
                     }

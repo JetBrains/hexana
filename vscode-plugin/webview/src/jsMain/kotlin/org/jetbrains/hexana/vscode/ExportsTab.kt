@@ -47,7 +47,7 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
     val importFuncCount = remember(provider) { provider.importFuncCount }
 
     if (exports.isEmpty()) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("No exports found.")
         }
         return
@@ -76,7 +76,7 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
                     scrollHexViewerTo(export.offset)
                 },
             ) {
-                Td({ style { property("padding", "2px 4px"); property("width", "12px") } }) {
+                Td({ classes("cell-id"); style { property("width", "12px") } }) {
                     if (isRunnable) {
                         RunArrowButton(
                             tooltip = "Run '${export.name}'",
@@ -89,15 +89,15 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
                         )
                     }
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(index.toString())
                 }
-                Td({ style { property("padding", "2px 8px") } }) { Text(kind) }
-                Td({ style { property("padding", "2px 8px") } }) { Text(export.name) }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell") }) { Text(kind) }
+                Td({ classes("cell") }) { Text(export.name) }
+                Td({ classes("cell-right") }) {
                     Text(exportIndex(export))
                 }
-                Td({ style { property("padding", "2px 8px"); property("opacity", "0.7") } }) { Text(sig) }
+                Td({ classes("cell-muted") }) { Text(sig) }
             }
         }
     }
@@ -118,7 +118,7 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
     val exports = remember(provider) { provider.exports }
 
     if (exports.isEmpty()) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("No exports found.")
         }
         return
@@ -144,7 +144,7 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
                     scrollHexViewerTo(export.offset)
                 },
             ) {
-                Td({ style { property("padding", "2px 4px"); property("width", "12px") } }) {
+                Td({ classes("cell-id"); style { property("width", "12px") } }) {
                     if (isRunnable) {
                         RunArrowButton(
                             tooltip = "Run '${export.exportName}'",
@@ -157,16 +157,16 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
                         )
                     }
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(index.toString())
                 }
-                Td({ style { property("padding", "2px 8px") } }) {
+                Td({ classes("cell") }) {
                     Text(export.exportName + (export.version?.let { " $it" } ?: ""))
                 }
-                Td({ style { property("padding", "2px 8px") } }) {
+                Td({ classes("cell") }) {
                     Text(componentSortIndexLabel(export.sortIndex))
                 }
-                Td({ style { property("padding", "2px 8px"); property("opacity", "0.7") } }) {
+                Td({ classes("cell-muted") }) {
                     Text(export.externDescription?.let { componentExternDescriptionLabel(it) } ?: "")
                 }
             }

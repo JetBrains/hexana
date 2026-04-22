@@ -38,7 +38,7 @@ private fun CoreWasmData(buffer: CommonByteBuffer, selection: HexSelectionState)
     val dataRecords = remember(provider) { provider.data }
 
     if (dataRecords.isEmpty()) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("No data segments found.")
         }
         return
@@ -60,13 +60,13 @@ private fun CoreWasmData(buffer: CommonByteBuffer, selection: HexSelectionState)
                     scrollHexViewerTo(record.offset)
                 },
             ) {
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(index.toString())
                 }
-                Td({ style { property("padding", "2px 8px") } }) {
+                Td({ classes("cell") }) {
                     Text(dataSegmentTypeLabel(record.type))
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell-right") }) {
                     Text("${record.recordLength} bytes")
                 }
             }

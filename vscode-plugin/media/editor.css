@@ -99,6 +99,59 @@ html, body {
     height: 2px !important;
 }
 
+/* Reusable table-cell styles */
+.cell-id {
+    text-align: right;
+    padding: 2px 4px;
+}
+.cell {
+    padding: 2px 8px;
+}
+.cell-right {
+    text-align: right;
+    padding: 2px 8px;
+}
+.cell-muted {
+    padding: 2px 8px;
+    opacity: 0.7;
+}
+.cell-right-muted {
+    text-align: right;
+    padding: 2px 8px;
+    opacity: 0.7;
+}
+
+/* Empty-state hint shown when a tab has no data */
+.empty-hint {
+    opacity: 0.6;
+    padding: 8px 0;
+}
+
+/* Section panel table header cells */
+.section-th-left {
+    text-align: left;
+    padding: 4px 8px;
+}
+.section-th-right {
+    text-align: right;
+    padding: 4px 8px;
+}
+
+/* PanelTable sticky header cells */
+.panel-th {
+    padding: 4px 8px;
+    font-weight: 600;
+    white-space: nowrap;
+    position: sticky;
+    top: -8px;
+    background: var(--hexana-bg, #1e1e1e);
+    z-index: 1;
+}
+.panel-th-narrow {
+    width: 1%;
+    padding: 4px 4px;
+}
+
 /* Tab content scrollbar */
 .hexana-tab-content::-webkit-scrollbar {
     width: 10px;

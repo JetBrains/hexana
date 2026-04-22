@@ -33,20 +33,12 @@ internal fun PanelTable(
             }) {
                 headers.forEachIndexed { index, header ->
                     val align = columnAligns.getOrElse(index) { "left" }
+                    val isNarrow = header == "ID" || header == ""
                     Th({
+                        classes("panel-th")
+                        if (isNarrow) classes("panel-th-narrow")
                         style {
                             property("text-align", align)
-                            property("padding", "4px 8px 4px")
-                            property("font-weight", "600")
-                            property("white-space", "nowrap")
-                            property("position", "sticky")
-                            property("top", "-8px")
-                            property("background", "var(--hexana-bg, #1e1e1e)")
-                            property("z-index", "1")
-                            if (header == "ID" || header == "") {
-                                property("width", "1%")
-                                property("padding", "4px 4px 4px")
-                            }
                         }
                     }) { Text(header) }
                 }

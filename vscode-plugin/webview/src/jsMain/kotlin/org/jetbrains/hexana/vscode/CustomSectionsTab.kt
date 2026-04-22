@@ -40,7 +40,7 @@ private fun CoreWasmCustomSections(buffer: CommonByteBuffer, selection: HexSelec
     }
 
     if (customSections.isEmpty()) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("No custom sections found.")
         }
         return
@@ -69,11 +69,11 @@ private fun CoreWasmCustomSections(buffer: CommonByteBuffer, selection: HexSelec
                     scrollHexViewerTo(section.sectionOffset)
                 },
             ) {
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(index.toString())
                 }
-                Td({ style { property("padding", "2px 8px") } }) { Text(section.name) }
-                Td({ style { property("padding", "2px 8px"); property("opacity", "0.7") } }) {
+                Td({ classes("cell") }) { Text(section.name) }
+                Td({ classes("cell-muted") }) {
                     Text(payloads[index])
                 }
             }

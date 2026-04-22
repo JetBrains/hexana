@@ -40,7 +40,7 @@ private fun CoreWasmMonos(buffer: CommonByteBuffer, selection: HexSelectionState
     val codeOffsets = remember(provider) { provider.codeOffsets }
 
     if (monos == null || monos.groups.isEmpty()) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text(if (monos == null) "No name section available." else "No monomorphizations detected.")
         }
         return
@@ -68,17 +68,17 @@ private fun CoreWasmMonos(buffer: CommonByteBuffer, selection: HexSelectionState
                     }
                 },
             ) {
-                Td({ style { property("text-align", "right"); property("padding", "2px 4px") } }) {
+                Td({ classes("cell-id") }) {
                     Text(index.toString())
                 }
-                Td({ style { property("padding", "2px 8px") } }) { Text(group.baseName) }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell") }) { Text(group.baseName) }
+                Td({ classes("cell-right") }) {
                     Text(group.count.toString())
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell-right") }) {
                     Text(formatSize(group.totalSize))
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell-right") }) {
                     Text(formatSize(group.avgSize))
                 }
             }

@@ -88,7 +88,7 @@ private fun ComponentSummary(buffer: CommonByteBuffer, selection: HexSelectionSt
 @Composable
 private fun SummarySectionsTable(sections: List<WasmSection>, selection: HexSelectionState) {
     if (sections.isEmpty()) {
-        Div({ style { property("opacity", "0.6"); property("padding", "8px 0") } }) {
+        Div({ classes("empty-hint") }) {
             Text("No sections found.")
         }
         return
@@ -113,11 +113,11 @@ private fun SummarySectionsTable(sections: List<WasmSection>, selection: HexSele
                     scrollHexViewerTo(sectionStart)
                 },
             ) {
-                Td({ style { property("padding", "2px 8px") } }) { Text(section.name) }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell") }) { Text(section.name) }
+                Td({ classes("cell-right") }) {
                     Text("0x${section.sectionOffset.toString(16)}")
                 }
-                Td({ style { property("text-align", "right"); property("padding", "2px 8px") } }) {
+                Td({ classes("cell-right") }) {
                     Text("${section.sectionSize} bytes")
                 }
             }
