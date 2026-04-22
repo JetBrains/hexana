@@ -10,6 +10,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.shared.importKindLabel
 import org.jetbrains.hexana.wasm.sections.*
 
 @Composable
@@ -120,10 +121,3 @@ private fun ComponentImports(buffer: CommonByteBuffer, selection: HexSelectionSt
     }
 }
 
-private fun importKindLabel(type: WasmExternalType): String = when (type) {
-    is WasmTypeIndexExternalType -> "function"
-    is WasmTableExternalType -> "table"
-    is WasmMemType -> "memory"
-    is WasmGlobalType -> "global"
-    is WasmTagType -> "tag"
-}

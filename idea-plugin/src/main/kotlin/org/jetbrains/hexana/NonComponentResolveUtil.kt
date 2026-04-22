@@ -1,32 +1,22 @@
 package org.jetbrains.hexana
 
+import org.jetbrains.hexana.shared.formatSignature as sharedFormatSignature
+import org.jetbrains.hexana.shared.isInternalName as sharedIsInternalName
+import org.jetbrains.hexana.shared.isTrivialType as sharedIsTrivialType
+import org.jetbrains.hexana.shared.resolveFunctionSignature as sharedResolveFunctionSignature
+import org.jetbrains.hexana.shared.wasmValueTypeName as sharedWasmTypeName
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.sections.*
 
-fun isInternalName(name: String): Boolean = name.startsWith("__")
+fun isInternalName(name: String): Boolean = sharedIsInternalName(name)
 
 fun resolveFunctionSignature(
     wasmBinaryProvider: WasmBinaryProvider,
     export: WasmFunctionExportRecordEntry,
-): WasmSectionFunctionTypeRecord? {
-    val importedFunctionCount = wasmBinaryProvider.imports.count { it.type is WasmTypeIndexExternalType }
-    val localIndex = export.index.toInt() - importedFunctionCount
-    if (localIndex < 0) return null
-    return wasmBinaryProvider.functions.getOrNull(localIndex) as? WasmSectionFunctionTypeRecord
-}
+): WasmSectionFunctionTypeRecord? = sharedResolveFunctionSignature(wasmBinaryProvider, export)
 
-fun isTrivialType(type: WasmValueType<*>): Boolean = type is WasmNumType
+fun isTrivialType(type: WasmValueType<*>): Boolean = sharedIsTrivialType(type)
 
-fun wasmTypeName(type: WasmValueType<*>): String = when (type) {
-    is WasmI32Type -> "i32"
-    is WasmI64Type -> "i64"
-    is WasmF32Type -> "f32"
-    is WasmF64Type -> "f64"
-    else -> type.toString()
-}
+fun wasmTypeName(type: WasmValueType<*>): String = sharedWasmTypeName(type)
 
-fun formatSignature(sig: WasmSectionFunctionTypeRecord): String {
-    val params = sig.params.joinToString(", ") { wasmTypeName(it) }
-    val result = sig.retTypes.firstOrNull()?.let { wasmTypeName(it) } ?: "void"
-    return "($params) -> $result"
-}
+fun formatSignature(sig: WasmSectionFunctionTypeRecord): String = sharedFormatSignature(sig)

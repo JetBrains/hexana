@@ -80,6 +80,7 @@ dependencies {
     implementation(project(":encdec"))
     implementation(project(":wasmParser"))
     implementation(project(":binaryProvider"))
+    implementation(project(":sharedUi"))
     implementation(project(":mcp:core"))
     implementation(project(":graalwasm:wasmprinter"))
     implementation(project(":graalwasm:common"))

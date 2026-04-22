@@ -8,6 +8,14 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.shared.exportKindLabel
+import org.jetbrains.hexana.shared.exportIndex
+import org.jetbrains.hexana.shared.resolveCoreSignature
+import org.jetbrains.hexana.shared.wasmValueTypeName
+import org.jetbrains.hexana.shared.isWasiCliRunExportName
+import org.jetbrains.hexana.shared.isComponentFunctionExport
+import org.jetbrains.hexana.shared.hasWasiCliRunExport as sharedHasWasiCliRunExport
+import org.jetbrains.hexana.shared.isInternalName
 import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.sections.*
 
@@ -57,7 +65,7 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
                 resolveCoreSignature(export, functions, importFuncCount)
             } else ""
 
-            val isRunnable = export is WasmFunctionExportRecordEntry && !export.name.startsWith("__")
+            val isRunnable = export is WasmFunctionExportRecordEntry && !isInternalName(export.name)
 
             PanelTableRow(
                 isHighlighted = selection.hasSelection &&
@@ -191,78 +199,8 @@ internal fun RunArrowButton(tooltip: String = "Run", onClick: () -> Unit) {
     }
 }
 
-private val WASI_CLI_RUN_PATTERN = Regex("^wasi:cli/run(@.+)?$")
-
-internal fun isWasiCliRunExportName(name: String): Boolean =
-    WASI_CLI_RUN_PATTERN.matches(name)
-
-internal fun isComponentFuncExport(export: WasmComponentExport, provider: WasmComponentBinaryProvider): Boolean {
-    val sort = export.sortIndex.sort
-    if (sort is ComponentSort.Func ||
-        (sort is ComponentSortWithCoreSort && sort.cs is ComponentCoreSort.Func)) {
-        return true
-    }
-    if (sort is ComponentSort.Instance) {
-        val instance = provider.instances.getOrNull(export.sortIndex.index.toInt())
-        if (instance is InlineInstanceExpression) {
-            return instance.e.any { it is FuncInstanceInlineExport }
-        }
-        if (instance is ComponentInstanceExpression) {
-            val componentExports = provider.nestedComponentExports(instance.index.toInt())
-            return componentExports.any {
-                it.sortIndex.sort is ComponentSort.Func ||
-                    (it.sortIndex.sort is ComponentSortWithCoreSort && (it.sortIndex.sort as ComponentSortWithCoreSort).cs is ComponentCoreSort.Func)
-            }
-        }
-    }
-    if (sort is ComponentSortWithCoreSort && sort.cs is ComponentCoreSort.Instance) {
-        val coreInstance = provider.coreInstances.getOrNull(export.sortIndex.index.toInt())
-        if (coreInstance is InlineInstanceCoreExpression) {
-            return coreInstance.e.any { it is FuncInlineCoreExpression }
-        }
-    }
-    return false
-}
+internal fun isComponentFuncExport(export: WasmComponentExport, provider: WasmComponentBinaryProvider): Boolean =
+    isComponentFunctionExport(export, provider)
 
 internal fun hasWasiCliRunExport(provider: WasmComponentBinaryProvider): Boolean =
-    provider.exports.any { isWasiCliRunExportName(it.exportName) }
-
-private fun exportKindLabel(export: WasmExportRecordEntry): String = when (export) {
-    is WasmFunctionExportRecordEntry -> "function"
-    is WasmGlobalExportRecordEntry -> "global"
-    is WasmMemoryExportRecordEntry -> "memory"
-    is WasmTableExportRecordEntry -> "table"
-    is WasmTagExportRecordEntry -> "tag"
-    is WasmUnsupportedExportRecordEntry -> "unknown"
-}
-
-private fun exportIndex(export: WasmExportRecordEntry): String = when (export) {
-    is WasmFunctionExportRecordEntry -> export.index.toString()
-    is WasmGlobalExportRecordEntry -> export.index.toString()
-    is WasmMemoryExportRecordEntry -> export.index.toString()
-    is WasmTableExportRecordEntry -> export.index.toString()
-    is WasmTagExportRecordEntry -> export.index.toString()
-    is WasmUnsupportedExportRecordEntry -> export.index.toString()
-}
-
-private fun resolveCoreSignature(
-    export: WasmFunctionExportRecordEntry,
-    functions: List<WasmTypeRecord>,
-    importFuncCount: Int,
-): String {
-    val localIndex = export.index.toInt() - importFuncCount
-    if (localIndex < 0) return ""
-    val sig = functions.getOrNull(localIndex) as? WasmSectionFunctionTypeRecord ?: return ""
-    val params = sig.params.joinToString(", ") { wasmValueTypeName(it) }
-    val result = sig.retTypes.firstOrNull()?.let { wasmValueTypeName(it) } ?: "void"
-    return "($params) → $result"
-}
-
-internal fun wasmValueTypeName(type: WasmValueType<*>): String = when (type) {
-    is WasmI32Type -> "i32"
-    is WasmI64Type -> "i64"
-    is WasmF32Type -> "f32"
-    is WasmF64Type -> "f64"
-    is WasmVecType -> "v128"
-    else -> type.toString()
-}
+    sharedHasWasiCliRunExport(provider)

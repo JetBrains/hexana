@@ -34,6 +34,7 @@ rootProject.name = "hexana"
 include("binaryProvider")
 include("wasmParser")
 include("encdec")
+include("sharedUi")
 include("mcp:core")
 include("mcp:server")
 include("mcp:tools-generator")

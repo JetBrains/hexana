@@ -13,6 +13,7 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 - If you touch `mcp/server/`, also read `mcp/server/AGENTS.md`.
 - If you touch `mcp/packaging/`, also read `mcp/packaging/AGENTS.md`.
 - If you touch `wasmParser/`, also read `wasmParser/AGENTS.md`.
+- If you touch `sharedUi/`, also read `sharedUi/AGENTS.md`.
 - If you touch `ui-driver-tests/`, also read `ui-driver-tests/AGENTS.md`.
 - If you touch `wasm-modules/`, also read `wasm-modules/AGENTS.md`.
 - If you touch `graalwasm/` or `wasm-modules/`, read the embedded-converter notes in this file before editing.
@@ -29,6 +30,7 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 - `mcp/packaging/`: thin Claude/Codex wrapper layouts that point at the standalone runtime from `mcp/server/`.
 - `wasmParser/`: Kotlin Multiplatform parser for core Wasm and component-model binaries.
 - `binaryProvider/`: thin provider layer that wraps parsed Wasm data for the UI and navigation features.
+- `sharedUi/`: Kotlin Multiplatform shared logic (no UI framework) used by both `idea-plugin` and `vscode-plugin:webview` — component description formatting, type labels, signature resolution, WAT text generation.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
 - `graalwasm/`: JVM wrappers around embedded `.wasm` utilities used for built-in `wasm -> wat` and `wat -> wasm`.
 - `wasm-modules/`: Rust sources and Docker build flow that produce the embedded `.wasm` artifacts consumed by `graalwasm/`.
@@ -73,6 +75,7 @@ Run the narrowest command that proves your change.
 - Run JVM parser tests: `./gradlew :wasmParser:jvmTest`
 - Run JS browser parser tests: `./gradlew :wasmParser:jsBrowserTest`
 - Run WasmJS browser parser tests: `./gradlew :wasmParser:wasmJsBrowserTest`
+- Build shared UI module: `./gradlew :sharedUi:build`
 - Run buffer abstraction tests: `./gradlew :encdec:test`
 - Run UI-driver test module: `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaWasmProjectDriverTest`
 
@@ -136,6 +139,7 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
 - Codex packaging or repo-local marketplace/install-flow changes: also run `:mcp:installRepoLocalCodexPlugin` and the
   packaged MCP UI smoke test under `ui-driver-tests` when the change could affect Codex discovery, installation, or
   bundled skill/MCP wiring.
+- `sharedUi/` changes: run `:sharedUi:build`, then `:idea-plugin:test` and `:vscode-plugin:webview:compileKotlinJs`.
 - `wasmParser/` changes: run at least the relevant parser tests and any affected plugin tests.
 - `mcp/` changes in the plugin: run the direct MCP tests under `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp/direct`.
 - `graalwasm/` or embedded converter changes: run the directly affected plugin tests and the existing `:graalwasm:wat2wasm:test` run configuration if relevant.
