@@ -97,6 +97,23 @@ fun postRunExportToHost(
 }
 
 /**
+ * Asks the extension host to open the WAT text in a native VS Code editor
+ * tab (Monaco) with syntax highlighting and full editor features.
+ *
+ * [watText] is the WAT text produced by the wasm-to-wat converter.
+ * [warning] is an optional conversion warning to display to the user.
+ */
+fun postShowWatToHost(watText: String, warning: String? = null) {
+    val msg = js("{}")
+    msg.type = "show-wat"
+    msg.watText = watText
+    if (warning != null) {
+        msg.warning = warning
+    }
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open a nested module in a new editor tab.
  *
  * [moduleIndex] is the zero-based index of the module inside the component,

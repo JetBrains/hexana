@@ -42,6 +42,15 @@
         "aliases": [
           "WebAssembly"
         ]
+      },
+      {
+        "id": "wat",
+        "extensions": [
+          ".wat"
+        ],
+        "aliases": [
+          "WebAssembly Text"
+        ]
       }
     ]
   },

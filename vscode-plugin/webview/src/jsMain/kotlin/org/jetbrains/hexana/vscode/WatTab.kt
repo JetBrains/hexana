@@ -3,14 +3,15 @@ package org.jetbrains.hexana.vscode
 import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
-import org.jetbrains.compose.web.dom.Pre
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.providers.BinaryProviderType
 
 /**
  * WAT tab content — converts the raw wasm bytes to WAT text using the
  * embedded `wasmprinter_wrapper.wasm` module, the same converter that
- * the IntelliJ plugin runs via GraalWasm.
+ * the IntelliJ plugin runs via GraalWasm, and opens the result in a
+ * native VS Code editor tab (Monaco) for syntax highlighting and
+ * full editor features.
  */
 @Composable
 fun WatTabContent(
@@ -26,26 +27,31 @@ fun WatTabContent(
 
 @Composable
 private fun WasmPrinterWat(bytes: ByteArray) {
-    var watText by remember { mutableStateOf<String?>(null) }
-    var warning by remember { mutableStateOf<String?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var status by remember { mutableStateOf<WatConversionStatus>(WatConversionStatus.Converting) }
 
     LaunchedEffect(bytes) {
+        status = WatConversionStatus.Converting
         try {
             WasmPrinterJs.ensureInitialized()
             val result = WasmPrinterJs.printWat(bytes, foldInstructions = false)
-            watText = result.wat
-            warning = result.warnings
+            postShowWatToHost(result.wat, result.warnings)
+            status = WatConversionStatus.Opened(result.warnings)
         } catch (e: Throwable) {
-            error = e.message ?: "Failed to convert WASM to WAT"
+            status = WatConversionStatus.Error(e.message ?: "Failed to convert WASM to WAT")
         }
     }
 
-    when {
-        error != null -> Div { Text("Error: $error") }
-        watText == null -> Div { Text("Converting…") }
-        else -> {
-            if (warning != null) {
+    when (val s = status) {
+        is WatConversionStatus.Converting -> Div({
+            style {
+                property("padding", "8px 0")
+                property("opacity", "0.7")
+            }
+        }) {
+            Text("Converting to WAT…")
+        }
+        is WatConversionStatus.Opened -> {
+            if (s.warning != null) {
                 Div({
                     style {
                         property("color", "var(--vscode-editorWarning-foreground, #cca700)")
@@ -53,34 +59,24 @@ private fun WasmPrinterWat(bytes: ByteArray) {
                         property("font-size", "12px")
                     }
                 }) {
-                    Text("Warning: $warning")
+                    Text("Warning: ${s.warning}")
                 }
             }
-            WatTextView(watText!!)
+            Div({
+                style {
+                    property("padding", "8px 0")
+                    property("opacity", "0.7")
+                }
+            }) {
+                Text("WAT output opened in editor tab.")
+            }
         }
+        is WatConversionStatus.Error -> Div { Text("Error: ${s.message}") }
     }
 }
 
-@Composable
-private fun WatTextView(watText: String) {
-    Div({
-        classes("hexana-wat-view")
-        style {
-            property("font-family", "var(--hexana-font, monospace)")
-            property("font-size", "12px")
-            property("line-height", "1.5")
-            property("white-space", "pre")
-            property("overflow-x", "auto")
-            property("tab-size", "2")
-        }
-    }) {
-        Pre({
-            style {
-                property("margin", "0")
-                property("font-family", "inherit")
-            }
-        }) {
-            Text(watText)
-        }
-    }
+private sealed class WatConversionStatus {
+    data object Converting : WatConversionStatus()
+    data class Opened(val warning: String?) : WatConversionStatus()
+    data class Error(val message: String) : WatConversionStatus()
 }

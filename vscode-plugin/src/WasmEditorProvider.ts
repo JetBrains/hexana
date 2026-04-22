@@ -68,6 +68,36 @@ const nodeFileSystemAccess: ExtensionLib.FileSystemAccess = {
 const inMemoryModules = new Map<string, { data: Uint8Array; fileName: string }>();
 
 /**
+ * In-memory store for WAT text keyed by a synthetic `hexana-wat:` URI.
+ *
+ * When the webview produces WAT output for a wasm binary, it sends the text
+ * to the extension host which stores it here and opens a native VS Code
+ * editor tab backed by a `TextDocumentContentProvider`.
+ */
+const watDocuments = new Map<string, string>();
+
+/**
+ * Content provider for virtual `hexana-wat:` documents.
+ *
+ * VS Code's Monaco editor uses this to display WAT text with full editor
+ * features (syntax highlighting, search, folding, etc.).
+ */
+class WatContentProvider implements vscode.TextDocumentContentProvider {
+    private _onDidChange = new vscode.EventEmitter<vscode.Uri>();
+    readonly onDidChange = this._onDidChange.event;
+
+    provideTextDocumentContent(uri: vscode.Uri): string {
+        return watDocuments.get(uri.toString()) ?? "";
+    }
+
+    update(uri: vscode.Uri): void {
+        this._onDidChange.fire(uri);
+    }
+}
+
+const watContentProvider = new WatContentProvider();
+
+/**
  * Minimal read-only file-system provider for the `hexana-module` URI scheme.
  *
  * VS Code requires a registered `FileSystemProvider` before `vscode.openWith`
@@ -139,6 +169,12 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             }),
         );
 
+        // Register the content provider for virtual WAT documents so that
+        // VS Code's built-in Monaco editor can display WAT text.
+        context.subscriptions.push(
+            vscode.workspace.registerTextDocumentContentProvider("hexana-wat", watContentProvider),
+        );
+
         return vscode.window.registerCustomEditorProvider(
             WasmEditorProvider.viewType,
             new WasmEditorProvider(context),
@@ -192,8 +228,41 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.openNestedModule(document, message);
             } else if (message.type === "run-export") {
                 this.runExport(document, message);
+            } else if (message.type === "show-wat") {
+                this.showWatEditor(document, message);
             }
         });
+    }
+
+    /**
+     * Opens the WAT text in a native VS Code editor tab (Monaco) so that the
+     * user gets syntax highlighting, search, and all standard editor features.
+     */
+    private async showWatEditor(
+        document: WasmDocument,
+        message: { watText: string; warning?: string },
+    ): Promise<void> {
+        const baseName = document.displayName ?? path.basename(document.uri.fsPath, ".wasm");
+        const watUri = vscode.Uri.parse(
+            `hexana-wat:/${baseName}.wat?source=${encodeURIComponent(document.uri.toString())}`,
+        );
+
+        watDocuments.set(watUri.toString(), message.watText);
+        watContentProvider.update(watUri);
+
+        const doc = await vscode.workspace.openTextDocument(watUri);
+        await vscode.window.showTextDocument(doc, {
+            viewColumn: vscode.ViewColumn.Beside,
+            preserveFocus: false,
+            preview: true,
+        });
+
+        // Set language to WAT for syntax highlighting.
+        await vscode.languages.setTextDocumentLanguage(doc, "wat");
+
+        if (message.warning) {
+            vscode.window.showWarningMessage(`WAT conversion warning: ${message.warning}`);
+        }
     }
 
     /**
