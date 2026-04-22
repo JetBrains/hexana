@@ -51,7 +51,12 @@ internal fun BinaryEditorView(
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         VerticalSplitPanel(state, northPanel = {
-            HexViewer(binaryProvider, state, focusRequester = hexFocusRequester)
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    HexViewer(binaryProvider, state, focusRequester = hexFocusRequester)
+                }
+                HexViewStatusBar(state = state, totalBytes = binaryProvider.bytes.limit())
+            }
         }, southPanel = {
             val pathsNav = remember { PathsNavigationState() }
             val panels = remember {
