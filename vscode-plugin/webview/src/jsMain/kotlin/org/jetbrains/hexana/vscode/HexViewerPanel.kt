@@ -3,11 +3,11 @@ package org.jetbrains.hexana.vscode
 import androidx.compose.runtime.*
 import kotlinx.browser.document
 import kotlinx.browser.window
+import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.css.*
-import org.jetbrains.compose.web.dom.Div
-import org.jetbrains.compose.web.dom.Span
-import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.compose.web.dom.*
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.events.Event
 import org.w3c.dom.events.KeyboardEvent
 import org.w3c.dom.events.MouseEvent
@@ -19,6 +19,96 @@ private const val DRAG_THRESHOLD_PX = 3.0
 private const val EDGE_THRESHOLD_PX = 30.0
 /** Pixels per second when auto-scrolling near the edge during drag selection. */
 private const val AUTO_SCROLL_PX_PER_SEC = 120.0
+
+/** Search mode for the hex viewer search bar. */
+enum class HexSearchMode { STRING, BYTES }
+
+/**
+ * Tracks search state for the hex viewer: the set of byte indices that belong
+ * to any match and the list of match start offsets for prev/next navigation.
+ */
+class HexSearchState {
+    var matchIndices by mutableStateOf(emptySet<Int>())
+    var matchStarts by mutableStateOf(emptyList<Int>())
+    var matchLength by mutableStateOf(0)
+    var currentMatchIndex by mutableStateOf(-1)
+
+    val currentMatchStart: Int get() = matchStarts.getOrElse(currentMatchIndex) { -1 }
+
+    fun clear() {
+        matchIndices = emptySet()
+        matchStarts = emptyList()
+        matchLength = 0
+        currentMatchIndex = -1
+    }
+
+    fun goToNext() {
+        if (matchStarts.isEmpty()) return
+        currentMatchIndex = (currentMatchIndex + 1) % matchStarts.size
+    }
+
+    fun goToPrevious() {
+        if (matchStarts.isEmpty()) return
+        currentMatchIndex = if (currentMatchIndex <= 0) matchStarts.size - 1 else currentMatchIndex - 1
+    }
+
+    fun isInCurrentMatch(byteIndex: Int): Boolean {
+        val start = currentMatchStart
+        if (start < 0) return false
+        return byteIndex >= start && byteIndex < start + matchLength
+    }
+}
+
+/**
+ * Finds all occurrences of [pattern] in [bytes] and updates [state] with
+ * the matching byte indices and match start positions.
+ */
+private fun computeSearchMatches(bytes: ByteArray, pattern: ByteArray, state: HexSearchState) {
+    if (pattern.isEmpty()) {
+        state.clear()
+        return
+    }
+    val indices = mutableSetOf<Int>()
+    val starts = mutableListOf<Int>()
+    var i = 0
+    while (i <= bytes.size - pattern.size) {
+        var found = true
+        for (j in pattern.indices) {
+            if (bytes[i + j] != pattern[j]) {
+                found = false
+                break
+            }
+        }
+        if (found) {
+            starts.add(i)
+            for (j in pattern.indices) indices.add(i + j)
+            i += pattern.size
+        } else {
+            i++
+        }
+    }
+    state.matchIndices = indices
+    state.matchStarts = starts
+    state.matchLength = pattern.size
+    state.currentMatchIndex = if (starts.isNotEmpty()) 0 else -1
+}
+
+/**
+ * Parses a hex byte-sequence query string (e.g. "4F 6B" or "4f6b") into a
+ * [ByteArray], or returns `null` if the input is not valid hex.
+ */
+private fun parseHexQuery(query: String): ByteArray? {
+    val cleaned = query.replace(" ", "").replace(",", "")
+    if (cleaned.isEmpty()) return null
+    if (cleaned.length % 2 != 0) return null
+    return try {
+        ByteArray(cleaned.length / 2) { idx ->
+            cleaned.substring(idx * 2, idx * 2 + 2).toInt(16).toByte()
+        }
+    } catch (_: NumberFormatException) {
+        null
+    }
+}
 
 /**
  * Selection state for the hex viewer, tracking a range of selected bytes
@@ -109,6 +199,51 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
     // auto-scroll timer and create runaway scrolling feedback loops.
     val dragState = remember { DragState() }
 
+    // --- Hex search state ---
+    var hexSearchVisible by remember { mutableStateOf(false) }
+    var hexSearchQuery by remember { mutableStateOf("") }
+    var hexSearchMode by remember { mutableStateOf(HexSearchMode.BYTES) }
+    val hexSearchState = remember { HexSearchState() }
+
+    // Recompute matches when query or mode changes.
+    LaunchedEffect(hexSearchQuery, hexSearchMode) {
+        if (hexSearchQuery.isEmpty()) {
+            hexSearchState.clear()
+        } else {
+            when (hexSearchMode) {
+                HexSearchMode.STRING -> {
+                    val pattern = hexSearchQuery.encodeToByteArray()
+                    computeSearchMatches(bytes, pattern, hexSearchState)
+                }
+                HexSearchMode.BYTES -> {
+                    val pattern = parseHexQuery(hexSearchQuery)
+                    if (pattern != null) {
+                        computeSearchMatches(bytes, pattern, hexSearchState)
+                    } else {
+                        hexSearchState.clear()
+                    }
+                }
+            }
+        }
+    }
+
+    // Scroll to current match when it changes.
+    LaunchedEffect(hexSearchState.currentMatchStart) {
+        val matchStart = hexSearchState.currentMatchStart
+        if (matchStart < 0) return@LaunchedEffect
+        val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement ?: return@LaunchedEffect
+        val headerHeight = ROW_HEIGHT_PX
+        val currentScroll = container.scrollTop.toInt()
+        val currentVpHeight = container.clientHeight
+        val matchRow = matchStart / BYTES_PER_ROW
+        val matchTopInContainer = matchRow * ROW_HEIGHT_PX + headerHeight
+        if (matchTopInContainer < currentScroll + headerHeight ||
+            matchTopInContainer + ROW_HEIGHT_PX > currentScroll + currentVpHeight
+        ) {
+            container.scrollTop = (matchTopInContainer - headerHeight).toDouble()
+        }
+    }
+
     val firstVisibleRow = (scrollTop / ROW_HEIGHT_PX - OVERSCAN_ROWS).coerceAtLeast(0)
     val lastVisibleRow = ((scrollTop + viewportHeight) / ROW_HEIGHT_PX + OVERSCAN_ROWS).coerceAtMost(totalRows - 1)
     val topSpacerHeight = firstVisibleRow * ROW_HEIGHT_PX
@@ -122,6 +257,24 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
         val handler: (Event) -> Unit = handler@{ event ->
             val ke = event as? KeyboardEvent ?: return@handler
             val key = ke.key
+
+            // Cmd/Ctrl+F opens the hex search bar.
+            if (key == "f" && (ke.metaKey || ke.ctrlKey)) {
+                // Only intercept when focus is on the hex viewer or the body.
+                val target = ke.target as? HTMLElement
+                if (target?.closest(".hexana-panel-table") != null ||
+                    target?.closest(".hexana-searchable-table") != null
+                ) return@handler
+                ke.preventDefault()
+                ke.stopPropagation()
+                hexSearchVisible = true
+                window.requestAnimationFrame {
+                    document.querySelector(".hexana-hex-search-input")
+                        ?.let { (it as? HTMLInputElement)?.focus() }
+                }
+                return@handler
+            }
+
             if (key !in listOf("ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight")) return@handler
 
             // Skip when focus is inside a panel table so that row navigation works.
@@ -316,6 +469,25 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
         }
     }
 
+    // Hex search bar (overlaid above the hex viewer)
+    if (hexSearchVisible) {
+        HexSearchBar(
+            query = hexSearchQuery,
+            onQueryChange = { hexSearchQuery = it },
+            mode = hexSearchMode,
+            onModeChange = { hexSearchMode = it },
+            matchCount = hexSearchState.matchStarts.size,
+            currentMatch = hexSearchState.currentMatchIndex,
+            onNext = { hexSearchState.goToNext() },
+            onPrevious = { hexSearchState.goToPrevious() },
+            onClose = {
+                hexSearchVisible = false
+                hexSearchQuery = ""
+                hexSearchState.clear()
+            },
+        )
+    }
+
     Div({
         classes("hex-viewer-scroll")
         style {
@@ -362,7 +534,7 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
                 }
             }) {
                 for (row in firstVisibleRow..lastVisibleRow) {
-                    HexRow(bytes, row, selection) { ox, oy ->
+                    HexRow(bytes, row, selection, hexSearchState) { ox, oy ->
                         dragState.pendingOriginX = ox
                         dragState.pendingOriginY = oy
                     }
@@ -437,11 +609,114 @@ private fun HexColumnHeader() {
     }
 }
 
+/**
+ * Search bar for the hex viewer with a toggle between String and Bytes search modes.
+ */
+@Composable
+private fun HexSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    mode: HexSearchMode,
+    onModeChange: (HexSearchMode) -> Unit,
+    matchCount: Int,
+    currentMatch: Int,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onClose: () -> Unit,
+) {
+    Div({
+        classes("hexana-hex-search-bar")
+    }) {
+        // Mode toggle button
+        Span({
+            classes("hexana-hex-search-mode")
+            attr("title", "Switch between String and Byte sequence search")
+            onClick {
+                onModeChange(
+                    if (mode == HexSearchMode.STRING) HexSearchMode.BYTES else HexSearchMode.STRING,
+                )
+            }
+        }) {
+            Text(if (mode == HexSearchMode.STRING) "Abc" else "Hex")
+        }
+
+        Input(InputType.Text) {
+            classes("hexana-hex-search-input")
+            value(query)
+            attr(
+                "placeholder",
+                if (mode == HexSearchMode.STRING) "Search text\u2026" else "Hex bytes (e.g. 4F 6B)\u2026",
+            )
+            onInput { event ->
+                onQueryChange(event.value)
+            }
+            onKeyDown { event ->
+                val ke = event.nativeEvent as? KeyboardEvent
+                if (ke != null) {
+                    when (ke.key) {
+                        "Escape" -> {
+                            ke.preventDefault()
+                            onClose()
+                        }
+                        "Enter" -> {
+                            ke.preventDefault()
+                            if (ke.shiftKey) onPrevious() else onNext()
+                        }
+                    }
+                }
+            }
+            ref { input ->
+                input.focus()
+                onDispose { }
+            }
+        }
+
+        // Match count indicator
+        if (query.isNotEmpty()) {
+            Span({
+                classes("hexana-hex-search-count")
+            }) {
+                if (matchCount > 0) {
+                    Text("${currentMatch + 1} of $matchCount")
+                } else {
+                    Text("No results")
+                }
+            }
+        }
+
+        // Previous / Next buttons
+        Span({
+            classes("hexana-hex-search-nav")
+            attr("title", "Previous match (Shift+Enter)")
+            onClick { onPrevious() }
+        }) {
+            Text("\u25B2") // ▲
+        }
+        Span({
+            classes("hexana-hex-search-nav")
+            attr("title", "Next match (Enter)")
+            onClick { onNext() }
+        }) {
+            Text("\u25BC") // ▼
+        }
+
+        // Close button
+        Span({
+            classes("hexana-hex-search-close")
+            attr("title", "Close search (Esc)")
+            onClick { onClose() }
+        }) {
+            Text("\u2715")
+        }
+    }
+}
+
 @Composable
 private fun HexRow(
     bytes: ByteArray,
     row: Int,
     selection: HexSelectionState,
+    searchState: HexSearchState,
     onPendingDrag: (Double, Double) -> Unit,
 ) {
     val offset = row * BYTES_PER_ROW
@@ -481,16 +756,20 @@ private fun HexRow(
                 val byteVal = bytes[i].toUByte()
                 val isSelected = selection.contains(byteIndex)
                 val isCursor = selection.cursorIndex == byteIndex
+                val isSearchMatch = searchState.matchIndices.contains(byteIndex)
+                val isCurrentMatch = isSearchMatch && searchState.isInCurrentMatch(byteIndex)
 
                 Span({
                     classes("hex-byte")
+                    if (isCurrentMatch) classes("hex-search-current")
+                    else if (isSearchMatch) classes("hex-search-match")
                     style {
                         property("width", "28px")
                         property("text-align", "center")
-                        if (!isSelected) {
+                        if (!isSelected && !isSearchMatch) {
                             property("border-radius", "2px")
                         }
-                        if (isSelected) {
+                        if (isSelected && !isSearchMatch) {
                             property("background", "var(--hexana-selection, rgba(156, 183, 255, 0.4))")
                         }
                         if (isCursor) {
@@ -554,17 +833,21 @@ private fun HexRow(
                 val display = if (c in ' '..'~') c.toString() else "."
                 val isSelected = selection.contains(byteIndex)
                 val isCursor = selection.cursorIndex == byteIndex
+                val isSearchMatch = searchState.matchIndices.contains(byteIndex)
+                val isCurrentMatch = isSearchMatch && searchState.isInCurrentMatch(byteIndex)
 
                 Span({
                     classes("hex-ascii-char")
+                    if (isCurrentMatch) classes("hex-search-current")
+                    else if (isSearchMatch) classes("hex-search-match")
                     style {
                         property("width", "8.5px")
                         property("text-align", "center")
                         color(Color("#CE9178"))
-                        if (!isSelected) {
+                        if (!isSelected && !isSearchMatch) {
                             property("border-radius", "1px")
                         }
-                        if (isSelected) {
+                        if (isSelected && !isSearchMatch) {
                             property("background", "var(--hexana-selection, rgba(156, 183, 255, 0.4))")
                         }
                         if (isCursor) {
