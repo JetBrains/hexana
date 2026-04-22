@@ -1,0 +1,88 @@
+/**
+ * Type declarations for the Kotlin/JS extension library.
+ *
+ * These types mirror the `@JsExport` API surface defined in
+ * `extension-lib/src/jsMain/kotlin/org/jetbrains/hexana/vscode/lib/`.
+ *
+ * The library is loaded at runtime via `require()` because it is a
+ * webpack-bundled Kotlin/JS artifact, not a normal npm package.
+ * This file provides compile-time type safety for the TypeScript host.
+ */
+
+/** A single resolved dependency: maps an import name to a file path. */
+export interface ResolvedDep {
+    readonly importName: string;
+    readonly filePath: string;
+}
+
+/** Result of a {@link resolveAllDependencies} call. */
+export interface DependencyResolution {
+    readonly resolved: ResolvedDep[];
+}
+
+/** A directory entry returned by {@link FileSystemAccess.listDirectory}. */
+export interface FileEntry {
+    readonly name: string;
+    readonly isDirectory: boolean;
+    readonly isFile: boolean;
+}
+
+/**
+ * Callback interface that TypeScript implements to provide filesystem
+ * access to the dependency resolver running inside Kotlin/JS.
+ */
+export interface FileSystemAccess {
+    listDirectory(dir: string): FileEntry[];
+    readFile(path: string): Int8Array | null;
+    fileExists(path: string): boolean;
+    parentDir(path: string): string;
+    joinPath(...parts: string[]): string;
+    pathRoot(path: string): string;
+}
+
+// ── WasmAnalysis ────────────────────────────────────────────────────
+
+/** Returns `true` when the given bytes represent a Wasm component binary. */
+export function isComponentBinary(bytes: Int8Array): boolean;
+
+/** Returns `true` when the name is a well-known WASI runtime import. */
+export function isWasiRuntimeImport(name: string): boolean;
+
+/** Strips the `@version` suffix from a WIT name. */
+export function stripVersion(name: string): string;
+
+/** Parses component export names from a Wasm component binary. */
+export function parseComponentExportNames(bytes: Int8Array): string[];
+
+/** Parses component import names from a Wasm component binary. */
+export function parseComponentImportNames(bytes: Int8Array): string[];
+
+// ── ShellUtils ──────────────────────────────────────────────────────
+
+/**
+ * Splits a string into shell-like arguments, respecting double-quoted
+ * segments.
+ */
+export function splitShellArgs(input: string): string[];
+
+/** Escapes a single shell argument for safe use in a terminal command. */
+export function shellEscape(arg: string): string;
+
+// ── DependencyResolver ──────────────────────────────────────────────
+
+/**
+ * Walks up from the given path looking for a directory that contains
+ * a workspace marker file (`Cargo.toml`, `package.json`, `.git`).
+ */
+export function findWorkspaceRoot(wasmFilePath: string, fs: FileSystemAccess): string | null;
+
+/**
+ * Resolves component dependencies (including transitive) for the
+ * component at the given path.
+ */
+export function resolveAllDependencies(
+    importNames: string[],
+    scanRoots: string[],
+    wasmFilePath: string,
+    fs: FileSystemAccess,
+): DependencyResolution;

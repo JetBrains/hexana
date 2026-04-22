@@ -4,11 +4,12 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { getWebviewContent } from "./webviewContent";
 import { execFileSync } from "child_process";
+import type * as ExtensionLib from "./extension-lib";
 
 // Kotlin/JS extension library — provides binary analysis, dependency resolution,
 // and shell utilities backed by the shared wasmParser / sharedUi modules.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const extensionLib: any = (() => {
+const extensionLib: typeof ExtensionLib | null = (() => {
     try {
         const mod = require("../extension-lib/build/kotlin-webpack/js/productionExecutable/extension-lib.js");
         return mod.hexanaExtensionLib.org.jetbrains.hexana.vscode.lib;
@@ -22,7 +23,7 @@ const extensionLib: any = (() => {
  * Node.js implementation of the FileSystemAccess interface expected by
  * the Kotlin/JS dependency resolver.
  */
-const nodeFileSystemAccess = {
+const nodeFileSystemAccess: ExtensionLib.FileSystemAccess = {
     listDirectory(dir: string): Array<{ name: string; isDirectory: boolean; isFile: boolean }> {
         try {
             return fs.readdirSync(dir, { withFileTypes: true }).map(e => ({
@@ -217,6 +218,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             componentImports?: string[];
         },
     ): void {
+        if (!extensionLib) {
+            vscode.window.showErrorMessage("Cannot run: extension library is not available.");
+            return;
+        }
+
         const filePath = document.uri.fsPath;
         if (!filePath) {
             vscode.window.showErrorMessage("Cannot run: file path is not available for in-memory modules.");
@@ -278,6 +284,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             componentImports?: string[];
         },
     ): void {
+        if (!extensionLib) {
+            vscode.window.showErrorMessage("Cannot run: extension library is not available.");
+            return;
+        }
+
         const filePath = document.uri.fsPath;
         const componentImports = message.componentImports || [];
 
@@ -341,9 +352,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         }
 
         // Walk up from the wasm file to find a workspace root (delegated to Kotlin/JS)
-        const workspaceRoot: string | null = extensionLib.findWorkspaceRoot(wasmFilePath, nodeFileSystemAccess);
-        if (workspaceRoot) {
-            roots.add(workspaceRoot);
+        if (extensionLib) {
+            const workspaceRoot: string | null = extensionLib.findWorkspaceRoot(wasmFilePath, nodeFileSystemAccess);
+            if (workspaceRoot) {
+                roots.add(workspaceRoot);
+            }
         }
 
         return Array.from(roots);
