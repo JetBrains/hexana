@@ -48,6 +48,9 @@ fun WasmEditorApp() {
     }
 }
 
+private const val MIN_PANEL_HEIGHT = 80.0
+private const val DEFAULT_PANEL_HEIGHT = 250.0
+
 @Composable
 fun WasmEditorContent(
     fileName: String,
@@ -56,6 +59,7 @@ fun WasmEditorContent(
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(bytes) { bytes.toCommonByteBuffer() }
+    var panelHeight by remember { mutableStateOf(DEFAULT_PANEL_HEIGHT) }
 
     Div({
         classes("hexana-editor")
@@ -70,6 +74,17 @@ fun WasmEditorContent(
         EditorToolbar(fileName = fileName, size = bytes.size, providerType = providerType, buffer = buffer)
         HexViewerPanel(bytes = bytes, selection = selection)
         SelectionStatusBar(selection = selection, totalBytes = bytes.size)
-        HexanaPanel(bytes = bytes, buffer = buffer, providerType = providerType, selection = selection, fileName = fileName)
+        ResizeDivider { deltaY ->
+            // Dragging down → shrink the panel (panel is below the divider)
+            panelHeight = (panelHeight - deltaY).coerceAtLeast(MIN_PANEL_HEIGHT)
+        }
+        HexanaPanel(
+            bytes = bytes,
+            buffer = buffer,
+            providerType = providerType,
+            selection = selection,
+            fileName = fileName,
+            heightPx = panelHeight,
+        )
     }
 }

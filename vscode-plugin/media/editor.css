@@ -92,6 +92,13 @@ html, body {
     background: rgba(255, 255, 255, 0.1);
 }
 
+/* Resize divider between hex viewer and panel */
+.hexana-resize-divider:hover .hexana-resize-divider-line,
+.hexana-resize-divider:active .hexana-resize-divider-line {
+    background: var(--vscode-focusBorder, #007FD4) !important;
+    height: 2px !important;
+}
+
 /* Tab content scrollbar */
 .hexana-tab-content::-webkit-scrollbar {
     width: 10px;

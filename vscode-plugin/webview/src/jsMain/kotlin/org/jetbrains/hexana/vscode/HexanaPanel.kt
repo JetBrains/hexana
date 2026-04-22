@@ -22,6 +22,7 @@ fun HexanaPanel(
     providerType: BinaryProviderType,
     selection: HexSelectionState,
     fileName: String,
+    heightPx: Double = 250.0,
 ) {
     val visibleTabs = remember(providerType) {
         buildList {
@@ -46,8 +47,9 @@ fun HexanaPanel(
         classes("hexana-panel")
         style {
             property("border-top", "1px solid var(--hexana-border, #333)")
-            property("flex", "1 1 0%")
-            property("min-height", "120px")
+            property("flex", "0 0 auto")
+            height(heightPx.px)
+            property("min-height", "80px")
             display(DisplayStyle.Flex)
             property("flex-direction", "column")
             property("overflow", "hidden")
