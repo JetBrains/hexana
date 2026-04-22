@@ -16,6 +16,9 @@ private const val BYTES_PER_ROW = 16
 internal const val ROW_HEIGHT_PX = 20
 private const val OVERSCAN_ROWS = 5
 private const val DRAG_THRESHOLD_PX = 3.0
+private const val EDGE_THRESHOLD_PX = 30.0
+/** Pixels per second when auto-scrolling near the edge during drag selection. */
+private const val AUTO_SCROLL_PX_PER_SEC = 120.0
 
 /**
  * Selection state for the hex viewer, tracking a range of selected bytes
@@ -54,6 +57,37 @@ class HexSelectionState {
 }
 
 /**
+ * Plain (non-Compose) mutable holder for drag and auto-scroll state.
+ * Keeping this outside of Compose `mutableStateOf` prevents recomposition from
+ * tearing down the [DisposableEffect] that owns the auto-scroll timer.
+ */
+private class DragState {
+    var isDragging = false
+    var pendingOriginX: Double? = null
+    var pendingOriginY: Double? = null
+    var lastClientX = 0.0
+    var lastClientY = 0.0
+    /** Last observed MouseEvent.buttons bitmask — updated on every mousemove. */
+    var lastButtons = 0
+
+    /** Direction of auto-scroll: -1 (up), 0 (none), +1 (down). */
+    var autoScrollDirection = 0
+    /** requestAnimationFrame handle, or -1 when inactive. */
+    var autoScrollRafId = -1
+    /** Timestamp (ms) of the last auto-scroll frame, for time-based movement. */
+    var autoScrollLastTime = 0.0
+
+    /** Whether the primary mouse button was held in the most recent mousemove. */
+    val isPrimaryHeld: Boolean get() = lastButtons and 1 != 0
+
+    fun reset() {
+        isDragging = false
+        pendingOriginX = null
+        pendingOriginY = null
+    }
+}
+
+/**
  * Compose for Web hex viewer panel with virtual scrolling and byte selection.
  *
  * Renders the raw binary content in a classic hex-dump layout:
@@ -69,17 +103,21 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
 
     var scrollTop by remember { mutableStateOf(0) }
     var viewportHeight by remember { mutableStateOf(600) }
-    var isDragging by remember { mutableStateOf(false) }
-    // Pending drag: tracks the mousedown position to apply a movement threshold
-    // before committing to drag selection. Prevents accidental selection on click.
-    var pendingDragOrigin by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+
+    // Drag state is tracked via plain JS variables (not Compose mutableStateOf) to avoid
+    // recomposition-driven DisposableEffect teardown/rebuild cycles that would lose the
+    // auto-scroll timer and create runaway scrolling feedback loops.
+    val dragState = remember { DragState() }
 
     val firstVisibleRow = (scrollTop / ROW_HEIGHT_PX - OVERSCAN_ROWS).coerceAtLeast(0)
     val lastVisibleRow = ((scrollTop + viewportHeight) / ROW_HEIGHT_PX + OVERSCAN_ROWS).coerceAtMost(totalRows - 1)
     val topSpacerHeight = firstVisibleRow * ROW_HEIGHT_PX
-    val bottomSpacerHeight = ((totalRows - 1 - lastVisibleRow) * ROW_HEIGHT_PX).coerceAtLeast(0)
 
-    // Keyboard handler
+    // Keyboard handler.
+    // Reads scroll position directly from the DOM element (not from Compose state)
+    // to avoid a feedback loop: setting container.scrollTop fires a scroll event
+    // that updates Compose scrollTop state, which triggers recomposition, which
+    // changes virtual-scroll spacer heights, which can shift scroll position again.
     DisposableEffect(Unit) {
         val handler: (Event) -> Unit = handler@{ event ->
             val ke = event as? KeyboardEvent ?: return@handler
@@ -107,15 +145,27 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
                 selection.startSelection(newIndex)
             }
 
-            // Scroll cursor into view
-            val cursorRow = newIndex / BYTES_PER_ROW
-            val cursorTopPx = cursorRow * ROW_HEIGHT_PX
-            if (cursorTopPx < scrollTop) {
-                val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement
-                container?.scrollTop = cursorTopPx.toDouble()
-            } else if (cursorTopPx + ROW_HEIGHT_PX > scrollTop + viewportHeight) {
-                val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement
-                container?.scrollTop = (cursorTopPx + ROW_HEIGHT_PX - viewportHeight).toDouble()
+            // Scroll cursor into view.
+            // Read current scroll position from the DOM element directly to avoid
+            // stale Compose state and recomposition-driven feedback loops.
+            // The column header (ROW_HEIGHT_PX tall, sticky) sits inside the scroll
+            // container, so the content rows start at an offset of ROW_HEIGHT_PX
+            // within the scrollable area.  Account for that when computing whether
+            // the cursor row is visible.
+            val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement
+            if (container != null) {
+                val headerHeight = ROW_HEIGHT_PX
+                val currentScroll = container.scrollTop.toInt()
+                val currentVpHeight = container.clientHeight
+                val cursorRow = newIndex / BYTES_PER_ROW
+                // Position of the cursor row inside the scroll container's
+                // scrollable content (content starts after the header).
+                val cursorTopInContainer = cursorRow * ROW_HEIGHT_PX + headerHeight
+                if (cursorTopInContainer < currentScroll + headerHeight) {
+                    container.scrollTop = (cursorTopInContainer - headerHeight).toDouble()
+                } else if (cursorTopInContainer + ROW_HEIGHT_PX > currentScroll + currentVpHeight) {
+                    container.scrollTop = (cursorTopInContainer + ROW_HEIGHT_PX - currentVpHeight).toDouble()
+                }
             }
         }
         window.addEventListener("keydown", handler)
@@ -123,68 +173,142 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
     }
 
     // Global mousemove/mouseup for pending drag detection and active drag selection.
-    // A drag threshold of DRAG_THRESHOLD_PX prevents accidental selections on simple clicks.
-    DisposableEffect(isDragging, pendingDragOrigin) {
-        if (!isDragging && pendingDragOrigin == null) return@DisposableEffect onDispose {}
+    // Uses DisposableEffect(Unit) so the effect is never torn down during drag — all drag
+    // and auto-scroll state lives as plain JS variables in the single stable scope.
+    // Auto-scroll uses a requestAnimationFrame loop so it is frame-synchronised and
+    // can never stack up behind slow Compose recompositions.
+    DisposableEffect(Unit) {
+        fun updateSelectionAt(clientX: Double, clientY: Double) {
+            val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement ?: return
+            val rect = container.getBoundingClientRect()
+            val relY = clientY - rect.top + container.scrollTop - ROW_HEIGHT_PX
+            val relX = clientX - rect.left
+            val row = (relY / ROW_HEIGHT_PX).toInt().coerceIn(0, totalRows - 1)
+            val col = resolveColumn(relX, container.clientWidth.toDouble())
+            val idx = (row * BYTES_PER_ROW + col).coerceIn(0, bytes.size - 1)
+            selection.extendSelection(idx)
+        }
+
+        // --- requestAnimationFrame-based auto-scroll ---
+        // Uses a single rAF loop instead of setInterval.  rAF is
+        // frame-synchronised so it never stacks up behind slow Compose
+        // recompositions the way setInterval can.
+        fun autoScrollFrame(timestamp: Double) {
+            // Safety: stop if drag ended or primary button released.
+            if (!dragState.isDragging || !dragState.isPrimaryHeld || dragState.autoScrollDirection == 0) {
+                dragState.autoScrollRafId = -1
+                return
+            }
+
+            val dt = if (dragState.autoScrollLastTime == 0.0) 0.0 else timestamp - dragState.autoScrollLastTime
+            dragState.autoScrollLastTime = timestamp
+
+            if (dt > 0) {
+                val px = AUTO_SCROLL_PX_PER_SEC * dragState.autoScrollDirection * (dt / 1000.0)
+                val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement
+                if (container != null) {
+                    container.scrollTop += px
+                    updateSelectionAt(dragState.lastClientX, dragState.lastClientY)
+                }
+            }
+
+            // Schedule the next frame.
+            dragState.autoScrollRafId = window.requestAnimationFrame { ts -> autoScrollFrame(ts) }
+        }
+
+        fun stopAutoScroll() {
+            if (dragState.autoScrollRafId != -1) {
+                window.cancelAnimationFrame(dragState.autoScrollRafId)
+                dragState.autoScrollRafId = -1
+            }
+            dragState.autoScrollDirection = 0
+            dragState.autoScrollLastTime = 0.0
+        }
+
+        fun startAutoScroll(direction: Int) {
+            if (dragState.autoScrollDirection == direction && dragState.autoScrollRafId != -1) return
+            stopAutoScroll()
+            dragState.autoScrollDirection = direction
+            dragState.autoScrollLastTime = 0.0 // will be set on the first frame
+            dragState.autoScrollRafId = window.requestAnimationFrame { ts -> autoScrollFrame(ts) }
+        }
 
         val moveHandler: (Event) -> Unit = handler@{ event ->
             val me = event as? MouseEvent ?: return@handler
 
+            // Track the latest button state so the auto-scroll timer can detect
+            // a released button even if the mouseup event was swallowed.
+            dragState.lastButtons = me.buttons.toInt()
+
             // Only perform selection while the primary mouse button is held down.
-            // buttons is a bitmask; bit 0 (value 1) = primary button.
-            if (me.buttons.toInt() and 1 == 0) {
-                if (pendingDragOrigin != null) pendingDragOrigin = null
-                if (isDragging) isDragging = false
+            if (!dragState.isPrimaryHeld) {
+                stopAutoScroll()
+                dragState.reset()
                 return@handler
             }
 
             // If we have a pending drag, check if the mouse moved far enough to commit
-            val origin = pendingDragOrigin
-            if (origin != null && !isDragging) {
-                val dx = me.clientX - origin.first
-                val dy = me.clientY - origin.second
+            val ox = dragState.pendingOriginX
+            val oy = dragState.pendingOriginY
+            if (ox != null && oy != null && !dragState.isDragging) {
+                val dx = me.clientX - ox
+                val dy = me.clientY - oy
                 if (dx * dx + dy * dy >= DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
-                    isDragging = true
-                    pendingDragOrigin = null
+                    dragState.isDragging = true
+                    dragState.pendingOriginX = null
+                    dragState.pendingOriginY = null
                 } else {
                     return@handler
                 }
             }
 
-            if (!isDragging) return@handler
+            if (!dragState.isDragging) return@handler
 
+            dragState.lastClientX = me.clientX.toDouble()
+            dragState.lastClientY = me.clientY.toDouble()
+
+            // Only extend selection from mousemove when auto-scroll is NOT active.
+            // When auto-scroll is running, the rAF loop handles both scrolling and
+            // selection extension — duplicating it here causes a feedback loop.
+            if (dragState.autoScrollRafId == -1) {
+                updateSelectionAt(dragState.lastClientX, dragState.lastClientY)
+            }
+
+            // Determine whether the cursor is near an edge and manage the auto-scroll loop.
             val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement ?: return@handler
             val rect = container.getBoundingClientRect()
-            // Subtract header row height since HexColumnHeader is inside the scroll container
-            val relY = me.clientY - rect.top + container.scrollTop - ROW_HEIGHT_PX
-            val relX = me.clientX - rect.left
-            val row = (relY / ROW_HEIGHT_PX).toInt().coerceIn(0, totalRows - 1)
-            val col = resolveColumn(relX, container.clientWidth.toDouble())
-            val idx = (row * BYTES_PER_ROW + col).coerceIn(0, bytes.size - 1)
-            selection.extendSelection(idx)
-
-            // Auto-scroll when dragging near edges
-            val edgeThreshold = 30.0
-            val scrollDelta = when {
-                me.clientY - rect.top < edgeThreshold -> -ROW_HEIGHT_PX.toDouble()
-                me.clientY - rect.top > rect.height - edgeThreshold -> ROW_HEIGHT_PX.toDouble()
-                else -> 0.0
-            }
-            if (scrollDelta != 0.0) {
-                container.scrollTop += scrollDelta
+            val distTop = me.clientY - rect.top
+            val distBottom = rect.bottom - me.clientY
+            when {
+                distTop < EDGE_THRESHOLD_PX -> startAutoScroll(-1)
+                distBottom < EDGE_THRESHOLD_PX -> startAutoScroll(+1)
+                else -> stopAutoScroll()
             }
         }
 
         val upHandler: (Event) -> Unit = {
-            isDragging = false
-            pendingDragOrigin = null
+            stopAutoScroll()
+            dragState.reset()
+        }
+
+        // Also stop on mouseleave from the document — handles the cursor leaving
+        // the VS Code webview iframe, where mouseup would fire in the parent frame
+        // and never reach us.
+        val leaveHandler: (Event) -> Unit = {
+            stopAutoScroll()
+            dragState.reset()
         }
 
         window.addEventListener("mousemove", moveHandler)
         window.addEventListener("mouseup", upHandler)
+        document.addEventListener("mouseup", upHandler)
+        document.addEventListener("mouseleave", leaveHandler)
         onDispose {
+            stopAutoScroll()
             window.removeEventListener("mousemove", moveHandler)
             window.removeEventListener("mouseup", upHandler)
+            document.removeEventListener("mouseup", upHandler)
+            document.removeEventListener("mouseleave", leaveHandler)
         }
     }
 
@@ -212,28 +336,33 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
         // Column header
         HexColumnHeader()
 
-        // Virtual scroll container
+        // Virtual scroll container — uses a fixed-height outer div with
+        // position:relative and an absolutely-positioned inner div for the
+        // visible rows.  This avoids variable-height top/bottom spacer divs
+        // whose recalculation during recomposition would shift the browser's
+        // scroll position and create a feedback loop.
         Div({
             style {
                 height(totalHeight.px)
                 property("position", "relative")
             }
         }) {
-            // Top spacer
-            if (topSpacerHeight > 0) {
-                Div({ style { height(topSpacerHeight.px) } })
-            }
-
-            // Visible rows
-            for (row in firstVisibleRow..lastVisibleRow) {
-                HexRow(bytes, row, selection, isDragging) { origin ->
-                    pendingDragOrigin = origin
+            // Visible rows positioned via translateY — no spacers needed.
+            Div({
+                style {
+                    property("position", "absolute")
+                    property("left", "0")
+                    property("right", "0")
+                    property("top", "0")
+                    property("transform", "translateY(${topSpacerHeight}px)")
                 }
-            }
-
-            // Bottom spacer
-            if (bottomSpacerHeight > 0) {
-                Div({ style { height(bottomSpacerHeight.px) } })
+            }) {
+                for (row in firstVisibleRow..lastVisibleRow) {
+                    HexRow(bytes, row, selection) { ox, oy ->
+                        dragState.pendingOriginX = ox
+                        dragState.pendingOriginY = oy
+                    }
+                }
             }
         }
     }
@@ -309,8 +438,7 @@ private fun HexRow(
     bytes: ByteArray,
     row: Int,
     selection: HexSelectionState,
-    isDragging: Boolean,
-    onPendingDrag: (Pair<Double, Double>) -> Unit,
+    onPendingDrag: (Double, Double) -> Unit,
 ) {
     val offset = row * BYTES_PER_ROW
     val end = minOf(offset + BYTES_PER_ROW, bytes.size)
@@ -379,7 +507,7 @@ private fun HexRow(
                         } else {
                             selection.startSelection(byteIndex)
                             if (nativeMouseEvent != null) {
-                                onPendingDrag(nativeMouseEvent.clientX.toDouble() to nativeMouseEvent.clientY.toDouble())
+                                onPendingDrag(nativeMouseEvent.clientX.toDouble(), nativeMouseEvent.clientY.toDouble())
                             }
                         }
                     }
@@ -449,7 +577,7 @@ private fun HexRow(
                         } else {
                             selection.startSelection(byteIndex)
                             if (nativeMouseEvent != null) {
-                                onPendingDrag(nativeMouseEvent.clientX.toDouble() to nativeMouseEvent.clientY.toDouble())
+                                onPendingDrag(nativeMouseEvent.clientX.toDouble(), nativeMouseEvent.clientY.toDouble())
                             }
                         }
                     }
