@@ -115,6 +115,26 @@ class GraalWasmJavaCompletionTest : BasePlatformTestCase() {
         //assertDoesNotContain(lookupStrings!!, "my_namespace")
     }
 
+    // -- Regression: Map.of with key + value pair (host function import) --
+
+    fun testImportFunctionNameCompletionWithValueArgument() {
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("ImportFunctionNameWithValue.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results when Map.of has a key+value pair", lookupStrings)
+        assertContainsElements(lookupStrings!!, "imported_func")
+    }
+
+    fun testImportFunctionNameCompletionInsideTryWithResources() {
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("ImportFunctionNameInTryBlock.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results inside try-with-resources", lookupStrings)
+        assertContainsElements(lookupStrings!!, "imported_func")
+    }
+
     // -- Advanced: exports stored in a field, used in another method --
 
     fun testExportFromFieldCompletion() {
