@@ -44,7 +44,7 @@ private fun CoreWasmData(buffer: CommonByteBuffer, selection: HexSelectionState)
         return
     }
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("ID", "Type", "Size"),
         columnAligns = listOf("right", "left", "right"),
     ) {

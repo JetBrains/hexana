@@ -75,7 +75,7 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
         )
     }
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("", "ID", "Kind", "Name", "Index", "Signature"),
         columnAligns = listOf("center", "right", "left", "left", "right", "left"),
     ) {
@@ -209,7 +209,7 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
         )
     }
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("", "ID", "Name", "Sort Index", "Description"),
         columnAligns = listOf("center", "right", "left", "left", "left"),
     ) {

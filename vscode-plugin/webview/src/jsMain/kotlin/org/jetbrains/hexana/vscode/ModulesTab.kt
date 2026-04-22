@@ -48,7 +48,7 @@ private fun ComponentModuleList(
         return
     }
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("ID", "Module"),
         columnAligns = listOf("right", "left"),
     ) {

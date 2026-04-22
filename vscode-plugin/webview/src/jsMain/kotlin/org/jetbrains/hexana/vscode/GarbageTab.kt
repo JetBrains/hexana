@@ -78,7 +78,7 @@ private fun GarbageFunctionsSection(
 
     if (entries.isEmpty()) return
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("ID", "Index", "Name", "Size", "Module", "Reason"),
         columnAligns = listOf("right", "right", "left", "right", "left", "left"),
     ) {
@@ -128,7 +128,7 @@ private fun GarbageTypesSection(garbage: GarbageResult) {
 
     if (entries.isEmpty()) return
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("ID", "Index", "Size"),
         columnAligns = listOf("right", "right", "right"),
     ) {
@@ -158,7 +158,7 @@ private fun GarbageDataSection(garbage: GarbageResult) {
 
     if (entries.isEmpty()) return
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("ID", "Index", "Data Size", "Record Size"),
         columnAligns = listOf("right", "right", "right", "right"),
     ) {

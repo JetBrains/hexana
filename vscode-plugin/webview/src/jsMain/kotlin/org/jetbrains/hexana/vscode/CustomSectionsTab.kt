@@ -53,7 +53,7 @@ private fun CoreWasmCustomSections(buffer: CommonByteBuffer, selection: HexSelec
         }
     }
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("ID", "Name", "Payload"),
         columnAligns = listOf("right", "left", "left"),
     ) {

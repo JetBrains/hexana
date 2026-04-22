@@ -86,7 +86,7 @@ private fun SizeNodeTable(module: SizeNode.Module, selection: HexSelectionState)
         return
     }
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("ID", "Section", "Size", "%", "Offset"),
         columnAligns = listOf("right", "left", "right", "right", "right"),
     ) {

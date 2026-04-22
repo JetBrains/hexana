@@ -46,7 +46,7 @@ private fun CoreWasmMonos(buffer: CommonByteBuffer, selection: HexSelectionState
         return
     }
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("ID", "Base Name", "Count", "Total Size", "Avg Size"),
         columnAligns = listOf("right", "left", "right", "right", "right"),
     ) {

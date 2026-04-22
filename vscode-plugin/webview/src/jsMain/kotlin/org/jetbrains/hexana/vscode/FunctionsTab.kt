@@ -66,7 +66,7 @@ private fun CoreWasmFunctions(buffer: CommonByteBuffer, selection: HexSelectionS
         add("left")
     }
 
-    PanelTable(headers = headers, columnAligns = aligns) {
+    SearchableTable(headers = headers, columnAligns = aligns) {
         for ((index, func) in functions.withIndex()) {
             val name = if (hasNames) resolveFunctionName(functionNamesMap, index) else null
             val sig = func.getDescription(index, typeNames)

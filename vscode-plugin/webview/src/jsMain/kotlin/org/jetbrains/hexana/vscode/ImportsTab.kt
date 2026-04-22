@@ -46,7 +46,7 @@ private fun CoreWasmImports(buffer: CommonByteBuffer, selection: HexSelectionSta
         return
     }
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("ID", "Kind", "Module", "Name"),
         columnAligns = listOf("right", "left", "left", "left"),
     ) {
@@ -96,7 +96,7 @@ private fun ComponentImports(buffer: CommonByteBuffer, selection: HexSelectionSt
         return
     }
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("ID", "Name", "Description"),
         columnAligns = listOf("right", "left", "left"),
     ) {

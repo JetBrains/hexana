@@ -94,7 +94,7 @@ private fun SummarySectionsTable(sections: List<WasmSection>, selection: HexSele
         return
     }
 
-    PanelTable(
+    SearchableTable(
         headers = listOf("Section", "Offset", "Size"),
         columnAligns = listOf("left", "right", "right"),
     ) {
