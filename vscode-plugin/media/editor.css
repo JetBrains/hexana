@@ -164,6 +164,11 @@ html, body {
     padding: 4px 4px;
 }
 
+/* Sortable header cells */
+.panel-th-sortable:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
 /* Function arguments dialog overlay */
 .hexana-dialog-overlay {
     position: fixed;

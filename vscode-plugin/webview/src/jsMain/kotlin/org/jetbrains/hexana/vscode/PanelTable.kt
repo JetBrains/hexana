@@ -11,6 +11,31 @@ import org.w3c.dom.HTMLTableRowElement
 import org.w3c.dom.events.EventListener
 import org.w3c.dom.events.KeyboardEvent
 
+/** Sort direction for table columns. */
+internal enum class SortDirection { NONE, ASC, DESC }
+
+/** Mutable sort state shared between the header and the DOM reorder effect. */
+internal class TableSortState(
+    initialColumn: Int = -1,
+    initialDirection: SortDirection = SortDirection.NONE,
+) {
+    var columnIndex by mutableStateOf(initialColumn)
+    var direction by mutableStateOf(initialDirection)
+
+    fun toggle(index: Int) {
+        if (columnIndex == index) {
+            direction = when (direction) {
+                SortDirection.NONE -> SortDirection.ASC
+                SortDirection.ASC -> SortDirection.DESC
+                SortDirection.DESC -> SortDirection.ASC
+            }
+        } else {
+            columnIndex = index
+            direction = SortDirection.ASC
+        }
+    }
+}
+
 /**
  * Wraps a [PanelTable] with an inline search bar that appears on Cmd/Ctrl+F.
  * When a query is entered, table body rows whose text content does not contain
@@ -20,6 +45,7 @@ import org.w3c.dom.events.KeyboardEvent
 internal fun SearchableTable(
     headers: List<String>,
     columnAligns: List<String> = emptyList(),
+    defaultSortColumn: Int = headers.indexOf("ID").takeIf { it >= 0 } ?: -1,
     content: @Composable () -> Unit,
 ) {
     var searchVisible by remember { mutableStateOf(false) }
@@ -67,20 +93,27 @@ internal fun SearchableTable(
             )
         }
 
+        val sortState = remember {
+            if (defaultSortColumn >= 0) TableSortState(defaultSortColumn, SortDirection.ASC)
+            else TableSortState()
+        }
+
         Div {
             PanelTable(
                 headers = headers,
                 columnAligns = columnAligns,
+                sortState = sortState,
                 content = content,
             )
         }
 
-        // Re-apply the filter whenever the query changes
-        DisposableEffect(query) {
+        // Re-apply the filter and sort whenever the query or sort state changes
+        DisposableEffect(query, sortState.columnIndex, sortState.direction) {
             val container = containerRef
             if (container != null) {
                 val table = container.querySelector("table.hexana-panel-table") as? HTMLTableElement
                 if (table != null) {
+                    applySortOrder(table, sortState.columnIndex, sortState.direction)
                     applySearchFilter(table, query)
                 }
             }
@@ -131,6 +164,83 @@ private fun SearchBar(
 }
 
 /**
+ * Reorders `<tr>` rows inside a [table]'s `<tbody>` based on the text
+ * content of the cell at [columnIndex]. Compares numerically when both
+ * values parse as numbers, otherwise falls back to lexicographic order.
+ */
+private fun applySortOrder(table: HTMLTableElement, columnIndex: Int, direction: SortDirection) {
+    val tbodyElement = table.querySelector("tbody") ?: return
+    if (columnIndex < 0 || direction == SortDirection.NONE) {
+        // Restore original order using the data attribute stored on first sort
+        val rows = tbodyElement.querySelectorAll("tr[data-orig-index]")
+        val sorted = (0 until rows.length)
+            .mapNotNull { rows.item(it) as? HTMLTableRowElement }
+            .sortedBy { it.getAttribute("data-orig-index")?.toIntOrNull() ?: 0 }
+        for (row in sorted) {
+            tbodyElement.appendChild(row)
+        }
+        return
+    }
+
+    val rows = tbodyElement.querySelectorAll("tr")
+    val rowList = (0 until rows.length).mapNotNull { rows.item(it) as? HTMLTableRowElement }
+
+    // Stamp original indices on first encounter
+    for ((i, row) in rowList.withIndex()) {
+        if (!row.hasAttribute("data-orig-index")) {
+            row.setAttribute("data-orig-index", i.toString())
+        }
+    }
+
+    val sorted = rowList.sortedWith(Comparator { a, b ->
+        val aText = a.querySelectorAll("td").let { cells ->
+            if (columnIndex < cells.length) (cells.item(columnIndex) as? HTMLElement)?.textContent?.trim() ?: ""
+            else ""
+        }
+        val bText = b.querySelectorAll("td").let { cells ->
+            if (columnIndex < cells.length) (cells.item(columnIndex) as? HTMLElement)?.textContent?.trim() ?: ""
+            else ""
+        }
+        val cmp = compareValues(aText, bText)
+        if (direction == SortDirection.DESC) -cmp else cmp
+    })
+    for (row in sorted) {
+        tbodyElement.appendChild(row)
+    }
+}
+
+/**
+ * Compares two cell text values. Attempts numeric comparison first
+ * (handling common suffixes like "B", "KB", "%"), then falls back to
+ * case-insensitive lexicographic order.
+ */
+private fun compareValues(a: String, b: String): Int {
+    val aNum = parseNumericValue(a)
+    val bNum = parseNumericValue(b)
+    if (aNum != null && bNum != null) return aNum.compareTo(bNum)
+    return a.compareTo(b, ignoreCase = true)
+}
+
+/** Extracts a numeric value from text, stripping common size/percentage suffixes. */
+private fun parseNumericValue(text: String): Double? {
+    if (text.isEmpty()) return null
+    // Strip hex prefix
+    if (text.startsWith("0x", ignoreCase = true)) {
+        return text.substring(2).toLongOrNull(16)?.toDouble()
+    }
+    // Strip common suffixes: "123 bytes", "1.2 KB", "45.6%", "12 B"
+    val stripped = text
+        .replace(Regex("\\s*bytes$", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("\\s*KB$", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("\\s*MB$", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("\\s*B$", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("%$"), "")
+        .replace(",", "")
+        .trim()
+    return stripped.toDoubleOrNull()
+}
+
+/**
  * Hides/shows `<tr>` rows inside a [table] based on whether their text
  * content matches [query] (case-insensitive).
  */
@@ -157,6 +267,7 @@ private fun applySearchFilter(table: HTMLTableElement, query: String) {
 internal fun PanelTable(
     headers: List<String>,
     columnAligns: List<String> = emptyList(),
+    sortState: TableSortState? = null,
     content: @Composable () -> Unit,
 ) {
     Table({
@@ -171,13 +282,27 @@ internal fun PanelTable(
                 headers.forEachIndexed { index, header ->
                     val align = columnAligns.getOrElse(index) { "left" }
                     val isNarrow = header == "ID" || header == ""
+                    val isSorted = sortState != null && sortState.columnIndex == index
+                    val indicator = when {
+                        isSorted && sortState!!.direction == SortDirection.ASC -> " \u25B2"
+                        isSorted && sortState!!.direction == SortDirection.DESC -> " \u25BC"
+                        else -> ""
+                    }
                     Th({
                         classes("panel-th")
                         if (isNarrow) classes("panel-th-narrow")
+                        if (sortState != null && header.isNotEmpty()) classes("panel-th-sortable")
                         style {
                             property("text-align", align)
+                            if (sortState != null && header.isNotEmpty()) {
+                                property("cursor", "pointer")
+                                property("user-select", "none")
+                            }
                         }
-                    }) { Text(header) }
+                        if (sortState != null && header.isNotEmpty()) {
+                            onClick { sortState.toggle(index) }
+                        }
+                    }) { Text(header + indicator) }
                 }
             }
         }

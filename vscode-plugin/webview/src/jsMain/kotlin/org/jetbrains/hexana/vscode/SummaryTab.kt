@@ -97,6 +97,7 @@ private fun SummarySectionsTable(sections: List<WasmSection>, selection: HexSele
     SearchableTable(
         headers = listOf("Section", "Offset", "Size"),
         columnAligns = listOf("left", "right", "right"),
+        defaultSortColumn = 1,
     ) {
         for (section in sections) {
             val sectionStart = section.sectionOffset
