@@ -1,9 +1,11 @@
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsEnvSpec
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsPlugin
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
+import org.jetbrains.kotlin.gradle.targets.js.testing.KotlinJsTest
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsEnvSpec
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsPlugin
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsRootPlugin
+import org.jetbrains.kotlin.gradle.testing.internal.KotlinTestReport
 
 plugins {
     alias(libs.plugins.kotlin.jvm) apply(false)
@@ -51,11 +53,32 @@ plugins.withType<WasmNodeJsRootPlugin> {
 }
 
 subprojects {
+    val ignoreTestFailuresOnTeamCity = providers.gradleProperty("teamcityIgnoreTestFailures")
+        .map(String::toBoolean)
+        .getOrElse(false)
+
     // We will enable this for tests on teamcity, because we are already fetching test failure there
     tasks.withType<AbstractTestTask>().configureEach {
-        ignoreFailures = providers.gradleProperty("teamcityIgnoreTestFailures")
-            .map(String::toBoolean)
-            .getOrElse(false)
+        ignoreFailures = ignoreTestFailuresOnTeamCity
+    }
+
+    // Browser test tasks are KotlinJsTest, not AbstractTestTask, so TeamCity's
+    // ignore-failures flag has to be wired separately for them.
+    tasks.withType<KotlinJsTest>().configureEach {
+        ignoreFailures = ignoreTestFailuresOnTeamCity
+        ignoreRunFailures = ignoreTestFailuresOnTeamCity
+    }
+
+    tasks.withType<KotlinTestReport>().configureEach {
+        ignoreFailures = ignoreTestFailuresOnTeamCity
+        checkFailedTests = !ignoreTestFailuresOnTeamCity
+
+        doFirst {
+            if (ignoreTestFailuresOnTeamCity) {
+                ignoreFailures = true
+                checkFailedTests = false
+            }
+        }
     }
 
     plugins.withType<NodeJsPlugin> {
