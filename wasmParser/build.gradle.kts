@@ -16,12 +16,22 @@ fun KotlinJsTest.passTestFlagsToEnvironment() {
     }
 }
 
-val copyWat2WasmForWebTests by tasks.registering(Copy::class) {
-    from(rootProject.file("wasm-modules/wat2wasm/target/wasm32-unknown-unknown/release/wat2wasm_full.wasm"))
-    into(layout.buildDirectory.dir("processedResources/js/test"))
+val wat2WasmFullResource =
+    project(":graalwasm:wat2wasm").layout.buildDirectory.file("resources/main/wat2wasm_full.wasm")
+
+val copyWat2WasmForWebTests by tasks.registering {
+    dependsOn(":graalwasm:wat2wasm:processResources")
+    inputs.file(wat2WasmFullResource)
+    outputs.dir(layout.buildDirectory.dir("processedResources/js/test"))
+    outputs.dir(layout.buildDirectory.dir("processedResources/wasmJs/test"))
+
     doLast {
         copy {
-            from(rootProject.file("wasm-modules/wat2wasm/target/wasm32-unknown-unknown/release/wat2wasm_full.wasm"))
+            from(wat2WasmFullResource)
+            into(layout.buildDirectory.dir("processedResources/js/test"))
+        }
+        copy {
+            from(wat2WasmFullResource)
             into(layout.buildDirectory.dir("processedResources/wasmJs/test"))
         }
     }
@@ -32,7 +42,8 @@ tasks.matching {
             it.name == "wasmJsTest" ||
             it.name == "jsBrowserTest" ||
             it.name == "wasmJsBrowserTest" ||
-            it.name == "compileTestDevelopmentExecutableKotlinJs"
+            it.name == "compileTestDevelopmentExecutableKotlinJs" ||
+            it.name == "compileTestDevelopmentExecutableKotlinWasmJs"
 }.configureEach {
     dependsOn(copyWat2WasmForWebTests)
 }
