@@ -16,8 +16,10 @@ import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.mcp.model.types.TypesResult
 import org.jetbrains.hexana.mcp.query.*
+import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import org.jetbrains.hexana.wasm.WasmModule
-import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
 import java.nio.file.Files
 import java.nio.file.Path
@@ -241,9 +243,11 @@ class DefaultHexanaAnalysisService(
     }
 
     private fun loadFromBytes(bytes: ByteArray): LoadedWasm {
-        val buffer = bytes.toCommonByteBuffer()
-        val module = parser.parseOrThrow(buffer)
-        return LoadedWasm(buffer, module)
+        val provider = bytes.toCommonByteBuffer().loadCoreProviderOrThrow()
+        return LoadedWasm(
+            provider = provider,
+            module = provider.wasmModule ?: throw wasmParseFailed()
+        )
     }
 
     private fun requireInlineBase64Size(base64: String) {
@@ -365,22 +369,26 @@ class DefaultHexanaAnalysisService(
     }
 
     private data class LoadedWasm(
-        val buffer: CommonByteBuffer,
+        private val provider: WasmBinaryProvider,
         val module: WasmModule
-    )
+    ) {
+        val buffer: CommonByteBuffer
+            get() = provider.bytes
+    }
 
-    private fun WasmParser.parseOrThrow(buffer: CommonByteBuffer): WasmModule {
-        return when (val result = parse(buffer)) {
-            is WasmParseSuccess -> result.wasmModule as? WasmModule
-                ?: throw HexanaAnalysisException(
-                    HexanaAnalysisErrorCode.WASM_PARSE_FAILED,
-                    "Failed to parse .wasm file"
-                )
-
-            else -> throw HexanaAnalysisException(
-                HexanaAnalysisErrorCode.WASM_PARSE_FAILED,
-                "Failed to parse .wasm file"
-            )
+    private fun CommonByteBuffer.loadCoreProviderOrThrow(): WasmBinaryProvider {
+        if (WasmBinaryProviderSelector.select(this) !is BinaryProviderType.Wasm) {
+            throw wasmParseFailed()
         }
+
+        return WasmBinaryProvider(this).takeIf(WasmBinaryProvider::canProvideWasmModule)
+            ?: throw wasmParseFailed()
+    }
+
+    private fun wasmParseFailed(): HexanaAnalysisException {
+        return HexanaAnalysisException(
+            HexanaAnalysisErrorCode.WASM_PARSE_FAILED,
+            "Failed to parse .wasm file"
+        )
     }
 }
