@@ -66,63 +66,63 @@ class DefaultHexanaAnalysisService(
 
     override fun summarizeModule(input: WasmInput): SummarizeModuleResult {
         val wasm = load(input)
-        return wasm.buffer.readModuleSummary(wasm.module)
+        return wasm.provider.readModuleSummary()
     }
 
     override fun listImports(input: WasmInput): ListImportsResult {
         val wasm = load(input)
-        return wasm.buffer.readImportFunctions(wasm.module)
+        return wasm.provider.readImportFunctions()
     }
 
     override fun listExports(input: WasmInput): ListExportsResult {
         val wasm = load(input)
-        return wasm.buffer.readExports(wasm.module)
+        return wasm.provider.readExports()
     }
 
     override fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult {
         requireOffset(offset)
         requireLimit(limit)
         val wasm = load(input)
-        return wasm.buffer.readFunctions(wasm.module, offset, limit)
+        return wasm.provider.readFunctions(offset, limit)
     }
 
     override fun listExportedFunctions(input: WasmInput, entriesRange: IntRange): ListExportedFunctionsResult {
         requireClosedRange(entriesRange)
         val wasm = load(input)
-        return wasm.buffer.readExportedFunctions(wasm.module, entriesRange)
+        return wasm.provider.readExportedFunctions(entriesRange)
     }
 
     override fun functionsForIndices(input: WasmInput, indices: List<Int>): FunctionsResult {
         requireIndices(indices)
         val wasm = load(input)
-        return wasm.buffer.readFunctionsByIndices(wasm.module, indices)
+        return wasm.provider.readFunctionsByIndices(indices)
     }
 
     override fun listGlobals(input: WasmInput): ListGlobalsResult {
         val wasm = load(input)
-        return wasm.buffer.readGlobals(wasm.module)
+        return wasm.provider.readGlobals()
     }
 
     override fun listTypes(input: WasmInput): TypesResult {
         val wasm = load(input)
-        return wasm.buffer.readTypes(wasm.module)
+        return wasm.provider.readTypes()
     }
 
     override fun listMemory(input: WasmInput): ListMemoryResult {
         val wasm = load(input)
-        return wasm.buffer.readMemory(wasm.module)
+        return wasm.provider.readMemory()
     }
 
     override fun getGlobalsForIndices(input: WasmInput, indices: List<Int>): ListGlobalsResult {
         requireIndices(indices)
         val wasm = load(input)
-        return wasm.buffer.readGlobalsByIndices(wasm.module, indices)
+        return wasm.provider.readGlobalsByIndices(indices)
     }
 
     override fun listData(input: WasmInput, entriesRange: IntRange): ListDataSectionsResult {
         requireClosedRange(entriesRange)
         val wasm = load(input)
-        return wasm.buffer.readDataSections(wasm.module, entriesRange)
+        return wasm.provider.readDataSections(entriesRange)
     }
 
     override fun listDataSegments(
@@ -136,10 +136,9 @@ class DefaultHexanaAnalysisService(
         requireHalfOpenRange(segmentStartInclusive, segmentEndExclusive)
         requireOptionalNonNegative(minByteLength, "Minimum byte length")
         val wasm = load(input)
-        return wasm.buffer.readDataSegments(
+        return wasm.provider.readDataSegments(
             segmentStartInclusive = segmentStartInclusive,
             segmentEndExclusive = segmentEndExclusive,
-            wasmModule = wasm.module,
             includeExports = includeExports,
             includeGlobals = includeGlobals,
             minByteLength = minByteLength
@@ -149,30 +148,30 @@ class DefaultHexanaAnalysisService(
     override fun getMemoryForIndices(input: WasmInput, indices: List<Int>): ListMemoryResult {
         requireIndices(indices)
         val wasm = load(input)
-        return wasm.buffer.readMemoryByIndices(wasm.module, indices)
+        return wasm.provider.readMemoryByIndices(indices)
     }
 
     override fun getTypesForIndices(input: WasmInput, indices: List<Int>): TypesResult {
         requireIndices(indices)
         val wasm = load(input)
-        return wasm.buffer.readTypesByIndices(wasm.module, indices)
+        return wasm.provider.readTypesByIndices(indices)
     }
 
     override fun getLocalsForFunctions(input: WasmInput, indices: List<Int>): GetLocalsForFunctionsResult {
         requireIndices(indices)
         val wasm = load(input)
-        return wasm.buffer.readLocalsForFunctions(wasm.module, indices)
+        return wasm.provider.readLocalsForFunctions(indices)
     }
 
     override fun getInstructionsForFunctions(input: WasmInput, indices: List<Int>): GetInstructionsForFunctionsResult {
         requireIndices(indices)
         val wasm = load(input)
-        return wasm.buffer.readInstructionsForFunctions(wasm.module, indices)
+        return wasm.provider.readInstructionsForFunctions(indices)
     }
 
     override fun listElementSegments(input: WasmInput): ListElementSegmentsResult {
         val wasm = load(input)
-        return wasm.buffer.readElementSegments(wasm.module)
+        return wasm.provider.readElementSegments()
     }
 
     private fun load(input: WasmInput): LoadedWasm {
@@ -369,7 +368,7 @@ class DefaultHexanaAnalysisService(
     }
 
     private data class LoadedWasm(
-        private val provider: WasmBinaryProvider,
+        val provider: WasmBinaryProvider,
         val module: WasmModule
     ) {
         val buffer: CommonByteBuffer

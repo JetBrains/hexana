@@ -5,9 +5,15 @@ import org.jetbrains.hexana.mcp.model.elements.ElementSegmentResult
 import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.wat
 import org.jetbrains.hexana.mcp.watString
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.sections.ExprWasmElementSegment
 import org.jetbrains.hexana.wasm.sections.FuncIdxWasmElementSegment
+
+fun WasmBinaryProvider.readElementSegments(): ListElementSegmentsResult {
+    val wasmModule = requireNotNull(wasmModule)
+    return bytes.readElementSegments(wasmModule)
+}
 
 fun CommonByteBuffer.readElementSegments(wasmModule: WasmModule): ListElementSegmentsResult {
     val elementSection = wasmModule.elementSection ?: return ListElementSegmentsResult(emptyList())

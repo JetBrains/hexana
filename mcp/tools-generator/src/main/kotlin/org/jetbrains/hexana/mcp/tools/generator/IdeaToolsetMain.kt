@@ -141,24 +141,23 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec, handlerSimpleName:
         "ListDataSegmentsInput" ->
             code.addStatement("val range = %M(segmentRange)", REQUIRE_HALF_OPEN_RANGE)
     }
-    code.addStatement("val buffer = file.%M()", CONTENTS_TO_BUFFER)
-    code.addStatement("val module = buffer.%M()", REQUIRE_PARSED_WASM_MODULE)
+    code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
 
     val queryMember = MemberName(QUERY_PACKAGE, handlerSimpleName)
     val callArgs: String = when (spec.input.name) {
-        "WasmInput" -> "(module)"
-        "ListFunctionsInput" -> "(module, offset, limit)"
+        "WasmInput" -> "()"
+        "ListFunctionsInput" -> "(offset, limit)"
         "FunctionsForIndicesInput",
         "GetGlobalsForIndicesInput",
         "GetMemoryForIndicesInput",
         "GetTypesForIndicesInput",
         "GetLocalsForFunctionsInput",
-        "GetInstructionsForFunctionsInput" -> "(module, indices)"
-        "ListExportedFunctionsInput", "ListDataInput" -> "(module, range)"
-        "ListDataSegmentsInput" -> "(module, range, includeExports, includeGlobals, minByteLength ?: 0)"
+        "GetInstructionsForFunctionsInput" -> "(indices)"
+        "ListExportedFunctionsInput", "ListDataInput" -> "(range)"
+        "ListDataSegmentsInput" -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
         else -> error("unreachable")
     }
-    code.addStatement("return buffer.%M$callArgs", queryMember)
+    code.addStatement("return provider.%M$callArgs", queryMember)
     builder.addCode(code.build())
 }
 
@@ -227,5 +226,4 @@ private const val QUERY_PACKAGE = "org.jetbrains.hexana.mcp.query"
 private val REQUIRE_WASM_FILE = MemberName(IDEA_PACKAGE, "requireWasmFile")
 private val REQUIRE_CLOSED_RANGE = MemberName(IDEA_PACKAGE, "requireClosedRange")
 private val REQUIRE_HALF_OPEN_RANGE = MemberName(IDEA_PACKAGE, "requireHalfOpenSegmentRange")
-private val CONTENTS_TO_BUFFER = MemberName(IDEA_PACKAGE, "contentsToCommonByteBuffer")
-private val REQUIRE_PARSED_WASM_MODULE = MemberName(IDEA_PACKAGE, "requireParsedWasmModule")
+private val REQUIRE_CORE_WASM_BINARY_PROVIDER = MemberName(IDEA_PACKAGE, "requireCoreWasmBinaryProvider")

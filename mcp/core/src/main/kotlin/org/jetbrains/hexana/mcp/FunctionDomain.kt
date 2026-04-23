@@ -224,7 +224,7 @@ fun Local.renderedType(): String =
         is LocalIndex -> "ref:index:${type}${nullableSuffix()}"
     }
 
-private fun List<WasmCodeLocalRecord>?.serializeLocals(): List<Local> = this?.map {
+internal fun List<WasmCodeLocalRecord>?.serializeLocals(): List<Local> = this?.map {
     when (it.type) {
         is WasmNumType -> LocalNum(it.local, it.type.code as Byte)
         is WasmVecType -> LocalVec(it.local)

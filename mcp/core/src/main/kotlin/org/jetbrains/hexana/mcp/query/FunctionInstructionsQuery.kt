@@ -5,7 +5,16 @@ import org.jetbrains.hexana.mcp.CodesByFunction
 import org.jetbrains.hexana.mcp.codeForFunctions
 import org.jetbrains.hexana.mcp.model.functions.FunctionInstructionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.WasmModule
+
+fun WasmBinaryProvider.readInstructionsForFunctions(
+    indices: List<Int>
+): GetInstructionsForFunctionsResult {
+    return GetInstructionsForFunctionsResult(
+        functions = readFunctionInstructions(indices).map { it.toFunctionInstructionsResult() }
+    )
+}
 
 fun CommonByteBuffer.readInstructionsForFunctions(
     wasmModule: WasmModule,

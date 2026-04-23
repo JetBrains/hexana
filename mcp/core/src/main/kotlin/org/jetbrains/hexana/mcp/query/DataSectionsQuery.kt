@@ -5,7 +5,15 @@ import org.jetbrains.hexana.mcp.DataEntry
 import org.jetbrains.hexana.mcp.listDataSectionInternal
 import org.jetbrains.hexana.mcp.model.data.DataEntryResult
 import org.jetbrains.hexana.mcp.model.data.ListDataSectionsResult
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.WasmModule
+
+fun WasmBinaryProvider.readDataSections(
+    range: IntRange
+): ListDataSectionsResult {
+    val wasmModule = requireNotNull(wasmModule)
+    return bytes.readDataSections(wasmModule, range)
+}
 
 fun CommonByteBuffer.readDataSections(
     wasmModule: WasmModule,

@@ -105,7 +105,7 @@ This module compiles sources from three locations:
 - `HexanaToolset.kt` is the registration surface for all plugin MCP tools. It is generated from the DSL in
   `mcp/tools-generator/` — do not hand-edit it; regenerate with `./gradlew :idea-plugin:generateHexanaToolset`.
 - `ToolsetHelpers.kt` is hand-written and holds the IntelliJ-side helpers the generated toolset calls
-  (`requireWasmFile`, `contentsToCommonByteBuffer`, `requireParsedWasmModule`, range helpers).
+  (`requireWasmFile`, `requireCoreWasmBinaryProvider`, range helpers).
 - The extracted pure query/model library lives in the sibling `mcp/core` module.
 - This module should keep only IntelliJ-specific MCP integration concerns such as:
     - `VirtualFile` and project-relative path resolution (in `ToolsetHelpers.kt`)

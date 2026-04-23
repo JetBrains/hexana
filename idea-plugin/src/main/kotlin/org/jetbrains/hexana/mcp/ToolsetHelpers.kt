@@ -11,22 +11,23 @@ package org.jetbrains.hexana.mcp
 import com.intellij.mcpserver.mcpFail
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.WasmFileType
-import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
-import org.jetbrains.hexana.wasm.WasmModule
-import org.jetbrains.hexana.wasm.WasmParseSuccess
-import org.jetbrains.hexana.wasm.WasmParser
+import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 
 /**
  * Shared helpers consumed by [HexanaToolset]. Kept hand-written because
  * they wrap IntelliJ VirtualFile resolution and `mcpFail` — behaviour, not shape.
  */
 
-internal fun VirtualFile.contentsToCommonByteBuffer(): CommonByteBuffer =
-    contentsToByteArray().toCommonByteBuffer()
-
-internal fun CommonByteBuffer.requireParsedWasmModule(): WasmModule {
-    return WasmParser().parseOrNull(this) ?: mcpFail("Failed to parse .wasm file")
+internal fun VirtualFile.requireCoreWasmBinaryProvider(): WasmBinaryProvider {
+    val buffer = contentsToByteArray().toCommonByteBuffer()
+    if (WasmBinaryProviderSelector.select(buffer) !is BinaryProviderType.Wasm) {
+        mcpFail("Failed to parse .wasm file")
+    }
+    return WasmBinaryProvider(buffer).takeIf(WasmBinaryProvider::canProvideWasmModule)
+        ?: mcpFail("Failed to parse .wasm file")
 }
 
 internal fun requireWasmFile(path: String): VirtualFile {
@@ -53,11 +54,4 @@ internal fun requireHalfOpenSegmentRange(segmentRange: Map<String, Int>): IntRan
         mcpFail("Invalid segmentRange `to` must be >= `from`")
     }
     return from until toExclusive
-}
-
-private fun WasmParser.parseOrNull(buffer: CommonByteBuffer): WasmModule? {
-    return when (val parseResult = parse(buffer)) {
-        is WasmParseSuccess -> parseResult.wasmModule as? WasmModule
-        else -> null
-    }
 }

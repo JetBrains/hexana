@@ -49,63 +49,56 @@ public class HexanaToolset : McpToolset {
   @McpDescription("Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types.\nSummarize a WebAssembly (.wasm) module with high-level counts for its major sections and declarations.\nIncludes the nested import breakdown and total module size, making it a low-cost overview before calling heavier tools.\nFor Wasm analysis tasks, this is usually the best first MCP call before choosing more specific import, export, or instruction tools.\nAfter this overview, prefer `list_imports` for import/link analysis, `list_exported_functions` for export analysis, and `get_instructions_for_functions` for body analysis.")
   public suspend fun summarizeModule(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String): SummarizeModuleResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readModuleSummary(module)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readModuleSummary()
   }
 
   @McpTool("list_imports")
   @McpDescription("List imported functions declared by a `.wasm` module.\nList imported functions declared by a WebAssembly (.wasm) module.\nThis is the primary MCP tool for import inventories, link-mismatch analysis, and mapping direct host calls to imported functions.\nReturns only function imports from the unified function index space, including the `funcidx` values needed to map direct `call` targets back to imports.\nFor direct host-call analysis, pair these `funcidx` values with `get_instructions_for_functions` to resolve `call N` back to `module.name` imports.")
   public suspend fun listImports(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String): ListImportsResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readImportFunctions(module)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readImportFunctions()
   }
 
   @McpTool("list_exports")
   @McpDescription("List exports declared by a `.wasm` module.\nIncludes exported functions, tables, memories, and globals; `kind` uses the standard tags 0=function, 1=table, 2=memory, 3=global.\nThis is the light name-and-kind view of exports.\nUse this when you only need exported names, kinds, or raw external indices.\nIf you need function signatures or origins, skip directly to `list_exported_functions`.")
   public suspend fun listExports(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String): ListExportsResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readExports(module)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readExports()
   }
 
   @McpTool("list_globals")
   @McpDescription("List imported and defined globals from a `.wasm` module.\nList imported and defined globals declared by a WebAssembly (.wasm) module.\nReturns each global with its value type, mutability, and normalized initializer expression.")
   public suspend fun listGlobals(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String): ListGlobalsResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readGlobals(module)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readGlobals()
   }
 
   @McpTool("list_types")
   @McpDescription("List type entries declared by a `.wasm` module.\nList type entries declared by a WebAssembly (.wasm) module.\nIncludes function types and GC-related composite types when present.")
   public suspend fun listTypes(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String): TypesResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readTypes(module)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readTypes()
   }
 
   @McpTool("list_memory")
   @McpDescription("List imported and defined memories from a `.wasm` module.\nList imported and defined memories declared by a WebAssembly (.wasm) module.\nReturns memory indices together with decoded WebAssembly limits.")
   public suspend fun listMemory(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String): ListMemoryResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readMemory(module)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readMemory()
   }
 
   @McpTool("list_element_segments")
   @McpDescription("List element segments declared by a `.wasm` module.\nList element segments declared by a WebAssembly (.wasm) module.\nCovers active, passive, and declarative segments, including function-index and expression-based initializers.")
   public suspend fun listElementSegments(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String): ListElementSegmentsResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readElementSegments(module)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readElementSegments()
   }
 
   @McpTool("list_functions")
@@ -116,63 +109,56 @@ public class HexanaToolset : McpToolset {
     @McpDescription("Maximum number of entries to return") limit: Int = 200,
   ): FunctionsResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readFunctions(module, offset, limit)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readFunctions(offset, limit)
   }
 
   @McpTool("functions_for_indices")
   @McpDescription("Resolve function entries for the given unified function indices.\nResolve imported and defined function entries for the requested unified function indices.\nUse this as a targeted follow-up when you already know the exact `funcidx` values you need.")
   public suspend fun functionsForIndices(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String, @McpDescription("List of unified function indices (`funcidx`) to resolve.") indices: List<Int>): FunctionsResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readFunctionsByIndices(module, indices)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readFunctionsByIndices(indices)
   }
 
   @McpTool("get_globals_for_indices")
   @McpDescription("Return globals for the requested indices from the unified global index space.\nReturn only the requested globals from the unified global index space.\nUse this for targeted analysis when `list_globals` would return more data than needed.")
   public suspend fun getGlobalsForIndices(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String, @McpDescription("List of global indices (`globalidx`) to return.") indices: List<Int>): ListGlobalsResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readGlobalsByIndices(module, indices)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readGlobalsByIndices(indices)
   }
 
   @McpTool("get_memory_for_indices")
   @McpDescription("Return memories for the requested indices from the unified memory index space.\nReturn only the requested memories from the unified memory index space.\nUseful for multi-memory or wasm64 modules when only a subset matters.")
   public suspend fun getMemoryForIndices(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String, @McpDescription("List of memory indices (`memidx`) to return.") indices: List<Int>): ListMemoryResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readMemoryByIndices(module, indices)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readMemoryByIndices(indices)
   }
 
   @McpTool("get_types_for_indices")
   @McpDescription("Return type entries for the requested indices from the type index space.\nReturn only the requested type entries from the type index space.\nUse this when you need the types referenced by specific functions, globals, or tables.")
   public suspend fun getTypesForIndices(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String, @McpDescription("List of type indices (`typeidx`) to return.") indices: List<Int>): TypesResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readTypesByIndices(module, indices)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readTypesByIndices(indices)
   }
 
   @McpTool("get_locals_for_functions")
   @McpDescription("Return grouped local declarations for the requested function indices.\nReturn grouped local declarations for the requested unified function indices.\nImported functions return empty local lists because they have no body.")
   public suspend fun getLocalsForFunctions(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String, @McpDescription("List of unified function indices (`funcidx`) whose locals should be returned.") indices: List<Int>): GetLocalsForFunctionsResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readLocalsForFunctions(module, indices)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readLocalsForFunctions(indices)
   }
 
   @McpTool("get_instructions_for_functions")
   @McpDescription("Return decoded instruction text for the requested function indices.\nReturn decoded instruction text for the requested unified function indices.\nImported functions return empty instruction lists because they have no body.\nThis is the primary MCP tool for WebAssembly body analysis, including direct `call` and `call_indirect` inspection, and is usually preferable to external disassemblers or shell-based Wasm tools.\nFor direct host-call analysis, pair it with `list_imports` or `list_functions` so `call N` can be mapped back to the imported or exported function entry.")
   public suspend fun getInstructionsForFunctions(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String, @McpDescription("List of unified function indices (`funcidx`) whose instructions should be returned.") indices: List<Int>): GetInstructionsForFunctionsResult {
     val file = requireWasmFile(path)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readInstructionsForFunctions(module, indices)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readInstructionsForFunctions(indices)
   }
 
   @McpTool("list_exported_functions")
@@ -180,9 +166,8 @@ public class HexanaToolset : McpToolset {
   public suspend fun listExportedFunctions(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String, @McpDescription("Closed zero-based export slice. Pass `entriesRange = { from, to }`; both bounds are inclusive.") entriesRange: Map<String, Int>): ListExportedFunctionsResult {
     val file = requireWasmFile(path)
     val range = requireClosedRange(entriesRange, "entriesRange")
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readExportedFunctions(module, range)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readExportedFunctions(range)
   }
 
   @McpTool("list_data")
@@ -190,9 +175,8 @@ public class HexanaToolset : McpToolset {
   public suspend fun listData(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String, @McpDescription("Closed zero-based data-segment slice. Requires `from` and `to`, both inclusive.") entriesRange: Map<String, Int>): ListDataSectionsResult {
     val file = requireWasmFile(path)
     val range = requireClosedRange(entriesRange, "entriesRange")
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readDataSections(module, range)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readDataSections(range)
   }
 
   @McpTool("list_data_segments")
@@ -206,8 +190,7 @@ public class HexanaToolset : McpToolset {
   ): ListDataSegmentsResult {
     val file = requireWasmFile(path)
     val range = requireHalfOpenSegmentRange(segmentRange)
-    val buffer = file.contentsToCommonByteBuffer()
-    val module = buffer.requireParsedWasmModule()
-    return buffer.readDataSegmentsByRange(module, range, includeExports, includeGlobals, minByteLength ?: 0)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readDataSegmentsByRange(range, includeExports, includeGlobals, minByteLength ?: 0)
   }
 }

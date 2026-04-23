@@ -3,7 +3,39 @@ package org.jetbrains.hexana.mcp.query
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.mcp.*
 import org.jetbrains.hexana.mcp.model.data.*
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.WasmModule
+
+fun WasmBinaryProvider.readDataSegments(
+    segmentStartInclusive: Int,
+    segmentEndExclusive: Int,
+    includeExports: Boolean,
+    includeGlobals: Boolean,
+    minByteLength: Int?
+): ListDataSegmentsResult {
+    val wasmModule = requireNotNull(wasmModule)
+    return bytes.readDataSegments(
+        segmentStartInclusive = segmentStartInclusive,
+        segmentEndExclusive = segmentEndExclusive,
+        wasmModule = wasmModule,
+        includeExports = includeExports,
+        includeGlobals = includeGlobals,
+        minByteLength = minByteLength
+    )
+}
+
+fun WasmBinaryProvider.readDataSegmentsByRange(
+    range: IntRange,
+    includeExports: Boolean,
+    includeGlobals: Boolean,
+    minByteLength: Int,
+): ListDataSegmentsResult = readDataSegments(
+    segmentStartInclusive = range.first,
+    segmentEndExclusive = if (range.isEmpty()) range.first else range.last + 1,
+    includeExports = includeExports,
+    includeGlobals = includeGlobals,
+    minByteLength = minByteLength.takeIf { it > 0 },
+)
 
 fun CommonByteBuffer.readDataSegments(
     segmentRange: IntRange,
