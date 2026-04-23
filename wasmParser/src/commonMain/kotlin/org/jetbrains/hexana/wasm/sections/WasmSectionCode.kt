@@ -91,7 +91,10 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
         try {
             consumeLocals(locals)
             val opCodes = parseOpCodes()
-            return WasmCodeRecord(codeEntryStart, sizeFromOffset(codeEntryStart), locals, opCodes)
+            val fullSize = (bodyStart - codeEntryStart) + funSize.toInt()
+            return WasmCodeRecord(codeEntryStart, fullSize, locals, opCodes).also {
+                position(codeEntryStart + fullSize)
+            }
         } catch (e: Exception) {
             position(bodyStart)
             val bytesToRead = minOf(funSize.toInt(), remaining())
@@ -101,14 +104,14 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
                 codeEntryStart,
                 sizeFromOffset(codeEntryStart),
                 locals,
-                listOf(UnparsedOpCode(e, raw, bodyStart))
+                listOf(UnparsedOpCode(e, raw, codeEntryStart))
             )
         }
     } catch (e: Exception) {
-        val raw = MemoryRegion(position(), remaining())
+        val raw = MemoryRegion(codeEntryStart, remaining())
         return WasmCodeRecord(
             codeEntryStart,
-            sizeFromOffset(codeEntryStart),
+            remaining(),
             locals,
             listOf(UnparsedOpCode(e, raw, codeEntryStart))
         )
