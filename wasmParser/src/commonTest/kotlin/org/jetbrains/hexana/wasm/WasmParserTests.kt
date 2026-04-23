@@ -12,6 +12,7 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.*
 import kotlin.test.*
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
+import org.jetbrains.hexana.wasm.opcodes.legacy.eh.LegacyEH
 import org.jetbrains.hexana.wasm.opcodes.numeric.F32
 import org.jetbrains.hexana.wasm.opcodes.numeric.F64
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
@@ -2149,6 +2150,7 @@ class WasmParserTests {
         }
         assertEquals(1, records.size)
         val ops = records.single().opCodes
+        assertTrue(records.single().opCodes.filterIsInstance<OpCodes.Flow.Loop>().single().value.first() is LegacyEH.Try)
         val unparsedOpCodes = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsedOpCodes.isEmpty())
     }
