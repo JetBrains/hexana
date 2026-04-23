@@ -16,6 +16,7 @@ import kotlin.test.Test
 import kotlin.test.assertIs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
 
 class GarbageAnalyzerTest {
 
@@ -202,7 +203,7 @@ class GarbageAnalyzerTest {
      * This test captures the current state as a regression baseline.
      */
     @Test
-    fun `skiko wasm garbage analysis — regression baseline`() = runTest {
+    fun `skiko wasm garbage analysis — regression baseline`() = runTest(timeout = 3.minutes) {
         val buffer = resourceAsByteBuffer("maps/skiko.wasm")
         val parseResult = WasmParser().parse(buffer)
         assertIs<WasmParseSuccess>(parseResult)
