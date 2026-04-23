@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp
 
 import org.jetbrains.hexana.mcp.query.readModuleSummary
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 
 class FunctionImportClassificationTest : WasmTest() {
     fun testImportFunctionsIgnoresNonFunctionImports() = doTest("functionIndexSpace") { wasmModule ->
@@ -16,7 +17,7 @@ class FunctionImportClassificationTest : WasmTest() {
         assertEquals(0, functions.first { it.definedIn == "import" }.funcidx)
         assertEquals(1, functions.first { it.definedIn == "function_section" }.funcidx)
 
-        val summary = readModuleSummary(requireNotNull(wasmModule))
+        val summary = WasmBinaryProvider(position(0)).readModuleSummary()
         assertEquals(1, summary.imports.functions)
         assertEquals(0, summary.memories)
         assertEquals(1, summary.globals)
