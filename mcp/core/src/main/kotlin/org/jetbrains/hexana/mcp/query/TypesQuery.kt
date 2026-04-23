@@ -1,12 +1,10 @@
 package org.jetbrains.hexana.mcp.query
 
-import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.mcp.model.types.TypeFieldResult
 import org.jetbrains.hexana.mcp.model.types.TypeResult
 import org.jetbrains.hexana.mcp.model.types.TypesResult
 import org.jetbrains.hexana.mcp.types
 import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.sections.*
 
 fun WasmBinaryProvider.readTypes(): TypesResult {
@@ -22,27 +20,6 @@ fun WasmBinaryProvider.readTypesByIndices(
     val wasmModule = requireNotNull(wasmModule)
     return TypesResult(
         types = bytes.types(wasmModule).mapIndexedNotNull { index, record ->
-            if (indices.contains(index)) {
-                record.toTypeResult(index)
-            } else {
-                null
-            }
-        }
-    )
-}
-
-fun CommonByteBuffer.readTypes(wasmModule: WasmModule): TypesResult {
-    return TypesResult(
-        types = types(wasmModule).mapIndexed { index, record -> record.toTypeResult(index) }
-    )
-}
-
-fun CommonByteBuffer.readTypesByIndices(
-    wasmModule: WasmModule,
-    indices: List<Int>
-): TypesResult {
-    return TypesResult(
-        types = types(wasmModule).mapIndexedNotNull { index, record ->
             if (indices.contains(index)) {
                 record.toTypeResult(index)
             } else {

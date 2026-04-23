@@ -1,6 +1,5 @@
 package org.jetbrains.hexana.mcp.query
 
-import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.mcp.Limits
 import org.jetbrains.hexana.mcp.MemoryRecord
 import org.jetbrains.hexana.mcp.listMemory
@@ -9,7 +8,6 @@ import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
 import org.jetbrains.hexana.mcp.model.memory.MemoryLimitsResult
 import org.jetbrains.hexana.mcp.model.memory.MemoryResult
 import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.wasm.WasmModule
 
 fun WasmBinaryProvider.readMemory(): ListMemoryResult {
     val wasmModule = requireNotNull(wasmModule)
@@ -24,21 +22,6 @@ fun WasmBinaryProvider.readMemoryByIndices(
     val wasmModule = requireNotNull(wasmModule)
     return ListMemoryResult(
         memories = bytes.listMemoryByIndices(wasmModule, indices).map { it.toMemoryResult() }
-    )
-}
-
-fun CommonByteBuffer.readMemory(wasmModule: WasmModule): ListMemoryResult {
-    return ListMemoryResult(
-        memories = listMemory(wasmModule).map { it.toMemoryResult() }
-    )
-}
-
-fun CommonByteBuffer.readMemoryByIndices(
-    wasmModule: WasmModule,
-    indices: List<Int>
-): ListMemoryResult {
-    return ListMemoryResult(
-        memories = listMemoryByIndices(wasmModule, indices).map { it.toMemoryResult() }
     )
 }
 
