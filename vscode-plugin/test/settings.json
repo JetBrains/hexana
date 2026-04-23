@@ -1,0 +1,10 @@
+{
+  "workbench.editor.enablePreview": false,
+  "workbench.editorAssociations": {
+    "*.wasm": "hexana.wasmEditor"
+  },
+  "window.dialogStyle": "custom",
+  "security.workspace.trust.enabled": false,
+  "extensions.ignoreRecommendations": true,
+  "update.mode": "none"
+}
