@@ -7,7 +7,7 @@ import { execFileSync } from "child_process";
 import type * as ExtensionLib from "./extension-lib";
 
 // Kotlin/JS extension library — provides binary analysis, dependency resolution,
-// and shell utilities backed by the shared wasmParser / sharedUi modules.
+// and shell utilities backed by the shared wasmParser / plugins-shared modules.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const extensionLib: typeof ExtensionLib | null = (() => {
     try {

@@ -22,7 +22,7 @@ The extension uses VS Code's Custom Editor API (`CustomReadonlyEditorProvider`) 
 All three layers reuse the existing KMP modules:
 - `wasmParser` – binary decoding.
 - `binaryProvider` – high-level provider abstraction and analysis.
-- `sharedUi` – shared run utilities, import stub generation, component resolution helpers.
+- `plugins-shared` – shared run utilities, import stub generation, component resolution helpers.
 - `encdec` – byte-buffer helpers.
 
 ## Build Commands

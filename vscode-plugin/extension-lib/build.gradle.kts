@@ -23,7 +23,7 @@ kotlin {
                 implementation(project(":wasmParser"))
                 implementation(project(":binaryProvider"))
                 implementation(project(":encdec"))
-                implementation(project(":sharedUi"))
+                implementation(project(":plugins-shared"))
             }
         }
 

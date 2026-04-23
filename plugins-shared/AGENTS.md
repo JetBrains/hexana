@@ -1,4 +1,4 @@
-# sharedUi Module
+# plugins-shared Module
 
 Read the root `AGENTS.md` first, then this file.
 
@@ -39,5 +39,5 @@ The module provides:
 
 ## Testing
 
-- Run shared module tests: `./gradlew :sharedUi:build`
+- Run shared module tests: `./gradlew :plugins-shared:build`
 - After changes, also run: `./gradlew :idea-plugin:test` and `./gradlew :vscode-plugin:webview:compileKotlinJs`

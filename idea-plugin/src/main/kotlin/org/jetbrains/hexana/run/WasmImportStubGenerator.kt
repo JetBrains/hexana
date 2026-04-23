@@ -9,7 +9,7 @@ import org.jetbrains.hexana.shared.WasmImportStubGenerator as SharedStubGenerato
 /**
  * Thin wrapper around [SharedStubGenerator] that adds GraalWasm-specific
  * instantiation logic. All stub generation is delegated to the shared
- * multiplatform implementation in `sharedUi`.
+ * multiplatform implementation in `plugins-shared`.
  */
 internal object WasmImportStubGenerator {
 

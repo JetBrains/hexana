@@ -75,7 +75,7 @@ The extension is organised into three layers:
 All three layers reuse existing Kotlin Multiplatform modules:
 - **wasmParser** — binary decoding for core Wasm and component model.
 - **binaryProvider** — high-level analysis (imports, exports, functions, size, etc.).
-- **sharedUi** — shared run utilities, import stub generation, component resolution helpers.
+- **plugins-shared** — shared run utilities, import stub generation, component resolution helpers.
 - **encdec** — `CommonByteBuffer` abstraction.
 
 ## Project Structure
