@@ -19,27 +19,27 @@ import org.jetbrains.hexana.wasm.sections.StandardTypesParser.heapType
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.valueType
 import org.jetbrains.hexana.wasm.sections.WasmValueType
 
-fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
+fun CommonByteBuffer.consumeOpCode(bcode: UByte, limit: Int = limit()): OpCode {
     val offset = position() - 1
     return when (val code = bcode.toUInt()) {
         0x00u -> OpCodes.ParametricInstructions.Unreachable
         0x01u -> OpCodes.ParametricInstructions.Nop
         0x02u -> {
-            Flow.Block(blockType(), consumeBlock(), offset)
+            Flow.Block(blockType(), consumeBlock(limit), offset)
         }
         0x03u -> {
-            Flow.Loop(blockType(), consumeBlock(), offset)
+            Flow.Loop(blockType(), consumeBlock(limit), offset)
         }
         0x04u -> {
-            Flow.If(blockType(), consumeBlock(), offset)
+            Flow.If(blockType(), consumeBlock(limit), offset)
         }
         0x05u -> {
-            val opCodes = parseOpCodes()
+            val opCodes = parseOpCodes(limit)
             // If and Else sections share terminal OpCode - that said, we just (sort of) give it back to parent If declaration
             position(position() - 1)
             Flow.Else(opCodes, offset)
         }
-        LegacyEH.Try.code.toUInt() -> LegacyEH.Try(blockType(), consumeBlock(),offset)
+        LegacyEH.Try.code.toUInt() -> LegacyEH.Try(blockType(), consumeBlock(limit), offset)
         LegacyEH.Catch.code.toUInt() -> LegacyEH.Catch(getSLEB128().toInt(), offset)
         0x08u -> Flow.Trow(consumeInt(), offset)
         LegacyEH.Rethrow.code.toUInt() -> LegacyEH.Rethrow(getSLEB128().toUInt(), offset)
@@ -86,10 +86,10 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
                     0x1.toByte() -> catches.add(Flow.CatchType.CatchRef(getULEB128().toUInt(), getULEB128().toUInt()))
                     0x2.toByte() -> catches.add(Flow.CatchType.CatchAll(getULEB128().toUInt()))
                     0x3.toByte() -> catches.add(Flow.CatchType.CatchAllRef(getULEB128().toUInt()))
-                    else -> throw UnsupportedOpsException(code, position())
+                    else -> throw UnsupportedOpsException(code, offset)
                 }
             }
-            val opcodes = parseOpCodes()
+            val opcodes = parseOpCodes(limit)
             Flow.TryTable(blockType, catches.toList(), opcodes, offset)
         }
         0x20u -> Local.Get(consumeInt(), offset)
@@ -285,20 +285,38 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
     }
 }
 
-private fun CommonByteBuffer.consumeBlock(): List<OpCode> {
-    val blockOpCodes = parseOpCodes()
+private fun CommonByteBuffer.consumeBlock(limit: Int = limit()): List<OpCode> {
+    val blockOpCodes = parseOpCodes(limit)
     return blockOpCodes
 }
 
-fun CommonByteBuffer.parseOpCodes(): List<OpCode> {
+/**
+ * Parses a sequence of opcodes from the current buffer position.
+ *
+ * The loop stops when any of the following is true:
+ *  - the `end` opcode (`0x0B`, [Flow.Terminal]) is read;
+ *  - the buffer has no remaining bytes;
+ *  - the buffer position reaches [limit] (exclusive upper bound in absolute
+ *    buffer coordinates).
+ *
+ * Callers that know a hard byte boundary — e.g. [consumeCodeEntry] with the
+ * `funSize`-declared function-body end — should pass it via [limit] so a
+ * mis-decoded opcode inside one region can't drift into the next one.
+ *
+ * Default `limit = limit()` (the buffer's own upper bound) preserves the
+ * previous unbounded-within-buffer behavior for callers that don't need a
+ * tighter constraint (top-level module scan, nested `block`/`loop`/`if`
+ * bodies whose only terminator is `0x0B`).
+ */
+fun CommonByteBuffer.parseOpCodes(limit: Int = limit()): List<OpCode> {
     val opCodes = mutableListOf<OpCode>()
-    while (remaining() != 0) {
+    while (remaining() != 0 && position() < limit) {
         val byte = get().toUByte()
         if (byte == Flow.Terminal.code) {
             break
         }
 
-        val op = consumeOpCode(byte)
+        val op = consumeOpCode(byte, limit)
         opCodes.add(op)
     }
     return opCodes

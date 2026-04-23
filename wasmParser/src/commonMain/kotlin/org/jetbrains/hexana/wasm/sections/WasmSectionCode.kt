@@ -90,7 +90,7 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
         val bodyStart = position()
         try {
             consumeLocals(locals)
-            val opCodes = parseOpCodes()
+            val opCodes = parseOpCodes(bodyStart + funSize.toInt())
             val fullSize = (bodyStart - codeEntryStart) + funSize.toInt()
             return WasmCodeRecord(codeEntryStart, fullSize, locals, opCodes).also {
                 position(codeEntryStart + fullSize)
