@@ -116,7 +116,7 @@ fun HexanaPanel(
         }) {
             when (activeTab) {
                 HexanaTab.Summary -> SummaryTabContent(buffer, providerType, selection)
-                HexanaTab.Exports -> ExportsTabContent(buffer, providerType, selection, wasmBytes = bytes)
+                HexanaTab.Exports -> ExportsTabContent(buffer, providerType, selection, wasmBytes = bytes, fileName = fileName)
                 HexanaTab.Imports -> ImportsTabContent(buffer, providerType, selection)
                 HexanaTab.Functions -> FunctionsTabContent(buffer, providerType, selection)
                 HexanaTab.Data -> DataTabContent(buffer, providerType, selection)

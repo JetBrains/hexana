@@ -24,8 +24,10 @@ fun EditorToolbar(
     buffer: CommonByteBuffer? = null,
     wasmBytes: ByteArray? = null,
 ) {
-    val runnableExportName = remember(buffer, providerType) {
-        if (buffer == null) return@remember null
+    val isSubmodule = isSubmoduleFileName(fileName)
+
+    val runnableExportName = remember(buffer, providerType, isSubmodule) {
+        if (buffer == null || isSubmodule) return@remember null
         when (providerType) {
             is BinaryProviderType.Wasm -> {
                 buffer.position(0)

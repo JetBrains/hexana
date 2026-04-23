@@ -16,16 +16,18 @@ fun ExportsTabContent(
     providerType: BinaryProviderType,
     selection: HexSelectionState,
     wasmBytes: ByteArray? = null,
+    fileName: String = "",
 ) {
+    val showRunButtons = !isSubmoduleFileName(fileName)
     when (providerType) {
-        is BinaryProviderType.Wasm -> CoreWasmExports(buffer, selection, wasmBytes)
-        is BinaryProviderType.WasmComponent -> ComponentExports(buffer, selection, wasmBytes)
+        is BinaryProviderType.Wasm -> CoreWasmExports(buffer, selection, wasmBytes, showRunButtons)
+        is BinaryProviderType.WasmComponent -> ComponentExports(buffer, selection, wasmBytes, showRunButtons)
         is BinaryProviderType.Generic -> Div { Text("Not a recognized WebAssembly binary.") }
     }
 }
 
 @Composable
-private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionState, wasmBytes: ByteArray? = null) {
+private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionState, wasmBytes: ByteArray? = null, showRunButtons: Boolean = true) {
     val provider = remember(buffer) {
         buffer.position(0)
         WasmBinaryProvider(buffer)
@@ -85,7 +87,7 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
                 resolveCoreSignature(export, functions, importFuncCount)
             } else ""
 
-            val isRunnable = export is WasmFunctionExportRecordEntry && !isInternalName(export.name)
+            val isRunnable = showRunButtons && export is WasmFunctionExportRecordEntry && !isInternalName(export.name)
 
             PanelTableRow(
                 isHighlighted = selection.hasSelection &&
@@ -136,7 +138,7 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
 }
 
 @Composable
-private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionState, wasmBytes: ByteArray? = null) {
+private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionState, wasmBytes: ByteArray? = null, showRunButtons: Boolean = true) {
     val provider = remember(buffer) {
         buffer.position(0)
         WasmComponentBinaryProvider(buffer)
@@ -216,7 +218,7 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
         for ((index, export) in exports.withIndex()) {
             val isWasiCliRun = isWasiCliRunExportName(export.exportName)
             val isFunctionExport = isComponentFunctionExport(export, provider)
-            val isRunnable = isWasiCliRun || isFunctionExport
+            val isRunnable = showRunButtons && (isWasiCliRun || isFunctionExport)
 
             PanelTableRow(
                 isHighlighted = selection.hasSelection &&

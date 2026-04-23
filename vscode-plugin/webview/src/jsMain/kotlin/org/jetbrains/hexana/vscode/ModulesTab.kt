@@ -10,6 +10,17 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 
+/**
+ * Returns `true` when [fileName] looks like a nested submodule opened in a
+ * separate tab.  The naming convention `baseName_index@hexOffset.ext` is
+ * produced by [ComponentModuleList] — the `@` before the hex offset is the
+ * distinguishing marker.
+ */
+internal fun isSubmoduleFileName(fileName: String): Boolean {
+    val name = fileName.substringAfterLast('/').substringAfterLast('\\')
+    return '_' in name && '@' in name
+}
+
 @Composable
 fun ModulesTabContent(
     buffer: CommonByteBuffer,
