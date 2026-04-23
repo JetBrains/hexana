@@ -19,8 +19,6 @@ import org.jetbrains.hexana.mcp.query.*
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
-import org.jetbrains.hexana.wasm.WasmModule
-import org.jetbrains.hexana.wasm.WasmParser
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.*
@@ -59,7 +57,6 @@ object HexanaAnalysisServices {
 }
 
 class DefaultHexanaAnalysisService(
-    private val parser: WasmParser = WasmParser(),
     private val maxInlineInputBytes: Int = HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES,
     private val maxFileInputBytes: Int = HexanaAnalysisLimits.MAX_FILE_WASM_BYTES
 ) : HexanaAnalysisService {
@@ -242,11 +239,7 @@ class DefaultHexanaAnalysisService(
     }
 
     private fun loadFromBytes(bytes: ByteArray): LoadedWasm {
-        val provider = bytes.toCommonByteBuffer().loadCoreProviderOrThrow()
-        return LoadedWasm(
-            provider = provider,
-            module = provider.wasmModule ?: throw wasmParseFailed()
-        )
+        return LoadedWasm(bytes.toCommonByteBuffer().loadCoreProviderOrThrow())
     }
 
     private fun requireInlineBase64Size(base64: String) {
@@ -367,13 +360,7 @@ class DefaultHexanaAnalysisService(
         }
     }
 
-    private data class LoadedWasm(
-        val provider: WasmBinaryProvider,
-        val module: WasmModule
-    ) {
-        val buffer: CommonByteBuffer
-            get() = provider.bytes
-    }
+    private data class LoadedWasm(val provider: WasmBinaryProvider)
 
     private fun CommonByteBuffer.loadCoreProviderOrThrow(): WasmBinaryProvider {
         if (WasmBinaryProviderSelector.select(this) !is BinaryProviderType.Wasm) {
