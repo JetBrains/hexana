@@ -30,13 +30,22 @@ fun splitShellArgs(input: String): Array<String> {
     return result.toTypedArray()
 }
 
-private val SAFE_ARG_REGEX = Regex("^[a-zA-Z0-9_./:=-]+$")
+private val SAFE_ARG_REGEX_UNIX = Regex("^[a-zA-Z0-9_./:=-]+$")
+private val SAFE_ARG_REGEX_WIN = Regex("^[a-zA-Z0-9_./:=\\\\-]+$")
 
 /**
  * Escapes a single shell argument for safe use in a terminal command.
+ *
+ * When [windows] is `true`, uses double-quote escaping suitable for
+ * `cmd.exe` / PowerShell (backslash paths are safe, inner `"` are
+ * escaped as `\"`).  Otherwise uses POSIX single-quote escaping.
  */
 @JsExport
-fun shellEscape(arg: String): String {
-    if (SAFE_ARG_REGEX.matches(arg)) return arg
+fun shellEscape(arg: String, windows: Boolean = false): String {
+    if (windows) {
+        if (SAFE_ARG_REGEX_WIN.matches(arg)) return arg
+        return "\"" + arg.replace("\"", "\\\"") + "\""
+    }
+    if (SAFE_ARG_REGEX_UNIX.matches(arg)) return arg
     return "'" + arg.replace("'", "'\\''") + "'"
 }

@@ -65,8 +65,12 @@ export function parseComponentImportNames(bytes: Int8Array): string[];
  */
 export function splitShellArgs(input: string): string[];
 
-/** Escapes a single shell argument for safe use in a terminal command. */
-export function shellEscape(arg: string): string;
+/**
+ * Escapes a single shell argument for safe use in a terminal command.
+ * When `windows` is `true`, uses double-quote escaping suitable for
+ * cmd.exe / PowerShell; otherwise uses POSIX single-quote escaping.
+ */
+export function shellEscape(arg: string, windows?: boolean): string;
 
 // ── DependencyResolver ──────────────────────────────────────────────
 

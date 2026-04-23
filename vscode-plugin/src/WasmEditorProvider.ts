@@ -332,9 +332,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const exportName = message.exportName || path.basename(filePath, ".wasm");
         const terminalName = `Wasm: ${exportName}`;
 
+        const isWindows = os.platform() === "win32";
+        const wasmtimeCmd = isWindows ? "wasmtime.exe" : "wasmtime";
         const terminal = vscode.window.createTerminal({ name: terminalName });
         terminal.show();
-        terminal.sendText(`wasmtime ${args.map((a: string) => extensionLib.shellEscape(a)).join(" ")}`);
+        terminal.sendText(`${wasmtimeCmd} ${args.map((a: string) => extensionLib.shellEscape(a, isWindows)).join(" ")}`);
     }
 
     /**
@@ -399,9 +401,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const exportName = message.exportName || path.basename(filePath, ".wasm");
         const terminalName = `Wasm: ${exportName}`;
 
+        const isWindows = os.platform() === "win32";
+        const wasmtimeCmd = isWindows ? "wasmtime.exe" : "wasmtime";
         const terminal = vscode.window.createTerminal({ name: terminalName });
         terminal.show();
-        terminal.sendText(`wasmtime ${args.map((a: string) => extensionLib.shellEscape(a)).join(" ")}`);
+        terminal.sendText(`${wasmtimeCmd} ${args.map((a: string) => extensionLib.shellEscape(a, isWindows)).join(" ")}`);
     }
 
     /**
@@ -590,20 +594,25 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
     /**
      * Resolves the path to a CLI tool, checking common locations.
+     * On Windows, appends `.exe` to binary names and uses `where.exe`
+     * instead of `which` to check PATH availability.
      */
     private resolveToolPath(toolName: string): string | undefined {
+        const isWindows = os.platform() === "win32";
+        const exeName = isWindows ? `${toolName}.exe` : toolName;
         const home = os.homedir();
         const candidates = [
-            path.join(home, ".cargo", "bin", toolName),
-            toolName,
+            path.join(home, ".cargo", "bin", exeName),
+            exeName,
         ];
 
         for (const candidate of candidates) {
             try {
-                if (candidate === toolName) {
+                if (candidate === exeName) {
                     // Check if it's on PATH
-                    execFileSync("which", [toolName], { stdio: "pipe" });
-                    return toolName;
+                    const whichCmd = isWindows ? "where.exe" : "which";
+                    execFileSync(whichCmd, [exeName], { stdio: "pipe" });
+                    return exeName;
                 } else if (fs.existsSync(candidate)) {
                     return candidate;
                 }
