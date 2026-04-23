@@ -1,13 +1,11 @@
 package org.jetbrains.hexana.mcp.query
 
-import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.mcp.*
 import org.jetbrains.hexana.mcp.model.exports.ExportedFunctionEntryResult
 import org.jetbrains.hexana.mcp.model.exports.ExportedFunctionResult
 import org.jetbrains.hexana.mcp.model.exports.ExportedFunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 
 fun WasmBinaryProvider.readExportedFunctions(
@@ -20,30 +18,6 @@ fun WasmBinaryProvider.readExportedFunctions(
             functionEntriesByIndex[export.index.toInt()]
                 ?.let { entry -> WasmExportFunctionRecord(export.name, entry) }
         }
-    val from = range.first
-    val to = minOf(range.last, entries.size - 1)
-    val returned = if (entries.isEmpty() || from > to) {
-        emptyList()
-    } else {
-        entries.subList(from, to + 1).map { it.toExportedFunctionResult() }
-    }
-    val nextOffset = if (to == entries.size - 1) null else to + 1
-
-    return ListExportedFunctionsResult(
-        from = from,
-        to = to,
-        returned = returned,
-        total = entries.size,
-        truncate = returned.size < entries.size,
-        nextOffset = nextOffset
-    )
-}
-
-fun CommonByteBuffer.readExportedFunctions(
-    wasmModule: WasmModule,
-    range: IntRange
-): ListExportedFunctionsResult {
-    val entries = listExportedInternal(wasmModule)
     val from = range.first
     val to = minOf(range.last, entries.size - 1)
     val returned = if (entries.isEmpty() || from > to) {

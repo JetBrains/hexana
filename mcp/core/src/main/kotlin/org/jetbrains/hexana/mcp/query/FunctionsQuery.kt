@@ -1,13 +1,11 @@
 package org.jetbrains.hexana.mcp.query
 
-import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.mcp.*
 import org.jetbrains.hexana.mcp.model.functions.FunctionImportResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionSummaryResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 
@@ -30,25 +28,6 @@ fun WasmBinaryProvider.readFunctionsByIndices(
         functions = listFunctionEntries()
             .filter { it.funcidx in indices }
             .map { it.toFunctionSummaryResult() }
-    )
-}
-
-fun CommonByteBuffer.readFunctions(
-    wasmModule: WasmModule,
-    offset: Int,
-    limit: Int
-): FunctionsResult {
-    return FunctionsResult(
-        functions = listFunctions(wasmModule, offset, limit).map { it.toFunctionSummaryResult() }
-    )
-}
-
-fun CommonByteBuffer.readFunctionsByIndices(
-    wasmModule: WasmModule,
-    indices: List<Int>
-): FunctionsResult {
-    return FunctionsResult(
-        functions = functionsByIndices(wasmModule, indices).map { it.toFunctionSummaryResult() }
     )
 }
 

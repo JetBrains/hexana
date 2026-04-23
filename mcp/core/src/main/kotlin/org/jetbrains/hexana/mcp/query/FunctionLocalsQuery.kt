@@ -1,30 +1,18 @@
 package org.jetbrains.hexana.mcp.query
 
-import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.mcp.Local
 import org.jetbrains.hexana.mcp.LocalsByFunction
-import org.jetbrains.hexana.mcp.localsForFunctions
 import org.jetbrains.hexana.mcp.model.functions.FunctionLocalsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.LocalDeclarationResult
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.mcp.renderedType
-import org.jetbrains.hexana.wasm.WasmModule
 
 fun WasmBinaryProvider.readLocalsForFunctions(
     indices: List<Int>
 ): GetLocalsForFunctionsResult {
     return GetLocalsForFunctionsResult(
         functions = readFunctionLocals(indices).map { it.toFunctionLocalsResult() }
-    )
-}
-
-fun CommonByteBuffer.readLocalsForFunctions(
-    wasmModule: WasmModule,
-    indices: List<Int>
-): GetLocalsForFunctionsResult {
-    return GetLocalsForFunctionsResult(
-        functions = localsForFunctions(indices, wasmModule).map { it.toFunctionLocalsResult() }
     )
 }
 
