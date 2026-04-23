@@ -17,6 +17,7 @@ import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.util.Key
+import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.ThrowableComputable
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugProcessStarter
@@ -372,7 +373,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
         private const val WAMR_DEBUG_SERVER_READY_TIMEOUT_MS = 10_000L
 
         /** Default LLDB executable name, resolved via PATH. */
-        internal const val DEFAULT_LLDB_PATH = "lldb"
+        internal val DEFAULT_LLDB_PATH = if (SystemInfo.isWindows) "lldb.exe" else "lldb"
 
         /**
          * Resolves the LLDB executable path from the run configuration.

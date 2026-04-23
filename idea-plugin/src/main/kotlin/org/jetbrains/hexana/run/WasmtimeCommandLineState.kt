@@ -7,6 +7,7 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.util.execution.ParametersListUtil
 import org.jetbrains.hexana.io.toCommonByteBuffer
@@ -130,12 +131,16 @@ class WasmtimeCommandLineState(
     companion object {
         private val LOG = Logger.getInstance(WasmtimeCommandLineState::class.java)
 
-        val DEFAULT_WASMTIME_PATH: String =
-            System.getProperty("user.home") + File.separator + ".wasmtime" + File.separator + "bin" + File.separator + "wasmtime"
+        val DEFAULT_WASMTIME_PATH: String = run {
+            val exeName = if (SystemInfo.isWindows) "wasmtime.exe" else "wasmtime"
+            System.getProperty("user.home") + File.separator + ".wasmtime" + File.separator + "bin" + File.separator + exeName
+        }
 
         fun resolveDefaultWasmtimePath(): String {
             val defaultPath = DEFAULT_WASMTIME_PATH
-            return if (File(defaultPath).exists()) defaultPath else "wasmtime"
+            return if (File(defaultPath).exists()) defaultPath else {
+                if (SystemInfo.isWindows) "wasmtime.exe" else "wasmtime"
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.run
 
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.util.SystemInfo
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
@@ -206,12 +207,13 @@ internal object WacComponentComposer {
     }
 
     private fun resolveWasmToolsPath(): String? {
+        val exeName = if (SystemInfo.isWindows) "wasm-tools.exe" else "wasm-tools"
         val candidates = listOfNotNull(
-            System.getenv("HOME")?.let { "$it/.cargo/bin/wasm-tools" },
-            "wasm-tools",
+            cargoHomeBin(exeName),
+            exeName,
         )
         return candidates.firstOrNull { path ->
-            if (path == "wasm-tools") {
+            if (path == exeName) {
                 isCommandAvailable(path)
             } else {
                 File(path).exists()
@@ -220,12 +222,13 @@ internal object WacComponentComposer {
     }
 
     private fun resolveWacPath(): String? {
+        val exeName = if (SystemInfo.isWindows) "wac.exe" else "wac"
         val candidates = listOfNotNull(
-            System.getenv("HOME")?.let { "$it/.cargo/bin/wac" },
-            "wac",
+            cargoHomeBin(exeName),
+            exeName,
         )
         return candidates.firstOrNull { path ->
-            if (path == "wac") {
+            if (path == exeName) {
                 isCommandAvailable(path)
             } else {
                 File(path).exists()
@@ -233,9 +236,29 @@ internal object WacComponentComposer {
         }
     }
 
+    /**
+     * Returns the path to the given executable inside the Cargo bin
+     * directory, respecting `CARGO_HOME` on all platforms and falling
+     * back to `~/.cargo/bin` on Unix or `%USERPROFILE%\.cargo\bin`
+     * on Windows.
+     */
+    private fun cargoHomeBin(exeName: String): String? {
+        val cargoHome = System.getenv("CARGO_HOME")
+        if (cargoHome != null) {
+            return File(cargoHome, "bin" + File.separator + exeName).path
+        }
+        val userHome = System.getProperty("user.home") ?: return null
+        return File(userHome, ".cargo" + File.separator + "bin" + File.separator + exeName).path
+    }
+
     private fun isCommandAvailable(command: String): Boolean {
         return try {
-            val process = ProcessBuilder("which", command)
+            val cmd = if (SystemInfo.isWindows) {
+                listOf("cmd.exe", "/c", "where", command)
+            } else {
+                listOf("which", command)
+            }
+            val process = ProcessBuilder(cmd)
                 .redirectErrorStream(true)
                 .start()
             process.waitFor() == 0

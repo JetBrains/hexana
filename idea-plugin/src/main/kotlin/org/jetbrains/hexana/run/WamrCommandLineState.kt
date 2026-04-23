@@ -7,6 +7,7 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.util.SystemInfo
 import com.intellij.util.execution.ParametersListUtil
 import java.io.File
 import java.nio.file.Files
@@ -85,14 +86,16 @@ class WamrCommandLineState(
     companion object {
         private val LOG = Logger.getInstance(WamrCommandLineState::class.java)
 
-        val DEFAULT_WAMR_PATH: String = "iwasm"
+        val DEFAULT_WAMR_PATH: String = if (SystemInfo.isWindows) "iwasm.exe" else "iwasm"
 
         fun resolveDefaultWamrPath(): String {
-            // Try common installation locations
-            val candidates = listOf(
-                System.getProperty("user.home") + File.separator + ".wamr" + File.separator + "bin" + File.separator + "iwasm",
-                "/usr/local/bin/iwasm",
-            )
+            val exeName = if (SystemInfo.isWindows) "iwasm.exe" else "iwasm"
+            val candidates = buildList {
+                add(System.getProperty("user.home") + File.separator + ".wamr" + File.separator + "bin" + File.separator + exeName)
+                if (!SystemInfo.isWindows) {
+                    add("/usr/local/bin/iwasm")
+                }
+            }
             for (candidate in candidates) {
                 if (File(candidate).exists()) return candidate
             }
