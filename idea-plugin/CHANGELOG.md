@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- [Support Legacy EH](https://github.com/JetBrains/hexana/issues/85)
 
 ### Changed
 
