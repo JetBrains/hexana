@@ -12,16 +12,8 @@ fun WasmBinaryProvider.readDataSections(
     range: IntRange
 ): ListDataSectionsResult {
     val wasmModule = requireNotNull(wasmModule)
-    return bytes.readDataSections(wasmModule, range)
-}
-
-fun CommonByteBuffer.readDataSections(
-    wasmModule: WasmModule,
-    range: IntRange
-): ListDataSectionsResult {
-    val entries = listDataSectionInternal(wasmModule)
+    val entries = bytes.listDataSectionInternal(wasmModule)
     val returned = entries.filter { it.index in range }
-
     val nextOffset = entries.firstOrNull { it.index >= range.last }?.index
 
     return ListDataSectionsResult(

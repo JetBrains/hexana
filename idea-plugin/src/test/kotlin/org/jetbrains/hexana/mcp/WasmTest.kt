@@ -6,13 +6,15 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
 import org.jetbrains.hexana.mcp.query.readDataSegments
-import org.jetbrains.hexana.wasm.WasmModule
+import org.jetbrains.hexana.mcp.query.readDataSegmentsByRange
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord
 import org.jetbrains.hexana.wasm.sections.WasmElementSegment
 import org.jetbrains.hexana.wasm.sections.WasmTableEntry
+import org.jetbrains.hexana.wasm.WasmModule
 import java.io.FileInputStream
 import kotlin.io.path.Path
 
@@ -43,7 +45,7 @@ abstract class WasmTest: UsefulTestCase() {
         listExports(it).let(body)
     }
     internal inline fun doListDataSegments(crossinline body: (ListDataSegmentsResult) -> Unit) = doTest("listDataSegments") {
-        readDataSegments(0..10, it!!, true, true, 0).let(body)
+        WasmBinaryProvider(position(0)).readDataSegmentsByRange(0..10, true, true, 0).let(body)
     }
     internal inline fun doFunctionTest(crossinline body: (List<GeneralFunctionEntry>) -> Unit) = doTest("function") {
         listFunctionsInternal(it).let(body)

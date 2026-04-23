@@ -12,14 +12,10 @@ import org.jetbrains.hexana.wasm.sections.FuncIdxWasmElementSegment
 
 fun WasmBinaryProvider.readElementSegments(): ListElementSegmentsResult {
     val wasmModule = requireNotNull(wasmModule)
-    return bytes.readElementSegments(wasmModule)
-}
-
-fun CommonByteBuffer.readElementSegments(wasmModule: WasmModule): ListElementSegmentsResult {
     val elementSection = wasmModule.elementSection ?: return ListElementSegmentsResult(emptyList())
     return with(elementSection) {
         ListElementSegmentsResult(
-            segments = scanElements().mapIndexed { index, segment ->
+            segments = bytes.scanElements().mapIndexed { index, segment ->
                 when (segment) {
                     is FuncIdxWasmElementSegment.ActiveDefault -> ElementSegmentResult(
                         elementidx = index,

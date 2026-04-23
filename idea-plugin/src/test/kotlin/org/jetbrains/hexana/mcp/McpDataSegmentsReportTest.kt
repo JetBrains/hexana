@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.mcp
 
 import org.jetbrains.hexana.mcp.query.readDataSegments
+import org.jetbrains.hexana.mcp.query.readDataSegmentsByRange
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 
 class McpDataSegmentsReportTest: WasmTest() {
     fun testSegment0() = doListDataSegments { report ->
@@ -21,9 +23,8 @@ class McpDataSegmentsReportTest: WasmTest() {
     }
 
     fun testSegmentRangeUsesHalfOpenBounds() = doTest("listDataSegments") { wasmModule ->
-        val firstOnly = readDataSegments(
-            segmentRange = 0 until 1,
-            wasmModule = wasmModule!!,
+        val firstOnly = WasmBinaryProvider(position(0)).readDataSegmentsByRange(
+            range = 0 until 1,
             includeExports = false,
             includeGlobals = false,
             minByteLength = 0,
@@ -32,9 +33,8 @@ class McpDataSegmentsReportTest: WasmTest() {
         assertEquals("First", firstOnly.segments.single().utf8Preview)
         assertEquals(2, firstOnly.summary.totalSegments)
 
-        val secondOnly = readDataSegments(
-            segmentRange = 1 until 2,
-            wasmModule = wasmModule!!,
+        val secondOnly = WasmBinaryProvider(position(0)).readDataSegmentsByRange(
+            range = 1 until 2,
             includeExports = false,
             includeGlobals = false,
             minByteLength = 0,
@@ -45,10 +45,9 @@ class McpDataSegmentsReportTest: WasmTest() {
     }
 
     fun testSegmentRangeExplicitBoundsMatchHalfOpenContract() = doTest("listDataSegments") { wasmModule ->
-        val report = readDataSegments(
+        val report = WasmBinaryProvider(position(0)).readDataSegments(
             segmentStartInclusive = 0,
             segmentEndExclusive = 1,
-            wasmModule = wasmModule!!,
             includeExports = false,
             includeGlobals = false,
             minByteLength = 0,

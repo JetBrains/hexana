@@ -14,7 +14,7 @@ fun WasmBinaryProvider.readDataSegments(
     minByteLength: Int?
 ): ListDataSegmentsResult {
     val wasmModule = requireNotNull(wasmModule)
-    return bytes.readDataSegments(
+    return bytes.buildDataSegmentsResult(
         segmentStartInclusive = segmentStartInclusive,
         segmentEndExclusive = segmentEndExclusive,
         wasmModule = wasmModule,
@@ -37,37 +37,7 @@ fun WasmBinaryProvider.readDataSegmentsByRange(
     minByteLength = minByteLength.takeIf { it > 0 },
 )
 
-fun CommonByteBuffer.readDataSegments(
-    segmentRange: IntRange,
-    wasmModule: WasmModule,
-    includeExports: Boolean,
-    includeGlobals: Boolean,
-    minByteLength: Int?
-): ListDataSegmentsResult {
-    val start = segmentRange.first
-    val endExclusive = if (segmentRange.isEmpty()) start else segmentRange.last + 1
-    return readDataSegments(start, endExclusive, wasmModule, includeExports, includeGlobals, minByteLength)
-}
-
-/**
- * Tool-friendly entry point that adapts an MCP `minByteLength` (non-nullable, 0 = "no filter")
- * to the internal nullable semantics (null = "no filter", positive = minimum segment byte length).
- */
-fun CommonByteBuffer.readDataSegmentsByRange(
-    wasmModule: WasmModule,
-    range: IntRange,
-    includeExports: Boolean,
-    includeGlobals: Boolean,
-    minByteLength: Int,
-): ListDataSegmentsResult = readDataSegments(
-    segmentRange = range,
-    wasmModule = wasmModule,
-    includeExports = includeExports,
-    includeGlobals = includeGlobals,
-    minByteLength = minByteLength.takeIf { it > 0 },
-)
-
-fun CommonByteBuffer.readDataSegments(
+private fun CommonByteBuffer.buildDataSegmentsResult(
     segmentStartInclusive: Int,
     segmentEndExclusive: Int,
     wasmModule: WasmModule,
