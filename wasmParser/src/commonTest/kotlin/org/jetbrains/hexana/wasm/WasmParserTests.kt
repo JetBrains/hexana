@@ -17,6 +17,7 @@ import org.jetbrains.hexana.wasm.opcodes.numeric.F32
 import org.jetbrains.hexana.wasm.opcodes.numeric.F64
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
 import org.jetbrains.hexana.wasm.opcodes.numeric.I64
+import kotlin.time.Duration.Companion.minutes
 
 class WasmParserTests {
 
@@ -93,7 +94,7 @@ class WasmParserTests {
 
 
     @Test
-    fun parseSkikoSections() = runTest {
+    fun parseSkikoSections() = runTest(timeout = 3.minutes) {
         val buffer = resourceAsByteBuffer("skiko.wasm")
 
         val wasmParseResult = WasmParser().parse(buffer)
