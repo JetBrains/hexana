@@ -221,18 +221,22 @@ private fun compareValues(a: String, b: String): Int {
     return a.compareTo(b, ignoreCase = true)
 }
 
-/** Extracts a numeric value from text, stripping common size/percentage suffixes. */
+/** Extracts a numeric value from text, normalizing size suffixes to bytes. */
 private fun parseNumericValue(text: String): Double? {
     if (text.isEmpty()) return null
     // Strip hex prefix
     if (text.startsWith("0x", ignoreCase = true)) {
         return text.substring(2).toLongOrNull(16)?.toDouble()
     }
-    // Strip common suffixes: "123 bytes", "1.2 KB", "45.6%", "12 B"
+    // Detect unit suffixes and convert to a common base so that, e.g.,
+    // "1 KB" (= 1024) sorts correctly after "900 bytes" (= 900).
+    val mbMatch = Regex("^([\\d,.]+)\\s*MB$", RegexOption.IGNORE_CASE).find(text)
+    if (mbMatch != null) return mbMatch.groupValues[1].replace(",", "").toDoubleOrNull()?.times(1024.0 * 1024)
+    val kbMatch = Regex("^([\\d,.]+)\\s*KB$", RegexOption.IGNORE_CASE).find(text)
+    if (kbMatch != null) return kbMatch.groupValues[1].replace(",", "").toDoubleOrNull()?.times(1024.0)
+    // Strip remaining suffixes: "123 bytes", "45.6%", "12 B"
     val stripped = text
         .replace(Regex("\\s*bytes$", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("\\s*KB$", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("\\s*MB$", RegexOption.IGNORE_CASE), "")
         .replace(Regex("\\s*B$", RegexOption.IGNORE_CASE), "")
         .replace(Regex("%$"), "")
         .replace(",", "")

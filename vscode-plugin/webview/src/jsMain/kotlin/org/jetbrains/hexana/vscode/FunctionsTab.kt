@@ -40,6 +40,7 @@ private fun CoreWasmFunctions(buffer: CommonByteBuffer, selection: HexSelectionS
     }
 
     val functions = remember(provider) { provider.functions }
+    val importFuncCount = remember(provider) { provider.importFuncCount }
     val nameSection = remember(provider) { provider.nameSection }
     val functionNamesMap = nameSection?.functionSubsection?.namemap
     val typeNames = nameSection?.typesSection?.namemap
@@ -51,7 +52,7 @@ private fun CoreWasmFunctions(buffer: CommonByteBuffer, selection: HexSelectionS
         return
     }
 
-    var selectedIndex by remember { mutableStateOf(-1) }
+    var selectedIndex by remember(functions) { mutableStateOf(-1) }
 
     val hasNames = functionNamesMap != null
 
@@ -68,7 +69,7 @@ private fun CoreWasmFunctions(buffer: CommonByteBuffer, selection: HexSelectionS
 
     SearchableTable(headers = headers, columnAligns = aligns) {
         for ((index, func) in functions.withIndex()) {
-            val name = if (hasNames) resolveFunctionName(functionNamesMap, index) else null
+            val name = if (hasNames) resolveFunctionName(functionNamesMap, importFuncCount + index) else null
             val sig = func.getDescription(index, typeNames)
 
             PanelTableRow(

@@ -54,7 +54,7 @@ fun resolveFunctionSignature(
 
 fun formatSignature(sig: WasmSectionFunctionTypeRecord): String {
     val params = sig.params.joinToString(", ") { wasmValueTypeName(it) }
-    val result = sig.retTypes.firstOrNull()?.let { wasmValueTypeName(it) } ?: "void"
+    val result = if (sig.retTypes.isEmpty()) "void" else sig.retTypes.joinToString(", ") { wasmValueTypeName(it) }
     return "($params) -> $result"
 }
 
@@ -67,7 +67,7 @@ fun resolveCoreSignature(
     if (localIndex < 0) return ""
     val sig = functions.getOrNull(localIndex) as? WasmSectionFunctionTypeRecord ?: return ""
     val params = sig.params.joinToString(", ") { wasmValueTypeName(it) }
-    val result = sig.retTypes.firstOrNull()?.let { wasmValueTypeName(it) } ?: "void"
+    val result = if (sig.retTypes.isEmpty()) "void" else sig.retTypes.joinToString(", ") { wasmValueTypeName(it) }
     return "($params) → $result"
 }
 

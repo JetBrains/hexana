@@ -205,8 +205,8 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
     var hexSearchMode by remember { mutableStateOf(HexSearchMode.BYTES) }
     val hexSearchState = remember { HexSearchState() }
 
-    // Recompute matches when query or mode changes.
-    LaunchedEffect(hexSearchQuery, hexSearchMode) {
+    // Recompute matches when query, mode, or underlying bytes change.
+    LaunchedEffect(hexSearchQuery, hexSearchMode, bytes) {
         if (hexSearchQuery.isEmpty()) {
             hexSearchState.clear()
         } else {
@@ -277,9 +277,10 @@ fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { H
 
             if (key !in listOf("ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight")) return@handler
 
-            // Skip when focus is inside a panel table so that row navigation works.
+            // Skip ArrowUp/Down when focus is inside a panel table so that row navigation
+            // works; ArrowLeft/Right still reach the hex viewer.
             val target = ke.target as? HTMLElement
-            if (target?.closest(".hexana-panel-table") != null) return@handler
+            if (target?.closest(".hexana-panel-table") != null && (key == "ArrowUp" || key == "ArrowDown")) return@handler
 
             ke.preventDefault()
             val cur = if (selection.cursorIndex >= 0) selection.cursorIndex else 0

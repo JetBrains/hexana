@@ -101,7 +101,7 @@ private fun SummarySectionsTable(sections: List<WasmSection>, selection: HexSele
     ) {
         for (section in sections) {
             val sectionStart = section.sectionOffset
-            val sectionEnd = sectionStart + section.sectionSize - 1
+            val sectionEnd = maxOf(sectionStart, sectionStart + section.sectionSize - 1)
 
             PanelTableRow(
                 isHighlighted = selection.hasSelection &&

@@ -16,7 +16,7 @@ fun resolveFunctionName(
  */
 fun WasmTypeRecord.getDescription(index: Int, typeNames: Map<Int, String>? = null): String {
     return when (this) {
-        is WasmSectionFunctionTypeRecord -> "(${(this.params.map { it.getDescription(typeNames) }).joinToString(", ")}) -> " + (this.retTypes.firstOrNull()?.getDescription(typeNames) ?: "void")
+        is WasmSectionFunctionTypeRecord -> "(${(this.params.map { it.getDescription(typeNames) }).joinToString(", ")}) -> " + (if (this.retTypes.isEmpty()) "void" else this.retTypes.joinToString(", ") { it.getDescription(typeNames) })
         is WasmStructTypeRecord -> {
             val name = typeNames?.get(index)?.let { "struct $it" }
             name ?: "struct#$index"
