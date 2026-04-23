@@ -560,7 +560,6 @@ private fun HexColumnHeader() {
             property("z-index", "1")
             property("background", "var(--hexana-bg, #1e1e1e)")
             property("border-bottom", "1px solid var(--hexana-border, #333)")
-            property("opacity", "0.6")
             property("padding-bottom", "2px")
         }
     }) {
