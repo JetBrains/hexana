@@ -1,15 +1,16 @@
 package org.jetbrains.hexana.wasm.opcodes.vector
 
 import org.jetbrains.hexana.wasm.opcodes.OpCode
+import org.jetbrains.hexana.wasm.opcodes.OpCodeWithOffset
 
 object i64x2 {
-    class ExtractLaneU(val laneIdx: UByte): OpCode {
+    class ExtractLaneU(val laneIdx: UByte, offset: Int = 0): OpCodeWithOffset(offset) {
         companion object {
             const val code: UInt = 29u
         }
     }
 
-    class ReplaceLine(val laneIdx: UByte): OpCode {
+    class ReplaceLine(val laneIdx: UByte, offset: Int = 0): OpCodeWithOffset(offset) {
         companion object {
             const val code: UInt = 30u
         }

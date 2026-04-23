@@ -19,50 +19,51 @@ import org.jetbrains.hexana.wasm.sections.StandardTypesParser.valueType
 import org.jetbrains.hexana.wasm.sections.WasmValueType
 
 fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
+    val offset = position() - 1
     return when (val code = bcode.toUInt()) {
         0x00u -> OpCodes.ParametricInstructions.Unreachable
         0x01u -> OpCodes.ParametricInstructions.Nop
         0x02u -> {
-            Flow.Block(blockType(), consumeBlock())
+            Flow.Block(blockType(), consumeBlock(), offset)
         }
         0x03u -> {
-            Flow.Loop(blockType(),consumeBlock())
+            Flow.Loop(blockType(), consumeBlock(), offset)
         }
         0x04u -> {
-            Flow.If(blockType(), consumeBlock())
+            Flow.If(blockType(), consumeBlock(), offset)
         }
         0x05u -> {
             val opCodes = parseOpCodes()
             // If and Else sections share terminal OpCode - that said, we just (sort of) give it back to parent If declaration
             position(position() - 1)
-            Flow.Else(opCodes)
+            Flow.Else(opCodes, offset)
         }
         0x06u,
-        0x07u -> ReservedOpCode(code)
-        0x08u -> Flow.Trow(consumeInt())
-        0x09u -> ReservedOpCode(code)
+        0x07u -> ReservedOpCode(code, offset)
+        0x08u -> Flow.Trow(consumeInt(), offset)
+        0x09u -> ReservedOpCode(code, offset)
         0x0Au -> Flow.ThrowRef
         0x0Bu -> Flow.Terminal
-        0x0Cu -> Flow.Br(consumeInt())
-        0x0Du -> Flow.BrIf(consumeInt())
+        0x0Cu -> Flow.Br(consumeInt(), offset)
+        0x0Du -> Flow.BrIf(consumeInt(), offset)
         0x0Eu -> {
             Flow.BrTable(buildList {
                 // TODO: 🐛 without this@consumeOpCode this will fail in JS (and it shouldn't)
                 consumeArray { add(getULEB128().toUInt()) }
-            }, getULEB128().toUInt())
+            }, getULEB128().toUInt(), offset)
         }
         0x0Fu -> Flow.Return
 
-        0x10u -> Flow.Call(consumeInt())
+        0x10u -> Flow.Call(consumeInt(), offset)
         0x11u -> {
             val value = getULEB128().toInt()
-            Flow.CallIndirect(value)
+            Flow.CallIndirect(value, offset)
         }
         0x12u -> Flow.ReturnCall
-        0x13u -> Flow.ReturnCallIndirect(consumeInt(), consumeInt())
-        0x14u -> Flow.CallRef(consumeInt())
-        0x15u -> Flow.ReturnCallRef(consumeInt())
-        0x16u, 0x17u, 0x18u, 0x19u -> ReservedOpCode(code)
+        0x13u -> Flow.ReturnCallIndirect(consumeInt(), consumeInt(), offset)
+        0x14u -> Flow.CallRef(consumeInt(), offset)
+        0x15u -> Flow.ReturnCallRef(consumeInt(), offset)
+        0x16u, 0x17u, 0x18u, 0x19u -> ReservedOpCode(code, offset)
         0x1Au -> OpCodes.ParametricInstructions.Drop
         0x1Bu -> OpCodes.ParametricInstructions.Select
         0x1Cu -> {
@@ -70,9 +71,9 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
             consumeArray {
                 valueType()?.let { element -> list.add(element) }
             }
-            OpCodes.ParametricInstructions.SelectWithType(list.toList())
+            OpCodes.ParametricInstructions.SelectWithType(list.toList(), offset)
         }
-        0x1Du, 0x1Eu -> ReservedOpCode(code)
+        0x1Du, 0x1Eu -> ReservedOpCode(code, offset)
         0x1Fu -> {
             val blockType = blockType()
             val catches = mutableListOf<Flow.CatchType>()
@@ -86,48 +87,48 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
                 }
             }
             val opcodes = parseOpCodes()
-            Flow.TryTable(blockType, catches.toList(), opcodes)
+            Flow.TryTable(blockType, catches.toList(), opcodes, offset)
         }
-        0x20u -> Local.Get(consumeInt())
-        0x21u -> Local.Set(consumeInt())
-        0x22u -> Local.Tee(consumeInt())
-        0x23u -> OpCodes.Global.Get(consumeInt())
-        0x24u -> OpCodes.Global.Set(consumeInt())
-        0x25u -> OpCodes.Table.Get(consumeInt())
-        0x26u -> OpCodes.Table.Set(consumeInt())
-        0x27u -> ReservedOpCode(code)
-        0x28u -> i32.Load(consumeMemArg())
-        0x29u -> i64.Load(consumeMemArg(),)
-        0x2Au -> f32.Load(consumeMemArg())
-        0x2Bu -> f64.Load(consumeMemArg())
-        0x2Cu -> i32.Load8_S(consumeMemArg())
-        0x2Du -> i32.Load8_U(consumeMemArg())
-        0x2Eu -> i32.Load16_S(consumeMemArg())
-        0x2Fu -> i32.Load16_U(consumeMemArg())
+        0x20u -> Local.Get(consumeInt(), offset)
+        0x21u -> Local.Set(consumeInt(), offset)
+        0x22u -> Local.Tee(consumeInt(), offset)
+        0x23u -> OpCodes.Global.Get(consumeInt(), offset)
+        0x24u -> OpCodes.Global.Set(consumeInt(), offset)
+        0x25u -> OpCodes.Table.Get(consumeInt(), offset)
+        0x26u -> OpCodes.Table.Set(consumeInt(), offset)
+        0x27u -> ReservedOpCode(code, offset)
+        0x28u -> i32.Load(consumeMemArg(), offset)
+        0x29u -> i64.Load(consumeMemArg(), offset)
+        0x2Au -> f32.Load(consumeMemArg(), offset)
+        0x2Bu -> f64.Load(consumeMemArg(), offset)
+        0x2Cu -> i32.Load8_S(consumeMemArg(), offset)
+        0x2Du -> i32.Load8_U(consumeMemArg(), offset)
+        0x2Eu -> i32.Load16_S(consumeMemArg(), offset)
+        0x2Fu -> i32.Load16_U(consumeMemArg(), offset)
 
-        0x30u -> i64.Load8_S(consumeMemArg())
-        0x31u -> i64.Load8_U(consumeMemArg())
-        0x32u -> i64.Load16_S(consumeMemArg())
-        0x33u -> i64.Load16_U(consumeMemArg())
-        0x34u -> i64.Load32_S(consumeMemArg())
-        0x35u -> i64.Load32_U(consumeMemArg())
-        0x36u -> i32.Store(consumeMemArg())
-        0x37u -> i64.Store(consumeMemArg())
-        0x38u -> f32.Store(consumeMemArg())
-        0x39u -> f64.Store(consumeMemArg())
+        0x30u -> i64.Load8_S(consumeMemArg(), offset)
+        0x31u -> i64.Load8_U(consumeMemArg(), offset)
+        0x32u -> i64.Load16_S(consumeMemArg(), offset)
+        0x33u -> i64.Load16_U(consumeMemArg(), offset)
+        0x34u -> i64.Load32_S(consumeMemArg(), offset)
+        0x35u -> i64.Load32_U(consumeMemArg(), offset)
+        0x36u -> i32.Store(consumeMemArg(), offset)
+        0x37u -> i64.Store(consumeMemArg(), offset)
+        0x38u -> f32.Store(consumeMemArg(), offset)
+        0x39u -> f64.Store(consumeMemArg(), offset)
 
-        0x3Au -> i32.Store8(consumeMemArg())
-        0x3Bu -> i32.Store16(consumeMemArg())
-        0x3Cu -> i64.Store8(consumeMemArg())
-        0x3Du -> i64.Store16(consumeMemArg())
-        0x3Eu -> i64.Store32(consumeMemArg())
-        0x3Fu -> OpCodes.Memory.Size(consumeInt())
+        0x3Au -> i32.Store8(consumeMemArg(), offset)
+        0x3Bu -> i32.Store16(consumeMemArg(), offset)
+        0x3Cu -> i64.Store8(consumeMemArg(), offset)
+        0x3Du -> i64.Store16(consumeMemArg(), offset)
+        0x3Eu -> i64.Store32(consumeMemArg(), offset)
+        0x3Fu -> OpCodes.Memory.Size(consumeInt(), offset)
 
-        0x40u -> OpCodes.Memory.Grow(consumeInt())
-        0x41u -> I32.Const(consumeSignedInt())
-        0x42u -> I64.Const(consumeSignedLong())
-        0x43u -> F32.Const(consumeFloat())
-        0x44u -> F64.Const(consumeDouble())
+        0x40u -> OpCodes.Memory.Grow(consumeInt(), offset)
+        0x41u -> I32.Const(consumeSignedInt(), offset)
+        0x42u -> I64.Const(consumeSignedLong(), offset)
+        0x43u -> F32.Const(consumeFloat(), offset)
+        0x44u -> F64.Const(consumeDouble(), offset)
         0x45u -> I32.Eqz
         0x46u -> I32.Eq
         0x47u -> I32.Ne
@@ -264,15 +265,15 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
         0xC2u -> I64.Extend8S
         0xC3u -> I64.Extend16S
         0xC4u -> I64.Extend32S
-        0xC5u, 0xC6u, 0xC7u, 0xC8u, 0xC9u, 0xCAu, 0xCBu, 0xCCu, 0xCDu, 0xCEu, 0xCFu -> ReservedOpCode(code)
-        0xD0u -> Ref.Null(heapType())
+        0xC5u, 0xC6u, 0xC7u, 0xC8u, 0xC9u, 0xCAu, 0xCBu, 0xCCu, 0xCDu, 0xCEu, 0xCFu -> ReservedOpCode(code, offset)
+        0xD0u -> Ref.Null(heapType(), offset)
         0xD1u -> Ref.IsNull
-        0xD2u -> Ref.Func(consumeInt())
+        0xD2u -> Ref.Func(consumeInt(), offset)
         0xD3u -> Ref.Eq
         0xD4u -> Ref.AsNonNull
-        0xD5u -> Flow.BrOnNull(consumeInt())
-        0xD6u -> Flow.BrOnNonNull(consumeInt())
-        in 0xD7u..0xFAu -> ReservedOpCode(code)
+        0xD5u -> Flow.BrOnNull(consumeInt(), offset)
+        0xD6u -> Flow.BrOnNonNull(consumeInt(), offset)
+        in 0xD7u..0xFAu -> ReservedOpCode(code, offset)
 
         0xFBu, 0xFCu, 0xFDu, 0xFFu -> {
             consumeMultibyteOpCode(position() - 1,  code.toUByte(),getULEB128().toUInt())

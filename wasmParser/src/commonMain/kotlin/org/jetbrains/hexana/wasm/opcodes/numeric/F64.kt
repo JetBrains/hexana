@@ -107,7 +107,7 @@ open class F64 {
         const val code: UByte = 0x9Fu
     }
 
-    class Const(initValue: Double) : OpCodeWithValue<Double>(initValue) {
+    class Const(initValue: Double, offset: Int = 0) : OpCodeWithValue<Double>(initValue, offset) {
         companion object {
             const val code: UByte = 0x44u
         }

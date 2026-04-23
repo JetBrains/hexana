@@ -168,7 +168,7 @@ open class I32 {
         const val code: UInt = 0x03u
     }
 
-    class Const(value: Int) : OpCodeWithValue<Int>(value) {
+    class Const(value: Int, offset: Int = 0) : OpCodeWithValue<Int>(value, offset) {
         companion object {
             const val code: UByte = 0x41u
         }

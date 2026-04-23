@@ -4,7 +4,7 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodeWithValue
 
 open class I64 {
     // supposed to be signed long ???
-    class Const(value: Long) : OpCodeWithValue<Long>(value) {
+    class Const(value: Long, offset: Int = 0) : OpCodeWithValue<Long>(value, offset) {
         companion object {
             const val code: UByte = 0x42u
         }

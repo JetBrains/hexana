@@ -30,10 +30,10 @@ fun CommonByteBuffer.consumeFCBasedOpCode(offset: Int, code: UInt): OpCode {
         I64.TruncSatF32U.code -> I64.TruncSatF32U
         I64.TruncSatF64S.code -> I64.TruncSatF64S
         I64.TruncSatF64U.code -> I64.TruncSatF64U
-        Memory.Init.code -> Memory.Init(getULEB128().toUInt(), getULEB128().toUInt())
-        Memory.Data.Drop.code -> Memory.Data.Drop(getULEB128().toUInt())
-        Memory.Copy.code -> Memory.Copy(getULEB128().toUInt(), getULEB128().toUInt())
-        Memory.Fill.code -> Memory.Fill(getULEB128().toUInt())
+        Memory.Init.code -> Memory.Init(getULEB128().toUInt(), getULEB128().toUInt(), offset)
+        Memory.Data.Drop.code -> Memory.Data.Drop(getULEB128().toUInt(), offset)
+        Memory.Copy.code -> Memory.Copy(getULEB128().toUInt(), getULEB128().toUInt(), offset)
+        Memory.Fill.code -> Memory.Fill(getULEB128().toUInt(), offset)
         else -> throw UnsupportedOpsException(code, offset)
     }
 }

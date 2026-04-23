@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.wasm.opcodes.vector
 
 import org.jetbrains.hexana.wasm.opcodes.OpCode
+import org.jetbrains.hexana.wasm.opcodes.OpCodeWithOffset
 
 object i8x16 {
     class Shuffle(
@@ -20,7 +21,8 @@ object i8x16 {
         val laneIdxD: UByte,
         val laneIdxE: UByte,
         val laneIdxF: UByte,
-    ): OpCode {
+        offset: Int = 0,
+    ): OpCodeWithOffset(offset) {
         companion object {
             const val code: UInt = 13u
         }
@@ -30,19 +32,19 @@ object i8x16 {
         const val code: UInt = 14u
     }
 
-    class ExtractLaneS(val laneIdx: UByte): OpCode {
+    class ExtractLaneS(val laneIdx: UByte, offset: Int = 0): OpCodeWithOffset(offset) {
         companion object {
             const val code:UInt = 21u
         }
     }
 
-    class ExtractLaneU(val laneIdx: UByte): OpCode {
+    class ExtractLaneU(val laneIdx: UByte, offset: Int = 0): OpCodeWithOffset(offset) {
         companion object {
             const val code: UInt = 22u
         }
     }
 
-    class ReplaceLine(val laneIdx: UByte): OpCode {
+    class ReplaceLine(val laneIdx: UByte, offset: Int = 0): OpCodeWithOffset(offset) {
         companion object {
             const val code: UInt = 23u
         }

@@ -2134,6 +2134,24 @@ class WasmParserTests {
         val unparsedOpCodes = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsedOpCodes.isEmpty())
     }
+
+    @Test
+    fun `function_NP of skiko`() = runTest {
+        val buffer = resourceAsByteBuffer("11449.skiko.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+
+
+        val wasmModule = wasmParseResult.wasmModule as WasmModule
+
+        val records = with(wasmModule.codeSection!!) {
+            buffer.scan()
+        }
+        assertEquals(1, records.size)
+        val ops = records.single().opCodes
+        val unparsedOpCodes = ops.filterIsInstance<UnparsedOpCode>()
+        assertTrue(unparsedOpCodes.isEmpty())
+    }
 }
 
 

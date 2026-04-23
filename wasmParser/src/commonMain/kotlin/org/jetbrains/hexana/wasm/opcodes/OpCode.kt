@@ -5,7 +5,9 @@ data class MemArg(val align: Int, val offset: Int)
 
 interface OpCode
 
-open class OpCodeWithValue<T : Any>(val value: T) : OpCode {
+open class OpCodeWithOffset(val offset: Int): OpCode
+
+open class OpCodeWithValue<T : Any>(val value: T, offset: Int = 0) : OpCodeWithOffset(offset) {
     // basically we are doing this for tests, and maybe we should just do tests differently
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -22,7 +24,7 @@ open class OpCodeWithValue<T : Any>(val value: T) : OpCode {
     }
 }
 
-open class OpCodeWithTwoValue<A : Any, B : Any>(val value0: A, val value1: B) : OpCode {
+open class OpCodeWithTwoValue<A : Any, B : Any>(val value0: A, val value1: B, offset: Int = 0) : OpCodeWithOffset(offset) {
     // basically we are doing this for tests, and maybe we should just do tests differently
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -39,5 +41,5 @@ open class OpCodeWithTwoValue<A : Any, B : Any>(val value0: A, val value1: B) : 
     }
 }
 
-class ReservedOpCode(val code: UInt) : OpCodeWithValue<Unit>(Unit)
+class ReservedOpCode(val code: UInt, offset: Int = 0) : OpCodeWithValue<Unit>(Unit, offset)
 class UnsupportedOpsException(val code: UInt, val position: Int):Exception("Unsupported opcode: ${code.toHexString()} @0x${position.toHexString()}")

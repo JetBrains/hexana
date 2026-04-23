@@ -3,7 +3,7 @@ package org.jetbrains.hexana.wasm.opcodes.numeric
 import org.jetbrains.hexana.wasm.opcodes.OpCodeWithValue
 
 open class F32 {
-    class Const(initValue: Float) : OpCodeWithValue<Float>(initValue) {
+    class Const(initValue: Float, offset: Int = 0) : OpCodeWithValue<Float>(initValue, offset) {
         companion object {
             const val code: UByte = 0x43u
         }

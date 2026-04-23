@@ -101,7 +101,7 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
                 codeEntryStart,
                 sizeFromOffset(codeEntryStart),
                 locals,
-                listOf(UnparsedOpCode(e, raw))
+                listOf(UnparsedOpCode(e, raw, bodyStart))
             )
         }
     } catch (e: Exception) {
@@ -110,7 +110,7 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
             codeEntryStart,
             sizeFromOffset(codeEntryStart),
             locals,
-            listOf(UnparsedOpCode(e, raw))
+            listOf(UnparsedOpCode(e, raw, codeEntryStart))
         )
     }
 }
@@ -124,7 +124,7 @@ fun CommonByteBuffer.consumeLocals(locals: MutableList<WasmCodeLocalRecord>) {
 }
 
 data class MemoryRegion(val offset: Int, val size: Int)
-class UnparsedOpCode(val e: Throwable, rawCodes: MemoryRegion): OpCodeWithValue<MemoryRegion>(rawCodes)
+class UnparsedOpCode(val e: Throwable, rawCodes: MemoryRegion, offset: Int = 0): OpCodeWithValue<MemoryRegion>(rawCodes, offset)
 
 /** Lightweight index entry: byte offset and size of a code entry, without parsed opcodes. */
 data class CodeEntryOffset(val offset: Int, val size: Int)

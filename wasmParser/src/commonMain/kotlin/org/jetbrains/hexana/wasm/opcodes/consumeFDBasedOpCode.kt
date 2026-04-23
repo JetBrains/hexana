@@ -6,18 +6,18 @@ import org.jetbrains.hexana.wasm.opcodes.vector.*
 fun CommonByteBuffer.consumeFDBasedOpCode(offset: Int, code: UInt): OpCode {
     return when (code) {
         // v128 load/store
-        V128.Load.code -> V128.Load(consumeMemArg())
-        V128.Load8x8S.code -> V128.Load8x8S(consumeMemArg())
-        V128.Load8x8U.code -> V128.Load8x8U(consumeMemArg())
-        V128.Load16x4S.code -> V128.Load16x4S(consumeMemArg())
-        V128.Load16x4U.code -> V128.Load16x4U(consumeMemArg())
-        V128.Load32x2S.code -> V128.Load32x2S(consumeMemArg())
-        V128.Load32x2U.code -> V128.Load32x2U(consumeMemArg())
-        V128.Load8Splat.code -> V128.Load8Splat(consumeMemArg())
-        V128.Load16Splat.code -> V128.Load16Splat(consumeMemArg())
-        V128.Load32Splat.code -> V128.Load32Splat(consumeMemArg())
-        V128.Load64Splat.code -> V128.Load64Splat(consumeMemArg())
-        V128.Store.code -> V128.Store(consumeMemArg())
+        V128.Load.code -> V128.Load(consumeMemArg(), offset)
+        V128.Load8x8S.code -> V128.Load8x8S(consumeMemArg(), offset)
+        V128.Load8x8U.code -> V128.Load8x8U(consumeMemArg(), offset)
+        V128.Load16x4S.code -> V128.Load16x4S(consumeMemArg(), offset)
+        V128.Load16x4U.code -> V128.Load16x4U(consumeMemArg(), offset)
+        V128.Load32x2S.code -> V128.Load32x2S(consumeMemArg(), offset)
+        V128.Load32x2U.code -> V128.Load32x2U(consumeMemArg(), offset)
+        V128.Load8Splat.code -> V128.Load8Splat(consumeMemArg(), offset)
+        V128.Load16Splat.code -> V128.Load16Splat(consumeMemArg(), offset)
+        V128.Load32Splat.code -> V128.Load32Splat(consumeMemArg(), offset)
+        V128.Load64Splat.code -> V128.Load64Splat(consumeMemArg(), offset)
+        V128.Store.code -> V128.Store(consumeMemArg(), offset)
 
         // v128.const — 16 immediate bytes
         V128.Const.code -> V128.Const(
@@ -25,6 +25,7 @@ fun CommonByteBuffer.consumeFDBasedOpCode(offset: Int, code: UInt): OpCode {
             get(), get(), get(), get(),
             get(), get(), get(), get(),
             get(), get(), get(), get(),
+            offset,
         )
 
         // i8x16.shuffle — 16 lane index immediates
@@ -33,6 +34,7 @@ fun CommonByteBuffer.consumeFDBasedOpCode(offset: Int, code: UInt): OpCode {
             get().toUByte(), get().toUByte(), get().toUByte(), get().toUByte(),
             get().toUByte(), get().toUByte(), get().toUByte(), get().toUByte(),
             get().toUByte(), get().toUByte(), get().toUByte(), get().toUByte(),
+            offset,
         )
 
         // swizzle, splat
@@ -45,20 +47,20 @@ fun CommonByteBuffer.consumeFDBasedOpCode(offset: Int, code: UInt): OpCode {
         f64x2.Splat.code -> f64x2.Splat
 
         // extract_lane / replace_lane — 1 byte lane index
-        i8x16.ExtractLaneS.code -> i8x16.ExtractLaneS(get().toUByte())
-        i8x16.ExtractLaneU.code -> i8x16.ExtractLaneU(get().toUByte())
-        i8x16.ReplaceLine.code -> i8x16.ReplaceLine(get().toUByte())
-        i16x8.ExtractLaneS.code -> i16x8.ExtractLaneS(get().toUByte())
-        i16x8.ExtractLaneU.code -> i16x8.ExtractLaneU(get().toUByte())
-        i16x8.ReplaceLine.code -> i16x8.ReplaceLine(get().toUByte())
-        i32x4.ExtractLaneU.code -> i32x4.ExtractLaneU(get().toUByte())
-        i32x4.ReplaceLine.code -> i32x4.ReplaceLine(get().toUByte())
-        i64x2.ExtractLaneU.code -> i64x2.ExtractLaneU(get().toUByte())
-        i64x2.ReplaceLine.code -> i64x2.ReplaceLine(get().toUByte())
-        f32x4.ExtractLaneU.code -> f32x4.ExtractLaneU(get().toUByte())
-        f32x4.ReplaceLine.code -> f32x4.ReplaceLine(get().toUByte())
-        f64x2.ExtractLaneU.code -> f64x2.ExtractLaneU(get().toUByte())
-        f64x2.ReplaceLine.code -> f64x2.ReplaceLine(get().toUByte())
+        i8x16.ExtractLaneS.code -> i8x16.ExtractLaneS(get().toUByte(), offset)
+        i8x16.ExtractLaneU.code -> i8x16.ExtractLaneU(get().toUByte(), offset)
+        i8x16.ReplaceLine.code -> i8x16.ReplaceLine(get().toUByte(), offset)
+        i16x8.ExtractLaneS.code -> i16x8.ExtractLaneS(get().toUByte(), offset)
+        i16x8.ExtractLaneU.code -> i16x8.ExtractLaneU(get().toUByte(), offset)
+        i16x8.ReplaceLine.code -> i16x8.ReplaceLine(get().toUByte(), offset)
+        i32x4.ExtractLaneU.code -> i32x4.ExtractLaneU(get().toUByte(), offset)
+        i32x4.ReplaceLine.code -> i32x4.ReplaceLine(get().toUByte(), offset)
+        i64x2.ExtractLaneU.code -> i64x2.ExtractLaneU(get().toUByte(), offset)
+        i64x2.ReplaceLine.code -> i64x2.ReplaceLine(get().toUByte(), offset)
+        f32x4.ExtractLaneU.code -> f32x4.ExtractLaneU(get().toUByte(), offset)
+        f32x4.ReplaceLine.code -> f32x4.ReplaceLine(get().toUByte(), offset)
+        f64x2.ExtractLaneU.code -> f64x2.ExtractLaneU(get().toUByte(), offset)
+        f64x2.ReplaceLine.code -> f64x2.ReplaceLine(get().toUByte(), offset)
 
         // i8x16 comparison
         i8x16.Eq.code -> i8x16.Eq
@@ -122,18 +124,18 @@ fun CommonByteBuffer.consumeFDBasedOpCode(offset: Int, code: UInt): OpCode {
         V128.AnyTrue.code -> V128.AnyTrue
 
         // v128 lane loads/stores — memarg + laneIdx
-        V128.Load8Lane.code -> { val m = consumeMemArg(); V128.Load8Lane(m, get().toUByte()) }
-        V128.Load16Lane.code -> { val m = consumeMemArg(); V128.Load16Lane(m, get().toUByte()) }
-        V128.Load32Lane.code -> { val m = consumeMemArg(); V128.Load32Lane(m, get().toUByte()) }
-        V128.Load64Lane.code -> { val m = consumeMemArg(); V128.Load64Lane(m, get().toUByte()) }
-        V128.Store8Lane.code -> { val m = consumeMemArg(); V128.Store8Lane(m, get().toUByte()) }
-        V128.Store16Lane.code -> { val m = consumeMemArg(); V128.Store16Lane(m, get().toUByte()) }
-        V128.Store32Lane.code -> { val m = consumeMemArg(); V128.Store32Lane(m, get().toUByte()) }
-        V128.Store64Lane.code -> { val m = consumeMemArg(); V128.Store64Lane(m, get().toUByte()) }
+        V128.Load8Lane.code -> { val m = consumeMemArg(); V128.Load8Lane(m, get().toUByte(), offset) }
+        V128.Load16Lane.code -> { val m = consumeMemArg(); V128.Load16Lane(m, get().toUByte(), offset) }
+        V128.Load32Lane.code -> { val m = consumeMemArg(); V128.Load32Lane(m, get().toUByte(), offset) }
+        V128.Load64Lane.code -> { val m = consumeMemArg(); V128.Load64Lane(m, get().toUByte(), offset) }
+        V128.Store8Lane.code -> { val m = consumeMemArg(); V128.Store8Lane(m, get().toUByte(), offset) }
+        V128.Store16Lane.code -> { val m = consumeMemArg(); V128.Store16Lane(m, get().toUByte(), offset) }
+        V128.Store32Lane.code -> { val m = consumeMemArg(); V128.Store32Lane(m, get().toUByte(), offset) }
+        V128.Store64Lane.code -> { val m = consumeMemArg(); V128.Store64Lane(m, get().toUByte(), offset) }
 
         // v128 load zero
-        V128.Load32Zero.code -> V128.Load32Zero(consumeMemArg())
-        V128.Load64Zero.code -> V128.Load64Zero(consumeMemArg())
+        V128.Load32Zero.code -> V128.Load32Zero(consumeMemArg(), offset)
+        V128.Load64Zero.code -> V128.Load64Zero(consumeMemArg(), offset)
 
         // f32x4 / f64x2 rounding and conversions in code range 94-106
         f32x4.DemoteZeroF64x2.code -> f32x4.DemoteZeroF64x2
