@@ -1068,7 +1068,7 @@ class NumericInstructionTest {
             )
         """.trimIndent())
         val c = ops.filterIsInstance<F32.Const>().single()
-        assertEquals(3.14159f, c.value, "should parse pi approximation")
+        assertEquals(3.14159f.toRawBits(), c.value.toRawBits(), "should parse pi approximation")
     }
 
     @Test
