@@ -8,6 +8,7 @@ import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i64
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.f64
+import org.jetbrains.hexana.wasm.opcodes.legacy.eh.LegacyEH
 import org.jetbrains.hexana.wasm.opcodes.numeric.F32
 import org.jetbrains.hexana.wasm.opcodes.numeric.F64
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
@@ -38,10 +39,10 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
             position(position() - 1)
             Flow.Else(opCodes, offset)
         }
-        0x06u,
-        0x07u -> ReservedOpCode(code, offset)
+        LegacyEH.Try.code.toUInt() -> LegacyEH.Try(blockType(), consumeBlock(),offset)
+        LegacyEH.Catch.code.toUInt() -> LegacyEH.Catch(getSLEB128().toInt(), offset)
         0x08u -> Flow.Trow(consumeInt(), offset)
-        0x09u -> ReservedOpCode(code, offset)
+        LegacyEH.Rethrow.code.toUInt() -> LegacyEH.Rethrow(getSLEB128().toUInt(), offset)
         0x0Au -> Flow.ThrowRef
         0x0Bu -> Flow.Terminal
         0x0Cu -> Flow.Br(consumeInt(), offset)
@@ -63,7 +64,9 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
         0x13u -> Flow.ReturnCallIndirect(consumeInt(), consumeInt(), offset)
         0x14u -> Flow.CallRef(consumeInt(), offset)
         0x15u -> Flow.ReturnCallRef(consumeInt(), offset)
-        0x16u, 0x17u, 0x18u, 0x19u -> ReservedOpCode(code, offset)
+        0x16u, 0x17u -> ReservedOpCode(code, offset)
+        LegacyEH.Delegate.code.toUInt() -> LegacyEH.Delegate(getSLEB128().toUInt(), offset)
+        LegacyEH.CatchAll.code.toUInt() -> LegacyEH.CatchAll(offset)
         0x1Au -> OpCodes.ParametricInstructions.Drop
         0x1Bu -> OpCodes.ParametricInstructions.Select
         0x1Cu -> {
@@ -278,7 +281,7 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
         0xFBu, 0xFCu, 0xFDu, 0xFFu -> {
             consumeMultibyteOpCode(position() - 1,  code.toUByte(),getULEB128().toUInt())
         }
-        else -> throw UnsupportedOpsException(code, position())
+        else -> throw UnsupportedOpsException(code, offset)
     }
 }
 
