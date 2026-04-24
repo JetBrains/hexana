@@ -31,6 +31,8 @@ All three layers reuse the existing KMP modules:
 - Build the Kotlin webview: `./gradlew :vscode-plugin:webview:jsBrowserProductionWebpack`
 - Compile the TypeScript extension: `cd vscode-plugin && npm run compile`
 - Package the extension: `cd vscode-plugin && npx @vscode/vsce package`
+- Build and run locally (no obfuscation): `cd vscode-plugin && ./build-and-run-locally.sh` (or `.bat` on Windows)
+- Build VSIX ready for distribution: `cd vscode-plugin && ./build-release-package.sh` (or `.bat` on Windows)
 
 ## Working Rules
 
