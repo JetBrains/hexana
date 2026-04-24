@@ -1,0 +1,38 @@
+# Test directory and its dependencies
+test/**
+
+# Agent/dev documentation and metadata
+AGENTS.md
+.gitignore
+README.md
+
+# Build scripts (not needed at runtime)
+build-and-run-locally.sh
+build-and-run-locally.bat
+build-release-package.sh
+build-release-package.bat
+
+# TypeScript source and config (compiled output is in out/)
+src/**
+tsconfig.json
+
+# Kotlin source files
+extension-lib/src/**
+webview/src/**
+
+# Gradle build files (not needed at runtime)
+extension-lib/build.gradle.kts
+webview/build.gradle.kts
+
+# Kotlin build intermediates (only webpack output is needed)
+extension-lib/build/classes/**
+extension-lib/build/compileSync/**
+extension-lib/build/kotlin/**
+extension-lib/build/tmp/**
+webview/build/classes/**
+webview/build/compileSync/**
+webview/build/kotlin/**
+webview/build/tmp/**
+
+# Source maps
+**/*.js.map
