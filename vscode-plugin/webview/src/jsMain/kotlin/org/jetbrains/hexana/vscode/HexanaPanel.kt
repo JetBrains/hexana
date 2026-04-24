@@ -97,7 +97,10 @@ fun HexanaPanel(
                         property("color", if (isActive) "var(--hexana-fg)" else "var(--vscode-tab-inactiveForeground, rgba(255,255,255,0.5))")
                         property("background", if (isActive) "var(--hexana-tab-active-bg, transparent)" else "transparent")
                     }
-                    onClick { activeTab = tab }
+                    onClick {
+                        activeTab = tab
+                        postTabSelectedToHost(tab.label)
+                    }
                 }) {
                     Text(tab.label)
                 }

@@ -195,9 +195,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const key = uri.toString();
         const inMemory = inMemoryModules.get(key);
         if (inMemory) {
+            extensionLib?.captureWasmFileOpened(inMemory.data.byteLength);
             return new WasmDocument(uri, inMemory.data, inMemory.fileName);
         }
         const data = await vscode.workspace.fs.readFile(uri);
+        extensionLib?.captureWasmFileOpened(data.byteLength);
         return new WasmDocument(uri, data);
     }
 
@@ -230,6 +232,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.runExport(document, message);
             } else if (message.type === "show-wat") {
                 this.showWatEditor(document, message);
+            } else if (message.type === "tab-selected") {
+                extensionLib?.captureHexTabSelected(message.tabName);
             }
         });
     }
@@ -249,6 +253,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
         watDocuments.set(watUri.toString(), message.watText);
         watContentProvider.update(watUri);
+
+        extensionLib?.captureWatViewActivated();
 
         const doc = await vscode.workspace.openTextDocument(watUri);
         await vscode.window.showTextDocument(doc, {

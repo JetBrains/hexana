@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.analytics
 
-private fun nodeRequire(module: String): dynamic = js("require(module)")
+@Suppress("UNUSED_PARAMETER")
+private fun nodeRequire(module: String): dynamic =
+    js("eval('require')(module)")
 
 /**
  * Persists a random UUID to a file on the Node.js filesystem.

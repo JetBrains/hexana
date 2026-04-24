@@ -2,10 +2,13 @@ package org.jetbrains.hexana.analytics
 
 @JsModule("posthog-node")
 @JsNonModule
-external class PostHogJs(apiKey: String, options: dynamic = definedExternally) {
-    fun capture(params: dynamic)
-    fun flush()
-    fun shutdown()
+external object PostHogModule {
+    @JsName("PostHog")
+    class PostHog(apiKey: String, options: dynamic = definedExternally) {
+        fun capture(params: dynamic)
+        fun flush()
+        fun shutdown()
+    }
 }
 
 internal class PostHogJsClient(
@@ -14,10 +17,11 @@ internal class PostHogJsClient(
     private val distinctIdProvider: DistinctIdProvider
 ) : AnalyticsClient {
 
-    private val client = PostHogJs(
-        config.apiKey,
-        js("({host: config.host})")
-    )
+    private val client: PostHogModule.PostHog = run {
+        val options = js("{}")
+        options.host = config.host
+        PostHogModule.PostHog(config.apiKey, options)
+    }
 
     override fun capture(event: HexanaEvent) {
         if (!consentProvider.isAnalyticsAllowed()) return

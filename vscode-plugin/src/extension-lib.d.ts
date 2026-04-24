@@ -72,6 +72,45 @@ export function splitShellArgs(input: string): string[];
  */
 export function shellEscape(arg: string, windows?: boolean): string;
 
+// ── Analytics ────────────────────────────────────────────────────────
+
+/**
+ * Initializes the PostHog analytics client.
+ *
+ * @param storagePath - Path for persisting the anonymous distinct ID.
+ * @param telemetryEnabled - Whether the user has opted in to telemetry.
+ */
+export function initAnalytics(storagePath: string, telemetryEnabled: boolean): void;
+
+/** Captures a `wasm_file_opened` event. */
+export function captureWasmFileOpened(fileSizeBytes: number): void;
+
+/** Captures a `wasm_file_parsed` event. */
+export function captureWasmFileParsed(
+    fileSizeBytes: number,
+    durationMs: number,
+    success: boolean,
+    functionCount: number | null,
+): void;
+
+/** Captures a `hex_tab_selected` event. */
+export function captureHexTabSelected(tabName: string): void;
+
+/** Captures a `wat_view_activated` event. */
+export function captureWatViewActivated(): void;
+
+/** Captures a `hex_view_activated` event. */
+export function captureHexViewActivated(): void;
+
+/** Captures a `wasm_unparsed_opcodes` event. */
+export function captureWasmUnparsedOpcodes(unparsedCount: number, totalFunctions: number): void;
+
+/** Flushes any pending analytics events. */
+export function flushAnalytics(): void;
+
+/** Shuts down the analytics client and flushes pending events. */
+export function shutdownAnalytics(): void;
+
 // ── DependencyResolver ──────────────────────────────────────────────
 
 /**

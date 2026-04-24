@@ -97,6 +97,19 @@ fun postRunExportToHost(
 }
 
 /**
+ * Notifies the extension host that the user selected a tab in the analysis
+ * panel, so the host can log an analytics event.
+ *
+ * [tabName] is the display label of the selected tab (e.g. "Functions").
+ */
+fun postTabSelectedToHost(tabName: String) {
+    val msg = js("{}")
+    msg.type = "tab-selected"
+    msg.tabName = tabName
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open the WAT text in a native VS Code editor
  * tab (Monaco) with syntax highlighting and full editor features.
  *
