@@ -544,4 +544,139 @@ class MultibyteInstructionTest {
         val unparsed = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsed.isEmpty(), "GC array instructions should all parse: ${unparsed.firstOrNull()?.e?.message}")
     }
+
+    // ========================================================================
+    // Inline WAT — br_on_cast / br_on_cast_fail
+    //
+    // Binary encoding (GC proposal, merged into WASM 3.0):
+    //   0xFB 0x18 castflags:u8 label:u32 src_ht:heaptype dst_ht:heaptype   ; br_on_cast
+    //   0xFB 0x19 castflags:u8 label:u32 src_ht:heaptype dst_ht:heaptype   ; br_on_cast_fail
+    //
+    // castflags is a 2-bit bitmask:
+    //   bit 0 (0x01) — source ref is nullable
+    //   bit 1 (0x02) — target ref is nullable
+    //
+    // Tests below pin all four nullability combinations, verify subsequent
+    // instructions parse at the right offset (catches byte-shift regressions
+    // if the castflags read is ever removed), and exercise immediate values.
+    // ========================================================================
+
+    private suspend fun parseInlineFlattened(wat: String): List<OpCode> =
+        flattenOpcodes(parseInlineOpcodes(wat))
+
+    private fun brOnCastWat(srcRef: String, dstRef: String): String = """
+        (module
+          (type ${'$'}base (struct (field i32)))
+          (type ${'$'}derived (sub ${'$'}base (struct (field i32) (field i32))))
+          (func (export "f") (param (ref null ${'$'}base)) (result i32)
+            (block ${'$'}L (result $dstRef)
+              local.get 0
+              br_on_cast ${'$'}L $srcRef $dstRef
+              drop
+              i32.const 7
+              return
+            )
+            drop
+            i32.const 11
+          )
+        )
+    """.trimIndent()
+
+    private fun brOnCastFailWat(srcRef: String, dstRef: String): String = """
+        (module
+          (type ${'$'}base (struct (field i32)))
+          (type ${'$'}derived (sub ${'$'}base (struct (field i32) (field i32))))
+          (func (export "f") (param (ref null ${'$'}base)) (result i32)
+            (block ${'$'}L (result $srcRef)
+              local.get 0
+              br_on_cast_fail ${'$'}L $srcRef $dstRef
+              drop
+              i32.const 13
+              return
+            )
+            drop
+            i32.const 17
+          )
+        )
+    """.trimIndent()
+
+    @Test
+    fun `inline — br_on_cast non-nullable to non-nullable (flags=0)`() = runTest {
+        val ops = parseInlineFlattened(brOnCastWat("(ref ${'$'}base)", "(ref ${'$'}derived)"))
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val br = ops.filterIsInstance<OpCodes.GC.BrOnCast>().single()
+        assertEquals(0.toByte(), br.flags, "neither side nullable")
+    }
+
+    @Test
+    fun `inline — br_on_cast nullable to non-nullable (flags=1)`() = runTest {
+        val ops = parseInlineFlattened(brOnCastWat("(ref null ${'$'}base)", "(ref ${'$'}derived)"))
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val br = ops.filterIsInstance<OpCodes.GC.BrOnCast>().single()
+        assertEquals(0x01.toByte(), br.flags, "src nullable")
+    }
+
+    @Test
+    fun `inline — br_on_cast nullable to nullable (flags=3)`() = runTest {
+        val ops = parseInlineFlattened(brOnCastWat("(ref null ${'$'}base)", "(ref null ${'$'}derived)"))
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val br = ops.filterIsInstance<OpCodes.GC.BrOnCast>().single()
+        assertEquals(0x03.toByte(), br.flags, "both sides nullable")
+    }
+
+    @Test
+    fun `inline — br_on_cast carries label, src and dst type indices`() = runTest {
+        val ops = parseInlineFlattened(brOnCastWat("(ref null ${'$'}base)", "(ref ${'$'}derived)"))
+        val br = ops.filterIsInstance<OpCodes.GC.BrOnCast>().single()
+        // Block defines label 0; br_on_cast targets it.
+        assertEquals(0u, br.value, "label index targets the enclosing block")
+        // $base = type 0, $derived = type 1 (declared in that order).
+        assertEquals(0, br.srcType.type, "src heaptype = type index 0 (\$base)")
+        assertEquals(1, br.dstType.type, "dst heaptype = type index 1 (\$derived)")
+    }
+
+    @Test
+    fun `inline — instruction after br_on_cast parses at correct offset`() = runTest {
+        // If the castflags byte were skipped during parsing, every byte after
+        // br_on_cast would shift by one and the i32.const 7 below would either
+        // come out wrong or produce an UnparsedOpCode. Pin both.
+        val ops = parseInlineFlattened(brOnCastWat("(ref null ${'$'}base)", "(ref ${'$'}derived)"))
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no byte-shift past br_on_cast")
+        val constants = ops.filterIsInstance<I32.Const>()
+        assertTrue(constants.any { it.value == 7 }, "i32.const 7 (after br_on_cast) parsed correctly")
+        assertTrue(constants.any { it.value == 11 }, "i32.const 11 (after block) parsed correctly")
+    }
+
+    @Test
+    fun `inline — br_on_cast_fail non-nullable to non-nullable (flags=0)`() = runTest {
+        val ops = parseInlineFlattened(brOnCastFailWat("(ref ${'$'}base)", "(ref ${'$'}derived)"))
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val br = ops.filterIsInstance<OpCodes.GC.BrOnCastFail>().single()
+        assertEquals(0.toByte(), br.flags, "neither side nullable")
+    }
+
+    @Test
+    fun `inline — br_on_cast_fail nullable to non-nullable (flags=1)`() = runTest {
+        val ops = parseInlineFlattened(brOnCastFailWat("(ref null ${'$'}base)", "(ref ${'$'}derived)"))
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val br = ops.filterIsInstance<OpCodes.GC.BrOnCastFail>().single()
+        assertEquals(0x01.toByte(), br.flags, "src nullable")
+    }
+
+    @Test
+    fun `inline — br_on_cast_fail nullable to nullable (flags=3)`() = runTest {
+        val ops = parseInlineFlattened(brOnCastFailWat("(ref null ${'$'}base)", "(ref null ${'$'}derived)"))
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val br = ops.filterIsInstance<OpCodes.GC.BrOnCastFail>().single()
+        assertEquals(0x03.toByte(), br.flags, "both sides nullable")
+    }
+
+    @Test
+    fun `inline — instruction after br_on_cast_fail parses at correct offset`() = runTest {
+        val ops = parseInlineFlattened(brOnCastFailWat("(ref null ${'$'}base)", "(ref ${'$'}derived)"))
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no byte-shift past br_on_cast_fail")
+        val constants = ops.filterIsInstance<I32.Const>()
+        assertTrue(constants.any { it.value == 13 }, "i32.const 13 (after br_on_cast_fail) parsed correctly")
+        assertTrue(constants.any { it.value == 17 }, "i32.const 17 (after block) parsed correctly")
+    }
 }
