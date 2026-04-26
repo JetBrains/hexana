@@ -21,7 +21,7 @@ class OpcodeClassifierTest {
 
     @Test
     fun `call indirect classified as Call`() {
-        assertEquals(OpcodeCategory.Call, classifyOpcode(OpCodes.Flow.CallIndirect(0)))
+        assertEquals(OpcodeCategory.Call, classifyOpcode(OpCodes.Flow.CallIndirect(0, 0)))
     }
 
     @Test

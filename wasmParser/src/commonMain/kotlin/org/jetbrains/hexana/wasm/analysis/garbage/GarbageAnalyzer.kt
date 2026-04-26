@@ -243,7 +243,7 @@ class GarbageAnalyzer(
     private fun collectTypeRefsFromOpcodes(opcodes: List<OpCode>, refs: MutableSet<Int>) {
         for (op in opcodes) {
             when (op) {
-                is OpCodes.Flow.CallIndirect -> refs.add(op.value)
+                is OpCodes.Flow.CallIndirect -> refs.add(op.value0)
                 is OpCodes.Flow.ReturnCallIndirect -> refs.add(op.value0.toInt())
                 is OpCodes.Flow.Block -> collectTypeRefsFromOpcodes(op.value, refs)
                 is OpCodes.Flow.TryTable -> collectTypeRefsFromOpcodes(op.code, refs)

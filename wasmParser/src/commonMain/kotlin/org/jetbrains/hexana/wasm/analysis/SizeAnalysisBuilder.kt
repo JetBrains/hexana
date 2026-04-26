@@ -255,7 +255,7 @@ class SizeAnalysisBuilder(
                     callTargets.add(SizeNode.CallTarget("call ${opcode.value}", record.offset, opcode.value.toInt()))
                 }
                 is OpCodes.Flow.CallIndirect -> {
-                    callTargets.add(SizeNode.CallTarget("call_indirect ${opcode.value}", record.offset, opcode.value))
+                    callTargets.add(SizeNode.CallTarget("call_indirect ${opcode.value0}", record.offset, opcode.value0))
                 }
                 else -> { /* not a direct call */ }
             }

@@ -28,7 +28,7 @@ internal fun OpCode.watString(): CharSequence {
         is OpCodes.ParametricInstructions.Unreachable -> "unreachable"
         is OpCodes.ParametricInstructions.Nop -> "nop"
         is OpCodes.Flow.Call -> "call ${value}"
-        is OpCodes.Flow.CallIndirect -> "call_indirect ${value}"
+        is OpCodes.Flow.CallIndirect -> "call_indirect $value0 $value1"
         is OpCodes.Flow.Br -> "br $value"
         is OpCodes.Flow.BrIf -> "br_if $value"
         is OpCodes.Flow.BrTable -> "br_table (${value.joinToString(", ")})"

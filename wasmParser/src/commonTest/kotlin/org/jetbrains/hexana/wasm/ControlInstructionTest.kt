@@ -245,7 +245,7 @@ class ControlInstructionTest {
         val callerOps = records[2].opCodes
         val callIndirect = callerOps.filterIsInstance<OpCodes.Flow.CallIndirect>().firstOrNull()
         assertNotNull(callIndirect)
-        assertEquals(0, callIndirect.value, "call_indirect uses type index 0 (${'$'}binop)")
+        assertEquals(0, callIndirect.value0, "call_indirect uses type index 0 (${'$'}binop)")
     }
 
     // --- Select ---
