@@ -49,8 +49,10 @@ object OpCodes {
             const val code: UByte = 0x0Fu
         }
 
-        object ReturnCall : OpCodeWithValue<Unit>(Unit) {
-            const val code: UByte = 0x12u
+        class ReturnCall(value: UInt, offset: Int = 0) : OpCodeWithValue<UInt>(value, offset) {
+            companion object {
+                const val code: UByte = 0x12u
+            }
         }
 
         class Call(value: UInt, offset: Int = 0) : OpCodeWithValue<UInt>(value, offset) {

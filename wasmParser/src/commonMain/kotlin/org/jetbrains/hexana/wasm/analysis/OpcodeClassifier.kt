@@ -32,8 +32,7 @@ fun classifyOpcode(opcode: OpCode): OpcodeCategory = when (opcode) {
     is OpCodes.Flow.ReturnCallIndirect -> OpcodeCategory.Call
     is OpCodes.Flow.CallRef -> OpcodeCategory.Call
     is OpCodes.Flow.ReturnCallRef -> OpcodeCategory.Call
-    // ReturnCall is an object that extends OpCodeWithValue<Unit>; check identity
-    OpCodes.Flow.ReturnCall -> OpcodeCategory.Call
+    is OpCodes.Flow.ReturnCall -> OpcodeCategory.Call
 
     // --- Control (remaining Flow opcodes) ---
     is OpCodes.Flow.Block -> OpcodeCategory.Control   // also covers Loop, If, Else (subclasses)

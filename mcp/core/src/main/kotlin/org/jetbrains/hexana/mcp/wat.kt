@@ -21,7 +21,7 @@ internal fun OpCode.watString(): CharSequence {
     return when (this) {
         is OpCodes.Flow.Terminal -> "terminal"
         is OpCodes.Flow.Return -> "return"
-        is OpCodes.Flow.ReturnCall -> "return_call"
+        is OpCodes.Flow.ReturnCall -> "return_call $value"
         is OpCodes.ParametricInstructions.Drop -> "drop"
         is OpCodes.ParametricInstructions.Select -> "select"
         is OpCodes.ParametricInstructions.SelectWithType -> "select"

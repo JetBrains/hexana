@@ -6,6 +6,7 @@ import org.jetbrains.hexana.wasm.analysis.graph.DirectedGraph
 import org.jetbrains.hexana.wasm.analysis.graph.DirectedGraphBuilder
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.sections.ExprWasmElementSegment
 import org.jetbrains.hexana.wasm.sections.FuncIdxWasmElementSegment
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
@@ -94,6 +95,14 @@ class CallGraphBuilder(
             graphBuilder.addEdge(virtualRoot.id, elemFuncIdx)
         }
 
+        // ref.func occurrences in global / element / data init exprs are evaluated at
+        // module instantiation, so the referenced function is reachable unconditionally.
+        // For Kotlin/Wasm-GC binaries this is the dominant rooting mechanism (vtables
+        // built from struct fields populated by ref.func in global init exprs).
+        for (target in collectInitExprRefFuncs()) {
+            graphBuilder.addEdge(virtualRoot.id, target)
+        }
+
         // 5. Parse each function one at a time, extract call edges, let GC reclaim parsed data
         for (i in codeOffsets.indices) {
             val callerIdx = importFuncCount + i
@@ -107,8 +116,10 @@ class CallGraphBuilder(
 
     /**
      * Walks the opcode tree of a single function, collects unique direct call targets
-     * and whether any indirect call exists, then adds edges once.
-     * This avoids adding duplicate edges for repeated call_indirect instructions.
+     * (call, return_call, ref.func) and whether any indirect call exists, then adds
+     * edges once. Recurses into all block-like containers (block, loop, if, else,
+     * legacy try, try_table). call_ref / return_call_ref add no edges — their targets
+     * are reached via ref.func roots (matches twiggy semantics).
      */
     private fun addEdgesForFunction(
         callerIdx: Int,
@@ -123,8 +134,12 @@ class CallGraphBuilder(
             for (op in ops) {
                 when (op) {
                     is OpCodes.Flow.Call -> directTargets.add(op.value.toInt())
+                    is OpCodes.Flow.ReturnCall -> directTargets.add(op.value.toInt())
                     is OpCodes.Flow.CallIndirect -> hasIndirectCall = true
+                    is OpCodes.Flow.ReturnCallIndirect -> hasIndirectCall = true
+                    is OpCodes.Ref.Func -> directTargets.add(op.value.toInt())
                     is OpCodes.Flow.Block -> walk(op.value)
+                    is OpCodes.Flow.TryTable -> walk(op.code)
                     else -> {}
                 }
             }
@@ -146,12 +161,55 @@ class CallGraphBuilder(
         val segments = with(elementSection) { buffer.scanElements() }
         val result = HashSet<Int>()
         for (segment in segments) {
-            if (segment is FuncIdxWasmElementSegment) {
-                for (idx in segment.funcs) {
-                    result.add(idx.toInt())
+            when (segment) {
+                is FuncIdxWasmElementSegment -> {
+                    for (idx in segment.funcs) result.add(idx.toInt())
+                }
+                is ExprWasmElementSegment -> {
+                    for (expr in segment.exprs) collectRefFuncs(expr, result)
                 }
             }
         }
         return result
+    }
+
+    /**
+     * Collects ref.func targets from init expressions evaluated at module
+     * instantiation: global init exprs and element-segment item exprs. These
+     * functions are unconditionally reachable and become virtual-root edges.
+     */
+    private fun collectInitExprRefFuncs(): Set<Int> {
+        val result = HashSet<Int>()
+
+        module.globalSection?.let { section ->
+            val records = with(section) { buffer.scan() }
+            for (record in records) collectRefFuncs(record.expression, result)
+        }
+
+        // Element item exprs are already folded into elementFunctions, but pass-through
+        // here keeps the rooting explicit for non-default segments (declare/passive),
+        // whose funcs are also reachable in practice (ref.func in declare segments
+        // exists exactly to root function references).
+        module.elementSection?.let { section ->
+            val segments = with(section) { buffer.scanElements() }
+            for (segment in segments) {
+                if (segment is ExprWasmElementSegment) {
+                    for (expr in segment.exprs) collectRefFuncs(expr, result)
+                }
+            }
+        }
+
+        return result
+    }
+
+    private fun collectRefFuncs(ops: List<OpCode>, sink: MutableSet<Int>) {
+        for (op in ops) {
+            when (op) {
+                is OpCodes.Ref.Func -> sink.add(op.value.toInt())
+                is OpCodes.Flow.Block -> collectRefFuncs(op.value, sink)
+                is OpCodes.Flow.TryTable -> collectRefFuncs(op.code, sink)
+                else -> {}
+            }
+        }
     }
 }

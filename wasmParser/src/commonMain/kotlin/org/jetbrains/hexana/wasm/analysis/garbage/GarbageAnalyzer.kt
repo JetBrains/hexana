@@ -246,6 +246,7 @@ class GarbageAnalyzer(
                 is OpCodes.Flow.CallIndirect -> refs.add(op.value)
                 is OpCodes.Flow.ReturnCallIndirect -> refs.add(op.value0.toInt())
                 is OpCodes.Flow.Block -> collectTypeRefsFromOpcodes(op.value, refs)
+                is OpCodes.Flow.TryTable -> collectTypeRefsFromOpcodes(op.code, refs)
                 else -> {}
             }
         }

@@ -26,7 +26,7 @@ class OpcodeClassifierTest {
 
     @Test
     fun `return call classified as Call`() {
-        assertEquals(OpcodeCategory.Call, classifyOpcode(OpCodes.Flow.ReturnCall))
+        assertEquals(OpcodeCategory.Call, classifyOpcode(OpCodes.Flow.ReturnCall(0u)))
     }
 
     @Test

@@ -251,4 +251,49 @@ class GarbageAnalyzerTest {
         assertEquals(3, result.dataSegmentEntries.size, "3 WASM data section entries")
         assertTrue(result.dataSegmentWastedBytes > 0, "Data segments should have non-zero size")
     }
+
+    /**
+     * Run GarbageAnalyzer on mpp-demo.wasm — a 25MB Kotlin/Wasm-GC binary that
+     * relies on ref.func + call_ref for virtual dispatch (vtables stored in struct
+     * globals). Twiggy reports ~35.33% code-section garbage on this file.
+     *
+     * Before adding ref.func / global-init-expr / return_call rooting, the analyzer
+     * reported ~99% garbage because almost every function was only reachable via
+     * vtable lookups. This test pins the post-fix behavior.
+     */
+    @Test
+    fun `mpp-demo wasm garbage analysis — ref_func rooting`() = runTest(timeout = 5.minutes) {
+        val buffer = resourceAsByteBuffer("mpp-demo.wasm")
+        val parseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(parseResult)
+        val module = parseResult.wasmModule
+        assertIs<WasmModule>(module)
+
+        val cgr = CallGraphBuilder(buffer, module).build()
+        val dom = DominatorTree.compute(cgr.graph)
+
+        val codeSection = module.codeSection!!
+        val codeOffsets = with(codeSection) { buffer.scanOffsets() }
+
+        val importRecords = module.importSection?.let { section ->
+            with(section) { buffer.getImportRecords() }
+        } ?: emptyList()
+        val importFuncCount = importRecords.count { it.type is WasmTypeIndexExternalType }
+
+        val result = GarbageAnalyzer(cgr, dom, codeOffsets, importFuncCount, buffer, module).analyze()
+
+        assertTrue(result.codeSectionTotalBytes > 0, "code section must have content")
+        val pctTimes100 = result.totalWastedBytes * 10_000 / result.codeSectionTotalBytes
+        val pctStr = "${pctTimes100 / 100}.${pctTimes100 % 100}%"
+
+        // Pre-fix this analyzer reported ~99.1% function garbage on mpp-demo because it
+        // missed every Kotlin/Wasm-GC vtable target (ref.func in global init-exprs +
+        // call_ref dispatch). Cap at 50% to catch any regression of that rooting.
+        assertTrue(
+            pctTimes100 < 5000,
+            "Garbage % ($pctStr) exceeds 50% — ref.func / init-expr rooting regressed " +
+                "(unreachable=${result.entries.size}/${codeOffsets.size}, " +
+                "wasted=${result.totalWastedBytes}/${result.codeSectionTotalBytes})",
+        )
+    }
 }
