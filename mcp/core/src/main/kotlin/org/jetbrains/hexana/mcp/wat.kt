@@ -8,6 +8,8 @@ import org.jetbrains.hexana.wasm.opcodes.numeric.F32
 import org.jetbrains.hexana.wasm.opcodes.numeric.F64
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
 import org.jetbrains.hexana.wasm.opcodes.numeric.I64
+import org.jetbrains.hexana.wasm.opcodes.table.Element
+import org.jetbrains.hexana.wasm.opcodes.table.Table
 import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
 import org.jetbrains.hexana.wasm.sections.WasmHeapType
 import org.jetbrains.hexana.wasm.sections.WasmValueType
@@ -188,6 +190,8 @@ internal fun OpCode.watString(): CharSequence {
         is F64.GT -> "f64.gt"
         is F64.LT -> "f64.lt"
         is F64.Abs -> "f64.abs"
+        is Element.Drop -> "elem.drop $value"
+        is Table.Init -> "table.init $value1 $value0"
         is UnparsedOpCode -> "unparsed block: 0x${value.offset.toHexString()} .. 0x${(value.offset + value.size).toHexString()}"
         // https://webassembly.github.io/spec/core/text/instructions.html
         // I changed begin/end to {} because of AI
