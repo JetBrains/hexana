@@ -240,7 +240,7 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte, limit: Int = limit()): OpCode {
         0xA8u -> I32.TruncF32S
         0xA9u -> I32.TruncF32U
         0xAAu -> I32.TruncF64S
-        0xABu -> I32.TruncF64S
+        0xABu -> I32.TruncF64U
         0xACu -> I64.Extend_I32_S
         0xADu -> I64.Extend_I32_U
         0xAEu -> I64.TruncF32S
