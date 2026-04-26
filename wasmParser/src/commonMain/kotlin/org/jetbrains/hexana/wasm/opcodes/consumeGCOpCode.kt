@@ -27,8 +27,8 @@ fun CommonByteBuffer.consumeGCOpCode(offset: Int, opcode: UInt): OpCode {
         0x15u -> OpCodes.GC.RefTestNullable(HeapType(consumeSignedInt()), offset)
         0x16u -> OpCodes.GC.RefCast(HeapType(consumeSignedInt()), offset)
         0x17u -> OpCodes.GC.RefCastNullable(HeapType(consumeSignedInt()), offset)
-        0x18u -> OpCodes.GC.BrOnCast(consumeInt(), HeapType(consumeSignedInt()), HeapType(consumeSignedInt()), offset)
-        0x19u -> OpCodes.GC.BrOnCastFail(consumeSignedInt(), consumeInt(), consumeInt(), offset)
+        0x18u -> OpCodes.GC.BrOnCast(get(),consumeInt(), HeapType(consumeSignedInt()), HeapType(consumeSignedInt()), offset)
+        0x19u -> OpCodes.GC.BrOnCastFail(get(),consumeSignedInt(), consumeInt(), consumeInt(), offset)
         0x1Au -> OpCodes.GC.AnyConvertExtern
         0x1Bu -> OpCodes.GC.ExternConvertAny
         0x1Cu -> OpCodes.GC.RefI31

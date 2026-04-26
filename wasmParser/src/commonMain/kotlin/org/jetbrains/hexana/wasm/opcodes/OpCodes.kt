@@ -482,13 +482,13 @@ object OpCodes {
             }
         }
 
-        class BrOnCast(label: UInt, val srcType: HeapType, val dstType: HeapType, offset: Int = 0) : OpCodeWithValue<UInt>(label, offset) {
+        class BrOnCast(val flags: Byte, label: UInt, val srcType: HeapType, val dstType: HeapType, offset: Int = 0) : OpCodeWithValue<UInt>(label, offset) {
             companion object {
                 const val code: UByte = 0x18u
             }
         }
 
-        class BrOnCastFail(label: Int, srcType: UInt, dstType: UInt, offset: Int = 0) : OpCodeGCBreak(label, srcType, dstType, offset) {
+        class BrOnCastFail(val flags: Byte, label: Int, srcType: UInt, dstType: UInt, offset: Int = 0) : OpCodeGCBreak(label, srcType, dstType, offset) {
             companion object {
                 const val code: UByte = 0x19u
             }
