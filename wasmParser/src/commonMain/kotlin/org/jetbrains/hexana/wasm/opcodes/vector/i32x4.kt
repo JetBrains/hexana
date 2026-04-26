@@ -183,6 +183,10 @@ object i32x4 {
         const val code: UInt = 252u
     }
 
+    object TruncSatUZeroF64x2: OpCode {
+        const val code: UInt = 253u
+    }
+
     object RelaxedTruncSF32x4: OpCode {
         const val code: UInt = 257u
     }

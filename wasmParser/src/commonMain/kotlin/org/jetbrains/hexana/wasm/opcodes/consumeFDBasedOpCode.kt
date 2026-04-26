@@ -291,6 +291,7 @@ fun CommonByteBuffer.consumeFDBasedOpCode(offset: Int, code: UInt): OpCode {
         f32x4.ConvertSI32x4.code -> f32x4.ConvertSI32x4
         f32x4.ConvertUF32x4.code -> f32x4.ConvertUF32x4
         i32x4.TruncSatSZeroF64x2.code -> i32x4.TruncSatSZeroF64x2
+        i32x4.TruncSatUZeroF64x2.code -> i32x4.TruncSatUZeroF64x2
         f64x2.ConvertLowSI32x4.code -> f64x2.ConvertLowSI32x4
         f64x2.ConvertLowUF32x4.code -> f64x2.ConvertLowUF32x4
 
