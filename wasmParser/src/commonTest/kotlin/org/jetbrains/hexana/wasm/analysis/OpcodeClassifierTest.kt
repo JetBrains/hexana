@@ -10,6 +10,7 @@ import org.jetbrains.hexana.wasm.opcodes.numeric.F32
 import org.jetbrains.hexana.wasm.opcodes.numeric.F64
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
 import org.jetbrains.hexana.wasm.opcodes.numeric.I64
+import org.jetbrains.hexana.wasm.opcodes.table.Table
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -166,7 +167,7 @@ class OpcodeClassifierTest {
 
     @Test
     fun `table get classified as Other`() {
-        assertEquals(OpcodeCategory.Other, classifyOpcode(OpCodes.Table.Get(0u)))
+        assertEquals(OpcodeCategory.Other, classifyOpcode(Table.Get(0u)))
     }
 
     @Test

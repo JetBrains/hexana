@@ -5,6 +5,7 @@ import org.jetbrains.hexana.tests.watStringToBuffer
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
+import org.jetbrains.hexana.wasm.opcodes.table.Table
 import org.jetbrains.hexana.wasm.sections.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -48,7 +49,7 @@ class TableInstructionTest {
             )
         """.trimIndent())
         assertIs<OpCodes.Local.Get>(ops[0])
-        val get = ops.filterIsInstance<OpCodes.Table.Get>().single()
+        val get = ops.filterIsInstance<Table.Get>().single()
         assertEquals(0u, get.value)
     }
 
@@ -64,7 +65,7 @@ class TableInstructionTest {
               )
             )
         """.trimIndent())
-        val get = ops.filterIsInstance<OpCodes.Table.Get>().single()
+        val get = ops.filterIsInstance<Table.Get>().single()
         assertEquals(1u, get.value, "should reference table index 1")
     }
 
@@ -79,7 +80,7 @@ class TableInstructionTest {
               )
             )
         """.trimIndent())
-        val get = ops.filterIsInstance<OpCodes.Table.Get>().single()
+        val get = ops.filterIsInstance<Table.Get>().single()
         assertEquals(0u, get.value)
     }
 
@@ -96,7 +97,7 @@ class TableInstructionTest {
         """.trimIndent())
         assertIs<I32.Const>(ops[0])
         assertEquals(3, (ops[0] as I32.Const).value)
-        val get = ops.filterIsInstance<OpCodes.Table.Get>().single()
+        val get = ops.filterIsInstance<Table.Get>().single()
         assertEquals(0u, get.value)
     }
 
@@ -116,7 +117,7 @@ class TableInstructionTest {
               )
             )
         """.trimIndent())
-        val set = ops.filterIsInstance<OpCodes.Table.Set>().single()
+        val set = ops.filterIsInstance<Table.Set>().single()
         assertEquals(0u, set.value)
     }
 
@@ -133,7 +134,7 @@ class TableInstructionTest {
               )
             )
         """.trimIndent())
-        val set = ops.filterIsInstance<OpCodes.Table.Set>().single()
+        val set = ops.filterIsInstance<Table.Set>().single()
         assertEquals(1u, set.value, "should reference table index 1")
     }
 
@@ -149,7 +150,7 @@ class TableInstructionTest {
               )
             )
         """.trimIndent())
-        val set = ops.filterIsInstance<OpCodes.Table.Set>().single()
+        val set = ops.filterIsInstance<Table.Set>().single()
         assertEquals(0u, set.value)
     }
 
@@ -167,7 +168,7 @@ class TableInstructionTest {
         """.trimIndent())
         assertIs<OpCodes.Local.Get>(ops[0])
         assertIs<OpCodes.Ref.Null>(ops[1])
-        val set = ops.filterIsInstance<OpCodes.Table.Set>().single()
+        val set = ops.filterIsInstance<Table.Set>().single()
         assertEquals(0u, set.value)
     }
 
@@ -198,8 +199,8 @@ class TableInstructionTest {
               )
             )
         """.trimIndent())
-        val gets = ops.filterIsInstance<OpCodes.Table.Get>()
-        val sets = ops.filterIsInstance<OpCodes.Table.Set>()
+        val gets = ops.filterIsInstance<Table.Get>()
+        val sets = ops.filterIsInstance<Table.Set>()
         assertEquals(2, gets.size, "two table.get instructions")
         assertEquals(2, sets.size, "two table.set instructions")
         gets.forEach { assertEquals(0u, it.value) }
@@ -221,8 +222,8 @@ class TableInstructionTest {
               )
             )
         """.trimIndent())
-        val get = ops.filterIsInstance<OpCodes.Table.Get>().single()
-        val set = ops.filterIsInstance<OpCodes.Table.Set>().single()
+        val get = ops.filterIsInstance<Table.Get>().single()
+        val set = ops.filterIsInstance<Table.Set>().single()
         assertEquals(0u, get.value, "get from table 0")
         assertEquals(1u, set.value, "set into table 1")
     }
@@ -275,7 +276,7 @@ class TableInstructionTest {
         """.trimIndent())
         val ops = allOps[1]
         assertIs<I32.Const>(ops[0])
-        val get = ops.filterIsInstance<OpCodes.Table.Get>().single()
+        val get = ops.filterIsInstance<Table.Get>().single()
         assertEquals(0u, get.value)
     }
 
@@ -296,7 +297,7 @@ class TableInstructionTest {
         """.trimIndent())
         assertEquals(2, ops.size)
         assertIs<OpCodes.Local.Get>(ops[0])
-        assertIs<OpCodes.Table.Get>(ops[1])
+        assertIs<Table.Get>(ops[1])
     }
 
     @Test
@@ -314,7 +315,7 @@ class TableInstructionTest {
         assertEquals(3, ops.size)
         assertIs<OpCodes.Local.Get>(ops[0])
         assertIs<OpCodes.Local.Get>(ops[1])
-        assertIs<OpCodes.Table.Set>(ops[2])
+        assertIs<Table.Set>(ops[2])
     }
 
     @Test
@@ -334,8 +335,8 @@ class TableInstructionTest {
         val fnOps = ops[1]
         assertIs<OpCodes.Local.Get>(fnOps[0])
         assertIs<OpCodes.Ref.Func>(fnOps[1])
-        assertIs<OpCodes.Table.Set>(fnOps[2])
-        assertEquals(0u, (fnOps[2] as OpCodes.Table.Set).value)
+        assertIs<Table.Set>(fnOps[2])
+        assertEquals(0u, (fnOps[2] as Table.Set).value)
     }
 
     @Test
@@ -352,7 +353,7 @@ class TableInstructionTest {
         """.trimIndent())
         assertEquals(3, ops.size)
         assertIs<OpCodes.Local.Get>(ops[0])
-        assertIs<OpCodes.Table.Get>(ops[1])
+        assertIs<Table.Get>(ops[1])
         assertIs<OpCodes.Ref.IsNull>(ops[2])
     }
 }

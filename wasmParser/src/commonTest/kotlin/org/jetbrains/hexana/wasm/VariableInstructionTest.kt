@@ -4,11 +4,9 @@ import kotlinx.coroutines.test.runTest
 import org.jetbrains.hexana.tests.watStringToBuffer
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
-import org.jetbrains.hexana.wasm.opcodes.numeric.I32
-import org.jetbrains.hexana.wasm.sections.*
+import org.jetbrains.hexana.wasm.opcodes.table.Table
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
 
 /**
  * Tests for WASM variable instructions — local.get, local.set, local.tee,
@@ -290,7 +288,7 @@ class VariableInstructionTest {
               )
             )
         """.trimIndent())
-        val get = ops.filterIsInstance<OpCodes.Table.Get>().single()
+        val get = ops.filterIsInstance<Table.Get>().single()
         assertEquals(0u, get.value)
     }
 
@@ -310,7 +308,7 @@ class VariableInstructionTest {
               )
             )
         """.trimIndent())
-        val set = ops.filterIsInstance<OpCodes.Table.Set>().single()
+        val set = ops.filterIsInstance<Table.Set>().single()
         assertEquals(0u, set.value)
     }
 

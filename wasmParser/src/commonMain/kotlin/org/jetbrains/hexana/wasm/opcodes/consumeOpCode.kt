@@ -13,6 +13,7 @@ import org.jetbrains.hexana.wasm.opcodes.numeric.F32
 import org.jetbrains.hexana.wasm.opcodes.numeric.F64
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
 import org.jetbrains.hexana.wasm.opcodes.numeric.I64
+import org.jetbrains.hexana.wasm.opcodes.table.Table
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.blockType
 import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.heapType
@@ -98,8 +99,8 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte, limit: Int = limit()): OpCode {
         0x22u -> Local.Tee(consumeInt(), offset)
         0x23u -> OpCodes.Global.Get(consumeInt(), offset)
         0x24u -> OpCodes.Global.Set(consumeInt(), offset)
-        0x25u -> OpCodes.Table.Get(consumeInt(), offset)
-        0x26u -> OpCodes.Table.Set(consumeInt(), offset)
+        0x25u -> Table.Get(consumeInt(), offset)
+        0x26u -> Table.Set(consumeInt(), offset)
         0x27u -> ReservedOpCode(code, offset)
         0x28u -> i32.Load(consumeMemArg(), offset)
         0x29u -> i64.Load(consumeMemArg(), offset)

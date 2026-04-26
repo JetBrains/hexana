@@ -381,20 +381,6 @@ object OpCodes {
         }
     }
 
-    object Table {
-        class Get(value: UInt, offset: Int = 0) : OpCodeWithValue<UInt>(value, offset) {
-            companion object {
-                const val code: UByte = 0x25u
-            }
-        }
-
-        class Set(value: UInt, offset: Int = 0) : OpCodeWithValue<UInt>(value, offset) {
-            companion object {
-                const val code: UByte = 0x26u
-            }
-        }
-    }
-
     object GC {
         class StructNew(value: UInt, offset: Int = 0) : OpCodeWithValue<UInt>(value, offset) {
             companion object {

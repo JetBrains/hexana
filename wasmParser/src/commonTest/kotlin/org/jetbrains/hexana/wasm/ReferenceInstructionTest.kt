@@ -5,6 +5,7 @@ import org.jetbrains.hexana.tests.watStringToBuffer
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
+import org.jetbrains.hexana.wasm.opcodes.table.Table
 import org.jetbrains.hexana.wasm.sections.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -78,7 +79,7 @@ class ReferenceInstructionTest {
         """.trimIndent())
         assertIs<OpCodes.Local.Get>(ops[0])
         assertIs<OpCodes.Ref.Null>(ops[1])
-        assertIs<OpCodes.Table.Set>(ops[2])
+        assertIs<Table.Set>(ops[2])
     }
 
     @Test
@@ -167,7 +168,7 @@ class ReferenceInstructionTest {
         """.trimIndent())
         assertEquals(3, ops.size)
         assertIs<OpCodes.Local.Get>(ops[0])
-        assertIs<OpCodes.Table.Get>(ops[1])
+        assertIs<Table.Get>(ops[1])
         assertIs<OpCodes.Ref.IsNull>(ops[2])
     }
 
@@ -247,7 +248,7 @@ class ReferenceInstructionTest {
         assertEquals(3, ops.size)
         assertIs<OpCodes.Local.Get>(ops[0])
         assertIs<OpCodes.Ref.Func>(ops[1])
-        assertIs<OpCodes.Table.Set>(ops[2])
+        assertIs<Table.Set>(ops[2])
         assertEquals(0u, (ops[1] as OpCodes.Ref.Func).value)
     }
 

@@ -4,6 +4,8 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
 import org.jetbrains.hexana.wasm.opcodes.numeric.I64
+import org.jetbrains.hexana.wasm.opcodes.table.Element
+import org.jetbrains.hexana.wasm.opcodes.table.Table
 
 fun CommonByteBuffer.consumeMultibyteOpCode(offset: Int, base: UByte, opcode: UInt): OpCode {
     return when (base) {
@@ -34,6 +36,12 @@ fun CommonByteBuffer.consumeFCBasedOpCode(offset: Int, code: UInt): OpCode {
         Memory.Data.Drop.code -> Memory.Data.Drop(getULEB128().toUInt(), offset)
         Memory.Copy.code -> Memory.Copy(getULEB128().toUInt(), getULEB128().toUInt(), offset)
         Memory.Fill.code -> Memory.Fill(getULEB128().toUInt(), offset)
+        Table.Init.code -> Table.Init(getULEB128().toUInt(), getULEB128().toUInt(), offset)
+        Table.Copy.code -> Table.Copy(getULEB128().toUInt(), getULEB128().toUInt(), offset)
+        Table.Grow.code -> Table.Grow(getULEB128().toUInt(), offset)
+        Table.Size.code -> Table.Size(getULEB128().toUInt(), offset)
+        Table.Fill.code -> Table.Fill(getULEB128().toUInt(), offset)
+        Element.Drop.code -> Element.Drop(getULEB128().toUInt(), offset)
         else -> throw UnsupportedOpsException(code, offset)
     }
 }
