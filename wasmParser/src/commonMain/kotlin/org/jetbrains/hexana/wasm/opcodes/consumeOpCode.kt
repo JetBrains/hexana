@@ -57,8 +57,9 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte, limit: Int = limit()): OpCode {
 
         0x10u -> Flow.Call(consumeInt(), offset)
         0x11u -> {
-            val value = getULEB128().toInt()
-            Flow.CallIndirect(value, offset)
+            val typeIdx = getULEB128().toInt()
+            val tableIdx = getULEB128().toInt()
+            Flow.CallIndirect(typeIdx, tableIdx, offset)
         }
         0x12u -> Flow.ReturnCall(consumeInt(), offset)
         0x13u -> Flow.ReturnCallIndirect(consumeInt(), consumeInt(), offset)

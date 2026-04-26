@@ -79,7 +79,7 @@ object OpCodes {
         }
 
 
-        class CallIndirect(value: Int, offset: Int = 0) : OpCodeWithValue<Int>(value, offset) {
+        class CallIndirect(typeIdx: Int, tableIdx: Int, offset: Int = 0) : OpCodeWithTwoValue<Int, Int>(typeIdx, tableIdx, offset) {
             companion object {
                 const val code: UByte = 0x11u
             }
