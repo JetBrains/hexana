@@ -12,6 +12,7 @@
 ### Removed
 
 ### Fixed
+ - wasm parser fixes (vector, table)
 
 ### Security
 
