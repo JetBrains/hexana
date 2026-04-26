@@ -488,7 +488,7 @@ object OpCodes {
             }
         }
 
-        class BrOnCastFail(val flags: Byte, label: Int, srcType: UInt, dstType: UInt, offset: Int = 0) : OpCodeGCBreak(label, srcType, dstType, offset) {
+        class BrOnCastFail(val flags: Byte, label: UInt, srcType: HeapType, dstType: HeapType, offset: Int = 0) : OpCodeGCBreak(label, srcType, dstType, offset) {
             companion object {
                 const val code: UByte = 0x19u
             }
@@ -539,6 +539,12 @@ object OpCodes {
         class ArrayGet(initValue: UInt, offset: Int = 0): OpCodeWithValue<UInt>(initValue, offset) {
             companion object {
                 const val code: UByte = 0x0Bu
+            }
+        }
+
+        class ArrayNewElement(typeIndex: UInt, val elemIndex: UInt, offset: Int = 0): OpCodeWithValue<UInt>(typeIndex, offset) {
+            companion object {
+                const val code: UByte = 0x0Au
             }
         }
 
@@ -624,7 +630,7 @@ open class OpCodeGCSrcDst(val typeIndexDst: UInt, val typeIndexSrc: UInt, offset
     }
 }
 
-open class OpCodeGCBreak(val label: Int, val srcType: UInt, val dstType: UInt, offset: Int = 0) : OpCodeWithOffset(offset) {
+open class OpCodeGCBreak(val label: UInt, val srcType: HeapType, val dstType: HeapType, offset: Int = 0) : OpCodeWithOffset(offset) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false
@@ -634,7 +640,7 @@ open class OpCodeGCBreak(val label: Int, val srcType: UInt, val dstType: UInt, o
     }
 
     override fun hashCode(): Int {
-        var result = label
+        var result = label.toInt()
         result = 31 * result + srcType.hashCode()
         result = 31 * result + dstType.hashCode()
         return result

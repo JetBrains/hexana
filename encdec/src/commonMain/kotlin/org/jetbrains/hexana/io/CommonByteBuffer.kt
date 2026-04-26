@@ -46,13 +46,15 @@ interface CommonByteBuffer {
             val byte = get().toUInt()
             result = result or ((byte and 0x7Fu) shl shift).toLong()
             if (byte and 0x80u == 0u) {
-                if (shift < 32 && (byte and 0x40u) != 0u) {
-                    result = result or ((-1L) shl shift)
-                    break
+                // Sign-extend if the sign bit (bit 6) of the final byte is set.
+                // The data bits we just OR'd occupy positions [shift, shift+6];
+                // the sign extension must fill positions [shift+7, ∞).
+                if (shift + 7 < 64 && (byte and 0x40u) != 0u) {
+                    result = result or ((-1L) shl (shift + 7))
                 }
                 break
             }
-            shift +=7
+            shift += 7
         }
 
         return result

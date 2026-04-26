@@ -271,8 +271,8 @@ object CfgBuilder {
 
                     is OpCodeGCBreak -> {
                         // BrOnCastFail - conditional branch similar to BrIf
-                        val depth = opcode.label
-                        if (depth >= 0 && depth < labelStack.size) {
+                        val depth = opcode.label.toInt()
+                        if (depth < labelStack.size) {
                             val targetLabel = labelStack[labelStack.size - 1 - depth]
                             updateBlockEnd(curBlockId, idx + 1)
                             addEdge(curBlockId, targetLabel.brTargetId)

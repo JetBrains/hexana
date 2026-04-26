@@ -14,6 +14,7 @@ fun CommonByteBuffer.consumeGCOpCode(offset: Int, opcode: UInt): OpCode {
         0x07u -> OpCodes.GC.ArrayNewDefault(consumeInt(), offset)
         0x08u -> OpCodes.GC.ArrayNewFixed(consumeInt(), consumeInt(), offset)
         0x09u -> OpCodes.GC.ArrayNewData(consumeInt(), consumeInt(), offset)
+        0x0Au -> OpCodes.GC.ArrayNewElement(consumeInt(), consumeInt(), offset)
         0x10u -> OpCodes.GC.ArrayFill(consumeInt(), offset)
         0x11u -> OpCodes.GC.ArrayCopy(consumeInt(), consumeInt(), offset)
         0x12u -> OpCodes.GC.ArrayInitData(consumeInt(), consumeInt(), offset)
@@ -28,7 +29,7 @@ fun CommonByteBuffer.consumeGCOpCode(offset: Int, opcode: UInt): OpCode {
         0x16u -> OpCodes.GC.RefCast(HeapType(consumeSignedInt()), offset)
         0x17u -> OpCodes.GC.RefCastNullable(HeapType(consumeSignedInt()), offset)
         0x18u -> OpCodes.GC.BrOnCast(get(),consumeInt(), HeapType(consumeSignedInt()), HeapType(consumeSignedInt()), offset)
-        0x19u -> OpCodes.GC.BrOnCastFail(get(),consumeSignedInt(), consumeInt(), consumeInt(), offset)
+        0x19u -> OpCodes.GC.BrOnCastFail(get(), consumeInt(), HeapType(consumeSignedInt()), HeapType(consumeSignedInt()), offset)
         0x1Au -> OpCodes.GC.AnyConvertExtern
         0x1Bu -> OpCodes.GC.ExternConvertAny
         0x1Cu -> OpCodes.GC.RefI31
