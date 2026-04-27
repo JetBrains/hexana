@@ -192,6 +192,8 @@ internal fun OpCode.watString(): CharSequence {
         is F64.Abs -> "f64.abs"
         is Element.Drop -> "elem.drop $value"
         is Table.Init -> "table.init $value1 $value0"
+        is OpCodes.Memory.Init -> "memory.init $dataIdx"
+        is OpCodes.Memory.Data.Drop -> "data.drop $dataIdx"
         is UnparsedOpCode -> "unparsed block: 0x${value.offset.toHexString()} .. 0x${(value.offset + value.size).toHexString()}"
         // https://webassembly.github.io/spec/core/text/instructions.html
         // I changed begin/end to {} because of AI
