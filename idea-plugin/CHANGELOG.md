@@ -4,6 +4,7 @@
 
 ### Added
 - [Support Legacy EH](https://github.com/JetBrains/hexana/issues/85)
+- WAT/MCP rendering reference-types and bulk-memory instructions
 
 ### Changed
 
@@ -13,6 +14,7 @@
 
 ### Fixed
  - wasm parser fixes (vector, table)
+ - Element segment type 6 now reads the reference-type per WebAssembly 3.0 spec §5.5.12 (2026-04-24)  
 
 ### Security
 
