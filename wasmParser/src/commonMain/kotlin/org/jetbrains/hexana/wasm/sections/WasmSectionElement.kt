@@ -71,8 +71,9 @@ class WasmSectionElement(sectionSize: Int, sectionOffset: Int, contentSize: Int,
                 6 -> {
                     val tableindx = getULEB128().toUInt()
                     val expression = parseOpCodes(instructionReadingLimit())
+                    val refType = referenceType()!!
                     val exprList = consumeExpressionList()
-                    elements.add(ExprWasmElementSegment.ActiveExplicit(offset, sizeFromOffset(offset), tableindx, expression, exprList))
+                    elements.add(ExprWasmElementSegment.ActiveExplicit(offset, sizeFromOffset(offset), tableindx, expression, refType, exprList))
                 }
                 7 -> {
                     val refType = referenceType()!!
@@ -160,6 +161,7 @@ sealed class ExprWasmElementSegment : WasmElementSegment {
         override val size: Int,
         val tableIndex: UInt,
         val offsetExpr: List<OpCode>,
+        val refType: WasmReferenceType,
         override val exprs: List<List<OpCode>>
     ) : ExprWasmElementSegment()
 
