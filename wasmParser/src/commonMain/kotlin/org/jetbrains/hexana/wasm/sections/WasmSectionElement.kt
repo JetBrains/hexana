@@ -32,33 +32,33 @@ class WasmSectionElement(sectionSize: Int, sectionOffset: Int, contentSize: Int,
             val elementType = getULEB128().toInt()
             when (elementType) {
                 0 -> {
-                    val opcodes = parseOpCodes()
+                    val opcodes = parseOpCodes(instructionReadingLimit())
                     val funcidxs = consumeFuncidxs()
                     elements.add(FuncIdxWasmElementSegment.ActiveDefault(offset, sizeFromOffset(offset), opcodes, funcidxs))
                 }
 
                 1 -> {
-                    val rt = get()
+                    val elementKind = get().toUByte()
                     val funcindxs = consumeFuncidxs()
-                    elements.add(FuncIdxWasmElementSegment.Passive(offset, sizeFromOffset(offset), funcindxs))
+                    elements.add(FuncIdxWasmElementSegment.Passive( offset, sizeFromOffset(offset), elementKind,funcindxs))
                 }
 
                 2 -> {
                     val tableindx = getULEB128().toUInt()
-                    val exprOffset = parseOpCodes()
-                    val rt = get()
+                    val exprOffset = parseOpCodes(instructionReadingLimit())
+                    val elementKind = get().toUByte()
                     val funcindxs = consumeFuncidxs()
-                    elements.add(FuncIdxWasmElementSegment.ActiveExplicit(offset, sizeFromOffset(offset), tableindx, exprOffset, funcindxs))
+                    elements.add(FuncIdxWasmElementSegment.ActiveExplicit(offset, sizeFromOffset(offset), elementKind,tableindx, exprOffset, funcindxs))
                 }
 
                 3 -> {
-                    val rt = get()
+                    val elementKind = get().toUByte()
                     val funcindxs = consumeFuncidxs()
-                    elements.add(FuncIdxWasmElementSegment.Declare(offset, sizeFromOffset(offset), funcindxs))
+                    elements.add(FuncIdxWasmElementSegment.Declare(offset, sizeFromOffset(offset), elementKind, funcindxs))
                 }
 
                 4 -> {
-                    val opcodes = parseOpCodes()
+                    val opcodes = parseOpCodes(instructionReadingLimit())
                     val exprList = consumeExpressionList()
                     elements.add(ExprWasmElementSegment.ActiveDefault(offset, sizeFromOffset(offset), opcodes, exprList))
                 }
@@ -70,7 +70,7 @@ class WasmSectionElement(sectionSize: Int, sectionOffset: Int, contentSize: Int,
 
                 6 -> {
                     val tableindx = getULEB128().toUInt()
-                    val expression = parseOpCodes()
+                    val expression = parseOpCodes(instructionReadingLimit())
                     val exprList = consumeExpressionList()
                     elements.add(ExprWasmElementSegment.ActiveExplicit(offset, sizeFromOffset(offset), tableindx, expression, exprList))
                 }
@@ -86,9 +86,11 @@ class WasmSectionElement(sectionSize: Int, sectionOffset: Int, contentSize: Int,
 
     private fun CommonByteBuffer.consumeExpressionList(): MutableList<List<OpCode>> {
         val exprList = mutableListOf<List<OpCode>>()
-        consumeArray { exprList.add(parseOpCodes()) }
+        consumeArray { exprList.add(parseOpCodes(instructionReadingLimit())) }
         return exprList
     }
+
+    private fun instructionReadingLimit(): Int = this@WasmSectionElement.sectionOffset + this@WasmSectionElement.sectionSize
 
     private fun CommonByteBuffer.consumeFuncidxs(): List<UInt> {
         val funcidxs = mutableListOf<UInt>()
@@ -115,12 +117,14 @@ sealed class FuncIdxWasmElementSegment : WasmElementSegment {
     data class Passive(
         override val offset: Int,
         override val size: Int,
+        val elementKind: UByte,
         override val funcs: List<UInt>
     ) : FuncIdxWasmElementSegment()
 
     data class ActiveExplicit(
         override val offset: Int,
         override val size: Int,
+        val elementKind: UByte,
         val tableIndex: UInt,
         val offsetExpr: List<OpCode>,
         override val funcs: List<UInt>
@@ -129,6 +133,7 @@ sealed class FuncIdxWasmElementSegment : WasmElementSegment {
     data class Declare(
         override val offset: Int,
         override val size: Int,
+        val elementKind: UByte,
         override val funcs: List<UInt>
     ) : FuncIdxWasmElementSegment()
 }
