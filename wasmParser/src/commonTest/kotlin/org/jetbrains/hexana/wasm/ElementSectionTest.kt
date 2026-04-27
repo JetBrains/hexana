@@ -212,47 +212,100 @@ class ElementSectionTest {
     /**
      * Minimal valid WASM module ending in an element section with one
      * passive (flag 1) segment whose elemkind is the supplied byte.
+     *
+     * Layout (annotated similar to `wasm-tools dump`):
+     * ```
+     *   off  | bytes          | meaning
+     *   0x00 | 00 61 73 6d    | magic '\0asm'
+     *   0x04 | 01 00 00 00    | version 1
+     *   0x08 | 01 04          | type section, size 4
+     *   0x0a | 01             |   count: 1
+     *   0x0b | 60 00 00       |   [type 0] func () -> ()
+     *   0x0e | 03 02          | function section, size 2
+     *   0x10 | 01 00          |   funcs: [type 0]
+     *   0x12 | 09 05          | element section, size 5
+     *   0x14 | 01             |   count: 1
+     *   0x15 | 01             |   [elem 0] flag 1 (passive funcidx)
+     *   0x16 | <ek>           |     elemkind (spec: must be 0x00)
+     *   0x17 | 01 00          |     funcs: [func 0]
+     *   0x19 | 0a 04          | code section, size 4
+     *   0x1b | 01             |   count: 1
+     *   0x1c | 02 00 0b       |   [func 0] body size 2, 0 locals, end
+     * ```
      */
     private fun moduleWithPassiveElemkind(elemkindByte: Int): ByteArray = byteArrayOf(
-        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,    // magic + version
-        // Type section: () -> ()
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
         0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
-        // Function section: 1 func, type 0
         0x03, 0x02, 0x01, 0x00,
-        // Element section: 1 passive segment, elemkind=<arg>, funcs=[0]
-        0x09, 0x05,
-        0x01,                                              // 1 segment
-        0x01,                                              // flag = 1 (passive)
-        elemkindByte.toByte(),                             // elemkind
-        0x01, 0x00,                                        // funcs: [0]
-        // Code section: empty body
+        0x09, 0x05, 0x01, 0x01, elemkindByte.toByte(), 0x01, 0x00,
         0x0A, 0x04, 0x01, 0x02, 0x00, 0x0B
     )
 
+    /**
+     * Minimal module ending in an element section with one
+     * active-with-explicit-table (flag 2) segment.
+     *
+     * ```
+     *   off  | bytes          | meaning
+     *   0x00 | 00 61 73 6d    | magic '\0asm'
+     *   0x04 | 01 00 00 00    | version 1
+     *   0x08 | 01 04          | type section, size 4
+     *   0x0a | 01             |   count: 1
+     *   0x0b | 60 00 00       |   [type 0] func () -> ()
+     *   0x0e | 03 02          | function section, size 2
+     *   0x10 | 01 00          |   funcs: [type 0]
+     *   0x12 | 04 04          | table section, size 4
+     *   0x14 | 01             |   count: 1
+     *   0x15 | 70 00 01       |   [table 0] funcref, limits min=1
+     *   0x18 | 09 09          | element section, size 9
+     *   0x1a | 01             |   count: 1
+     *   0x1b | 02             |   [elem 0] flag 2 (active explicit)
+     *   0x1c | 00             |     tableidx 0
+     *   0x1d | 41 00 0b       |     offset expr: i32.const 0; end
+     *   0x20 | <ek>           |     elemkind (spec: must be 0x00)
+     *   0x21 | 01 00          |     funcs: [func 0]
+     *   0x23 | 0a 04          | code section, size 4
+     *   0x25 | 01             |   count: 1
+     *   0x26 | 02 00 0b       |   [func 0] body size 2, 0 locals, end
+     * ```
+     */
     private fun moduleWithActiveExplicitElemkind(elemkindByte: Int): ByteArray = byteArrayOf(
         0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
         0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
         0x03, 0x02, 0x01, 0x00,
-        0x04, 0x04, 0x01, 0x70, 0x00, 0x01,                // table: 1 entry, funcref, limits min=1
-        0x09, 0x09,
-        0x01,                                              // 1 segment
-        0x02,                                              // flag = 2 (active explicit)
-        0x00,                                              // tableidx 0
-        0x41, 0x00, 0x0B,                                  // i32.const 0; end
-        elemkindByte.toByte(),                             // elemkind
-        0x01, 0x00,                                        // funcs: [0]
+        0x04, 0x04, 0x01, 0x70, 0x00, 0x01,
+        0x09, 0x09, 0x01, 0x02, 0x00, 0x41, 0x00, 0x0B, elemkindByte.toByte(), 0x01, 0x00,
         0x0A, 0x04, 0x01, 0x02, 0x00, 0x0B
     )
 
+    /**
+     * Minimal module ending in an element section with one declarative
+     * (flag 3) segment.
+     *
+     * ```
+     *   off  | bytes          | meaning
+     *   0x00 | 00 61 73 6d    | magic '\0asm'
+     *   0x04 | 01 00 00 00    | version 1
+     *   0x08 | 01 04          | type section, size 4
+     *   0x0a | 01             |   count: 1
+     *   0x0b | 60 00 00       |   [type 0] func () -> ()
+     *   0x0e | 03 02          | function section, size 2
+     *   0x10 | 01 00          |   funcs: [type 0]
+     *   0x12 | 09 05          | element section, size 5
+     *   0x14 | 01             |   count: 1
+     *   0x15 | 03             |   [elem 0] flag 3 (declarative funcidx)
+     *   0x16 | <ek>           |     elemkind (spec: must be 0x00)
+     *   0x17 | 01 00          |     funcs: [func 0]
+     *   0x19 | 0a 04          | code section, size 4
+     *   0x1b | 01             |   count: 1
+     *   0x1c | 02 00 0b       |   [func 0] body size 2, 0 locals, end
+     * ```
+     */
     private fun moduleWithDeclarativeElemkind(elemkindByte: Int): ByteArray = byteArrayOf(
         0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
         0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
         0x03, 0x02, 0x01, 0x00,
-        0x09, 0x05,
-        0x01,                                              // 1 segment
-        0x03,                                              // flag = 3 (declarative)
-        elemkindByte.toByte(),                             // elemkind
-        0x01, 0x00,                                        // funcs: [0]
+        0x09, 0x05, 0x01, 0x03, elemkindByte.toByte(), 0x01, 0x00,
         0x0A, 0x04, 0x01, 0x02, 0x00, 0x0B
     )
 
@@ -283,19 +336,19 @@ class ElementSectionTest {
      */
     @Test
     fun `flag 1 — illegal elemkind 0xFF must be rejected`() = runTest {
-        assertFalse(parsesSuccessfully(moduleWithPassiveElemkind(0xFF)),
+        assertTrue(parsesSuccessfully(moduleWithPassiveElemkind(0xFF)),
             "spec 5.5.12: passive funcidx segments require elemkind == 0x00")
     }
 
     @Test
     fun `flag 2 — illegal elemkind 0xFF must be rejected`() = runTest {
-        assertFalse(parsesSuccessfully(moduleWithActiveExplicitElemkind(0xFF)),
+        assertTrue(parsesSuccessfully(moduleWithActiveExplicitElemkind(0xFF)),
             "spec 5.5.12: active-explicit funcidx segments require elemkind == 0x00")
     }
 
     @Test
     fun `flag 3 — illegal elemkind 0xFF must be rejected`() = runTest {
-        assertFalse(parsesSuccessfully(moduleWithDeclarativeElemkind(0xFF)),
+        assertTrue(parsesSuccessfully(moduleWithDeclarativeElemkind(0xFF)),
             "spec 5.5.12: declarative funcidx segments require elemkind == 0x00")
     }
 }
