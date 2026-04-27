@@ -21,6 +21,16 @@ import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 import org.jetbrains.hexana.wasm.sections.*
 
 sealed interface BinaryProvider {
+    /**
+     * Returns a buffer view with an independent position cursor on every access.
+     * The underlying bytes are shared; the cursor is private to the caller, so concurrent
+     * readers (e.g. UI panels triggered on `Dispatchers.IO`) cannot clobber each other.
+     *
+     * Implementations MUST return `sharedBytes.duplicate()`, never the same instance twice.
+     * Callers that need cursor continuity across multiple reads MUST cache the result into
+     * a local: `val buf = bytes; buf.position(...); buf.get(...)` — `bytes; bytes` would
+     * give two different cursors.
+     */
     val bytes: CommonByteBuffer
 }
 
@@ -51,8 +61,13 @@ sealed class BinaryProviderType {
     object Generic : BinaryProviderType()
 }
 
-class GenericBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProvider
-open class WasmComponentBinaryProvider(override val bytes: CommonByteBuffer): BinaryProvider {
+class GenericBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvider {
+    override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+}
+
+open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer): BinaryProvider {
+    override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+
     val wasmModule = when (val parseResult = WasmParser().parse(bytes)) {
         is WasmParseSuccess -> parseResult.wasmModule as? WasmComponent
         else -> null
@@ -111,10 +126,13 @@ open class WasmComponentBinaryProvider(override val bytes: CommonByteBuffer): Bi
 
     val nestedComponents: List<NestedComponentData> by lazy {
         val componentSection = wasmModule?.componentSection ?: return@lazy emptyList()
-        val component = with(componentSection) { bytes.parseNestedComponent() } ?: return@lazy emptyList()
-        bytes.position(componentSection.contentOffset)
+        // Single duplicate for the whole sequence: parseNestedComponent + position + get
+        // must share one cursor.
+        val buf = bytes
+        val component = with(componentSection) { buf.parseNestedComponent() } ?: return@lazy emptyList()
+        buf.position(componentSection.contentOffset)
         val nestedBytes = ByteArray(componentSection.contentSize)
-        bytes.get(nestedBytes, 0, componentSection.contentSize)
+        buf.get(nestedBytes, 0, componentSection.contentSize)
         listOf(NestedComponentData(component, nestedBytes.toCommonByteBuffer()))
     }
 
@@ -170,7 +188,9 @@ fun buildComponentTypeIndex(sections: List<WasmSection>, buffer: CommonByteBuffe
     return types
 }
 
-open class WasmBinaryProvider(override val bytes: CommonByteBuffer) : BinaryProvider {
+open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvider {
+    override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+
     private val parseResult = WasmParser().parse(bytes)
 
     val parsedModule = when (parseResult) {
