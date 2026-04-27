@@ -521,6 +521,351 @@ class MultibyteInstructionTest {
     }
 
     // ========================================================================
+    // Inline WAT — GC struct extras (struct_new_default, struct_set, packed reads)
+    // ========================================================================
+
+    @Test
+    fun `inline — struct_new_default and struct_set`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}point (struct (field ${'$'}x (mut i32))))
+              (func (export "f") (param i32)
+                struct.new_default ${'$'}point
+                local.get 0
+                struct.set ${'$'}point ${'$'}x
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val newDefault = ops.filterIsInstance<OpCodes.GC.StructNewDefault>().single()
+        assertEquals(0u, newDefault.value, "type index = 0 (\$point)")
+        val set = ops.filterIsInstance<OpCodes.GC.StructSet>().single()
+        assertEquals(0u, set.typeIndex)
+        assertEquals(0u, set.fieldIndex, "\$x is field 0")
+    }
+
+    @Test
+    fun `inline — struct_get_s and struct_get_u on packed fields`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}rec (struct (field ${'$'}b (mut i8)) (field ${'$'}s (mut i16))))
+              (func (export "f") (param (ref null ${'$'}rec)) (result i32)
+                local.get 0
+                struct.get_s ${'$'}rec ${'$'}b
+                local.get 0
+                struct.get_u ${'$'}rec ${'$'}s
+                i32.add
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val getS = ops.filterIsInstance<OpCodes.GC.StructGetSignExtended>().single()
+        assertEquals(0u, getS.typeIndex)
+        assertEquals(0u, getS.fieldIndex, "\$b is field 0")
+        val getU = ops.filterIsInstance<OpCodes.GC.StructGetZeroExtended>().single()
+        assertEquals(0u, getU.typeIndex)
+        assertEquals(1u, getU.fieldIndex, "\$s is field 1")
+    }
+
+    // ========================================================================
+    // Inline WAT — GC array extras (new/get/set/fill/copy/init from data & elem)
+    // ========================================================================
+
+    @Test
+    fun `inline — array_new`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}arr (array (mut i32)))
+              (func (export "f") (param i32 i32) (result (ref ${'$'}arr))
+                local.get 0
+                local.get 1
+                array.new ${'$'}arr
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val arrayNew = ops.filterIsInstance<OpCodes.GC.ArrayNew>().single()
+        assertEquals(0u, arrayNew.value, "type index = 0 (\$arr)")
+    }
+
+    @Test
+    fun `inline — array_new_default`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}arr (array (mut i32)))
+              (func (export "f") (param i32) (result (ref ${'$'}arr))
+                local.get 0
+                array.new_default ${'$'}arr
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val arrayNewDefault = ops.filterIsInstance<OpCodes.GC.ArrayNewDefault>().single()
+        assertEquals(0u, arrayNewDefault.value, "type index = 0 (\$arr)")
+    }
+
+    @Test
+    fun `inline — array_get and array_set`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}arr (array (mut i32)))
+              (func (export "f") (param (ref null ${'$'}arr) i32 i32) (result i32)
+                local.get 0
+                local.get 1
+                local.get 2
+                array.set ${'$'}arr
+                local.get 0
+                local.get 1
+                array.get ${'$'}arr
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val set = ops.filterIsInstance<OpCodes.GC.ArraySet>().single()
+        assertEquals(0u, set.value, "type index = 0")
+        val get = ops.filterIsInstance<OpCodes.GC.ArrayGet>().single()
+        assertEquals(0u, get.value, "type index = 0")
+    }
+
+    @Test
+    fun `inline — array_get_s and array_get_u on packed bytes`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}bytes (array (mut i8)))
+              (func (export "f") (param (ref null ${'$'}bytes) i32) (result i32)
+                local.get 0
+                local.get 1
+                array.get_s ${'$'}bytes
+                local.get 0
+                local.get 1
+                array.get_u ${'$'}bytes
+                i32.add
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val getS = ops.filterIsInstance<OpCodes.GC.ArrayGetSigned>().single()
+        assertEquals(0u, getS.value)
+        val getU = ops.filterIsInstance<OpCodes.GC.ArrayGetUnsigned>().single()
+        assertEquals(0u, getU.value)
+    }
+
+    @Test
+    fun `inline — array_fill`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}arr (array (mut i32)))
+              (func (export "f") (param (ref ${'$'}arr) i32 i32 i32)
+                local.get 0
+                local.get 1
+                local.get 2
+                local.get 3
+                array.fill ${'$'}arr
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val fill = ops.filterIsInstance<OpCodes.GC.ArrayFill>().single()
+        assertEquals(0u, fill.value, "type index = 0")
+    }
+
+    @Test
+    fun `inline — array_copy`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}arr (array (mut i32)))
+              (func (export "f") (param (ref ${'$'}arr) i32 (ref ${'$'}arr) i32 i32)
+                local.get 0
+                local.get 1
+                local.get 2
+                local.get 3
+                local.get 4
+                array.copy ${'$'}arr ${'$'}arr
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val copy = ops.filterIsInstance<OpCodes.GC.ArrayCopy>().single()
+        assertEquals(0u, copy.typeIndexDst, "dst array type index = 0")
+        assertEquals(0u, copy.typeIndexSrc, "src array type index = 0")
+    }
+
+    @Test
+    fun `inline — array_new_data`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}arr (array (mut i32)))
+              (data ${'$'}d "\01\02\03\04")
+              (func (export "f") (result (ref ${'$'}arr))
+                i32.const 0
+                i32.const 1
+                array.new_data ${'$'}arr ${'$'}d
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val newData = ops.filterIsInstance<OpCodes.GC.ArrayNewData>().single()
+        assertEquals(0u, newData.typeIndexDst, "array type index = 0 (\$arr)")
+        assertEquals(0u, newData.typeIndexSrc, "data segment index = 0 (\$d)")
+    }
+
+    @Test
+    fun `inline — array_init_data`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}arr (array (mut i32)))
+              (data ${'$'}d "\01\02\03\04")
+              (func (export "f") (param (ref ${'$'}arr) i32 i32 i32)
+                local.get 0
+                local.get 1
+                local.get 2
+                local.get 3
+                array.init_data ${'$'}arr ${'$'}d
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val init = ops.filterIsInstance<OpCodes.GC.ArrayInitData>().single()
+        assertEquals(0u, init.value, "array type index = 0")
+        assertEquals(0u, init.dataIndex, "data segment index = 0")
+    }
+
+    @Test
+    fun `inline — array_new_elem`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}farr (array (mut funcref)))
+              (elem ${'$'}e func ${'$'}f0)
+              (func (export "f") (result (ref ${'$'}farr))
+                i32.const 0
+                i32.const 1
+                array.new_elem ${'$'}farr ${'$'}e
+              )
+              (func ${'$'}f0 (nop))
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val newElem = ops.filterIsInstance<OpCodes.GC.ArrayNewElement>().single()
+        assertEquals(0u, newElem.value, "array type index = 0")
+        assertEquals(0u, newElem.elemIndex, "elem segment index = 0")
+    }
+
+    @Test
+    fun `inline — array_init_elem`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}farr (array (mut funcref)))
+              (elem ${'$'}e func ${'$'}f0)
+              (func (export "f") (param (ref ${'$'}farr) i32 i32 i32)
+                local.get 0
+                local.get 1
+                local.get 2
+                local.get 3
+                array.init_elem ${'$'}farr ${'$'}e
+              )
+              (func ${'$'}f0 (nop))
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val init = ops.filterIsInstance<OpCodes.GC.ArrayInitElem>().single()
+        assertEquals(0u, init.value, "array type index = 0")
+        assertEquals(0u, init.elemIndex, "elem segment index = 0")
+    }
+
+    // ========================================================================
+    // Inline WAT — GC ref.test / ref.cast (heaptype carries target type index)
+    // ========================================================================
+
+    @Test
+    fun `inline — ref_test non-nullable carries target type index`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}base (struct (field i32)))
+              (type ${'$'}derived (sub ${'$'}base (struct (field i32) (field i32))))
+              (func (export "f") (param (ref null ${'$'}base)) (result i32)
+                local.get 0
+                ref.test (ref ${'$'}derived)
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val refTest = ops.filterIsInstance<OpCodes.GC.RefTest>().single()
+        assertEquals(1, refTest.value.type, "target heaptype = type 1 (\$derived)")
+    }
+
+    @Test
+    fun `inline — ref_test nullable carries target type index`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}base (struct (field i32)))
+              (type ${'$'}derived (sub ${'$'}base (struct (field i32) (field i32))))
+              (func (export "f") (param (ref null ${'$'}base)) (result i32)
+                local.get 0
+                ref.test (ref null ${'$'}derived)
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val refTestNull = ops.filterIsInstance<OpCodes.GC.RefTestNullable>().single()
+        assertEquals(1, refTestNull.value.type, "target heaptype = type 1 (\$derived)")
+    }
+
+    @Test
+    fun `inline — ref_cast non-nullable carries target type index`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}base (struct (field i32)))
+              (type ${'$'}derived (sub ${'$'}base (struct (field i32) (field i32))))
+              (func (export "f") (param (ref null ${'$'}base)) (result (ref ${'$'}derived))
+                local.get 0
+                ref.cast (ref ${'$'}derived)
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val refCast = ops.filterIsInstance<OpCodes.GC.RefCast>().single()
+        assertEquals(1, refCast.value.type, "target heaptype = type 1 (\$derived)")
+    }
+
+    @Test
+    fun `inline — ref_cast nullable carries target type index`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (type ${'$'}base (struct (field i32)))
+              (type ${'$'}derived (sub ${'$'}base (struct (field i32) (field i32))))
+              (func (export "f") (param (ref null ${'$'}base)) (result (ref null ${'$'}derived))
+                local.get 0
+                ref.cast (ref null ${'$'}derived)
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        val refCastNull = ops.filterIsInstance<OpCodes.GC.RefCastNullable>().single()
+        assertEquals(1, refCastNull.value.type, "target heaptype = type 1 (\$derived)")
+    }
+
+    // ========================================================================
+    // Inline WAT — GC i31 (unsigned unbox)
+    // ========================================================================
+
+    @Test
+    fun `inline — i31_get_u unboxes unsigned`() = runTest {
+        val ops = parseInlineOpcodes("""
+            (module
+              (func (export "f") (param i32) (result i32)
+                local.get 0
+                ref.i31
+                i31.get_u
+              )
+            )
+        """.trimIndent())
+        assertTrue(ops.filterIsInstance<UnparsedOpCode>().isEmpty(), "no UnparsedOpCode")
+        assertIs<OpCodes.Local.Get>(ops[0])
+        assertIs<OpCodes.GC.RefI31>(ops[1])
+        assertIs<OpCodes.GC.I31GetU>(ops[2])
+    }
+
+    // ========================================================================
     // No UnparsedOpCode regression
     // ========================================================================
 
