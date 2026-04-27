@@ -35,7 +35,7 @@ fun CommonByteBuffer.consumeGCOpCode(offset: Int, opcode: UInt): OpCode {
         0x1Cu -> OpCodes.GC.RefI31
         0x1Du -> OpCodes.GC.I31GetS
         0x1Eu -> OpCodes.GC.I31GetU
-        else -> throw UnsupportedOpsException(opcode, position())
+        else -> throw UnsupportedOpsException(opcode, offset)
     }
 }
 

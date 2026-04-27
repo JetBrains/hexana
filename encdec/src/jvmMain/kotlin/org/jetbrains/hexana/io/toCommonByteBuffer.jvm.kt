@@ -67,6 +67,8 @@ private class JvmByteBuffer(val buffer: ByteBuffer) : CommonByteBuffer {
     override fun slice(range: IntRange): CommonByteBuffer {
         return buffer.slice(range.first, range.last).toCommonByteBuffer()
     }
+
+    override fun duplicate(): CommonByteBuffer = JvmByteBuffer(buffer.duplicate())
 }
 
 fun CommonByteBuffer.toByteBuffer(): ByteBuffer = (this as JvmByteBuffer).buffer

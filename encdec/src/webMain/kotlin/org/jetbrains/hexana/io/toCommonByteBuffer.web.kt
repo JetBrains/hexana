@@ -90,4 +90,6 @@ private class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer 
     override fun slice(range: IntRange): CommonByteBuffer {
         return WebByteBuffer(buffer.slice(range.first, range.last))
     }
+
+    override fun duplicate(): CommonByteBuffer = WebByteBuffer(buffer).also { it.cursorPosition = cursorPosition }
 }

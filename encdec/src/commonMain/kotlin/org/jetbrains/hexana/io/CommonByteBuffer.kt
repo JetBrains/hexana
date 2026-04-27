@@ -16,6 +16,18 @@ interface CommonByteBuffer {
     fun limit(): Int
     fun slice(range: IntRange): CommonByteBuffer
 
+    /**
+     * Returns a new [CommonByteBuffer] that shares the underlying bytes with this one,
+     * but has an independent position cursor in the **same coordinate frame** (absolute
+     * file offsets are preserved). Use this whenever a buffer is handed off to a code
+     * path that may run concurrently with other readers — every reader needs its own
+     * cursor.
+     *
+     * Unlike [slice], this does NOT translate offsets: `duplicate().position(0x1234)`
+     * lands on the same byte as `original.position(0x1234)`.
+     */
+    fun duplicate(): CommonByteBuffer
+
     val lastIndex: Int
         get() = limit() - 1
 
