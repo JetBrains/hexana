@@ -102,8 +102,10 @@ Existing IDE run configurations currently include:
 
 - `idea-plugin/src/main/gen/**` holds generated output that is checked in. Do not hand-edit it as the primary source of truth.
   - WIT PSI/parser: grammar source `idea-plugin/src/main/java/org/jetbrains/hexana/wit/psi/wit.bnf`; no checked-in regen task.
-  - `HexanaToolset.kt`: DSL source `mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt`;
-    regenerate with `./gradlew :idea-plugin:generateHexanaToolset`.
+  - `HexanaToolset.kt`: DSL source `mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/`;
+    `HexanaTools.kt` only composes the catalog order, while feature files such as `FunctionTools.kt` and `DataTools.kt`
+    own their related inputs, result schema mirrors, and tool definitions.
+    Regenerate with `./gradlew :idea-plugin:generateHexanaToolset`.
 - `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from the same DSL; regenerate with
   `./gradlew :mcp:server:generateHexanaToolDispatcher`. If you change a tool's name, description, input shape, or output
   shape, edit the DSL and rerun both generators in the same change.

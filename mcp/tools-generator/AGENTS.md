@@ -11,10 +11,12 @@ DSL and emit checked-in Kotlin files into the two consumers:
 ## Start Here
 
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/Dsl.kt` — `class_`/`tools` builders, `FieldType` hierarchy, `ToolSpec`.
-- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt` — the DSL instance: every tool's name, summary,
-  guidance, input class, output class, and handler FQN.
-- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/Main.kt` — server dispatcher generator.
-- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/ToolsetMain.kt` — idea-plugin toolset generator.
+- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/CommonInputs.kt` — Wasm input and tiny shared input helpers.
+- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/*Tools.kt` — feature-owned specs and definitions. Keep each tool's
+  input specs, result schema mirrors, descriptions, and handler FQN in the same feature file when possible.
+- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt` — catalog composition and canonical tool ordering.
+- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/StandaloneToolsetMain.kt` — server dispatcher generator.
+- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/IdeaToolsetMain.kt` — idea-plugin toolset generator.
 
 ## Ownership Boundary
 
@@ -44,11 +46,12 @@ reviewed with the DSL change.
 
 1. Add the output data class to `mcp/core/src/main/kotlin/org/jetbrains/hexana/mcp/model/**` and the handler function to
    `mcp/core/src/main/kotlin/org/jetbrains/hexana/mcp/query/**` (hand-written, not generated).
-2. Mirror the output class shape in `HexanaTools.kt` with `class_(...)` so the generator can emit an MCP output schema.
-3. If the input needs a new parameter pattern, extend the `addParameters`/`addBody` switches in `ToolsetMain.kt` and the
-   matching schema/dispatch code in `Main.kt`. The five existing patterns cover path-only, offset/limit, indices,
-   closed range, and half-open segment range with filters.
-4. Also add a `RESULT_PACKAGE` entry in `ToolsetMain.kt` mapping the new result class name to its `mcp/core/model/`
+2. Mirror the output class shape with `class_(...)` in the feature file that owns the tool, so the generator can emit an
+   MCP output schema. Add cross-feature reusable input pieces to `CommonInputs.kt`.
+3. If the input needs a new parameter pattern, extend the `addParameters`/`addBody` switches in `IdeaToolsetMain.kt` and
+   the matching schema/dispatch code in `StandaloneToolsetMain.kt`. The five existing patterns cover path-only,
+   offset/limit, indices, closed range, and half-open segment range with filters.
+4. Also add a `RESULT_PACKAGE` entry in `IdeaToolsetMain.kt` mapping the new result class name to its `mcp/core/model/`
    package — this is what the generator uses to emit the correct import.
 5. Run both generators and both sets of tests: `./gradlew :mcp:tools-generator:test :idea-plugin:test :mcp:server:test
    :mcp:server:integrationTest`.

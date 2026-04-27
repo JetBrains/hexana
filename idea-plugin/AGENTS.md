@@ -12,8 +12,8 @@ Read these files before making structural changes:
 - `src/main/kotlin/org/jetbrains/hexana/HexanaFileEditorProvider.kt`
 - `src/main/kotlin/org/jetbrains/hexana/HexanaFileEditor.kt`
 - `src/main/kotlin/org/jetbrains/hexana/HexanaService.kt`
-- `src/main/gen/org/jetbrains/hexana/mcp/HexanaToolset.kt` (generated — do not hand-edit; DSL source is
-  `../mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt`)
+- `src/main/gen/org/jetbrains/hexana/mcp/HexanaToolset.kt` (generated — do not hand-edit; DSL sources live under
+  `../mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/`)
 - `src/main/kotlin/org/jetbrains/hexana/mcp/ToolsetHelpers.kt` (hand-written IntelliJ-side helpers the generated toolset calls)
 - `../mcp/core/src/main/kotlin/org/jetbrains/hexana/mcp/query`
 
@@ -117,8 +117,8 @@ This module compiles sources from three locations:
 
 When adding or changing an MCP tool:
 
-- Edit the DSL in `mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt`; both the plugin
-  toolset and the standalone-server dispatcher are generated from it.
+- Edit the DSL under `mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/`; both the plugin toolset and
+  the standalone-server dispatcher are generated from it.
 - Put the real decode/query logic in the extracted `mcp/core` module, not in the descriptor body.
 - Add or update a result model under the extracted `mcp/core` model package when the response shape is non-trivial.
 - Prefer typed structured content over hand-built strings.

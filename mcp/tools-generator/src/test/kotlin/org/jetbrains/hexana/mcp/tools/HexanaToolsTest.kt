@@ -37,6 +37,32 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `registry preserves canonical generation order`() {
+        assertEquals(
+            listOf(
+                "summarize_module",
+                "list_imports",
+                "list_exports",
+                "list_globals",
+                "list_types",
+                "list_memory",
+                "list_element_segments",
+                "list_functions",
+                "functions_for_indices",
+                "get_globals_for_indices",
+                "get_memory_for_indices",
+                "get_types_for_indices",
+                "get_locals_for_functions",
+                "get_instructions_for_functions",
+                "list_exported_functions",
+                "list_data",
+                "list_data_segments",
+            ),
+            HexanaTools.map { it.name },
+        )
+    }
+
+    @Test
     fun `critical Wasm-analysis tools are always present`() {
         // Guard against accidental removal of the headline tools even as the full registry grows.
         val names = HexanaTools.map { it.name }.toSet()
@@ -106,6 +132,12 @@ class HexanaToolsTest {
     fun `ImportFunctionSignature applies serialName override on ret`() {
         val ret = ImportFunctionSignatureClass.fields.single { it.name == "ret" }
         assertEquals("return", ret.serialName)
+    }
+
+    @Test
+    fun `data payload schema references the core base64 serializer`() {
+        val data = DataEntryResultClass.fields.single { it.name == "data" }
+        assertEquals("org.jetbrains.hexana.mcp.model.data.Base64ByteArraySerializer", data.serializerFqn)
     }
 
     @Test

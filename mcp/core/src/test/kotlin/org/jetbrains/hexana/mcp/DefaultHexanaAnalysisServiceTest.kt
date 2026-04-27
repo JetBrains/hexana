@@ -229,6 +229,48 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun listDataPaginatesWithoutRepeatingCurrentEntry() {
+        val wasm = createWasmFile(
+            "data_pagination.wasm",
+            """
+            (module
+              (memory 1)
+              (data (i32.const 0) "A")
+              (data (i32.const 1) "B"))
+            """.trimIndent()
+        )
+
+        val first = service.listData(WasmInput.FilePath(wasm.toString()), entriesRange = 0..0)
+        val second = service.listData(WasmInput.FilePath(wasm.toString()), entriesRange = 1..1)
+
+        assertEquals(0, first.from)
+        assertEquals(0, first.to)
+        assertEquals(listOf(0), first.returned.map { it.index })
+        assertEquals(1, first.nextOffset)
+        assertEquals(listOf(1), second.returned.map { it.index })
+        assertEquals(null, second.nextOffset)
+    }
+
+    @Test
+    fun listDataReturnsEmptyPayloadForOutOfRangeSlice() {
+        val wasm = createWasmFile(
+            "data_out_of_range.wasm",
+            """
+            (module
+              (memory 1)
+              (data (i32.const 0) "A"))
+            """.trimIndent()
+        )
+
+        val result = service.listData(WasmInput.FilePath(wasm.toString()), entriesRange = 5..5)
+
+        assertEquals(5, result.from)
+        assertEquals(0, result.to)
+        assertTrue(result.returned.isEmpty())
+        assertEquals(null, result.nextOffset)
+    }
+
+    @Test
     fun rejectsMissingFile() {
         val error = assertFailsWith<HexanaAnalysisException> {
             service.summarizeModule(WasmInput.FilePath("/definitely/missing/module.wasm"))

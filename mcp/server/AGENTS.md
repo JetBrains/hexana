@@ -12,8 +12,8 @@ Read these files before making structural changes:
 - `src/main/kotlin/org/jetbrains/hexana/mcp/server/Main.kt`
 - `src/main/kotlin/org/jetbrains/hexana/mcp/server/HexanaMcpServer.kt`
 - `src/main/kotlin/org/jetbrains/hexana/mcp/server/HexanaToolHandlers.kt`
-- `src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` (generated — do not hand-edit; DSL source is
-  `../tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt`)
+- `src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` (generated — do not hand-edit; DSL sources live
+  under `../tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/`)
 - `../core/src/main/kotlin/org/jetbrains/hexana/mcp/HexanaAnalysisService.kt`
 
 ## Ownership Boundary
