@@ -17,6 +17,8 @@ open class WasmSection(
     open fun getRecordRanges(buffer: CommonByteBuffer): List<WasmNamedRange> {
         return emptyList()
     }
+
+    protected fun instructionReadingLimit(): Int = sectionOffset + sectionSize
 }
 
 class WasmSectionUnresolved(

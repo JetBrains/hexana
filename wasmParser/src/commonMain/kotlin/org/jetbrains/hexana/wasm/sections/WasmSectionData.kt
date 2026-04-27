@@ -30,7 +30,7 @@ class WasmSectionData(sectionSize: Int, sectionOffset: Int, contentSize: Int, co
                 val off = position()
                 when (val recordType = getULEB128().toUInt()) {
                     0u -> {
-                        val opCodes = this@scan.parseOpCodes()
+                        val opCodes = this@scan.parseOpCodes(instructionReadingLimit())
                         val data = this@scan.fetchDataArray()
                         add(WasmDataRecordActive(off, sizeFromOffset(off), opCodes, data))
                     }
@@ -40,7 +40,7 @@ class WasmSectionData(sectionSize: Int, sectionOffset: Int, contentSize: Int, co
                     }
                     2u -> {
                         val index = getULEB128().toUInt()
-                        val opCodes = this@scan.parseOpCodes()
+                        val opCodes = this@scan.parseOpCodes(instructionReadingLimit())
                         val data = this@scan.fetchDataArray()
                         add(WasmDataRecordActiveWithMemoryIndex(off, sizeFromOffset(off), index, opCodes, data))
                     }

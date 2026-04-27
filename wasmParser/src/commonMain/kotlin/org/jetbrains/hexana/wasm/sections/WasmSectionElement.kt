@@ -91,8 +91,6 @@ class WasmSectionElement(sectionSize: Int, sectionOffset: Int, contentSize: Int,
         return exprList
     }
 
-    private fun instructionReadingLimit(): Int = this@WasmSectionElement.sectionOffset + this@WasmSectionElement.sectionSize
-
     private fun CommonByteBuffer.consumeFuncidxs(): List<UInt> {
         val funcidxs = mutableListOf<UInt>()
         consumeArray {
