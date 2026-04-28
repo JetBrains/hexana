@@ -235,7 +235,11 @@ class FieldHandle internal constructor(
     }
 
     fun serialName(name: String): FieldHandle = apply {
-        builder.mutate(index) { it.copy(serialName = name) }
+        val serialName = name.trim()
+        builder.mutate(index) {
+            require(serialName.isNotBlank()) { "Field '${it.name}' serialName must not be blank." }
+            it.copy(serialName = serialName)
+        }
     }
 
     fun withSerializer(fqn: String): FieldHandle = apply {

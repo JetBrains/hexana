@@ -220,6 +220,15 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `blank field serial names are rejected`() {
+        assertFailsWith<IllegalArgumentException> {
+            class_("Broken") {
+                int("value").serialName("   ")
+            }
+        }
+    }
+
+    @Test
     fun `class kotlin package must produce a valid FQN`() {
         assertFailsWith<IllegalArgumentException> {
             class_("Broken", kotlinPackage = "not a package") {
