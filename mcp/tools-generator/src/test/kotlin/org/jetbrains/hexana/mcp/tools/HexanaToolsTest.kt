@@ -303,6 +303,21 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `tool with blank summary is rejected`() {
+        assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("broken") {
+                    summary = "   "
+                    input = WasmInputClass
+                    inputPattern = ToolInputPattern.WasmOnly
+                    output = WasmInputClass
+                    handlerFqn = sampleHandler
+                }
+            }
+        }
+    }
+
+    @Test
     fun `tool without input pattern is rejected`() {
         assertFailsWith<IllegalArgumentException> {
             tools {

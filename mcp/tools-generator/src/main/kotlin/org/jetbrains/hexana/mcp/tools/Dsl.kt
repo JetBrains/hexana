@@ -325,6 +325,7 @@ class ToolBuilder internal constructor(private val name: String) {
             "Tool name '$name' must be strict snake_case."
         }
         val resolvedSummary = requireNotNull(summary) { "Tool '$name' is missing `summary`." }
+        require(resolvedSummary.isNotBlank()) { "Tool '$name' summary must not be blank." }
         val resolvedInput = requireNotNull(input) { "Tool '$name' is missing `input = `." }
         val resolvedInputPattern = requireNotNull(inputPattern) { "Tool '$name' is missing `inputPattern = `." }
         val resolvedOutput = requireNotNull(output) { "Tool '$name' is missing `output = `." }
