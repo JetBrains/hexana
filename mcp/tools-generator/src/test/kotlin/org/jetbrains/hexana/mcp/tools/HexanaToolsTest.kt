@@ -197,6 +197,20 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `field names must be lower camel case`() {
+        assertFailsWith<IllegalArgumentException> {
+            class_("Broken") {
+                int("bad_name")
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            class_("Broken") {
+                int("1bad")
+            }
+        }
+    }
+
+    @Test
     fun `blank field descriptions are rejected`() {
         assertFailsWith<IllegalArgumentException> {
             class_("Broken") {

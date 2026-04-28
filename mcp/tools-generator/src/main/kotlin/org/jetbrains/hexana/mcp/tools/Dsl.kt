@@ -191,6 +191,9 @@ class ClassBuilder internal constructor(
         default: Any? = null,
         nullable: Boolean = false,
     ): FieldHandle {
+        require(FIELD_NAME_REGEX.matches(name)) {
+            "Field name '$name' in class '${this.name}' must be lowerCamelCase."
+        }
         require(fields.none { it.name == name }) { "Duplicate field '$name' in class '${this.name}'." }
         fields += FieldSpec(name, type, nullable, default)
         return FieldHandle(this, fields.lastIndex)
@@ -313,6 +316,7 @@ class ToolsBuilder internal constructor() {
 }
 
 private val FQN_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$")
+private val FIELD_NAME_REGEX = Regex("^[a-z][A-Za-z0-9]*$")
 private val TOOL_NAME_REGEX = Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
 
 @HexanaToolsDsl
