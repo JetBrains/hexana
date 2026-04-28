@@ -10,7 +10,9 @@ import org.jetbrains.hexana.mcp.tools.ClassSpec
 import org.jetbrains.hexana.mcp.tools.FieldSpec
 import org.jetbrains.hexana.mcp.tools.FieldType
 import org.jetbrains.hexana.mcp.tools.HexanaTools
+import org.jetbrains.hexana.mcp.tools.ServerInputSchema
 import org.jetbrains.hexana.mcp.tools.ToolSpec
+import org.jetbrains.hexana.mcp.tools.ToolInputPattern
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.system.exitProcess
@@ -65,7 +67,7 @@ private fun buildDispatcherFile(tools: List<ToolSpec>): FileSpec {
 
 private fun renderAddToolCall(spec: ToolSpec): CodeBlock {
     val handlerMethod = spec.name.toCamelCase()
-    val inputSchema = schemaInvocation(spec.input)
+    val inputSchema = schemaInvocation(spec)
     val outputSchema = buildOutputSchema(spec.output)
 
     return CodeBlock.builder()
@@ -162,11 +164,10 @@ private fun emitTypeSchema(type: FieldType, builder: CodeBlock.Builder, indent: 
 }
 
 /**
- * Maps each input ClassSpec's `name` to the corresponding schema helper already
- * shipped with `mcp/server`. A new input shape must either reuse an existing
- * helper name or register a new one here + in `HexanaMcpServer.kt`.
+ * Maps a tool's explicit input pattern to the corresponding schema helper already
+ * shipped with `mcp/server`.
  */
-private fun schemaInvocation(input: ClassSpec): CodeBlock {
+private fun schemaInvocation(spec: ToolSpec): CodeBlock {
     val wasmInput = MemberName(SERVER_PACKAGE, "wasmInputToolSchema")
     val listFunctions = MemberName(SERVER_PACKAGE, "listFunctionsSchema")
     val pathAndIndices = MemberName(SERVER_PACKAGE, "pathAndIndicesSchema")
@@ -174,26 +175,17 @@ private fun schemaInvocation(input: ClassSpec): CodeBlock {
     val listData = MemberName(SERVER_PACKAGE, "listDataSchema")
     val listDataSegments = MemberName(SERVER_PACKAGE, "listDataSegmentsSchema")
 
-    val helper = when (input.name) {
-        "WasmInput" -> wasmInput
-        "ListFunctionsInput" -> listFunctions
-        "FunctionsForIndicesInput",
-        "GetGlobalsForIndicesInput",
-        "GetMemoryForIndicesInput",
-        "GetTypesForIndicesInput",
-        "GetLocalsForFunctionsInput",
-        "GetInstructionsForFunctionsInput" -> pathAndIndices
-        "ListExportedFunctionsInput" -> listExportedFunctions
-        "ListDataInput" -> listData
-        "ListDataSegmentsInput" -> listDataSegments
-        else -> error(
-            "Input class '${input.name}' does not map to a known schema helper. " +
-                "Add a mapping in `schemaInvocation` or register a new helper in mcp/server.",
-        )
+    val helper = when (spec.inputPattern.serverSchema) {
+        ServerInputSchema.WasmInput -> wasmInput
+        ServerInputSchema.ListFunctions -> listFunctions
+        ServerInputSchema.PathAndIndices -> pathAndIndices
+        ServerInputSchema.ListExportedFunctions -> listExportedFunctions
+        ServerInputSchema.ListData -> listData
+        ServerInputSchema.ListDataSegments -> listDataSegments
     }
 
-    return if (helper.simpleName == "pathAndIndicesSchema") {
-        val indicesDescription = input.fields
+    return if (spec.inputPattern == ToolInputPattern.Indices) {
+        val indicesDescription = spec.input.fields
             .single { it.name == "indices" }
             .let { requireNotNull(it.describe) { "pathAndIndicesSchema handler requires a describe() on `indices`." } }
         CodeBlock.of("%M(%S)", helper, indicesDescription)
@@ -211,4 +203,3 @@ private fun String.toCamelCase(): String {
     require(parts.isNotEmpty()) { "tool name `$this` has no non-empty segments" }
     return parts.first() + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
 }
-

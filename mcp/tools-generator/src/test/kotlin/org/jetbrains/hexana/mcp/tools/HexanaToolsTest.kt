@@ -3,7 +3,6 @@ package org.jetbrains.hexana.mcp.tools
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class HexanaToolsTest {
@@ -91,6 +90,21 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `tools expose input invocation patterns explicitly`() {
+        assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "summarize_module" }.inputPattern)
+        assertEquals(ToolInputPattern.FunctionPage, HexanaTools.single { it.name == "list_functions" }.inputPattern)
+        assertEquals(ToolInputPattern.Indices, HexanaTools.single { it.name == "functions_for_indices" }.inputPattern)
+        assertEquals(
+            ToolInputPattern.ClosedRange(
+                parameterName = "entriesRange",
+                rangeSchema = ServerInputSchema.ListExportedFunctions,
+            ),
+            HexanaTools.single { it.name == "list_exported_functions" }.inputPattern,
+        )
+        assertEquals(ToolInputPattern.DataSegments, HexanaTools.single { it.name == "list_data_segments" }.inputPattern)
+    }
+
+    @Test
     fun `wasmInputClass carries a oneOf constraint`() {
         assertEquals(listOf("path", "bytesBase64", "bytes"), WasmInputClass.oneOf)
     }
@@ -162,10 +176,18 @@ class HexanaToolsTest {
         assertFailsWith<IllegalArgumentException> {
             tools {
                 tool("dup") {
-                    summary = "s"; input = WasmInputClass; output = WasmInputClass; handlerFqn = sampleHandler
+                    summary = "s"
+                    input = WasmInputClass
+                    inputPattern = ToolInputPattern.WasmOnly
+                    output = WasmInputClass
+                    handlerFqn = sampleHandler
                 }
                 tool("dup") {
-                    summary = "t"; input = WasmInputClass; output = WasmInputClass; handlerFqn = sampleHandler
+                    summary = "t"
+                    input = WasmInputClass
+                    inputPattern = ToolInputPattern.WasmOnly
+                    output = WasmInputClass
+                    handlerFqn = sampleHandler
                 }
             }
         }
@@ -185,12 +207,42 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `tool without input pattern is rejected`() {
+        assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("broken") {
+                    summary = "s"
+                    input = WasmInputClass
+                    output = WasmInputClass
+                    handlerFqn = sampleHandler
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `input pattern must match input shape`() {
+        assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("broken") {
+                    summary = "s"
+                    input = WasmInputClass
+                    inputPattern = ToolInputPattern.Indices
+                    output = WasmInputClass
+                    handlerFqn = sampleHandler
+                }
+            }
+        }
+    }
+
+    @Test
     fun `tool without output is rejected`() {
         assertFailsWith<IllegalArgumentException> {
             tools {
                 tool("broken") {
                     summary = "s"
                     input = WasmInputClass
+                    inputPattern = ToolInputPattern.WasmOnly
                     handlerFqn = sampleHandler
                 }
             }

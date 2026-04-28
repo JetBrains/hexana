@@ -22,6 +22,7 @@ internal val ElementTools: List<ToolSpec> = tools {
             Covers active, passive, and declarative segments, including function-index and expression-based initializers.
         """
         input = WasmInputClass
+        inputPattern = ToolInputPattern.WasmOnly
         output = ListElementSegmentsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readElementSegments"
     }

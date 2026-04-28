@@ -28,6 +28,7 @@ internal val ModuleTools: List<ToolSpec> = tools {
             After this overview, prefer `list_imports` for import/link analysis, `list_exported_functions` for export analysis, and `get_instructions_for_functions` for body analysis.
         """
         input = WasmInputClass
+        inputPattern = ToolInputPattern.WasmOnly
         output = SummarizeModuleResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readModuleSummary"
     }

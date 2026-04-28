@@ -27,6 +27,7 @@ internal val GlobalTools: List<ToolSpec> = tools {
             Returns each global with its value type, mutability, and normalized initializer expression.
         """
         input = WasmInputClass
+        inputPattern = ToolInputPattern.WasmOnly
         output = ListGlobalsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readGlobals"
     }
@@ -38,6 +39,7 @@ internal val GlobalTools: List<ToolSpec> = tools {
             Use this for targeted analysis when `list_globals` would return more data than needed.
         """
         input = GetGlobalsForIndicesInput
+        inputPattern = ToolInputPattern.Indices
         output = ListGlobalsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readGlobalsByIndices"
     }

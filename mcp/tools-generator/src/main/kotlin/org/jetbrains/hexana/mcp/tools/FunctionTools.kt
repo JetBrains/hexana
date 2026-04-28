@@ -84,6 +84,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
             Use this to map or inspect `funcidx` ranges before targeted body lookup with `get_instructions_for_functions`.
         """
         input = ListFunctionsInput
+        inputPattern = ToolInputPattern.FunctionPage
         output = FunctionsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctions"
     }
@@ -95,6 +96,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
             Use this as a targeted follow-up when you already know the exact `funcidx` values you need.
         """
         input = FunctionsForIndicesInput
+        inputPattern = ToolInputPattern.Indices
         output = FunctionsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionsByIndices"
     }
@@ -106,6 +108,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
             Imported functions return empty local lists because they have no body.
         """
         input = GetLocalsForFunctionsInput
+        inputPattern = ToolInputPattern.Indices
         output = GetLocalsForFunctionsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readLocalsForFunctions"
     }
@@ -119,6 +122,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
             For direct host-call analysis, pair it with `list_imports` or `list_functions` so `call N` can be mapped back to the imported or exported function entry.
         """
         input = GetInstructionsForFunctionsInput
+        inputPattern = ToolInputPattern.Indices
         output = GetInstructionsForFunctionsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readInstructionsForFunctions"
     }

@@ -111,6 +111,10 @@ internal val DataTools: List<ToolSpec> = tools {
             This is the high-volume raw-bytes view; the `data` field is base64-encoded, and `list_data_segments` is usually cheaper when previews and metadata are sufficient.
         """
         input = ListDataInput
+        inputPattern = ToolInputPattern.ClosedRange(
+            parameterName = "entriesRange",
+            rangeSchema = ServerInputSchema.ListData,
+        )
         output = ListDataSectionsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readDataSections"
     }
@@ -122,6 +126,7 @@ internal val DataTools: List<ToolSpec> = tools {
             Prefer this over `list_data` when previews, sizes, and offset context are enough.
         """
         input = ListDataSegmentsInput
+        inputPattern = ToolInputPattern.DataSegments
         output = ListDataSegmentsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readDataSegmentsByRange"
     }

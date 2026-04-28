@@ -32,6 +32,7 @@ internal val MemoryTools: List<ToolSpec> = tools {
             Returns memory indices together with decoded WebAssembly limits.
         """
         input = WasmInputClass
+        inputPattern = ToolInputPattern.WasmOnly
         output = ListMemoryResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readMemory"
     }
@@ -43,6 +44,7 @@ internal val MemoryTools: List<ToolSpec> = tools {
             Useful for multi-memory or wasm64 modules when only a subset matters.
         """
         input = GetMemoryForIndicesInput
+        inputPattern = ToolInputPattern.Indices
         output = ListMemoryResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readMemoryByIndices"
     }

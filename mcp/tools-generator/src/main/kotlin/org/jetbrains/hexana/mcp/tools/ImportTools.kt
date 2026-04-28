@@ -28,6 +28,7 @@ internal val ImportTools: List<ToolSpec> = tools {
             For direct host-call analysis, pair these `funcidx` values with `get_instructions_for_functions` to resolve `call N` back to `module.name` imports.
         """
         input = WasmInputClass
+        inputPattern = ToolInputPattern.WasmOnly
         output = ListImportsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readImportFunctions"
     }

@@ -190,6 +190,7 @@ data class ToolSpec(
     val summary: String,
     val guidance: String?,
     val input: ClassSpec,
+    val inputPattern: ToolInputPattern,
     val output: ClassSpec,
     /**
      * Fully-qualified name of the top-level handler function that backs this tool.
@@ -199,6 +200,29 @@ data class ToolSpec(
      */
     val handlerFqn: String,
 )
+
+enum class ServerInputSchema {
+    WasmInput,
+    ListFunctions,
+    PathAndIndices,
+    ListExportedFunctions,
+    ListData,
+    ListDataSegments,
+}
+
+sealed class ToolInputPattern(
+    val serverSchema: ServerInputSchema,
+) {
+    object WasmOnly : ToolInputPattern(ServerInputSchema.WasmInput)
+    object FunctionPage : ToolInputPattern(ServerInputSchema.ListFunctions)
+    object Indices : ToolInputPattern(ServerInputSchema.PathAndIndices)
+    data class ClosedRange(
+        val parameterName: String,
+        val rangeSchema: ServerInputSchema,
+    ) : ToolInputPattern(rangeSchema)
+
+    object DataSegments : ToolInputPattern(ServerInputSchema.ListDataSegments)
+}
 
 @HexanaToolsDsl
 class ToolsBuilder internal constructor() {
@@ -223,25 +247,53 @@ class ToolBuilder internal constructor(private val name: String) {
     var summary: String? = null
     var guidance: String? = null
     var input: ClassSpec? = null
+    var inputPattern: ToolInputPattern? = null
     var output: ClassSpec? = null
     var handlerFqn: String? = null
 
     internal fun build(): ToolSpec {
         val resolvedSummary = requireNotNull(summary) { "Tool '$name' is missing `summary`." }
         val resolvedInput = requireNotNull(input) { "Tool '$name' is missing `input = `." }
+        val resolvedInputPattern = requireNotNull(inputPattern) { "Tool '$name' is missing `inputPattern = `." }
         val resolvedOutput = requireNotNull(output) { "Tool '$name' is missing `output = `." }
         val resolvedHandler = requireNotNull(handlerFqn) { "Tool '$name' is missing `handlerFqn = `." }
         require(HANDLER_FQN_REGEX.matches(resolvedHandler)) {
             "Tool '$name' handlerFqn must be a fully-qualified function name (`pkg.subpkg.fn`), got `$resolvedHandler`."
         }
+        validateInputPattern(name, resolvedInput, resolvedInputPattern)
         return ToolSpec(
             name = name,
             summary = resolvedSummary.trim(),
             guidance = guidance?.trimIndent()?.trim()?.takeIf { it.isNotEmpty() },
             input = resolvedInput,
+            inputPattern = resolvedInputPattern,
             output = resolvedOutput,
             handlerFqn = resolvedHandler,
         )
+    }
+}
+
+private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: ToolInputPattern) {
+    fun requireField(fieldName: String) {
+        require(input.fields.any { it.name == fieldName }) {
+            "Tool '$toolName' input pattern ${pattern::class.simpleName} requires field `$fieldName` on `${input.name}`."
+        }
+    }
+
+    when (pattern) {
+        ToolInputPattern.WasmOnly -> Unit
+        ToolInputPattern.FunctionPage -> {
+            requireField("offset")
+            requireField("limit")
+        }
+        ToolInputPattern.Indices -> requireField("indices")
+        is ToolInputPattern.ClosedRange -> requireField(pattern.parameterName)
+        ToolInputPattern.DataSegments -> {
+            requireField("segmentRange")
+            requireField("includeExports")
+            requireField("includeGlobals")
+            requireField("minByteLength")
+        }
     }
 }
 

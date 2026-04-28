@@ -33,6 +33,7 @@ internal val TypeTools: List<ToolSpec> = tools {
             Includes function types and GC-related composite types when present.
         """
         input = WasmInputClass
+        inputPattern = ToolInputPattern.WasmOnly
         output = TypesResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readTypes"
     }
@@ -44,6 +45,7 @@ internal val TypeTools: List<ToolSpec> = tools {
             Use this when you need the types referenced by specific functions, globals, or tables.
         """
         input = GetTypesForIndicesInput
+        inputPattern = ToolInputPattern.Indices
         output = TypesResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readTypesByIndices"
     }

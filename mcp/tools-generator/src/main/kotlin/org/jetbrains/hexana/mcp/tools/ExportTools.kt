@@ -57,6 +57,7 @@ internal val ExportTools: List<ToolSpec> = tools {
             If you need function signatures or origins, skip directly to `list_exported_functions`.
         """
         input = WasmInputClass
+        inputPattern = ToolInputPattern.WasmOnly
         output = ListExportsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readExports"
     }
@@ -72,6 +73,10 @@ internal val ExportTools: List<ToolSpec> = tools {
             The signature strings are usually ready to use as-is, so `list_types` is often unnecessary unless you need raw type definitions.
         """
         input = ListExportedFunctionsInput
+        inputPattern = ToolInputPattern.ClosedRange(
+            parameterName = "entriesRange",
+            rangeSchema = ServerInputSchema.ListExportedFunctions,
+        )
         output = ListExportedFunctionsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readExportedFunctions"
     }

@@ -14,6 +14,7 @@ import com.squareup.kotlinpoet.asClassName
 import org.jetbrains.hexana.mcp.tools.ClassSpec
 import org.jetbrains.hexana.mcp.tools.HexanaTools
 import org.jetbrains.hexana.mcp.tools.ToolSpec
+import org.jetbrains.hexana.mcp.tools.ToolInputPattern
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.system.exitProcess
@@ -103,22 +104,17 @@ private fun buildDescription(spec: ToolSpec): String {
 
 private fun addParameters(builder: FunSpec.Builder, spec: ToolSpec) {
     builder.addParameter(pathParameter())
-    when (spec.input.name) {
-        "WasmInput" -> Unit
-        "ListFunctionsInput" -> {
+    when (val pattern = spec.inputPattern) {
+        ToolInputPattern.WasmOnly -> Unit
+        ToolInputPattern.FunctionPage -> {
             builder.addParameter(intWithDefault("offset", 0, fieldDescribe(spec.input, "offset")))
             builder.addParameter(intWithDefault("limit", 200, fieldDescribe(spec.input, "limit")))
         }
-        "FunctionsForIndicesInput",
-        "GetGlobalsForIndicesInput",
-        "GetMemoryForIndicesInput",
-        "GetTypesForIndicesInput",
-        "GetLocalsForFunctionsInput",
-        "GetInstructionsForFunctionsInput" ->
+        ToolInputPattern.Indices ->
             builder.addParameter(intListParam("indices", fieldDescribe(spec.input, "indices")))
-        "ListExportedFunctionsInput", "ListDataInput" ->
-            builder.addParameter(mapParam("entriesRange", fieldDescribe(spec.input, "entriesRange")))
-        "ListDataSegmentsInput" -> {
+        is ToolInputPattern.ClosedRange ->
+            builder.addParameter(mapParam(pattern.parameterName, fieldDescribe(spec.input, pattern.parameterName)))
+        ToolInputPattern.DataSegments -> {
             builder.addParameter(mapParam("segmentRange", fieldDescribe(spec.input, "segmentRange")))
             builder.addParameter(
                 boolWithDefault("includeExports", false, fieldDescribe(spec.input, "includeExports")),
@@ -128,34 +124,35 @@ private fun addParameters(builder: FunSpec.Builder, spec: ToolSpec) {
             )
             builder.addParameter(nullableIntParam("minByteLength", fieldDescribe(spec.input, "minByteLength")))
         }
-        else -> error("Unmapped input class '${spec.input.name}' in toolset generator.")
     }
 }
 
 private fun addBody(builder: FunSpec.Builder, spec: ToolSpec, handlerSimpleName: String) {
     val code = CodeBlock.builder()
     code.addStatement("val file = %M(path)", REQUIRE_WASM_FILE)
-    when (spec.input.name) {
-        "ListExportedFunctionsInput", "ListDataInput" ->
-            code.addStatement("val range = %M(entriesRange, %S)", REQUIRE_CLOSED_RANGE, "entriesRange")
-        "ListDataSegmentsInput" ->
+    when (val pattern = spec.inputPattern) {
+        is ToolInputPattern.ClosedRange ->
+            code.addStatement(
+                "val range = %M(%N, %S)",
+                REQUIRE_CLOSED_RANGE,
+                pattern.parameterName,
+                pattern.parameterName,
+            )
+        ToolInputPattern.DataSegments ->
             code.addStatement("val range = %M(segmentRange)", REQUIRE_HALF_OPEN_RANGE)
+        ToolInputPattern.WasmOnly,
+        ToolInputPattern.FunctionPage,
+        ToolInputPattern.Indices -> Unit
     }
     code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
 
     val queryMember = MemberName(QUERY_PACKAGE, handlerSimpleName)
-    val callArgs: String = when (spec.input.name) {
-        "WasmInput" -> "()"
-        "ListFunctionsInput" -> "(offset, limit)"
-        "FunctionsForIndicesInput",
-        "GetGlobalsForIndicesInput",
-        "GetMemoryForIndicesInput",
-        "GetTypesForIndicesInput",
-        "GetLocalsForFunctionsInput",
-        "GetInstructionsForFunctionsInput" -> "(indices)"
-        "ListExportedFunctionsInput", "ListDataInput" -> "(range)"
-        "ListDataSegmentsInput" -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
-        else -> error("unreachable")
+    val callArgs: String = when (spec.inputPattern) {
+        ToolInputPattern.WasmOnly -> "()"
+        ToolInputPattern.FunctionPage -> "(offset, limit)"
+        ToolInputPattern.Indices -> "(indices)"
+        is ToolInputPattern.ClosedRange -> "(range)"
+        ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
     }
     code.addStatement("return provider.%M$callArgs", queryMember)
     builder.addCode(code.build())
