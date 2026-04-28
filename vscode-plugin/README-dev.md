@@ -176,6 +176,42 @@ cd vscode-plugin
 
    This creates a `.vsix` file you can install via `code --install-extension hexana-wasm-*.vsix`.
 
+## Publishing
+
+The extension can be published to both the [VS Code Marketplace](https://marketplace.visualstudio.com/) and [Open VSX](https://open-vsx.org/) using the provided publish scripts.
+
+### Prerequisites
+
+1. Build the `.vsix` artifact first:
+
+   ```bash
+   cd vscode-plugin
+   ./build-release-package.sh
+   ```
+
+2. Obtain Personal Access Tokens:
+   - **VS Code Marketplace** (`VSCE_PAT`): Create at [Azure DevOps](https://dev.azure.com) under Marketplace → Manage → Personal Access Tokens.
+   - **Open VSX** (`OVSX_PAT`): Create at [Open VSX User Settings](https://open-vsx.org/user-settings/tokens).
+
+### Publish to Both Registries
+
+```bash
+cd vscode-plugin
+VSCE_PAT=<your-vsce-token> OVSX_PAT=<your-ovsx-token> ./publish.sh
+```
+
+### Publish to a Single Registry
+
+```bash
+# VS Code Marketplace only
+VSCE_PAT=<your-vsce-token> PUBLISH_TARGET=vscode ./publish.sh
+
+# Open VSX only
+OVSX_PAT=<your-ovsx-token> PUBLISH_TARGET=openvsx ./publish.sh
+```
+
+On Windows, use `publish.bat` and set environment variables with `set` before running the script.
+
 ## Development
 
 - Run `npm run watch` in `vscode-plugin/` for incremental TypeScript builds.

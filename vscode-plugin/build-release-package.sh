@@ -27,5 +27,9 @@ npm run obfuscate
 echo "== Packaging VSIX =="
 npx @vscode/vsce package
 
+PACKAGE_NAME="$(node -p "require('./package.json').name")"
+PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+VSIX_FILE="${PACKAGE_NAME}-${PACKAGE_VERSION}.vsix"
+
 echo "== Done =="
-echo "Obfuscated VSIX is at: $SCRIPT_DIR/hexana-wasm-0.0.1.vsix"
+echo "Obfuscated VSIX is at: $SCRIPT_DIR/$VSIX_FILE"

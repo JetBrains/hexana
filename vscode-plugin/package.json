@@ -1,6 +1,6 @@
 {
   "name": "hexana-wasm",
-  "displayName": "Hexana WebAssembly",
+  "displayName": "Hexana",
   "description": "WebAssembly binary viewer and analyzer with a Compose for Web custom editor",
   "version": "0.0.1",
   "publisher": "JetBrains",
@@ -67,11 +67,14 @@
     "compile": "tsc -p ./tsconfig.json",
     "watch": "tsc -watch -p ./tsconfig.json",
     "package": "npx @vscode/vsce package",
+    "publish:vscode": "vsce publish --packagePath",
+    "publish:openvsx": "ovsx publish",
     "obfuscate": "javascript-obfuscator out/ --output out/ --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false && javascript-obfuscator extension-lib/build/kotlin-webpack/js/productionExecutable/extension-lib.js --output extension-lib/build/kotlin-webpack/js/productionExecutable/extension-lib.js --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false && javascript-obfuscator webview/build/kotlin-webpack/js/productionExecutable/webview.js --output webview/build/kotlin-webpack/js/productionExecutable/webview.js --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.0.0",
+    "ovsx": "^0.10.0",
     "javascript-obfuscator": "^4.1.1",
     "typescript": "^5.3.0"
   }

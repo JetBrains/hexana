@@ -6,11 +6,13 @@ AGENTS.md
 README-dev.md
 .gitignore
 
-# Build scripts (not needed at runtime)
+# Build and publish scripts (not needed at runtime)
 build-and-run-locally.sh
 build-and-run-locally.bat
 build-release-package.sh
 build-release-package.bat
+publish.sh
+publish.bat
 
 # TypeScript source and config (compiled output is in out/)
 src/**
