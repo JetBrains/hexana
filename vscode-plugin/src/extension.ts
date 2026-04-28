@@ -33,10 +33,83 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     context.subscriptions.push(WasmEditorProvider.register(context));
+
+    // Ensure .wasm files are associated with the Hexana custom editor so that
+    // VS Code does not show the "binary file not displayed" warning.  The
+    // `configurationDefaults` in package.json provides the default, but VS Code
+    // may ignore it on first activation because the custom editor is not yet
+    // registered when the association is evaluated.  Writing the setting
+    // programmatically at activation time guarantees the association is present
+    // for all subsequent file opens.
+    ensureWasmEditorAssociation();
+
+    // If a .wasm file was opened before the extension activated, VS Code may
+    // have shown the binary-file placeholder instead of the custom editor.
+    // Re-open any such tabs with our custom editor now that it is registered.
+    reopenWasmBinaryTabs();
 }
 
 export function deactivate(): void {
     if (extensionLib) {
         extensionLib.shutdownAnalytics();
+    }
+}
+
+/**
+ * Ensures that `workbench.editorAssociations` maps `*.wasm` to the Hexana
+ * custom editor in the user's global settings.  This prevents VS Code from
+ * showing the "binary file not displayed" placeholder for `.wasm` files.
+ *
+ * The function only writes the setting once — it will not overwrite a value
+ * the user has already configured for `*.wasm`.
+ */
+function ensureWasmEditorAssociation(): void {
+    const config = vscode.workspace.getConfiguration("workbench.editor");
+    const inspected = config.inspect<Record<string, string>>("editorAssociations");
+
+    // Check whether the user (or workspace) has already set an association for *.wasm.
+    const userValue = inspected?.globalValue ?? {};
+    if (userValue["*.wasm"] !== undefined) {
+        return; // user already made a choice — respect it
+    }
+
+    const merged: Record<string, string> = { ...userValue, "*.wasm": "hexana.wasmEditor" };
+    config.update("editorAssociations", merged, vscode.ConfigurationTarget.Global);
+}
+
+/**
+ * Scans all currently open tab groups for `.wasm` tabs that VS Code opened
+ * with the default text/binary editor (showing the "binary file not
+ * displayed" placeholder) and re-opens them with the Hexana custom editor,
+ * closing the stale binary-warning tabs so the user doesn't end up with
+ * duplicate tabs for the same file.
+ *
+ * This handles the race where the file was opened before the extension
+ * finished activating and registering its custom editor provider.
+ */
+function reopenWasmBinaryTabs(): void {
+    // Collect stale tabs first — iterating while mutating the tab list is
+    // unreliable.
+    const staleTabs: { tab: vscode.Tab; uri: vscode.Uri }[] = [];
+
+    for (const group of vscode.window.tabGroups.all) {
+        for (const tab of group.tabs) {
+            const input = tab.input;
+            // TabInputText is used for the built-in text/binary editor.
+            // Our custom editor uses TabInputCustom instead.
+            if (input instanceof vscode.TabInputText && input.uri.path.endsWith(".wasm")) {
+                staleTabs.push({ tab, uri: input.uri });
+            }
+        }
+    }
+
+    for (const { tab, uri } of staleTabs) {
+        // Close the binary-warning tab first, then open with the custom
+        // editor.  Closing first avoids the stale-reference problem where
+        // the tab object captured in a closure no longer matches any live
+        // tab after `vscode.openWith` rearranges the tab bar.
+        vscode.window.tabGroups.close(tab).then(() => {
+            vscode.commands.executeCommand("vscode.openWith", uri, "hexana.wasmEditor");
+        });
     }
 }

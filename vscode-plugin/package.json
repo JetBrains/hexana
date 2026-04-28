@@ -27,7 +27,9 @@
     "binary",
     "hex"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "customEditors": [
