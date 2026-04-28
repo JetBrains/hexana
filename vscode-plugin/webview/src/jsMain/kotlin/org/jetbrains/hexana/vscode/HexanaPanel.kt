@@ -8,7 +8,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 
 enum class HexanaTab(val label: String) {
-    Summary("Summary"),
+    Summary("Sections"),
     Exports("Exports"),
     Imports("Imports"),
     Functions("Functions"),
