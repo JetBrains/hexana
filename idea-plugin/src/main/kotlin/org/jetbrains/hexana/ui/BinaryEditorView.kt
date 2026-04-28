@@ -73,7 +73,8 @@ internal fun BinaryEditorView(
             }, onTabSelect = { index: Int ->
                 state.setSelectedTab(index)
                 panels.getOrNull(index)?.let { panel ->
-                    HexanaAnalytics.client.capture(HexanaEvent.HexTabSelected(panel.description))
+                    HexanaAnalytics.client.capture(HexanaEvent.HexTabSelected(panel.description,
+                        surface = HexanaEvent.Surface.IDE_PLUGIN))
                 }
             })
         })

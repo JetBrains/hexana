@@ -84,10 +84,14 @@ sealed class HexanaEvent {
     }
 
     data class HexTabSelected(
-        val tabName: String
+        val tabName: String,
+        val surface: Surface
     ) : HexanaEvent() {
         override val name = "hex_tab_selected"
-        override val properties = mapOf("tab_name" to tabName)
+        override val properties = mapOf(
+            "tab_name" to tabName,
+            "surface" to surface.value
+        )
     }
 
     data class WasmUnparsedOpcodes(

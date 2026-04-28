@@ -57,7 +57,8 @@ fun captureWasmFileParsed(fileSizeBytes: Double, durationMs: Double, success: Bo
 @JsExport
 fun captureHexTabSelected(tabName: String) {
     HexanaAnalytics.client.capture(
-        HexanaEvent.HexTabSelected(tabName = tabName)
+        HexanaEvent.HexTabSelected(tabName = tabName,
+            surface = HexanaEvent.Surface.VSCODE_EXTENSION)
     )
 }
 
