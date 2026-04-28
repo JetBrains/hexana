@@ -309,6 +309,22 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `oneOf declarations must not be empty or duplicated`() {
+        assertFailsWith<IllegalArgumentException> {
+            class_("Broken") {
+                nullable("path", string())
+                oneOf()
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            class_("Broken") {
+                nullable("path", string())
+                oneOf("path", "path")
+            }
+        }
+    }
+
+    @Test
     fun `duplicate tool names are rejected`() {
         assertFailsWith<IllegalArgumentException> {
             tools {

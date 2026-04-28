@@ -182,7 +182,11 @@ class ClassBuilder internal constructor(
         addField(name, FieldType.ClassRef(of), nullable = true)
 
     fun oneOf(vararg props: String) {
-        oneOf = props.toList()
+        val choices = props.toList()
+        require(choices.isNotEmpty()) { "oneOf in class '$name' must declare at least one field." }
+        val duplicates = choices.groupBy { it }.filterValues { it.size > 1 }.keys
+        require(duplicates.isEmpty()) { "oneOf in class '$name' contains duplicate fields: $duplicates" }
+        oneOf = choices
     }
 
     private fun addField(
