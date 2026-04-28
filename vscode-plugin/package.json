@@ -61,7 +61,12 @@
           "WebAssembly Text"
         ]
       }
-    ]
+    ],
+    "configurationDefaults": {
+      "workbench.editorAssociations": {
+        "*.wasm": "hexana.wasmEditor"
+      }
+    }
   },
   "scripts": {
     "compile": "tsc -p ./tsconfig.json",
