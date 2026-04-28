@@ -309,6 +309,7 @@ class ToolsBuilder internal constructor() {
 }
 
 private val FQN_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$")
+private val TOOL_NAME_REGEX = Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
 
 @HexanaToolsDsl
 class ToolBuilder internal constructor(private val name: String) {
@@ -320,6 +321,9 @@ class ToolBuilder internal constructor(private val name: String) {
     var handlerFqn: String? = null
 
     internal fun build(): ToolSpec {
+        require(TOOL_NAME_REGEX.matches(name)) {
+            "Tool name '$name' must be strict snake_case."
+        }
         val resolvedSummary = requireNotNull(summary) { "Tool '$name' is missing `summary`." }
         val resolvedInput = requireNotNull(input) { "Tool '$name' is missing `input = `." }
         val resolvedInputPattern = requireNotNull(inputPattern) { "Tool '$name' is missing `inputPattern = `." }

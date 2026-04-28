@@ -79,6 +79,32 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `tool builder rejects names outside strict snake_case`() {
+        assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("listFunctions") {
+                    summary = "s"
+                    input = WasmInputClass
+                    inputPattern = ToolInputPattern.WasmOnly
+                    output = WasmInputClass
+                    handlerFqn = sampleHandler
+                }
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("list__functions") {
+                    summary = "s"
+                    input = WasmInputClass
+                    inputPattern = ToolInputPattern.WasmOnly
+                    output = WasmInputClass
+                    handlerFqn = sampleHandler
+                }
+            }
+        }
+    }
+
+    @Test
     fun `every tool declares summary, input, output, handler`() {
         for (spec in HexanaTools) {
             assertTrue(spec.summary.isNotBlank(), "summary blank for ${spec.name}")
