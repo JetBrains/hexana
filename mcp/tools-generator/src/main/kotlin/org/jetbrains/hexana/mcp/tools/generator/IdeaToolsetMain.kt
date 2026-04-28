@@ -52,7 +52,6 @@ private fun buildToolsetFile(tools: List<ToolSpec>): FileSpec {
 private fun buildMethod(spec: ToolSpec): FunSpec {
     val returnType = returnType(spec)
     val methodName = spec.name.toToolsetMethodName()
-    val handlerSimpleName = spec.handlerFqn.substringAfterLast('.')
 
     val builder = FunSpec.builder(methodName)
         .addModifiers(KModifier.SUSPEND)
@@ -68,7 +67,7 @@ private fun buildMethod(spec: ToolSpec): FunSpec {
         .returns(returnType)
 
     addParameters(builder, spec)
-    addBody(builder, spec, handlerSimpleName)
+    addBody(builder, spec)
     return builder.build()
 }
 
@@ -112,7 +111,7 @@ private fun addParameters(builder: FunSpec.Builder, spec: ToolSpec) {
     }
 }
 
-private fun addBody(builder: FunSpec.Builder, spec: ToolSpec, handlerSimpleName: String) {
+private fun addBody(builder: FunSpec.Builder, spec: ToolSpec) {
     val code = CodeBlock.builder()
     code.addStatement("val file = %M(path)", REQUIRE_WASM_FILE)
     when (val pattern = spec.inputPattern) {
@@ -131,7 +130,7 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec, handlerSimpleName:
     }
     code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
 
-    val queryMember = MemberName(QUERY_PACKAGE, handlerSimpleName)
+    val handlerMember = spec.handlerMemberName()
     val callArgs: String = when (spec.inputPattern) {
         ToolInputPattern.WasmOnly -> "()"
         ToolInputPattern.FunctionPage -> "(offset, limit)"
@@ -139,7 +138,7 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec, handlerSimpleName:
         is ToolInputPattern.ClosedRange -> "(range)"
         ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
     }
-    code.addStatement("return provider.%M$callArgs", queryMember)
+    code.addStatement("return provider.%M$callArgs", handlerMember)
     builder.addCode(code.build())
 }
 
@@ -209,7 +208,8 @@ private fun String.toToolsetMethodName(): String {
     return parts.first() + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
 }
 
-private const val QUERY_PACKAGE = "org.jetbrains.hexana.mcp.query"
+private fun ToolSpec.handlerMemberName(): MemberName =
+    MemberName(handlerFqn.substringBeforeLast('.'), handlerFqn.substringAfterLast('.'))
 
 // Helpers resolved at generated-code compile time via the hand-written
 // ToolsetHelpers.kt file shipped alongside the generated class.
