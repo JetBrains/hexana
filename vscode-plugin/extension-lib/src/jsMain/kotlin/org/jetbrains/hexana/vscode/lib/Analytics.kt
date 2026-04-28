@@ -15,14 +15,24 @@ private fun Double.safeToLong(): Long =
  * (typically `globalStorageUri.fsPath + "/hexana-analytics-id"`).
  *
  * [telemetryEnabled] reflects `vscode.env.isTelemetryEnabled`.
+ *
+ * [appName] is the editor display name (e.g. `vscode.env.appName`).
+ * For stock VS Code this is `"Visual Studio Code"`, forks such as
+ * Cursor or Windsurf report their own name.
+ *
+ * [appVersion] is the editor version string (e.g. `vscode.version`).
  */
 @JsExport
-fun initAnalytics(storagePath: String, telemetryEnabled: Boolean) {
+fun initAnalytics(storagePath: String, telemetryEnabled: Boolean, appName: String, appVersion: String) {
     HexanaAnalytics.initialize(
         config = AnalyticsConfig(),
         consentProvider = ConsentProvider { telemetryEnabled },
         distinctIdProvider = NodeDistinctIdProvider(storagePath),
-        globalProperties = mapOf("surface" to "vscode_extension")
+        globalProperties = mapOf(
+            "surface" to "vscode_extension",
+            "ide_type" to appName,
+            "ide_build" to appVersion
+        )
     )
 }
 

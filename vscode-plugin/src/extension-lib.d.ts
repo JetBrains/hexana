@@ -79,8 +79,11 @@ export function shellEscape(arg: string, windows?: boolean): string;
  *
  * @param storagePath - Path for persisting the anonymous distinct ID.
  * @param telemetryEnabled - Whether the user has opted in to telemetry.
+ * @param appName - Editor display name (`vscode.env.appName`). Forks such as
+ *   Cursor or Windsurf report their own name here.
+ * @param appVersion - Editor version string (`vscode.version`).
  */
-export function initAnalytics(storagePath: string, telemetryEnabled: boolean): void;
+export function initAnalytics(storagePath: string, telemetryEnabled: boolean, appName: string, appVersion: string): void;
 
 /** Captures a `wasm_file_opened` event. */
 export function captureWasmFileOpened(fileSizeBytes: number): void;
