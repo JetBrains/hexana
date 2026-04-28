@@ -2,6 +2,7 @@ package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.H4
 import org.jetbrains.compose.web.dom.Td
@@ -42,17 +43,16 @@ private fun CoreWasmSummary(buffer: CommonByteBuffer, selection: HexSelectionSta
     val exportCount = remember(provider) { provider.exports.size }
     val functionCount = remember(provider) { provider.functions.size }
 
-    H4({ style { property("margin", "0 0 8px 0") } }) { Text("Sections") }
-
-    SummarySectionsTable(sections, selection)
-
-    H4({ style { property("margin", "16px 0 8px 0") } }) { Text("Summary") }
-    Div({ style { property("font-size", "12px"); property("line-height", "1.6") } }) {
-        Div { Text("Imports: $importCount") }
-        Div { Text("Exports: $exportCount") }
-        Div { Text("Functions: $functionCount") }
-        Div { Text("Sections: ${sections.size}") }
-    }
+    SummaryLayout(
+        sections = sections,
+        selection = selection,
+        stats = {
+            Div { Text("Imports: $importCount") }
+            Div { Text("Exports: $exportCount") }
+            Div { Text("Functions: $functionCount") }
+            Div { Text("Sections: ${sections.size}") }
+        },
+    )
 }
 
 @Composable
@@ -72,16 +72,56 @@ private fun ComponentSummary(buffer: CommonByteBuffer, selection: HexSelectionSt
     val exportCount = remember(provider) { provider.exports.size }
     val moduleCount = remember(provider) { provider.modules.size }
 
-    H4({ style { property("margin", "0 0 8px 0") } }) { Text("Sections") }
+    SummaryLayout(
+        sections = sections,
+        selection = selection,
+        stats = {
+            Div { Text("Imports: $importCount") }
+            Div { Text("Exports: $exportCount") }
+            Div { Text("Modules: $moduleCount") }
+            Div { Text("Sections: ${sections.size}") }
+        },
+    )
+}
 
-    SummarySectionsTable(sections, selection)
+@Composable
+private fun SummaryLayout(
+    sections: List<WasmSection>,
+    selection: HexSelectionState,
+    stats: @Composable () -> Unit,
+) {
+    Div({
+        style {
+            display(DisplayStyle.Flex)
+            property("gap", "24px")
+            property("align-items", "flex-start")
+        }
+    }) {
+        // Sections table – shrink-wraps to its content
+        Div({ style { property("flex", "0 0 auto") } }) {
+            H4({ style { property("margin", "0 0 8px 0") } }) { Text("Sections") }
+            SummarySectionsTable(sections, selection)
+        }
 
-    H4({ style { property("margin", "16px 0 8px 0") } }) { Text("Summary") }
-    Div({ style { property("font-size", "12px"); property("line-height", "1.6") } }) {
-        Div { Text("Imports: $importCount") }
-        Div { Text("Exports: $exportCount") }
-        Div { Text("Modules: $moduleCount") }
-        Div { Text("Sections: ${sections.size}") }
+        // Summary card – fixed width, sticky
+        Div({
+            style {
+                property("flex", "0 0 auto")
+                property("position", "sticky")
+                property("top", "0")
+                property("align-self", "flex-start")
+                property("min-width", "140px")
+                property("font-size", "12px")
+                property("line-height", "1.6")
+                property("padding", "8px 12px")
+                property("border-radius", "4px")
+                property("background", "rgba(255,255,255,0.03)")
+                property("border", "1px solid var(--hexana-border, #333)")
+            }
+        }) {
+            H4({ style { property("margin", "0 0 8px 0") } }) { Text("Summary") }
+            stats()
+        }
     }
 }
 
