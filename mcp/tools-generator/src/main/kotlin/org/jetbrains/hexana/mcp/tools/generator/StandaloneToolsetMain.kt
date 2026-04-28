@@ -10,9 +10,8 @@ import org.jetbrains.hexana.mcp.tools.ClassSpec
 import org.jetbrains.hexana.mcp.tools.FieldSpec
 import org.jetbrains.hexana.mcp.tools.FieldType
 import org.jetbrains.hexana.mcp.tools.HexanaTools
-import org.jetbrains.hexana.mcp.tools.ServerInputSchema
+import org.jetbrains.hexana.mcp.tools.SchemaIntValue
 import org.jetbrains.hexana.mcp.tools.ToolSpec
-import org.jetbrains.hexana.mcp.tools.ToolInputPattern
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.system.exitProcess
@@ -22,9 +21,11 @@ private val SERVER_CLASS = ClassName("io.modelcontextprotocol.kotlin.sdk.server"
 private val TOOL_CLASS = ClassName("io.modelcontextprotocol.kotlin.sdk.types", "Tool")
 private val CALL_TOOL_REQUEST = ClassName("io.modelcontextprotocol.kotlin.sdk.types", "CallToolRequest")
 private val TOOL_HANDLERS = ClassName(SERVER_PACKAGE, "HexanaToolHandlers")
+private val HEXANA_ANALYSIS_LIMITS = ClassName("org.jetbrains.hexana.mcp", "HexanaAnalysisLimits")
 private val TOOL_SCHEMA = ClassName("io.modelcontextprotocol.kotlin.sdk.types", "ToolSchema")
 private val JSON_PRIMITIVE = ClassName("kotlinx.serialization.json", "JsonPrimitive")
 private val BUILD_JSON_OBJECT = MemberName("kotlinx.serialization.json", "buildJsonObject")
+private val BUILD_JSON_ARRAY = MemberName("kotlinx.serialization.json", "buildJsonArray")
 
 fun main(args: Array<String>) {
     val outputRoot = args.firstOrNull()?.let(Path::of) ?: run {
@@ -67,8 +68,8 @@ private fun buildDispatcherFile(tools: List<ToolSpec>): FileSpec {
 
 private fun renderAddToolCall(spec: ToolSpec): CodeBlock {
     val handlerMethod = spec.name.toCamelCase()
-    val inputSchema = schemaInvocation(spec)
-    val outputSchema = buildOutputSchema(spec.output)
+    val inputSchema = buildToolSchema(spec.input)
+    val outputSchema = buildToolSchema(spec.output)
 
     return CodeBlock.builder()
         .add(
@@ -82,11 +83,11 @@ private fun renderAddToolCall(spec: ToolSpec): CodeBlock {
 }
 
 /**
- * Emits a full `ToolSchema(...)` expression for the tool's output type.
+ * Emits a full `ToolSchema(...)` expression for the tool's input or output type.
  * Nested classes are inlined into the schema — the generated file is verbose
  * but self-contained.
  */
-private fun buildOutputSchema(cls: ClassSpec): CodeBlock {
+private fun buildToolSchema(cls: ClassSpec): CodeBlock {
     val builder = CodeBlock.builder()
     builder.add("%T(\n", TOOL_SCHEMA)
     builder.add("  properties = %M {\n", BUILD_JSON_OBJECT)
@@ -107,17 +108,41 @@ private fun buildOutputSchema(cls: ClassSpec): CodeBlock {
 }
 
 private fun fieldSchemaObject(field: FieldSpec): CodeBlock {
+    return fieldSchemaObject(field, schemaIndent = "      ", closingIndent = "    ")
+}
+
+private fun fieldSchemaObject(field: FieldSpec, schemaIndent: String, closingIndent: String): CodeBlock {
     val b = CodeBlock.builder()
     b.add("%M {\n", BUILD_JSON_OBJECT)
-    emitTypeSchema(field.type, b, indent = "      ")
+    emitTypeSchema(field, b, indent = schemaIndent)
     field.describe?.let {
-        b.add("      put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, it)
+        b.add("${schemaIndent}put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, it)
     }
-    b.add("    }")
+    emitFieldConstraints(field, b, indent = schemaIndent)
+    b.add("$closingIndent}")
     return b.build()
 }
 
-/** Emits the JSON Schema properties (`type`, `items`, nested `properties`/`required`) for a [FieldType]. */
+/** Emits the JSON Schema properties (`type`, `items`, nested `properties`/`required`) for a field. */
+private fun emitTypeSchema(field: FieldSpec, builder: CodeBlock.Builder, indent: String) {
+    when (val type = field.type) {
+        is FieldType.ListOf -> {
+            builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "array")
+            builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
+            emitTypeSchema(type.element, builder, indent = "$indent  ")
+            field.itemMinimum?.let {
+                builder.add("$indent  put(%S, %T(%L))\n", "minimum", JSON_PRIMITIVE, it)
+            }
+            field.itemMaximum?.let {
+                builder.add("$indent  put(%S, %T(%L))\n", "maximum", JSON_PRIMITIVE, it)
+            }
+            builder.add("${indent}})\n")
+        }
+
+        else -> emitTypeSchema(type, builder, indent)
+    }
+}
+
 private fun emitTypeSchema(type: FieldType, builder: CodeBlock.Builder, indent: String) {
     when (type) {
         FieldType.Int32,
@@ -143,17 +168,14 @@ private fun emitTypeSchema(type: FieldType, builder: CodeBlock.Builder, indent: 
             builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "object")
             builder.add("${indent}put(%S, %M {\n", "properties", BUILD_JSON_OBJECT)
             type.clazz.fields.forEach { nested ->
-                builder.add("$indent  put(%S, %M {\n", nested.schemaKey, BUILD_JSON_OBJECT)
-                emitTypeSchema(nested.type, builder, indent = "$indent    ")
-                nested.describe?.let {
-                    builder.add("$indent    put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, it)
-                }
-                builder.add("$indent  })\n")
+                builder.add("$indent  put(%S, ", nested.schemaKey)
+                builder.add(fieldSchemaObject(nested, schemaIndent = "$indent    ", closingIndent = "$indent  "))
+                builder.add(")\n")
             }
             builder.add("${indent}})\n")
             val requiredFields = type.clazz.fields.filter { !it.nullable && it.default == null }
             if (requiredFields.isNotEmpty()) {
-                builder.add("${indent}put(%S, %M {\n", "required", MemberName("kotlinx.serialization.json", "buildJsonArray"))
+                builder.add("${indent}put(%S, %M {\n", "required", BUILD_JSON_ARRAY)
                 requiredFields.forEach { req ->
                     builder.add("$indent  add(%T(%S))\n", JSON_PRIMITIVE, req.schemaKey)
                 }
@@ -163,34 +185,27 @@ private fun emitTypeSchema(type: FieldType, builder: CodeBlock.Builder, indent: 
     }
 }
 
-/**
- * Maps a tool's explicit input pattern to the corresponding schema helper already
- * shipped with `mcp/server`.
- */
-private fun schemaInvocation(spec: ToolSpec): CodeBlock {
-    val wasmInput = MemberName(SERVER_PACKAGE, "wasmInputToolSchema")
-    val listFunctions = MemberName(SERVER_PACKAGE, "listFunctionsSchema")
-    val pathAndIndices = MemberName(SERVER_PACKAGE, "pathAndIndicesSchema")
-    val listExportedFunctions = MemberName(SERVER_PACKAGE, "listExportedFunctionsSchema")
-    val listData = MemberName(SERVER_PACKAGE, "listDataSchema")
-    val listDataSegments = MemberName(SERVER_PACKAGE, "listDataSegmentsSchema")
-
-    val helper = when (spec.inputPattern.serverSchema) {
-        ServerInputSchema.WasmInput -> wasmInput
-        ServerInputSchema.ListFunctions -> listFunctions
-        ServerInputSchema.PathAndIndices -> pathAndIndices
-        ServerInputSchema.ListExportedFunctions -> listExportedFunctions
-        ServerInputSchema.ListData -> listData
-        ServerInputSchema.ListDataSegments -> listDataSegments
+private fun emitFieldConstraints(field: FieldSpec, builder: CodeBlock.Builder, indent: String) {
+    field.minimum?.let {
+        builder.add("${indent}put(%S, %T(%L))\n", "minimum", JSON_PRIMITIVE, it)
     }
+    field.maximum?.let {
+        builder.add("${indent}put(%S, %T(%L))\n", "maximum", JSON_PRIMITIVE, it)
+    }
+    field.maxItems?.let {
+        builder.add("${indent}put(%S, %T(%L))\n", "maxItems", JSON_PRIMITIVE, schemaIntValue(it))
+    }
+    field.maxLength?.let {
+        builder.add("${indent}put(%S, %T(%L))\n", "maxLength", JSON_PRIMITIVE, schemaIntValue(it))
+    }
+}
 
-    return if (spec.inputPattern == ToolInputPattern.Indices) {
-        val indicesDescription = spec.input.fields
-            .single { it.name == "indices" }
-            .let { requireNotNull(it.describe) { "pathAndIndicesSchema handler requires a describe() on `indices`." } }
-        CodeBlock.of("%M(%S)", helper, indicesDescription)
-    } else {
-        CodeBlock.of("%M()", helper)
+private fun schemaIntValue(value: SchemaIntValue): CodeBlock {
+    return when (value) {
+        is SchemaIntValue.Literal -> CodeBlock.of("%L", value.value)
+        SchemaIntValue.MaxInlineWasmBytes -> CodeBlock.of("%T.MAX_INLINE_WASM_BYTES", HEXANA_ANALYSIS_LIMITS)
+        SchemaIntValue.MaxInlineWasmBase64Length ->
+            CodeBlock.of("((%T.MAX_INLINE_WASM_BYTES + 2) / 3) * 4", HEXANA_ANALYSIS_LIMITS)
     }
 }
 

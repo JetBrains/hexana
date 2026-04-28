@@ -75,7 +75,6 @@ internal val ExportTools: List<ToolSpec> = tools {
         input = ListExportedFunctionsInput
         inputPattern = ToolInputPattern.ClosedRange(
             parameterName = "entriesRange",
-            rangeSchema = ServerInputSchema.ListExportedFunctions,
         )
         output = ListExportedFunctionsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readExportedFunctions"

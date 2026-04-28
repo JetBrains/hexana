@@ -39,6 +39,12 @@ data class FieldSpec(
     val describe: String? = null,
     /** Optional fully-qualified name of a [kotlinx.serialization.KSerializer] object. */
     val serializerFqn: String? = null,
+    val minimum: Int? = null,
+    val maximum: Int? = null,
+    val maxItems: SchemaIntValue? = null,
+    val maxLength: SchemaIntValue? = null,
+    val itemMinimum: Int? = null,
+    val itemMaximum: Int? = null,
 ) {
     init {
         if (default != null) {
@@ -58,9 +64,39 @@ data class FieldSpec(
                 "Field '$name': default value `$default` (${default.javaClass.simpleName}) does not match declared type $type."
             }
         }
+        if (minimum != null || maximum != null) {
+            require(type.isNumeric()) {
+                "Field '$name': minimum/maximum constraints require a numeric field type, got $type."
+            }
+        }
+        if (maxItems != null || itemMinimum != null || itemMaximum != null) {
+            require(type is FieldType.ListOf) {
+                "Field '$name': maxItems/item constraints require a list field type, got $type."
+            }
+        }
+        if (maxLength != null) {
+            require(type == FieldType.StringT || type == FieldType.ByteArrayT) {
+                "Field '$name': maxLength requires a string-like field type, got $type."
+            }
+        }
+        if (itemMinimum != null || itemMaximum != null) {
+            val element = (type as FieldType.ListOf).element
+            require(element.isNumeric()) {
+                "Field '$name': item minimum/maximum constraints require numeric list items, got $element."
+            }
+        }
     }
 
     val schemaKey: String get() = serialName ?: name
+}
+
+private fun FieldType.isNumeric(): Boolean =
+    this == FieldType.Int32 || this == FieldType.Int64 || this == FieldType.UInt32 || this == FieldType.ByteT
+
+sealed class SchemaIntValue {
+    data class Literal(val value: Int) : SchemaIntValue()
+    object MaxInlineWasmBytes : SchemaIntValue()
+    object MaxInlineWasmBase64Length : SchemaIntValue()
 }
 
 // ---------- Class spec ----------
@@ -68,7 +104,7 @@ data class FieldSpec(
 data class ClassSpec(
     val name: String,
     val fields: List<FieldSpec>,
-    /** Exactly one of these field names must be present at runtime; emitted as JSON Schema `oneOf`. */
+    /** Exactly one of these field names must be present at runtime. */
     val oneOf: List<String>? = null,
 ) {
     /**
@@ -181,6 +217,36 @@ class FieldHandle internal constructor(
     fun withSerializer(fqn: String): FieldHandle = apply {
         builder.mutate(index) { it.copy(serializerFqn = fqn) }
     }
+
+    fun minimum(value: Int): FieldHandle = apply {
+        builder.mutate(index) { it.copy(minimum = value) }
+    }
+
+    fun maximum(value: Int): FieldHandle = apply {
+        builder.mutate(index) { it.copy(maximum = value) }
+    }
+
+    fun maxItems(value: Int): FieldHandle =
+        maxItems(SchemaIntValue.Literal(value))
+
+    fun maxItems(value: SchemaIntValue): FieldHandle = apply {
+        builder.mutate(index) { it.copy(maxItems = value) }
+    }
+
+    fun maxLength(value: Int): FieldHandle =
+        maxLength(SchemaIntValue.Literal(value))
+
+    fun maxLength(value: SchemaIntValue): FieldHandle = apply {
+        builder.mutate(index) { it.copy(maxLength = value) }
+    }
+
+    fun itemsMinimum(value: Int): FieldHandle = apply {
+        builder.mutate(index) { it.copy(itemMinimum = value) }
+    }
+
+    fun itemsMaximum(value: Int): FieldHandle = apply {
+        builder.mutate(index) { it.copy(itemMaximum = value) }
+    }
 }
 
 // ---------- Tool spec ----------
@@ -201,27 +267,12 @@ data class ToolSpec(
     val handlerFqn: String,
 )
 
-enum class ServerInputSchema {
-    WasmInput,
-    ListFunctions,
-    PathAndIndices,
-    ListExportedFunctions,
-    ListData,
-    ListDataSegments,
-}
-
-sealed class ToolInputPattern(
-    val serverSchema: ServerInputSchema,
-) {
-    object WasmOnly : ToolInputPattern(ServerInputSchema.WasmInput)
-    object FunctionPage : ToolInputPattern(ServerInputSchema.ListFunctions)
-    object Indices : ToolInputPattern(ServerInputSchema.PathAndIndices)
-    data class ClosedRange(
-        val parameterName: String,
-        val rangeSchema: ServerInputSchema,
-    ) : ToolInputPattern(rangeSchema)
-
-    object DataSegments : ToolInputPattern(ServerInputSchema.ListDataSegments)
+sealed class ToolInputPattern {
+    object WasmOnly : ToolInputPattern()
+    object FunctionPage : ToolInputPattern()
+    object Indices : ToolInputPattern()
+    data class ClosedRange(val parameterName: String) : ToolInputPattern()
+    object DataSegments : ToolInputPattern()
 }
 
 @HexanaToolsDsl

@@ -8,6 +8,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 
 /**
  * Registers all Hexana MCP tools on the receiver Server.
@@ -18,7 +19,30 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "summarize_module",
     description = "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types.",
-    inputSchema = wasmInputToolSchema(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+    },
+    required = listOf()
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("functions", buildJsonObject {
@@ -87,7 +111,30 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_imports",
     description = "List imported functions declared by a `.wasm` module.",
-    inputSchema = wasmInputToolSchema(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+    },
+    required = listOf()
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("imports", buildJsonObject {
@@ -150,7 +197,30 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_exports",
     description = "List exports declared by a `.wasm` module.",
-    inputSchema = wasmInputToolSchema(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+    },
+    required = listOf()
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("exports", buildJsonObject {
@@ -189,7 +259,30 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_globals",
     description = "List imported and defined globals from a `.wasm` module.",
-    inputSchema = wasmInputToolSchema(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+    },
+    required = listOf()
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("globals", buildJsonObject {
@@ -245,7 +338,30 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_types",
     description = "List type entries declared by a `.wasm` module.",
-    inputSchema = wasmInputToolSchema(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+    },
+    required = listOf()
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("types", buildJsonObject {
@@ -346,7 +462,30 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_memory",
     description = "List imported and defined memories from a `.wasm` module.",
-    inputSchema = wasmInputToolSchema(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+    },
+    required = listOf()
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("memories", buildJsonObject {
@@ -418,7 +557,30 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_element_segments",
     description = "List element segments declared by a `.wasm` module.",
-    inputSchema = wasmInputToolSchema(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+    },
+    required = listOf()
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("segments", buildJsonObject {
@@ -480,7 +642,40 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_functions",
     description = "List imported and defined functions with offset/limit pagination.",
-    inputSchema = listFunctionsSchema(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("offset", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Offset into the unified function index space"))
+        put("minimum", JsonPrimitive(0))
+      })
+      put("limit", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Maximum number of entries to return"))
+        put("minimum", JsonPrimitive(1))
+      })
+    },
+    required = listOf()
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("functions", buildJsonObject {
@@ -576,7 +771,38 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "functions_for_indices",
     description = "Resolve function entries for the given unified function indices.",
-    inputSchema = pathAndIndicesSchema("List of unified function indices (`funcidx`) to resolve."),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("indices", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+        })
+        put("description", JsonPrimitive("List of unified function indices (`funcidx`) to resolve."))
+      })
+    },
+    required = listOf("indices")
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("functions", buildJsonObject {
@@ -672,7 +898,38 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "get_globals_for_indices",
     description = "Return globals for the requested indices from the unified global index space.",
-    inputSchema = pathAndIndicesSchema("List of global indices (`globalidx`) to return."),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("indices", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+        })
+        put("description", JsonPrimitive("List of global indices (`globalidx`) to return."))
+      })
+    },
+    required = listOf("indices")
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("globals", buildJsonObject {
@@ -728,7 +985,38 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "get_memory_for_indices",
     description = "Return memories for the requested indices from the unified memory index space.",
-    inputSchema = pathAndIndicesSchema("List of memory indices (`memidx`) to return."),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("indices", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+        })
+        put("description", JsonPrimitive("List of memory indices (`memidx`) to return."))
+      })
+    },
+    required = listOf("indices")
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("memories", buildJsonObject {
@@ -800,7 +1088,38 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "get_types_for_indices",
     description = "Return type entries for the requested indices from the type index space.",
-    inputSchema = pathAndIndicesSchema("List of type indices (`typeidx`) to return."),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("indices", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+        })
+        put("description", JsonPrimitive("List of type indices (`typeidx`) to return."))
+      })
+    },
+    required = listOf("indices")
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("types", buildJsonObject {
@@ -901,7 +1220,38 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "get_locals_for_functions",
     description = "Return grouped local declarations for the requested function indices.",
-    inputSchema = pathAndIndicesSchema("List of unified function indices (`funcidx`) whose locals should be returned."),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("indices", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+        })
+        put("description", JsonPrimitive("List of unified function indices (`funcidx`) whose locals should be returned."))
+      })
+    },
+    required = listOf("indices")
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("functions", buildJsonObject {
@@ -952,7 +1302,38 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "get_instructions_for_functions",
     description = "Return decoded instruction text for the requested function indices.",
-    inputSchema = pathAndIndicesSchema("List of unified function indices (`funcidx`) whose instructions should be returned."),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("indices", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+        })
+        put("description", JsonPrimitive("List of unified function indices (`funcidx`) whose instructions should be returned."))
+      })
+    },
+    required = listOf("indices")
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("functions", buildJsonObject {
@@ -989,7 +1370,50 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_exported_functions",
     description = "List exported functions within a closed range of the export section.",
-    inputSchema = listExportedFunctionsSchema(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("entriesRange", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("from", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Inclusive zero-based lower bound."))
+            put("minimum", JsonPrimitive(0))
+          })
+          put("to", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Inclusive zero-based upper bound."))
+            put("minimum", JsonPrimitive(0))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("from"))
+          add(JsonPrimitive("to"))
+        })
+        put("description", JsonPrimitive("Closed zero-based export slice. Pass `entriesRange = { from, to }`; both bounds are inclusive."))
+      })
+    },
+    required = listOf("entriesRange")
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("from", buildJsonObject {
@@ -1108,7 +1532,50 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_data",
     description = "Return raw data-section entries for a closed data-segment range.",
-    inputSchema = listDataSchema(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("entriesRange", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("from", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Inclusive zero-based lower bound."))
+            put("minimum", JsonPrimitive(0))
+          })
+          put("to", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Inclusive zero-based upper bound."))
+            put("minimum", JsonPrimitive(0))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("from"))
+          add(JsonPrimitive("to"))
+        })
+        put("description", JsonPrimitive("Closed zero-based data-segment slice. Requires `from` and `to`, both inclusive."))
+      })
+    },
+    required = listOf("entriesRange")
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("from", buildJsonObject {
@@ -1180,7 +1647,62 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_data_segments",
     description = "Return data-segment metadata with range slicing and optional export/global context.",
-    inputSchema = listDataSegmentsSchema(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("segmentRange", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("from", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Inclusive zero-based lower bound."))
+            put("minimum", JsonPrimitive(0))
+          })
+          put("to", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Optional exclusive upper bound."))
+            put("minimum", JsonPrimitive(0))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("from"))
+        })
+        put("description", JsonPrimitive("Half-open zero-based data-segment slice. `from` is required; `to` is optional and treated as exclusive."))
+      })
+      put("includeExports", buildJsonObject {
+        put("type", JsonPrimitive("boolean"))
+        put("description", JsonPrimitive("Include exported symbols associated with the returned segments."))
+      })
+      put("includeGlobals", buildJsonObject {
+        put("type", JsonPrimitive("boolean"))
+        put("description", JsonPrimitive("Include globals referenced by segment offset expressions."))
+      })
+      put("minByteLength", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Optional minimum raw byte length for returned segments."))
+        put("minimum", JsonPrimitive(0))
+      })
+    },
+    required = listOf("segmentRange")
+  ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
       put("memory", buildJsonObject {

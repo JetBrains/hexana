@@ -1,8 +1,8 @@
 package org.jetbrains.hexana.mcp.tools
 
 private val HalfOpenIntRange = class_("HalfOpenIntRange") {
-    int("from").describe("Inclusive zero-based lower bound.")
-    nullable("to", int()).describe("Optional exclusive upper bound.")
+    int("from").describe("Inclusive zero-based lower bound.").minimum(0)
+    nullable("to", int()).describe("Optional exclusive upper bound.").minimum(0)
 }
 
 val ListDataInput = WasmInputClass.with("ListDataInput") {
@@ -19,6 +19,7 @@ val ListDataSegmentsInput = WasmInputClass.with("ListDataSegmentsInput") {
         .describe("Include globals referenced by segment offset expressions.")
     nullable("minByteLength", int())
         .describe("Optional minimum raw byte length for returned segments.")
+        .minimum(0)
 }
 
 val DataEntryResultClass = class_("DataEntryResult") {
@@ -113,7 +114,6 @@ internal val DataTools: List<ToolSpec> = tools {
         input = ListDataInput
         inputPattern = ToolInputPattern.ClosedRange(
             parameterName = "entriesRange",
-            rangeSchema = ServerInputSchema.ListData,
         )
         output = ListDataSectionsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readDataSections"

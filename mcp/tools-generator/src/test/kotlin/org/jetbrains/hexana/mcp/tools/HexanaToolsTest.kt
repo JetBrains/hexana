@@ -95,10 +95,7 @@ class HexanaToolsTest {
         assertEquals(ToolInputPattern.FunctionPage, HexanaTools.single { it.name == "list_functions" }.inputPattern)
         assertEquals(ToolInputPattern.Indices, HexanaTools.single { it.name == "functions_for_indices" }.inputPattern)
         assertEquals(
-            ToolInputPattern.ClosedRange(
-                parameterName = "entriesRange",
-                rangeSchema = ServerInputSchema.ListExportedFunctions,
-            ),
+            ToolInputPattern.ClosedRange(parameterName = "entriesRange"),
             HexanaTools.single { it.name == "list_exported_functions" }.inputPattern,
         )
         assertEquals(ToolInputPattern.DataSegments, HexanaTools.single { it.name == "list_data_segments" }.inputPattern)
@@ -107,6 +104,41 @@ class HexanaToolsTest {
     @Test
     fun `wasmInputClass carries a oneOf constraint`() {
         assertEquals(listOf("path", "bytesBase64", "bytes"), WasmInputClass.oneOf)
+    }
+
+    @Test
+    fun `standalone schema constraints are declared in the DSL`() {
+        val bytesBase64 = WasmInputClass.fields.single { it.name == "bytesBase64" }
+        assertEquals(SchemaIntValue.MaxInlineWasmBase64Length, bytesBase64.maxLength)
+
+        val bytes = WasmInputClass.fields.single { it.name == "bytes" }
+        assertEquals(SchemaIntValue.MaxInlineWasmBytes, bytes.maxItems)
+        assertEquals(0, bytes.itemMinimum)
+        assertEquals(255, bytes.itemMaximum)
+
+        val rangeFrom = ClosedIntRange.fields.single { it.name == "from" }
+        val rangeTo = ClosedIntRange.fields.single { it.name == "to" }
+        assertEquals(0, rangeFrom.minimum)
+        assertEquals(0, rangeTo.minimum)
+    }
+
+    @Test
+    fun `schema constraints reject incompatible field types`() {
+        assertFailsWith<IllegalArgumentException> {
+            class_("Broken") {
+                string("name").minimum(0)
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            class_("Broken") {
+                int("count").maxItems(1)
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            class_("Broken") {
+                list("names", of = string()).itemsMinimum(0)
+            }
+        }
     }
 
     @Test

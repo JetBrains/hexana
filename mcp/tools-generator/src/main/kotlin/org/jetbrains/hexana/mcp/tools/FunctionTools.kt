@@ -3,8 +3,10 @@ package org.jetbrains.hexana.mcp.tools
 val ListFunctionsInput = WasmInputClass.with("ListFunctionsInput") {
     int("offset", default = 0)
         .describe("Offset into the unified function index space")
+        .minimum(0)
     int("limit", default = 200)
         .describe("Maximum number of entries to return")
+        .minimum(1)
 }
 
 val FunctionsForIndicesInput = indicesInput(

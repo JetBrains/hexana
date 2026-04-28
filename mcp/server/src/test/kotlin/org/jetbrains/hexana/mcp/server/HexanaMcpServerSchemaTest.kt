@@ -1,7 +1,9 @@
 package org.jetbrains.hexana.mcp.server
 
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -35,6 +37,31 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
+    fun wasmInputPropertiesCarryInlineByteLimits() {
+        val summarizeModuleSchema = createHexanaMcpServer()
+            .tools
+            .getValue("summarize_module")
+            .tool
+            .inputSchema
+            .properties
+            ?.jsonObject
+            ?: error("Missing summarize_module input schema properties")
+
+        val bytesBase64 = summarizeModuleSchema.getValue("bytesBase64").jsonObject
+        assertEquals(
+            ((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4,
+            bytesBase64.getValue("maxLength").jsonPrimitive.int
+        )
+
+        val bytes = summarizeModuleSchema.getValue("bytes").jsonObject
+        assertEquals(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES, bytes.getValue("maxItems").jsonPrimitive.int)
+
+        val byteItem = bytes.getValue("items").jsonObject
+        assertEquals(0, byteItem.getValue("minimum").jsonPrimitive.int)
+        assertEquals(255, byteItem.getValue("maximum").jsonPrimitive.int)
+    }
+
+    @Test
     fun listExportedFunctionsSchemaMakesInclusiveBoundsExplicit() {
         val listExportedFunctionsSchema = createHexanaMcpServer()
             .tools
@@ -48,8 +75,26 @@ class HexanaMcpServerSchemaTest {
             ?: error("Missing list_exported_functions entriesRange schema")
 
         assertEquals(
-            "Closed zero-based export slice. Both `from` and `to` are required and inclusive.",
+            "Closed zero-based export slice. Pass `entriesRange = { from, to }`; both bounds are inclusive.",
             listExportedFunctionsSchema.getValue("description").jsonPrimitive.content
         )
+    }
+
+    @Test
+    fun closedRangeBoundsAreNonNegative() {
+        val entriesRange = createHexanaMcpServer()
+            .tools
+            .getValue("list_exported_functions")
+            .tool
+            .inputSchema
+            .properties
+            ?.jsonObject
+            ?.getValue("entriesRange")
+            ?.jsonObject
+            ?: error("Missing list_exported_functions entriesRange schema")
+
+        val properties = entriesRange.getValue("properties").jsonObject
+        assertEquals(0, properties.getValue("from").jsonObject.getValue("minimum").jsonPrimitive.int)
+        assertEquals(0, properties.getValue("to").jsonObject.getValue("minimum").jsonPrimitive.int)
     }
 }
