@@ -91,9 +91,10 @@ class HexanaEventTest {
 
     @Test
     fun hexTabSelectedEvent() {
-        val event = HexanaEvent.HexTabSelected(tabName = "Functions")
+        val event = HexanaEvent.HexTabSelected(tabName = "Functions", surface = HexanaEvent.Surface.VSCODE_EXTENSION)
         assertEquals("hex_tab_selected", event.name)
         assertEquals("Functions", event.properties["tab_name"])
+        assertEquals("vscode_extension", event.properties["surface"])
     }
 
     @Test
@@ -131,7 +132,7 @@ class HexanaEventTest {
             HexanaEvent.McpServerStarted(HexanaEvent.McpTransport.HTTP, false),
             HexanaEvent.WatViewActivated(HexanaEvent.Surface.IDE_PLUGIN),
             HexanaEvent.HexViewActivated(HexanaEvent.Surface.IDE_PLUGIN),
-            HexanaEvent.HexTabSelected("Test"),
+            HexanaEvent.HexTabSelected("Test", HexanaEvent.Surface.IDE_PLUGIN),
             HexanaEvent.WasmUnparsedOpcodes(1, 100)
         )
         val snakeCaseRegex = Regex("^[a-z][a-z0-9_]*$")

@@ -4,6 +4,10 @@ package org.jetbrains.hexana.vscode.lib
 
 import org.jetbrains.hexana.analytics.*
 
+/** Safely converts a JS [Double] to [Long], clamping NaN, Infinity, and negative values to 0. */
+private fun Double.safeToLong(): Long =
+    if (isNaN() || isInfinite() || this < 0.0) 0L else toLong()
+
 /**
  * Initializes the PostHog analytics client for the VS Code extension.
  *
@@ -29,7 +33,7 @@ fun initAnalytics(storagePath: String, telemetryEnabled: Boolean) {
 fun captureWasmFileOpened(fileSizeBytes: Double) {
     HexanaAnalytics.client.capture(
         HexanaEvent.WasmFileOpened(
-            fileSizeBytes = fileSizeBytes.toLong(),
+            fileSizeBytes = fileSizeBytes.safeToLong(),
             surface = HexanaEvent.Surface.VSCODE_EXTENSION
         )
     )
@@ -42,8 +46,8 @@ fun captureWasmFileOpened(fileSizeBytes: Double) {
 fun captureWasmFileParsed(fileSizeBytes: Double, durationMs: Double, success: Boolean, functionCount: Int?) {
     HexanaAnalytics.client.capture(
         HexanaEvent.WasmFileParsed(
-            fileSizeBytes = fileSizeBytes.toLong(),
-            durationMs = durationMs.toLong(),
+            fileSizeBytes = fileSizeBytes.safeToLong(),
+            durationMs = durationMs.safeToLong(),
             success = success,
             functionCount = functionCount,
             surface = HexanaEvent.Surface.VSCODE_EXTENSION

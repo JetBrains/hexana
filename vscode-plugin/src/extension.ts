@@ -24,7 +24,9 @@ export function activate(context: vscode.ExtensionContext): void {
         // Re-evaluate consent when the user toggles VS Code telemetry.
         context.subscriptions.push(
             vscode.env.onDidChangeTelemetryEnabled((enabled) => {
-                // Re-initialize so the consent provider picks up the new value.
+                // Flush and shut down the previous client before re-initializing
+                // so pending events are not lost and connections are released.
+                extensionLib.shutdownAnalytics();
                 extensionLib.initAnalytics(storagePath, enabled);
             }),
         );

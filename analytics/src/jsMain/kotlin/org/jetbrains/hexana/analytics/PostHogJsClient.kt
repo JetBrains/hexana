@@ -17,6 +17,9 @@ internal class PostHogJsClient(
     private val distinctIdProvider: DistinctIdProvider
 ) : AnalyticsClient {
 
+    // Build the options object imperatively instead of using a js("({…})") literal
+    // because Kotlin/JS `js()` blocks cannot reference Kotlin parameters after webpack
+    // minification.  The resulting plain JS object is equivalent to `{ host: "…" }`.
     private val client: PostHogModule.PostHog = run {
         val options = js("{}")
         options.host = config.host

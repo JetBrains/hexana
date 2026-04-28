@@ -1,6 +1,10 @@
 package org.jetbrains.hexana.analytics
 
-@Suppress("UNUSED_PARAMETER")
+// eval('require') is used intentionally: Kotlin/JS `js()` literals cannot reference
+// Kotlin parameters after webpack minification, and webpack's static analysis rewrites
+// bare `require()` calls.  Using eval bypasses both issues.  The `module` argument is
+// always a hardcoded string constant supplied by callers in this file ("fs", "path",
+// "crypto"), so there is no code-injection risk.
 private fun nodeRequire(module: String): dynamic =
     js("eval('require')(module)")
 
