@@ -167,7 +167,7 @@ private fun fieldSchemaObject(field: FieldSpec, schemaIndent: String, closingInd
 private fun emitTypeSchema(field: FieldSpec, builder: CodeBlock.Builder, indent: String) {
     when (val type = field.type) {
         is FieldType.ListOf -> {
-            builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "array")
+            emitJsonType(builder, indent, "array", nullable = field.nullable)
             builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
             emitTypeSchema(type.element, builder, indent = "$indent  ")
             field.itemMinimum?.let {
@@ -179,33 +179,38 @@ private fun emitTypeSchema(field: FieldSpec, builder: CodeBlock.Builder, indent:
             builder.add("${indent}})\n")
         }
 
-        else -> emitTypeSchema(type, builder, indent)
+        else -> emitTypeSchema(type, builder, indent, nullable = field.nullable)
     }
 }
 
-private fun emitTypeSchema(type: FieldType, builder: CodeBlock.Builder, indent: String) {
+private fun emitTypeSchema(
+    type: FieldType,
+    builder: CodeBlock.Builder,
+    indent: String,
+    nullable: Boolean = false,
+) {
     when (type) {
         FieldType.Int32,
         FieldType.Int64,
         FieldType.UInt32,
-        FieldType.ByteT -> builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "integer")
+        FieldType.ByteT -> emitJsonType(builder, indent, "integer", nullable)
 
         FieldType.BooleanT ->
-            builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "boolean")
+            emitJsonType(builder, indent, "boolean", nullable)
 
         FieldType.StringT,
         FieldType.ByteArrayT ->
-            builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "string")
+            emitJsonType(builder, indent, "string", nullable)
 
         is FieldType.ListOf -> {
-            builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "array")
+            emitJsonType(builder, indent, "array", nullable)
             builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
             emitTypeSchema(type.element, builder, indent = "$indent  ")
             builder.add("${indent}})\n")
         }
 
         is FieldType.ClassRef -> {
-            builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "object")
+            emitJsonType(builder, indent, "object", nullable)
             builder.add("${indent}put(%S, %M {\n", "properties", BUILD_JSON_OBJECT)
             type.clazz.fields.forEach { nested ->
                 builder.add("$indent  put(%S, ", nested.schemaKey)
@@ -223,6 +228,23 @@ private fun emitTypeSchema(type: FieldType, builder: CodeBlock.Builder, indent: 
             }
         }
     }
+}
+
+private fun emitJsonType(
+    builder: CodeBlock.Builder,
+    indent: String,
+    jsonType: String,
+    nullable: Boolean,
+) {
+    if (!nullable) {
+        builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, jsonType)
+        return
+    }
+
+    builder.add("${indent}put(%S, %M {\n", "type", BUILD_JSON_ARRAY)
+    builder.add("$indent  add(%T(%S))\n", JSON_PRIMITIVE, jsonType)
+    builder.add("$indent  add(%T(%S))\n", JSON_PRIMITIVE, "null")
+    builder.add("${indent}})\n")
 }
 
 private fun emitFieldConstraints(field: FieldSpec, builder: CodeBlock.Builder, indent: String) {

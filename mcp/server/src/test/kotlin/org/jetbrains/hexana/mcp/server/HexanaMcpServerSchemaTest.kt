@@ -1,7 +1,9 @@
 package org.jetbrains.hexana.mcp.server
 
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
@@ -60,6 +62,37 @@ class HexanaMcpServerSchemaTest {
         val byteItem = bytes.getValue("items").jsonObject
         assertEquals(0, byteItem.getValue("minimum").jsonPrimitive.int)
         assertEquals(255, byteItem.getValue("maximum").jsonPrimitive.int)
+    }
+
+    @Test
+    fun nullableInputPropertiesAllowNullInGeneratedSchemas() {
+        val tools = createHexanaMcpServer().tools
+
+        val summarizeModuleSchema = tools
+            .getValue("summarize_module")
+            .tool
+            .inputSchema
+            .properties
+            ?.jsonObject
+            ?: error("Missing summarize_module input schema properties")
+        assertEquals(listOf("string", "null"), schemaTypes(summarizeModuleSchema.getValue("path").jsonObject))
+        assertEquals(listOf("string", "null"), schemaTypes(summarizeModuleSchema.getValue("bytesBase64").jsonObject))
+        assertEquals(listOf("array", "null"), schemaTypes(summarizeModuleSchema.getValue("bytes").jsonObject))
+
+        val listDataSegmentsSchema = tools
+            .getValue("list_data_segments")
+            .tool
+            .inputSchema
+            .properties
+            ?.jsonObject
+            ?: error("Missing list_data_segments input schema properties")
+        val segmentRangeProperties = listDataSegmentsSchema
+            .getValue("segmentRange")
+            .jsonObject
+            .getValue("properties")
+            .jsonObject
+        assertEquals(listOf("integer", "null"), schemaTypes(segmentRangeProperties.getValue("to").jsonObject))
+        assertEquals(listOf("integer", "null"), schemaTypes(listDataSegmentsSchema.getValue("minByteLength").jsonObject))
     }
 
     @Test
@@ -128,5 +161,9 @@ class HexanaMcpServerSchemaTest {
             true,
             listDataSegmentsProperties.getValue("includeGlobals").jsonObject.getValue("default").jsonPrimitive.boolean,
         )
+    }
+
+    private fun schemaTypes(schema: JsonObject): List<String> {
+        return schema.getValue("type").jsonArray.map { it.jsonPrimitive.content }
     }
 }

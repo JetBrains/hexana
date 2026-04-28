@@ -264,6 +264,7 @@ class HexanaToolHandlers(
 
     private fun JsonObject?.optionalNonBlankString(name: String): String? {
         val element = this?.get(name) ?: return null
+        if (element == JsonNull) return null
         val value = element.jsonPrimitive.contentOrNull
             ?: throw ToolInputException("`$name` must be a string")
         if (value.isBlank()) {
@@ -274,6 +275,7 @@ class HexanaToolHandlers(
 
     private fun JsonObject?.optionalByteArray(name: String): ByteArray? {
         val element = this?.get(name) ?: return null
+        if (element == JsonNull) return null
         val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
         if (array.size > maxInlineInputBytes) {
             throw ToolInputException("`$name` exceeds maximum size of $maxInlineInputBytes bytes")
@@ -307,12 +309,14 @@ class HexanaToolHandlers(
 
     private fun JsonObject.optionalInt(name: String): Int? {
         val element = get(name) ?: return null
+        if (element == JsonNull) return null
         return element.jsonPrimitive.intOrNull
             ?: throw ToolInputException("`$name` must be an integer")
     }
 
     private fun JsonObject?.nullableInt(name: String): Int? {
         val element = this?.get(name) ?: return null
+        if (element == JsonNull) return null
         return element.jsonPrimitive.intOrNull
             ?: throw ToolInputException("`$name` must be an integer")
     }

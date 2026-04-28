@@ -110,6 +110,43 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun nullableInputFieldsAcceptExplicitJsonNull() {
+        val wasm = createWasmFile(
+            "nullable-inputs.wasm",
+            """
+            (module
+              (memory 1)
+              (data (i32.const 0) "Hello"))
+            """.trimIndent()
+        )
+
+        val inlineSummary = handlers.summarizeModule(
+            buildJsonObject {
+                put("path", JsonNull)
+                put("bytes", buildJsonArray {
+                    Files.readAllBytes(wasm).forEach { add(JsonPrimitive(it.toInt() and 0xFF)) }
+                })
+            }
+        )
+        val dataSegments = handlers.listDataSegments(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("bytesBase64", JsonNull)
+                put("bytes", JsonNull)
+                put("segmentRange", buildJsonObject {
+                    put("from", JsonPrimitive(0))
+                    put("to", JsonNull)
+                })
+                put("minByteLength", JsonNull)
+            }
+        )
+
+        assertFalse(inlineSummary.isError == true)
+        assertFalse(dataSegments.isError == true)
+        assertEquals(1, dataSegments.structuredContent!!["segments"]!!.jsonArray.size)
+    }
+
+    @Test
     fun listFunctionsReturnsToolErrorForMissingFile() {
         val result = handlers.listFunctions(
             buildJsonObject {

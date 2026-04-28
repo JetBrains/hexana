@@ -37,16 +37,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -129,16 +138,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -170,7 +188,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Imported field name."))
             })
             put("signature", buildJsonObject {
-              put("type", JsonPrimitive("object"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
               put("properties", buildJsonObject {
                 put("params", buildJsonObject {
                   put("type", JsonPrimitive("array"))
@@ -215,16 +236,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -277,16 +307,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -310,11 +349,17 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Global index in the unified global index space."))
             })
             put("prefix", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Import module prefix, when the global is imported."))
             })
             put("name", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Import or exported name, when applicable."))
             })
             put("type", buildJsonObject {
@@ -326,7 +371,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("True when the global is mutable."))
             })
             put("expression", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Initialization expression in WAT syntax."))
             })
             put("definedIn", buildJsonObject {
@@ -356,16 +404,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -393,7 +450,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Type index."))
             })
             put("elementType", buildJsonObject {
-              put("type", JsonPrimitive("object"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
               put("properties", buildJsonObject {
                 put("type", buildJsonObject {
                   put("type", JsonPrimitive("string"))
@@ -411,14 +471,20 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Array element type, when applicable."))
             })
             put("superTypes", buildJsonObject {
-              put("type", JsonPrimitive("array"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("array"))
+                add(JsonPrimitive("null"))
+              })
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("integer"))
               })
               put("description", JsonPrimitive("Supertype indices for subtyping, when applicable."))
             })
             put("fields", buildJsonObject {
-              put("type", JsonPrimitive("array"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("array"))
+                add(JsonPrimitive("null"))
+              })
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("object"))
                 put("properties", buildJsonObject {
@@ -439,21 +505,30 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Struct fields, when applicable."))
             })
             put("entries", buildJsonObject {
-              put("type", JsonPrimitive("array"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("array"))
+                add(JsonPrimitive("null"))
+              })
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("string"))
               })
               put("description", JsonPrimitive("Entry signatures, when applicable."))
             })
             put("params", buildJsonObject {
-              put("type", JsonPrimitive("array"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("array"))
+                add(JsonPrimitive("null"))
+              })
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("string"))
               })
               put("description", JsonPrimitive("Function parameter types, when applicable."))
             })
             put("retTypes", buildJsonObject {
-              put("type", JsonPrimitive("array"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("array"))
+                add(JsonPrimitive("null"))
+              })
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("string"))
               })
@@ -480,16 +555,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -524,7 +608,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
                   put("description", JsonPrimitive("Minimum number of pages."))
                 })
                 put("max", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("integer"))
+                    add(JsonPrimitive("null"))
+                  })
                   put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
                 })
                 put("hasMax", buildJsonObject {
@@ -575,16 +662,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -616,11 +712,17 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Segment mode (`active`, `passive`, `declarative`)."))
             })
             put("tableIdx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Target table index for active segments."))
             })
             put("offsetExpr", buildJsonObject {
-              put("type", JsonPrimitive("array"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("array"))
+                add(JsonPrimitive("null"))
+              })
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("string"))
               })
@@ -631,7 +733,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Element reference type."))
             })
             put("elements", buildJsonObject {
-              put("type", JsonPrimitive("array"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("array"))
+                add(JsonPrimitive("null"))
+              })
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("string"))
               })
@@ -660,16 +765,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -705,7 +819,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Funcidx in the unified function index space."))
             })
             put("signature", buildJsonObject {
-              put("type", JsonPrimitive("object"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
               put("properties", buildJsonObject {
                 put("params", buildJsonObject {
                   put("type", JsonPrimitive("array"))
@@ -729,7 +846,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Parsed signature when available."))
             })
             put("import", buildJsonObject {
-              put("type", JsonPrimitive("object"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
               put("properties", buildJsonObject {
                 put("module", buildJsonObject {
                   put("type", JsonPrimitive("string"))
@@ -758,15 +878,24 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Which section the function lives in."))
             })
             put("codeOffset", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Byte offset of the function body in the module."))
             })
             put("codeSize", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Size of the function body in bytes."))
             })
             put("instructionCount", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Number of decoded instructions in the body."))
             })
           })
@@ -791,16 +920,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -832,7 +970,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Funcidx in the unified function index space."))
             })
             put("signature", buildJsonObject {
-              put("type", JsonPrimitive("object"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
               put("properties", buildJsonObject {
                 put("params", buildJsonObject {
                   put("type", JsonPrimitive("array"))
@@ -856,7 +997,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Parsed signature when available."))
             })
             put("import", buildJsonObject {
-              put("type", JsonPrimitive("object"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
               put("properties", buildJsonObject {
                 put("module", buildJsonObject {
                   put("type", JsonPrimitive("string"))
@@ -885,15 +1029,24 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Which section the function lives in."))
             })
             put("codeOffset", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Byte offset of the function body in the module."))
             })
             put("codeSize", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Size of the function body in bytes."))
             })
             put("instructionCount", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Number of decoded instructions in the body."))
             })
           })
@@ -918,16 +1071,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -959,11 +1121,17 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Global index in the unified global index space."))
             })
             put("prefix", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Import module prefix, when the global is imported."))
             })
             put("name", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Import or exported name, when applicable."))
             })
             put("type", buildJsonObject {
@@ -975,7 +1143,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("True when the global is mutable."))
             })
             put("expression", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Initialization expression in WAT syntax."))
             })
             put("definedIn", buildJsonObject {
@@ -1005,16 +1176,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -1057,7 +1237,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
                   put("description", JsonPrimitive("Minimum number of pages."))
                 })
                 put("max", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("integer"))
+                    add(JsonPrimitive("null"))
+                  })
                   put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
                 })
                 put("hasMax", buildJsonObject {
@@ -1108,16 +1291,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -1153,7 +1345,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Type index."))
             })
             put("elementType", buildJsonObject {
-              put("type", JsonPrimitive("object"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
               put("properties", buildJsonObject {
                 put("type", buildJsonObject {
                   put("type", JsonPrimitive("string"))
@@ -1171,14 +1366,20 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Array element type, when applicable."))
             })
             put("superTypes", buildJsonObject {
-              put("type", JsonPrimitive("array"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("array"))
+                add(JsonPrimitive("null"))
+              })
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("integer"))
               })
               put("description", JsonPrimitive("Supertype indices for subtyping, when applicable."))
             })
             put("fields", buildJsonObject {
-              put("type", JsonPrimitive("array"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("array"))
+                add(JsonPrimitive("null"))
+              })
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("object"))
                 put("properties", buildJsonObject {
@@ -1199,21 +1400,30 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Struct fields, when applicable."))
             })
             put("entries", buildJsonObject {
-              put("type", JsonPrimitive("array"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("array"))
+                add(JsonPrimitive("null"))
+              })
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("string"))
               })
               put("description", JsonPrimitive("Entry signatures, when applicable."))
             })
             put("params", buildJsonObject {
-              put("type", JsonPrimitive("array"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("array"))
+                add(JsonPrimitive("null"))
+              })
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("string"))
               })
               put("description", JsonPrimitive("Function parameter types, when applicable."))
             })
             put("retTypes", buildJsonObject {
-              put("type", JsonPrimitive("array"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("array"))
+                add(JsonPrimitive("null"))
+              })
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("string"))
               })
@@ -1240,16 +1450,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -1322,16 +1541,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -1390,16 +1618,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -1458,15 +1695,24 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
                   put("description", JsonPrimitive("Funcidx in the unified function index space."))
                 })
                 put("module", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("string"))
+                    add(JsonPrimitive("null"))
+                  })
                   put("description", JsonPrimitive("Import module name, when the export resolves to an imported function."))
                 })
                 put("name", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("string"))
+                    add(JsonPrimitive("null"))
+                  })
                   put("description", JsonPrimitive("Import field name, when applicable."))
                 })
                 put("signature", buildJsonObject {
-                  put("type", JsonPrimitive("object"))
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("object"))
+                    add(JsonPrimitive("null"))
+                  })
                   put("properties", buildJsonObject {
                     put("params", buildJsonObject {
                       put("type", JsonPrimitive("array"))
@@ -1497,19 +1743,31 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
                   put("description", JsonPrimitive("All export names pointing at this function."))
                 })
                 put("definedIn", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("string"))
+                    add(JsonPrimitive("null"))
+                  })
                   put("description", JsonPrimitive("Which section the function body lives in."))
                 })
                 put("codeOffset", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("integer"))
+                    add(JsonPrimitive("null"))
+                  })
                   put("description", JsonPrimitive("Byte offset of the function body in the module."))
                 })
                 put("codeSize", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("integer"))
+                    add(JsonPrimitive("null"))
+                  })
                   put("description", JsonPrimitive("Size of the function body in bytes."))
                 })
                 put("instructionCount", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("integer"))
+                    add(JsonPrimitive("null"))
+                  })
                   put("description", JsonPrimitive("Number of decoded instructions in the body."))
                 })
               })
@@ -1536,7 +1794,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
         put("description", JsonPrimitive("True when the range was clipped to the module's export count."))
       })
       put("nextOffset", buildJsonObject {
-        put("type", JsonPrimitive("integer"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("integer"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Next offset to continue pagination; null when the range was exhausted."))
       })
     },
@@ -1552,16 +1813,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -1625,11 +1895,17 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Raw data payload (serialised as Base64)."))
             })
             put("memoryIndex", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Target memory index for active entries."))
             })
             put("expression", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Offset expression for active entries."))
             })
           })
@@ -1651,7 +1927,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
         put("description", JsonPrimitive("True when the range was clipped."))
       })
       put("nextOffset", buildJsonObject {
-        put("type", JsonPrimitive("integer"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("integer"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Next offset to continue pagination; null when exhausted."))
       })
     },
@@ -1667,16 +1946,25 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
-        put("type", JsonPrimitive("string"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
           put("minimum", JsonPrimitive(0))
@@ -1694,7 +1982,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
             put("minimum", JsonPrimitive(0))
           })
           put("to", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
+            put("type", buildJsonArray {
+              add(JsonPrimitive("integer"))
+              add(JsonPrimitive("null"))
+            })
             put("description", JsonPrimitive("Optional exclusive upper bound."))
             put("minimum", JsonPrimitive(0))
           })
@@ -1715,7 +2006,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
         put("default", JsonPrimitive(true))
       })
       put("minByteLength", buildJsonObject {
-        put("type", JsonPrimitive("integer"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("integer"))
+          add(JsonPrimitive("null"))
+        })
         put("description", JsonPrimitive("Optional minimum raw byte length for returned segments."))
         put("minimum", JsonPrimitive(0))
       })
@@ -1745,7 +2039,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
                   put("description", JsonPrimitive("Minimum number of pages."))
                 })
                 put("max", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("integer"))
+                    add(JsonPrimitive("null"))
+                  })
                   put("description", JsonPrimitive("Maximum number of pages, when bounded."))
                 })
                 put("hasMax", buildJsonObject {
@@ -1793,11 +2090,17 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Global index."))
             })
             put("module", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Import module name when the global is imported."))
             })
             put("name", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Import or exported name when applicable."))
             })
             put("type", buildJsonObject {
@@ -1809,7 +2112,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("True when the global is mutable."))
             })
             put("initExpr", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Initialization expression in WAT syntax."))
             })
             put("definedIn", buildJsonObject {
@@ -1848,11 +2154,17 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Segment mode (`active`, `passive`)."))
             })
             put("memory", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Target memory index for active segments."))
             })
             put("offsetExpr", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Offset expression for active segments."))
             })
             put("byteLength", buildJsonObject {
@@ -1860,11 +2172,17 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
               put("description", JsonPrimitive("Byte length of the segment payload."))
             })
             put("hexPreview", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Hex-encoded preview of the first bytes."))
             })
             put("utf8Preview", buildJsonObject {
-              put("type", JsonPrimitive("string"))
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
               put("description", JsonPrimitive("Best-effort UTF-8 preview of the segment content."))
             })
             put("rawAvailable", buildJsonObject {
@@ -1882,7 +2200,10 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
         put("description", JsonPrimitive("Data segment metadata."))
       })
       put("linkingMetadata", buildJsonObject {
-        put("type", JsonPrimitive("object"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
+        })
         put("properties", buildJsonObject {
         })
         put("description", JsonPrimitive("Optional linker/CG metadata block."))
