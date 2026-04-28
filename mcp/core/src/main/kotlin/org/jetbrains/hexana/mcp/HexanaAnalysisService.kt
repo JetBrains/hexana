@@ -28,7 +28,7 @@ interface HexanaAnalysisService {
     fun summarizeModule(input: WasmInput): SummarizeModuleResult
     fun listImports(input: WasmInput): ListImportsResult
     fun listExports(input: WasmInput): ListExportsResult
-    fun listFunctions(input: WasmInput, offset: Int = 0, limit: Int = 200): FunctionsResult
+    fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult
     fun listExportedFunctions(input: WasmInput, entriesRange: IntRange): ListExportedFunctionsResult
     fun functionsForIndices(input: WasmInput, indices: List<Int>): FunctionsResult
     fun listGlobals(input: WasmInput): ListGlobalsResult
@@ -39,10 +39,10 @@ interface HexanaAnalysisService {
     fun listDataSegments(
         input: WasmInput,
         segmentStartInclusive: Int,
-        segmentEndExclusive: Int = Int.MAX_VALUE,
-        includeExports: Boolean = false,
-        includeGlobals: Boolean = true,
-        minByteLength: Int? = null
+        segmentEndExclusive: Int,
+        includeExports: Boolean,
+        includeGlobals: Boolean,
+        minByteLength: Int?
     ): ListDataSegmentsResult
 
     fun getMemoryForIndices(input: WasmInput, indices: List<Int>): ListMemoryResult

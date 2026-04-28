@@ -205,7 +205,8 @@ class DefaultHexanaAnalysisServiceTest {
             segmentStartInclusive = 0,
             segmentEndExclusive = 1,
             includeExports = false,
-            includeGlobals = true
+            includeGlobals = true,
+            minByteLength = null
         )
         val selectedMemory = service.getMemoryForIndices(WasmInput.FilePath(wasm.toString()), indices = listOf(0))
         val selectedTypes = service.getTypesForIndices(WasmInput.FilePath(wasm.toString()), indices = listOf(0))
@@ -432,7 +433,10 @@ class DefaultHexanaAnalysisServiceTest {
             service.listDataSegments(
                 input = WasmInput.FilePath(wasm.toString()),
                 segmentStartInclusive = 5,
-                segmentEndExclusive = 1
+                segmentEndExclusive = 1,
+                includeExports = false,
+                includeGlobals = true,
+                minByteLength = null
             )
         }
         val negativeMinByteLength = assertFailsWith<HexanaAnalysisException> {
@@ -440,6 +444,8 @@ class DefaultHexanaAnalysisServiceTest {
                 input = WasmInput.FilePath(wasm.toString()),
                 segmentStartInclusive = 0,
                 segmentEndExclusive = 1,
+                includeExports = false,
+                includeGlobals = true,
                 minByteLength = -1
             )
         }
