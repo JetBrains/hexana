@@ -39,7 +39,7 @@ interface WasmComponentBase<S: WasmSection, T: WasmSection> {
     }
 
     fun CommonByteBuffer.content(section: WasmSection): CommonByteBuffer {
-        return this.slice(section.contentOffset until section.contentOffset + section.contentSize)
+        return this.slice(section.contentOffset, section.contentSize)
     }
 
     fun getCustomSectionByName(name: String): WasmSectionCustom? {

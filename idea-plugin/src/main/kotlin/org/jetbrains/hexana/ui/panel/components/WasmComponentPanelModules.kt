@@ -25,9 +25,7 @@ fun WasmComponentPanelModules( wasmBinaryProvider: WasmComponentBinaryProvider,
 
         ), modules.size) { rowIndex ->
         val moduleRecord = modules[rowIndex] ?: return@Table
-        val buffer = wasmBinaryProvider.bytes.slice(
-            IntRange(moduleRecord.contentOffset, moduleRecord.contentSize)
-        )
+        val buffer = wasmBinaryProvider.bytes.slice(moduleRecord.contentOffset, moduleRecord.contentSize)
         val hexedOffset = moduleRecord.contentOffset.toHexString()
         val fileName = (wasmBinaryProvider as? WasmComponentBinaryVirtualFileProvider)?.let {
             "${it.file.nameWithoutExtension}_${rowIndex}@$hexedOffset.${it.file.extension}"

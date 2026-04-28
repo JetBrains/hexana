@@ -23,6 +23,8 @@ private class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer 
         return res
     }
 
+    override fun get(index: Int): Byte = dataView.getInt8(index)
+
     override fun get(dst: ByteArray, offset: Int, size: Int) {
         val slice = Int8Array(buffer.slice(cursorPosition, cursorPosition + size))
         for (i in offset until offset + size) {
@@ -87,8 +89,10 @@ private class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer 
         return buffer.byteLength
     }
 
-    override fun slice(range: IntRange): CommonByteBuffer {
-        return WebByteBuffer(buffer.slice(range.first, range.last))
+    override fun slice(offset: Int, length: Int): CommonByteBuffer {
+        // ArrayBuffer.slice(begin, end) takes an exclusive end index — convert
+        // (offset, length) → (offset, offset + length).
+        return WebByteBuffer(buffer.slice(offset, offset + length))
     }
 
     override fun duplicate(): CommonByteBuffer = WebByteBuffer(buffer).also { it.cursorPosition = cursorPosition }

@@ -36,6 +36,8 @@ private class JvmByteBuffer(val buffer: ByteBuffer) : CommonByteBuffer {
         buffer.get(dst, offset, size)
     }
 
+    override fun get(index: Int): Byte = buffer.get(index)
+
     override fun put(value: Byte) {
         buffer.put(value)
     }
@@ -64,11 +66,20 @@ private class JvmByteBuffer(val buffer: ByteBuffer) : CommonByteBuffer {
         return buffer.limit()
     }
 
-    override fun slice(range: IntRange): CommonByteBuffer {
-        return buffer.slice(range.first, range.last).toCommonByteBuffer()
+    override fun slice(offset: Int, length: Int): CommonByteBuffer {
+        return buffer.slice(offset, length).toCommonByteBuffer()
     }
 
     override fun duplicate(): CommonByteBuffer = JvmByteBuffer(buffer.duplicate())
+
+    override fun toByteArray(): ByteArray {
+        // Bulk copy through a duplicate so we don't disturb our own cursor.
+        val dup = buffer.duplicate()
+        dup.position(0)
+        val out = ByteArray(dup.limit())
+        dup.get(out, 0, out.size)
+        return out
+    }
 }
 
 fun CommonByteBuffer.toByteBuffer(): ByteBuffer = (this as JvmByteBuffer).buffer

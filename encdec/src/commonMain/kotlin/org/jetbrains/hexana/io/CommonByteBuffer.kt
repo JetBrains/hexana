@@ -3,6 +3,13 @@ package org.jetbrains.hexana.io
 interface CommonByteBuffer {
     fun get(): Byte
     fun get(dst: ByteArray, offset: Int, size: Int)
+
+    /**
+     * Absolute random-access read. Does **not** advance the cursor. Mirrors
+     * `ByteArray[i]` so `buf[i]` is source-compatible with array-style access.
+     */
+    operator fun get(index: Int): Byte
+
     fun put(value: Byte)
     fun put(src: ByteArray, offset: Int, size: Int)
     fun putIntLE(value: Int)
@@ -14,7 +21,32 @@ interface CommonByteBuffer {
     fun getFloatLE(): Float
     fun getDoubleLE(): Double
     fun limit(): Int
-    fun slice(range: IntRange): CommonByteBuffer
+
+    /**
+     * Returns a buffer view over `[offset, offset + length)` of the underlying
+     * bytes, with its own cursor starting at 0 and `limit() == length`.
+     * Coordinates are translated; absolute file offsets are NOT preserved.
+     * For a race-free shared cursor without coordinate translation, use [duplicate].
+     */
+    fun slice(offset: Int, length: Int): CommonByteBuffer
+
+    /** Mirrors [ByteArray.size] for source compatibility. */
+    val size: Int
+        get() = limit()
+
+    /** Mirrors [ByteArray.isEmpty] for source compatibility. */
+    fun isEmpty(): Boolean = limit() == 0
+
+    /**
+     * Materializes a copy of the buffer's contents as a [ByteArray]. Use only
+     * at boundaries that demand `ByteArray` (serialization, host-side I/O). For
+     * in-process consumers prefer indexed access via [get] to avoid the copy.
+     */
+    fun toByteArray(): ByteArray {
+        val out = ByteArray(size)
+        for (i in 0 until size) out[i] = get(i)
+        return out
+    }
 
     /**
      * Returns a new [CommonByteBuffer] that shares the underlying bytes with this one,
