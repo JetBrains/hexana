@@ -4,8 +4,16 @@
   "description": "WebAssembly binary viewer and analyzer with a Compose for Web custom editor",
   "version": "0.0.1",
   "publisher": "JetBrains",
-  "license": "JetBrains User Agreement",
-  "repository": "https://github.com/JetBrains/hexana",
+  "license": "SEE LICENSE IN LICENSE",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JetBrains/hexana"
+  },
+  "homepage": "https://github.com/JetBrains/hexana#readme",
+  "bugs": {
+    "url": "https://github.com/JetBrains/hexana/issues"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },

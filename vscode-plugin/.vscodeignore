@@ -3,8 +3,8 @@ test/**
 
 # Agent/dev documentation and metadata
 AGENTS.md
+README-dev.md
 .gitignore
-README.md
 
 # Build scripts (not needed at runtime)
 build-and-run-locally.sh
@@ -34,5 +34,11 @@ webview/build/compileSync/**
 webview/build/kotlin/**
 webview/build/tmp/**
 
+# Webpack config
+extension-lib/webpack.config.d/**
+
 # Source maps
 **/*.js.map
+
+# Webpack license extracts
+**/*.js.LICENSE.txt
