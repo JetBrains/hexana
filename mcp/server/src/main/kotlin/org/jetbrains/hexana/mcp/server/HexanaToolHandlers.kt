@@ -36,8 +36,8 @@ class HexanaToolHandlers(
         return execute("list_functions") {
             analysisService.listFunctions(
                 input = wasmInput(arguments),
-                offset = arguments.intOrDefault("offset", 0),
-                limit = arguments.intOrDefault("limit", 200)
+                offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.LIST_FUNCTIONS_OFFSET),
+                limit = arguments.intOrDefault("limit", HexanaToolInputDefaults.LIST_FUNCTIONS_LIMIT)
             )
         }
     }
@@ -103,8 +103,14 @@ class HexanaToolHandlers(
                 input = wasmInput(arguments),
                 segmentStartInclusive = from,
                 segmentEndExclusive = toExclusive,
-                includeExports = arguments.booleanOrDefault("includeExports", false),
-                includeGlobals = arguments.booleanOrDefault("includeGlobals", true),
+                includeExports = arguments.booleanOrDefault(
+                    "includeExports",
+                    HexanaToolInputDefaults.LIST_DATA_SEGMENTS_INCLUDE_EXPORTS
+                ),
+                includeGlobals = arguments.booleanOrDefault(
+                    "includeGlobals",
+                    HexanaToolInputDefaults.LIST_DATA_SEGMENTS_INCLUDE_GLOBALS
+                ),
                 minByteLength = arguments.nullableInt("minByteLength")
             )
         }

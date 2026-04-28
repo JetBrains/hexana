@@ -22,6 +22,8 @@ Read these files before making structural changes:
 - Tool registration (`Server.registerHexanaTools`) is generated from the DSL in `mcp/tools-generator/`. To change a
   tool's name, description, input, or output shape, edit the DSL and regenerate with
   `./gradlew :mcp:server:generateHexanaToolDispatcher`; commit the regenerated file under `src/main/gen/`.
+- The same generated file also exposes `HexanaToolInputDefaults`; use those constants in hand-written argument parsing
+  instead of repeating defaults from the DSL.
 - Do not add hand-written per-tool input schema helpers here. Standalone input schemas are generated from
   `ClassSpec`/`FieldSpec` in `mcp/tools-generator`.
 - Use the shared JVM CLI/logging stack here rather than ad hoc parsing or `System.err.println` wrappers.

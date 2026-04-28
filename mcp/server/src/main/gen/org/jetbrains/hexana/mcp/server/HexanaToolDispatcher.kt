@@ -5,10 +5,25 @@ import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
+import kotlin.Boolean
+import kotlin.Int
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
+
+/**
+ * Generated input defaults shared by standalone server handlers.
+ */
+internal object HexanaToolInputDefaults {
+  public const val LIST_FUNCTIONS_OFFSET: Int = 0
+
+  public const val LIST_FUNCTIONS_LIMIT: Int = 200
+
+  public const val LIST_DATA_SEGMENTS_INCLUDE_EXPORTS: Boolean = false
+
+  public const val LIST_DATA_SEGMENTS_INCLUDE_GLOBALS: Boolean = true
+}
 
 /**
  * Registers all Hexana MCP tools on the receiver Server.
