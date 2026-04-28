@@ -224,7 +224,11 @@ class FieldHandle internal constructor(
     private val index: Int,
 ) {
     fun describe(text: String): FieldHandle = apply {
-        builder.mutate(index) { it.copy(describe = text.trimIndent().trim()) }
+        val description = text.trimIndent().trim()
+        builder.mutate(index) {
+            require(description.isNotBlank()) { "Field '${it.name}' description must not be blank." }
+            it.copy(describe = description)
+        }
     }
 
     fun serialName(name: String): FieldHandle = apply {

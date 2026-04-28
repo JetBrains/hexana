@@ -197,6 +197,15 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `blank field descriptions are rejected`() {
+        assertFailsWith<IllegalArgumentException> {
+            class_("Broken") {
+                int("value").describe("   ")
+            }
+        }
+    }
+
+    @Test
     fun `class kotlin package must produce a valid FQN`() {
         assertFailsWith<IllegalArgumentException> {
             class_("Broken", kotlinPackage = "not a package") {
