@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.data"
+
 private val HalfOpenIntRange = class_("HalfOpenIntRange") {
     int("from").describe("Inclusive zero-based lower bound.").minimum(0)
     nullable("to", int()).describe("Optional exclusive upper bound.").minimum(0)
@@ -33,7 +35,7 @@ val DataEntryResultClass = class_("DataEntryResult") {
     nullable("expression", string()).describe("Offset expression for active entries.")
 }
 
-val ListDataSectionsResultClass = class_("ListDataSectionsResult") {
+val ListDataSectionsResultClass = class_("ListDataSectionsResult", kotlinPackage = MODEL_PACKAGE) {
     int("from").describe("Inclusive lower bound that was requested.")
     int("to").describe("Inclusive upper bound that was requested.")
     list("returned", of = DataEntryResultClass).describe("Entries inside the requested range.")
@@ -95,7 +97,7 @@ val DataSegmentsSummaryResultClass = class_("DataSegmentsSummaryResult") {
 val DataSegmentLinkingMetadataResultClass = class_("DataSegmentLinkingMetadataResult") {
 }
 
-val ListDataSegmentsResultClass = class_("ListDataSegmentsResult") {
+val ListDataSegmentsResultClass = class_("ListDataSegmentsResult", kotlinPackage = MODEL_PACKAGE) {
     list("memory", of = DataSegmentMemoryResultClass).describe("Memories referenced by the segments.")
     list("globals", of = DataSegmentGlobalResultClass).describe("Globals referenced by segment offset expressions.")
     list("segments", of = DataSegmentResultClass).describe("Data segment metadata.")

@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.functions"
+
 val ListFunctionsInput = WasmInputClass.with("ListFunctionsInput") {
     int("offset", default = 0)
         .describe("Offset into the unified function index space")
@@ -46,7 +48,7 @@ val FunctionSummaryResultClass = class_("FunctionSummaryResult") {
     nullable("instructionCount", long()).describe("Number of decoded instructions in the body.")
 }
 
-val FunctionsResultClass = class_("FunctionsResult") {
+val FunctionsResultClass = class_("FunctionsResult", kotlinPackage = MODEL_PACKAGE) {
     list("functions", of = FunctionSummaryResultClass)
         .describe("Resolved function entries.")
 }
@@ -56,7 +58,10 @@ val FunctionInstructionsResultClass = class_("FunctionInstructionsResult") {
     list("instructions", of = string()).describe("Decoded instruction text, one entry per instruction.")
 }
 
-val GetInstructionsForFunctionsResultClass = class_("GetInstructionsForFunctionsResult") {
+val GetInstructionsForFunctionsResultClass = class_(
+    "GetInstructionsForFunctionsResult",
+    kotlinPackage = MODEL_PACKAGE,
+) {
     list("functions", of = FunctionInstructionsResultClass)
         .describe("Per-function decoded instructions.")
 }
@@ -71,7 +76,7 @@ val FunctionLocalsResultClass = class_("FunctionLocalsResult") {
     list("locals", of = LocalDeclarationResultClass).describe("Grouped local declarations for the function.")
 }
 
-val GetLocalsForFunctionsResultClass = class_("GetLocalsForFunctionsResult") {
+val GetLocalsForFunctionsResultClass = class_("GetLocalsForFunctionsResult", kotlinPackage = MODEL_PACKAGE) {
     list("functions", of = FunctionLocalsResultClass)
         .describe("Per-function local declarations.")
 }

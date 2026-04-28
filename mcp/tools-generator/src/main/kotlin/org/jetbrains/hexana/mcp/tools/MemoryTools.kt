@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.memory"
+
 val GetMemoryForIndicesInput = indicesInput(
     "GetMemoryForIndicesInput",
     "List of memory indices (`memidx`) to return.",
@@ -20,7 +22,7 @@ val MemoryResultClass = class_("MemoryResult") {
     string("definedIn").describe("Section the memory is declared in.")
 }
 
-val ListMemoryResultClass = class_("ListMemoryResult") {
+val ListMemoryResultClass = class_("ListMemoryResult", kotlinPackage = MODEL_PACKAGE) {
     list("memories", of = MemoryResultClass).describe("Imported and defined memories.")
 }
 

@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.globals"
+
 val GetGlobalsForIndicesInput = indicesInput(
     "GetGlobalsForIndicesInput",
     "List of global indices (`globalidx`) to return.",
@@ -15,7 +17,7 @@ val GlobalResultClass = class_("GlobalResult") {
     string("definedIn").describe("Section the global is declared in.")
 }
 
-val ListGlobalsResultClass = class_("ListGlobalsResult") {
+val ListGlobalsResultClass = class_("ListGlobalsResult", kotlinPackage = MODEL_PACKAGE) {
     list("globals", of = GlobalResultClass).describe("Globals declared or imported by the module.")
 }
 

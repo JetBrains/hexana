@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.imports"
+
 val ImportFunctionSignatureClass = class_("ImportFunctionSignature") {
     list("params", of = string()).describe("Parameter types, in declaration order.")
     list("ret", of = string()).serialName("return").describe("Return types, in declaration order.")
@@ -13,7 +15,7 @@ val ImportFunctionResultClass = class_("ImportFunctionResult") {
         .describe("Parsed signature, when available.")
 }
 
-val ListImportsResultClass = class_("ListImportsResult") {
+val ListImportsResultClass = class_("ListImportsResult", kotlinPackage = MODEL_PACKAGE) {
     list("imports", of = ImportFunctionResultClass)
         .describe("Imported functions declared by the module.")
 }

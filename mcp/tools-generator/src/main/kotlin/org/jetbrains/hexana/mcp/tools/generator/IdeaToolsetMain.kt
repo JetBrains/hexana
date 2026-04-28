@@ -26,26 +26,6 @@ private val MCP_DESCRIPTION = ClassName("com.intellij.mcpserver.annotations", "M
 private val MCP_TOOLSET = ClassName("com.intellij.mcpserver", "McpToolset")
 private val CONSTANTS = ClassName("com.intellij.mcpserver.toolsets", "Constants")
 
-/**
- * Maps each generated-toolset method's return type to the package its data
- * class lives in under `mcp/core/model/`. Update when adding new tool outputs.
- */
-private val RESULT_PACKAGE: Map<String, String> = mapOf(
-    "SummarizeModuleResult" to "org.jetbrains.hexana.mcp.model.summary",
-    "ListImportsResult" to "org.jetbrains.hexana.mcp.model.imports",
-    "ListExportsResult" to "org.jetbrains.hexana.mcp.model.exports",
-    "ListExportedFunctionsResult" to "org.jetbrains.hexana.mcp.model.exports",
-    "ListGlobalsResult" to "org.jetbrains.hexana.mcp.model.globals",
-    "ListMemoryResult" to "org.jetbrains.hexana.mcp.model.memory",
-    "ListElementSegmentsResult" to "org.jetbrains.hexana.mcp.model.elements",
-    "TypesResult" to "org.jetbrains.hexana.mcp.model.types",
-    "FunctionsResult" to "org.jetbrains.hexana.mcp.model.functions",
-    "GetInstructionsForFunctionsResult" to "org.jetbrains.hexana.mcp.model.functions",
-    "GetLocalsForFunctionsResult" to "org.jetbrains.hexana.mcp.model.functions",
-    "ListDataSectionsResult" to "org.jetbrains.hexana.mcp.model.data",
-    "ListDataSegmentsResult" to "org.jetbrains.hexana.mcp.model.data",
-)
-
 fun main(args: Array<String>) {
     val outputRoot = args.firstOrNull()?.let(Path::of) ?: run {
         System.err.println("Usage: toolset-generator <output-root>")
@@ -69,9 +49,7 @@ private fun buildToolsetFile(tools: List<ToolSpec>): FileSpec {
 }
 
 private fun buildMethod(spec: ToolSpec): FunSpec {
-    val pkg = RESULT_PACKAGE[spec.output.name]
-        ?: error("No package mapping for result class '${spec.output.name}'. Add to RESULT_PACKAGE.")
-    val returnType = ClassName(pkg, spec.output.name)
+    val returnType = returnType(spec)
     val methodName = spec.name.toToolsetMethodName()
     val handlerSimpleName = spec.handlerFqn.substringAfterLast('.')
 
@@ -91,6 +69,12 @@ private fun buildMethod(spec: ToolSpec): FunSpec {
     addParameters(builder, spec)
     addBody(builder, spec, handlerSimpleName)
     return builder.build()
+}
+
+private fun returnType(spec: ToolSpec): ClassName {
+    val outputFqn = spec.output.kotlinFqn
+        ?: error("Output class '${spec.output.name}' for tool '${spec.name}' must declare kotlinPackage in the DSL.")
+    return ClassName(outputFqn.substringBeforeLast('.'), outputFqn.substringAfterLast('.'))
 }
 
 private fun buildDescription(spec: ToolSpec): String {

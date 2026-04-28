@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.summary"
+
 val SummarizeModuleImportsClass = class_("SummarizeModuleImports") {
     int("functions").describe("Number of imported functions.")
     int("memories").describe("Number of imported memories.")
@@ -7,7 +9,7 @@ val SummarizeModuleImportsClass = class_("SummarizeModuleImports") {
     int("globals").describe("Number of imported globals.")
 }
 
-val SummarizeModuleResultClass = class_("SummarizeModuleResult") {
+val SummarizeModuleResultClass = class_("SummarizeModuleResult", kotlinPackage = MODEL_PACKAGE) {
     int("functions").describe("Total function count (imports + defined).")
     int("exports").describe("Number of exports declared by the module.")
     int("memories").describe("Number of memories declared by the module.")

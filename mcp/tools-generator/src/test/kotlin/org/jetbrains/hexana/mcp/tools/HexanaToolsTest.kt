@@ -84,8 +84,26 @@ class HexanaToolsTest {
             assertTrue(spec.summary.isNotBlank(), "summary blank for ${spec.name}")
             assertTrue(spec.handlerFqn.isNotBlank(), "handlerFqn blank for ${spec.name}")
             assertTrue(spec.input.fields.isNotEmpty(), "empty input class for ${spec.name}")
-            assertTrue(spec.output.fields.isNotEmpty() || spec.output.name == "DataSegmentLinkingMetadataResult",
-                "empty output class for ${spec.name}")
+            assertTrue(
+                spec.output.kotlinFqn != null,
+                "output class ${spec.output.name} missing kotlinPackage for ${spec.name}",
+            )
+            assertTrue(
+                spec.output.fields.isNotEmpty() || spec.output.name == "DataSegmentLinkingMetadataResult",
+                "empty output class for ${spec.name}",
+            )
+        }
+    }
+
+    @Test
+    fun `tool output Kotlin FQNs point at matching result classes`() {
+        HexanaTools.forEach { spec ->
+            val outputFqn = requireNotNull(spec.output.kotlinFqn)
+            assertEquals(spec.output.name, outputFqn.substringAfterLast('.'), "bad output FQN for ${spec.name}")
+            assertTrue(
+                outputFqn.startsWith("org.jetbrains.hexana.mcp.model."),
+                "output FQN for ${spec.name} should point at mcp/core model package",
+            )
         }
     }
 
@@ -137,6 +155,15 @@ class HexanaToolsTest {
         assertFailsWith<IllegalArgumentException> {
             class_("Broken") {
                 list("names", of = string()).itemsMinimum(0)
+            }
+        }
+    }
+
+    @Test
+    fun `class kotlin package must produce a valid FQN`() {
+        assertFailsWith<IllegalArgumentException> {
+            class_("Broken", kotlinPackage = "not a package") {
+                int("value")
             }
         }
     }

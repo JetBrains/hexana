@@ -106,21 +106,29 @@ data class ClassSpec(
     val fields: List<FieldSpec>,
     /** Exactly one of these field names must be present at runtime. */
     val oneOf: List<String>? = null,
+    val kotlinFqn: String? = null,
 ) {
     /**
      * Returns a new ClassSpec that inherits this one's fields, plus whatever the block adds.
      * Optionally rename the derived class.
      */
-    fun with(renameTo: String = name, block: ClassBuilder.() -> Unit): ClassSpec {
-        val builder = ClassBuilder(renameTo, fields, oneOf)
+    fun with(
+        renameTo: String = name,
+        kotlinPackage: String? = null,
+        block: ClassBuilder.() -> Unit,
+    ): ClassSpec {
+        val builder = ClassBuilder(renameTo, fields, oneOf, kotlinFqn(renameTo, kotlinPackage))
         builder.block()
         return builder.build()
     }
 }
 
-fun class_(name: String, block: ClassBuilder.() -> Unit): ClassSpec {
-    return ClassBuilder(name).apply(block).build()
+fun class_(name: String, kotlinPackage: String? = null, block: ClassBuilder.() -> Unit): ClassSpec {
+    return ClassBuilder(name, kotlinFqn = kotlinFqn(name, kotlinPackage)).apply(block).build()
 }
+
+private fun kotlinFqn(name: String, kotlinPackage: String?): String? =
+    kotlinPackage?.let { "$it.$name" }
 
 // ---------- Builders ----------
 
@@ -132,6 +140,7 @@ class ClassBuilder internal constructor(
     private val name: String,
     seed: List<FieldSpec> = emptyList(),
     seedOneOf: List<String>? = null,
+    private val kotlinFqn: String? = null,
 ) {
     private val fields = seed.toMutableList()
     private var oneOf: List<String>? = seedOneOf
@@ -197,7 +206,15 @@ class ClassBuilder internal constructor(
                 "oneOf references unknown field '$prop' in class '$name'."
             }
         }
-        return ClassSpec(name, fields.toList(), oneOf)
+        kotlinFqn?.let {
+            require(FQN_REGEX.matches(it)) {
+                "Class '$name' kotlinPackage produced invalid FQN `$it`."
+            }
+            require(it.substringAfterLast('.') == name) {
+                "Class '$name' kotlin FQN must end with the class name, got `$it`."
+            }
+        }
+        return ClassSpec(name, fields.toList(), oneOf, kotlinFqn)
     }
 }
 
@@ -291,7 +308,7 @@ class ToolsBuilder internal constructor() {
     }
 }
 
-private val HANDLER_FQN_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$")
+private val FQN_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$")
 
 @HexanaToolsDsl
 class ToolBuilder internal constructor(private val name: String) {
@@ -308,7 +325,7 @@ class ToolBuilder internal constructor(private val name: String) {
         val resolvedInputPattern = requireNotNull(inputPattern) { "Tool '$name' is missing `inputPattern = `." }
         val resolvedOutput = requireNotNull(output) { "Tool '$name' is missing `output = `." }
         val resolvedHandler = requireNotNull(handlerFqn) { "Tool '$name' is missing `handlerFqn = `." }
-        require(HANDLER_FQN_REGEX.matches(resolvedHandler)) {
+        require(FQN_REGEX.matches(resolvedHandler)) {
             "Tool '$name' handlerFqn must be a fully-qualified function name (`pkg.subpkg.fn`), got `$resolvedHandler`."
         }
         validateInputPattern(name, resolvedInput, resolvedInputPattern)

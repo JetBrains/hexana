@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.exports"
+
 val ListExportedFunctionsInput = WasmInputClass.with("ListExportedFunctionsInput") {
     embed("entriesRange", of = ClosedIntRange)
         .describe("Closed zero-based export slice. Pass `entriesRange = { from, to }`; both bounds are inclusive.")
@@ -11,7 +13,7 @@ val ExportResultClass = class_("ExportResult") {
     byte("kind").describe("WebAssembly export kind byte (0=func, 1=table, 2=memory, 3=global).")
 }
 
-val ListExportsResultClass = class_("ListExportsResult") {
+val ListExportsResultClass = class_("ListExportsResult", kotlinPackage = MODEL_PACKAGE) {
     list("exports", of = ExportResultClass)
         .describe("Exports declared by the module.")
 }
@@ -38,7 +40,7 @@ val ExportedFunctionResultClass = class_("ExportedFunctionResult") {
     embed("entry", of = ExportedFunctionEntryResultClass).describe("Resolved function entry for the export.")
 }
 
-val ListExportedFunctionsResultClass = class_("ListExportedFunctionsResult") {
+val ListExportedFunctionsResultClass = class_("ListExportedFunctionsResult", kotlinPackage = MODEL_PACKAGE) {
     int("from").describe("Inclusive lower bound that was requested.")
     int("to").describe("Inclusive upper bound that was requested.")
     list("returned", of = ExportedFunctionResultClass).describe("Entries inside the requested range.")

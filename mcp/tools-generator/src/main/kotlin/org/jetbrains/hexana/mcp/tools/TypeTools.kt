@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.types"
+
 val GetTypesForIndicesInput = indicesInput(
     "GetTypesForIndicesInput",
     "List of type indices (`typeidx`) to return.",
@@ -21,7 +23,7 @@ val TypeResultClass = class_("TypeResult") {
     nullable("retTypes", of = list(of = string())).describe("Function return types, when applicable.")
 }
 
-val TypesResultClass = class_("TypesResult") {
+val TypesResultClass = class_("TypesResult", kotlinPackage = MODEL_PACKAGE) {
     list("types", of = TypeResultClass).describe("Declared type entries.")
 }
 

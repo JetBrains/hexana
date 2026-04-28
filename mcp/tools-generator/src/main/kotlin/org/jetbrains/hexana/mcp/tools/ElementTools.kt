@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.elements"
+
 val ElementSegmentResultClass = class_("ElementSegmentResult") {
     int("elementidx").describe("Element segment index.")
     int("kind").describe("Raw element segment kind byte.")
@@ -10,7 +12,7 @@ val ElementSegmentResultClass = class_("ElementSegmentResult") {
     nullable("elements", of = list(of = string())).describe("Element expressions or funcidx list.")
 }
 
-val ListElementSegmentsResultClass = class_("ListElementSegmentsResult") {
+val ListElementSegmentsResultClass = class_("ListElementSegmentsResult", kotlinPackage = MODEL_PACKAGE) {
     list("segments", of = ElementSegmentResultClass).describe("Element segments declared by the module.")
 }
 

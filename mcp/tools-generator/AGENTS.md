@@ -22,6 +22,8 @@ DSL and emit checked-in Kotlin files into the two consumers:
 ## Ownership Boundary
 
 - Tool descriptions, input/output shapes, and handler references live only in this module.
+- Top-level tool output classes also declare their `mcp/core` model package here with `kotlinPackage = ...`; the
+  idea-plugin generator must not carry a separate result-class package map.
 - Standalone server input and output JSON schemas are generated from `ClassSpec`/`FieldSpec`; add bounds such as
   `minimum`, `maxItems`, and `maxLength` to the DSL instead of adding per-tool schema helpers in `mcp/server`.
 - No IntelliJ Platform APIs. No `mcp/core` model dependency — handlers are string FQNs, resolved at consumer compile time.
@@ -49,16 +51,15 @@ reviewed with the DSL change.
 
 1. Add the output data class to `mcp/core/src/main/kotlin/org/jetbrains/hexana/mcp/model/**` and the handler function to
    `mcp/core/src/main/kotlin/org/jetbrains/hexana/mcp/query/**` (hand-written, not generated).
-2. Mirror the output class shape with `class_(...)` in the feature file that owns the tool, so the generator can emit an
-   MCP output schema. Add cross-feature reusable input pieces to `CommonInputs.kt`.
+2. Mirror the output class shape with `class_(..., kotlinPackage = "...")` in the feature file that owns the tool, so
+   the generator can emit an MCP output schema and the idea-plugin generator can import the real `mcp/core` return
+   type. Add cross-feature reusable input pieces to `CommonInputs.kt`.
 3. Set `inputPattern` beside `input`. If the input needs a new IDE method parameter pattern, add it to
    `ToolInputPattern` and update the pattern handling in `IdeaToolsetMain.kt`. The standalone dispatcher derives its
    input schema from `input`; update `StandaloneToolsetMain.kt` only when the DSL needs a new schema feature or field
    type. The existing patterns cover path-only, offset/limit, indices, closed range, and half-open segment range with
    filters.
-4. Also add a `RESULT_PACKAGE` entry in `IdeaToolsetMain.kt` mapping the new result class name to its `mcp/core/model/`
-   package — this is what the generator uses to emit the correct import.
-5. Run both generators and both sets of tests: `./gradlew :mcp:tools-generator:test :idea-plugin:test :mcp:server:test
+4. Run both generators and both sets of tests: `./gradlew :mcp:tools-generator:test :idea-plugin:test :mcp:server:test
    :mcp:server:integrationTest`.
 
 ## Testing
