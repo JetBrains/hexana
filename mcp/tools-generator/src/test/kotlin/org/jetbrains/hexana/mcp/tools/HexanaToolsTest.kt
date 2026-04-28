@@ -141,6 +141,17 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `input defaults are declared in the DSL`() {
+        val listFunctions = HexanaTools.single { it.name == "list_functions" }.input
+        assertEquals(0, listFunctions.fields.single { it.name == "offset" }.default)
+        assertEquals(200, listFunctions.fields.single { it.name == "limit" }.default)
+
+        val listDataSegments = HexanaTools.single { it.name == "list_data_segments" }.input
+        assertEquals(false, listDataSegments.fields.single { it.name == "includeExports" }.default)
+        assertEquals(true, listDataSegments.fields.single { it.name == "includeGlobals" }.default)
+    }
+
+    @Test
     fun `schema constraints reject incompatible field types`() {
         assertFailsWith<IllegalArgumentException> {
             class_("Broken") {

@@ -24,8 +24,10 @@ DSL and emit checked-in Kotlin files into the two consumers:
 - Tool descriptions, input/output shapes, and handler references live only in this module.
 - Top-level tool output classes also declare their `mcp/core` model package here with `kotlinPackage = ...`; the
   idea-plugin generator must not carry a separate result-class package map.
-- Standalone server input and output JSON schemas are generated from `ClassSpec`/`FieldSpec`; add bounds such as
-  `minimum`, `maxItems`, and `maxLength` to the DSL instead of adding per-tool schema helpers in `mcp/server`.
+- Standalone server input and output JSON schemas are generated from `ClassSpec`/`FieldSpec`; add defaults and bounds
+  such as `minimum`, `maxItems`, and `maxLength` to the DSL instead of adding per-tool schema helpers in `mcp/server`.
+- Idea-plugin method parameter defaults also come from `FieldSpec.default`; do not repeat numeric or boolean defaults in
+  `IdeaToolsetMain.kt`.
 - No IntelliJ Platform APIs. No `mcp/core` model dependency — handlers are string FQNs, resolved at consumer compile time.
 - The two generators share the same DSL but emit different targets; keep any new cross-cutting helpers next to the DSL,
   not inside a single generator.

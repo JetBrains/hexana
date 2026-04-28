@@ -118,6 +118,9 @@ private fun fieldSchemaObject(field: FieldSpec, schemaIndent: String, closingInd
     field.describe?.let {
         b.add("${schemaIndent}put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, it)
     }
+    field.default?.let {
+        b.add("${schemaIndent}put(%S, %T(%L))\n", "default", JSON_PRIMITIVE, schemaDefaultValue(field))
+    }
     emitFieldConstraints(field, b, indent = schemaIndent)
     b.add("$closingIndent}")
     return b.build()
@@ -206,6 +209,16 @@ private fun schemaIntValue(value: SchemaIntValue): CodeBlock {
         SchemaIntValue.MaxInlineWasmBytes -> CodeBlock.of("%T.MAX_INLINE_WASM_BYTES", HEXANA_ANALYSIS_LIMITS)
         SchemaIntValue.MaxInlineWasmBase64Length ->
             CodeBlock.of("((%T.MAX_INLINE_WASM_BYTES + 2) / 3) * 4", HEXANA_ANALYSIS_LIMITS)
+    }
+}
+
+private fun schemaDefaultValue(field: FieldSpec): CodeBlock {
+    return when (val value = field.default) {
+        is Int,
+        is Long,
+        is Boolean -> CodeBlock.of("%L", value)
+        is String -> CodeBlock.of("%S", value)
+        else -> error("Field '${field.name}' has unsupported schema default value `${field.default}`.")
     }
 }
 

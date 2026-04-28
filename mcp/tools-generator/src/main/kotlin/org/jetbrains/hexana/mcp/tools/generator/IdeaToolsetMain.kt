@@ -12,6 +12,7 @@ import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asClassName
 import org.jetbrains.hexana.mcp.tools.ClassSpec
+import org.jetbrains.hexana.mcp.tools.FieldSpec
 import org.jetbrains.hexana.mcp.tools.HexanaTools
 import org.jetbrains.hexana.mcp.tools.ToolSpec
 import org.jetbrains.hexana.mcp.tools.ToolInputPattern
@@ -91,22 +92,22 @@ private fun addParameters(builder: FunSpec.Builder, spec: ToolSpec) {
     when (val pattern = spec.inputPattern) {
         ToolInputPattern.WasmOnly -> Unit
         ToolInputPattern.FunctionPage -> {
-            builder.addParameter(intWithDefault("offset", 0, fieldDescribe(spec.input, "offset")))
-            builder.addParameter(intWithDefault("limit", 200, fieldDescribe(spec.input, "limit")))
+            builder.addParameter(intWithDefault(inputField(spec.input, "offset")))
+            builder.addParameter(intWithDefault(inputField(spec.input, "limit")))
         }
         ToolInputPattern.Indices ->
-            builder.addParameter(intListParam("indices", fieldDescribe(spec.input, "indices")))
+            builder.addParameter(intListParam(inputField(spec.input, "indices")))
         is ToolInputPattern.ClosedRange ->
-            builder.addParameter(mapParam(pattern.parameterName, fieldDescribe(spec.input, pattern.parameterName)))
+            builder.addParameter(mapParam(inputField(spec.input, pattern.parameterName)))
         ToolInputPattern.DataSegments -> {
-            builder.addParameter(mapParam("segmentRange", fieldDescribe(spec.input, "segmentRange")))
+            builder.addParameter(mapParam(inputField(spec.input, "segmentRange")))
             builder.addParameter(
-                boolWithDefault("includeExports", false, fieldDescribe(spec.input, "includeExports")),
+                boolWithDefault(inputField(spec.input, "includeExports")),
             )
             builder.addParameter(
-                boolWithDefault("includeGlobals", true, fieldDescribe(spec.input, "includeGlobals")),
+                boolWithDefault(inputField(spec.input, "includeGlobals")),
             )
-            builder.addParameter(nullableIntParam("minByteLength", fieldDescribe(spec.input, "minByteLength")))
+            builder.addParameter(nullableIntParam(inputField(spec.input, "minByteLength")))
         }
     }
 }
@@ -153,46 +154,54 @@ private fun pathParameter(): ParameterSpec =
         )
         .build()
 
-private fun intWithDefault(name: String, default: Int, describe: String): ParameterSpec =
-    ParameterSpec.builder(name, Int::class)
-        .addAnnotation(describeAnnotation(describe))
-        .defaultValue("%L", default)
+private fun intWithDefault(field: FieldSpec): ParameterSpec =
+    ParameterSpec.builder(field.name, Int::class)
+        .addAnnotation(describeAnnotation(field.descriptionOrError()))
+        .defaultValue("%L", field.defaultOrError<Int>())
         .build()
 
-private fun boolWithDefault(name: String, default: Boolean, describe: String): ParameterSpec =
-    ParameterSpec.builder(name, Boolean::class)
-        .addAnnotation(describeAnnotation(describe))
-        .defaultValue("%L", default)
+private fun boolWithDefault(field: FieldSpec): ParameterSpec =
+    ParameterSpec.builder(field.name, Boolean::class)
+        .addAnnotation(describeAnnotation(field.descriptionOrError()))
+        .defaultValue("%L", field.defaultOrError<Boolean>())
         .build()
 
-private fun nullableIntParam(name: String, describe: String): ParameterSpec =
-    ParameterSpec.builder(name, Int::class.asClassName().copy(nullable = true))
-        .addAnnotation(describeAnnotation(describe))
+private fun nullableIntParam(field: FieldSpec): ParameterSpec =
+    ParameterSpec.builder(field.name, Int::class.asClassName().copy(nullable = true))
+        .addAnnotation(describeAnnotation(field.descriptionOrError()))
         .defaultValue("null")
         .build()
 
-private fun intListParam(name: String, describe: String): ParameterSpec =
+private fun intListParam(field: FieldSpec): ParameterSpec =
     ParameterSpec.builder(
-        name,
+        field.name,
         List::class.asClassName().parameterizedBy(Int::class.asClassName()),
     )
-        .addAnnotation(describeAnnotation(describe))
+        .addAnnotation(describeAnnotation(field.descriptionOrError()))
         .build()
 
-private fun mapParam(name: String, describe: String): ParameterSpec =
+private fun mapParam(field: FieldSpec): ParameterSpec =
     ParameterSpec.builder(
-        name,
+        field.name,
         Map::class.asClassName().parameterizedBy(String::class.asClassName(), Int::class.asClassName()),
     )
-        .addAnnotation(describeAnnotation(describe))
+        .addAnnotation(describeAnnotation(field.descriptionOrError()))
         .build()
 
 private fun describeAnnotation(text: String): AnnotationSpec =
     AnnotationSpec.builder(MCP_DESCRIPTION).addMember("%S", text).build()
 
-private fun fieldDescribe(cls: ClassSpec, fieldName: String): String =
-    cls.fields.single { it.name == fieldName }.describe
-        ?: error("Field '$fieldName' on class '${cls.name}' must have a .describe().")
+private fun inputField(cls: ClassSpec, fieldName: String): FieldSpec =
+    cls.fields.single { it.name == fieldName }
+
+private fun FieldSpec.descriptionOrError(): String =
+    describe ?: error("Field '$name' must have a .describe().")
+
+private inline fun <reified T : Any> FieldSpec.defaultOrError(): T {
+    val defaultValue = default ?: error("Field '$name' must declare a default value.")
+    return defaultValue as? T
+        ?: error("Field '$name' default must be ${T::class.simpleName}, got ${defaultValue::class.simpleName}.")
+}
 
 // Hexana-specific snake_case → camelCase; `get_instructions_for_functions` → `getInstructionsForFunctions`.
 private fun String.toToolsetMethodName(): String {

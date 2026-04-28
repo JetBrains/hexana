@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.server
 
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -96,5 +97,36 @@ class HexanaMcpServerSchemaTest {
         val properties = entriesRange.getValue("properties").jsonObject
         assertEquals(0, properties.getValue("from").jsonObject.getValue("minimum").jsonPrimitive.int)
         assertEquals(0, properties.getValue("to").jsonObject.getValue("minimum").jsonPrimitive.int)
+    }
+
+    @Test
+    fun inputDefaultsArePresentInGeneratedSchemas() {
+        val tools = createHexanaMcpServer().tools
+
+        val listFunctionsProperties = tools
+            .getValue("list_functions")
+            .tool
+            .inputSchema
+            .properties
+            ?.jsonObject
+            ?: error("Missing list_functions input schema properties")
+        assertEquals(0, listFunctionsProperties.getValue("offset").jsonObject.getValue("default").jsonPrimitive.int)
+        assertEquals(200, listFunctionsProperties.getValue("limit").jsonObject.getValue("default").jsonPrimitive.int)
+
+        val listDataSegmentsProperties = tools
+            .getValue("list_data_segments")
+            .tool
+            .inputSchema
+            .properties
+            ?.jsonObject
+            ?: error("Missing list_data_segments input schema properties")
+        assertEquals(
+            false,
+            listDataSegmentsProperties.getValue("includeExports").jsonObject.getValue("default").jsonPrimitive.boolean,
+        )
+        assertEquals(
+            true,
+            listDataSegmentsProperties.getValue("includeGlobals").jsonObject.getValue("default").jsonPrimitive.boolean,
+        )
     }
 }

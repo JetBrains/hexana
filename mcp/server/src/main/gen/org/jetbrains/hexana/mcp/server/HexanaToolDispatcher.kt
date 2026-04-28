@@ -666,11 +666,13 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
       put("offset", buildJsonObject {
         put("type", JsonPrimitive("integer"))
         put("description", JsonPrimitive("Offset into the unified function index space"))
+        put("default", JsonPrimitive(0))
         put("minimum", JsonPrimitive(0))
       })
       put("limit", buildJsonObject {
         put("type", JsonPrimitive("integer"))
         put("description", JsonPrimitive("Maximum number of entries to return"))
+        put("default", JsonPrimitive(200))
         put("minimum", JsonPrimitive(1))
       })
     },
@@ -1690,10 +1692,12 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
       put("includeExports", buildJsonObject {
         put("type", JsonPrimitive("boolean"))
         put("description", JsonPrimitive("Include exported symbols associated with the returned segments."))
+        put("default", JsonPrimitive(false))
       })
       put("includeGlobals", buildJsonObject {
         put("type", JsonPrimitive("boolean"))
         put("description", JsonPrimitive("Include globals referenced by segment offset expressions."))
+        put("default", JsonPrimitive(true))
       })
       put("minByteLength", buildJsonObject {
         put("type", JsonPrimitive("integer"))
