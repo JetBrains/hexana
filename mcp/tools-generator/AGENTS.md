@@ -29,6 +29,8 @@ DSL and emit checked-in Kotlin files into the two consumers:
 - Idea-plugin method parameter defaults also come from `FieldSpec.default`; do not repeat numeric or boolean defaults in
   `IdeaToolsetMain.kt`.
 - Generators must consume the full `handlerFqn`; do not hard-code `org.jetbrains.hexana.mcp.query` in generator code.
+- `ToolInputPattern` validation must fail fast on field type, nullability, default, and description mismatches that would
+  otherwise surface only during generator execution.
 - No IntelliJ Platform APIs. No `mcp/core` model dependency — handlers are string FQNs, resolved at consumer compile time.
 - The two generators share the same DSL but emit different targets; keep any new cross-cutting helpers next to the DSL,
   not inside a single generator.

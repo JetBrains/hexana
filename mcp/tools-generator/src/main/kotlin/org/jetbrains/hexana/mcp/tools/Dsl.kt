@@ -342,25 +342,137 @@ class ToolBuilder internal constructor(private val name: String) {
 }
 
 private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: ToolInputPattern) {
-    fun requireField(fieldName: String) {
-        require(input.fields.any { it.name == fieldName }) {
+    fun requireField(fieldName: String, owner: ClassSpec = input): FieldSpec {
+        return owner.fields.singleOrNull { it.name == fieldName } ?: throw IllegalArgumentException(
             "Tool '$toolName' input pattern ${pattern::class.simpleName} requires field `$fieldName` on `${input.name}`."
+        )
+    }
+
+    fun requireDescribed(field: FieldSpec) {
+        require(!field.describe.isNullOrBlank()) {
+            "Tool '$toolName' input field `${field.name}` must have a .describe()."
         }
     }
 
+    fun requireType(field: FieldSpec, expected: FieldType) {
+        require(field.type == expected) {
+            "Tool '$toolName' input field `${field.name}` must be $expected, got ${field.type}."
+        }
+    }
+
+    fun requireNullable(field: FieldSpec) {
+        require(field.nullable) {
+            "Tool '$toolName' input field `${field.name}` must be nullable."
+        }
+    }
+
+    fun requireNonNullable(field: FieldSpec) {
+        require(!field.nullable) {
+            "Tool '$toolName' input field `${field.name}` must be non-nullable."
+        }
+    }
+
+    fun requireListOf(field: FieldSpec, expectedElement: FieldType) {
+        val listType = field.type as? FieldType.ListOf ?: throw IllegalArgumentException(
+            "Tool '$toolName' input field `${field.name}` must be a list, got ${field.type}."
+        )
+        require(listType.element == expectedElement) {
+            "Tool '$toolName' input field `${field.name}` must list $expectedElement, got ${listType.element}."
+        }
+    }
+
+    fun requireClassRef(field: FieldSpec): ClassSpec {
+        return (field.type as? FieldType.ClassRef)?.clazz ?: throw IllegalArgumentException(
+            "Tool '$toolName' input field `${field.name}` must be an embedded class, got ${field.type}."
+        )
+    }
+
+    fun requireDefault(field: FieldSpec, expectedType: String, predicate: (Any) -> Boolean) {
+        val defaultValue = field.default
+        require(defaultValue != null && predicate(defaultValue)) {
+            "Tool '$toolName' input field `${field.name}` must declare a $expectedType default."
+        }
+    }
+
+    fun requireWasmInput() {
+        val path = requireField("path")
+        requireType(path, FieldType.StringT)
+        requireNullable(path)
+        val bytesBase64 = requireField("bytesBase64")
+        requireType(bytesBase64, FieldType.StringT)
+        requireNullable(bytesBase64)
+        val bytes = requireField("bytes")
+        requireListOf(bytes, FieldType.Int32)
+        requireNullable(bytes)
+        require(input.oneOf == listOf("path", "bytesBase64", "bytes")) {
+            "Tool '$toolName' input class `${input.name}` must keep Wasm input oneOf(path, bytesBase64, bytes)."
+        }
+    }
+
+    fun requireClosedRange(field: FieldSpec) {
+        requireDescribed(field)
+        val range = requireClassRef(field)
+        val from = requireField("from", owner = range)
+        requireType(from, FieldType.Int32)
+        requireNonNullable(from)
+        requireDescribed(from)
+        val to = requireField("to", owner = range)
+        requireType(to, FieldType.Int32)
+        requireNonNullable(to)
+        requireDescribed(to)
+    }
+
+    fun requireHalfOpenRange(field: FieldSpec) {
+        requireDescribed(field)
+        val range = requireClassRef(field)
+        val from = requireField("from", owner = range)
+        requireType(from, FieldType.Int32)
+        requireNonNullable(from)
+        requireDescribed(from)
+        val to = requireField("to", owner = range)
+        requireType(to, FieldType.Int32)
+        requireNullable(to)
+        requireDescribed(to)
+    }
+
+    requireWasmInput()
     when (pattern) {
         ToolInputPattern.WasmOnly -> Unit
         ToolInputPattern.FunctionPage -> {
-            requireField("offset")
-            requireField("limit")
+            val offset = requireField("offset")
+            requireType(offset, FieldType.Int32)
+            requireNonNullable(offset)
+            requireDefault(offset, "Int") { it is Int }
+            requireDescribed(offset)
+            val limit = requireField("limit")
+            requireType(limit, FieldType.Int32)
+            requireNonNullable(limit)
+            requireDefault(limit, "Int") { it is Int }
+            requireDescribed(limit)
         }
-        ToolInputPattern.Indices -> requireField("indices")
-        is ToolInputPattern.ClosedRange -> requireField(pattern.parameterName)
+        ToolInputPattern.Indices -> {
+            val indices = requireField("indices")
+            requireListOf(indices, FieldType.Int32)
+            requireNonNullable(indices)
+            requireDescribed(indices)
+        }
+        is ToolInputPattern.ClosedRange -> requireClosedRange(requireField(pattern.parameterName))
         ToolInputPattern.DataSegments -> {
-            requireField("segmentRange")
-            requireField("includeExports")
-            requireField("includeGlobals")
-            requireField("minByteLength")
+            requireHalfOpenRange(requireField("segmentRange"))
+            val includeExports = requireField("includeExports")
+            requireType(includeExports, FieldType.BooleanT)
+            requireNonNullable(includeExports)
+            requireDefault(includeExports, "Boolean") { it is Boolean }
+            requireDescribed(includeExports)
+            val includeGlobals = requireField("includeGlobals")
+            requireType(includeGlobals, FieldType.BooleanT)
+            requireNonNullable(includeGlobals)
+            requireDefault(includeGlobals, "Boolean") { it is Boolean }
+            requireDescribed(includeGlobals)
+            val minByteLength = requireField("minByteLength")
+            requireType(minByteLength, FieldType.Int32)
+            requireNullable(minByteLength)
+            requireDescribed(minByteLength)
         }
     }
 }

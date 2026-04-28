@@ -306,6 +306,52 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `input pattern validates field contracts`() {
+        assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("broken") {
+                    summary = "s"
+                    input = WasmInputClass.with("BrokenFunctionPageInput") {
+                        string("offset", default = "0").describe("Offset")
+                        int("limit", default = 1).describe("Limit")
+                    }
+                    inputPattern = ToolInputPattern.FunctionPage
+                    output = WasmInputClass
+                    handlerFqn = sampleHandler
+                }
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("broken") {
+                    summary = "s"
+                    input = WasmInputClass.with("BrokenFunctionPageInput") {
+                        int("offset").describe("Offset")
+                        int("limit", default = 1).describe("Limit")
+                    }
+                    inputPattern = ToolInputPattern.FunctionPage
+                    output = WasmInputClass
+                    handlerFqn = sampleHandler
+                }
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("broken") {
+                    summary = "s"
+                    input = WasmInputClass.with("BrokenFunctionPageInput") {
+                        int("offset", default = 0)
+                        int("limit", default = 1).describe("Limit")
+                    }
+                    inputPattern = ToolInputPattern.FunctionPage
+                    output = WasmInputClass
+                    handlerFqn = sampleHandler
+                }
+            }
+        }
+    }
+
+    @Test
     fun `tool without output is rejected`() {
         assertFailsWith<IllegalArgumentException> {
             tools {
