@@ -12,21 +12,24 @@ internal fun CommonByteBuffer.listDataSectionInternal(wasmModule: WasmModule?): 
         scan()
     }
     return data.mapIndexedNotNull { index, record ->
+        // record.data is a CommonByteBuffer view; materialize once here for
+        // out-of-process serialization. Inside the parser we keep the view
+        // to avoid duplicating multi-MB data segments.
         when (record) {
             is WasmDataRecordActive -> DataEntry(
                 0,
                 index,
                 record.offset.toLong(),
-                record.data,
+                record.data.toByteArray(),
                 expression = record.expression.wat()
             )
 
-            is WasmDataRecordPassive -> DataEntry(1, index, record.offset.toLong(), record.data)
+            is WasmDataRecordPassive -> DataEntry(1, index, record.offset.toLong(), record.data.toByteArray())
             is WasmDataRecordActiveWithMemoryIndex -> DataEntry(
                 2,
                 index,
                 record.offset.toLong(),
-                record.data,
+                record.data.toByteArray(),
                 record.memoryIndex,
                 record.expression.wat()
             )

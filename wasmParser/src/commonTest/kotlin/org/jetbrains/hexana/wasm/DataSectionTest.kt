@@ -51,7 +51,7 @@ class DataSectionTest {
             )
         """.trimIndent())
         val record = assertIs<WasmDataRecordActive>(records.single())
-        assertEquals(byteArrayOf(0x41, 0x42, 0x43, 0x44).toList(), record.data.toList())
+        assertEquals(byteArrayOf(0x41, 0x42, 0x43, 0x44).toList(), record.data.toByteArray().toList())
         assertTrue(record.expression.isNotEmpty(), "offset expression must be parsed")
     }
 
@@ -82,7 +82,7 @@ class DataSectionTest {
             )
         """.trimIndent())
         val record = assertIs<WasmDataRecordPassive>(records.single())
-        assertEquals("passive", record.data.decodeToString())
+        assertEquals("passive", record.data.toByteArray().decodeToString())
     }
 
     @Test
@@ -101,7 +101,7 @@ class DataSectionTest {
         """.trimIndent())
         val record = assertIs<WasmDataRecordPassive>(records.single(),
             "wat2wasm encodes a segment referenced by memory.init as passive (flag 1)")
-        assertEquals("ZZZZ", record.data.decodeToString())
+        assertEquals("ZZZZ", record.data.toByteArray().decodeToString())
     }
 
     // ========================================================================
@@ -122,7 +122,7 @@ class DataSectionTest {
         """.trimIndent())
         val record = assertIs<WasmDataRecordActiveWithMemoryIndex>(records.single())
         assertEquals(1u, record.memoryIndex)
-        assertEquals(byteArrayOf(0x58).toList(), record.data.toList())
+        assertEquals(byteArrayOf(0x58).toList(), record.data.toByteArray().toList())
     }
 
     // ========================================================================
