@@ -243,7 +243,13 @@ class FieldHandle internal constructor(
     }
 
     fun withSerializer(fqn: String): FieldHandle = apply {
-        builder.mutate(index) { it.copy(serializerFqn = fqn) }
+        val serializerFqn = fqn.trim()
+        builder.mutate(index) {
+            require(FQN_REGEX.matches(serializerFqn)) {
+                "Field '${it.name}' serializer FQN must be fully-qualified, got `$fqn`."
+            }
+            it.copy(serializerFqn = serializerFqn)
+        }
     }
 
     fun minimum(value: Int): FieldHandle = apply {

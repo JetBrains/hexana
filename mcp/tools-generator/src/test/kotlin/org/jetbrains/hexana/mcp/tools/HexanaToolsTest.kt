@@ -229,6 +229,15 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `serializer FQN must be fully qualified`() {
+        assertFailsWith<IllegalArgumentException> {
+            class_("Broken") {
+                bytes("payload").withSerializer("not a fqn")
+            }
+        }
+    }
+
+    @Test
     fun `class kotlin package must produce a valid FQN`() {
         assertFailsWith<IllegalArgumentException> {
             class_("Broken", kotlinPackage = "not a package") {
