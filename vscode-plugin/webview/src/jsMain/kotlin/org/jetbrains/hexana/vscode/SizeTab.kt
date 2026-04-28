@@ -89,6 +89,8 @@ private fun SizeNodeTable(module: SizeNode.Module, selection: HexSelectionState)
     SearchableTable(
         headers = listOf("ID", "Section", "Size", "%", "Offset"),
         columnAligns = listOf("right", "left", "right", "right", "right"),
+        defaultSortColumn = 2,
+        defaultSortDirection = SortDirection.DESC,
     ) {
         for ((index, child) in module.children.withIndex()) {
             val pct = child.percentage(module.size)

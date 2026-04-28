@@ -46,6 +46,7 @@ internal fun SearchableTable(
     headers: List<String>,
     columnAligns: List<String> = emptyList(),
     defaultSortColumn: Int = headers.indexOf("ID").takeIf { it >= 0 } ?: -1,
+    defaultSortDirection: SortDirection = SortDirection.ASC,
     content: @Composable () -> Unit,
 ) {
     var searchVisible by remember { mutableStateOf(false) }
@@ -94,7 +95,7 @@ internal fun SearchableTable(
         }
 
         val sortState = remember {
-            if (defaultSortColumn >= 0) TableSortState(defaultSortColumn, SortDirection.ASC)
+            if (defaultSortColumn >= 0) TableSortState(defaultSortColumn, defaultSortDirection)
             else TableSortState()
         }
 
@@ -107,17 +108,27 @@ internal fun SearchableTable(
             )
         }
 
-        // Re-apply the filter and sort whenever the query or sort state changes
+        // Re-apply the filter and sort whenever the query or sort state changes.
+        // Use requestAnimationFrame to ensure the DOM is fully rendered before
+        // manipulating row order – on the very first composition the table body
+        // may not yet be populated when DisposableEffect fires synchronously.
         DisposableEffect(query, sortState.columnIndex, sortState.direction) {
-            val container = containerRef
-            if (container != null) {
-                val table = container.querySelector("table.hexana-panel-table") as? HTMLTableElement
-                if (table != null) {
-                    applySortOrder(table, sortState.columnIndex, sortState.direction)
-                    applySearchFilter(table, query)
+            val colIdx = sortState.columnIndex
+            val dir = sortState.direction
+            val q = query
+            val rafId = kotlinx.browser.window.requestAnimationFrame {
+                val container = containerRef
+                if (container != null) {
+                    val table = container.querySelector("table.hexana-panel-table") as? HTMLTableElement
+                    if (table != null) {
+                        applySortOrder(table, colIdx, dir)
+                        applySearchFilter(table, q)
+                    }
                 }
             }
-            onDispose { }
+            onDispose {
+                kotlinx.browser.window.cancelAnimationFrame(rafId)
+            }
         }
     }
 }
