@@ -2,6 +2,7 @@ package org.jetbrains.hexana.wasm.analysis
 
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.opcodes.VectorOpCode
 import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i32
 import org.jetbrains.hexana.wasm.opcodes.OpCodes.Memory.i64
@@ -47,7 +48,7 @@ fun classifyOpcode(opcode: OpCode): OpcodeCategory = when (opcode) {
     OpCodes.Flow.Return -> OpcodeCategory.Control
     OpCodes.ParametricInstructions.Drop -> OpcodeCategory.Control
     OpCodes.ParametricInstructions.Select -> OpcodeCategory.Control
-    OpCodes.ParametricInstructions.SelectWithType -> OpcodeCategory.Control
+    is OpCodes.ParametricInstructions.SelectWithType -> OpcodeCategory.Control
     OpCodes.ParametricInstructions.Unreachable -> OpcodeCategory.Control
     OpCodes.ParametricInstructions.Nop -> OpcodeCategory.Control
     OpCodes.Flow.ThrowRef -> OpcodeCategory.Control
@@ -90,18 +91,26 @@ fun classifyOpcode(opcode: OpCode): OpcodeCategory = when (opcode) {
 
     // --- GC ---
     is OpCodes.GC.StructNew -> OpcodeCategory.GC
+    is OpCodes.GC.StructNewDefault -> OpcodeCategory.GC
     is OpCodes.GC.StructGet -> OpcodeCategory.GC
     is OpCodes.GC.StructGetSignExtended -> OpcodeCategory.GC
     is OpCodes.GC.StructGetZeroExtended -> OpcodeCategory.GC
     is OpCodes.GC.StructSet -> OpcodeCategory.GC
     is OpCodes.GC.RefTest -> OpcodeCategory.GC
+    is OpCodes.GC.RefTestNullable -> OpcodeCategory.GC
     is OpCodes.GC.RefCast -> OpcodeCategory.GC
     is OpCodes.GC.RefCastNullable -> OpcodeCategory.GC
+    is OpCodes.GC.BrOnCast -> OpcodeCategory.GC
     is OpCodes.GC.BrOnCastFail -> OpcodeCategory.GC
+    is OpCodes.GC.ArrayNew -> OpcodeCategory.GC
     is OpCodes.GC.ArrayNewDefault -> OpcodeCategory.GC
     is OpCodes.GC.ArrayNewFixed -> OpcodeCategory.GC
     is OpCodes.GC.ArrayNewData -> OpcodeCategory.GC
+    is OpCodes.GC.ArrayNewElement -> OpcodeCategory.GC
+    is OpCodes.GC.ArrayFill -> OpcodeCategory.GC
     is OpCodes.GC.ArrayCopy -> OpcodeCategory.GC
+    is OpCodes.GC.ArrayInitData -> OpcodeCategory.GC
+    is OpCodes.GC.ArrayInitElem -> OpcodeCategory.GC
     is OpCodes.GC.ArrayGet -> OpcodeCategory.GC
     is OpCodes.GC.ArrayGetSigned -> OpcodeCategory.GC
     is OpCodes.GC.ArrayGetUnsigned -> OpcodeCategory.GC
@@ -109,6 +118,9 @@ fun classifyOpcode(opcode: OpCode): OpcodeCategory = when (opcode) {
     OpCodes.GC.ArrayLength -> OpcodeCategory.GC
     OpCodes.GC.AnyConvertExtern -> OpcodeCategory.GC
     OpCodes.GC.ExternConvertAny -> OpcodeCategory.GC
+    OpCodes.GC.RefI31 -> OpcodeCategory.GC
+    OpCodes.GC.I31GetS -> OpcodeCategory.GC
+    OpCodes.GC.I31GetU -> OpcodeCategory.GC
 
     // --- Arithmetic: remaining I32 opcodes ---
     is I32.Const -> OpcodeCategory.Arithmetic
@@ -258,6 +270,11 @@ fun classifyOpcode(opcode: OpCode): OpcodeCategory = when (opcode) {
     F64.ConvertI64S -> OpcodeCategory.Arithmetic
     F64.ConvertI64U -> OpcodeCategory.Arithmetic
     is UnparsedOpCode -> OpcodeCategory.Unparsed
+
+    // --- SIMD: every 0xFD-prefixed vector instruction (fixed-width + relaxed). ---
+    // Marker interface VectorOpCode is implemented by every member of
+    // opcodes.vector.{V128, i8x16, i16x8, i32x4, i64x2, f32x4, f64x2}.
+    is VectorOpCode -> OpcodeCategory.SIMD
 
     // --- Other: Local, Global, Table, Ref, Reserved ---
     else -> OpcodeCategory.Other
