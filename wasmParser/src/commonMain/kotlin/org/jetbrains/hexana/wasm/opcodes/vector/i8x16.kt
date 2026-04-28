@@ -2,6 +2,7 @@ package org.jetbrains.hexana.wasm.opcodes.vector
 
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodeWithOffset
+import org.jetbrains.hexana.wasm.opcodes.VectorOpCode
 
 object i8x16 {
     class Shuffle(
@@ -22,165 +23,165 @@ object i8x16 {
         val laneIdxE: UByte,
         val laneIdxF: UByte,
         offset: Int = 0,
-    ): OpCodeWithOffset(offset) {
+    ): OpCodeWithOffset(offset), VectorOpCode {
         companion object {
             const val code: UInt = 13u
         }
     }
 
-    object Swizzle : OpCode {
+    object Swizzle : OpCode, VectorOpCode {
         const val code: UInt = 14u
     }
 
-    class ExtractLaneS(val laneIdx: UByte, offset: Int = 0): OpCodeWithOffset(offset) {
+    class ExtractLaneS(val laneIdx: UByte, offset: Int = 0): OpCodeWithOffset(offset), VectorOpCode {
         companion object {
             const val code:UInt = 21u
         }
     }
 
-    class ExtractLaneU(val laneIdx: UByte, offset: Int = 0): OpCodeWithOffset(offset) {
+    class ExtractLaneU(val laneIdx: UByte, offset: Int = 0): OpCodeWithOffset(offset), VectorOpCode {
         companion object {
             const val code: UInt = 22u
         }
     }
 
-    class ReplaceLine(val laneIdx: UByte, offset: Int = 0): OpCodeWithOffset(offset) {
+    class ReplaceLine(val laneIdx: UByte, offset: Int = 0): OpCodeWithOffset(offset), VectorOpCode {
         companion object {
             const val code: UInt = 23u
         }
     }
 
-    object Splat: OpCode {
+    object Splat: OpCode, VectorOpCode {
         const val code: UInt = 15u
     }
 
-    object Eq: OpCode {
+    object Eq: OpCode, VectorOpCode {
         const val code: UInt = 35u
     }
 
-    object Ne: OpCode {
+    object Ne: OpCode, VectorOpCode {
         const val code: UInt = 36u
     }
 
-    object LtS: OpCode {
+    object LtS: OpCode, VectorOpCode {
         const val code: UInt = 37u
     }
 
-    object LtU: OpCode {
+    object LtU: OpCode, VectorOpCode {
         const val code: UInt = 38u
     }
 
-    object GtS: OpCode {
+    object GtS: OpCode, VectorOpCode {
         const val code: UInt = 39u
     }
 
-    object GtU: OpCode {
+    object GtU: OpCode, VectorOpCode {
         const val code: UInt = 40u
     }
 
-    object LeS: OpCode {
+    object LeS: OpCode, VectorOpCode {
         const val code: UInt = 41u
     }
 
-    object LeU: OpCode {
+    object LeU: OpCode, VectorOpCode {
         const val code: UInt = 42u
     }
 
-    object GeS: OpCode {
+    object GeS: OpCode, VectorOpCode {
         const val code: UInt = 43u
     }
 
-    object GeU: OpCode {
+    object GeU: OpCode, VectorOpCode {
         const val code: UInt = 44u
     }
 
     /**/
-    object Abs: OpCode {
+    object Abs: OpCode, VectorOpCode {
         const val code: UInt = 96u
     }
 
-    object Neg: OpCode {
+    object Neg: OpCode, VectorOpCode {
         const val code: UInt = 97u
     }
 
-    object PopCnt: OpCode {
+    object PopCnt: OpCode, VectorOpCode {
         const val code: UInt = 98u
     }
 
-    object AllTrue: OpCode {
+    object AllTrue: OpCode, VectorOpCode {
         const val code: UInt = 99u
     }
 
-    object BitMask: OpCode {
+    object BitMask: OpCode, VectorOpCode {
         const val code: UInt = 100u
     }
 
-    object NarrowI16x8S: OpCode {
+    object NarrowI16x8S: OpCode, VectorOpCode {
         const val code: UInt = 101u
     }
 
-    object NarrowI16x8U: OpCode {
+    object NarrowI16x8U: OpCode, VectorOpCode {
         const val code: UInt = 102u
     }
 
-    object Shl: OpCode {
+    object Shl: OpCode, VectorOpCode {
         const val code: UInt = 107u
     }
 
-    object ShrS: OpCode {
+    object ShrS: OpCode, VectorOpCode {
         const val code: UInt = 108u
     }
 
-    object ShrU: OpCode {
+    object ShrU: OpCode, VectorOpCode {
         const val code: UInt = 109u
     }
 
-    object Add: OpCode {
+    object Add: OpCode, VectorOpCode {
         const val code: UInt = 110u
     }
 
-    object AddSatS: OpCode {
+    object AddSatS: OpCode, VectorOpCode {
         const val code: UInt = 111u
     }
 
-    object AddSatU: OpCode {
+    object AddSatU: OpCode, VectorOpCode {
         const val code: UInt = 112u
     }
 
-    object Sub: OpCode {
+    object Sub: OpCode, VectorOpCode {
         const val code: UInt = 113u
     }
 
-    object SubSatS: OpCode {
+    object SubSatS: OpCode, VectorOpCode {
         const val code: UInt = 114u
     }
 
-    object SubSatU: OpCode {
+    object SubSatU: OpCode, VectorOpCode {
         const val code: UInt = 115u
     }
 
-    object MinS: OpCode {
+    object MinS: OpCode, VectorOpCode {
         const val code: UInt = 118u
     }
 
-    object MinU: OpCode {
+    object MinU: OpCode, VectorOpCode {
         const val code: UInt = 119u
     }
 
-    object MaxS: OpCode {
+    object MaxS: OpCode, VectorOpCode {
         const val code: UInt = 120u
     }
 
-    object MaxU: OpCode {
+    object MaxU: OpCode, VectorOpCode {
         const val code: UInt = 121u
     }
 
-    object AvgrU: OpCode {
+    object AvgrU: OpCode, VectorOpCode {
         const val code: UInt = 123u
     }
 
     /**/
-    object RelaxedLaneselect: OpCode {
+    object RelaxedLaneselect: OpCode, VectorOpCode {
         const val code: UInt = 265u
     }
 }

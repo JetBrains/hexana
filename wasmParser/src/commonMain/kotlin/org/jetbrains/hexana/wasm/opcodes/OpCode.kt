@@ -5,6 +5,15 @@ data class MemArg(val align: Int, val offset: Int)
 
 interface OpCode
 
+/**
+ * Marker for every `0xFD`-prefixed vector instruction (fixed-width SIMD spec
+ * 2.0 + Relaxed SIMD spec 3.0). Lets the size-analysis classifier bucket all
+ * vector ops as [org.jetbrains.hexana.wasm.analysis.OpcodeCategory.SIMD]
+ * without enumerating every per-lane class. Implemented by every member of
+ * `vector.{V128, i8x16, i16x8, i32x4, i64x2, f32x4, f64x2}`.
+ */
+interface VectorOpCode : OpCode
+
 open class OpCodeWithOffset(val offset: Int): OpCode
 
 open class OpCodeWithValue<T : Any>(val value: T, offset: Int = 0) : OpCodeWithOffset(offset) {
