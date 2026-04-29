@@ -1,6 +1,7 @@
 import * as path from 'path';
 import { Workbench, EditorView, WebView, By, VSBrowser, WebDriver, Key } from 'vscode-extension-tester';
 import { expect } from 'chai';
+import * as fs from "fs";
 
 /**
  * Basic acceptance integration tests for the Hexana VS Code extension.
@@ -70,6 +71,12 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
                 await editorView.openEditor('test-exports.wasm');
                 await driver.sleep(2000);
             }
+
+            // capture a screenshot here
+            await driver.takeScreenshot().then((png) => {
+                fs.mkdirSync('collected-screenshots', { recursive: true });
+                fs.writeFileSync('collected-screenshots/screenshot.png', png, 'base64');
+            });
 
             // Wait for the webview editor instance to be present before switching
             await driver.wait(async () => {
