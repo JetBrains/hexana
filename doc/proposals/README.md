@@ -20,6 +20,7 @@ inline-bytes tests in
 | Reference Types | 2.0 | [reference-types.md](reference-types.md) |
 | Bulk memory operations | 2.0 | [bulk-memory.md](bulk-memory.md) |
 | Fixed-width SIMD | 2.0 | [simd.md](simd.md) |
+| Threads (atomics, shared memory) | 2.0 | [threads.md](threads.md) |
 | Tail call | 3.0 | [tail-call.md](tail-call.md) |
 | Typed Function References | 3.0 | [function-references.md](function-references.md) |
 | Garbage Collection | 3.0 | [gc.md](gc.md) |
