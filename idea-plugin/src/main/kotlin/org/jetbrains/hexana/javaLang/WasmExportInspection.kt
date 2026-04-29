@@ -23,12 +23,12 @@ class WasmExportInspection : AbstractBaseJavaLocalInspectionTool() {
                 val methodName = expression.methodExpression.referenceName ?: return
 
                 when (methodName) {
-                    // Chicory: instance.export("name")
-                    "export" -> checkExportName(expression, holder)
+                    // Chicory: instance.export("name") — scope lookup to this specific instance.
+                    "export" -> checkExportName(expression, holder, scoped = true)
                     // GraalWasm: exports.invokeMember("name"), exports.getMember("name")
                     "invokeMember", "getMember" -> {
                         if (isCalledOnExportsObject(expression)) {
-                            checkExportName(expression, holder)
+                            checkExportName(expression, holder, scoped = false)
                         }
                     }
                 }
@@ -36,13 +36,18 @@ class WasmExportInspection : AbstractBaseJavaLocalInspectionTool() {
         }
     }
 
-    private fun checkExportName(expression: PsiMethodCallExpression, holder: ProblemsHolder) {
+    private fun checkExportName(expression: PsiMethodCallExpression, holder: ProblemsHolder, scoped: Boolean) {
         val args = expression.argumentList.expressions
         if (args.isEmpty()) return
         val firstArg = args[0] as? PsiLiteralExpression ?: return
         val exportName = firstArg.value as? String ?: return
 
-        val data = getWasmDataForFile(holder.file) ?: return
+        // For Chicory `export` calls, prefer per-call-site resolution so a file with
+        // multiple WASM modules doesn't false-flag exports against the wrong module.
+        // Fall back to file-level lookup when the data-flow trace breaks.
+        val data = (if (scoped) getScopedWasmData(expression, holder.file) else null)
+            ?: getWasmDataForFile(holder.file)
+            ?: return
         val exportNames = data.exports.map { it.name }.toSet()
 
         if (exportName !in exportNames) {

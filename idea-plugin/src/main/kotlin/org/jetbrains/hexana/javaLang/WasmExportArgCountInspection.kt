@@ -67,7 +67,11 @@ class WasmExportArgCountInspection : AbstractBaseJavaLocalInspectionTool() {
         if (initMethodName != "export") return
 
         val exportName = getFirstStringArg(initializer) ?: return
-        val data = getWasmDataForFile(holder.file) ?: return
+        // Use the export() call as the call site for scoped lookup so the arity
+        // check compares against the correct module when a file uses several.
+        val data = getScopedWasmData(initializer, holder.file)
+            ?: getWasmDataForFile(holder.file)
+            ?: return
         val funcType = resolveFunctionType(data, exportName) ?: return
 
         val expectedParamCount = funcType.params.size

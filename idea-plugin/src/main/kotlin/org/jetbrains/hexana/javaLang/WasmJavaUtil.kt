@@ -114,6 +114,108 @@ internal fun getWasmDataForFile(psiFile: PsiFile): CoreWasmData? {
 }
 
 /**
+ * Resolves the `.wasm` [VirtualFile] backing a specific Chicory `instance.export(...)`
+ * call, by walking the local data flow:
+ * `instance` → its initializer `Instance.builder(module).build()` → `module` → the
+ * `Parser.parse(...)` call (or any helper that wraps it) → the resource-name string
+ * literal ending in `.wasm`.
+ *
+ * Returns `null` if the trace breaks at any point — callers should fall back to the
+ * file-level [findReferencedWasmFile] for legacy single-module-per-file behaviour.
+ *
+ * Why this exists: when a single Java file uses **multiple** WASM modules (e.g. one
+ * per method, each with its own `Parser.parse(...)`), file-level resolution
+ * arbitrarily picks the first indexed filename and applies it to every call site.
+ * That produces wrong export-name completions and false-positive inspections.
+ */
+internal fun findScopedWasmFile(
+    exportCall: PsiMethodCallExpression,
+    psiFile: PsiFile
+): VirtualFile? {
+    val javaFile = psiFile as? PsiJavaFile ?: return null
+    val instanceQualifier = exportCall.methodExpression.qualifierExpression as? PsiReferenceExpression
+        ?: return null
+    val instanceVar = instanceQualifier.resolve() as? PsiVariable ?: return null
+    val instanceInit = instanceVar.initializer ?: return null
+
+    val moduleArg = findInstanceBuilderArg(instanceInit) ?: return null
+    val filename = findWasmFilenameInExpression(moduleArg, depth = 0) ?: return null
+
+    val containingVirtualFile = javaFile.virtualFile ?: return null
+    val packagePath = javaFile.packageName.takeIf { it.isNotEmpty() }?.replace('.', '/')
+    return resolveWasmFile(filename, containingVirtualFile, javaFile.project, packagePath)
+}
+
+/**
+ * [getWasmDataForFile] but scoped to the specific `instance.export(...)` call site.
+ * Caller is responsible for falling back to the file-level lookup when this returns
+ * `null` — keeps single-module files working through the legacy path.
+ */
+internal fun getScopedWasmData(
+    exportCall: PsiMethodCallExpression,
+    psiFile: PsiFile
+): CoreWasmData? {
+    val wasmFile = findScopedWasmFile(exportCall, psiFile) ?: return null
+    return WasmBinaryDataCacheService.getInstance().getOrParseBinary(wasmFile) as? CoreWasmData
+}
+
+/**
+ * Walks a method-call chain looking for `Instance.builder(module)` and returns the
+ * `module` argument expression. Handles the canonical
+ * `Instance.builder(module).withImportValues(...).build()` shape regardless of how
+ * many builder methods sit between `builder(...)` and the terminal `.build()`.
+ */
+private fun findInstanceBuilderArg(expr: PsiExpression?): PsiExpression? {
+    var current: PsiMethodCallExpression? = expr as? PsiMethodCallExpression
+    while (current != null) {
+        if (current.methodExpression.referenceName == "builder") {
+            return current.argumentList.expressions.firstOrNull()
+        }
+        current = current.methodExpression.qualifierExpression as? PsiMethodCallExpression
+    }
+    return null
+}
+
+/**
+ * Recursively unwraps an expression looking for a string literal that ends in
+ * `.wasm`. Bounded to keep PSI walks cheap on real-world code.
+ *
+ * Handles the common shapes that feed `Parser.parse(...)`:
+ *  - direct literal:                 `"foo.wasm"` / `"/foo.wasm"`
+ *  - `getResource(...)`:             `App.class.getResource("foo.wasm")`
+ *  - `getResourceAsStream(...)`:     `App.class.getResourceAsStream("foo.wasm")`
+ *  - `Paths.get(...)`:               `Paths.get("foo.wasm")`
+ *  - `new File(...)`:                `new File("foo.wasm")`
+ *  - any helper method that returns one of the above (one indirection is enough
+ *    for the example-app pattern `parseResource("/foo.wasm")`).
+ *  - reference to a local variable initialised from any of the above.
+ */
+private fun findWasmFilenameInExpression(expr: PsiExpression?, depth: Int): String? {
+    if (expr == null || depth > 8) return null
+    return when (expr) {
+        is PsiLiteralExpression -> {
+            (expr.value as? String)?.takeIf { it.endsWith(".wasm") }
+        }
+        is PsiReferenceExpression -> {
+            val resolved = expr.resolve()
+            findWasmFilenameInExpression((resolved as? PsiVariable)?.initializer, depth + 1)
+        }
+        is PsiMethodCallExpression -> {
+            for (arg in expr.argumentList.expressions) {
+                findWasmFilenameInExpression(arg, depth + 1)?.let { return it }
+            }
+            findWasmFilenameInExpression(expr.methodExpression.qualifierExpression, depth + 1)
+        }
+        is PsiNewExpression -> {
+            expr.argumentList?.expressions?.firstNotNullOfOrNull {
+                findWasmFilenameInExpression(it, depth + 1)
+            }
+        }
+        else -> null
+    }
+}
+
+/**
  * Resolves the function type for a given export name.
  * Returns the [WasmSectionFunctionTypeRecord] if the export is a function, null otherwise.
  */

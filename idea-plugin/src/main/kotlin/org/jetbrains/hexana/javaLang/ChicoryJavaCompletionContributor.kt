@@ -42,25 +42,27 @@ private class ChicoryCompletionProvider : CompletionProvider<CompletionParameter
 
         val psiFile = parameters.originalFile
         if (!fileImportsPackage(psiFile, CHICORY_PACKAGE)) return
-        val data = getWasmDataForFile(psiFile) ?: return
 
         val literal = PsiTreeUtil.getParentOfType(position, PsiLiteralExpression::class.java) ?: return
 
-        // Check if we're inside instance.export("...")
+        // Check if we're inside instance.export("...") — scope lookup to the specific
+        // module fed into that instance, falling back to file-level for code shapes the
+        // data-flow walk can't trace (parameters, fields, method-return chains).
         val methodCall = PsiTreeUtil.getParentOfType(literal, PsiMethodCallExpression::class.java)
-        if (methodCall != null) {
-            val methodName = methodCall.methodExpression.referenceName
-            if (methodName == "export") {
-                addExportCompletions(data, result)
-                return
-            }
+        if (methodCall != null && methodCall.methodExpression.referenceName == "export") {
+            val data = getScopedWasmData(methodCall, psiFile) ?: getWasmDataForFile(psiFile) ?: return
+            addExportCompletions(data, result)
+            return
         }
 
-        // Check if we're inside new HostFunction("...", "...", ...)
+        // Check if we're inside new HostFunction("...", "...", ...) — keep file-level
+        // resolution here; HostFunction declarations don't yet point at a specific
+        // Instance, so per-call-site scoping isn't well-defined.
         val newExpr = PsiTreeUtil.getParentOfType(literal, PsiNewExpression::class.java)
         if (newExpr != null) {
             val classRef = newExpr.classReference
             if (classRef != null && classRef.referenceName == "HostFunction") {
+                val data = getWasmDataForFile(psiFile) ?: return
                 addHostFunctionCompletions(data, literal, newExpr, result)
                 return
             }
