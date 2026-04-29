@@ -14,20 +14,22 @@ fun WasmBinaryProvider.readDataSections(
     val wasmModule = requireNotNull(wasmModule)
     val entries = bytes.listDataSectionInternal(wasmModule)
     val from = range.first
-    val to = minOf(range.last, entries.size - 1)
-    val returned = if (entries.isEmpty() || from > to) {
+    val to = range.last
+    val lastAvailableIndex = entries.size - 1
+    val lastReturnedIndex = minOf(to, lastAvailableIndex)
+    val returned = if (entries.isEmpty() || from > lastReturnedIndex) {
         emptyList()
     } else {
-        entries.filter { it.index in from..to }
+        entries.filter { it.index in from..lastReturnedIndex }
     }
-    val nextOffset = if (to == entries.size - 1) null else to + 1
+    val nextOffset = if (to < lastAvailableIndex) to + 1 else null
 
     return ListDataSectionsResult(
         from = from,
         to = to,
         returned = returned.map { it.toDataEntryResult() },
         totalSegments = entries.size,
-        truncate = entries.size > returned.size,
+        truncate = returned.isNotEmpty() && to > lastAvailableIndex,
         nextOffset = nextOffset
     )
 }
