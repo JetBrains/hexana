@@ -19,7 +19,12 @@ import * as fs from "fs";
 describe('Hexana Wasm Editor – Acceptance Tests', function () {
     this.timeout(180_000);
 
-    const WASM_FIXTURE = path.resolve(process.cwd(), '..', '..', 'fixtures', 'test-exports.wasm');
+    let dir = process.cwd();
+    // in teamcity the workdir is different
+    const WASM_FIXTURE =
+        dir.indexOf("ui-test") >= 0
+            ? path.resolve(dir, '..', '..', 'fixtures', 'test-exports.wasm')
+            : path.resolve(dir, 'fixtures', 'test-exports.wasm');
     let driver: WebDriver;
 
     before(async function () {
