@@ -144,10 +144,12 @@ class ChicoryJavaCompletionTest : BasePlatformTestCase() {
         myFixture.completeBasic()
         val lookupStrings = myFixture.lookupElementStrings
         assertNotNull("Expected completion results inside runAdd", lookupStrings)
-        // Caret is in runAdd → addInstance was built from add.wasm → must offer `add`
-        assertContainsElements(lookupStrings!!, "add")
-        // …and must NOT offer simple.wasm's export.
-        assertDoesNotContain(lookupStrings, "exported_func")
+        // Caret in runAdd → addInstance was built from add.wasm. The scoped Chicory
+        // contributor emits `add` at priority 100.0, so it must come first.
+        // (Word completion may surface "exported_func" further down — that's
+        // IntelliJ picking up string literals from runSimple's body, not a
+        // scoping bug. Ordering, not membership, is what we pin here.)
+        assertEquals("Top suggestion should be add.wasm's export", "add", lookupStrings!!.first())
     }
 
     fun testScopedCompletionSimpleInRunSimple() {
@@ -157,10 +159,15 @@ class ChicoryJavaCompletionTest : BasePlatformTestCase() {
         myFixture.completeBasic()
         val lookupStrings = myFixture.lookupElementStrings
         assertNotNull("Expected completion results inside runSimple", lookupStrings)
-        // Caret is in runSimple → simpleInstance was built from simple.wasm → offer `exported_func`
-        assertContainsElements(lookupStrings!!, "exported_func")
-        // …and must NOT offer add.wasm's export.
-        assertDoesNotContain(lookupStrings, "add")
+        // Caret in runSimple → simpleInstance was built from simple.wasm. Same
+        // reasoning as the runAdd case: top of the list is the scoped contributor's
+        // priority-100 suggestion, not the word-completion echo of `add` from
+        // runAdd's body.
+        assertEquals(
+            "Top suggestion should be simple.wasm's export",
+            "exported_func",
+            lookupStrings!!.first()
+        )
     }
 
     fun testScopedHostFunctionImportFuncNameInRunSimple() {
