@@ -14,6 +14,15 @@ interface OpCode
  */
 interface VectorOpCode : OpCode
 
+/**
+ * Marker for every `0xFE`-prefixed atomic instruction (Threads proposal,
+ * merged into the core spec). Lets the size-analysis classifier bucket all
+ * atomic memory ops as [org.jetbrains.hexana.wasm.analysis.OpcodeCategory.Memory]
+ * without enumerating every load/store/RMW variant. Implemented by every
+ * member of `atomic.Atomic`.
+ */
+interface AtomicOpCode : OpCode
+
 open class OpCodeWithOffset(val offset: Int): OpCode
 
 open class OpCodeWithValue<T : Any>(val value: T, offset: Int = 0) : OpCodeWithOffset(offset) {

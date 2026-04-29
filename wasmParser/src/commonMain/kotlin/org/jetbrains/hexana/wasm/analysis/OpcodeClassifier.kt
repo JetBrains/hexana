@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.wasm.analysis
 
+import org.jetbrains.hexana.wasm.opcodes.AtomicOpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.opcodes.VectorOpCode
@@ -275,6 +276,12 @@ fun classifyOpcode(opcode: OpCode): OpcodeCategory = when (opcode) {
     // Marker interface VectorOpCode is implemented by every member of
     // opcodes.vector.{V128, i8x16, i16x8, i32x4, i64x2, f32x4, f64x2}.
     is VectorOpCode -> OpcodeCategory.SIMD
+
+    // --- Memory: every 0xFE-prefixed atomic instruction (Threads proposal). ---
+    // Marker interface AtomicOpCode is implemented by every member of
+    // opcodes.atomic.Atomic — covers wait/notify, fence, atomic loads/stores
+    // and the full RMW × {add,sub,and,or,xor,xchg,cmpxchg} matrix.
+    is AtomicOpCode -> OpcodeCategory.Memory
 
     // --- Other: Local, Global, Table, Ref, Reserved ---
     else -> OpcodeCategory.Other

@@ -18,6 +18,9 @@ fun CommonByteBuffer.consumeMultibyteOpCode(offset: Int, base: UByte, opcode: UI
         0xFDu.toUByte() -> {
             consumeFDBasedOpCode(offset, opcode)
         }
+        0xFEu.toUByte() -> {
+            consumeFEBasedOpCode(offset, opcode)
+        }
         else -> throw UnsupportedOpsException(opcode, offset)
     }
 }
