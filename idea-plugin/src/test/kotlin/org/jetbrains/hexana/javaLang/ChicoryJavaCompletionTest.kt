@@ -135,6 +135,34 @@ class ChicoryJavaCompletionTest : BasePlatformTestCase() {
         assertContainsElements(lookupStrings!!, "my_namespace")
     }
 
+    // -- Scoped resolution: file uses TWO modules, each export() should resolve to its own --
+
+    fun testScopedCompletionAddInRunAdd() {
+        myFixture.copyFileToProject("add.wasm")
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("MultipleScopedModulesAdd.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results inside runAdd", lookupStrings)
+        // Caret is in runAdd → addInstance was built from add.wasm → must offer `add`
+        assertContainsElements(lookupStrings!!, "add")
+        // …and must NOT offer simple.wasm's export.
+        assertDoesNotContain(lookupStrings, "exported_func")
+    }
+
+    fun testScopedCompletionSimpleInRunSimple() {
+        myFixture.copyFileToProject("add.wasm")
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("MultipleScopedModulesSimple.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results inside runSimple", lookupStrings)
+        // Caret is in runSimple → simpleInstance was built from simple.wasm → offer `exported_func`
+        assertContainsElements(lookupStrings!!, "exported_func")
+        // …and must NOT offer add.wasm's export.
+        assertDoesNotContain(lookupStrings, "add")
+    }
+
     // -- Negative: no WASM reference --
 
     fun testNoCompletionWithoutWasmReference() {

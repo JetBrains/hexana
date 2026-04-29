@@ -102,6 +102,28 @@ class WasmJavaInspectionTest : BasePlatformTestCase() {
         )
     }
 
+    // -- Chicory: scoped export resolution across multiple modules in one file --
+
+    fun testChicoryScopedExportFlagsCrossModuleNames() {
+        myFixture.copyFileToProject("add.wasm")
+        myFixture.copyFileToProject("simple.wasm")
+        val warnings = getWarnings(WasmExportInspection(), "ChicoryScopedExportMismatch.java")
+
+        // In runAdd: addInstance.export("exported_func") — that's a simple.wasm export, not add.wasm.
+        // In runSimple: simpleInstance.export("add") — that's an add.wasm export, not simple.wasm.
+        assertContainsElements(warnings, "Export 'exported_func' not found in WebAssembly module")
+        assertContainsElements(warnings, "Export 'add' not found in WebAssembly module")
+
+        // The matching-module calls in each method must NOT flag (this is the
+        // regression we're guarding against — file-level lookup would have
+        // either flagged both or neither, depending on indexing order).
+        val flagCount = warnings.count {
+            it == "Export 'add' not found in WebAssembly module" ||
+                it == "Export 'exported_func' not found in WebAssembly module"
+        }
+        assertEquals("expected exactly two scoped mismatches, got: $warnings", 2, flagCount)
+    }
+
     // -- Chicory: argument count mismatch --
 
     fun testChicoryArgCountMismatch() {
