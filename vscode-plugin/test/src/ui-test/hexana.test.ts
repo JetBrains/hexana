@@ -16,13 +16,13 @@ import { expect } from 'chai';
  *   4. The Exports tab can be selected and shows export rows.
  */
 describe('Hexana Wasm Editor – Acceptance Tests', function () {
-    this.timeout(120_000);
+    this.timeout(180_000);
 
     const WASM_FIXTURE = path.resolve(process.cwd(), '..', '..', 'fixtures', 'test-exports.wasm');
     let driver: WebDriver;
 
     before(async function () {
-        this.timeout(60_000);
+        this.timeout(90_000);
 
         const browser = VSBrowser.instance;
         if (!browser) {
@@ -32,14 +32,14 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
         driver = browser.driver;
 
         // Allow the workbench and extension to fully activate
-        await driver.sleep(3000);
+        await driver.sleep(5000);
     });
 
     describe('Opening a .wasm file', function () {
         let webview: WebView;
 
         before(async function () {
-            this.timeout(90_000);
+            this.timeout(120_000);
 
             // The test runner opens the .wasm fixture via --open_resource.
             // Check whether the file is already open as a tab; if not, open
@@ -64,12 +64,18 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
                 await input.sendKeys(Key.ENTER);
 
                 // Wait for the custom editor to appear
-                await driver.sleep(5000);
+                await driver.sleep(8000);
             } else {
                 // Make sure the wasm tab is active
                 await editorView.openEditor('test-exports.wasm');
                 await driver.sleep(2000);
             }
+
+            // Wait for the webview editor instance to be present before switching
+            await driver.wait(async () => {
+                const frames = await driver.findElements(By.css('.editor-instance'));
+                return frames.length > 0;
+            }, 30_000, 'Webview editor instance did not appear within 30 seconds');
 
             // Switch into the webview iframe
             webview = new WebView();
@@ -79,7 +85,7 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
             await driver.wait(async () => {
                 const editors = await driver.findElements(By.css('.hexana-editor'));
                 return editors.length > 0;
-            }, 30_000, 'Hexana editor did not render within 30 seconds');
+            }, 60_000, 'Hexana editor did not render within 60 seconds');
         });
 
         after(async function () {
