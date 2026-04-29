@@ -163,6 +163,19 @@ class ChicoryJavaCompletionTest : BasePlatformTestCase() {
         assertDoesNotContain(lookupStrings, "add")
     }
 
+    fun testScopedHostFunctionImportFuncNameInRunSimple() {
+        myFixture.copyFileToProject("add.wasm")
+        myFixture.copyFileToProject("simple.wasm")
+        myFixture.configureByFile("ScopedHostFunctionInRunSimple.java")
+        myFixture.completeBasic()
+        val lookupStrings = myFixture.lookupElementStrings
+        assertNotNull("Expected completion results inside HostFunction in runSimple", lookupStrings)
+        // The HostFunction's 2nd-arg completion must come from simple.wasm
+        // (the module fed into the sibling Instance.builder(module) call) —
+        // not from add.wasm, which has zero imports and would hide the suggestion.
+        assertContainsElements(lookupStrings!!, "imported_func")
+    }
+
     // -- Negative: no WASM reference --
 
     fun testNoCompletionWithoutWasmReference() {
