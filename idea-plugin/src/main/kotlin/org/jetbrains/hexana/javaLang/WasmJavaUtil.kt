@@ -7,6 +7,7 @@ import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.*
 import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.hexana.javascript.CoreWasmData
 import org.jetbrains.hexana.javascript.WasmBinaryDataCacheService
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
@@ -157,6 +158,79 @@ internal fun getScopedWasmData(
 ): CoreWasmData? {
     val wasmFile = findScopedWasmFile(exportCall, psiFile) ?: return null
     return WasmBinaryDataCacheService.getInstance().getOrParseBinary(wasmFile) as? CoreWasmData
+}
+
+/**
+ * Block-level scoped lookup for `new HostFunction(...)` call sites.
+ *
+ * Unlike [findScopedWasmFile] (which traces backward from an `export()` call's
+ * `instance` qualifier), a HostFunction has no `instance` to walk through — it's
+ * the *input* to a later `Instance.builder().withImportValues(...)` call, not an
+ * output of one. We approximate scoping by finding the textually closest
+ * `Instance.builder(module)` call inside the same method/block and tracing
+ * `module → .wasm` from there.
+ *
+ * "Textually closest" handles both common shapes:
+ *   - HostFunction declared *before* the Instance.builder call (typical)
+ *   - HostFunction declared *after* (rare, e.g. when the lambda captures the
+ *     instance)
+ *
+ * Returns `null` when the heuristic fails (no builder in scope, multiple
+ * unrelated builders, builder argument not traceable to a `.wasm` literal) so
+ * callers can fall back to file-level resolution.
+ */
+internal fun findScopedWasmFileForHostFunction(
+    newExpr: PsiNewExpression,
+    psiFile: PsiFile
+): VirtualFile? {
+    val javaFile = psiFile as? PsiJavaFile ?: return null
+    val containingVirtualFile = javaFile.virtualFile ?: return null
+
+    val scope = PsiTreeUtil.getParentOfType(
+        newExpr,
+        PsiMethod::class.java,
+        PsiClassInitializer::class.java,
+        PsiField::class.java
+    ) ?: return null
+
+    val builderCall = findClosestInstanceBuilderInScope(scope, newExpr) ?: return null
+    val moduleArg = builderCall.argumentList.expressions.firstOrNull() ?: return null
+    val filename = findWasmFilenameInExpression(moduleArg, depth = 0) ?: return null
+
+    val packagePath = javaFile.packageName.takeIf { it.isNotEmpty() }?.replace('.', '/')
+    return resolveWasmFile(filename, containingVirtualFile, javaFile.project, packagePath)
+}
+
+/**
+ * [getWasmDataForFile] but scoped to a specific `new HostFunction(...)` site via
+ * [findScopedWasmFileForHostFunction].
+ */
+internal fun getScopedWasmDataForHostFunction(
+    newExpr: PsiNewExpression,
+    psiFile: PsiFile
+): CoreWasmData? {
+    val wasmFile = findScopedWasmFileForHostFunction(newExpr, psiFile) ?: return null
+    return WasmBinaryDataCacheService.getInstance().getOrParseBinary(wasmFile) as? CoreWasmData
+}
+
+/**
+ * Finds the `Instance.builder(...)` call within [scope] whose text offset is
+ * closest to [target]. Matches by short name (`Instance.builder`) so both
+ * imported and fully-qualified forms work without a classpath dependency.
+ * Returns `null` when no qualifying call exists in scope.
+ */
+private fun findClosestInstanceBuilderInScope(
+    scope: PsiElement,
+    target: PsiElement
+): PsiMethodCallExpression? {
+    val targetOffset = target.textOffset
+    return PsiTreeUtil.findChildrenOfType(scope, PsiMethodCallExpression::class.java)
+        .filter { call ->
+            call.methodExpression.referenceName == "builder" &&
+                (call.methodExpression.qualifierExpression as? PsiReferenceExpression)
+                    ?.referenceName == "Instance"
+        }
+        .minByOrNull { kotlin.math.abs(it.textOffset - targetOffset) }
 }
 
 /**

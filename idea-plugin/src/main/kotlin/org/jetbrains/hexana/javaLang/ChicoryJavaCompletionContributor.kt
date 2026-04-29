@@ -55,14 +55,17 @@ private class ChicoryCompletionProvider : CompletionProvider<CompletionParameter
             return
         }
 
-        // Check if we're inside new HostFunction("...", "...", ...) — keep file-level
-        // resolution here; HostFunction declarations don't yet point at a specific
-        // Instance, so per-call-site scoping isn't well-defined.
+        // Check if we're inside new HostFunction("...", "...", ...) — scope to the
+        // closest sibling Instance.builder(module) in the same method/block, then
+        // fall back to file-level when no builder is in scope (e.g. when the
+        // HostFunction is constructed by a helper method).
         val newExpr = PsiTreeUtil.getParentOfType(literal, PsiNewExpression::class.java)
         if (newExpr != null) {
             val classRef = newExpr.classReference
             if (classRef != null && classRef.referenceName == "HostFunction") {
-                val data = getWasmDataForFile(psiFile) ?: return
+                val data = getScopedWasmDataForHostFunction(newExpr, psiFile)
+                    ?: getWasmDataForFile(psiFile)
+                    ?: return
                 addHostFunctionCompletions(data, literal, newExpr, result)
                 return
             }
