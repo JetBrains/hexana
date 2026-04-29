@@ -127,8 +127,8 @@ private fun WasmFieldType.toFieldDeclarationString(depth: Int): String {
 
 private fun WasmValueType<*>.toTypeString(@Suppress("UNUSED_PARAMETER") depth: Int = 0): String {
     return when (this) {
-        is WasmF32Type -> "i32"
-        is WasmF64Type -> "i64"
+        is WasmF32Type -> "f32"
+        is WasmF64Type -> "f64"
         is WasmI32Type -> "i32"
         is WasmI64Type -> "i64"
         is WasmVecType -> "v128"
