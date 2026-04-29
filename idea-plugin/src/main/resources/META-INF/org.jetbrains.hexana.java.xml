@@ -1,5 +1,6 @@
 <idea-plugin>
     <extensions defaultExtensionNs="com.intellij">
+        <fileBasedIndex implementation="org.jetbrains.hexana.javaLang.JavaWasmReferenceIndex"/>
         <completion.contributor language="JAVA"
                                 implementationClass="org.jetbrains.hexana.javaLang.GraalWasmJavaCompletionContributor"
                                 order="first"/>

@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.javaLang
 
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.CompilerModuleExtension
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
@@ -12,49 +14,79 @@ import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 
 /**
- * Resolves the `.wasm` [VirtualFile] referenced from a Java source file.
+ * Resolves all `.wasm` [VirtualFile]s referenced from a Java source file.
  *
- * Scans the file for known patterns:
- * - GraalWasm: `Source.newBuilder("wasm", Foo.class.getResource("file.wasm"))`
- * - Chicory:   `Parser.parse(Foo.class.getResourceAsStream("file.wasm"))`
- * - Chicory:   `Parser.parse(new File("file.wasm"))`
+ * Uses [JavaWasmReferenceIndex] for fast filename discovery, then resolves
+ * each filename to a [VirtualFile] via sibling directory, module source roots,
+ * or project-wide filename search.
+ */
+internal fun findAllReferencedWasmFiles(psiFile: PsiFile): List<VirtualFile> {
+    val javaFile = psiFile as? PsiJavaFile ?: return emptyList()
+    val containingVirtualFile = javaFile.virtualFile ?: return emptyList()
+    val project = javaFile.project
+
+    val wasmFileNames = getIndexedWasmFileNames(containingVirtualFile, project)
+    if (wasmFileNames.isEmpty()) return emptyList()
+
+    val packagePath = javaFile.packageName.takeIf { it.isNotEmpty() }?.replace('.', '/')
+    return wasmFileNames.mapNotNull { resolveWasmFile(it, containingVirtualFile, project, packagePath) }
+}
+
+/**
+ * Resolves the first `.wasm` [VirtualFile] referenced from a Java source file.
+ *
+ * Uses [JavaWasmReferenceIndex] for fast lookup.
  */
 internal fun findReferencedWasmFile(psiFile: PsiFile): VirtualFile? {
-    val javaFile = psiFile as? PsiJavaFile ?: return null
-    val containingVirtualFile = javaFile.virtualFile ?: return null
+    return findAllReferencedWasmFiles(psiFile).firstOrNull()
+}
 
-    // Collect all string literals that end with .wasm
-    val wasmLiterals = mutableListOf<String>()
-    javaFile.accept(object : JavaRecursiveElementVisitor() {
-        override fun visitLiteralExpression(expression: PsiLiteralExpression) {
-            val value = expression.value as? String ?: return
-            if (value.endsWith(".wasm")) {
-                wasmLiterals.add(value)
+/**
+ * Resolves a WASM filename to a [VirtualFile] by searching, in order:
+ * 1. Sibling directory of the containing file
+ * 2. `<sourceRoot>/<packagePath>/<filename>` for each source root (mirrors `Class.getResource` lookup)
+ * 3. `<sourceRoot>/<filename>` for each source root (root-relative paths)
+ * 4. Compiler output directories `<output>/<packagePath>/<filename>` and `<output>/<filename>`
+ *    — needed for Maven/Gradle projects that generate WASM into `target/classes` or `build/classes`,
+ *    which are typically marked as excluded and not covered by [GlobalSearchScope.projectScope]
+ * 5. Project-wide filename search (fallback)
+ */
+private fun resolveWasmFile(
+    wasmFileName: String,
+    containingFile: VirtualFile,
+    project: Project,
+    packagePath: String?
+): VirtualFile? {
+    containingFile.parent?.findChild(wasmFileName)?.let { return it }
+
+    val fileIndex = ProjectFileIndex.getInstance(project)
+    val module = fileIndex.getModuleForFile(containingFile)
+    if (module != null) {
+        val sourceRoots = ModuleRootManager.getInstance(module).sourceRoots
+        if (packagePath != null) {
+            for (sourceRoot in sourceRoots) {
+                sourceRoot.findFileByRelativePath("$packagePath/$wasmFileName")?.let { return it }
             }
         }
-    })
-
-    if (wasmLiterals.isEmpty()) return null
-    val wasmFileName = wasmLiterals.first()
-
-    // Try sibling directory (same folder as the Java file)
-    val siblingDir = containingVirtualFile.parent
-    siblingDir?.findChild(wasmFileName)?.let { return it }
-
-    // Try resource roots of the containing module
-    val project = javaFile.project
-    val fileIndex = ProjectFileIndex.getInstance(project)
-    val module = fileIndex.getModuleForFile(containingVirtualFile)
-    if (module != null) {
-        for (sourceRoot in ModuleRootManager.getInstance(module).sourceRoots) {
+        for (sourceRoot in sourceRoots) {
             sourceRoot.findFileByRelativePath(wasmFileName)?.let { return it }
+        }
+
+        val outputRoots = CompilerModuleExtension.getInstance(module)?.let { ext ->
+            listOfNotNull(ext.compilerOutputPath, ext.compilerOutputPathForTests)
+        }.orEmpty()
+        if (packagePath != null) {
+            for (output in outputRoots) {
+                output.findFileByRelativePath("$packagePath/$wasmFileName")?.let { return it }
+            }
+        }
+        for (output in outputRoots) {
+            output.findFileByRelativePath(wasmFileName)?.let { return it }
         }
     }
 
-    // Fallback: search by name across project scope
-    val psiManager = PsiManager.getInstance(project)
-    val scope = GlobalSearchScope.projectScope(project)
     val shortName = wasmFileName.substringAfterLast('/')
+    val scope = GlobalSearchScope.projectScope(project)
     com.intellij.psi.search.FilenameIndex.getVirtualFilesByName(shortName, scope).firstOrNull()?.let { return it }
 
     return null
