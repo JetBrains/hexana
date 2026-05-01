@@ -19,6 +19,7 @@ class HexanaToolsTest {
                 "get_locals_for_functions",
                 "get_memory_for_indices",
                 "get_types_for_indices",
+                "list_code_section_offsets",
                 "list_data",
                 "list_data_segments",
                 "list_element_segments",
@@ -51,6 +52,7 @@ class HexanaToolsTest {
                 "list_memory",
                 "list_element_segments",
                 "list_functions",
+                "list_code_section_offsets",
                 "functions_for_indices",
                 "resolve_function_signature",
                 "search_functions_by_name",
@@ -143,6 +145,10 @@ class HexanaToolsTest {
     fun `tools expose input invocation patterns explicitly`() {
         assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "summarize_module" }.inputPattern)
         assertEquals(ToolInputPattern.FunctionPage, HexanaTools.single { it.name == "list_functions" }.inputPattern)
+        assertEquals(
+            ToolInputPattern.WasmOnly,
+            HexanaTools.single { it.name == "list_code_section_offsets" }.inputPattern,
+        )
         assertEquals(ToolInputPattern.Indices, HexanaTools.single { it.name == "functions_for_indices" }.inputPattern)
         assertEquals(
             ToolInputPattern.Funcidx,

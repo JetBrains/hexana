@@ -10,6 +10,7 @@ private val HEXANA_TOOL_ORDER = listOf(
     "list_memory",
     "list_element_segments",
     "list_functions",
+    "list_code_section_offsets",
     "functions_for_indices",
     "resolve_function_signature",
     "search_functions_by_name",

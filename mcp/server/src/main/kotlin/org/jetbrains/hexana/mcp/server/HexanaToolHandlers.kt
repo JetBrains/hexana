@@ -52,6 +52,12 @@ class HexanaToolHandlers(
         }
     }
 
+    fun listCodeSectionOffsets(arguments: JsonObject?): CallToolResult {
+        return execute("list_code_section_offsets") {
+            analysisService.listCodeSectionOffsets(wasmInput(arguments))
+        }
+    }
+
     fun resolveFunctionSignature(arguments: JsonObject?): CallToolResult {
         return execute("resolve_function_signature") {
             analysisService.resolveFunctionSignature(

@@ -16,6 +16,7 @@ import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
+import org.jetbrains.hexana.mcp.model.functions.ListCodeSectionOffsetsResult
 import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
@@ -142,6 +143,29 @@ class HexanaToolHandlersTest {
         assertEquals("i32", structured["results"]!!.jsonArray[0].jsonPrimitive.content)
         assertEquals("export", structured["kind"]!!.jsonPrimitive.content)
         assertEquals("main", structured["exportNames"]!!.jsonArray[0].jsonPrimitive.content)
+    }
+
+    @Test
+    fun listCodeSectionOffsetsReturnsDefinedFunctionBodyRanges() {
+        val wasm = createWasmFile(
+            "list_code_section_offsets.wasm",
+            """
+            (module
+              (import "env" "log" (func))
+              (func ${'$'}a)
+              (func ${'$'}b))
+            """.trimIndent()
+        )
+
+        val result = handlers.listCodeSectionOffsets(jsonPath(wasm.toString()))
+
+        assertFalse(result.isError == true)
+        val functions = result.structuredContent!!["functions"]!!.jsonArray
+        assertEquals(2, functions.size)
+        assertEquals(1, functions[0].jsonObject["funcidx"]!!.jsonPrimitive.int)
+        assertTrue(functions[0].jsonObject["offset"]!!.jsonPrimitive.long > 0)
+        assertTrue(functions[0].jsonObject["size"]!!.jsonPrimitive.long > 0)
+        assertEquals(2, functions[1].jsonObject["funcidx"]!!.jsonPrimitive.int)
     }
 
     @Test
@@ -689,6 +713,7 @@ class HexanaToolHandlersTest {
                     error("boom")
 
                 override fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult = error("boom")
+                override fun listCodeSectionOffsets(input: WasmInput): ListCodeSectionOffsetsResult = error("boom")
                 override fun resolveFunctionSignature(
                     input: WasmInput,
                     funcidx: Int
@@ -769,6 +794,7 @@ class HexanaToolHandlersTest {
                     error("unused")
 
                 override fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult = error("unused")
+                override fun listCodeSectionOffsets(input: WasmInput): ListCodeSectionOffsetsResult = error("unused")
                 override fun resolveFunctionSignature(
                     input: WasmInput,
                     funcidx: Int

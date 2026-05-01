@@ -11,6 +11,7 @@ import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
+import org.jetbrains.hexana.mcp.model.functions.ListCodeSectionOffsetsResult
 import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
@@ -33,6 +34,7 @@ interface HexanaAnalysisService {
     fun listExports(input: WasmInput): ListExportsResult
     fun searchExports(input: WasmInput, query: List<String>, limit: Int): SearchExportsResult
     fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult
+    fun listCodeSectionOffsets(input: WasmInput): ListCodeSectionOffsetsResult
     fun resolveFunctionSignature(input: WasmInput, funcidx: Int): ResolveFunctionSignatureResult
     fun searchFunctionsByName(input: WasmInput, query: String, limit: Int): SearchFunctionsByNameResult
     fun listExportedFunctions(input: WasmInput, entriesRange: IntRange): ListExportedFunctionsResult
@@ -94,6 +96,11 @@ class DefaultHexanaAnalysisService(
         requireLimit(limit)
         val wasm = load(input)
         return wasm.provider.readFunctions(offset, limit)
+    }
+
+    override fun listCodeSectionOffsets(input: WasmInput): ListCodeSectionOffsetsResult {
+        val wasm = load(input)
+        return wasm.provider.readCodeSectionOffsets()
     }
 
     override fun resolveFunctionSignature(input: WasmInput, funcidx: Int): ResolveFunctionSignatureResult {

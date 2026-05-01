@@ -19,6 +19,7 @@ import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
+import org.jetbrains.hexana.mcp.model.functions.ListCodeSectionOffsetsResult
 import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
@@ -26,6 +27,7 @@ import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.mcp.model.types.TypesResult
+import org.jetbrains.hexana.mcp.query.readCodeSectionOffsets
 import org.jetbrains.hexana.mcp.query.readDataSections
 import org.jetbrains.hexana.mcp.query.readDataSegmentsByRange
 import org.jetbrains.hexana.mcp.query.readElementSegments
@@ -129,6 +131,14 @@ public class HexanaToolset : McpToolset {
     val file = requireWasmFile(path)
     val provider = file.requireCoreWasmBinaryProvider()
     return provider.readFunctions(offset, limit)
+  }
+
+  @McpTool("list_code_section_offsets")
+  @McpDescription("List byte offsets and sizes for defined function bodies.\nList code-section byte ranges for all defined WebAssembly function bodies.\nThe returned `funcidx` values are in the unified function index space, so imported functions are skipped and defined functions keep their import-offset-adjusted indices.\nUse this to connect disassembly, binary offsets, source locations, and body-level triage.")
+  public suspend fun listCodeSectionOffsets(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String): ListCodeSectionOffsetsResult {
+    val file = requireWasmFile(path)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readCodeSectionOffsets()
   }
 
   @McpTool("functions_for_indices")

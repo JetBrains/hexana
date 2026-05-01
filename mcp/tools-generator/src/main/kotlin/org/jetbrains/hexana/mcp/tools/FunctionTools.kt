@@ -69,6 +69,17 @@ val FunctionsResultClass = class_("FunctionsResult", kotlinPackage = MODEL_PACKA
         .describe("Resolved function entries.")
 }
 
+val CodeSectionOffsetResultClass = class_("CodeSectionOffsetResult") {
+    int("funcidx").describe("Unified function index for this defined function body.")
+    long("offset").describe("Byte offset of the function body in the module.")
+    long("size").describe("Size of the function body in bytes.")
+}
+
+val ListCodeSectionOffsetsResultClass = class_("ListCodeSectionOffsetsResult", kotlinPackage = MODEL_PACKAGE) {
+    list("functions", of = CodeSectionOffsetResultClass)
+        .describe("Code-section byte ranges keyed by unified function index.")
+}
+
 val ResolveFunctionSignatureResultClass = class_("ResolveFunctionSignatureResult", kotlinPackage = MODEL_PACKAGE) {
     int("funcidx").describe("Funcidx in the unified function index space.")
     nullable("typeidx", of = int()).describe("Function type index, when resolved.")
@@ -144,6 +155,19 @@ internal val FunctionTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.FunctionPage
         output = FunctionsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctions"
+    }
+
+    tool("list_code_section_offsets") {
+        summary = "List byte offsets and sizes for defined function bodies."
+        guidance = """
+            List code-section byte ranges for all defined WebAssembly function bodies.
+            The returned `funcidx` values are in the unified function index space, so imported functions are skipped and defined functions keep their import-offset-adjusted indices.
+            Use this to connect disassembly, binary offsets, source locations, and body-level triage.
+        """
+        input = WasmInputClass
+        inputPattern = ToolInputPattern.WasmOnly
+        output = ListCodeSectionOffsetsResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readCodeSectionOffsets"
     }
 
     tool("functions_for_indices") {

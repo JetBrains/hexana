@@ -1161,6 +1161,77 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   }
 
   addTool(tool = Tool(
+    name = "list_code_section_offsets",
+    description = "List byte offsets and sizes for defined function bodies.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("functions", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("funcidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Unified function index for this defined function body."))
+            })
+            put("offset", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Byte offset of the function body in the module."))
+            })
+            put("size", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Size of the function body in bytes."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("funcidx"))
+            add(JsonPrimitive("offset"))
+            add(JsonPrimitive("size"))
+          })
+        })
+        put("description", JsonPrimitive("Code-section byte ranges keyed by unified function index."))
+      })
+    },
+    required = listOf("functions")
+  ),
+  ))  {
+    request: CallToolRequest -> handlers.listCodeSectionOffsets(request.arguments)
+  }
+
+  addTool(tool = Tool(
     name = "functions_for_indices",
     description = "Resolve function entries for the given unified function indices.",
     inputSchema = ToolSchema(

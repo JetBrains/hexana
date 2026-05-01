@@ -51,6 +51,19 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(2, functions.obj(2).int("funcidx"))
     }
 
+    fun testListCodeSectionOffsetsReturnsDefinedFunctionBodyRanges() {
+        val fixture = createFunctionFixture("fixtures/direct/functions/list_code_section_offsets.wasm")
+
+        val result = callToolJsonObject("list_code_section_offsets", jsonPath(fixture.projectRelativePath))
+        val functions = result.array("functions")
+
+        assertEquals(2, functions.size)
+        assertEquals(1, functions.obj(0).int("funcidx"))
+        assertTrue(functions.obj(0).long("offset") > 0)
+        assertTrue(functions.obj(0).long("size") > 0)
+        assertEquals(2, functions.obj(1).int("funcidx"))
+    }
+
     fun testFunctionsForIndicesReturnsImportAndDefinedEntries() {
         val fixture = createFunctionFixture("fixtures/direct/functions/functions_for_indices.wasm")
 

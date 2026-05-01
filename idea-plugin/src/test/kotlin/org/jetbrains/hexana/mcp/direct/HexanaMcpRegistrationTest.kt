@@ -5,6 +5,7 @@ class HexanaMcpRegistrationTest : HexanaMcpToolsetDirectTestBase() {
         val expectedHexanaTools = setOf(
             "list_imports",
             "list_functions",
+            "list_code_section_offsets",
             "resolve_function_signature",
             "search_functions_by_name",
             "list_data",
