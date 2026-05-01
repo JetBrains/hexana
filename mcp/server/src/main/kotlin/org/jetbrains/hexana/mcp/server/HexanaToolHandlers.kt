@@ -42,6 +42,15 @@ class HexanaToolHandlers(
         }
     }
 
+    fun resolveFunctionSignature(arguments: JsonObject?): CallToolResult {
+        return execute("resolve_function_signature") {
+            analysisService.resolveFunctionSignature(
+                input = wasmInput(arguments),
+                funcidx = arguments.requireIntArgument("funcidx")
+            )
+        }
+    }
+
     fun listExportedFunctions(arguments: JsonObject?): CallToolResult {
         return execute("list_exported_functions") {
             analysisService.listExportedFunctions(
@@ -292,6 +301,12 @@ class HexanaToolHandlers(
 
     private fun JsonObject?.intOrDefault(name: String, default: Int): Int {
         val element = this?.get(name) ?: return default
+        return element.jsonPrimitive.intOrNull
+            ?: throw ToolInputException("`$name` must be an integer")
+    }
+
+    private fun JsonObject?.requireIntArgument(name: String): Int {
+        val element = this?.get(name) ?: throw ToolInputException("`$name` is required")
         return element.jsonPrimitive.intOrNull
             ?: throw ToolInputException("`$name` must be an integer")
     }

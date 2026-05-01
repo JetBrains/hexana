@@ -13,17 +13,22 @@ import org.jetbrains.hexana.wasm.sections.*
  */
 data class WasmExportFunctionRecord(val name: String, val entry: FunctionEntry)
 
-sealed class FunctionEntry(open val funcidx: Int)
+sealed class FunctionEntry(
+    open val funcidx: Int,
+    open val typeidx: Int?
+)
 
 data class ImportFunctionEntry(
     override val funcidx: Int,
+    override val typeidx: Int?,
     val module: String,
     val name: String,
     val signature: ParameterSignature?
-) : FunctionEntry(funcidx)
+) : FunctionEntry(funcidx, typeidx)
 
 data class GeneralFunctionEntry(
     override val funcidx: Int,
+    override val typeidx: Int?,
     val signature: ParameterSignature?,
     val import: Import?,
     val exportedAs: List<String>,
@@ -31,7 +36,7 @@ data class GeneralFunctionEntry(
     val codeOffset: Long?,
     val codeSize: Long?,
     val instructionCount: Long?,
-) : FunctionEntry(funcidx)
+) : FunctionEntry(funcidx, typeidx)
 
 data class Import(val module: String, val name: String)
 
@@ -62,6 +67,7 @@ fun CommonByteBuffer.listFunctionsInternal(wasmModule: WasmModule?): List<Genera
     val imports = importFunctions(wasmModule).mapIndexed { index, entry ->
         GeneralFunctionEntry(
             funcidx = index,
+            typeidx = entry.typeidx,
             import = Import(module = entry.module, name = entry.name),
             codeOffset = null,
             signature = entry.signature,
@@ -85,6 +91,7 @@ fun CommonByteBuffer.listFunctionsInternal(wasmModule: WasmModule?): List<Genera
             val funcidx = index + indexBase
             GeneralFunctionEntry(
                 funcidx = funcidx,
+                typeidx = typeIndex,
                 import = null,
                 codeOffset = codes.getOrNull(index)?.offset?.toLong(),
                 signature = signature,
@@ -176,11 +183,10 @@ fun CommonByteBuffer.importFunctions(
 
     val types = types(wasmModule)
     return records.mapIndexed { index, record ->
-        val signature = when (record.type) {
-            is WasmTypeIndexExternalType -> (record.type as WasmTypeIndexExternalType).toSignature(types)
-            else -> null
-        }
-        ImportFunctionEntry(index, record.prefix, record.name, signature)
+        val type = record.type as WasmTypeIndexExternalType
+        val typeIndex = type.index.toInt()
+        val signature = type.toSignature(types)
+        ImportFunctionEntry(index, typeIndex, record.prefix, record.name, signature)
     }
 }
 

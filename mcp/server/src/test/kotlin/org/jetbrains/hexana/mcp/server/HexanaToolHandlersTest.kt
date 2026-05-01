@@ -15,6 +15,7 @@ import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
+import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
@@ -107,6 +108,38 @@ class HexanaToolHandlersTest {
             "env",
             result.structuredContent!!["imports"]!!.jsonArray[0].jsonObject["module"]!!.jsonPrimitive.content
         )
+    }
+
+    @Test
+    fun resolveFunctionSignatureReturnsTypeIndexAndSignature() {
+        val wasm = createWasmFile(
+            "resolve_function_signature.wasm",
+            """
+            (module
+              (type (func (param i32 f64) (result i32)))
+              (import "env" "log" (func (param i64)))
+              (func ${'$'}main (type 0) (param i32 f64) (result i32)
+                local.get 0)
+              (export "main" (func 1)))
+            """.trimIndent()
+        )
+
+        val result = handlers.resolveFunctionSignature(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("funcidx", JsonPrimitive(1))
+            }
+        )
+
+        assertFalse(result.isError == true)
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertEquals(1, structured["funcidx"]!!.jsonPrimitive.int)
+        assertEquals(0, structured["typeidx"]!!.jsonPrimitive.int)
+        assertEquals("i32", structured["params"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals("f64", structured["params"]!!.jsonArray[1].jsonPrimitive.content)
+        assertEquals("i32", structured["results"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals("export", structured["kind"]!!.jsonPrimitive.content)
+        assertEquals("main", structured["exportNames"]!!.jsonArray[0].jsonPrimitive.content)
     }
 
     @Test
@@ -563,6 +596,11 @@ class HexanaToolHandlersTest {
                 override fun listImports(input: WasmInput): ListImportsResult = error("boom")
                 override fun listExports(input: WasmInput): ListExportsResult = error("boom")
                 override fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult = error("boom")
+                override fun resolveFunctionSignature(
+                    input: WasmInput,
+                    funcidx: Int
+                ): ResolveFunctionSignatureResult = error("boom")
+
                 override fun listExportedFunctions(
                     input: WasmInput,
                     entriesRange: IntRange
@@ -629,6 +667,11 @@ class HexanaToolHandlersTest {
                 override fun listImports(input: WasmInput): ListImportsResult = error("unused")
                 override fun listExports(input: WasmInput): ListExportsResult = error("unused")
                 override fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult = error("unused")
+                override fun resolveFunctionSignature(
+                    input: WasmInput,
+                    funcidx: Int
+                ): ResolveFunctionSignatureResult = error("unused")
+
                 override fun listExportedFunctions(
                     input: WasmInput,
                     entriesRange: IntRange

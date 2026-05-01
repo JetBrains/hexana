@@ -18,6 +18,7 @@ import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
+import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
@@ -28,6 +29,7 @@ import org.jetbrains.hexana.mcp.query.readDataSegmentsByRange
 import org.jetbrains.hexana.mcp.query.readElementSegments
 import org.jetbrains.hexana.mcp.query.readExportedFunctions
 import org.jetbrains.hexana.mcp.query.readExports
+import org.jetbrains.hexana.mcp.query.readFunctionSignature
 import org.jetbrains.hexana.mcp.query.readFunctions
 import org.jetbrains.hexana.mcp.query.readFunctionsByIndices
 import org.jetbrains.hexana.mcp.query.readGlobals
@@ -119,6 +121,14 @@ public class HexanaToolset : McpToolset {
     val file = requireWasmFile(path)
     val provider = file.requireCoreWasmBinaryProvider()
     return provider.readFunctionsByIndices(indices)
+  }
+
+  @McpTool("resolve_function_signature")
+  @McpDescription("Resolve the type index and signature for one function index.\nResolve the type index and signature for one unified WebAssembly function index.\nUse this as a targeted lookup when logs, stack traces, exports, or other tools already identify the `funcidx`.")
+  public suspend fun resolveFunctionSignature(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String, @McpDescription("Unified function index (`funcidx`) to resolve.") funcidx: Int): ResolveFunctionSignatureResult {
+    val file = requireWasmFile(path)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readFunctionSignature(funcidx)
   }
 
   @McpTool("get_globals_for_indices")

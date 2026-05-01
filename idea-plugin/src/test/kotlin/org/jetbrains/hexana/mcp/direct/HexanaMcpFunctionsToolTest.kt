@@ -101,6 +101,25 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(1, functions.obj(1).int("funcidx"))
     }
 
+    fun testResolveFunctionSignatureReturnsTypeIndexAndSignature() {
+        val fixture = createFunctionFixture("fixtures/direct/functions/resolve_function_signature.wasm")
+
+        val result = callToolJsonObject(
+            "resolve_function_signature",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("funcidx", JsonPrimitive(1))
+            }
+        )
+
+        assertEquals(1, result.int("funcidx"))
+        assertEquals(0, result.int("typeidx"))
+        assertEquals(listOf("i32"), result.array("params").map { it.textValue() })
+        assertEquals(listOf("i32"), result.array("results").map { it.textValue() })
+        assertEquals("export", result.text("kind"))
+        assertEquals("increment", result.array("exportNames")[0].textValue())
+    }
+
     fun testGetLocalsForFunctionsReturnsGroupedLocalDeclarations() {
         val fixture = createFunctionFixture("fixtures/direct/functions/get_locals.wasm")
 

@@ -68,6 +68,7 @@ class HexanaStdioIntegrationTest {
                     "list_imports",
                     "list_memory",
                     "list_types",
+                    "resolve_function_signature",
                     "summarize_module"
                 ),
                 tools.tools.map { it.name }.sorted()

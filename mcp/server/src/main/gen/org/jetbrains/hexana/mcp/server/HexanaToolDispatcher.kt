@@ -1112,6 +1112,106 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   }
 
   addTool(tool = Tool(
+    name = "resolve_function_signature",
+    description = "Resolve the type index and signature for one function index.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("funcidx", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Unified function index (`funcidx`) to resolve."))
+        put("minimum", JsonPrimitive(0))
+      })
+    },
+    required = listOf("funcidx")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("funcidx", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Funcidx in the unified function index space."))
+      })
+      put("typeidx", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("integer"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Function type index, when resolved."))
+      })
+      put("params", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Parameter types, in declaration order."))
+      })
+      put("results", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Result types, in declaration order."))
+      })
+      put("kind", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Function origin: `import`, `export`, or `internal`."))
+      })
+      put("module", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Import module name for imported functions."))
+      })
+      put("importName", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Import field name for imported functions."))
+      })
+      put("exportNames", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Export names pointing at this function."))
+      })
+    },
+    required = listOf("funcidx", "params", "results", "kind", "exportNames")
+  ),
+  ))  {
+    request: CallToolRequest -> handlers.resolveFunctionSignature(request.arguments)
+  }
+
+  addTool(tool = Tool(
     name = "get_globals_for_indices",
     description = "Return globals for the requested indices from the unified global index space.",
     inputSchema = ToolSchema(

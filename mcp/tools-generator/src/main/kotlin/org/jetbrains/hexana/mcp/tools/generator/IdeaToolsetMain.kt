@@ -94,6 +94,8 @@ private fun addParameters(builder: FunSpec.Builder, spec: ToolSpec) {
             builder.addParameter(intWithDefault(inputField(spec.input, "offset")))
             builder.addParameter(intWithDefault(inputField(spec.input, "limit")))
         }
+        ToolInputPattern.Funcidx ->
+            builder.addParameter(intParam(inputField(spec.input, "funcidx")))
         ToolInputPattern.Indices ->
             builder.addParameter(intListParam(inputField(spec.input, "indices")))
         is ToolInputPattern.ClosedRange ->
@@ -126,6 +128,7 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec) {
             code.addStatement("val range = %M(segmentRange)", REQUIRE_HALF_OPEN_RANGE)
         ToolInputPattern.WasmOnly,
         ToolInputPattern.FunctionPage,
+        ToolInputPattern.Funcidx,
         ToolInputPattern.Indices -> Unit
     }
     code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
@@ -134,6 +137,7 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec) {
     val callArgs: String = when (spec.inputPattern) {
         ToolInputPattern.WasmOnly -> "()"
         ToolInputPattern.FunctionPage -> "(offset, limit)"
+        ToolInputPattern.Funcidx -> "(funcidx)"
         ToolInputPattern.Indices -> "(indices)"
         is ToolInputPattern.ClosedRange -> "(range)"
         ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
@@ -163,6 +167,11 @@ private fun boolWithDefault(field: FieldSpec): ParameterSpec =
     ParameterSpec.builder(field.name, Boolean::class)
         .addAnnotation(describeAnnotation(field.descriptionOrError()))
         .defaultValue("%L", field.defaultOrError<Boolean>())
+        .build()
+
+private fun intParam(field: FieldSpec): ParameterSpec =
+    ParameterSpec.builder(field.name, Int::class)
+        .addAnnotation(describeAnnotation(field.descriptionOrError()))
         .build()
 
 private fun nullableIntParam(field: FieldSpec): ParameterSpec =

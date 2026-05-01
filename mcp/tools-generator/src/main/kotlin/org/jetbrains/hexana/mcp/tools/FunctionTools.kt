@@ -16,6 +16,12 @@ val FunctionsForIndicesInput = indicesInput(
     "List of unified function indices (`funcidx`) to resolve.",
 )
 
+val ResolveFunctionSignatureInput = WasmInputClass.with("ResolveFunctionSignatureInput") {
+    int("funcidx")
+        .describe("Unified function index (`funcidx`) to resolve.")
+        .minimum(0)
+}
+
 val GetLocalsForFunctionsInput = indicesInput(
     "GetLocalsForFunctionsInput",
     "List of unified function indices (`funcidx`) whose locals should be returned.",
@@ -51,6 +57,17 @@ val FunctionSummaryResultClass = class_("FunctionSummaryResult") {
 val FunctionsResultClass = class_("FunctionsResult", kotlinPackage = MODEL_PACKAGE) {
     list("functions", of = FunctionSummaryResultClass)
         .describe("Resolved function entries.")
+}
+
+val ResolveFunctionSignatureResultClass = class_("ResolveFunctionSignatureResult", kotlinPackage = MODEL_PACKAGE) {
+    int("funcidx").describe("Funcidx in the unified function index space.")
+    nullable("typeidx", of = int()).describe("Function type index, when resolved.")
+    list("params", of = string()).describe("Parameter types, in declaration order.")
+    list("results", of = string()).describe("Result types, in declaration order.")
+    string("kind").describe("Function origin: `import`, `export`, or `internal`.")
+    nullable("module", of = string()).describe("Import module name for imported functions.")
+    nullable("importName", of = string()).describe("Import field name for imported functions.")
+    list("exportNames", of = string()).describe("Export names pointing at this function.")
 }
 
 val FunctionInstructionsResultClass = class_("FunctionInstructionsResult") {
@@ -106,6 +123,18 @@ internal val FunctionTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.Indices
         output = FunctionsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionsByIndices"
+    }
+
+    tool("resolve_function_signature") {
+        summary = "Resolve the type index and signature for one function index."
+        guidance = """
+            Resolve the type index and signature for one unified WebAssembly function index.
+            Use this as a targeted lookup when logs, stack traces, exports, or other tools already identify the `funcidx`.
+        """
+        input = ResolveFunctionSignatureInput
+        inputPattern = ToolInputPattern.Funcidx
+        output = ResolveFunctionSignatureResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionSignature"
     }
 
     tool("get_locals_for_functions") {

@@ -29,6 +29,7 @@ class HexanaToolsTest {
                 "list_imports",
                 "list_memory",
                 "list_types",
+                "resolve_function_signature",
                 "summarize_module",
             ),
             HexanaTools.map { it.name }.sorted(),
@@ -48,6 +49,7 @@ class HexanaToolsTest {
                 "list_element_segments",
                 "list_functions",
                 "functions_for_indices",
+                "resolve_function_signature",
                 "get_globals_for_indices",
                 "get_memory_for_indices",
                 "get_types_for_indices",
@@ -138,6 +140,10 @@ class HexanaToolsTest {
         assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "summarize_module" }.inputPattern)
         assertEquals(ToolInputPattern.FunctionPage, HexanaTools.single { it.name == "list_functions" }.inputPattern)
         assertEquals(ToolInputPattern.Indices, HexanaTools.single { it.name == "functions_for_indices" }.inputPattern)
+        assertEquals(
+            ToolInputPattern.Funcidx,
+            HexanaTools.single { it.name == "resolve_function_signature" }.inputPattern,
+        )
         assertEquals(
             ToolInputPattern.ClosedRange(parameterName = "entriesRange"),
             HexanaTools.single { it.name == "list_exported_functions" }.inputPattern,
@@ -259,6 +265,14 @@ class HexanaToolsTest {
         val indices = spec.input.fields.single { it.name == "indices" }
         val element = (indices.type as FieldType.ListOf).element
         assertEquals(FieldType.Int32, element)
+    }
+
+    @Test
+    fun `resolve_function_signature composes wasm input with funcidx`() {
+        val spec = HexanaTools.single { it.name == "resolve_function_signature" }
+        val funcidx = spec.input.fields.single { it.name == "funcidx" }
+        assertEquals(FieldType.Int32, funcidx.type)
+        assertEquals(0, funcidx.minimum)
     }
 
     @Test

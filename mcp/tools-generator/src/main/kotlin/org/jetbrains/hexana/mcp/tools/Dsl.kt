@@ -308,6 +308,7 @@ data class ToolSpec(
 sealed class ToolInputPattern {
     object WasmOnly : ToolInputPattern()
     object FunctionPage : ToolInputPattern()
+    object Funcidx : ToolInputPattern()
     object Indices : ToolInputPattern()
     data class ClosedRange(val parameterName: String) : ToolInputPattern()
     object DataSegments : ToolInputPattern()
@@ -476,6 +477,12 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireNonNullable(limit)
             requireDefault(limit, "Int") { it is Int }
             requireDescribed(limit)
+        }
+        ToolInputPattern.Funcidx -> {
+            val funcidx = requireField("funcidx")
+            requireType(funcidx, FieldType.Int32)
+            requireNonNullable(funcidx)
+            requireDescribed(funcidx)
         }
         ToolInputPattern.Indices -> {
             val indices = requireField("indices")

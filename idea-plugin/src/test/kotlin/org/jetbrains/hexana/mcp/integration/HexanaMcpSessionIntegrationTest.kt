@@ -164,6 +164,7 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
         val EXPECTED_HEXANA_TOOLS = setOf(
             "list_imports",
             "list_functions",
+            "resolve_function_signature",
             "list_data",
             "list_exports",
             "list_exported_functions",

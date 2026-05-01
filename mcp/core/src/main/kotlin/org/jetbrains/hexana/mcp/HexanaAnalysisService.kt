@@ -10,6 +10,7 @@ import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
+import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
@@ -29,6 +30,7 @@ interface HexanaAnalysisService {
     fun listImports(input: WasmInput): ListImportsResult
     fun listExports(input: WasmInput): ListExportsResult
     fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult
+    fun resolveFunctionSignature(input: WasmInput, funcidx: Int): ResolveFunctionSignatureResult
     fun listExportedFunctions(input: WasmInput, entriesRange: IntRange): ListExportedFunctionsResult
     fun functionsForIndices(input: WasmInput, indices: List<Int>): FunctionsResult
     fun listGlobals(input: WasmInput): ListGlobalsResult
@@ -81,6 +83,12 @@ class DefaultHexanaAnalysisService(
         requireLimit(limit)
         val wasm = load(input)
         return wasm.provider.readFunctions(offset, limit)
+    }
+
+    override fun resolveFunctionSignature(input: WasmInput, funcidx: Int): ResolveFunctionSignatureResult {
+        requireIndices(listOf(funcidx))
+        val wasm = load(input)
+        return wasm.provider.readFunctionSignature(funcidx)
     }
 
     override fun listExportedFunctions(input: WasmInput, entriesRange: IntRange): ListExportedFunctionsResult {

@@ -80,6 +80,7 @@ internal fun WasmBinaryProvider.listFunctionEntries(): List<GeneralFunctionEntry
             val signature = (record.type as WasmTypeIndexExternalType).toSignature(types)
             GeneralFunctionEntry(
                 funcidx = index,
+                typeidx = (record.type as WasmTypeIndexExternalType).index.toInt(),
                 signature = signature,
                 import = Import(module = record.prefix, name = record.name),
                 exportedAs = exportedFunctionsByIndex[index].orEmpty(),
@@ -102,6 +103,7 @@ internal fun WasmBinaryProvider.listFunctionEntries(): List<GeneralFunctionEntry
             val codeRecord = declaredCodeRecords.getOrNull(index)
             GeneralFunctionEntry(
                 funcidx = funcidx,
+                typeidx = typeIndex,
                 signature = signature,
                 import = null,
                 exportedAs = exportedFunctionsByIndex[funcidx].orEmpty(),
