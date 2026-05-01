@@ -64,6 +64,7 @@ class HexanaStdioIntegrationTest {
                     "list_data",
                     "list_data_segments",
                     "list_element_segments",
+                    "list_enabled_features",
                     "list_exported_functions",
                     "list_exports",
                     "list_functions",

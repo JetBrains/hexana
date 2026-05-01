@@ -25,6 +25,7 @@ class HexanaToolsTest {
                 "list_data",
                 "list_data_segments",
                 "list_element_segments",
+                "list_enabled_features",
                 "list_exported_functions",
                 "list_exports",
                 "list_functions",
@@ -48,6 +49,7 @@ class HexanaToolsTest {
         assertEquals(
             listOf(
                 "summarize_module",
+                "list_enabled_features",
                 "list_custom_sections",
                 "list_imports",
                 "list_exports",
@@ -152,6 +154,7 @@ class HexanaToolsTest {
     @Test
     fun `tools expose input invocation patterns explicitly`() {
         assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "summarize_module" }.inputPattern)
+        assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "list_enabled_features" }.inputPattern)
         assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "list_custom_sections" }.inputPattern)
         assertEquals(ToolInputPattern.FunctionPage, HexanaTools.single { it.name == "list_functions" }.inputPattern)
         assertEquals(

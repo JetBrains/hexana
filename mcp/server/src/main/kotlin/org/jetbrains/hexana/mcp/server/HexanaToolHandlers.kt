@@ -20,6 +20,12 @@ class HexanaToolHandlers(
         }
     }
 
+    fun listEnabledFeatures(arguments: JsonObject?): CallToolResult {
+        return execute("list_enabled_features") {
+            analysisService.listEnabledFeatures(wasmInput(arguments))
+        }
+    }
+
     fun listCustomSections(arguments: JsonObject?): CallToolResult {
         return execute("list_custom_sections") {
             analysisService.listCustomSections(wasmInput(arguments))

@@ -13,6 +13,7 @@ import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
+import org.jetbrains.hexana.mcp.model.features.ListEnabledFeaturesResult
 import org.jetbrains.hexana.mcp.model.functions.DisassembleFunctionResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
@@ -678,6 +679,7 @@ class HexanaToolHandlersTest {
             }
         )
         val elements = handlers.listElementSegments(jsonPath(wasm.toString()))
+        val features = handlers.listEnabledFeatures(jsonPath(wasm.toString()))
 
         assertFalse(functions.isError == true)
         assertEquals(2, functions.structuredContent!!["functions"]!!.jsonArray.size)
@@ -755,6 +757,12 @@ class HexanaToolHandlersTest {
             "1",
             elements.structuredContent!!["segments"]!!.jsonArray[0].jsonObject["elements"]!!.jsonArray[0].jsonPrimitive.content
         )
+
+        assertFalse(features.isError == true)
+        assertEquals(
+            true,
+            features.structuredContent!!["features"]!!.jsonObject["referenceTypes"]!!.jsonPrimitive.boolean
+        )
     }
 
     @Test
@@ -793,6 +801,7 @@ class HexanaToolHandlersTest {
         val handlers = HexanaToolHandlers(
             analysisService = object : HexanaAnalysisService {
                 override fun summarizeModule(input: WasmInput): SummarizeModuleResult = error("boom")
+                override fun listEnabledFeatures(input: WasmInput): ListEnabledFeaturesResult = error("boom")
                 override fun listCustomSections(input: WasmInput): ListCustomSectionsResult = error("boom")
                 override fun listImports(input: WasmInput): ListImportsResult = error("boom")
                 override fun listExports(input: WasmInput): ListExportsResult = error("boom")
@@ -880,6 +889,7 @@ class HexanaToolHandlersTest {
                     )
                 }
 
+                override fun listEnabledFeatures(input: WasmInput): ListEnabledFeaturesResult = error("unused")
                 override fun listCustomSections(input: WasmInput): ListCustomSectionsResult = error("unused")
                 override fun listImports(input: WasmInput): ListImportsResult = error("unused")
                 override fun listExports(input: WasmInput): ListExportsResult = error("unused")

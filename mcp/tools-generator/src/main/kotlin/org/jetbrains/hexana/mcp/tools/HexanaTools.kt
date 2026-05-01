@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.tools
 
 private val HEXANA_TOOL_ORDER = listOf(
     "summarize_module",
+    "list_enabled_features",
     "list_custom_sections",
     "list_imports",
     "list_exports",

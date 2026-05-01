@@ -8,6 +8,7 @@ import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
+import org.jetbrains.hexana.mcp.model.features.ListEnabledFeaturesResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.DisassembleFunctionResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
@@ -34,6 +35,7 @@ import kotlin.io.path.extension
 
 interface HexanaAnalysisService {
     fun summarizeModule(input: WasmInput): SummarizeModuleResult
+    fun listEnabledFeatures(input: WasmInput): ListEnabledFeaturesResult
     fun listCustomSections(input: WasmInput): ListCustomSectionsResult
     fun listImports(input: WasmInput): ListImportsResult
     fun listExports(input: WasmInput): ListExportsResult
@@ -80,6 +82,11 @@ class DefaultHexanaAnalysisService(
     override fun summarizeModule(input: WasmInput): SummarizeModuleResult {
         val wasm = load(input)
         return wasm.provider.readModuleSummary()
+    }
+
+    override fun listEnabledFeatures(input: WasmInput): ListEnabledFeaturesResult {
+        val wasm = load(input)
+        return wasm.provider.readEnabledFeatures()
     }
 
     override fun listCustomSections(input: WasmInput): ListCustomSectionsResult {

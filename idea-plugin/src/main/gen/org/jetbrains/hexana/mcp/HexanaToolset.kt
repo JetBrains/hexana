@@ -16,6 +16,7 @@ import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
+import org.jetbrains.hexana.mcp.model.features.ListEnabledFeaturesResult
 import org.jetbrains.hexana.mcp.model.functions.DisassembleFunctionResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
@@ -36,6 +37,7 @@ import org.jetbrains.hexana.mcp.query.readCustomSections
 import org.jetbrains.hexana.mcp.query.readDataSections
 import org.jetbrains.hexana.mcp.query.readDataSegmentsByRange
 import org.jetbrains.hexana.mcp.query.readElementSegments
+import org.jetbrains.hexana.mcp.query.readEnabledFeatures
 import org.jetbrains.hexana.mcp.query.readExportedFunctions
 import org.jetbrains.hexana.mcp.query.readExports
 import org.jetbrains.hexana.mcp.query.readExportsByName
@@ -67,6 +69,14 @@ public class HexanaToolset : McpToolset {
     val file = requireWasmFile(path)
     val provider = file.requireCoreWasmBinaryProvider()
     return provider.readModuleSummary()
+  }
+
+  @McpTool("list_enabled_features")
+  @McpDescription("List enabled or inferred WebAssembly feature flags for a `.wasm` module.\nInfer WebAssembly feature usage from type declarations, section presence, instructions, and feature-related custom sections.\nUse this before choosing specialized tools when syntax or semantics depend on proposals such as reference types, bulk memory, SIMD, threads, memory64, GC, or function references.")
+  public suspend fun listEnabledFeatures(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String): ListEnabledFeaturesResult {
+    val file = requireWasmFile(path)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readEnabledFeatures()
   }
 
   @McpTool("list_custom_sections")

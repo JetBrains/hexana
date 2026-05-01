@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.mcp.direct
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonPrimitive
 
 class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
     fun testSummarizeModuleReturnsProjectRelativeFixtureData() {
@@ -88,6 +90,48 @@ class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(textJson, structuredContent)
         assertEquals(1, structuredContent.int("functions"))
         assertEquals(1, structuredContent.int("exports"))
+    }
+
+    fun testListEnabledFeaturesReturnsFlagsAndSources() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/summary/enabled_features.wasm",
+            """
+            (module
+              (type (func (param funcref) (result i32 i32)))
+              (memory 1)
+              (data ${'$'}d "abc")
+              (func (export "features") (type 0) (param funcref) (result i32 i32)
+                local.get 0
+                ref.is_null
+                i32.extend8_s
+                i32.const 1)
+              (func (export "bulk")
+                i32.const 0
+                i32.const 0
+                i32.const 3
+                memory.init ${'$'}d
+                data.drop ${'$'}d))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject("list_enabled_features", jsonPath(fixture.projectRelativePath))
+        val features = result.obj("features")
+
+        assertTrue(features["referenceTypes"]!!.jsonPrimitive.boolean)
+        assertTrue(features["bulkMemory"]!!.jsonPrimitive.boolean)
+        assertTrue(features["multiValue"]!!.jsonPrimitive.boolean)
+        assertTrue(features["signExtension"]!!.jsonPrimitive.boolean)
+        assertFalse(features["simd"]!!.jsonPrimitive.boolean)
+        assertFalse(features["threads"]!!.jsonPrimitive.boolean)
+        assertFalse(features["memory64"]!!.jsonPrimitive.boolean)
+        assertFalse(features["functionReferences"]!!.jsonPrimitive.boolean)
+
+        val sources = result.obj("sources")
+        assertTrue(sources.array("sections").map { it.textValue() }.contains("Type"))
+        assertTrue(sources.array("sections").map { it.textValue() }.contains("DataCount"))
+        assertTrue(sources.array("instructions").map { it.textValue() }.contains("memory.init"))
+        assertTrue(sources.array("instructions").map { it.textValue() }.contains("data.drop"))
+        assertTrue(sources.array("instructions").map { it.textValue() }.contains("i32.extend8_s"))
     }
 
     fun testListCustomSectionsReturnsOffsetsAndPreviews() {

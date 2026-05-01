@@ -37,6 +37,7 @@ internal object HexanaToolInputDefaults {
  */
 public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   registerSummarizeModuleTool(handlers)
+  registerListEnabledFeaturesTool(handlers)
   registerListCustomSectionsTool(handlers)
   registerListImportsTool(handlers)
   registerListExportsTool(handlers)
@@ -168,6 +169,148 @@ private fun Server.registerSummarizeModuleTool(handlers: HexanaToolHandlers) {
     ),
   ))  {
     request: CallToolRequest -> handlers.summarizeModule(request.arguments)
+  }
+}
+
+private fun Server.registerListEnabledFeaturesTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "list_enabled_features",
+    description = "List enabled or inferred WebAssembly feature flags for a `.wasm` module.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("features", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("referenceTypes", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when reference types are used."))
+          })
+          put("bulkMemory", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when bulk-memory sections or instructions are used."))
+          })
+          put("multiValue", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when multi-value function results are used."))
+          })
+          put("signExtension", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when sign-extension instructions are used."))
+          })
+          put("simd", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when SIMD value types or instructions are used."))
+          })
+          put("threads", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when atomic/thread instructions are used."))
+          })
+          put("memory64", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when memory64 limits are used."))
+          })
+          put("gcTypes", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when GC types, packed storage, or GC instructions are used."))
+          })
+          put("subtyping", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when type subtyping metadata is present."))
+          })
+          put("functionReferences", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when function-reference instructions such as `ref.func` or `call_ref` are used."))
+          })
+          put("extendedConst", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when extended constant-expression instructions are observed."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("referenceTypes"))
+          add(JsonPrimitive("bulkMemory"))
+          add(JsonPrimitive("multiValue"))
+          add(JsonPrimitive("signExtension"))
+          add(JsonPrimitive("simd"))
+          add(JsonPrimitive("threads"))
+          add(JsonPrimitive("memory64"))
+          add(JsonPrimitive("gcTypes"))
+          add(JsonPrimitive("subtyping"))
+          add(JsonPrimitive("functionReferences"))
+          add(JsonPrimitive("extendedConst"))
+        })
+        put("description", JsonPrimitive("Enabled or inferred WebAssembly feature flags."))
+      })
+      put("sources", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("sections", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+            })
+            put("description", JsonPrimitive("Sections that contributed feature evidence."))
+          })
+          put("instructions", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+            })
+            put("description", JsonPrimitive("Instructions that contributed feature evidence."))
+          })
+          put("customSections", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+            })
+            put("description", JsonPrimitive("Feature-related custom sections found in the module."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("sections"))
+          add(JsonPrimitive("instructions"))
+          add(JsonPrimitive("customSections"))
+        })
+        put("description", JsonPrimitive("Evidence sources for enabled features."))
+      })
+    },
+    required = listOf("features", "sources")
+  ),
+  ))  {
+    request: CallToolRequest -> handlers.listEnabledFeatures(request.arguments)
   }
 }
 

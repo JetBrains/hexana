@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.tools
 
 private const val SUMMARY_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.summary"
 private const val SECTIONS_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.sections"
+private const val FEATURES_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.features"
 
 val SummarizeModuleImportsClass = class_("SummarizeModuleImports") {
     int("functions").describe("Number of imported functions.")
@@ -19,6 +20,31 @@ val SummarizeModuleResultClass = class_("SummarizeModuleResult", kotlinPackage =
     int("types").describe("Number of type entries declared by the module.")
     embed("imports", of = SummarizeModuleImportsClass).describe("Import breakdown by kind.")
     int("moduleSize").describe("Size of the module binary in bytes.")
+}
+
+val EnabledFeaturesResultClass = class_("EnabledFeaturesResult") {
+    boolean("referenceTypes").describe("True when reference types are used.")
+    boolean("bulkMemory").describe("True when bulk-memory sections or instructions are used.")
+    boolean("multiValue").describe("True when multi-value function results are used.")
+    boolean("signExtension").describe("True when sign-extension instructions are used.")
+    boolean("simd").describe("True when SIMD value types or instructions are used.")
+    boolean("threads").describe("True when atomic/thread instructions are used.")
+    boolean("memory64").describe("True when memory64 limits are used.")
+    boolean("gcTypes").describe("True when GC types, packed storage, or GC instructions are used.")
+    boolean("subtyping").describe("True when type subtyping metadata is present.")
+    boolean("functionReferences").describe("True when function-reference instructions such as `ref.func` or `call_ref` are used.")
+    boolean("extendedConst").describe("True when extended constant-expression instructions are observed.")
+}
+
+val EnabledFeatureSourcesResultClass = class_("EnabledFeatureSourcesResult") {
+    list("sections", of = string()).describe("Sections that contributed feature evidence.")
+    list("instructions", of = string()).describe("Instructions that contributed feature evidence.")
+    list("customSections", of = string()).describe("Feature-related custom sections found in the module.")
+}
+
+val ListEnabledFeaturesResultClass = class_("ListEnabledFeaturesResult", kotlinPackage = FEATURES_MODEL_PACKAGE) {
+    embed("features", of = EnabledFeaturesResultClass).describe("Enabled or inferred WebAssembly feature flags.")
+    embed("sources", of = EnabledFeatureSourcesResultClass).describe("Evidence sources for enabled features.")
 }
 
 val CustomSectionResultClass = class_("CustomSectionResult") {
@@ -47,6 +73,18 @@ internal val ModuleTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.WasmOnly
         output = SummarizeModuleResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readModuleSummary"
+    }
+
+    tool("list_enabled_features") {
+        summary = "List enabled or inferred WebAssembly feature flags for a `.wasm` module."
+        guidance = """
+            Infer WebAssembly feature usage from type declarations, section presence, instructions, and feature-related custom sections.
+            Use this before choosing specialized tools when syntax or semantics depend on proposals such as reference types, bulk memory, SIMD, threads, memory64, GC, or function references.
+        """
+        input = WasmInputClass
+        inputPattern = ToolInputPattern.WasmOnly
+        output = ListEnabledFeaturesResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readEnabledFeatures"
     }
 
     tool("list_custom_sections") {
