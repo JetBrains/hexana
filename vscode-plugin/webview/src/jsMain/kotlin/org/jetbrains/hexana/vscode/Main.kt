@@ -60,6 +60,11 @@ fun WasmEditorContent(
     val selection = remember { HexSelectionState() }
     val buffer = remember(bytes) { bytes.toCommonByteBuffer() }
     var panelHeight by remember { mutableStateOf(DEFAULT_PANEL_HEIGHT) }
+    var activeTab by remember { mutableStateOf(HexanaTab.Summary) }
+
+    val hasTopTab = remember(providerType) {
+        providerType is BinaryProviderType.Wasm || providerType is BinaryProviderType.WasmComponent
+    }
 
     Div({
         classes("hexana-editor")
@@ -71,7 +76,14 @@ fun WasmEditorContent(
             property("overflow", "hidden")
         }
     }) {
-        EditorToolbar(fileName = fileName, size = bytes.size, providerType = providerType, buffer = buffer, wasmBytes = bytes)
+        EditorToolbar(
+            fileName = fileName,
+            size = bytes.size,
+            providerType = providerType,
+            buffer = buffer,
+            wasmBytes = bytes,
+            onSizeClick = if (hasTopTab) {{ activeTab = HexanaTab.Size }} else null,
+        )
         HexViewerPanel(bytes = bytes, selection = selection)
         SelectionStatusBar(selection = selection, totalBytes = bytes.size)
         ResizeDivider { deltaY ->
@@ -85,6 +97,8 @@ fun WasmEditorContent(
             selection = selection,
             fileName = fileName,
             heightPx = panelHeight,
+            activeTab = activeTab,
+            onActiveTabChange = { activeTab = it },
         )
     }
 }

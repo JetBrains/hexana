@@ -51,21 +51,33 @@ internal fun BinaryEditorView(
     fileName: String = "",
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
+        val pathsNav = remember { PathsNavigationState() }
+        val panels = remember {
+            val p = binaryProvider.resolvePanels(state, pathsNav)
+            mutableStateListOf(*p)
+        }
+
+        val topTabIndex = remember(panels) { panels.indexOfFirst { it.description == "Top" }.takeIf { it >= 0 } }
+
         VerticalSplitPanel(state, northPanel = {
             Column(modifier = Modifier.fillMaxSize()) {
-                FileDescriptionBar(fileName = fileName, binaryProvider = binaryProvider, state = state)
+                FileDescriptionBar(
+                    fileName = fileName,
+                    binaryProvider = binaryProvider,
+                    state = state,
+                    onSizeClick = topTabIndex?.let { idx -> {
+                        state.setSelectedTab(idx)
+                        if (state.topFraction > 0.9f) {
+                            state.setTopFraction(0.5f)
+                        }
+                    }},
+                )
                 Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     HexViewer(binaryProvider, state, focusRequester = hexFocusRequester)
                 }
                 HexViewStatusBar(state = state, totalBytes = binaryProvider.bytes.limit())
             }
         }, southPanel = {
-            val pathsNav = remember { PathsNavigationState() }
-            val panels = remember {
-                val p = binaryProvider.resolvePanels(state, pathsNav)
-                mutableStateListOf(*p)
-            }
-
             TabsPanel(panels, state.currentState.value,  onExpand = { expanded ->
                 if (expanded) {
                     state.setTopFraction(0f)

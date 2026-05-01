@@ -23,6 +23,7 @@ fun EditorToolbar(
     providerType: BinaryProviderType,
     buffer: CommonByteBuffer? = null,
     wasmBytes: ByteArray? = null,
+    onSizeClick: (() -> Unit)? = null,
 ) {
     val isSubmodule = isSubmoduleFileName(fileName)
 
@@ -85,7 +86,13 @@ fun EditorToolbar(
             Text(fileName.substringAfterLast('/').substringAfterLast('\\'))
         }
 
-        Span({ style { property("opacity", "0.7") } }) {
+        Span({
+            style {
+                property("opacity", "0.7")
+                if (onSizeClick != null) property("cursor", "pointer")
+            }
+            if (onSizeClick != null) onClick { onSizeClick() }
+        }) {
             Text(formatSize(size))
         }
 

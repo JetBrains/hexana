@@ -29,6 +29,8 @@ fun HexanaPanel(
     selection: HexSelectionState,
     fileName: String,
     heightPx: Double = 250.0,
+    activeTab: HexanaTab = HexanaTab.Summary,
+    onActiveTabChange: (HexanaTab) -> Unit = {},
 ) {
     val visibleTabs = remember(providerType) {
         buildList {
@@ -52,11 +54,9 @@ fun HexanaPanel(
         }
     }
 
-    var activeTab by remember { mutableStateOf(HexanaTab.Summary) }
-
     // If the active tab was removed (e.g. switching from component to core), reset
     if (activeTab !in visibleTabs) {
-        activeTab = HexanaTab.Summary
+        onActiveTabChange(HexanaTab.Summary)
     }
 
     Div({
@@ -98,7 +98,7 @@ fun HexanaPanel(
                         property("background", if (isActive) "var(--hexana-tab-active-bg, transparent)" else "transparent")
                     }
                     onClick {
-                        activeTab = tab
+                        onActiveTabChange(tab)
                         postTabSelectedToHost(tab.label)
                     }
                 }) {

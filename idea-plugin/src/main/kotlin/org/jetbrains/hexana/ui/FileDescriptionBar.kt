@@ -2,6 +2,7 @@ package org.jetbrains.hexana.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +16,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -46,6 +49,7 @@ internal fun FileDescriptionBar(
     fileName: String,
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
+    onSizeClick: (() -> Unit)? = null,
 ) {
     val size = binaryProvider.bytes.limit()
     val moduleType = when (binaryProvider) {
@@ -96,6 +100,13 @@ internal fun FileDescriptionBar(
 
         Text(
             text = formatSize(size),
+            modifier = if (onSizeClick != null) {
+                Modifier
+                    .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                    .clickable { onSizeClick() }
+            } else {
+                Modifier
+            },
             style = TextStyle(
                 fontSize = 12.sp,
                 color = HexanaTheme.hexTextColor,
