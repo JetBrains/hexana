@@ -59,6 +59,7 @@ class HexanaStdioIntegrationTest {
                     "get_memory_for_indices",
                     "get_types_for_indices",
                     "list_code_section_offsets",
+                    "list_custom_sections",
                     "list_data",
                     "list_data_segments",
                     "list_element_segments",

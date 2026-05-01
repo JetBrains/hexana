@@ -89,4 +89,38 @@ class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(1, structuredContent.int("functions"))
         assertEquals(1, structuredContent.int("exports"))
     }
+
+    fun testListCustomSectionsReturnsOffsetsAndPreviews() {
+        val fixture = createBinaryFixture(
+            "fixtures/direct/summary/custom_sections.wasm",
+            wasmWithCustomSections()
+        )
+
+        val result = callToolJsonObject("list_custom_sections", jsonPath(fixture.projectRelativePath))
+        val sections = result.array("customSections")
+
+        assertEquals(2, sections.size)
+        assertEquals("answer", sections.obj(0).text("name"))
+        assertEquals(8, sections.obj(0).long("offset"))
+        assertTrue(sections.obj(0).long("size") > 0)
+        assertEquals("utf8", sections.obj(0).text("encoding"))
+        assertEquals("flag=42", sections.obj(0).text("preview"))
+
+        assertEquals(".debug_info", sections.obj(1).text("name"))
+        assertEquals("binary", sections.obj(1).text("encoding"))
+        assertEquals("0x04 0x00 0x00 0x00 0x11 0xff", sections.obj(1).text("preview"))
+    }
+
+    private fun wasmWithCustomSections(): ByteArray {
+        return intArrayOf(
+            0x00, 0x61, 0x73, 0x6d,
+            0x01, 0x00, 0x00, 0x00,
+            0x00, 0x0e, 0x06,
+            0x61, 0x6e, 0x73, 0x77, 0x65, 0x72,
+            0x66, 0x6c, 0x61, 0x67, 0x3d, 0x34, 0x32,
+            0x00, 0x12, 0x0b,
+            0x2e, 0x64, 0x65, 0x62, 0x75, 0x67, 0x5f, 0x69, 0x6e, 0x66, 0x6f,
+            0x04, 0x00, 0x00, 0x00, 0x11, 0xff,
+        ).map { it.toByte() }.toByteArray()
+    }
 }

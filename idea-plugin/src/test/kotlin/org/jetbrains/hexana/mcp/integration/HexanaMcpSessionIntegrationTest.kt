@@ -163,6 +163,7 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
     private companion object {
         val EXPECTED_HEXANA_TOOLS = setOf(
             "list_imports",
+            "list_custom_sections",
             "list_functions",
             "list_code_section_offsets",
             "resolve_function_signature",

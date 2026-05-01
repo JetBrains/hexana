@@ -22,6 +22,7 @@ import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
+import org.jetbrains.hexana.mcp.model.sections.ListCustomSectionsResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.mcp.model.types.TypesResult
 import org.junit.Rule
@@ -166,6 +167,30 @@ class HexanaToolHandlersTest {
         assertTrue(functions[0].jsonObject["offset"]!!.jsonPrimitive.long > 0)
         assertTrue(functions[0].jsonObject["size"]!!.jsonPrimitive.long > 0)
         assertEquals(2, functions[1].jsonObject["funcidx"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun listCustomSectionsReturnsOffsetsAndPreviews() {
+        val wasm = temporaryFolder.newFile("custom_sections.wasm").toPath().also {
+            Files.write(it, wasmWithCustomSections())
+        }
+
+        val result = handlers.listCustomSections(jsonPath(wasm.toString()))
+
+        assertFalse(result.isError == true)
+        val sections = result.structuredContent!!["customSections"]!!.jsonArray
+        assertEquals(2, sections.size)
+        val answer = sections[0].jsonObject
+        assertEquals("answer", answer["name"]!!.jsonPrimitive.content)
+        assertEquals(8, answer["offset"]!!.jsonPrimitive.long)
+        assertTrue(answer["size"]!!.jsonPrimitive.long > 0)
+        assertEquals("utf8", answer["encoding"]!!.jsonPrimitive.content)
+        assertEquals("flag=42", answer["preview"]!!.jsonPrimitive.content)
+
+        val debugInfo = sections[1].jsonObject
+        assertEquals(".debug_info", debugInfo["name"]!!.jsonPrimitive.content)
+        assertEquals("binary", debugInfo["encoding"]!!.jsonPrimitive.content)
+        assertEquals("0x04 0x00 0x00 0x00 0x11 0xff", debugInfo["preview"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -707,6 +732,7 @@ class HexanaToolHandlersTest {
         val handlers = HexanaToolHandlers(
             analysisService = object : HexanaAnalysisService {
                 override fun summarizeModule(input: WasmInput): SummarizeModuleResult = error("boom")
+                override fun listCustomSections(input: WasmInput): ListCustomSectionsResult = error("boom")
                 override fun listImports(input: WasmInput): ListImportsResult = error("boom")
                 override fun listExports(input: WasmInput): ListExportsResult = error("boom")
                 override fun searchExports(input: WasmInput, query: List<String>, limit: Int): SearchExportsResult =
@@ -788,6 +814,7 @@ class HexanaToolHandlersTest {
                     )
                 }
 
+                override fun listCustomSections(input: WasmInput): ListCustomSectionsResult = error("unused")
                 override fun listImports(input: WasmInput): ListImportsResult = error("unused")
                 override fun listExports(input: WasmInput): ListExportsResult = error("unused")
                 override fun searchExports(input: WasmInput, query: List<String>, limit: Int): SearchExportsResult =
@@ -867,6 +894,19 @@ class HexanaToolHandlersTest {
 
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {
         Files.write(it, wat2wasm(wat))
+    }
+
+    private fun wasmWithCustomSections(): ByteArray {
+        return intArrayOf(
+            0x00, 0x61, 0x73, 0x6d,
+            0x01, 0x00, 0x00, 0x00,
+            0x00, 0x0e, 0x06,
+            0x61, 0x6e, 0x73, 0x77, 0x65, 0x72,
+            0x66, 0x6c, 0x61, 0x67, 0x3d, 0x34, 0x32,
+            0x00, 0x12, 0x0b,
+            0x2e, 0x64, 0x65, 0x62, 0x75, 0x67, 0x5f, 0x69, 0x6e, 0x66, 0x6f,
+            0x04, 0x00, 0x00, 0x00, 0x11, 0xff,
+        ).map { it.toByte() }.toByteArray()
     }
 
     private class RecordingLogger : Logger by LoggerStub() {

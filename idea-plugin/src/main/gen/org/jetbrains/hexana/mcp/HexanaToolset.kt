@@ -25,9 +25,11 @@ import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
+import org.jetbrains.hexana.mcp.model.sections.ListCustomSectionsResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.mcp.model.types.TypesResult
 import org.jetbrains.hexana.mcp.query.readCodeSectionOffsets
+import org.jetbrains.hexana.mcp.query.readCustomSections
 import org.jetbrains.hexana.mcp.query.readDataSections
 import org.jetbrains.hexana.mcp.query.readDataSegmentsByRange
 import org.jetbrains.hexana.mcp.query.readElementSegments
@@ -59,6 +61,14 @@ public class HexanaToolset : McpToolset {
     val file = requireWasmFile(path)
     val provider = file.requireCoreWasmBinaryProvider()
     return provider.readModuleSummary()
+  }
+
+  @McpTool("list_custom_sections")
+  @McpDescription("List WebAssembly custom sections with offsets, sizes, and small content previews.\nList custom sections from a WebAssembly module, including names, full-section byte ranges, and a capped content preview.\nThe preview excludes the encoded section name; `encoding` is `utf8` for printable UTF-8 content prefixes and `binary` for hex-rendered byte prefixes.\nUse this before deeper debug, producer, source-map, or CTF-style metadata investigation.")
+  public suspend fun listCustomSections(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String): ListCustomSectionsResult {
+    val file = requireWasmFile(path)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readCustomSections()
   }
 
   @McpTool("list_imports")

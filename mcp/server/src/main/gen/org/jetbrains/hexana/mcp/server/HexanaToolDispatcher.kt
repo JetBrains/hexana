@@ -143,6 +143,87 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   }
 
   addTool(tool = Tool(
+    name = "list_custom_sections",
+    description = "List WebAssembly custom sections with offsets, sizes, and small content previews.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("customSections", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("name", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Custom section name as encoded in the module."))
+            })
+            put("offset", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Byte offset of the full custom section in the module."))
+            })
+            put("size", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Size of the full custom section in bytes."))
+            })
+            put("encoding", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Preview encoding: `utf8` when the content prefix is printable UTF-8, otherwise `binary`."))
+            })
+            put("preview", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Small content preview, excluding the section name."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("name"))
+            add(JsonPrimitive("offset"))
+            add(JsonPrimitive("size"))
+            add(JsonPrimitive("encoding"))
+            add(JsonPrimitive("preview"))
+          })
+        })
+        put("description", JsonPrimitive("Custom sections found in the module."))
+      })
+    },
+    required = listOf("customSections")
+  ),
+  ))  {
+    request: CallToolRequest -> handlers.listCustomSections(request.arguments)
+  }
+
+  addTool(tool = Tool(
     name = "list_imports",
     description = "List imported functions declared by a `.wasm` module.",
     inputSchema = ToolSchema(

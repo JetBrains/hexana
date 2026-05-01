@@ -20,6 +20,12 @@ class HexanaToolHandlers(
         }
     }
 
+    fun listCustomSections(arguments: JsonObject?): CallToolResult {
+        return execute("list_custom_sections") {
+            analysisService.listCustomSections(wasmInput(arguments))
+        }
+    }
+
     fun listImports(arguments: JsonObject?): CallToolResult {
         return execute("list_imports") {
             analysisService.listImports(wasmInput(arguments))

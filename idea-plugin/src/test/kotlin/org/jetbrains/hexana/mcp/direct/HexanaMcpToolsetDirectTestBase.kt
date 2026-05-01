@@ -179,7 +179,7 @@ abstract class HexanaMcpToolsetDirectTestBase : BasePlatformTestCase() {
 
     private fun assertionFailure(message: String): Nothing = throw AssertionError(message)
 
-    private fun createBinaryFixture(pathInProject: String, bytes: ByteArray): ProjectFileFixture {
+    protected fun createBinaryFixture(pathInProject: String, bytes: ByteArray): ProjectFileFixture {
         val projectBasePath = project.basePath ?: error("Project base path is not available")
         val fullPath = Path.of(projectBasePath).resolve(pathInProject)
         Files.createDirectories(fullPath.parent)

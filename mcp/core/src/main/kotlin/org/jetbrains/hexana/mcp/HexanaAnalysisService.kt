@@ -17,6 +17,7 @@ import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
+import org.jetbrains.hexana.mcp.model.sections.ListCustomSectionsResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.mcp.model.types.TypesResult
 import org.jetbrains.hexana.mcp.query.*
@@ -30,6 +31,7 @@ import kotlin.io.path.extension
 
 interface HexanaAnalysisService {
     fun summarizeModule(input: WasmInput): SummarizeModuleResult
+    fun listCustomSections(input: WasmInput): ListCustomSectionsResult
     fun listImports(input: WasmInput): ListImportsResult
     fun listExports(input: WasmInput): ListExportsResult
     fun searchExports(input: WasmInput, query: List<String>, limit: Int): SearchExportsResult
@@ -72,6 +74,11 @@ class DefaultHexanaAnalysisService(
     override fun summarizeModule(input: WasmInput): SummarizeModuleResult {
         val wasm = load(input)
         return wasm.provider.readModuleSummary()
+    }
+
+    override fun listCustomSections(input: WasmInput): ListCustomSectionsResult {
+        val wasm = load(input)
+        return wasm.provider.readCustomSections()
     }
 
     override fun listImports(input: WasmInput): ListImportsResult {
