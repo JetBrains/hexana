@@ -70,6 +70,7 @@ class HexanaHttpIntegrationTest {
                             "list_memory",
                             "list_types",
                             "resolve_function_signature",
+                            "search_exports",
                             "search_functions_by_name",
                             "summarize_module"
                         ),

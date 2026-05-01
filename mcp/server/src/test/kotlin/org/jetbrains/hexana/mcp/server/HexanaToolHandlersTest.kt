@@ -12,6 +12,7 @@ import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
 import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
+import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
@@ -278,6 +279,46 @@ class HexanaToolHandlersTest {
             "main",
             exports.structuredContent!!["exports"]!!.jsonArray[0].jsonObject["name"]!!.jsonPrimitive.content
         )
+    }
+
+    @Test
+    fun searchExportsReturnsResolvedFunctionAndMemoryMetadata() {
+        val wasm = createWasmFile(
+            "search_exports.wasm",
+            """
+            (module
+              (memory (export "memory") 1 2)
+              (func (export "add") (param i32 i32) (result i32)
+                local.get 0))
+            """.trimIndent()
+        )
+
+        val result = handlers.searchExports(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("query", buildJsonArray {
+                    add(JsonPrimitive("add"))
+                    add(JsonPrimitive("mem"))
+                })
+                put("limit", JsonPrimitive(10))
+            }
+        )
+
+        assertFalse(result.isError == true)
+        val results = result.structuredContent!!["results"]!!.jsonArray
+        assertEquals(2, results.size)
+        val add = results[0].jsonObject
+        assertEquals("add", add["name"]!!.jsonPrimitive.content)
+        assertEquals("func", add["kind"]!!.jsonPrimitive.content)
+        assertEquals(0, add["funcidx"]!!.jsonPrimitive.int)
+        assertEquals("i32", add["signature"]!!.jsonObject["params"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals("i32", add["signature"]!!.jsonObject["results"]!!.jsonArray[0].jsonPrimitive.content)
+        val memory = results[1].jsonObject
+        assertEquals("memory", memory["name"]!!.jsonPrimitive.content)
+        assertEquals("memory", memory["kind"]!!.jsonPrimitive.content)
+        assertEquals(0, memory["memidx"]!!.jsonPrimitive.int)
+        assertEquals(1, memory["limits"]!!.jsonObject["min"]!!.jsonPrimitive.long)
+        assertEquals(2, memory["limits"]!!.jsonObject["max"]!!.jsonPrimitive.long)
     }
 
     @Test
@@ -644,6 +685,9 @@ class HexanaToolHandlersTest {
                 override fun summarizeModule(input: WasmInput): SummarizeModuleResult = error("boom")
                 override fun listImports(input: WasmInput): ListImportsResult = error("boom")
                 override fun listExports(input: WasmInput): ListExportsResult = error("boom")
+                override fun searchExports(input: WasmInput, query: List<String>, limit: Int): SearchExportsResult =
+                    error("boom")
+
                 override fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult = error("boom")
                 override fun resolveFunctionSignature(
                     input: WasmInput,
@@ -721,6 +765,9 @@ class HexanaToolHandlersTest {
 
                 override fun listImports(input: WasmInput): ListImportsResult = error("unused")
                 override fun listExports(input: WasmInput): ListExportsResult = error("unused")
+                override fun searchExports(input: WasmInput, query: List<String>, limit: Int): SearchExportsResult =
+                    error("unused")
+
                 override fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult = error("unused")
                 override fun resolveFunctionSignature(
                     input: WasmInput,

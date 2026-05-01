@@ -32,6 +32,16 @@ class HexanaToolHandlers(
         }
     }
 
+    fun searchExports(arguments: JsonObject?): CallToolResult {
+        return execute("search_exports") {
+            analysisService.searchExports(
+                input = wasmInput(arguments),
+                query = arguments.requireStringList("query"),
+                limit = arguments.intOrDefault("limit", HexanaToolInputDefaults.SEARCH_EXPORTS_LIMIT)
+            )
+        }
+    }
+
     fun listFunctions(arguments: JsonObject?): CallToolResult {
         return execute("list_functions") {
             analysisService.listFunctions(
@@ -368,6 +378,15 @@ class HexanaToolHandlers(
         return array.mapIndexed { index, value ->
             value.jsonPrimitive.intOrNull
                 ?: throw ToolInputException("`$name[$index]` must be an integer")
+        }
+    }
+
+    private fun JsonObject?.requireStringList(name: String): List<String> {
+        val element = this?.get(name) ?: throw ToolInputException("`$name` is required")
+        val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
+        return array.mapIndexed { index, value ->
+            value.jsonPrimitive.contentOrNull
+                ?: throw ToolInputException("`$name[$index]` must be a string")
         }
     }
 

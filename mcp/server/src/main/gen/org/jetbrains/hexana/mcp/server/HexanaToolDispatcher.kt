@@ -17,6 +17,8 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
  * Generated input defaults shared by standalone server handlers.
  */
 internal object HexanaToolInputDefaults {
+  public const val SEARCH_EXPORTS_LIMIT: Int = 50
+
   public const val LIST_FUNCTIONS_OFFSET: Int = 0
 
   public const val LIST_FUNCTIONS_LIMIT: Int = 200
@@ -317,6 +319,207 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     ),
   ))  {
     request: CallToolRequest -> handlers.listExports(request.arguments)
+  }
+
+  addTool(tool = Tool(
+    name = "search_exports",
+    description = "Search exports by name and resolve common export metadata.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("query", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Case-insensitive export-name substrings to search for."))
+        put("maxItems", JsonPrimitive(20))
+      })
+      put("limit", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Maximum number of matching exports to return."))
+        put("default", JsonPrimitive(50))
+        put("minimum", JsonPrimitive(1))
+        put("maximum", JsonPrimitive(200))
+      })
+    },
+    required = listOf("query")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("results", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("name", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Export name."))
+            })
+            put("kind", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Export kind: `func`, `table`, `memory`, `global`, `tag`, or `unknown`."))
+            })
+            put("externIndex", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Index into the exported address space."))
+            })
+            put("funcidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Function index for function exports."))
+            })
+            put("tableidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Table index for table exports."))
+            })
+            put("memidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Memory index for memory exports."))
+            })
+            put("globalidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Global index for global exports."))
+            })
+            put("tagidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Tag index for tag exports."))
+            })
+            put("signature", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("params", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Parameter types."))
+                })
+                put("results", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Result types."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("params"))
+                add(JsonPrimitive("results"))
+              })
+              put("description", JsonPrimitive("Resolved function signature for function exports."))
+            })
+            put("limits", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("addressType", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
+                })
+                put("min", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Minimum number of pages."))
+                })
+                put("max", buildJsonObject {
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("integer"))
+                    add(JsonPrimitive("null"))
+                  })
+                  put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
+                })
+                put("hasMax", buildJsonObject {
+                  put("type", JsonPrimitive("boolean"))
+                  put("description", JsonPrimitive("True when an explicit upper bound was declared."))
+                })
+                put("range", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Human-readable range such as `1..ε`."))
+                })
+                put("flag", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Raw limits flag byte as hex (`0x00`, `0x01`, etc.)."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("addressType"))
+                add(JsonPrimitive("min"))
+                add(JsonPrimitive("hasMax"))
+                add(JsonPrimitive("range"))
+                add(JsonPrimitive("flag"))
+              })
+              put("description", JsonPrimitive("Resolved page limits for memory exports."))
+            })
+            put("repr", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Compact WAT export representation."))
+            })
+            put("score", buildJsonObject {
+              put("type", JsonPrimitive("number"))
+              put("description", JsonPrimitive("Name-match score between 0.0 and 1.0."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("name"))
+            add(JsonPrimitive("kind"))
+            add(JsonPrimitive("externIndex"))
+            add(JsonPrimitive("repr"))
+            add(JsonPrimitive("score"))
+          })
+        })
+        put("description", JsonPrimitive("Matching export entries."))
+      })
+    },
+    required = listOf("results")
+  ),
+  ))  {
+    request: CallToolRequest -> handlers.searchExports(request.arguments)
   }
 
   addTool(tool = Tool(

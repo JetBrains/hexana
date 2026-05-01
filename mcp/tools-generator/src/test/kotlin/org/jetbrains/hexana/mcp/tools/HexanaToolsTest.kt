@@ -30,6 +30,7 @@ class HexanaToolsTest {
                 "list_memory",
                 "list_types",
                 "resolve_function_signature",
+                "search_exports",
                 "search_functions_by_name",
                 "summarize_module",
             ),
@@ -44,6 +45,7 @@ class HexanaToolsTest {
                 "summarize_module",
                 "list_imports",
                 "list_exports",
+                "search_exports",
                 "list_globals",
                 "list_types",
                 "list_memory",
@@ -150,6 +152,7 @@ class HexanaToolsTest {
             ToolInputPattern.FunctionNameSearch,
             HexanaTools.single { it.name == "search_functions_by_name" }.inputPattern,
         )
+        assertEquals(ToolInputPattern.ExportNameSearch, HexanaTools.single { it.name == "search_exports" }.inputPattern)
         assertEquals(
             ToolInputPattern.ClosedRange(parameterName = "entriesRange"),
             HexanaTools.single { it.name == "list_exported_functions" }.inputPattern,
@@ -186,6 +189,9 @@ class HexanaToolsTest {
 
         val searchFunctionsByName = HexanaTools.single { it.name == "search_functions_by_name" }.input
         assertEquals(50, searchFunctionsByName.fields.single { it.name == "limit" }.default)
+
+        val searchExports = HexanaTools.single { it.name == "search_exports" }.input
+        assertEquals(50, searchExports.fields.single { it.name == "limit" }.default)
 
         val listDataSegments = HexanaTools.single { it.name == "list_data_segments" }.input
         assertEquals(false, listDataSegments.fields.single { it.name == "includeExports" }.default)
@@ -294,6 +300,24 @@ class HexanaToolsTest {
         assertEquals(FieldType.Int32, limit.type)
         assertEquals(1, limit.minimum)
         assertEquals(200, limit.maximum)
+    }
+
+    @Test
+    fun `search_exports composes wasm input with query list and limit`() {
+        val spec = HexanaTools.single { it.name == "search_exports" }
+        val query = spec.input.fields.single { it.name == "query" }
+        val limit = spec.input.fields.single { it.name == "limit" }
+        val element = (query.type as FieldType.ListOf).element
+        assertEquals(FieldType.StringT, element)
+        assertEquals(SchemaIntValue.Literal(20), query.maxItems)
+        assertEquals(FieldType.Int32, limit.type)
+        assertEquals(1, limit.minimum)
+        assertEquals(200, limit.maximum)
+
+        val score = spec.output.fields.single { it.name == "results" }
+            .let { (it.type as FieldType.ListOf).element as FieldType.ClassRef }
+            .clazz.fields.single { it.name == "score" }
+        assertEquals(FieldType.Float64, score.type)
     }
 
     @Test

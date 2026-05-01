@@ -7,6 +7,16 @@ val ListExportedFunctionsInput = WasmInputClass.with("ListExportedFunctionsInput
         .describe("Closed zero-based export slice. Pass `entriesRange = { from, to }`; both bounds are inclusive.")
 }
 
+val SearchExportsInput = WasmInputClass.with("SearchExportsInput") {
+    list("query", of = string())
+        .describe("Case-insensitive export-name substrings to search for.")
+        .maxItems(20)
+    int("limit", default = 50)
+        .describe("Maximum number of matching exports to return.")
+        .minimum(1)
+        .maximum(200)
+}
+
 val ExportResultClass = class_("ExportResult") {
     string("name").describe("Export field name.")
     long("externIndex").describe("Index into the exported address space (funcidx, tableidx, memidx, or globalidx).")
@@ -16,6 +26,32 @@ val ExportResultClass = class_("ExportResult") {
 val ListExportsResultClass = class_("ListExportsResult", kotlinPackage = MODEL_PACKAGE) {
     list("exports", of = ExportResultClass)
         .describe("Exports declared by the module.")
+}
+
+val SearchExportFunctionSignatureResultClass = class_("SearchExportFunctionSignatureResult") {
+    list("params", of = string()).describe("Parameter types.")
+    list("results", of = string()).describe("Result types.")
+}
+
+val SearchExportResultClass = class_("SearchExportResult") {
+    string("name").describe("Export name.")
+    string("kind").describe("Export kind: `func`, `table`, `memory`, `global`, `tag`, or `unknown`.")
+    int("externIndex").describe("Index into the exported address space.")
+    nullable("funcidx", int()).describe("Function index for function exports.")
+    nullable("tableidx", int()).describe("Table index for table exports.")
+    nullable("memidx", int()).describe("Memory index for memory exports.")
+    nullable("globalidx", int()).describe("Global index for global exports.")
+    nullable("tagidx", int()).describe("Tag index for tag exports.")
+    nullable("signature", of = SearchExportFunctionSignatureResultClass)
+        .describe("Resolved function signature for function exports.")
+    nullable("limits", of = MemoryLimitsResultClass).describe("Resolved page limits for memory exports.")
+    string("repr").describe("Compact WAT export representation.")
+    double("score").describe("Name-match score between 0.0 and 1.0.")
+}
+
+val SearchExportsResultClass = class_("SearchExportsResult", kotlinPackage = MODEL_PACKAGE) {
+    list("results", of = SearchExportResultClass)
+        .describe("Matching export entries.")
 }
 
 val ExportedFunctionSignatureResultClass = class_("ExportedFunctionSignatureResult") {
@@ -62,6 +98,19 @@ internal val ExportTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.WasmOnly
         output = ListExportsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readExports"
+    }
+
+    tool("search_exports") {
+        summary = "Search exports by name and resolve common export metadata."
+        guidance = """
+            Search exported functions, tables, memories, globals, and tags by case-insensitive export-name substrings.
+            Function matches include resolved signatures, and memory matches include decoded page limits.
+            Use this when logs, host code, or expected API names identify exports symbolically and you need the exact exported index.
+        """
+        input = SearchExportsInput
+        inputPattern = ToolInputPattern.ExportNameSearch
+        output = SearchExportsResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readExportsByName"
     }
 
     tool("list_exported_functions") {

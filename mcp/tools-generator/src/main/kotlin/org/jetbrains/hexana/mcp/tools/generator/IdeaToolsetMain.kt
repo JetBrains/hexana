@@ -100,6 +100,10 @@ private fun addParameters(builder: FunSpec.Builder, spec: ToolSpec) {
             builder.addParameter(stringParam(inputField(spec.input, "query")))
             builder.addParameter(intWithDefault(inputField(spec.input, "limit")))
         }
+        ToolInputPattern.ExportNameSearch -> {
+            builder.addParameter(stringListParam(inputField(spec.input, "query")))
+            builder.addParameter(intWithDefault(inputField(spec.input, "limit")))
+        }
         ToolInputPattern.Indices ->
             builder.addParameter(intListParam(inputField(spec.input, "indices")))
         is ToolInputPattern.ClosedRange ->
@@ -134,6 +138,7 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec) {
         ToolInputPattern.FunctionPage,
         ToolInputPattern.Funcidx,
         ToolInputPattern.FunctionNameSearch,
+        ToolInputPattern.ExportNameSearch,
         ToolInputPattern.Indices -> Unit
     }
     code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
@@ -144,6 +149,7 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec) {
         ToolInputPattern.FunctionPage -> "(offset, limit)"
         ToolInputPattern.Funcidx -> "(funcidx)"
         ToolInputPattern.FunctionNameSearch -> "(query, limit)"
+        ToolInputPattern.ExportNameSearch -> "(query, limit)"
         ToolInputPattern.Indices -> "(indices)"
         is ToolInputPattern.ClosedRange -> "(range)"
         ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
@@ -182,6 +188,14 @@ private fun intParam(field: FieldSpec): ParameterSpec =
 
 private fun stringParam(field: FieldSpec): ParameterSpec =
     ParameterSpec.builder(field.name, String::class)
+        .addAnnotation(describeAnnotation(field.descriptionOrError()))
+        .build()
+
+private fun stringListParam(field: FieldSpec): ParameterSpec =
+    ParameterSpec.builder(
+        field.name,
+        List::class.asClassName().parameterizedBy(String::class.asClassName()),
+    )
         .addAnnotation(describeAnnotation(field.descriptionOrError()))
         .build()
 

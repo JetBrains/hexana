@@ -2,7 +2,10 @@ package org.jetbrains.hexana.mcp.direct
 
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.double
+import kotlinx.serialization.json.jsonPrimitive
 
 class HexanaMcpExportsToolTest : HexanaMcpToolsetDirectTestBase() {
     fun testListExportsReturnsAllKindsWithIndices() {
@@ -51,6 +54,48 @@ class HexanaMcpExportsToolTest : HexanaMcpToolsetDirectTestBase() {
         val exports = structuredContent.array("exports")
         assertEquals("mem", exports.obj(0).text("name"))
         assertEquals("func", exports.obj(1).text("name"))
+    }
+
+    fun testSearchExportsReturnsFunctionSignatureAndMemoryLimits() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/exports/search_exports.wasm",
+            """
+            (module
+              (memory (export "memory") 1 2)
+              (func (export "add") (param i32 i32) (result i32)
+                local.get 0))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "search_exports",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("query", buildJsonArray {
+                    add(JsonPrimitive("add"))
+                    add(JsonPrimitive("mem"))
+                })
+                put("limit", JsonPrimitive(10))
+            }
+        )
+        val results = result.array("results")
+
+        assertEquals(2, results.size)
+        val add = results.obj(0)
+        assertEquals("add", add.text("name"))
+        assertEquals("func", add.text("kind"))
+        assertEquals(0, add.int("funcidx"))
+        assertEquals(listOf("i32", "i32"), add.obj("signature").array("params").map { it.textValue() })
+        assertEquals(listOf("i32"), add.obj("signature").array("results").map { it.textValue() })
+        assertEquals("""(export "add" (func 0))""", add.text("repr"))
+        assertEquals(1.0, add["score"]!!.jsonPrimitive.double)
+
+        val memory = results.obj(1)
+        assertEquals("memory", memory.text("name"))
+        assertEquals("memory", memory.text("kind"))
+        assertEquals(0, memory.int("memidx"))
+        assertEquals(1, memory.obj("limits").long("min"))
+        assertEquals(2, memory.obj("limits").long("max"))
     }
 
     fun testListExportedFunctionsReturnsMetadataSlice() {

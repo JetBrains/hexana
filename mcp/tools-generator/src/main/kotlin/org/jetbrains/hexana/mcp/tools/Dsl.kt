@@ -5,6 +5,7 @@ package org.jetbrains.hexana.mcp.tools
 sealed class FieldType {
     object Int32 : FieldType()
     object Int64 : FieldType()
+    object Float64 : FieldType()
     object UInt32 : FieldType()
     object ByteT : FieldType()
     object BooleanT : FieldType()
@@ -17,6 +18,7 @@ sealed class FieldType {
 // Helpers usable where a `FieldType` is expected (e.g. `list(of = string())`).
 fun int(): FieldType = FieldType.Int32
 fun long(): FieldType = FieldType.Int64
+fun double(): FieldType = FieldType.Float64
 fun uint(): FieldType = FieldType.UInt32
 fun byte(): FieldType = FieldType.ByteT
 fun string(): FieldType = FieldType.StringT
@@ -54,6 +56,7 @@ data class FieldSpec(
             val expected: Class<*> = when (type) {
                 FieldType.Int32, FieldType.UInt32, FieldType.ByteT -> Int::class.javaObjectType
                 FieldType.Int64 -> Long::class.javaObjectType
+                FieldType.Float64 -> Double::class.javaObjectType
                 FieldType.BooleanT -> Boolean::class.javaObjectType
                 FieldType.StringT -> String::class.java
                 FieldType.ByteArrayT -> ByteArray::class.java
@@ -91,7 +94,11 @@ data class FieldSpec(
 }
 
 private fun FieldType.isNumeric(): Boolean =
-    this == FieldType.Int32 || this == FieldType.Int64 || this == FieldType.UInt32 || this == FieldType.ByteT
+    this == FieldType.Int32 ||
+        this == FieldType.Int64 ||
+        this == FieldType.Float64 ||
+        this == FieldType.UInt32 ||
+        this == FieldType.ByteT
 
 sealed class SchemaIntValue {
     data class Literal(val value: Int) : SchemaIntValue()
@@ -150,6 +157,9 @@ class ClassBuilder internal constructor(
 
     fun long(name: String, default: Long? = null): FieldHandle =
         addField(name, FieldType.Int64, default)
+
+    fun double(name: String, default: Double? = null): FieldHandle =
+        addField(name, FieldType.Float64, default)
 
     fun uint(name: String): FieldHandle =
         addField(name, FieldType.UInt32)
@@ -310,6 +320,7 @@ sealed class ToolInputPattern {
     object FunctionPage : ToolInputPattern()
     object Funcidx : ToolInputPattern()
     object FunctionNameSearch : ToolInputPattern()
+    object ExportNameSearch : ToolInputPattern()
     object Indices : ToolInputPattern()
     data class ClosedRange(val parameterName: String) : ToolInputPattern()
     object DataSegments : ToolInputPattern()
@@ -488,6 +499,17 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
         ToolInputPattern.FunctionNameSearch -> {
             val query = requireField("query")
             requireType(query, FieldType.StringT)
+            requireNonNullable(query)
+            requireDescribed(query)
+            val limit = requireField("limit")
+            requireType(limit, FieldType.Int32)
+            requireNonNullable(limit)
+            requireDefault(limit, "Int") { it is Int }
+            requireDescribed(limit)
+        }
+        ToolInputPattern.ExportNameSearch -> {
+            val query = requireField("query")
+            requireListOf(query, FieldType.StringT)
             requireNonNullable(query)
             requireDescribed(query)
             val limit = requireField("limit")

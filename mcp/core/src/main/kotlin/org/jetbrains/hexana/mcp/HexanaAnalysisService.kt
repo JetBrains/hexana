@@ -7,6 +7,7 @@ import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
 import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
+import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
@@ -30,6 +31,7 @@ interface HexanaAnalysisService {
     fun summarizeModule(input: WasmInput): SummarizeModuleResult
     fun listImports(input: WasmInput): ListImportsResult
     fun listExports(input: WasmInput): ListExportsResult
+    fun searchExports(input: WasmInput, query: List<String>, limit: Int): SearchExportsResult
     fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult
     fun resolveFunctionSignature(input: WasmInput, funcidx: Int): ResolveFunctionSignatureResult
     fun searchFunctionsByName(input: WasmInput, query: String, limit: Int): SearchFunctionsByNameResult
@@ -78,6 +80,13 @@ class DefaultHexanaAnalysisService(
     override fun listExports(input: WasmInput): ListExportsResult {
         val wasm = load(input)
         return wasm.provider.readExports()
+    }
+
+    override fun searchExports(input: WasmInput, query: List<String>, limit: Int): SearchExportsResult {
+        requireNonEmptyStrings(query, "Query")
+        requireLimit(limit)
+        val wasm = load(input)
+        return wasm.provider.readExportsByName(query, limit)
     }
 
     override fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult {
@@ -322,6 +331,21 @@ class DefaultHexanaAnalysisService(
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.INVALID_INPUT,
                 "$label must not be blank"
+            )
+        }
+    }
+
+    private fun requireNonEmptyStrings(values: List<String>, label: String) {
+        if (values.isEmpty()) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INVALID_INPUT,
+                "$label must contain at least one value"
+            )
+        }
+        if (values.any { it.isBlank() }) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INVALID_INPUT,
+                "$label values must not be blank"
             )
         }
     }

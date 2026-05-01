@@ -15,6 +15,7 @@ import org.jetbrains.hexana.mcp.model.`data`.ListDataSegmentsResult
 import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
+import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
@@ -30,6 +31,7 @@ import org.jetbrains.hexana.mcp.query.readDataSegmentsByRange
 import org.jetbrains.hexana.mcp.query.readElementSegments
 import org.jetbrains.hexana.mcp.query.readExportedFunctions
 import org.jetbrains.hexana.mcp.query.readExports
+import org.jetbrains.hexana.mcp.query.readExportsByName
 import org.jetbrains.hexana.mcp.query.readFunctionSignature
 import org.jetbrains.hexana.mcp.query.readFunctions
 import org.jetbrains.hexana.mcp.query.readFunctionsByIndices
@@ -71,6 +73,18 @@ public class HexanaToolset : McpToolset {
     val file = requireWasmFile(path)
     val provider = file.requireCoreWasmBinaryProvider()
     return provider.readExports()
+  }
+
+  @McpTool("search_exports")
+  @McpDescription("Search exports by name and resolve common export metadata.\nSearch exported functions, tables, memories, globals, and tags by case-insensitive export-name substrings.\nFunction matches include resolved signatures, and memory matches include decoded page limits.\nUse this when logs, host code, or expected API names identify exports symbolically and you need the exact exported index.")
+  public suspend fun searchExports(
+    @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+    @McpDescription("Case-insensitive export-name substrings to search for.") query: List<String>,
+    @McpDescription("Maximum number of matching exports to return.") limit: Int = 50,
+  ): SearchExportsResult {
+    val file = requireWasmFile(path)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readExportsByName(query, limit)
   }
 
   @McpTool("list_globals")

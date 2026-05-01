@@ -95,6 +95,8 @@ private fun buildDefaultProperty(name: String, default: Any): PropertySpec {
             .initializer("%L", default)
         is Long -> PropertySpec.builder(name, Long::class, KModifier.CONST)
             .initializer("%L", default)
+        is Double -> PropertySpec.builder(name, Double::class, KModifier.CONST)
+            .initializer("%L", default)
         is Boolean -> PropertySpec.builder(name, Boolean::class, KModifier.CONST)
             .initializer("%L", default)
         is String -> PropertySpec.builder(name, String::class, KModifier.CONST)
@@ -206,6 +208,8 @@ private fun emitTypeSchema(
         FieldType.UInt32,
         FieldType.ByteT -> emitJsonType(builder, indent, "integer", nullable)
 
+        FieldType.Float64 -> emitJsonType(builder, indent, "number", nullable)
+
         FieldType.BooleanT ->
             emitJsonType(builder, indent, "boolean", nullable)
 
@@ -286,6 +290,7 @@ private fun schemaDefaultValue(field: FieldSpec): CodeBlock {
     return when (val value = field.default) {
         is Int,
         is Long,
+        is Double,
         is Boolean -> CodeBlock.of("%L", value)
         is String -> CodeBlock.of("%S", value)
         else -> error("Field '${field.name}' has unsupported schema default value `${field.default}`.")

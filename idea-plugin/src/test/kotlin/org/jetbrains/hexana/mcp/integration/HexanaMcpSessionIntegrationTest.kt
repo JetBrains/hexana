@@ -168,6 +168,7 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
             "search_functions_by_name",
             "list_data",
             "list_exports",
+            "search_exports",
             "list_exported_functions",
             "functions_for_indices",
             "list_globals",
