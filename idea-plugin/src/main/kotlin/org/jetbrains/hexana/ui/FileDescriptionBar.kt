@@ -26,6 +26,8 @@ import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.run.PopupMode
+import org.jetbrains.hexana.run.WasmEngine
 import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.run.runWasmFile
 import org.jetbrains.hexana.run.showEnginePopup
@@ -67,6 +69,12 @@ internal fun FileDescriptionBar(
 
     val isComponentCliRun = remember(binaryProvider) {
         binaryProvider is WasmComponentBinaryProvider && hasWasiCliRunExport(binaryProvider)
+    }
+
+    val isDebuggable = remember(binaryProvider) {
+        if (!isRunnable) return@remember false
+        val engines = WasmEngine.entries.filter { !isComponentCliRun || it.supportsComponentsModel }
+        engines.any { it.supportsDebug }
     }
 
     Row(
@@ -117,11 +125,30 @@ internal fun FileDescriptionBar(
         )
 
         if (isRunnable) {
-            ToolbarRunButton(
-                state = state,
-                binaryProvider = binaryProvider,
-                isComponentCliRun = isComponentCliRun,
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                ToolbarActionButton(
+                    state = state,
+                    binaryProvider = binaryProvider,
+                    isComponentCliRun = isComponentCliRun,
+                    popupMode = if (isDebuggable) PopupMode.RUN_ONLY else PopupMode.RUN_AND_DEBUG,
+                    icon = AllIconsKeys.Actions.Execute,
+                    label = "Run",
+                    tooltip = "Run Wasm module",
+                    buttonBackground = if (JewelTheme.isDark) Color(0xFF0E639C) else Color(0xFF007ACC),
+                )
+                if (isDebuggable) {
+                    ToolbarActionButton(
+                        state = state,
+                        binaryProvider = binaryProvider,
+                        isComponentCliRun = isComponentCliRun,
+                        popupMode = PopupMode.DEBUG_ONLY,
+                        icon = AllIconsKeys.Actions.StartDebugger,
+                        label = "Debug",
+                        tooltip = "Debug Wasm module",
+                        buttonBackground = if (JewelTheme.isDark) Color(0xFF6C3B2A) else Color(0xFFCC6633),
+                    )
+                }
+            }
         }
     }
 
@@ -130,32 +157,32 @@ internal fun FileDescriptionBar(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ToolbarRunButton(
+private fun ToolbarActionButton(
     state: HexViewStateHolder,
     binaryProvider: BinaryProvider,
     isComponentCliRun: Boolean,
+    popupMode: PopupMode,
+    icon: org.jetbrains.jewel.ui.icon.IconKey,
+    label: String,
+    tooltip: String,
+    buttonBackground: Color,
 ) {
-    val buttonBackground = if (JewelTheme.isDark) {
-        Color(0xFF0E639C)
-    } else {
-        Color(0xFF007ACC)
-    }
     val buttonForeground = Color.White
 
-    Tooltip(tooltip = { Text("Run Wasm module") }) {
+    Tooltip(tooltip = { Text(tooltip) }) {
         Row(
             modifier = Modifier
                 .background(buttonBackground, RoundedCornerShape(4.dp))
                 .onClick {
                     if (isComponentCliRun) {
-                        showEnginePopup(isComponentModel = true) { engine, mode ->
+                        showEnginePopup(isComponentModel = true, popupMode = popupMode) { engine, mode ->
                             val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return@showEnginePopup
                             val dialog = ProgramArgsDialog(state.project, "wasi:cli/run")
                             if (!dialog.showAndGet()) return@showEnginePopup
                             runWasmConfiguration(state.project, file, "", dialog.programArgs, "", engine, mode)
                         }
                     } else {
-                        showEnginePopup { engine, mode ->
+                        showEnginePopup(popupMode = popupMode) { engine, mode ->
                             runWasmFile(binaryProvider, state, engine, mode)
                         }
                     }
@@ -166,14 +193,14 @@ private fun ToolbarRunButton(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                AllIconsKeys.Actions.Execute,
-                contentDescription = "Run",
+                icon,
+                contentDescription = label,
                 iconClass = AllIcons::class.java,
                 tint = buttonForeground,
                 modifier = Modifier.size(14.dp),
             )
             Text(
-                text = "Run",
+                text = label,
                 style = TextStyle(
                     fontSize = 11.sp,
                     color = buttonForeground,

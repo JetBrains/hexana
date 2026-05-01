@@ -25,6 +25,10 @@ enum class WasmRunMode {
     RUN, DEBUG
 }
 
+enum class PopupMode {
+    RUN_AND_DEBUG, RUN_ONLY, DEBUG_ONLY
+}
+
 fun runWasmConfiguration(
     project: Project,
     file: VirtualFile,
@@ -107,12 +111,18 @@ data class EngineRunOption(val engine: WasmEngine, val mode: WasmRunMode) {
     }
 }
 
-fun showEnginePopup(isComponentModel: Boolean = false, onSelected: (WasmEngine, WasmRunMode) -> Unit) {
+fun showEnginePopup(
+    isComponentModel: Boolean = false,
+    popupMode: PopupMode = PopupMode.RUN_AND_DEBUG,
+    onSelected: (WasmEngine, WasmRunMode) -> Unit,
+) {
     val engines = WasmEngine.entries.filter { !isComponentModel || it.supportsComponentsModel }
     val options = engines.flatMap { engine ->
         buildList {
-            add(EngineRunOption(engine, WasmRunMode.RUN))
-            if (engine.supportsDebug) {
+            if (popupMode != PopupMode.DEBUG_ONLY) {
+                add(EngineRunOption(engine, WasmRunMode.RUN))
+            }
+            if (engine.supportsDebug && popupMode != PopupMode.RUN_ONLY) {
                 add(EngineRunOption(engine, WasmRunMode.DEBUG))
             }
         }
