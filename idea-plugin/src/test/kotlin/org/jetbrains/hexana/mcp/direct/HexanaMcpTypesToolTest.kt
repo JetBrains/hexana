@@ -127,6 +127,46 @@ class HexanaMcpTypesToolTest : HexanaMcpToolsetDirectTestBase() {
         assertFalse(summary["pureMVP"]!!.jsonPrimitive.boolean)
     }
 
+    fun testListReferenceTypesReturnsGroupedReferencesCountsAndSummary() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/types/list_reference_types.wasm",
+            """
+            (module
+              (type (func (param funcref externref anyref eqref i31ref) (result externref)))
+              (func (type 0) (param funcref externref anyref eqref i31ref) (result externref)
+                local.get 1))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject("list_reference_types", jsonPath(fixture.projectRelativePath))
+        val referenceTypes = result.obj("referenceTypes")
+
+        assertEquals(listOf("funcref"), referenceTypes.array("functionReferences").map { it.objValue().text("type") })
+        assertEquals(listOf("externref"), referenceTypes.array("externalReferences").map { it.objValue().text("type") })
+        assertEquals(
+            listOf("anyref", "eqref"),
+            referenceTypes.array("anyReferences").map { it.objValue().text("type") }
+        )
+        assertEquals(listOf("i31ref"), referenceTypes.array("primitiveReferences").map { it.objValue().text("type") })
+        assertTrue(referenceTypes.array("gcReferences").isEmpty())
+        assertTrue(referenceTypes.array("noneReferences").isEmpty())
+
+        assertEquals(1, countFor(result.array("counts"), "funcref"))
+        assertEquals(2, countFor(result.array("counts"), "externref"))
+        assertEquals(1, countFor(result.array("counts"), "anyref"))
+        assertEquals(1, countFor(result.array("counts"), "eqref"))
+        assertEquals(1, countFor(result.array("counts"), "i31ref"))
+
+        val summary = result.obj("summary")
+        assertTrue(summary["hasGC"]!!.jsonPrimitive.boolean)
+        assertTrue(summary["hasI31"]!!.jsonPrimitive.boolean)
+        assertFalse(summary["hasStruct"]!!.jsonPrimitive.boolean)
+        assertFalse(summary["hasArray"]!!.jsonPrimitive.boolean)
+        assertTrue(summary["hasRefEq"]!!.jsonPrimitive.boolean)
+        assertTrue(summary["hasAnyRef"]!!.jsonPrimitive.boolean)
+        assertTrue(summary["hasExternRef"]!!.jsonPrimitive.boolean)
+    }
+
     fun testGetTypesForIndicesProvidesStructuredContentForTypedResult() {
         val fixture = createWasmFixture(
             "fixtures/direct/types/structured_get_types_for_indices.wasm",
@@ -165,5 +205,9 @@ class HexanaMcpTypesToolTest : HexanaMcpToolsetDirectTestBase() {
             .map { it as JsonObject }
             .single { it.text("type") == type }
             .int("count")
+    }
+
+    private fun kotlinx.serialization.json.JsonElement.objValue(): JsonObject {
+        return this as? JsonObject ?: throw AssertionError("Expected JSON object, got $this")
     }
 }

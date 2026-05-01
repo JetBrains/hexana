@@ -31,6 +31,7 @@ class HexanaToolsTest {
                 "list_globals",
                 "list_imports",
                 "list_memory",
+                "list_reference_types",
                 "list_types",
                 "list_value_types",
                 "resolve_function_signature",
@@ -54,6 +55,7 @@ class HexanaToolsTest {
                 "list_globals",
                 "list_types",
                 "list_value_types",
+                "list_reference_types",
                 "list_memory",
                 "list_element_segments",
                 "list_functions",
@@ -157,6 +159,7 @@ class HexanaToolsTest {
             HexanaTools.single { it.name == "list_code_section_offsets" }.inputPattern,
         )
         assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "list_value_types" }.inputPattern)
+        assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "list_reference_types" }.inputPattern)
         assertEquals(ToolInputPattern.Indices, HexanaTools.single { it.name == "functions_for_indices" }.inputPattern)
         assertEquals(
             ToolInputPattern.Funcidx,

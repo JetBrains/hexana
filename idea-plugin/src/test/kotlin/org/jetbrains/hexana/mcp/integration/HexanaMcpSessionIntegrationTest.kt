@@ -181,6 +181,7 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
             "get_memory_for_indices",
             "list_types",
             "list_value_types",
+            "list_reference_types",
             "get_types_for_indices",
             "get_locals_for_functions",
             "get_instructions_for_functions",

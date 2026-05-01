@@ -25,6 +25,7 @@ import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
 import org.jetbrains.hexana.mcp.model.sections.ListCustomSectionsResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
+import org.jetbrains.hexana.mcp.model.types.ListReferenceTypesResult
 import org.jetbrains.hexana.mcp.model.types.ListValueTypesResult
 import org.jetbrains.hexana.mcp.model.types.TypesResult
 import org.junit.Rule
@@ -659,6 +660,7 @@ class HexanaToolHandlersTest {
             }
         )
         val valueTypes = handlers.listValueTypes(jsonPath(wasm.toString()))
+        val referenceTypes = handlers.listReferenceTypes(jsonPath(wasm.toString()))
         val locals = handlers.getLocalsForFunctions(
             buildJsonObject {
                 put("path", JsonPrimitive(wasm.toString()))
@@ -731,6 +733,12 @@ class HexanaToolHandlersTest {
         assertTrue(valueTypes.structuredContent!!["counts"]!!.jsonObject["valueTypes"]!!.jsonObject["reference"]!!.jsonArray.any {
             it.jsonObject["type"]!!.jsonPrimitive.content == "funcref"
         })
+
+        assertFalse(referenceTypes.isError == true)
+        assertEquals(
+            "funcref",
+            referenceTypes.structuredContent!!["referenceTypes"]!!.jsonObject["functionReferences"]!!.jsonArray[0].jsonObject["type"]!!.jsonPrimitive.content
+        )
 
         assertFalse(locals.isError == true)
         assertEquals(
@@ -816,6 +824,7 @@ class HexanaToolHandlersTest {
                 override fun listGlobals(input: WasmInput): ListGlobalsResult = error("boom")
                 override fun listTypes(input: WasmInput): TypesResult = error("boom")
                 override fun listValueTypes(input: WasmInput): ListValueTypesResult = error("boom")
+                override fun listReferenceTypes(input: WasmInput): ListReferenceTypesResult = error("boom")
                 override fun listMemory(input: WasmInput): ListMemoryResult = error("boom")
                 override fun getGlobalsForIndices(input: WasmInput, indices: List<Int>): ListGlobalsResult =
                     error("boom")
@@ -904,6 +913,7 @@ class HexanaToolHandlersTest {
                 override fun listGlobals(input: WasmInput): ListGlobalsResult = error("unused")
                 override fun listTypes(input: WasmInput): TypesResult = error("unused")
                 override fun listValueTypes(input: WasmInput): ListValueTypesResult = error("unused")
+                override fun listReferenceTypes(input: WasmInput): ListReferenceTypesResult = error("unused")
                 override fun listMemory(input: WasmInput): ListMemoryResult = error("unused")
                 override fun getGlobalsForIndices(input: WasmInput, indices: List<Int>): ListGlobalsResult =
                     error("unused")

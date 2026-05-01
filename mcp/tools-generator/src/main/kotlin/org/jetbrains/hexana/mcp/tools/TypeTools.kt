@@ -77,6 +77,31 @@ val ListValueTypesResultClass = class_("ListValueTypesResult", kotlinPackage = M
     embed("summary", of = ValueTypeSummaryResultClass).describe("High-level feature flags inferred from value types.")
 }
 
+val ReferenceTypesResultClass = class_("ReferenceTypesResult") {
+    list("functionReferences", of = ReferenceValueTypeResultClass).describe("Function reference types such as `funcref`.")
+    list("externalReferences", of = ReferenceValueTypeResultClass).describe("External reference types such as `externref`.")
+    list("gcReferences", of = ReferenceValueTypeResultClass).describe("GC composite reference types such as `structref` and `arrayref`.")
+    list("primitiveReferences", of = ReferenceValueTypeResultClass).describe("Primitive GC reference types such as `i31ref`.")
+    list("anyReferences", of = ReferenceValueTypeResultClass).describe("Top-like GC reference types such as `anyref` and `eqref`.")
+    list("noneReferences", of = ReferenceValueTypeResultClass).describe("Bottom/null reference types such as `nullref`.")
+}
+
+val ReferenceTypesSummaryResultClass = class_("ReferenceTypesSummaryResult") {
+    boolean("hasGC").describe("True when GC-only reference kinds are present.")
+    boolean("hasI31").describe("True when `i31ref` or `ref i31` is present.")
+    boolean("hasStruct").describe("True when struct references are present.")
+    boolean("hasArray").describe("True when array references are present.")
+    boolean("hasRefEq").describe("True when `eqref` or `ref eq` is present.")
+    boolean("hasAnyRef").describe("True when `anyref` or `ref any` is present.")
+    boolean("hasExternRef").describe("True when external references are present.")
+}
+
+val ListReferenceTypesResultClass = class_("ListReferenceTypesResult", kotlinPackage = MODEL_PACKAGE) {
+    embed("referenceTypes", of = ReferenceTypesResultClass).describe("Distinct reference types grouped by semantic family.")
+    list("counts", of = ReferenceValueTypeCountResultClass).describe("Observed reference-type occurrence counts.")
+    embed("summary", of = ReferenceTypesSummaryResultClass).describe("High-level reference feature flags.")
+}
+
 internal val TypeTools: List<ToolSpec> = tools {
     tool("list_types") {
         summary = "List type entries declared by a `.wasm` module."
@@ -100,6 +125,18 @@ internal val TypeTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.WasmOnly
         output = ListValueTypesResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readValueTypes"
+    }
+
+    tool("list_reference_types") {
+        summary = "List reference value types used by a `.wasm` module."
+        guidance = """
+            List reference value types grouped by function, external, GC, primitive, top-like, and bottom/null families.
+            Use this when the agent needs exact reference syntax and feature signals before writing WAT, diagnosing host interop, or deciding whether GC/reference-type semantics matter.
+        """
+        input = WasmInputClass
+        inputPattern = ToolInputPattern.WasmOnly
+        output = ListReferenceTypesResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readReferenceTypes"
     }
 
     tool("get_types_for_indices") {

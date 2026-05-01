@@ -28,6 +28,7 @@ import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
 import org.jetbrains.hexana.mcp.model.sections.ListCustomSectionsResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
+import org.jetbrains.hexana.mcp.model.types.ListReferenceTypesResult
 import org.jetbrains.hexana.mcp.model.types.ListValueTypesResult
 import org.jetbrains.hexana.mcp.model.types.TypesResult
 import org.jetbrains.hexana.mcp.query.readCodeSectionOffsets
@@ -51,6 +52,7 @@ import org.jetbrains.hexana.mcp.query.readLocalsForFunctions
 import org.jetbrains.hexana.mcp.query.readMemory
 import org.jetbrains.hexana.mcp.query.readMemoryByIndices
 import org.jetbrains.hexana.mcp.query.readModuleSummary
+import org.jetbrains.hexana.mcp.query.readReferenceTypes
 import org.jetbrains.hexana.mcp.query.readTypes
 import org.jetbrains.hexana.mcp.query.readTypesByIndices
 import org.jetbrains.hexana.mcp.query.readValueTypes
@@ -125,6 +127,14 @@ public class HexanaToolset : McpToolset {
     val file = requireWasmFile(path)
     val provider = file.requireCoreWasmBinaryProvider()
     return provider.readValueTypes()
+  }
+
+  @McpTool("list_reference_types")
+  @McpDescription("List reference value types used by a `.wasm` module.\nList reference value types grouped by function, external, GC, primitive, top-like, and bottom/null families.\nUse this when the agent needs exact reference syntax and feature signals before writing WAT, diagnosing host interop, or deciding whether GC/reference-type semantics matter.")
+  public suspend fun listReferenceTypes(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String): ListReferenceTypesResult {
+    val file = requireWasmFile(path)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readReferenceTypes()
   }
 
   @McpTool("list_memory")
