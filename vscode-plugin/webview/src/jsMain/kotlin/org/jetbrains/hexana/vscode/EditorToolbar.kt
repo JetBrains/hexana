@@ -4,12 +4,16 @@ import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Span
+import org.jetbrains.compose.web.dom.Table
+import org.jetbrains.compose.web.dom.Td
 import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.compose.web.dom.Tr
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
+import org.jetbrains.hexana.wasm.analysis.SizeNode
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 
 /**
@@ -26,6 +30,10 @@ fun EditorToolbar(
     onSizeClick: (() -> Unit)? = null,
 ) {
     val isSubmodule = isSubmoduleFileName(fileName)
+
+    val sizeTooltip = remember(buffer, providerType) {
+        buildSizeTooltip(buffer, providerType)
+    }
 
     val runnableExportName = remember(buffer, providerType, isSubmodule) {
         if (buffer == null || isSubmodule) return@remember null
@@ -80,20 +88,83 @@ fun EditorToolbar(
             property("padding", "6px 12px")
             property("border-bottom", "1px solid var(--hexana-border, #333)")
             property("flex-shrink", "0")
+            property("overflow", "visible")
+            property("position", "relative")
+            property("z-index", "100")
         }
     }) {
         Span({ style { property("font-weight", "600") } }) {
             Text(fileName.substringAfterLast('/').substringAfterLast('\\'))
         }
 
-        Span({
+        var sizeHovered by remember { mutableStateOf(false) }
+
+        Div({
             style {
-                property("opacity", "0.7")
+                property("display", "inline-flex")
+                property("align-items", "center")
+                property("position", "relative")
                 if (onSizeClick != null) property("cursor", "pointer")
             }
+            onMouseEnter { sizeHovered = true }
+            onMouseLeave { sizeHovered = false }
             if (onSizeClick != null) onClick { onSizeClick() }
         }) {
-            Text(formatSize(size))
+            Span({ style { property("opacity", "0.7") } }) {
+                Text(formatSize(size))
+            }
+            if (sizeTooltip != null && sizeHovered) {
+                Div({
+                    style {
+                        property("position", "absolute")
+                        property("top", "100%")
+                        property("left", "0")
+                        property("z-index", "1000")
+                        property("margin-top", "4px")
+                        property("padding", "8px 12px")
+                        property("border-radius", "4px")
+                        property("background", "var(--vscode-editorHoverWidget-background, #2d2d30)")
+                        property("border", "1px solid var(--vscode-editorHoverWidget-border, #454545)")
+                        property("color", "var(--vscode-editorHoverWidget-foreground, #ccc)")
+                        property("font-size", "12px")
+                        property("white-space", "nowrap")
+                        property("box-shadow", "0 2px 8px rgba(0,0,0,0.3)")
+                        property("pointer-events", "none")
+                    }
+                }) {
+                    Div({
+                        style {
+                            property("margin-bottom", "6px")
+                            property("opacity", "0.8")
+                        }
+                    }) {
+                        Text("Click to see the full analysis in the \"Top\" tab below")
+                    }
+                    Table({
+                        style {
+                            property("border-collapse", "collapse")
+                            property("width", "100%")
+                        }
+                    }) {
+                        sizeTooltip.forEach { (label, size) ->
+                            Tr {
+                                Td({
+                                    style {
+                                        property("padding", "1px 16px 1px 0")
+                                        property("text-align", "left")
+                                    }
+                                }) { Text(label) }
+                                Td({
+                                    style {
+                                        property("padding", "1px 0")
+                                        property("text-align", "right")
+                                    }
+                                }) { Text(size) }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Span({
@@ -165,6 +236,35 @@ private fun ToolbarRunButton(tooltip: String = "Run", onClick: () -> Unit) {
             Text("Run")
         }
     }
+}
+
+private fun buildSizeTooltip(buffer: CommonByteBuffer?, providerType: BinaryProviderType): List<Pair<String, String>>? {
+    if (buffer == null) return null
+    val sizeAnalysis: SizeNode.Module? = when (providerType) {
+        is BinaryProviderType.Wasm -> {
+            buffer.position(0)
+            WasmBinaryProvider(buffer).sizeAnalysis
+        }
+        is BinaryProviderType.WasmComponent -> {
+            buffer.position(0)
+            WasmComponentBinaryProvider(buffer).sizeAnalysis
+        }
+        else -> null
+    }
+    val children = sizeAnalysis?.children ?: return null
+    if (children.isEmpty()) return null
+
+    val grouped = linkedMapOf<String, MutableList<SizeNode>>()
+    for (child in children) {
+        grouped.getOrPut(child.name) { mutableListOf() }.add(child)
+    }
+
+    return grouped.map { (name, nodes) ->
+        val totalSize = nodes.sumOf { it.size }
+        val label = if (nodes.size > 1) "$name (\u00d7${nodes.size})" else name
+        label to totalSize
+    }.sortedByDescending { it.second }
+     .map { (label, size) -> label to formatSize(size) }
 }
 
 private fun formatSize(bytes: Int): String = when {

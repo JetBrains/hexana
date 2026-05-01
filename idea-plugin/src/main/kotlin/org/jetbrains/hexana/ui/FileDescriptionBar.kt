@@ -4,11 +4,14 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.onClick
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -36,6 +39,7 @@ import org.jetbrains.hexana.run.runWasmFile
 import org.jetbrains.hexana.run.showEnginePopup
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
+import org.jetbrains.hexana.wasm.analysis.SizeNode
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Divider
@@ -44,6 +48,7 @@ import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.Tooltip
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun FileDescriptionBar(
     fileName: String,
@@ -56,6 +61,10 @@ internal fun FileDescriptionBar(
         is WasmBinaryProvider -> "Core Wasm"
         is WasmComponentBinaryProvider -> "Component Model"
         is GenericBinaryProvider -> "Binary"
+    }
+
+    val sizeTooltip = remember(binaryProvider) {
+        buildSizeTooltip(binaryProvider)
     }
 
     val isRunnable = remember(binaryProvider) {
@@ -98,20 +107,68 @@ internal fun FileDescriptionBar(
             ),
         )
 
-        Text(
-            text = formatSize(size),
-            modifier = if (onSizeClick != null) {
-                Modifier
-                    .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
-                    .clickable { onSizeClick() }
-            } else {
-                Modifier
-            },
-            style = TextStyle(
-                fontSize = 12.sp,
-                color = HexanaTheme.hexTextColor,
-            ),
-        )
+        if (sizeTooltip != null) {
+            Tooltip(tooltip = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Click to see the full analysis in the \"Top\" tab below",
+                        style = TextStyle(fontSize = 12.sp),
+                        modifier = Modifier.padding(bottom = 2.dp),
+                    )
+                    Column(
+                        modifier = Modifier.padding(top = 4.dp).width(IntrinsicSize.Max),
+                        verticalArrangement = Arrangement.spacedBy(1.dp),
+                    ) {
+                        sizeTooltip.forEach { (label, size) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = TextStyle(fontSize = 12.sp),
+                                )
+                                Text(
+                                    text = size,
+                                    style = TextStyle(fontSize = 12.sp),
+                                    modifier = Modifier.padding(start = 16.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }) {
+                Text(
+                    text = formatSize(size),
+                    modifier = if (onSizeClick != null) {
+                        Modifier
+                            .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                            .clickable { onSizeClick() }
+                    } else {
+                        Modifier
+                    },
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        color = HexanaTheme.hexTextColor,
+                    ),
+                )
+            }
+        } else {
+            Text(
+                text = formatSize(size),
+                modifier = if (onSizeClick != null) {
+                    Modifier
+                        .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                        .clickable { onSizeClick() }
+                } else {
+                    Modifier
+                },
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    color = HexanaTheme.hexTextColor,
+                ),
+            )
+        }
 
         val badgeBackground = if (JewelTheme.isDark) {
             Color(0xFF4D4D4D)
@@ -219,6 +276,28 @@ private fun ToolbarActionButton(
             )
         }
     }
+}
+
+private fun buildSizeTooltip(binaryProvider: BinaryProvider): List<Pair<String, String>>? {
+    val sizeAnalysis: SizeNode.Module? = when (binaryProvider) {
+        is WasmBinaryProvider -> binaryProvider.sizeAnalysis
+        is WasmComponentBinaryProvider -> binaryProvider.sizeAnalysis
+        is GenericBinaryProvider -> null
+    }
+    val children = sizeAnalysis?.children ?: return null
+    if (children.isEmpty()) return null
+
+    val grouped = linkedMapOf<String, MutableList<SizeNode>>()
+    for (child in children) {
+        grouped.getOrPut(child.name) { mutableListOf() }.add(child)
+    }
+
+    return grouped.map { (name, nodes) ->
+        val totalSize = nodes.sumOf { it.size }
+        val label = if (nodes.size > 1) "$name (\u00d7${nodes.size})" else name
+        label to totalSize
+    }.sortedByDescending { it.second }
+     .map { (label, size) -> label to formatSize(size) }
 }
 
 private fun formatSize(bytes: Int): String = when {
