@@ -25,7 +25,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.intellij.icons.AllIcons
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
@@ -52,20 +51,10 @@ import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toByteBuffer
 import org.jetbrains.hexana.providers.*
-import org.jetbrains.hexana.run.runWasmConfiguration
-import org.jetbrains.hexana.run.runWasmFile
-import org.jetbrains.hexana.run.showEnginePopup
-import org.jetbrains.hexana.shared.hasWasiCliRunExport
-import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
-import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wat.psi.getDataByIndex
 import org.jetbrains.hexana.wat.psi.getDefinedFunctionByIndex
 import org.jetbrains.jewel.foundation.modifier.onHover
-import org.jetbrains.jewel.ui.component.Icon
-import org.jetbrains.jewel.ui.component.IconButton
 import org.jetbrains.jewel.ui.component.Text
-import org.jetbrains.jewel.ui.component.Tooltip
-import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import java.awt.datatransfer.StringSelection
 import java.nio.CharBuffer
 import java.nio.charset.CharsetDecoder
@@ -346,23 +335,6 @@ internal fun HexViewer(
         }
 
 
-        val isRunnable = remember(binaryProvider) {
-            if (binaryProvider is WasmBinaryProvider) {
-                binaryProvider.exports.any { export ->
-                    export is WasmFunctionExportRecordEntry &&
-                        (export.name == "_start" || export.name == "_initialize")
-                }
-            } else if (binaryProvider is WasmComponentBinaryProvider) {
-                hasWasiCliRunExport(binaryProvider)
-            } else {
-                false
-            }
-        }
-
-        val isComponentCliRun = remember(binaryProvider) {
-            binaryProvider is WasmComponentBinaryProvider && hasWasiCliRunExport(binaryProvider)
-        }
-
         Column(modifier = Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 if (showOffsets) {
@@ -373,32 +345,7 @@ internal fun HexViewer(
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (isRunnable) {
-                            Tooltip(tooltip = { Text("Run Wasm module") }) {
-                                IconButton(onClick = {
-                                    if (isComponentCliRun) {
-                                        showEnginePopup(isComponentModel = true) { engine, mode ->
-                                            val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return@showEnginePopup
-                                            val dialog = ProgramArgsDialog(state.project, "wasi:cli/run")
-                                            if (!dialog.showAndGet()) return@showEnginePopup
-                                            runWasmConfiguration(state.project, file, "", dialog.programArgs, "", engine, mode)
-                                        }
-                                    } else {
-                                        showEnginePopup { engine, mode ->
-                                            runWasmFile(binaryProvider, state, engine, mode)
-                                        }
-                                    }
-                                }) {
-                                    Icon(
-                                        AllIconsKeys.Actions.Execute,
-                                        contentDescription = "Run",
-                                        iconClass = AllIcons::class.java,
-                                    )
-                                }
-                            }
-                        } else {
-                            Text(" ", style = TextStyle(fontFamily = FontFamily.Monospace))
-                        }
+                        Text(" ", style = TextStyle(fontFamily = FontFamily.Monospace))
                     }
                 }
                 Box(

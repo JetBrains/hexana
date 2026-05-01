@@ -153,7 +153,7 @@ class HexanaFileEditor(
                 if (stateHolder.showSearchDialog.value) {
                     HexSearchField(binaryProvider!!, stateHolder, hexFocusRequester)
                 }
-                BinaryEditorView(binaryProvider!!, stateHolder, hexFocusRequester)
+                BinaryEditorView(binaryProvider!!, stateHolder, hexFocusRequester, fileName = myFile.name)
             }
         }
         panel.add(hexView)

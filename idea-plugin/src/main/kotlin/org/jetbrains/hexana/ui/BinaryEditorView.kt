@@ -48,10 +48,12 @@ internal fun BinaryEditorView(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
     hexFocusRequester: FocusRequester,
+    fileName: String = "",
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         VerticalSplitPanel(state, northPanel = {
             Column(modifier = Modifier.fillMaxSize()) {
+                FileDescriptionBar(fileName = fileName, binaryProvider = binaryProvider, state = state)
                 Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     HexViewer(binaryProvider, state, focusRequester = hexFocusRequester)
                 }

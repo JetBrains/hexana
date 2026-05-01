@@ -32,13 +32,13 @@ internal fun HexViewStatusBar(
     val hasSelection = selection.start.line >= 0 && selection.end.line >= 0 &&
             (selection.start.line != selection.end.line || selection.start.lineOffset != selection.end.lineOffset)
 
-    Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
+    Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal, thickness = 2.dp, modifier = Modifier.fillMaxWidth())
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(HexanaTheme.backgroundColor)
-            .padding(horizontal = 12.dp, vertical = 2.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
