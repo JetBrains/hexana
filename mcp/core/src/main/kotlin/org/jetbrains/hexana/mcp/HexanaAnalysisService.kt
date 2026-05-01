@@ -20,6 +20,7 @@ import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
 import org.jetbrains.hexana.mcp.model.sections.ListCustomSectionsResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
+import org.jetbrains.hexana.mcp.model.types.ListValueTypesResult
 import org.jetbrains.hexana.mcp.model.types.TypesResult
 import org.jetbrains.hexana.mcp.query.*
 import org.jetbrains.hexana.providers.BinaryProviderType
@@ -45,6 +46,7 @@ interface HexanaAnalysisService {
     fun functionsForIndices(input: WasmInput, indices: List<Int>): FunctionsResult
     fun listGlobals(input: WasmInput): ListGlobalsResult
     fun listTypes(input: WasmInput): TypesResult
+    fun listValueTypes(input: WasmInput): ListValueTypesResult
     fun listMemory(input: WasmInput): ListMemoryResult
     fun getGlobalsForIndices(input: WasmInput, indices: List<Int>): ListGlobalsResult
     fun listData(input: WasmInput, entriesRange: IntRange): ListDataSectionsResult
@@ -151,6 +153,11 @@ class DefaultHexanaAnalysisService(
     override fun listTypes(input: WasmInput): TypesResult {
         val wasm = load(input)
         return wasm.provider.readTypes()
+    }
+
+    override fun listValueTypes(input: WasmInput): ListValueTypesResult {
+        val wasm = load(input)
+        return wasm.provider.readValueTypes()
     }
 
     override fun listMemory(input: WasmInput): ListMemoryResult {

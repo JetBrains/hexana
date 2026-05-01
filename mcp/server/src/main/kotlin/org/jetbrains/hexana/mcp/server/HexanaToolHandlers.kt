@@ -122,6 +122,12 @@ class HexanaToolHandlers(
         }
     }
 
+    fun listValueTypes(arguments: JsonObject?): CallToolResult {
+        return execute("list_value_types") {
+            analysisService.listValueTypes(wasmInput(arguments))
+        }
+    }
+
     fun listMemory(arguments: JsonObject?): CallToolResult {
         return execute("list_memory") {
             analysisService.listMemory(wasmInput(arguments))

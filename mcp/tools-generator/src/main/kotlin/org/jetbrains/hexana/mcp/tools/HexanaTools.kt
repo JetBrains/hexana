@@ -8,6 +8,7 @@ private val HEXANA_TOOL_ORDER = listOf(
     "search_exports",
     "list_globals",
     "list_types",
+    "list_value_types",
     "list_memory",
     "list_element_segments",
     "list_functions",

@@ -862,6 +862,258 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   }
 
   addTool(tool = Tool(
+    name = "list_value_types",
+    description = "List value types used by a `.wasm` module with counts and feature flags.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("valueTypes", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("scalar", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+            })
+            put("description", JsonPrimitive("Scalar numeric value types used by the module."))
+          })
+          put("vector", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+            })
+            put("description", JsonPrimitive("Vector value types used by the module."))
+          })
+          put("packed", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+            })
+            put("description", JsonPrimitive("Packed storage value types used by GC fields or locals."))
+          })
+          put("reference", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("object"))
+              put("properties", buildJsonObject {
+                put("type", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Canonical reference value type, for example `funcref`, `externref`, or `ref struct`."))
+                })
+                put("refKind", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Heap kind without nullability, for example `func`, `extern`, `struct`, or `array`."))
+                })
+                put("nullable", buildJsonObject {
+                  put("type", JsonPrimitive("boolean"))
+                  put("description", JsonPrimitive("True when the reference type is nullable."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("type"))
+                add(JsonPrimitive("refKind"))
+                add(JsonPrimitive("nullable"))
+              })
+            })
+            put("description", JsonPrimitive("Reference value types used by the module."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("scalar"))
+          add(JsonPrimitive("vector"))
+          add(JsonPrimitive("packed"))
+          add(JsonPrimitive("reference"))
+        })
+        put("description", JsonPrimitive("Distinct value types grouped by category."))
+      })
+      put("counts", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("valueTypes", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("scalar", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("object"))
+                  put("properties", buildJsonObject {
+                    put("type", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Value type name."))
+                    })
+                    put("count", buildJsonObject {
+                      put("type", JsonPrimitive("integer"))
+                      put("description", JsonPrimitive("Number of observed type occurrences."))
+                    })
+                  })
+                  put("required", buildJsonArray {
+                    add(JsonPrimitive("type"))
+                    add(JsonPrimitive("count"))
+                  })
+                })
+                put("description", JsonPrimitive("Counts for scalar numeric value types."))
+              })
+              put("vector", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("object"))
+                  put("properties", buildJsonObject {
+                    put("type", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Value type name."))
+                    })
+                    put("count", buildJsonObject {
+                      put("type", JsonPrimitive("integer"))
+                      put("description", JsonPrimitive("Number of observed type occurrences."))
+                    })
+                  })
+                  put("required", buildJsonArray {
+                    add(JsonPrimitive("type"))
+                    add(JsonPrimitive("count"))
+                  })
+                })
+                put("description", JsonPrimitive("Counts for vector value types."))
+              })
+              put("packed", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("object"))
+                  put("properties", buildJsonObject {
+                    put("type", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Value type name."))
+                    })
+                    put("count", buildJsonObject {
+                      put("type", JsonPrimitive("integer"))
+                      put("description", JsonPrimitive("Number of observed type occurrences."))
+                    })
+                  })
+                  put("required", buildJsonArray {
+                    add(JsonPrimitive("type"))
+                    add(JsonPrimitive("count"))
+                  })
+                })
+                put("description", JsonPrimitive("Counts for packed storage value types."))
+              })
+              put("reference", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("object"))
+                  put("properties", buildJsonObject {
+                    put("type", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Canonical reference value type."))
+                    })
+                    put("refKind", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Heap kind without nullability."))
+                    })
+                    put("nullable", buildJsonObject {
+                      put("type", JsonPrimitive("boolean"))
+                      put("description", JsonPrimitive("True when the reference type is nullable."))
+                    })
+                    put("count", buildJsonObject {
+                      put("type", JsonPrimitive("integer"))
+                      put("description", JsonPrimitive("Number of observed type occurrences."))
+                    })
+                  })
+                  put("required", buildJsonArray {
+                    add(JsonPrimitive("type"))
+                    add(JsonPrimitive("refKind"))
+                    add(JsonPrimitive("nullable"))
+                    add(JsonPrimitive("count"))
+                  })
+                })
+                put("description", JsonPrimitive("Counts for reference value types."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("scalar"))
+              add(JsonPrimitive("vector"))
+              add(JsonPrimitive("packed"))
+              add(JsonPrimitive("reference"))
+            })
+            put("description", JsonPrimitive("Counts grouped by value-type category."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("valueTypes"))
+        })
+        put("description", JsonPrimitive("Observed value-type occurrence counts."))
+      })
+      put("summary", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("hasGC", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when GC-only value types or storage types are present."))
+          })
+          put("hasPacked", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when packed storage types such as `i8` or `i16` are present."))
+          })
+          put("hasSIMD", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when `v128` or SIMD instructions are present."))
+          })
+          put("hasReferenceTypes", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when reference value types are present."))
+          })
+          put("pureMVP", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when no post-MVP value-type features were observed."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("hasGC"))
+          add(JsonPrimitive("hasPacked"))
+          add(JsonPrimitive("hasSIMD"))
+          add(JsonPrimitive("hasReferenceTypes"))
+          add(JsonPrimitive("pureMVP"))
+        })
+        put("description", JsonPrimitive("High-level feature flags inferred from value types."))
+      })
+    },
+    required = listOf("valueTypes", "counts", "summary")
+  ),
+  ))  {
+    request: CallToolRequest -> handlers.listValueTypes(request.arguments)
+  }
+
+  addTool(tool = Tool(
     name = "list_memory",
     description = "List imported and defined memories from a `.wasm` module.",
     inputSchema = ToolSchema(
