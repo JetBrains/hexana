@@ -14,6 +14,7 @@ private val HEXANA_TOOL_ORDER = listOf(
     "list_code_section_offsets",
     "functions_for_indices",
     "resolve_function_signature",
+    "disassemble_function",
     "search_functions_by_name",
     "get_globals_for_indices",
     "get_memory_for_indices",

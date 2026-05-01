@@ -8,6 +8,7 @@ class HexanaMcpRegistrationTest : HexanaMcpToolsetDirectTestBase() {
             "list_functions",
             "list_code_section_offsets",
             "resolve_function_signature",
+            "disassemble_function",
             "search_functions_by_name",
             "list_data",
             "list_exports",

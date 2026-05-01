@@ -16,6 +16,7 @@ import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
+import org.jetbrains.hexana.mcp.model.functions.DisassembleFunctionResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
@@ -36,6 +37,7 @@ import org.jetbrains.hexana.mcp.query.readElementSegments
 import org.jetbrains.hexana.mcp.query.readExportedFunctions
 import org.jetbrains.hexana.mcp.query.readExports
 import org.jetbrains.hexana.mcp.query.readExportsByName
+import org.jetbrains.hexana.mcp.query.readFunctionDisassembly
 import org.jetbrains.hexana.mcp.query.readFunctionSignature
 import org.jetbrains.hexana.mcp.query.readFunctions
 import org.jetbrains.hexana.mcp.query.readFunctionsByIndices
@@ -165,6 +167,14 @@ public class HexanaToolset : McpToolset {
     val file = requireWasmFile(path)
     val provider = file.requireCoreWasmBinaryProvider()
     return provider.readFunctionSignature(funcidx)
+  }
+
+  @McpTool("disassemble_function")
+  @McpDescription("Disassemble one function by unified function index.\nDisassemble one WebAssembly function by `funcidx`, returning signature, import/export metadata, locals, decoded instruction records, WAT-style text, and raw code bytes when the function has a body.\nImported functions return metadata with empty body fields because imports have no code entry.\nUse this when a task has narrowed the search to one function and needs a compact, production-oriented body snapshot.")
+  public suspend fun disassembleFunction(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String, @McpDescription("Unified function index (`funcidx`) to disassemble.") funcidx: Int): DisassembleFunctionResult {
+    val file = requireWasmFile(path)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readFunctionDisassembly(funcidx)
   }
 
   @McpTool("search_functions_by_name")

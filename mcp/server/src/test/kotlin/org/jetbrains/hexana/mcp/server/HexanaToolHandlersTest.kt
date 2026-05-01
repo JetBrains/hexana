@@ -13,6 +13,7 @@ import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
+import org.jetbrains.hexana.mcp.model.functions.DisassembleFunctionResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
@@ -144,6 +145,48 @@ class HexanaToolHandlersTest {
         assertEquals("i32", structured["results"]!!.jsonArray[0].jsonPrimitive.content)
         assertEquals("export", structured["kind"]!!.jsonPrimitive.content)
         assertEquals("main", structured["exportNames"]!!.jsonArray[0].jsonPrimitive.content)
+    }
+
+    @Test
+    fun disassembleFunctionReturnsBodySnapshot() {
+        val wasm = createWasmFile(
+            "disassemble_function.wasm",
+            """
+            (module
+              (type (func (param i32) (result i32)))
+              (import "env" "log" (func (param i32)))
+              (func ${'$'}main (type 0) (param i32) (result i32)
+                (local i32)
+                local.get 0
+                local.set 1
+                local.get 1
+                call 0
+                local.get 1)
+              (export "main" (func 1)))
+            """.trimIndent()
+        )
+
+        val result = handlers.disassembleFunction(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("funcidx", JsonPrimitive(1))
+            }
+        )
+
+        assertFalse(result.isError == true)
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertEquals(1, structured["funcidx"]!!.jsonPrimitive.int)
+        assertEquals(0, structured["typeidx"]!!.jsonPrimitive.int)
+        assertEquals("i32", structured["signature"]!!.jsonObject["params"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals("i32", structured["signature"]!!.jsonObject["results"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals(false, structured["isImported"]!!.jsonPrimitive.boolean)
+        assertEquals(true, structured["isExported"]!!.jsonPrimitive.boolean)
+        assertEquals("main", structured["exportNames"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals("num:i32", structured["locals"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals("local.get", structured["instructions"]!!.jsonArray[0].jsonObject["op"]!!.jsonPrimitive.content)
+        assertEquals("0", structured["instructions"]!!.jsonArray[0].jsonObject["args"]!!.jsonArray[0].jsonPrimitive.content)
+        assertTrue(structured["wat"]!!.jsonPrimitive.content.contains("(func (param i32) (result i32)"))
+        assertTrue(structured["hex"]!!.jsonPrimitive.content.isNotBlank())
     }
 
     @Test
@@ -745,6 +788,9 @@ class HexanaToolHandlersTest {
                     funcidx: Int
                 ): ResolveFunctionSignatureResult = error("boom")
 
+                override fun disassembleFunction(input: WasmInput, funcidx: Int): DisassembleFunctionResult =
+                    error("boom")
+
                 override fun searchFunctionsByName(
                     input: WasmInput,
                     query: String,
@@ -826,6 +872,9 @@ class HexanaToolHandlersTest {
                     input: WasmInput,
                     funcidx: Int
                 ): ResolveFunctionSignatureResult = error("unused")
+
+                override fun disassembleFunction(input: WasmInput, funcidx: Int): DisassembleFunctionResult =
+                    error("unused")
 
                 override fun searchFunctionsByName(
                     input: WasmInput,

@@ -73,6 +73,15 @@ class HexanaToolHandlers(
         }
     }
 
+    fun disassembleFunction(arguments: JsonObject?): CallToolResult {
+        return execute("disassemble_function") {
+            analysisService.disassembleFunction(
+                input = wasmInput(arguments),
+                funcidx = arguments.requireIntArgument("funcidx")
+            )
+        }
+    }
+
     fun searchFunctionsByName(arguments: JsonObject?): CallToolResult {
         return execute("search_functions_by_name") {
             analysisService.searchFunctionsByName(

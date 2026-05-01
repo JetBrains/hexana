@@ -3,6 +3,8 @@ package org.jetbrains.hexana.mcp.direct
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonPrimitive
 
 class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
     fun testListFunctionsReturnsImportedAndDefinedFunctions() {
@@ -131,6 +133,55 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(listOf("i32"), result.array("results").map { it.textValue() })
         assertEquals("export", result.text("kind"))
         assertEquals("increment", result.array("exportNames")[0].textValue())
+    }
+
+    fun testDisassembleFunctionReturnsBodySnapshot() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/functions/disassemble_function.wasm",
+            """
+            (module
+              (type (func (param i32) (result i32)))
+              (import "env" "print" (func (param i32)))
+              (func (export "increment") (type 0) (param i32) (result i32)
+                (local i32 i32)
+                local.get 0
+                local.set 1
+                local.get 1
+                call 0
+                local.get 1))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "disassemble_function",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("funcidx", JsonPrimitive(1))
+            }
+        )
+
+        assertEquals(1, result.int("funcidx"))
+        assertEquals(0, result.int("typeidx"))
+        assertEquals(listOf("i32"), result.obj("signature").array("params").map { it.textValue() })
+        assertEquals(listOf("i32"), result.obj("signature").array("results").map { it.textValue() })
+        assertFalse(result["isImported"]!!.jsonPrimitive.boolean)
+        assertTrue(result["isExported"]!!.jsonPrimitive.boolean)
+        assertEquals("increment", result.array("exportNames")[0].textValue())
+        assertEquals(listOf("num:i32"), result.array("locals").map { it.textValue() })
+        assertEquals(1, result.array("localGroups").size)
+        assertEquals(2, result.array("localGroups").obj(0).int("count"))
+        assertEquals("num:i32", result.array("localGroups").obj(0).text("type"))
+        assertTrue(result.long("codeOffset") > 0)
+        assertTrue(result.long("codeSize") > 0)
+        assertTrue(result.text("hex").isNotBlank())
+        assertTrue(result.text("wat").contains("(func (param i32) (result i32)"))
+        assertTrue(result.text("wat").contains("(local i32 i32)"))
+
+        val instructions = result.array("instructions")
+        assertEquals("local.get", instructions.obj(0).text("op"))
+        assertEquals(listOf("0"), instructions.obj(0).array("args").map { it.textValue() })
+        assertEquals("local.get 0", instructions.obj(0).text("text"))
+        assertTrue(instructions.map { it.toString() }.any { it.contains("call 0") })
     }
 
     fun testSearchFunctionsByNameReturnsImportAndExportMatches() {

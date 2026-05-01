@@ -22,6 +22,12 @@ val ResolveFunctionSignatureInput = WasmInputClass.with("ResolveFunctionSignatur
         .minimum(0)
 }
 
+val DisassembleFunctionInput = WasmInputClass.with("DisassembleFunctionInput") {
+    int("funcidx")
+        .describe("Unified function index (`funcidx`) to disassemble.")
+        .minimum(0)
+}
+
 val SearchFunctionsByNameInput = WasmInputClass.with("SearchFunctionsByNameInput") {
     string("query")
         .describe("Case-insensitive substring to search in import, export, and debug function names.")
@@ -89,6 +95,42 @@ val ResolveFunctionSignatureResultClass = class_("ResolveFunctionSignatureResult
     nullable("module", of = string()).describe("Import module name for imported functions.")
     nullable("importName", of = string()).describe("Import field name for imported functions.")
     list("exportNames", of = string()).describe("Export names pointing at this function.")
+}
+
+val DisassembleFunctionSignatureResultClass = class_("DisassembleFunctionSignatureResult") {
+    list("params", of = string()).describe("Parameter types, in declaration order.")
+    list("results", of = string()).describe("Result types, in declaration order.")
+}
+
+val DisassembledLocalGroupResultClass = class_("DisassembledLocalGroupResult") {
+    int("count").describe("Number of local slots in this grouped declaration.")
+    string("type").describe("Rendered local type (`num:i32`, `vec:v128`, reference types, etc.).")
+}
+
+val DisassembledInstructionResultClass = class_("DisassembledInstructionResult") {
+    string("op").describe("Instruction mnemonic.")
+    list("args", of = string()).describe("Rendered WAT operands for this instruction.")
+    string("text").describe("Full decoded instruction text.")
+    nullable("offset", of = long()).describe("Instruction byte offset when the parser provides one.")
+}
+
+val DisassembleFunctionResultClass = class_("DisassembleFunctionResult", kotlinPackage = MODEL_PACKAGE) {
+    int("funcidx").describe("Funcidx in the unified function index space.")
+    nullable("typeidx", of = int()).describe("Function type index, when resolved.")
+    nullable("signature", of = DisassembleFunctionSignatureResultClass).describe("Parsed signature when available.")
+    list("locals", of = string()).describe("Grouped rendered local declarations for defined functions.")
+    list("localGroups", of = DisassembledLocalGroupResultClass)
+        .describe("Grouped local declarations with declaration counts preserved.")
+    boolean("isImported").describe("Whether this function is imported and has no body.")
+    boolean("isExported").describe("Whether this function is exported by at least one export entry.")
+    list("exportNames", of = string()).describe("Export names pointing at this function.")
+    nullable("importInfo", of = FunctionImportResultClass).serialName("import")
+        .describe("Import descriptor when this function is imported.")
+    nullable("codeOffset", of = long()).describe("Byte offset of the code entry for defined functions.")
+    nullable("codeSize", of = long()).describe("Size of the code entry in bytes for defined functions.")
+    list("instructions", of = DisassembledInstructionResultClass).describe("Decoded instruction records.")
+    nullable("wat", of = string()).describe("Best-effort WAT-style function text for defined functions.")
+    nullable("hex", of = string()).describe("Raw code-entry bytes rendered as space-separated hex for defined functions.")
 }
 
 val FunctionNameSearchSignatureResultClass = class_("FunctionNameSearchSignatureResult") {
@@ -192,6 +234,19 @@ internal val FunctionTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.Funcidx
         output = ResolveFunctionSignatureResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionSignature"
+    }
+
+    tool("disassemble_function") {
+        summary = "Disassemble one function by unified function index."
+        guidance = """
+            Disassemble one WebAssembly function by `funcidx`, returning signature, import/export metadata, locals, decoded instruction records, WAT-style text, and raw code bytes when the function has a body.
+            Imported functions return metadata with empty body fields because imports have no code entry.
+            Use this when a task has narrowed the search to one function and needs a compact, production-oriented body snapshot.
+        """
+        input = DisassembleFunctionInput
+        inputPattern = ToolInputPattern.Funcidx
+        output = DisassembleFunctionResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionDisassembly"
     }
 
     tool("search_functions_by_name") {

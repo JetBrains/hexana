@@ -13,6 +13,7 @@ class HexanaToolsTest {
     fun `registry exposes the expected tool names`() {
         assertEquals(
             listOf(
+                "disassemble_function",
                 "functions_for_indices",
                 "get_globals_for_indices",
                 "get_instructions_for_functions",
@@ -57,6 +58,7 @@ class HexanaToolsTest {
                 "list_code_section_offsets",
                 "functions_for_indices",
                 "resolve_function_signature",
+                "disassemble_function",
                 "search_functions_by_name",
                 "get_globals_for_indices",
                 "get_memory_for_indices",
@@ -156,6 +158,10 @@ class HexanaToolsTest {
         assertEquals(
             ToolInputPattern.Funcidx,
             HexanaTools.single { it.name == "resolve_function_signature" }.inputPattern,
+        )
+        assertEquals(
+            ToolInputPattern.Funcidx,
+            HexanaTools.single { it.name == "disassemble_function" }.inputPattern,
         )
         assertEquals(
             ToolInputPattern.FunctionNameSearch,

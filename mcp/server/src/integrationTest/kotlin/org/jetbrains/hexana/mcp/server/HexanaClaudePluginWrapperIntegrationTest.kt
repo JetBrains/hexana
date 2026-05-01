@@ -65,6 +65,7 @@ class HexanaClaudePluginWrapperIntegrationTest {
             logger.info("{} wrapper tools: {}", clientLabel, toolNames)
             assertEquals(
                 listOf(
+                    "disassemble_function",
                     "functions_for_indices",
                     "get_globals_for_indices",
                     "get_instructions_for_functions",

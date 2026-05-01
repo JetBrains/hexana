@@ -52,6 +52,7 @@ class HexanaStdioIntegrationTest {
             logger.info("Received tools over stdio: {}", tools.tools.map { it.name }.sorted())
             assertEquals(
                 listOf(
+                    "disassemble_function",
                     "functions_for_indices",
                     "get_globals_for_indices",
                     "get_instructions_for_functions",
