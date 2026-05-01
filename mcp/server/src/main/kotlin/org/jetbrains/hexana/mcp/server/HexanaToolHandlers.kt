@@ -51,6 +51,16 @@ class HexanaToolHandlers(
         }
     }
 
+    fun searchFunctionsByName(arguments: JsonObject?): CallToolResult {
+        return execute("search_functions_by_name") {
+            analysisService.searchFunctionsByName(
+                input = wasmInput(arguments),
+                query = arguments.requireNonBlankString("query"),
+                limit = arguments.intOrDefault("limit", HexanaToolInputDefaults.SEARCH_FUNCTIONS_BY_NAME_LIMIT)
+            )
+        }
+    }
+
     fun listExportedFunctions(arguments: JsonObject?): CallToolResult {
         return execute("list_exported_functions") {
             analysisService.listExportedFunctions(
@@ -309,6 +319,16 @@ class HexanaToolHandlers(
         val element = this?.get(name) ?: throw ToolInputException("`$name` is required")
         return element.jsonPrimitive.intOrNull
             ?: throw ToolInputException("`$name` must be an integer")
+    }
+
+    private fun JsonObject?.requireNonBlankString(name: String): String {
+        val element = this?.get(name) ?: throw ToolInputException("`$name` is required")
+        val value = element.jsonPrimitive.contentOrNull
+            ?: throw ToolInputException("`$name` must be a string")
+        if (value.isBlank()) {
+            throw ToolInputException("`$name` must not be blank")
+        }
+        return value
     }
 
     private fun JsonObject?.requireObject(name: String): JsonObject {

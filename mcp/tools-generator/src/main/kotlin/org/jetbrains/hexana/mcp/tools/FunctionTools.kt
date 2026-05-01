@@ -22,6 +22,16 @@ val ResolveFunctionSignatureInput = WasmInputClass.with("ResolveFunctionSignatur
         .minimum(0)
 }
 
+val SearchFunctionsByNameInput = WasmInputClass.with("SearchFunctionsByNameInput") {
+    string("query")
+        .describe("Case-insensitive substring to search in import, export, and debug function names.")
+        .maxLength(200)
+    int("limit", default = 50)
+        .describe("Maximum number of matching function name entries to return.")
+        .minimum(1)
+        .maximum(200)
+}
+
 val GetLocalsForFunctionsInput = indicesInput(
     "GetLocalsForFunctionsInput",
     "List of unified function indices (`funcidx`) whose locals should be returned.",
@@ -68,6 +78,29 @@ val ResolveFunctionSignatureResultClass = class_("ResolveFunctionSignatureResult
     nullable("module", of = string()).describe("Import module name for imported functions.")
     nullable("importName", of = string()).describe("Import field name for imported functions.")
     list("exportNames", of = string()).describe("Export names pointing at this function.")
+}
+
+val FunctionNameSearchSignatureResultClass = class_("FunctionNameSearchSignatureResult") {
+    list("params", of = string()).describe("Parameter types, in declaration order.")
+    list("results", of = string()).describe("Result types, in declaration order.")
+}
+
+val FunctionNameSearchResultClass = class_("FunctionNameSearchResult") {
+    int("funcidx").describe("Funcidx in the unified function index space.")
+    string("name").describe("Matched function name.")
+    string("kind").describe("Name source: `import`, `export`, or `internal`.")
+    nullable("module", of = string()).describe("Import module name for imported functions.")
+    nullable("importName", of = string()).describe("Import field name for imported functions.")
+    nullable("exportName", of = string()).describe("Export name for exported functions.")
+    nullable("signature", of = FunctionNameSearchSignatureResultClass).describe("Parsed signature when available.")
+    list("locals", of = string()).describe("Rendered local types for defined functions.")
+    string("repr").describe("Compact WAT-like function representation.")
+    nullable("offset", of = long()).describe("Byte offset of the function body in the module.")
+}
+
+val SearchFunctionsByNameResultClass = class_("SearchFunctionsByNameResult", kotlinPackage = MODEL_PACKAGE) {
+    list("functions", of = FunctionNameSearchResultClass)
+        .describe("Matching function name entries.")
 }
 
 val FunctionInstructionsResultClass = class_("FunctionInstructionsResult") {
@@ -135,6 +168,18 @@ internal val FunctionTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.Funcidx
         output = ResolveFunctionSignatureResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionSignature"
+    }
+
+    tool("search_functions_by_name") {
+        summary = "Search function names across imports, exports, and debug names."
+        guidance = """
+            Search import names, export names, and WebAssembly name-section function names with a case-insensitive substring query.
+            Use this before targeted lookups when you know a symbolic name from logs, host bindings, exports, or source-level debugging.
+        """
+        input = SearchFunctionsByNameInput
+        inputPattern = ToolInputPattern.FunctionNameSearch
+        output = SearchFunctionsByNameResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionsByName"
     }
 
     tool("get_locals_for_functions") {

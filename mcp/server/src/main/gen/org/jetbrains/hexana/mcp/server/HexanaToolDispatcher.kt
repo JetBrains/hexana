@@ -21,6 +21,8 @@ internal object HexanaToolInputDefaults {
 
   public const val LIST_FUNCTIONS_LIMIT: Int = 200
 
+  public const val SEARCH_FUNCTIONS_BY_NAME_LIMIT: Int = 50
+
   public const val LIST_DATA_SEGMENTS_INCLUDE_EXPORTS: Boolean = false
 
   public const val LIST_DATA_SEGMENTS_INCLUDE_GLOBALS: Boolean = true
@@ -1209,6 +1211,157 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   ),
   ))  {
     request: CallToolRequest -> handlers.resolveFunctionSignature(request.arguments)
+  }
+
+  addTool(tool = Tool(
+    name = "search_functions_by_name",
+    description = "Search function names across imports, exports, and debug names.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("query", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Case-insensitive substring to search in import, export, and debug function names."))
+        put("maxLength", JsonPrimitive(200))
+      })
+      put("limit", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Maximum number of matching function name entries to return."))
+        put("default", JsonPrimitive(50))
+        put("minimum", JsonPrimitive(1))
+        put("maximum", JsonPrimitive(200))
+      })
+    },
+    required = listOf("query")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("functions", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("funcidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Funcidx in the unified function index space."))
+            })
+            put("name", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Matched function name."))
+            })
+            put("kind", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Name source: `import`, `export`, or `internal`."))
+            })
+            put("module", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import module name for imported functions."))
+            })
+            put("importName", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import field name for imported functions."))
+            })
+            put("exportName", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Export name for exported functions."))
+            })
+            put("signature", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("params", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Parameter types, in declaration order."))
+                })
+                put("results", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Result types, in declaration order."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("params"))
+                add(JsonPrimitive("results"))
+              })
+              put("description", JsonPrimitive("Parsed signature when available."))
+            })
+            put("locals", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Rendered local types for defined functions."))
+            })
+            put("repr", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Compact WAT-like function representation."))
+            })
+            put("offset", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Byte offset of the function body in the module."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("funcidx"))
+            add(JsonPrimitive("name"))
+            add(JsonPrimitive("kind"))
+            add(JsonPrimitive("locals"))
+            add(JsonPrimitive("repr"))
+          })
+        })
+        put("description", JsonPrimitive("Matching function name entries."))
+      })
+    },
+    required = listOf("functions")
+  ),
+  ))  {
+    request: CallToolRequest -> handlers.searchFunctionsByName(request.arguments)
   }
 
   addTool(tool = Tool(

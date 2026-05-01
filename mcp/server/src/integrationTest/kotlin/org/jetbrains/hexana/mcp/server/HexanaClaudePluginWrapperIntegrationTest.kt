@@ -82,6 +82,7 @@ class HexanaClaudePluginWrapperIntegrationTest {
                     "list_memory",
                     "list_types",
                     "resolve_function_signature",
+                    "search_functions_by_name",
                     "summarize_module"
                 ),
                 toolNames

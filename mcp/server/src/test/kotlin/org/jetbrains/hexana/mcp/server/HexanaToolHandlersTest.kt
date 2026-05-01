@@ -16,6 +16,7 @@ import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSignatureResult
+import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
@@ -140,6 +141,54 @@ class HexanaToolHandlersTest {
         assertEquals("i32", structured["results"]!!.jsonArray[0].jsonPrimitive.content)
         assertEquals("export", structured["kind"]!!.jsonPrimitive.content)
         assertEquals("main", structured["exportNames"]!!.jsonArray[0].jsonPrimitive.content)
+    }
+
+    @Test
+    fun searchFunctionsByNameReturnsMatchingImportAndExportNames() {
+        val wasm = createWasmFile(
+            "search_functions_by_name.wasm",
+            """
+            (module
+              (type (func (param i32) (result i32)))
+              (import "env" "print" (func (param i32)))
+              (func ${'$'}main (type 0) (param i32) (result i32)
+                (local i32)
+                local.get 0)
+              (export "main" (func 1)))
+            """.trimIndent()
+        )
+
+        val importResult = handlers.searchFunctionsByName(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("query", JsonPrimitive("print"))
+                put("limit", JsonPrimitive(10))
+            }
+        )
+        val exportResult = handlers.searchFunctionsByName(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("query", JsonPrimitive("MAIN"))
+            }
+        )
+
+        assertFalse(importResult.isError == true)
+        val importMatch = importResult.structuredContent!!["functions"]!!.jsonArray[0].jsonObject
+        assertEquals(0, importMatch["funcidx"]!!.jsonPrimitive.int)
+        assertEquals("print", importMatch["name"]!!.jsonPrimitive.content)
+        assertEquals("import", importMatch["kind"]!!.jsonPrimitive.content)
+        assertEquals("env", importMatch["module"]!!.jsonPrimitive.content)
+        assertEquals("print", importMatch["importName"]!!.jsonPrimitive.content)
+
+        assertFalse(exportResult.isError == true)
+        val exportMatch = exportResult.structuredContent!!["functions"]!!.jsonArray[0].jsonObject
+        assertEquals(1, exportMatch["funcidx"]!!.jsonPrimitive.int)
+        assertEquals("main", exportMatch["name"]!!.jsonPrimitive.content)
+        assertEquals("export", exportMatch["kind"]!!.jsonPrimitive.content)
+        assertEquals("main", exportMatch["exportName"]!!.jsonPrimitive.content)
+        assertEquals("i32", exportMatch["signature"]!!.jsonObject["params"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals("i32", exportMatch["signature"]!!.jsonObject["results"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals("num:i32", exportMatch["locals"]!!.jsonArray[0].jsonPrimitive.content)
     }
 
     @Test
@@ -601,6 +650,12 @@ class HexanaToolHandlersTest {
                     funcidx: Int
                 ): ResolveFunctionSignatureResult = error("boom")
 
+                override fun searchFunctionsByName(
+                    input: WasmInput,
+                    query: String,
+                    limit: Int
+                ): SearchFunctionsByNameResult = error("boom")
+
                 override fun listExportedFunctions(
                     input: WasmInput,
                     entriesRange: IntRange
@@ -671,6 +726,12 @@ class HexanaToolHandlersTest {
                     input: WasmInput,
                     funcidx: Int
                 ): ResolveFunctionSignatureResult = error("unused")
+
+                override fun searchFunctionsByName(
+                    input: WasmInput,
+                    query: String,
+                    limit: Int
+                ): SearchFunctionsByNameResult = error("unused")
 
                 override fun listExportedFunctions(
                     input: WasmInput,

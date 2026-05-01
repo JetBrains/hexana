@@ -30,6 +30,7 @@ class HexanaToolsTest {
                 "list_memory",
                 "list_types",
                 "resolve_function_signature",
+                "search_functions_by_name",
                 "summarize_module",
             ),
             HexanaTools.map { it.name }.sorted(),
@@ -50,6 +51,7 @@ class HexanaToolsTest {
                 "list_functions",
                 "functions_for_indices",
                 "resolve_function_signature",
+                "search_functions_by_name",
                 "get_globals_for_indices",
                 "get_memory_for_indices",
                 "get_types_for_indices",
@@ -145,6 +147,10 @@ class HexanaToolsTest {
             HexanaTools.single { it.name == "resolve_function_signature" }.inputPattern,
         )
         assertEquals(
+            ToolInputPattern.FunctionNameSearch,
+            HexanaTools.single { it.name == "search_functions_by_name" }.inputPattern,
+        )
+        assertEquals(
             ToolInputPattern.ClosedRange(parameterName = "entriesRange"),
             HexanaTools.single { it.name == "list_exported_functions" }.inputPattern,
         )
@@ -177,6 +183,9 @@ class HexanaToolsTest {
         val listFunctions = HexanaTools.single { it.name == "list_functions" }.input
         assertEquals(0, listFunctions.fields.single { it.name == "offset" }.default)
         assertEquals(200, listFunctions.fields.single { it.name == "limit" }.default)
+
+        val searchFunctionsByName = HexanaTools.single { it.name == "search_functions_by_name" }.input
+        assertEquals(50, searchFunctionsByName.fields.single { it.name == "limit" }.default)
 
         val listDataSegments = HexanaTools.single { it.name == "list_data_segments" }.input
         assertEquals(false, listDataSegments.fields.single { it.name == "includeExports" }.default)
@@ -273,6 +282,18 @@ class HexanaToolsTest {
         val funcidx = spec.input.fields.single { it.name == "funcidx" }
         assertEquals(FieldType.Int32, funcidx.type)
         assertEquals(0, funcidx.minimum)
+    }
+
+    @Test
+    fun `search_functions_by_name composes wasm input with query and limit`() {
+        val spec = HexanaTools.single { it.name == "search_functions_by_name" }
+        val query = spec.input.fields.single { it.name == "query" }
+        val limit = spec.input.fields.single { it.name == "limit" }
+        assertEquals(FieldType.StringT, query.type)
+        assertEquals(SchemaIntValue.Literal(200), query.maxLength)
+        assertEquals(FieldType.Int32, limit.type)
+        assertEquals(1, limit.minimum)
+        assertEquals(200, limit.maximum)
     }
 
     @Test

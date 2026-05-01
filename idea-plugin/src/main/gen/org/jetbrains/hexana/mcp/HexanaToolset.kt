@@ -19,6 +19,7 @@ import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSignatureResult
+import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
@@ -32,6 +33,7 @@ import org.jetbrains.hexana.mcp.query.readExports
 import org.jetbrains.hexana.mcp.query.readFunctionSignature
 import org.jetbrains.hexana.mcp.query.readFunctions
 import org.jetbrains.hexana.mcp.query.readFunctionsByIndices
+import org.jetbrains.hexana.mcp.query.readFunctionsByName
 import org.jetbrains.hexana.mcp.query.readGlobals
 import org.jetbrains.hexana.mcp.query.readGlobalsByIndices
 import org.jetbrains.hexana.mcp.query.readImportFunctions
@@ -129,6 +131,18 @@ public class HexanaToolset : McpToolset {
     val file = requireWasmFile(path)
     val provider = file.requireCoreWasmBinaryProvider()
     return provider.readFunctionSignature(funcidx)
+  }
+
+  @McpTool("search_functions_by_name")
+  @McpDescription("Search function names across imports, exports, and debug names.\nSearch import names, export names, and WebAssembly name-section function names with a case-insensitive substring query.\nUse this before targeted lookups when you know a symbolic name from logs, host bindings, exports, or source-level debugging.")
+  public suspend fun searchFunctionsByName(
+    @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
+    @McpDescription("Case-insensitive substring to search in import, export, and debug function names.") query: String,
+    @McpDescription("Maximum number of matching function name entries to return.") limit: Int = 50,
+  ): SearchFunctionsByNameResult {
+    val file = requireWasmFile(path)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readFunctionsByName(query, limit)
   }
 
   @McpTool("get_globals_for_indices")

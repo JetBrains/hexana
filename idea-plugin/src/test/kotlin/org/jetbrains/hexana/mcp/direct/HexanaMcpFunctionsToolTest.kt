@@ -120,6 +120,44 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals("increment", result.array("exportNames")[0].textValue())
     }
 
+    fun testSearchFunctionsByNameReturnsImportAndExportMatches() {
+        val fixture = createFunctionFixture("fixtures/direct/functions/search_functions_by_name.wasm")
+
+        val importResult = callToolJsonObject(
+            "search_functions_by_name",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("query", JsonPrimitive("print"))
+                put("limit", JsonPrimitive(10))
+            }
+        )
+        val importMatches = importResult.array("functions")
+        assertEquals(1, importMatches.size)
+        assertEquals(0, importMatches.obj(0).int("funcidx"))
+        assertEquals("print", importMatches.obj(0).text("name"))
+        assertEquals("import", importMatches.obj(0).text("kind"))
+        assertEquals("env", importMatches.obj(0).text("module"))
+        assertEquals("print", importMatches.obj(0).text("importName"))
+
+        val exportResult = callToolJsonObject(
+            "search_functions_by_name",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("query", JsonPrimitive("INCRE"))
+            }
+        )
+        val exportMatches = exportResult.array("functions")
+        assertEquals(1, exportMatches.size)
+        assertEquals(1, exportMatches.obj(0).int("funcidx"))
+        assertEquals("increment", exportMatches.obj(0).text("name"))
+        assertEquals("export", exportMatches.obj(0).text("kind"))
+        assertEquals("increment", exportMatches.obj(0).text("exportName"))
+        assertEquals(listOf("i32"), exportMatches.obj(0).obj("signature").array("params").map { it.textValue() })
+        assertEquals(listOf("i32"), exportMatches.obj(0).obj("signature").array("results").map { it.textValue() })
+        assertEquals(listOf("num:i32"), exportMatches.obj(0).array("locals").map { it.textValue() })
+        assertTrue(exportMatches.obj(0).long("offset") > 0)
+    }
+
     fun testGetLocalsForFunctionsReturnsGroupedLocalDeclarations() {
         val fixture = createFunctionFixture("fixtures/direct/functions/get_locals.wasm")
 

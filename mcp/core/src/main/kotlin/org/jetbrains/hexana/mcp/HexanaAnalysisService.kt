@@ -11,6 +11,7 @@ import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSignatureResult
+import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
@@ -31,6 +32,7 @@ interface HexanaAnalysisService {
     fun listExports(input: WasmInput): ListExportsResult
     fun listFunctions(input: WasmInput, offset: Int, limit: Int): FunctionsResult
     fun resolveFunctionSignature(input: WasmInput, funcidx: Int): ResolveFunctionSignatureResult
+    fun searchFunctionsByName(input: WasmInput, query: String, limit: Int): SearchFunctionsByNameResult
     fun listExportedFunctions(input: WasmInput, entriesRange: IntRange): ListExportedFunctionsResult
     fun functionsForIndices(input: WasmInput, indices: List<Int>): FunctionsResult
     fun listGlobals(input: WasmInput): ListGlobalsResult
@@ -89,6 +91,13 @@ class DefaultHexanaAnalysisService(
         requireIndices(listOf(funcidx))
         val wasm = load(input)
         return wasm.provider.readFunctionSignature(funcidx)
+    }
+
+    override fun searchFunctionsByName(input: WasmInput, query: String, limit: Int): SearchFunctionsByNameResult {
+        requireNonBlank(query, "Query")
+        requireLimit(limit)
+        val wasm = load(input)
+        return wasm.provider.readFunctionsByName(query, limit)
     }
 
     override fun listExportedFunctions(input: WasmInput, entriesRange: IntRange): ListExportedFunctionsResult {
@@ -304,6 +313,15 @@ class DefaultHexanaAnalysisService(
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.OUT_OF_RANGE,
                 "Limit must be greater than 0"
+            )
+        }
+    }
+
+    private fun requireNonBlank(value: String, label: String) {
+        if (value.isBlank()) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INVALID_INPUT,
+                "$label must not be blank"
             )
         }
     }

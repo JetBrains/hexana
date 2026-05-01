@@ -165,6 +165,7 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
             "list_imports",
             "list_functions",
             "resolve_function_signature",
+            "search_functions_by_name",
             "list_data",
             "list_exports",
             "list_exported_functions",

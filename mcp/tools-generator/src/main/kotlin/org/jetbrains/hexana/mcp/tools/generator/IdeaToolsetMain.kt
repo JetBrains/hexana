@@ -96,6 +96,10 @@ private fun addParameters(builder: FunSpec.Builder, spec: ToolSpec) {
         }
         ToolInputPattern.Funcidx ->
             builder.addParameter(intParam(inputField(spec.input, "funcidx")))
+        ToolInputPattern.FunctionNameSearch -> {
+            builder.addParameter(stringParam(inputField(spec.input, "query")))
+            builder.addParameter(intWithDefault(inputField(spec.input, "limit")))
+        }
         ToolInputPattern.Indices ->
             builder.addParameter(intListParam(inputField(spec.input, "indices")))
         is ToolInputPattern.ClosedRange ->
@@ -129,6 +133,7 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec) {
         ToolInputPattern.WasmOnly,
         ToolInputPattern.FunctionPage,
         ToolInputPattern.Funcidx,
+        ToolInputPattern.FunctionNameSearch,
         ToolInputPattern.Indices -> Unit
     }
     code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
@@ -138,6 +143,7 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec) {
         ToolInputPattern.WasmOnly -> "()"
         ToolInputPattern.FunctionPage -> "(offset, limit)"
         ToolInputPattern.Funcidx -> "(funcidx)"
+        ToolInputPattern.FunctionNameSearch -> "(query, limit)"
         ToolInputPattern.Indices -> "(indices)"
         is ToolInputPattern.ClosedRange -> "(range)"
         ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
@@ -171,6 +177,11 @@ private fun boolWithDefault(field: FieldSpec): ParameterSpec =
 
 private fun intParam(field: FieldSpec): ParameterSpec =
     ParameterSpec.builder(field.name, Int::class)
+        .addAnnotation(describeAnnotation(field.descriptionOrError()))
+        .build()
+
+private fun stringParam(field: FieldSpec): ParameterSpec =
+    ParameterSpec.builder(field.name, String::class)
         .addAnnotation(describeAnnotation(field.descriptionOrError()))
         .build()
 

@@ -309,6 +309,7 @@ sealed class ToolInputPattern {
     object WasmOnly : ToolInputPattern()
     object FunctionPage : ToolInputPattern()
     object Funcidx : ToolInputPattern()
+    object FunctionNameSearch : ToolInputPattern()
     object Indices : ToolInputPattern()
     data class ClosedRange(val parameterName: String) : ToolInputPattern()
     object DataSegments : ToolInputPattern()
@@ -483,6 +484,17 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireType(funcidx, FieldType.Int32)
             requireNonNullable(funcidx)
             requireDescribed(funcidx)
+        }
+        ToolInputPattern.FunctionNameSearch -> {
+            val query = requireField("query")
+            requireType(query, FieldType.StringT)
+            requireNonNullable(query)
+            requireDescribed(query)
+            val limit = requireField("limit")
+            requireType(limit, FieldType.Int32)
+            requireNonNullable(limit)
+            requireDefault(limit, "Int") { it is Int }
+            requireDescribed(limit)
         }
         ToolInputPattern.Indices -> {
             val indices = requireField("indices")
