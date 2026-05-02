@@ -85,6 +85,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private val wasmtimeOptionsField = RawCommandLineEditor()
     private val wamrPathField = TextFieldWithBrowseButton()
     private val wamrOptionsField = RawCommandLineEditor()
+    private val graalVmPathField = TextFieldWithBrowseButton()
     private val lldbPathField = TextFieldWithBrowseButton()
     private val exportNameField = JBTextField()
     private val programArgumentsField = RawCommandLineEditor()
@@ -95,6 +96,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private var wasmtimeOptionsRow: Row? = null
     private var wamrPathRow: Row? = null
     private var wamrOptionsRow: Row? = null
+    private var graalVmPathRow: Row? = null
     private var lldbPathRow: Row? = null
     private var exportNameRow: Row? = null
 
@@ -118,6 +120,14 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         (wamrPathField.childComponent as? JBTextField)?.emptyText?.setText(
             WasmRuntimeSettings.getInstance().effectiveWamrPath()
         )
+        graalVmPathField.addBrowseFolderListener(
+            project,
+            FileChooserDescriptor(false, true, false, false, false, false),
+        )
+        val effectiveGraalVm = WasmRuntimeSettings.getInstance().effectiveGraalVmPath()
+        if (effectiveGraalVm != null) {
+            (graalVmPathField.childComponent as? JBTextField)?.emptyText?.setText(effectiveGraalVm)
+        }
         lldbPathField.addBrowseFolderListener(
             project,
             FileChooserDescriptorFactory.singleFile(),
@@ -180,10 +190,12 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         val selected = engineCombo.item
         val isWasmtime = selected == WasmEngine.WASMTIME
         val isWamr = selected == WasmEngine.WAMR
+        val isGraalWasm = selected == WasmEngine.GRAALWASM
         wasmtimePathRow?.visible(isWasmtime)
         wasmtimeOptionsRow?.visible(isWasmtime)
         wamrPathRow?.visible(isWamr)
         wamrOptionsRow?.visible(isWamr)
+        graalVmPathRow?.visible(isGraalWasm)
         lldbPathRow?.visible(isWasmtime || isWamr)
         exportNameRow?.visible(!isWasmtime)
     }
@@ -195,6 +207,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         wasmtimeOptionsField.text = configuration.wasmtimeOptions
         wamrPathField.text = configuration.wamrPath
         wamrOptionsField.text = configuration.wamrOptions
+        graalVmPathField.text = configuration.graalVmPath
         lldbPathField.text = configuration.lldbPath
         exportNameField.text = configuration.exportName
         programArgumentsField.text = configuration.programArguments
@@ -210,6 +223,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         configuration.wasmtimeOptions = wasmtimeOptionsField.text
         configuration.wamrPath = wamrPathField.text
         configuration.wamrOptions = wamrOptionsField.text
+        configuration.graalVmPath = graalVmPathField.text
         configuration.lldbPath = lldbPathField.text
         configuration.exportName = exportNameField.text
         configuration.programArguments = programArgumentsField.text
@@ -234,6 +248,9 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         }
         wamrOptionsRow = row(HexanaBundle.message("wasm.run.configuration.wamr.options")) {
             cell(wamrOptionsField).align(AlignX.FILL)
+        }
+        graalVmPathRow = row(HexanaBundle.message("wasm.run.configuration.graalvm.path")) {
+            cell(graalVmPathField).align(AlignX.FILL)
         }
         lldbPathRow = row(HexanaBundle.message("wasm.run.configuration.lldb.path")) {
             cell(lldbPathField).align(AlignX.FILL)

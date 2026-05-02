@@ -31,6 +31,11 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
         get() = state.wamrPath
         set(value) { state.wamrPath = value?.takeIf { it.isNotBlank() } }
 
+    /** User-configured GraalVM home path for UI binding. */
+    var graalVmPathInUi: String?
+        get() = state.graalVmPath
+        set(value) { state.graalVmPath = value?.takeIf { it.isNotBlank() } }
+
     /** User-configured LLDB path for UI binding. */
     var lldbPathInUi: String?
         get() = state.lldbPath
@@ -57,6 +62,15 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
     }
 
     /**
+     * Returns the user-configured GraalVM home path, or `null`
+     * when not set (meaning the built-in GraalWasm engine is used).
+     */
+    fun effectiveGraalVmPath(): String? {
+        val configured = state.graalVmPath
+        return configured?.takeIf { it.isNotBlank() }
+    }
+
+    /**
      * Returns the effective LLDB executable path.
      */
     fun effectiveLldbPath(): String {
@@ -69,5 +83,6 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
 class WasmRuntimeSettingsState : BaseState() {
     var wasmtimePath: String? by string()
     var wamrPath: String? by string()
+    var graalVmPath: String? by string()
     var lldbPath: String? by string()
 }

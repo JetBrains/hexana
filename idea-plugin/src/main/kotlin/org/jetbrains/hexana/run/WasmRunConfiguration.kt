@@ -54,6 +54,10 @@ class WasmRunConfiguration(
         get() = options.getWamrOptions()
         set(value) { options.setWamrOptions(value) }
 
+    var graalVmPath: String
+        get() = options.getGraalVmPath()
+        set(value) { options.setGraalVmPath(value) }
+
     var lldbPath: String
         get() = options.getLldbPath()
         set(value) { options.setLldbPath(value) }

@@ -11,6 +11,7 @@ class WasmRunConfigurationOptions : RunConfigurationOptions() {
     private val wasmtimeOptions = string("").provideDelegate(this, "wasmtimeOptions")
     private val wamrPath = string("").provideDelegate(this, "wamrPath")
     private val wamrOptions = string("").provideDelegate(this, "wamrOptions")
+    private val graalVmPath = string("").provideDelegate(this, "graalVmPath")
     private val lldbPath = string("").provideDelegate(this, "lldbPath")
     private val exportName = string("").provideDelegate(this, "exportName")
     private val dependencies = list<String>().provideDelegate(this, "dependencies")
@@ -38,6 +39,9 @@ class WasmRunConfigurationOptions : RunConfigurationOptions() {
 
     fun getWamrOptions(): String = wamrOptions.getValue(this) ?: ""
     fun setWamrOptions(value: String) { wamrOptions.setValue(this, value) }
+
+    fun getGraalVmPath(): String = graalVmPath.getValue(this) ?: ""
+    fun setGraalVmPath(value: String) { graalVmPath.setValue(this, value) }
 
     fun getLldbPath(): String = lldbPath.getValue(this) ?: ""
     fun setLldbPath(value: String) { lldbPath.setValue(this, value) }

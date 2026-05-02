@@ -45,6 +45,12 @@ class WasmRuntimeConfigurable : DslConfigurableBase(), SearchableConfigurable {
                         }
                         .bindText(settings::wamrPathInUi.toNonNullableProperty(""))
                 }
+                row(HexanaBundle.message("wasm.runtime.settings.graalvm.path")) {
+                    textFieldWithBrowseButton(FileChooserDescriptorFactory.singleDir())
+                        .align(AlignX.FILL)
+                        .comment(HexanaBundle.message("wasm.runtime.settings.graalvm.path.comment"))
+                        .bindText(settings::graalVmPathInUi.toNonNullableProperty(""))
+                }
             }
             group(HexanaBundle.message("wasm.runtime.settings.group.debugger")) {
                 row(HexanaBundle.message("wasm.runtime.settings.lldb.path")) {

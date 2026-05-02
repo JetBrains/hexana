@@ -3,12 +3,17 @@ package org.jetbrains.hexana.run
 import com.intellij.execution.DefaultExecutionResult
 import com.intellij.execution.ExecutionResult
 import com.intellij.execution.Executor
+import com.intellij.execution.configurations.CommandLineState
+import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.impl.ConsoleViewImpl
+import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessOutputType
+import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ProgramRunner
+import com.intellij.openapi.util.SystemInfo
 import org.graalvm.polyglot.Context
 import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.proxy.ProxyObject
@@ -28,10 +33,67 @@ class GraalWasmCommandLineState(
 ) : RunProfileState {
 
     override fun execute(executor: Executor?, runner: ProgramRunner<*>): ExecutionResult {
+        val graalVmHome = resolveGraalVmHome()
+        if (graalVmHome != null && executor != null) {
+            return ExternalGraalWasmCommandLineState(configuration, environment, graalVmHome)
+                .execute(executor, runner)!!
+        }
+
         val consoleView = ConsoleViewImpl(environment.project, false)
         val handler = GraalWasmProcessHandler(configuration)
         consoleView.attachToProcess(handler)
         return DefaultExecutionResult(consoleView, handler)
+    }
+
+    private fun resolveGraalVmHome(): String? {
+        val perConfig = configuration.graalVmPath.ifBlank { null }
+        if (perConfig != null) return perConfig
+        return WasmRuntimeSettings.getInstance().effectiveGraalVmPath()
+    }
+}
+
+/**
+ * Launches the `wasm` launcher from a custom GraalVM installation
+ * as an external process, similar to how [WasmtimeCommandLineState]
+ * launches the Wasmtime CLI.
+ */
+private class ExternalGraalWasmCommandLineState(
+    private val configuration: WasmRunConfiguration,
+    environment: ExecutionEnvironment,
+    private val graalVmHome: String,
+) : CommandLineState(environment) {
+
+    override fun startProcess(): ProcessHandler {
+        val exeName = if (SystemInfo.isWindows) "wasm.exe" else "wasm"
+        val wasmLauncher = File(graalVmHome, "bin" + File.separator + exeName).absolutePath
+
+        val commandLine = GeneralCommandLine().apply {
+            exePath = wasmLauncher
+
+            val targetExport = configuration.exportName.ifBlank { null }
+            if (targetExport != null) {
+                addParameter("--entry-point")
+                addParameter(targetExport)
+            }
+
+            addParameter(configuration.wasmFilePath)
+
+            val args = configuration.programArguments.trim()
+            if (args.isNotEmpty()) {
+                addParameters(args.split("\\s+".toRegex()))
+            }
+
+            val workDir = configuration.workingDirectory.ifBlank { null }
+            if (workDir != null) {
+                withWorkDirectory(workDir)
+            }
+
+            withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+        }
+
+        val handler = OSProcessHandler(commandLine)
+        ProcessTerminatedListener.attach(handler)
+        return handler
     }
 }
 
