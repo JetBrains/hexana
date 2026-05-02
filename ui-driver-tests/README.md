@@ -8,6 +8,7 @@ This module contains the first migrated UI tests from RemoteRobot to the new IDE
 - Resolves the Hexana plugin — either from a local ZIP or by downloading from TeamCity (see configuration below).
 - Installs the plugin into test IDE.
 - Opens a local wasm project and verifies `hello.wasm` can be opened.
+- Runs Wasm configurations with Wasmtime: core modules (`_start`), exported functions (`--invoke`), and component models.
 - Runs a packaged-plugin MCP smoke against the real IDE `/stream` endpoint and checks that Hexana tools are exposed
   there.
 
@@ -17,6 +18,8 @@ From repository root:
 
 ```bash
 ./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaWasmProjectDriverTest
+
+./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaRunConfigurationDriverTest
 
 ./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaMcpPackagedSmokeTest
 ```

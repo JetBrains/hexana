@@ -9,10 +9,12 @@ This module contains expensive end-to-end UI tests for the plugin using JetBrain
 - Install the plugin into the test IDE.
 - Open a sample project from `testData/projects/hexana_wasm_project`.
 - Verify that `hello.wasm` can be opened successfully.
+- Run Wasm configurations with Wasmtime (core modules, exported functions, component models).
 
-Main test entry point:
+Main test entry points:
 
 - `src/test/kotlin/org/jetbrains/hexana/ui/HexanaWasmProjectDriverTest.kt`
+- `src/test/kotlin/org/jetbrains/hexana/ui/HexanaRunConfigurationDriverTest.kt`
 
 Support code:
 
@@ -25,12 +27,14 @@ Support code:
 - Plugin packaging or ZIP layout changed.
 - Sandbox IDE startup behavior changed.
 - End-to-end file-opening behavior changed in ways unit tests cannot cover.
+- Run configuration or execution behavior changed for Wasm engines.
 
 Do not use this module as the default validation path for normal parser or editor changes.
 
 ## Run Command
 
 - `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaWasmProjectDriverTest`
+- `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaRunConfigurationDriverTest`
 
 ## Required Environment Configuration
 
