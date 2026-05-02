@@ -15,6 +15,7 @@ import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
 import org.jetbrains.hexana.mcp.model.features.ListEnabledFeaturesResult
 import org.jetbrains.hexana.mcp.model.functions.DisassembleFunctionResult
+import org.jetbrains.hexana.mcp.model.functions.GetFunctionCallGraphResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
@@ -185,11 +186,57 @@ class HexanaToolHandlersTest {
         assertEquals(false, structured["isImported"]!!.jsonPrimitive.boolean)
         assertEquals(true, structured["isExported"]!!.jsonPrimitive.boolean)
         assertEquals("main", structured["exportNames"]!!.jsonArray[0].jsonPrimitive.content)
-        assertEquals("num:i32", structured["locals"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals("i32", structured["locals"]!!.jsonArray[0].jsonPrimitive.content)
         assertEquals("local.get", structured["instructions"]!!.jsonArray[0].jsonObject["op"]!!.jsonPrimitive.content)
         assertEquals("0", structured["instructions"]!!.jsonArray[0].jsonObject["args"]!!.jsonArray[0].jsonPrimitive.content)
         assertTrue(structured["wat"]!!.jsonPrimitive.content.contains("(func (param i32) (result i32)"))
         assertTrue(structured["hex"]!!.jsonPrimitive.content.isNotBlank())
+    }
+
+    @Test
+    fun getFunctionCallGraphReturnsResolvedCallSummary() {
+        val wasm = createWasmFile(
+            "get_function_call_graph.wasm",
+            """
+            (module
+              (type (func (param i32) (result i32)))
+              (type (func (param i32)))
+              (import "env" "log" (func (type 1)))
+              (memory 1)
+              (func ${'$'}helper (type 0) (param i32) (result i32)
+                local.get 0)
+              (func ${'$'}main (export "main") (type 0) (param i32) (result i32)
+                (local i32 i32)
+                local.get 0
+                call 0
+                i32.const 0
+                i32.const 7
+                i32.store
+                local.get 0
+                call 1))
+            """.trimIndent()
+        )
+
+        val result = handlers.getFunctionCallGraph(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("indices", buildJsonArray {
+                    add(JsonPrimitive(2))
+                })
+            }
+        )
+
+        assertFalse(result.isError == true)
+        val structured = result.structuredContent ?: error("Expected structured content")
+        val function = structured["functions"]!!.jsonArray[0].jsonObject
+        assertEquals(2, function["funcidx"]!!.jsonPrimitive.int)
+        assertEquals("main", function["exportedAs"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals(2, function["locals"]!!.jsonArray[0].jsonObject["count"]!!.jsonPrimitive.int)
+        assertEquals(2, function["directCalls"]!!.jsonArray.size)
+        val importedCall = function["directImportedCalls"]!!.jsonArray[0].jsonObject
+        assertEquals(0, importedCall["targetFuncidx"]!!.jsonPrimitive.int)
+        assertEquals("env", importedCall["target"]!!.jsonObject["import"]!!.jsonObject["module"]!!.jsonPrimitive.content)
+        assertEquals("i32.store", function["directMemoryWrites"]!!.jsonArray[0].jsonObject["op"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -284,7 +331,7 @@ class HexanaToolHandlersTest {
         assertEquals("main", exportMatch["exportName"]!!.jsonPrimitive.content)
         assertEquals("i32", exportMatch["signature"]!!.jsonObject["params"]!!.jsonArray[0].jsonPrimitive.content)
         assertEquals("i32", exportMatch["signature"]!!.jsonObject["results"]!!.jsonArray[0].jsonPrimitive.content)
-        assertEquals("num:i32", exportMatch["locals"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals("i32", exportMatch["locals"]!!.jsonArray[0].jsonPrimitive.content)
     }
 
     @Test
@@ -744,7 +791,7 @@ class HexanaToolHandlersTest {
 
         assertFalse(locals.isError == true)
         assertEquals(
-            "num:i32",
+            "i32",
             locals.structuredContent!!["functions"]!!.jsonArray[0].jsonObject["locals"]!!.jsonArray[0].jsonObject["type"]!!.jsonPrimitive.content
         )
 
@@ -816,6 +863,9 @@ class HexanaToolHandlersTest {
                 ): ResolveFunctionSignatureResult = error("boom")
 
                 override fun disassembleFunction(input: WasmInput, funcidx: Int): DisassembleFunctionResult =
+                    error("boom")
+
+                override fun getFunctionCallGraph(input: WasmInput, indices: List<Int>): GetFunctionCallGraphResult =
                     error("boom")
 
                 override fun searchFunctionsByName(
@@ -904,6 +954,9 @@ class HexanaToolHandlersTest {
                 ): ResolveFunctionSignatureResult = error("unused")
 
                 override fun disassembleFunction(input: WasmInput, funcidx: Int): DisassembleFunctionResult =
+                    error("unused")
+
+                override fun getFunctionCallGraph(input: WasmInput, indices: List<Int>): GetFunctionCallGraphResult =
                     error("unused")
 
                 override fun searchFunctionsByName(

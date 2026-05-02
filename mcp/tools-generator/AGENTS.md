@@ -3,7 +3,7 @@
 This module is the single source of truth for Hexana MCP tool definitions. Two KotlinPoet generators consume the same
 DSL and emit checked-in Kotlin files into the two consumers:
 
-- `idea-plugin/src/main/gen/org/jetbrains/hexana/mcp/HexanaToolset.kt` — `McpToolset` with 26 `@McpTool` methods, consumed
+- `idea-plugin/src/main/gen/org/jetbrains/hexana/mcp/HexanaToolset.kt` — `McpToolset` with 27 `@McpTool` methods, consumed
   by `plugin.xml`.
 - `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` — `Server.registerHexanaTools(handlers)`
   extension for the standalone MCP runtime.

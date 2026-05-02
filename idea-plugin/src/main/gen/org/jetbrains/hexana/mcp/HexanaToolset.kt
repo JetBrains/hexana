@@ -19,6 +19,7 @@ import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
 import org.jetbrains.hexana.mcp.model.features.ListEnabledFeaturesResult
 import org.jetbrains.hexana.mcp.model.functions.DisassembleFunctionResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
+import org.jetbrains.hexana.mcp.model.functions.GetFunctionCallGraphResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.ListCodeSectionOffsetsResult
@@ -41,6 +42,7 @@ import org.jetbrains.hexana.mcp.query.readEnabledFeatures
 import org.jetbrains.hexana.mcp.query.readExportedFunctions
 import org.jetbrains.hexana.mcp.query.readExports
 import org.jetbrains.hexana.mcp.query.readExportsByName
+import org.jetbrains.hexana.mcp.query.readFunctionCallGraph
 import org.jetbrains.hexana.mcp.query.readFunctionDisassembly
 import org.jetbrains.hexana.mcp.query.readFunctionSignature
 import org.jetbrains.hexana.mcp.query.readFunctions
@@ -205,6 +207,14 @@ public class HexanaToolset : McpToolset {
     val file = requireWasmFile(path)
     val provider = file.requireCoreWasmBinaryProvider()
     return provider.readFunctionDisassembly(funcidx)
+  }
+
+  @McpTool("get_function_call_graph")
+  @McpDescription("Return resolved direct calls and memory write sites for function indices.\nReturn a compact per-function call graph for requested unified WebAssembly `funcidx` values.\nThe result resolves direct `call` and `return_call` targets to import/export/signature metadata, separates imported callees, reports `call_indirect` sites, preserves grouped local counts, and lists direct memory-writing instructions.\nUse this when a stack trace, export, log, or previous lookup identifies one or more function indices and you need production-oriented dependency/effect context without reading full disassembly.")
+  public suspend fun getFunctionCallGraph(@McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String, @McpDescription("List of unified function indices (`funcidx`) whose direct call graph and effect summary should be returned.") indices: List<Int>): GetFunctionCallGraphResult {
+    val file = requireWasmFile(path)
+    val provider = file.requireCoreWasmBinaryProvider()
+    return provider.readFunctionCallGraph(indices)
   }
 
   @McpTool("search_functions_by_name")

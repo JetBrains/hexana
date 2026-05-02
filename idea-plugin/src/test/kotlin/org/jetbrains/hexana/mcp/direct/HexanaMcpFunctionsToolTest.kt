@@ -167,10 +167,10 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertFalse(result["isImported"]!!.jsonPrimitive.boolean)
         assertTrue(result["isExported"]!!.jsonPrimitive.boolean)
         assertEquals("increment", result.array("exportNames")[0].textValue())
-        assertEquals(listOf("num:i32"), result.array("locals").map { it.textValue() })
+        assertEquals(listOf("i32"), result.array("locals").map { it.textValue() })
         assertEquals(1, result.array("localGroups").size)
         assertEquals(2, result.array("localGroups").obj(0).int("count"))
-        assertEquals("num:i32", result.array("localGroups").obj(0).text("type"))
+        assertEquals("i32", result.array("localGroups").obj(0).text("type"))
         assertTrue(result.long("codeOffset") > 0)
         assertTrue(result.long("codeSize") > 0)
         assertTrue(result.text("hex").isNotBlank())
@@ -182,6 +182,86 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(listOf("0"), instructions.obj(0).array("args").map { it.textValue() })
         assertEquals("local.get 0", instructions.obj(0).text("text"))
         assertTrue(instructions.map { it.toString() }.any { it.contains("call 0") })
+    }
+
+    fun testGetFunctionCallGraphReturnsResolvedCallsAndMemoryWrites() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/functions/get_function_call_graph.wasm",
+            """
+            (module
+              (type (func (param i32) (result i32)))
+              (type (func (param i32)))
+              (import "env" "log" (func (type 1)))
+              (memory 1)
+              (table 1 funcref)
+              (func ${'$'}helper (type 0) (param i32) (result i32)
+                local.get 0)
+              (func ${'$'}main (export "main") (type 0) (param i32) (result i32)
+                (local i32 i32)
+                local.get 0
+                call 0
+                i32.const 0
+                i32.const 7
+                i32.store
+                local.get 0
+                i32.const 0
+                call_indirect (type 0)
+                drop
+                local.get 0
+                call 1)
+              (elem (i32.const 0) ${'$'}helper))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "get_function_call_graph",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("indices", kotlinx.serialization.json.buildJsonArray {
+                    add(JsonPrimitive(0))
+                    add(JsonPrimitive(2))
+                })
+            }
+        )
+        val functions = result.array("functions")
+
+        assertEquals(2, functions.size)
+        assertEquals(0, functions.obj(0).int("funcidx"))
+        assertEquals("import", functions.obj(0).text("kind"))
+        assertEquals("env", functions.obj(0).obj("import").text("module"))
+        assertEquals("log", functions.obj(0).obj("import").text("name"))
+
+        val main = functions.obj(1)
+        assertEquals(2, main.int("funcidx"))
+        assertEquals("local", main.text("kind"))
+        assertEquals("main", main.array("exportedAs")[0].textValue())
+        assertEquals(2, main.array("locals").obj(0).int("count"))
+        assertEquals("i32", main.array("locals").obj(0).text("type"))
+
+        val directCalls = main.array("directCalls")
+        assertEquals(
+            listOf(0, 1),
+            listOf(directCalls.obj(0).int("targetFuncidx"), directCalls.obj(1).int("targetFuncidx"))
+        )
+        assertEquals("call", directCalls.obj(0).text("op"))
+        assertEquals("import", directCalls.obj(0).obj("target").text("kind"))
+        assertEquals("env", directCalls.obj(0).obj("target").obj("import").text("module"))
+        assertEquals("log", directCalls.obj(0).obj("target").obj("import").text("name"))
+        assertEquals("local", directCalls.obj(1).obj("target").text("kind"))
+
+        val importedCalls = main.array("directImportedCalls")
+        assertEquals(1, importedCalls.size)
+        assertEquals(0, importedCalls.obj(0).int("targetFuncidx"))
+
+        val indirectCalls = main.array("indirectCalls")
+        assertEquals(1, indirectCalls.size)
+        assertEquals(0, indirectCalls.obj(0).int("typeidx"))
+        assertEquals(0, indirectCalls.obj(0).int("tableidx"))
+
+        val memoryWrites = main.array("directMemoryWrites")
+        assertEquals(1, memoryWrites.size)
+        assertEquals("i32.store", memoryWrites.obj(0).text("op"))
+        assertEquals(0, memoryWrites.obj(0).int("memoryOffset"))
     }
 
     fun testSearchFunctionsByNameReturnsImportAndExportMatches() {
@@ -218,7 +298,7 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals("increment", exportMatches.obj(0).text("exportName"))
         assertEquals(listOf("i32"), exportMatches.obj(0).obj("signature").array("params").map { it.textValue() })
         assertEquals(listOf("i32"), exportMatches.obj(0).obj("signature").array("results").map { it.textValue() })
-        assertEquals(listOf("num:i32"), exportMatches.obj(0).array("locals").map { it.textValue() })
+        assertEquals(listOf("i32"), exportMatches.obj(0).array("locals").map { it.textValue() })
         assertTrue(exportMatches.obj(0).long("offset") > 0)
     }
 
@@ -240,7 +320,7 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(1, functions.obj(0).int("funcidx"))
         assertEquals(1, functions.obj(0).array("locals").size)
         assertEquals(1, functions.obj(0).array("locals").obj(0).int("local"))
-        assertEquals("num:i32", functions.obj(0).array("locals").obj(0).text("type"))
+        assertEquals("i32", functions.obj(0).array("locals").obj(0).text("type"))
     }
 
     fun testGetLocalsForFunctionsProvidesStructuredContentForTypedResult() {

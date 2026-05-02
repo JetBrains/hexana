@@ -15,6 +15,7 @@ class HexanaToolsTest {
             listOf(
                 "disassemble_function",
                 "functions_for_indices",
+                "get_function_call_graph",
                 "get_globals_for_indices",
                 "get_instructions_for_functions",
                 "get_locals_for_functions",
@@ -65,6 +66,7 @@ class HexanaToolsTest {
                 "functions_for_indices",
                 "resolve_function_signature",
                 "disassemble_function",
+                "get_function_call_graph",
                 "search_functions_by_name",
                 "get_globals_for_indices",
                 "get_memory_for_indices",
@@ -171,6 +173,10 @@ class HexanaToolsTest {
         assertEquals(
             ToolInputPattern.Funcidx,
             HexanaTools.single { it.name == "disassemble_function" }.inputPattern,
+        )
+        assertEquals(
+            ToolInputPattern.Indices,
+            HexanaTools.single { it.name == "get_function_call_graph" }.inputPattern,
         )
         assertEquals(
             ToolInputPattern.FunctionNameSearch,
@@ -312,6 +318,14 @@ class HexanaToolsTest {
         val funcidx = spec.input.fields.single { it.name == "funcidx" }
         assertEquals(FieldType.Int32, funcidx.type)
         assertEquals(0, funcidx.minimum)
+    }
+
+    @Test
+    fun `get_function_call_graph composes wasm input with indices list`() {
+        val spec = HexanaTools.single { it.name == "get_function_call_graph" }
+        val indices = spec.input.fields.single { it.name == "indices" }
+        val element = (indices.type as FieldType.ListOf).element
+        assertEquals(FieldType.Int32, element)
     }
 
     @Test

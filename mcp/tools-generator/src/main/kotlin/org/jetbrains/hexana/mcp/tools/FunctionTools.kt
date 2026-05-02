@@ -28,6 +28,11 @@ val DisassembleFunctionInput = WasmInputClass.with("DisassembleFunctionInput") {
         .minimum(0)
 }
 
+val GetFunctionCallGraphInput = indicesInput(
+    "GetFunctionCallGraphInput",
+    "List of unified function indices (`funcidx`) whose direct call graph and effect summary should be returned.",
+)
+
 val SearchFunctionsByNameInput = WasmInputClass.with("SearchFunctionsByNameInput") {
     string("query")
         .describe("Case-insensitive substring to search in import, export, and debug function names.")
@@ -104,7 +109,7 @@ val DisassembleFunctionSignatureResultClass = class_("DisassembleFunctionSignatu
 
 val DisassembledLocalGroupResultClass = class_("DisassembledLocalGroupResult") {
     int("count").describe("Number of local slots in this grouped declaration.")
-    string("type").describe("Rendered local type (`num:i32`, `vec:v128`, reference types, etc.).")
+    string("type").describe("Local type (`i32`, `i64`, `v128`, reference types, etc.).")
 }
 
 val DisassembledInstructionResultClass = class_("DisassembledInstructionResult") {
@@ -118,7 +123,7 @@ val DisassembleFunctionResultClass = class_("DisassembleFunctionResult", kotlinP
     int("funcidx").describe("Funcidx in the unified function index space.")
     nullable("typeidx", of = int()).describe("Function type index, when resolved.")
     nullable("signature", of = DisassembleFunctionSignatureResultClass).describe("Parsed signature when available.")
-    list("locals", of = string()).describe("Grouped rendered local declarations for defined functions.")
+    list("locals", of = string()).describe("Grouped local types for defined functions.")
     list("localGroups", of = DisassembledLocalGroupResultClass)
         .describe("Grouped local declarations with declaration counts preserved.")
     boolean("isImported").describe("Whether this function is imported and has no body.")
@@ -131,6 +136,74 @@ val DisassembleFunctionResultClass = class_("DisassembleFunctionResult", kotlinP
     list("instructions", of = DisassembledInstructionResultClass).describe("Decoded instruction records.")
     nullable("wat", of = string()).describe("Best-effort WAT-style function text for defined functions.")
     nullable("hex", of = string()).describe("Raw code-entry bytes rendered as space-separated hex for defined functions.")
+}
+
+val FunctionCallGraphLocalResultClass = class_("FunctionCallGraphLocalResult") {
+    int("count").describe("Number of local slots in this grouped declaration.")
+    string("type").describe("Local type (`i32`, `i64`, `v128`, reference types, etc.).")
+}
+
+val FunctionCallTargetResultClass = class_("FunctionCallTargetResult") {
+    int("funcidx").describe("Resolved callee funcidx in the unified function index space.")
+    string("kind").describe("Callee origin: `import` or `local`.")
+    nullable("typeidx", of = int()).describe("Function type index, when resolved.")
+    nullable("signature", of = FunctionSignatureResultClass).describe("Parsed signature when available.")
+    nullable("importInfo", of = FunctionImportResultClass).serialName("import")
+        .describe("Import descriptor when the callee is imported.")
+    list("exportedAs", of = string()).describe("Export names pointing at the callee.")
+}
+
+val FunctionDirectCallResultClass = class_("FunctionDirectCallResult") {
+    string("op").describe("Call instruction mnemonic, for example `call` or `return_call`.")
+    string("text").describe("Full decoded call instruction text.")
+    nullable("offset", of = long()).describe("Instruction byte offset when the parser provides one.")
+    int("targetFuncidx").describe("Raw target funcidx encoded by the call instruction.")
+    nullable("target", of = FunctionCallTargetResultClass)
+        .describe("Resolved callee metadata when the target funcidx exists.")
+}
+
+val FunctionIndirectCallResultClass = class_("FunctionIndirectCallResult") {
+    string("op").describe("Indirect call instruction mnemonic, for example `call_indirect`.")
+    string("text").describe("Full decoded indirect call instruction text.")
+    nullable("offset", of = long()).describe("Instruction byte offset when the parser provides one.")
+    int("typeidx").describe("Function type index used by the indirect call.")
+    int("tableidx").describe("Table index used by the indirect call.")
+}
+
+val FunctionMemoryWriteResultClass = class_("FunctionMemoryWriteResult") {
+    string("op").describe("Memory-writing instruction mnemonic.")
+    string("text").describe("Full decoded memory-writing instruction text.")
+    nullable("offset", of = long()).describe("Instruction byte offset when the parser provides one.")
+    nullable("memoryOffset", of = int()).describe("Static memory offset from memarg for store-like instructions.")
+    nullable("alignment", of = int()).describe("Alignment from memarg for store-like instructions.")
+}
+
+val FunctionCallGraphResultClass = class_("FunctionCallGraphResult") {
+    int("funcidx").describe("Funcidx in the unified function index space.")
+    string("kind").describe("Function origin: `import` or `local`.")
+    nullable("typeidx", of = int()).describe("Function type index, when resolved.")
+    nullable("signature", of = FunctionSignatureResultClass).describe("Parsed signature when available.")
+    nullable("importInfo", of = FunctionImportResultClass).serialName("import")
+        .describe("Import descriptor when the function is imported.")
+    list("exportedAs", of = string()).describe("Export names pointing at this function.")
+    nullable("codeOffset", of = long()).describe("Byte offset of the code entry for defined functions.")
+    nullable("codeSize", of = long()).describe("Size of the code entry in bytes for defined functions.")
+    nullable("instructionCount", of = long()).describe("Number of decoded instructions in the body.")
+    list("locals", of = FunctionCallGraphLocalResultClass)
+        .describe("Grouped local declarations with declaration counts preserved.")
+    list("directCalls", of = FunctionDirectCallResultClass)
+        .describe("Direct `call` and `return_call` sites with resolved target metadata.")
+    list("directImportedCalls", of = FunctionDirectCallResultClass)
+        .describe("Subset of direct calls whose resolved target is an imported function.")
+    list("indirectCalls", of = FunctionIndirectCallResultClass)
+        .describe("Indirect call sites with type and table indices.")
+    list("directMemoryWrites", of = FunctionMemoryWriteResultClass)
+        .describe("Direct memory-writing instruction sites in this function body.")
+}
+
+val GetFunctionCallGraphResultClass = class_("GetFunctionCallGraphResult", kotlinPackage = MODEL_PACKAGE) {
+    list("functions", of = FunctionCallGraphResultClass)
+        .describe("Per-function direct call graph and memory-write summaries.")
 }
 
 val FunctionNameSearchSignatureResultClass = class_("FunctionNameSearchSignatureResult") {
@@ -146,7 +219,7 @@ val FunctionNameSearchResultClass = class_("FunctionNameSearchResult") {
     nullable("importName", of = string()).describe("Import field name for imported functions.")
     nullable("exportName", of = string()).describe("Export name for exported functions.")
     nullable("signature", of = FunctionNameSearchSignatureResultClass).describe("Parsed signature when available.")
-    list("locals", of = string()).describe("Rendered local types for defined functions.")
+    list("locals", of = string()).describe("Local types for defined functions.")
     string("repr").describe("Compact WAT-like function representation.")
     nullable("offset", of = long()).describe("Byte offset of the function body in the module.")
 }
@@ -171,7 +244,7 @@ val GetInstructionsForFunctionsResultClass = class_(
 
 val LocalDeclarationResultClass = class_("LocalDeclarationResult") {
     int("local").describe("Local slot index.")
-    string("type").describe("Local type (`i32`, `i64`, `f32`, `f64`, etc.).")
+    string("type").describe("Local type (`i32`, `i64`, `f32`, `f64`, `v128`, reference types, etc.).")
 }
 
 val FunctionLocalsResultClass = class_("FunctionLocalsResult") {
@@ -247,6 +320,19 @@ internal val FunctionTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.Funcidx
         output = DisassembleFunctionResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionDisassembly"
+    }
+
+    tool("get_function_call_graph") {
+        summary = "Return resolved direct calls and memory write sites for function indices."
+        guidance = """
+            Return a compact per-function call graph for requested unified WebAssembly `funcidx` values.
+            The result resolves direct `call` and `return_call` targets to import/export/signature metadata, separates imported callees, reports `call_indirect` sites, preserves grouped local counts, and lists direct memory-writing instructions.
+            Use this when a stack trace, export, log, or previous lookup identifies one or more function indices and you need production-oriented dependency/effect context without reading full disassembly.
+        """
+        input = GetFunctionCallGraphInput
+        inputPattern = ToolInputPattern.Indices
+        output = GetFunctionCallGraphResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionCallGraph"
     }
 
     tool("search_functions_by_name") {

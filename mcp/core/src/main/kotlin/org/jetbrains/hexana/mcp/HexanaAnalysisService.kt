@@ -11,6 +11,7 @@ import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
 import org.jetbrains.hexana.mcp.model.features.ListEnabledFeaturesResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.DisassembleFunctionResult
+import org.jetbrains.hexana.mcp.model.functions.GetFunctionCallGraphResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.ListCodeSectionOffsetsResult
@@ -44,6 +45,7 @@ interface HexanaAnalysisService {
     fun listCodeSectionOffsets(input: WasmInput): ListCodeSectionOffsetsResult
     fun resolveFunctionSignature(input: WasmInput, funcidx: Int): ResolveFunctionSignatureResult
     fun disassembleFunction(input: WasmInput, funcidx: Int): DisassembleFunctionResult
+    fun getFunctionCallGraph(input: WasmInput, indices: List<Int>): GetFunctionCallGraphResult
     fun searchFunctionsByName(input: WasmInput, query: String, limit: Int): SearchFunctionsByNameResult
     fun listExportedFunctions(input: WasmInput, entriesRange: IntRange): ListExportedFunctionsResult
     fun functionsForIndices(input: WasmInput, indices: List<Int>): FunctionsResult
@@ -133,6 +135,12 @@ class DefaultHexanaAnalysisService(
         requireIndices(listOf(funcidx))
         val wasm = load(input)
         return wasm.provider.readFunctionDisassembly(funcidx)
+    }
+
+    override fun getFunctionCallGraph(input: WasmInput, indices: List<Int>): GetFunctionCallGraphResult {
+        requireIndices(indices)
+        val wasm = load(input)
+        return wasm.provider.readFunctionCallGraph(indices)
     }
 
     override fun searchFunctionsByName(input: WasmInput, query: String, limit: Int): SearchFunctionsByNameResult {

@@ -18,6 +18,7 @@ private val HEXANA_TOOL_ORDER = listOf(
     "functions_for_indices",
     "resolve_function_signature",
     "disassemble_function",
+    "get_function_call_graph",
     "search_functions_by_name",
     "get_globals_for_indices",
     "get_memory_for_indices",

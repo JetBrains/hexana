@@ -5,7 +5,7 @@ import org.jetbrains.hexana.mcp.ParameterSignature
 import org.jetbrains.hexana.mcp.model.functions.FunctionNameSearchSignatureResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionNameSearchResult
 import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
-import org.jetbrains.hexana.mcp.renderedType
+import org.jetbrains.hexana.mcp.renderedMcpType
 import org.jetbrains.hexana.mcp.serializeLocals
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 
@@ -89,7 +89,7 @@ private fun FunctionNameCandidate.toResult(provider: WasmBinaryProvider): Functi
 }
 
 private fun List<org.jetbrains.hexana.wasm.sections.WasmCodeLocalRecord>?.localsAsRenderedTypes(): List<String> {
-    return serializeLocals().map { it.renderedType() }
+    return serializeLocals().map { it.renderedMcpType() }
 }
 
 private fun GeneralFunctionEntry.renderFunctionRepr(

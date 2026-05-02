@@ -48,6 +48,15 @@ class FunctionLocalsIndexMappingTest : WasmTest() {
         assertEquals("num:f64", LocalNum(1, WasmF64Type.code).renderedType())
     }
 
+    fun testMcpLocalTypeLabelsDoNotExposeInternalNamespaces() {
+        assertEquals("i32", LocalNum(1, WasmI32Type.code).renderedMcpType())
+        assertEquals("i64", LocalNum(1, WasmI64Type.code).renderedMcpType())
+        assertEquals("f32", LocalNum(1, WasmF32Type.code).renderedMcpType())
+        assertEquals("f64", LocalNum(1, WasmF64Type.code).renderedMcpType())
+        assertEquals("v128", LocalVec(1).renderedMcpType())
+        assertEquals("i8", LocalPackI8(1).renderedMcpType())
+    }
+
     private fun assertLocalNum(local: Local, count: Int, type: Byte) {
         assertTrue(local is LocalNum)
         local as LocalNum

@@ -10,6 +10,7 @@ import org.jetbrains.hexana.mcp.model.functions.DisassembleFunctionResult
 import org.jetbrains.hexana.mcp.model.functions.DisassembleFunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.functions.DisassembledInstructionResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionImportResult
+import org.jetbrains.hexana.mcp.renderedMcpType
 import org.jetbrains.hexana.mcp.renderedType
 import org.jetbrains.hexana.mcp.serializeLocals
 import org.jetbrains.hexana.mcp.watString
@@ -27,7 +28,7 @@ fun WasmBinaryProvider.readFunctionDisassembly(funcidx: Int): DisassembleFunctio
 
     val codeRecord = if (entry.import == null) getCodeRecordByIndex(funcidx - importFuncCount) else null
     val localGroups = codeRecord?.locals.serializeLocals()
-    val locals = localGroups.map { it.renderedType() }
+    val locals = localGroups.map { it.renderedMcpType() }
     val instructions = codeRecord?.opCodes.orEmpty().map { it.toDisassembledInstructionResult() }
 
     return DisassembleFunctionResult(
@@ -58,7 +59,7 @@ private fun ParameterSignature.toDisassembleFunctionSignatureResult(): Disassemb
 private fun Local.toDisassembledLocalGroupResult(): DisassembledLocalGroupResult {
     return DisassembledLocalGroupResult(
         count = count,
-        type = renderedType()
+        type = renderedMcpType()
     )
 }
 

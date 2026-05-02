@@ -53,6 +53,7 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   registerFunctionsForIndicesTool(handlers)
   registerResolveFunctionSignatureTool(handlers)
   registerDisassembleFunctionTool(handlers)
+  registerGetFunctionCallGraphTool(handlers)
   registerSearchFunctionsByNameTool(handlers)
   registerGetGlobalsForIndicesTool(handlers)
   registerGetMemoryForIndicesTool(handlers)
@@ -2396,7 +2397,7 @@ private fun Server.registerDisassembleFunctionTool(handlers: HexanaToolHandlers)
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Grouped rendered local declarations for defined functions."))
+        put("description", JsonPrimitive("Grouped local types for defined functions."))
       })
       put("localGroups", buildJsonObject {
         put("type", JsonPrimitive("array"))
@@ -2409,7 +2410,7 @@ private fun Server.registerDisassembleFunctionTool(handlers: HexanaToolHandlers)
             })
             put("type", buildJsonObject {
               put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Rendered local type (`num:i32`, `vec:v128`, reference types, etc.)."))
+              put("description", JsonPrimitive("Local type (`i32`, `i64`, `v128`, reference types, etc.)."))
             })
           })
           put("required", buildJsonArray {
@@ -2524,6 +2525,506 @@ private fun Server.registerDisassembleFunctionTool(handlers: HexanaToolHandlers)
   ),
   ))  {
     request: CallToolRequest -> handlers.disassembleFunction(request.arguments)
+  }
+}
+
+private fun Server.registerGetFunctionCallGraphTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "get_function_call_graph",
+    description = "Return resolved direct calls and memory write sites for function indices.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("indices", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+        })
+        put("description", JsonPrimitive("List of unified function indices (`funcidx`) whose direct call graph and effect summary should be returned."))
+      })
+    },
+    required = listOf("indices")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("functions", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("funcidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Funcidx in the unified function index space."))
+            })
+            put("kind", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Function origin: `import` or `local`."))
+            })
+            put("typeidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Function type index, when resolved."))
+            })
+            put("signature", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("params", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Parameter types, in declaration order."))
+                })
+                put("return", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Return types, in declaration order."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("params"))
+                add(JsonPrimitive("return"))
+              })
+              put("description", JsonPrimitive("Parsed signature when available."))
+            })
+            put("import", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("module", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Import module name."))
+                })
+                put("name", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Import field name."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("module"))
+                add(JsonPrimitive("name"))
+              })
+              put("description", JsonPrimitive("Import descriptor when the function is imported."))
+            })
+            put("exportedAs", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Export names pointing at this function."))
+            })
+            put("codeOffset", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Byte offset of the code entry for defined functions."))
+            })
+            put("codeSize", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Size of the code entry in bytes for defined functions."))
+            })
+            put("instructionCount", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Number of decoded instructions in the body."))
+            })
+            put("locals", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("count", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Number of local slots in this grouped declaration."))
+                  })
+                  put("type", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Local type (`i32`, `i64`, `v128`, reference types, etc.)."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("count"))
+                  add(JsonPrimitive("type"))
+                })
+              })
+              put("description", JsonPrimitive("Grouped local declarations with declaration counts preserved."))
+            })
+            put("directCalls", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("op", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Call instruction mnemonic, for example `call` or `return_call`."))
+                  })
+                  put("text", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Full decoded call instruction text."))
+                  })
+                  put("offset", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Instruction byte offset when the parser provides one."))
+                  })
+                  put("targetFuncidx", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Raw target funcidx encoded by the call instruction."))
+                  })
+                  put("target", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("object"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("properties", buildJsonObject {
+                      put("funcidx", buildJsonObject {
+                        put("type", JsonPrimitive("integer"))
+                        put("description", JsonPrimitive("Resolved callee funcidx in the unified function index space."))
+                      })
+                      put("kind", buildJsonObject {
+                        put("type", JsonPrimitive("string"))
+                        put("description", JsonPrimitive("Callee origin: `import` or `local`."))
+                      })
+                      put("typeidx", buildJsonObject {
+                        put("type", buildJsonArray {
+                          add(JsonPrimitive("integer"))
+                          add(JsonPrimitive("null"))
+                        })
+                        put("description", JsonPrimitive("Function type index, when resolved."))
+                      })
+                      put("signature", buildJsonObject {
+                        put("type", buildJsonArray {
+                          add(JsonPrimitive("object"))
+                          add(JsonPrimitive("null"))
+                        })
+                        put("properties", buildJsonObject {
+                          put("params", buildJsonObject {
+                            put("type", JsonPrimitive("array"))
+                            put("items", buildJsonObject {
+                              put("type", JsonPrimitive("string"))
+                            })
+                            put("description", JsonPrimitive("Parameter types, in declaration order."))
+                          })
+                          put("return", buildJsonObject {
+                            put("type", JsonPrimitive("array"))
+                            put("items", buildJsonObject {
+                              put("type", JsonPrimitive("string"))
+                            })
+                            put("description", JsonPrimitive("Return types, in declaration order."))
+                          })
+                        })
+                        put("required", buildJsonArray {
+                          add(JsonPrimitive("params"))
+                          add(JsonPrimitive("return"))
+                        })
+                        put("description", JsonPrimitive("Parsed signature when available."))
+                      })
+                      put("import", buildJsonObject {
+                        put("type", buildJsonArray {
+                          add(JsonPrimitive("object"))
+                          add(JsonPrimitive("null"))
+                        })
+                        put("properties", buildJsonObject {
+                          put("module", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
+                            put("description", JsonPrimitive("Import module name."))
+                          })
+                          put("name", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
+                            put("description", JsonPrimitive("Import field name."))
+                          })
+                        })
+                        put("required", buildJsonArray {
+                          add(JsonPrimitive("module"))
+                          add(JsonPrimitive("name"))
+                        })
+                        put("description", JsonPrimitive("Import descriptor when the callee is imported."))
+                      })
+                      put("exportedAs", buildJsonObject {
+                        put("type", JsonPrimitive("array"))
+                        put("items", buildJsonObject {
+                          put("type", JsonPrimitive("string"))
+                        })
+                        put("description", JsonPrimitive("Export names pointing at the callee."))
+                      })
+                    })
+                    put("required", buildJsonArray {
+                      add(JsonPrimitive("funcidx"))
+                      add(JsonPrimitive("kind"))
+                      add(JsonPrimitive("exportedAs"))
+                    })
+                    put("description", JsonPrimitive("Resolved callee metadata when the target funcidx exists."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("op"))
+                  add(JsonPrimitive("text"))
+                  add(JsonPrimitive("targetFuncidx"))
+                })
+              })
+              put("description", JsonPrimitive("Direct `call` and `return_call` sites with resolved target metadata."))
+            })
+            put("directImportedCalls", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("op", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Call instruction mnemonic, for example `call` or `return_call`."))
+                  })
+                  put("text", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Full decoded call instruction text."))
+                  })
+                  put("offset", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Instruction byte offset when the parser provides one."))
+                  })
+                  put("targetFuncidx", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Raw target funcidx encoded by the call instruction."))
+                  })
+                  put("target", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("object"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("properties", buildJsonObject {
+                      put("funcidx", buildJsonObject {
+                        put("type", JsonPrimitive("integer"))
+                        put("description", JsonPrimitive("Resolved callee funcidx in the unified function index space."))
+                      })
+                      put("kind", buildJsonObject {
+                        put("type", JsonPrimitive("string"))
+                        put("description", JsonPrimitive("Callee origin: `import` or `local`."))
+                      })
+                      put("typeidx", buildJsonObject {
+                        put("type", buildJsonArray {
+                          add(JsonPrimitive("integer"))
+                          add(JsonPrimitive("null"))
+                        })
+                        put("description", JsonPrimitive("Function type index, when resolved."))
+                      })
+                      put("signature", buildJsonObject {
+                        put("type", buildJsonArray {
+                          add(JsonPrimitive("object"))
+                          add(JsonPrimitive("null"))
+                        })
+                        put("properties", buildJsonObject {
+                          put("params", buildJsonObject {
+                            put("type", JsonPrimitive("array"))
+                            put("items", buildJsonObject {
+                              put("type", JsonPrimitive("string"))
+                            })
+                            put("description", JsonPrimitive("Parameter types, in declaration order."))
+                          })
+                          put("return", buildJsonObject {
+                            put("type", JsonPrimitive("array"))
+                            put("items", buildJsonObject {
+                              put("type", JsonPrimitive("string"))
+                            })
+                            put("description", JsonPrimitive("Return types, in declaration order."))
+                          })
+                        })
+                        put("required", buildJsonArray {
+                          add(JsonPrimitive("params"))
+                          add(JsonPrimitive("return"))
+                        })
+                        put("description", JsonPrimitive("Parsed signature when available."))
+                      })
+                      put("import", buildJsonObject {
+                        put("type", buildJsonArray {
+                          add(JsonPrimitive("object"))
+                          add(JsonPrimitive("null"))
+                        })
+                        put("properties", buildJsonObject {
+                          put("module", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
+                            put("description", JsonPrimitive("Import module name."))
+                          })
+                          put("name", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
+                            put("description", JsonPrimitive("Import field name."))
+                          })
+                        })
+                        put("required", buildJsonArray {
+                          add(JsonPrimitive("module"))
+                          add(JsonPrimitive("name"))
+                        })
+                        put("description", JsonPrimitive("Import descriptor when the callee is imported."))
+                      })
+                      put("exportedAs", buildJsonObject {
+                        put("type", JsonPrimitive("array"))
+                        put("items", buildJsonObject {
+                          put("type", JsonPrimitive("string"))
+                        })
+                        put("description", JsonPrimitive("Export names pointing at the callee."))
+                      })
+                    })
+                    put("required", buildJsonArray {
+                      add(JsonPrimitive("funcidx"))
+                      add(JsonPrimitive("kind"))
+                      add(JsonPrimitive("exportedAs"))
+                    })
+                    put("description", JsonPrimitive("Resolved callee metadata when the target funcidx exists."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("op"))
+                  add(JsonPrimitive("text"))
+                  add(JsonPrimitive("targetFuncidx"))
+                })
+              })
+              put("description", JsonPrimitive("Subset of direct calls whose resolved target is an imported function."))
+            })
+            put("indirectCalls", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("op", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Indirect call instruction mnemonic, for example `call_indirect`."))
+                  })
+                  put("text", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Full decoded indirect call instruction text."))
+                  })
+                  put("offset", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Instruction byte offset when the parser provides one."))
+                  })
+                  put("typeidx", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Function type index used by the indirect call."))
+                  })
+                  put("tableidx", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Table index used by the indirect call."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("op"))
+                  add(JsonPrimitive("text"))
+                  add(JsonPrimitive("typeidx"))
+                  add(JsonPrimitive("tableidx"))
+                })
+              })
+              put("description", JsonPrimitive("Indirect call sites with type and table indices."))
+            })
+            put("directMemoryWrites", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("op", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Memory-writing instruction mnemonic."))
+                  })
+                  put("text", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Full decoded memory-writing instruction text."))
+                  })
+                  put("offset", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Instruction byte offset when the parser provides one."))
+                  })
+                  put("memoryOffset", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Static memory offset from memarg for store-like instructions."))
+                  })
+                  put("alignment", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Alignment from memarg for store-like instructions."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("op"))
+                  add(JsonPrimitive("text"))
+                })
+              })
+              put("description", JsonPrimitive("Direct memory-writing instruction sites in this function body."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("funcidx"))
+            add(JsonPrimitive("kind"))
+            add(JsonPrimitive("exportedAs"))
+            add(JsonPrimitive("locals"))
+            add(JsonPrimitive("directCalls"))
+            add(JsonPrimitive("directImportedCalls"))
+            add(JsonPrimitive("indirectCalls"))
+            add(JsonPrimitive("directMemoryWrites"))
+          })
+        })
+        put("description", JsonPrimitive("Per-function direct call graph and memory-write summaries."))
+      })
+    },
+    required = listOf("functions")
+  ),
+  ))  {
+    request: CallToolRequest -> handlers.getFunctionCallGraph(request.arguments)
   }
 }
 
@@ -2648,7 +3149,7 @@ private fun Server.registerSearchFunctionsByNameTool(handlers: HexanaToolHandler
               put("items", buildJsonObject {
                 put("type", JsonPrimitive("string"))
               })
-              put("description", JsonPrimitive("Rendered local types for defined functions."))
+              put("description", JsonPrimitive("Local types for defined functions."))
             })
             put("repr", buildJsonObject {
               put("type", JsonPrimitive("string"))
@@ -3147,7 +3648,7 @@ private fun Server.registerGetLocalsForFunctionsTool(handlers: HexanaToolHandler
                   })
                   put("type", buildJsonObject {
                     put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Local type (`i32`, `i64`, `f32`, `f64`, etc.)."))
+                    put("description", JsonPrimitive("Local type (`i32`, `i64`, `f32`, `f64`, `v128`, reference types, etc.)."))
                   })
                 })
                 put("required", buildJsonArray {

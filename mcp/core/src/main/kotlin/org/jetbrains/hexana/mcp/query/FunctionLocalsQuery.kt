@@ -6,7 +6,7 @@ import org.jetbrains.hexana.mcp.model.functions.FunctionLocalsResult
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.LocalDeclarationResult
 import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.mcp.renderedType
+import org.jetbrains.hexana.mcp.renderedMcpType
 
 fun WasmBinaryProvider.readLocalsForFunctions(
     indices: List<Int>
@@ -26,6 +26,6 @@ private fun LocalsByFunction.toFunctionLocalsResult(): FunctionLocalsResult {
 private fun Local.toLocalDeclarationResult(): LocalDeclarationResult {
     return LocalDeclarationResult(
         local = count,
-        type = renderedType()
+        type = renderedMcpType()
     )
 }

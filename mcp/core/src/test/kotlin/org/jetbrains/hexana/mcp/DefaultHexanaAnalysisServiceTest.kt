@@ -224,7 +224,7 @@ class DefaultHexanaAnalysisServiceTest {
         assertEquals(1, dataSegments.summary.totalSegments)
         assertEquals(0, selectedMemory.memories.single().memoryIdx)
         assertEquals("func", selectedTypes.types.single().kind)
-        assertEquals("num:i32", locals.functions.single().locals.single().type)
+        assertEquals("i32", locals.functions.single().locals.single().type)
         assertTrue(instructions.functions.single().instructions.contains("call 0"))
         assertEquals("1", elements.segments.single().elements!!.single())
     }

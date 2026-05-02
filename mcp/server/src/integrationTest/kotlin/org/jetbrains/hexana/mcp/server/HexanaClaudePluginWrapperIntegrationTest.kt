@@ -67,6 +67,7 @@ class HexanaClaudePluginWrapperIntegrationTest {
                 listOf(
                     "disassemble_function",
                     "functions_for_indices",
+                    "get_function_call_graph",
                     "get_globals_for_indices",
                     "get_instructions_for_functions",
                     "get_locals_for_functions",

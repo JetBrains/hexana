@@ -169,6 +169,7 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
             "list_code_section_offsets",
             "resolve_function_signature",
             "disassemble_function",
+            "get_function_call_graph",
             "search_functions_by_name",
             "list_data",
             "list_exports",

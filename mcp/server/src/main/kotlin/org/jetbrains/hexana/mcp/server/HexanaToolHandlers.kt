@@ -88,6 +88,15 @@ class HexanaToolHandlers(
         }
     }
 
+    fun getFunctionCallGraph(arguments: JsonObject?): CallToolResult {
+        return execute("get_function_call_graph") {
+            analysisService.getFunctionCallGraph(
+                input = wasmInput(arguments),
+                indices = arguments.requireIntList("indices")
+            )
+        }
+    }
+
     fun searchFunctionsByName(arguments: JsonObject?): CallToolResult {
         return execute("search_functions_by_name") {
             analysisService.searchFunctionsByName(
