@@ -27,6 +27,21 @@ class HexanaStdioIntegrationTest {
     val temporaryFolder = TemporaryFolder()
 
     @Test
+    fun installedServerVersionCommandExitsPromptly() = runBlocking {
+        val result = HexanaInstalledStdioClient.runCommand(StdioLauncher.Server, "version")
+
+        assertFalse(
+            result.timedOut,
+            "Version command timed out. stdout=${result.stdout}, stderr=${result.stderr}, command=${result.command}"
+        )
+        assertEquals(0, result.exitCode, "stderr=${result.stderr}")
+        assertTrue(
+            result.stdout.trim().matches(Regex("""hexana-mcp \S+""")),
+            "Unexpected version output: ${result.stdout}"
+        )
+    }
+
+    @Test
     fun installedServerSupportsListToolsAndToolCallsOverStdio() = runBlocking {
         KotlinLoggingConfiguration.logStartupMessage = false
         withInstalledStdioClient { server ->

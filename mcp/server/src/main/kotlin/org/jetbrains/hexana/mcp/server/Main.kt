@@ -36,14 +36,14 @@ fun main(args: Array<String>) {
 
     developmentVersionWarning(command, version)?.let(logger::warn)
 
-    initializeAnalytics(command)
-
     try {
-        when (command) {
-            is HexanaCommand.Help -> println(cli.helpText())
-            is HexanaCommand.Version -> println("hexana-mcp $version")
-            is HexanaCommand.Stdio -> runBlocking { runStdio(command) }
-            is HexanaCommand.Http -> runBlocking { runHttp(command) }
+        withCommandAnalytics(command) {
+            when (command) {
+                is HexanaCommand.Help -> println(cli.helpText())
+                is HexanaCommand.Version -> println("hexana-mcp $version")
+                is HexanaCommand.Stdio -> runBlocking { runStdio(command) }
+                is HexanaCommand.Http -> runBlocking { runHttp(command) }
+            }
         }
     } catch (error: Throwable) {
         if (error is VirtualMachineError || error is LinkageError) {
@@ -63,6 +63,40 @@ fun main(args: Array<String>) {
     }
 }
 
+private data class CommandAnalytics(
+    val analyticsKey: String?,
+    val transport: HexanaEvent.McpTransport,
+)
+
+private inline fun withCommandAnalytics(command: HexanaCommand, block: () -> Unit) {
+    val analytics = command.analytics() ?: run {
+        block()
+        return
+    }
+
+    initializeAnalytics(analytics)
+    try {
+        block()
+    } finally {
+        HexanaAnalytics.shutdown()
+    }
+}
+
+private fun HexanaCommand.analytics(): CommandAnalytics? = when (this) {
+    is HexanaCommand.Stdio -> CommandAnalytics(
+        analyticsKey = analyticsKey,
+        transport = HexanaEvent.McpTransport.STDIO,
+    )
+
+    is HexanaCommand.Http -> CommandAnalytics(
+        analyticsKey = analyticsKey,
+        transport = HexanaEvent.McpTransport.HTTP,
+    )
+
+    is HexanaCommand.Help,
+    is HexanaCommand.Version -> null
+}
+
 internal fun developmentVersionWarning(command: HexanaCommand, version: String): String? {
     if (version != "dev") {
         return null
@@ -79,26 +113,15 @@ internal fun developmentVersionWarning(command: HexanaCommand, version: String):
     }
 }
 
-private fun initializeAnalytics(command: HexanaCommand) {
-    val analyticsKey = when (command) {
-        is HexanaCommand.Stdio -> command.analyticsKey
-        is HexanaCommand.Http -> command.analyticsKey
-        else -> null
-    }
-
+private fun initializeAnalytics(analytics: CommandAnalytics) {
     HexanaAnalytics.initialize(
-        config = AnalyticsConfig(apiKey = analyticsKey ?: AnalyticsConfig.DEFAULT_API_KEY),
+        config = AnalyticsConfig(apiKey = analytics.analyticsKey ?: AnalyticsConfig.DEFAULT_API_KEY),
         consentProvider = ConsentProvider { true },
         distinctIdProvider = UuidDistinctIdProvider()
     )
 
-    val transport = when (command) {
-        is HexanaCommand.Stdio -> HexanaEvent.McpTransport.STDIO
-        is HexanaCommand.Http -> HexanaEvent.McpTransport.HTTP
-        else -> return
-    }
     HexanaAnalytics.client.capture(
-        HexanaEvent.McpServerStarted(transport = transport, embeddedInIde = false)
+        HexanaEvent.McpServerStarted(transport = analytics.transport, embeddedInIde = false)
     )
 
     Runtime.getRuntime().addShutdownHook(Thread {

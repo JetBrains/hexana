@@ -83,6 +83,7 @@ internal class HexanaInstalledStdioClient private constructor(
 
     companion object {
         private const val CONNECT_TIMEOUT_MILLIS = 20_000L
+        private const val COMMAND_TIMEOUT_SECONDS = 5L
 
         private val logger = LoggerFactory.getLogger(HexanaInstalledStdioClient::class.java)
 
@@ -91,7 +92,11 @@ internal class HexanaInstalledStdioClient private constructor(
             launcher: StdioLauncher = StdioLauncher.Server,
         ): HexanaInstalledStdioClient {
             val installDir = integrationInstallDir(launcher.installDirSystemProperty)
-            val command = buildCommand(installDir, logLevel, launcher)
+            val command = buildCommand(
+                installDir = installDir,
+                launcher = launcher,
+                arguments = listOf("stdio", "--log-level", logLevel.cliValue())
+            )
             logger.info(
                 "Starting installed stdio server from {} with logLevel={} command={}",
                 installDir,
@@ -149,6 +154,50 @@ internal class HexanaInstalledStdioClient private constructor(
             }
         }
 
+        suspend fun runCommand(
+            launcher: StdioLauncher,
+            vararg arguments: String
+        ): InstalledCommandResult {
+            val installDir = integrationInstallDir(launcher.installDirSystemProperty)
+            val command = buildCommand(
+                installDir = installDir,
+                launcher = launcher,
+                arguments = arguments.toList()
+            )
+            logger.info("Starting installed command from {} command={}", installDir, command.joinToString(" "))
+
+            val process = withContext(Dispatchers.IO) {
+                ProcessBuilder(command)
+                    .directory(installDir.toFile())
+                    .useCurrentJvm(logger)
+                    .start()
+            }
+            val completed = withContext(Dispatchers.IO) {
+                process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            }
+            if (!completed) {
+                logger.warn(
+                    "Installed command did not exit within {}s, forcing pid={}",
+                    COMMAND_TIMEOUT_SECONDS,
+                    process.pid()
+                )
+                withContext(Dispatchers.IO) {
+                    process.destroyForcibly()
+                    process.waitFor()
+                }
+            }
+
+            val stdout = withContext(Dispatchers.IO) { process.inputStream.bufferedReader().readText() }
+            val stderr = withContext(Dispatchers.IO) { process.errorStream.bufferedReader().readText() }
+            return InstalledCommandResult(
+                command = command,
+                exitCode = process.exitValue(),
+                stdout = stdout,
+                stderr = stderr,
+                timedOut = !completed,
+            )
+        }
+
         private fun integrationInstallDir(systemPropertyName: String): Path {
             val rawPath = System.getProperty(systemPropertyName)
                 ?: error("Missing `$systemPropertyName` system property")
@@ -159,25 +208,17 @@ internal class HexanaInstalledStdioClient private constructor(
 
         private fun buildCommand(
             installDir: Path,
-            logLevel: HexanaLogLevel,
             launcher: StdioLauncher,
+            arguments: List<String>,
         ): List<String> {
             return if (isWindows()) {
                 listOf(
                     "cmd.exe",
                     "/c",
                     installDir.resolve(launcher.windowsRelativePath).toString(),
-                    "stdio",
-                    "--log-level",
-                    logLevel.cliValue()
-                )
+                ) + arguments
             } else {
-                listOf(
-                    installDir.resolve(launcher.unixRelativePath).toString(),
-                    "stdio",
-                    "--log-level",
-                    logLevel.cliValue()
-                )
+                listOf(installDir.resolve(launcher.unixRelativePath).toString()) + arguments
             }
         }
 
@@ -215,6 +256,14 @@ internal class HexanaInstalledStdioClient private constructor(
         }
     }
 }
+
+internal data class InstalledCommandResult(
+    val command: List<String>,
+    val exitCode: Int,
+    val stdout: String,
+    val stderr: String,
+    val timedOut: Boolean,
+)
 
 internal suspend inline fun <T> withInstalledStdioClient(
     logLevel: HexanaLogLevel = HexanaLogLevel.INFO,

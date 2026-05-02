@@ -23,6 +23,21 @@ class HexanaClaudePluginWrapperIntegrationTest {
     val temporaryFolder = TemporaryFolder()
 
     @Test
+    fun assembledClaudePluginVersionCommandExitsPromptly() = runBlocking {
+        val result = HexanaInstalledStdioClient.runCommand(StdioLauncher.ClaudePluginWrapper, "version")
+
+        assertFalse(
+            result.timedOut,
+            "Version command timed out. stdout=${result.stdout}, stderr=${result.stderr}, command=${result.command}"
+        )
+        assertEquals(0, result.exitCode, "stderr=${result.stderr}")
+        assertTrue(
+            result.stdout.trim().matches(Regex("""hexana-mcp \S+""")),
+            "Unexpected version output: ${result.stdout}"
+        )
+    }
+
+    @Test
     fun assembledClaudePluginExposesAllToolsOverStdio() = runBlocking {
         KotlinLoggingConfiguration.logStartupMessage = false
         withInstalledStdioClient(launcher = StdioLauncher.ClaudePluginWrapper) { server ->
