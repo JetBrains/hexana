@@ -3,7 +3,8 @@
 This module is the single source of truth for Hexana MCP tool definitions. Two KotlinPoet generators consume the same
 DSL and emit checked-in Kotlin files into the two consumers:
 
-- `idea-plugin/src/main/gen/org/jetbrains/hexana/mcp/HexanaToolset.kt` — `McpToolset` with 27 `@McpTool` methods, consumed
+- `idea-plugin/src/main/gen/org/jetbrains/hexana/mcp/HexanaToolset.kt` — `McpToolset` with the generated Hexana
+  `@McpTool` methods, consumed
   by `plugin.xml`.
 - `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` — `Server.registerHexanaTools(handlers)`
   extension for the standalone MCP runtime.
@@ -49,8 +50,9 @@ reviewed with the DSL change.
 
 ## Guidance prose conventions
 
-- Reference tool names with backticks in summaries and guidance: `` `list_imports` ``, `` `get_instructions_for_functions` ``.
-- Same convention for field names the caller has to pass: `` `entriesRange` ``, `` `funcidx` ``, `` `from` `` / `` `to` ``.
+- Reference tool names with backticks in summaries and guidance: `` `query_artifacts` ``.
+- Same convention for field names the caller has to pass: `` `operation` ``, `` `entityTypes` ``, `` `query` ``,
+  `` `baselinePath` ``, and `` `startFuncidx` ``.
 - Summaries are one line and already used standalone by some UIs — do not repeat them verbatim in the `guidance` block.
 - Wrap multi-line guidance with a triple-quoted string and rely on the DSL's `trimIndent().trim()`; do not manually indent.
 

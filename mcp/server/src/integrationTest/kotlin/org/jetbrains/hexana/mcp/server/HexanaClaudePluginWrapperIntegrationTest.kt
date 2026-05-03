@@ -4,6 +4,8 @@ import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
 import io.modelcontextprotocol.kotlin.sdk.types.ListToolsRequest
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.int
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
@@ -63,38 +65,7 @@ class HexanaClaudePluginWrapperIntegrationTest {
             val tools = server.client.listTools(ListToolsRequest())
             val toolNames = tools.tools.map { it.name }.sorted()
             logger.info("{} wrapper tools: {}", clientLabel, toolNames)
-            assertEquals(
-                listOf(
-                    "disassemble_function",
-                    "functions_for_indices",
-                    "get_function_call_graph",
-                    "get_globals_for_indices",
-                    "get_instructions_for_functions",
-                    "get_locals_for_functions",
-                    "get_memory_for_indices",
-                    "get_types_for_indices",
-                    "list_code_section_offsets",
-                    "list_custom_sections",
-                    "list_data",
-                    "list_data_segments",
-                    "list_element_segments",
-                    "list_enabled_features",
-                    "list_exported_functions",
-                    "list_exports",
-                    "list_functions",
-                    "list_globals",
-                    "list_imports",
-                    "list_memory",
-                    "list_reference_types",
-                    "list_types",
-                    "list_value_types",
-                    "resolve_function_signature",
-                    "search_exports",
-                    "search_functions_by_name",
-                    "summarize_module"
-                ),
-                toolNames
-            )
+            assertEquals(listOf("query_artifacts"), toolNames)
 
             val wasm = temporaryFolder.newFile("claude-wrapper-summary.wasm").toPath().also {
                 Files.write(it, wat2wasm(
@@ -107,14 +78,24 @@ class HexanaClaudePluginWrapperIntegrationTest {
             }
 
             val summary = server.client.callTool(
-                name = "summarize_module",
-                arguments = mapOf("path" to wasm.toString()),
+                name = "query_artifacts",
+                arguments = mapOf("path" to wasm.toString(), "operation" to "overview"),
                 meta = emptyMap()
             )
             assertFalse(summary.isError == true)
             val summaryText = summary.content.single() as TextContent
-            logger.info("{} wrapper summarize_module payload: {}", clientLabel, summaryText.text)
-            assertEquals(1, summary.structuredContent?.get("functions")?.jsonPrimitive?.int)
+            logger.info("{} wrapper query_artifacts payload: {}", clientLabel, summaryText.text)
+            assertEquals(
+                1,
+                summary.structuredContent
+                    ?.get("modules")
+                    ?.jsonArray
+                    ?.first()
+                    ?.jsonObject
+                    ?.get("functions")
+                    ?.jsonPrimitive
+                    ?.int
+            )
 
             assertTrue(
                 server.stderr.contains("Starting stdio MCP transport"),

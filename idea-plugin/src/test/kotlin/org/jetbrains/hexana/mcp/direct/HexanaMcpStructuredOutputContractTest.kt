@@ -21,11 +21,11 @@ class HexanaMcpStructuredOutputContractTest : HexanaMcpToolsetDirectTestBase() {
                 """.trimIndent()
             )
 
-            val rawResult = findRawTool("summarize_module").call(jsonPath(fixture.projectRelativePath))
-            assertFalse("summarize_module returned an MCP error", rawResult.isError)
+            val rawResult = findRawTool("query_artifacts").call(jsonPath(fixture.projectRelativePath))
+            assertFalse("query_artifacts returned an MCP error", rawResult.isError)
 
             val structuredContent = (rawResult.structuredContent
-                ?: fail("Expected structuredContent to be present for summarize_module")) as kotlinx.serialization.json.JsonObject
+                ?: fail("Expected structuredContent to be present for query_artifacts")) as kotlinx.serialization.json.JsonObject
 
             val sdkJsonObjectClass = Class.forName(
                 "kotlinx.serialization.json.JsonObject",
@@ -42,7 +42,7 @@ class HexanaMcpStructuredOutputContractTest : HexanaMcpToolsetDirectTestBase() {
             val encoded = sdkJson.encodeToString(CallToolResult.serializer(), sdkResult)
 
             assertTrue(encoded, encoded.contains("\"structuredContent\""))
-            assertTrue(encoded, encoded.contains("\"types\""))
+            assertTrue(encoded, encoded.contains("\"modules\""))
             assertTrue(encoded, encoded.contains("\"moduleSize\""))
         }
     }

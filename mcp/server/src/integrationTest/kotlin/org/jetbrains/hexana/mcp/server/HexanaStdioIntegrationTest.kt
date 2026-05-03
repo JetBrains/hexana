@@ -50,38 +50,7 @@ class HexanaStdioIntegrationTest {
             logger.info("Requesting tools/list over stdio")
             val tools = server.client.listTools(ListToolsRequest())
             logger.info("Received tools over stdio: {}", tools.tools.map { it.name }.sorted())
-            assertEquals(
-                listOf(
-                    "disassemble_function",
-                    "functions_for_indices",
-                    "get_function_call_graph",
-                    "get_globals_for_indices",
-                    "get_instructions_for_functions",
-                    "get_locals_for_functions",
-                    "get_memory_for_indices",
-                    "get_types_for_indices",
-                    "list_code_section_offsets",
-                    "list_custom_sections",
-                    "list_data",
-                    "list_data_segments",
-                    "list_element_segments",
-                    "list_enabled_features",
-                    "list_exported_functions",
-                    "list_exports",
-                    "list_functions",
-                    "list_globals",
-                    "list_imports",
-                    "list_memory",
-                    "list_reference_types",
-                    "list_types",
-                    "list_value_types",
-                    "resolve_function_signature",
-                    "search_exports",
-                    "search_functions_by_name",
-                    "summarize_module"
-                ),
-                tools.tools.map { it.name }.sorted()
-            )
+            assertEquals(listOf("query_artifacts"), tools.tools.map { it.name }.sorted())
 
             val wasm = createWasmFile(
                 "stdio-summary.wasm",
@@ -93,73 +62,61 @@ class HexanaStdioIntegrationTest {
             )
             logger.info("Created stdio wasm fixture at {}", wasm)
 
-            logger.info("Requesting summarize_module over stdio")
-            val summaryResult = server.client.callTool(
-                name = "summarize_module",
-                arguments = mapOf("path" to wasm.toString()),
+            logger.info("Requesting query_artifacts overview over stdio")
+            val overviewResult = server.client.callTool(
+                name = "query_artifacts",
+                arguments = mapOf("path" to wasm.toString(), "operation" to "overview"),
                 meta = emptyMap<String, Any?>()
             )
             logger.info(
-                "Received summarize_module result over stdio isError={}, contentBlocks={}",
-                summaryResult.isError,
-                summaryResult.content.size
+                "Received query_artifacts overview result over stdio isError={}, contentBlocks={}",
+                overviewResult.isError,
+                overviewResult.content.size
             )
-            assertFalse(summaryResult.isError == true)
-            val summaryText = summaryResult.content.single() as TextContent
-            logger.info("Summarize module text payload over stdio: {}", summaryText.text)
-            assertJsonTextMatchesStructured(summaryResult)
-            assertEquals(1, summaryResult.structuredContent?.get("functions")?.jsonPrimitive?.int)
+            assertFalse(overviewResult.isError == true)
+            val overviewText = overviewResult.content.single() as TextContent
+            logger.info("Query artifacts overview text payload over stdio: {}", overviewText.text)
+            assertJsonTextMatchesStructured(overviewResult)
+            assertEquals(
+                1,
+                overviewResult.structuredContent
+                    ?.get("modules")
+                    ?.jsonArray
+                    ?.first()
+                    ?.jsonObject
+                    ?.get("functions")
+                    ?.jsonPrimitive
+                    ?.int
+            )
 
-            logger.info("Requesting list_memory over stdio")
+            logger.info("Requesting query_artifacts memory find over stdio")
             val memoryResult = server.client.callTool(
-                name = "list_memory",
-                arguments = mapOf("path" to wasm.toString()),
+                name = "query_artifacts",
+                arguments = mapOf(
+                    "path" to wasm.toString(),
+                    "operation" to "find",
+                    "entityTypes" to listOf("memory"),
+                    "limit" to 5,
+                ),
                 meta = emptyMap<String, Any?>()
             )
             logger.info(
-                "Received list_memory result over stdio isError={}, contentBlocks={}",
+                "Received query_artifacts memory result over stdio isError={}, contentBlocks={}",
                 memoryResult.isError,
                 memoryResult.content.size
             )
             assertFalse(memoryResult.isError == true)
             val memoryText = memoryResult.content.single() as TextContent
-            logger.info("List memory text payload over stdio: {}", memoryText.text)
+            logger.info("Query artifacts memory text payload over stdio: {}", memoryText.text)
             assertJsonTextMatchesStructured(memoryResult)
             assertEquals(
                 0,
                 memoryResult.structuredContent
-                    ?.get("memories")
+                    ?.get("records")
                     ?.jsonArray
                     ?.first()
                     ?.jsonObject
-                    ?.get("memoryIdx")
-                    ?.jsonPrimitive
-                    ?.int
-            )
-
-            logger.info("Requesting functions_for_indices over stdio")
-            val functionsResult = server.client.callTool(
-                name = "functions_for_indices",
-                arguments = mapOf("path" to wasm.toString(), "indices" to listOf(0)),
-                meta = emptyMap<String, Any?>()
-            )
-            logger.info(
-                "Received functions_for_indices result over stdio isError={}, contentBlocks={}",
-                functionsResult.isError,
-                functionsResult.content.size
-            )
-            assertFalse(functionsResult.isError == true)
-            val functionsText = functionsResult.content.single() as TextContent
-            logger.info("Functions for indices text payload over stdio: {}", functionsText.text)
-            assertJsonTextMatchesStructured(functionsResult)
-            assertEquals(
-                0,
-                functionsResult.structuredContent
-                    ?.get("functions")
-                    ?.jsonArray
-                    ?.first()
-                    ?.jsonObject
-                    ?.get("funcidx")
+                    ?.get("index")
                     ?.jsonPrimitive
                     ?.int
             )

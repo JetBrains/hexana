@@ -9,11 +9,38 @@ import org.jetbrains.hexana.mcp.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
+private const val LEGACY_SEARCH_EXPORTS_LIMIT = 50
+private const val LEGACY_LIST_FUNCTIONS_OFFSET = 0
+private const val LEGACY_LIST_FUNCTIONS_LIMIT = 200
+private const val LEGACY_SEARCH_FUNCTIONS_BY_NAME_LIMIT = 50
+private const val LEGACY_LIST_DATA_SEGMENTS_INCLUDE_EXPORTS = false
+private const val LEGACY_LIST_DATA_SEGMENTS_INCLUDE_GLOBALS = true
+
 class HexanaToolHandlers(
     private val analysisService: HexanaAnalysisService = HexanaAnalysisServices.default,
     private val maxInlineInputBytes: Int = HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES,
     private val logger: Logger = LoggerFactory.getLogger(HexanaToolHandlers::class.java)
 ) {
+    fun queryArtifacts(arguments: JsonObject?): CallToolResult {
+        return execute("query_artifacts") {
+            analysisService.queryArtifacts(
+                input = wasmInput(arguments),
+                baselineInput = arguments.optionalNonBlankString("baselinePath")?.let(WasmInput::FilePath),
+                operation = arguments.stringOrDefault(
+                    "operation",
+                    HexanaToolInputDefaults.QUERY_ARTIFACTS_OPERATION
+                ),
+                entityTypes = arguments.optionalStringList("entityTypes").orEmpty(),
+                query = arguments.optionalStringList("query").orEmpty(),
+                startName = arguments.optionalNonBlankString("startName"),
+                startFuncidx = arguments.nullableInt("startFuncidx"),
+                relations = arguments.optionalStringList("relations").orEmpty(),
+                limit = arguments.intOrDefault("limit", HexanaToolInputDefaults.QUERY_ARTIFACTS_LIMIT),
+                detail = arguments.stringOrDefault("detail", HexanaToolInputDefaults.QUERY_ARTIFACTS_DETAIL)
+            )
+        }
+    }
+
     fun summarizeModule(arguments: JsonObject?): CallToolResult {
         return execute("summarize_module") {
             analysisService.summarizeModule(wasmInput(arguments))
@@ -49,7 +76,7 @@ class HexanaToolHandlers(
             analysisService.searchExports(
                 input = wasmInput(arguments),
                 query = arguments.requireStringList("query"),
-                limit = arguments.intOrDefault("limit", HexanaToolInputDefaults.SEARCH_EXPORTS_LIMIT)
+                limit = arguments.intOrDefault("limit", LEGACY_SEARCH_EXPORTS_LIMIT)
             )
         }
     }
@@ -58,8 +85,8 @@ class HexanaToolHandlers(
         return execute("list_functions") {
             analysisService.listFunctions(
                 input = wasmInput(arguments),
-                offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.LIST_FUNCTIONS_OFFSET),
-                limit = arguments.intOrDefault("limit", HexanaToolInputDefaults.LIST_FUNCTIONS_LIMIT)
+                offset = arguments.intOrDefault("offset", LEGACY_LIST_FUNCTIONS_OFFSET),
+                limit = arguments.intOrDefault("limit", LEGACY_LIST_FUNCTIONS_LIMIT)
             )
         }
     }
@@ -102,7 +129,7 @@ class HexanaToolHandlers(
             analysisService.searchFunctionsByName(
                 input = wasmInput(arguments),
                 query = arguments.requireNonBlankString("query"),
-                limit = arguments.intOrDefault("limit", HexanaToolInputDefaults.SEARCH_FUNCTIONS_BY_NAME_LIMIT)
+                limit = arguments.intOrDefault("limit", LEGACY_SEARCH_FUNCTIONS_BY_NAME_LIMIT)
             )
         }
     }
@@ -182,11 +209,11 @@ class HexanaToolHandlers(
                 segmentEndExclusive = toExclusive,
                 includeExports = arguments.booleanOrDefault(
                     "includeExports",
-                    HexanaToolInputDefaults.LIST_DATA_SEGMENTS_INCLUDE_EXPORTS
+                    LEGACY_LIST_DATA_SEGMENTS_INCLUDE_EXPORTS
                 ),
                 includeGlobals = arguments.booleanOrDefault(
                     "includeGlobals",
-                    HexanaToolInputDefaults.LIST_DATA_SEGMENTS_INCLUDE_GLOBALS
+                    LEGACY_LIST_DATA_SEGMENTS_INCLUDE_GLOBALS
                 ),
                 minByteLength = arguments.nullableInt("minByteLength")
             )
@@ -389,6 +416,17 @@ class HexanaToolHandlers(
         return value
     }
 
+    private fun JsonObject?.stringOrDefault(name: String, default: String): String {
+        val element = this?.get(name) ?: return default
+        if (element == JsonNull) return default
+        val value = element.jsonPrimitive.contentOrNull
+            ?: throw ToolInputException("`$name` must be a string")
+        if (value.isBlank()) {
+            throw ToolInputException("`$name` must not be blank")
+        }
+        return value
+    }
+
     private fun JsonObject?.requireObject(name: String): JsonObject {
         val element = this?.get(name) ?: throw ToolInputException("`$name` is required")
         return element as? JsonObject ?: throw ToolInputException("`$name` must be an object")
@@ -431,6 +469,16 @@ class HexanaToolHandlers(
 
     private fun JsonObject?.requireStringList(name: String): List<String> {
         val element = this?.get(name) ?: throw ToolInputException("`$name` is required")
+        val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
+        return array.mapIndexed { index, value ->
+            value.jsonPrimitive.contentOrNull
+                ?: throw ToolInputException("`$name[$index]` must be a string")
+        }
+    }
+
+    private fun JsonObject?.optionalStringList(name: String): List<String>? {
+        val element = this?.get(name) ?: return null
+        if (element == JsonNull) return null
         val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
         return array.mapIndexed { index, value ->
             value.jsonPrimitive.contentOrNull

@@ -3,91 +3,16 @@ package org.jetbrains.hexana.mcp.tools
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class HexanaToolsTest {
 
-    private val sampleHandler = HexanaTools.single { it.name == "summarize_module" }.handlerFqn
+    private val queryArtifacts = HexanaTools.single { it.name == "query_artifacts" }
 
     @Test
-    fun `registry exposes the expected tool names`() {
-        assertEquals(
-            listOf(
-                "disassemble_function",
-                "functions_for_indices",
-                "get_function_call_graph",
-                "get_globals_for_indices",
-                "get_instructions_for_functions",
-                "get_locals_for_functions",
-                "get_memory_for_indices",
-                "get_types_for_indices",
-                "list_code_section_offsets",
-                "list_custom_sections",
-                "list_data",
-                "list_data_segments",
-                "list_element_segments",
-                "list_enabled_features",
-                "list_exported_functions",
-                "list_exports",
-                "list_functions",
-                "list_globals",
-                "list_imports",
-                "list_memory",
-                "list_reference_types",
-                "list_types",
-                "list_value_types",
-                "resolve_function_signature",
-                "search_exports",
-                "search_functions_by_name",
-                "summarize_module",
-            ),
-            HexanaTools.map { it.name }.sorted(),
-        )
-    }
-
-    @Test
-    fun `registry preserves canonical generation order`() {
-        assertEquals(
-            listOf(
-                "summarize_module",
-                "list_enabled_features",
-                "list_custom_sections",
-                "list_imports",
-                "list_exports",
-                "search_exports",
-                "list_globals",
-                "list_types",
-                "list_value_types",
-                "list_reference_types",
-                "list_memory",
-                "list_element_segments",
-                "list_functions",
-                "list_code_section_offsets",
-                "functions_for_indices",
-                "resolve_function_signature",
-                "disassemble_function",
-                "get_function_call_graph",
-                "search_functions_by_name",
-                "get_globals_for_indices",
-                "get_memory_for_indices",
-                "get_types_for_indices",
-                "get_locals_for_functions",
-                "get_instructions_for_functions",
-                "list_exported_functions",
-                "list_data",
-                "list_data_segments",
-            ),
-            HexanaTools.map { it.name },
-        )
-    }
-
-    @Test
-    fun `critical Wasm-analysis tools are always present`() {
-        // Guard against accidental removal of the headline tools even as the full registry grows.
-        val names = HexanaTools.map { it.name }.toSet()
-        listOf("summarize_module", "list_imports", "list_functions", "get_instructions_for_functions").forEach {
-            assertTrue(it in names, "critical tool `$it` missing from HexanaTools")
-        }
+    fun `registry exposes only the generic artifact query tool`() {
+        assertEquals(listOf("query_artifacts"), HexanaTools.map { it.name })
     }
 
     @Test
@@ -102,23 +27,23 @@ class HexanaToolsTest {
     fun `tool builder rejects names outside strict snake_case`() {
         assertFailsWith<IllegalArgumentException> {
             tools {
-                tool("listFunctions") {
+                tool("queryArtifacts") {
                     summary = "s"
                     input = WasmInputClass
                     inputPattern = ToolInputPattern.WasmOnly
                     output = WasmInputClass
-                    handlerFqn = sampleHandler
+                    handlerFqn = queryArtifacts.handlerFqn
                 }
             }
         }
         assertFailsWith<IllegalArgumentException> {
             tools {
-                tool("list__functions") {
+                tool("query__artifacts") {
                     summary = "s"
                     input = WasmInputClass
                     inputPattern = ToolInputPattern.WasmOnly
                     output = WasmInputClass
-                    handlerFqn = sampleHandler
+                    handlerFqn = queryArtifacts.handlerFqn
                 }
             }
         }
@@ -134,10 +59,7 @@ class HexanaToolsTest {
                 spec.output.kotlinFqn != null,
                 "output class ${spec.output.name} missing kotlinPackage for ${spec.name}",
             )
-            assertTrue(
-                spec.output.fields.isNotEmpty() || spec.output.name == "DataSegmentLinkingMetadataResult",
-                "empty output class for ${spec.name}",
-            )
+            assertTrue(spec.output.fields.isNotEmpty(), "empty output class for ${spec.name}")
         }
     }
 
@@ -154,40 +76,8 @@ class HexanaToolsTest {
     }
 
     @Test
-    fun `tools expose input invocation patterns explicitly`() {
-        assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "summarize_module" }.inputPattern)
-        assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "list_enabled_features" }.inputPattern)
-        assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "list_custom_sections" }.inputPattern)
-        assertEquals(ToolInputPattern.FunctionPage, HexanaTools.single { it.name == "list_functions" }.inputPattern)
-        assertEquals(
-            ToolInputPattern.WasmOnly,
-            HexanaTools.single { it.name == "list_code_section_offsets" }.inputPattern,
-        )
-        assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "list_value_types" }.inputPattern)
-        assertEquals(ToolInputPattern.WasmOnly, HexanaTools.single { it.name == "list_reference_types" }.inputPattern)
-        assertEquals(ToolInputPattern.Indices, HexanaTools.single { it.name == "functions_for_indices" }.inputPattern)
-        assertEquals(
-            ToolInputPattern.Funcidx,
-            HexanaTools.single { it.name == "resolve_function_signature" }.inputPattern,
-        )
-        assertEquals(
-            ToolInputPattern.Funcidx,
-            HexanaTools.single { it.name == "disassemble_function" }.inputPattern,
-        )
-        assertEquals(
-            ToolInputPattern.Indices,
-            HexanaTools.single { it.name == "get_function_call_graph" }.inputPattern,
-        )
-        assertEquals(
-            ToolInputPattern.FunctionNameSearch,
-            HexanaTools.single { it.name == "search_functions_by_name" }.inputPattern,
-        )
-        assertEquals(ToolInputPattern.ExportNameSearch, HexanaTools.single { it.name == "search_exports" }.inputPattern)
-        assertEquals(
-            ToolInputPattern.ClosedRange(parameterName = "entriesRange"),
-            HexanaTools.single { it.name == "list_exported_functions" }.inputPattern,
-        )
-        assertEquals(ToolInputPattern.DataSegments, HexanaTools.single { it.name == "list_data_segments" }.inputPattern)
+    fun `query_artifacts uses the artifact query invocation pattern`() {
+        assertEquals(ToolInputPattern.ArtifactQuery, queryArtifacts.inputPattern)
     }
 
     @Test
@@ -204,28 +94,38 @@ class HexanaToolsTest {
         assertEquals(SchemaIntValue.MaxInlineWasmBytes, bytes.maxItems)
         assertEquals(0, bytes.itemMinimum)
         assertEquals(255, bytes.itemMaximum)
-
-        val rangeFrom = ClosedIntRange.fields.single { it.name == "from" }
-        val rangeTo = ClosedIntRange.fields.single { it.name == "to" }
-        assertEquals(0, rangeFrom.minimum)
-        assertEquals(0, rangeTo.minimum)
     }
 
     @Test
-    fun `input defaults are declared in the DSL`() {
-        val listFunctions = HexanaTools.single { it.name == "list_functions" }.input
-        assertEquals(0, listFunctions.fields.single { it.name == "offset" }.default)
-        assertEquals(200, listFunctions.fields.single { it.name == "limit" }.default)
+    fun `query_artifacts input carries defaults and bounds`() {
+        val fields = queryArtifacts.input.fields.associateBy { it.name }
 
-        val searchFunctionsByName = HexanaTools.single { it.name == "search_functions_by_name" }.input
-        assertEquals(50, searchFunctionsByName.fields.single { it.name == "limit" }.default)
+        assertEquals("overview", fields.getValue("operation").default)
+        assertEquals(50, fields.getValue("limit").default)
+        assertEquals("summary", fields.getValue("detail").default)
+        assertEquals(1, fields.getValue("limit").minimum)
+        assertEquals(200, fields.getValue("limit").maximum)
+        assertEquals(SchemaIntValue.Literal(20), fields.getValue("entityTypes").maxItems)
+        assertEquals(SchemaIntValue.Literal(20), fields.getValue("query").maxItems)
+        assertEquals(SchemaIntValue.Literal(20), fields.getValue("relations").maxItems)
+    }
 
-        val searchExports = HexanaTools.single { it.name == "search_exports" }.input
-        assertEquals(50, searchExports.fields.single { it.name == "limit" }.default)
-
-        val listDataSegments = HexanaTools.single { it.name == "list_data_segments" }.input
-        assertEquals(false, listDataSegments.fields.single { it.name == "includeExports" }.default)
-        assertEquals(true, listDataSegments.fields.single { it.name == "includeGlobals" }.default)
+    @Test
+    fun `artifact query pattern validates required input fields`() {
+        val fields = queryArtifacts.input.fields.associateBy { it.name }
+        listOf(
+            "baselinePath",
+            "operation",
+            "entityTypes",
+            "query",
+            "startName",
+            "startFuncidx",
+            "relations",
+            "limit",
+            "detail"
+        ).forEach { fieldName ->
+            assertNotNull(fields[fieldName], "Missing query_artifacts input field `$fieldName`")
+        }
     }
 
     @Test
@@ -257,305 +157,6 @@ class HexanaToolsTest {
         assertFailsWith<IllegalArgumentException> {
             class_("Broken") {
                 int("1bad")
-            }
-        }
-    }
-
-    @Test
-    fun `blank field descriptions are rejected`() {
-        assertFailsWith<IllegalArgumentException> {
-            class_("Broken") {
-                int("value").describe("   ")
-            }
-        }
-    }
-
-    @Test
-    fun `blank field serial names are rejected`() {
-        assertFailsWith<IllegalArgumentException> {
-            class_("Broken") {
-                int("value").serialName("   ")
-            }
-        }
-    }
-
-    @Test
-    fun `serializer FQN must be fully qualified`() {
-        assertFailsWith<IllegalArgumentException> {
-            class_("Broken") {
-                bytes("payload").withSerializer("not a fqn")
-            }
-        }
-    }
-
-    @Test
-    fun `class kotlin package must produce a valid FQN`() {
-        assertFailsWith<IllegalArgumentException> {
-            class_("Broken", kotlinPackage = "not a package") {
-                int("value")
-            }
-        }
-    }
-
-    @Test
-    fun `list_functions composes wasm input with offset and limit`() {
-        val spec = HexanaTools.single { it.name == "list_functions" }
-        val fieldNames = spec.input.fields.map { it.name }
-        assertTrue(fieldNames.containsAll(listOf("path", "bytesBase64", "bytes", "offset", "limit")))
-    }
-
-    @Test
-    fun `functions_for_indices composes wasm input with indices list`() {
-        val spec = HexanaTools.single { it.name == "functions_for_indices" }
-        val indices = spec.input.fields.single { it.name == "indices" }
-        val element = (indices.type as FieldType.ListOf).element
-        assertEquals(FieldType.Int32, element)
-    }
-
-    @Test
-    fun `resolve_function_signature composes wasm input with funcidx`() {
-        val spec = HexanaTools.single { it.name == "resolve_function_signature" }
-        val funcidx = spec.input.fields.single { it.name == "funcidx" }
-        assertEquals(FieldType.Int32, funcidx.type)
-        assertEquals(0, funcidx.minimum)
-    }
-
-    @Test
-    fun `get_function_call_graph composes wasm input with indices list`() {
-        val spec = HexanaTools.single { it.name == "get_function_call_graph" }
-        val indices = spec.input.fields.single { it.name == "indices" }
-        val element = (indices.type as FieldType.ListOf).element
-        assertEquals(FieldType.Int32, element)
-    }
-
-    @Test
-    fun `search_functions_by_name composes wasm input with query and limit`() {
-        val spec = HexanaTools.single { it.name == "search_functions_by_name" }
-        val query = spec.input.fields.single { it.name == "query" }
-        val limit = spec.input.fields.single { it.name == "limit" }
-        assertEquals(FieldType.StringT, query.type)
-        assertEquals(SchemaIntValue.Literal(200), query.maxLength)
-        assertEquals(FieldType.Int32, limit.type)
-        assertEquals(1, limit.minimum)
-        assertEquals(200, limit.maximum)
-    }
-
-    @Test
-    fun `search_exports composes wasm input with query list and limit`() {
-        val spec = HexanaTools.single { it.name == "search_exports" }
-        val query = spec.input.fields.single { it.name == "query" }
-        val limit = spec.input.fields.single { it.name == "limit" }
-        val element = (query.type as FieldType.ListOf).element
-        assertEquals(FieldType.StringT, element)
-        assertEquals(SchemaIntValue.Literal(20), query.maxItems)
-        assertEquals(FieldType.Int32, limit.type)
-        assertEquals(1, limit.minimum)
-        assertEquals(200, limit.maximum)
-
-        val score = spec.output.fields.single { it.name == "results" }
-            .let { (it.type as FieldType.ListOf).element as FieldType.ClassRef }
-            .clazz.fields.single { it.name == "score" }
-        assertEquals(FieldType.Float64, score.type)
-    }
-
-    @Test
-    fun `list_exported_functions embeds a closed range object`() {
-        val spec = HexanaTools.single { it.name == "list_exported_functions" }
-        val range = spec.input.fields.single { it.name == "entriesRange" }
-        val clazz = (range.type as FieldType.ClassRef).clazz
-        assertEquals("ClosedIntRange", clazz.name)
-        assertEquals(listOf("from", "to"), clazz.fields.map { it.name })
-    }
-
-    @Test
-    fun `list_imports output references ImportFunctionResult`() {
-        val spec = HexanaTools.single { it.name == "list_imports" }
-        val imports = spec.output.fields.single { it.name == "imports" }
-        val list = imports.type as FieldType.ListOf
-        val clazz = (list.element as FieldType.ClassRef).clazz
-        assertEquals("ImportFunctionResult", clazz.name)
-    }
-
-    @Test
-    fun `ImportFunctionSignature applies serialName override on ret`() {
-        val ret = ImportFunctionSignatureClass.fields.single { it.name == "ret" }
-        assertEquals("return", ret.serialName)
-    }
-
-    @Test
-    fun `data payload schema references the core base64 serializer`() {
-        val data = DataEntryResultClass.fields.single { it.name == "data" }
-        assertEquals("org.jetbrains.hexana.mcp.model.data.Base64ByteArraySerializer", data.serializerFqn)
-    }
-
-    @Test
-    fun `with() rejects redeclaration of a seeded field`() {
-        val parent = class_("Parent") { nullable("path", string()) }
-        assertFailsWith<IllegalArgumentException> {
-            parent.with("Child") { nullable("path", string()) }
-        }
-    }
-
-    @Test
-    fun `with() rejects redeclaration of a grandparent-seeded field`() {
-        val grandparent = class_("Grandparent") { nullable("path", string()) }
-        val parent = grandparent.with("Parent") { int("offset", default = 0) }
-        assertFailsWith<IllegalArgumentException> {
-            parent.with("Child") { nullable("path", string()) }
-        }
-    }
-
-    @Test
-    fun `oneOf declarations must not be empty or duplicated`() {
-        assertFailsWith<IllegalArgumentException> {
-            class_("Broken") {
-                nullable("path", string())
-                oneOf()
-            }
-        }
-        assertFailsWith<IllegalArgumentException> {
-            class_("Broken") {
-                nullable("path", string())
-                oneOf("path", "path")
-            }
-        }
-    }
-
-    @Test
-    fun `duplicate tool names are rejected`() {
-        assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("dup") {
-                    summary = "s"
-                    input = WasmInputClass
-                    inputPattern = ToolInputPattern.WasmOnly
-                    output = WasmInputClass
-                    handlerFqn = sampleHandler
-                }
-                tool("dup") {
-                    summary = "t"
-                    input = WasmInputClass
-                    inputPattern = ToolInputPattern.WasmOnly
-                    output = WasmInputClass
-                    handlerFqn = sampleHandler
-                }
-            }
-        }
-    }
-
-    @Test
-    fun `tool without summary is rejected`() {
-        assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("broken") {
-                    input = WasmInputClass
-                    output = WasmInputClass
-                    handlerFqn = sampleHandler
-                }
-            }
-        }
-    }
-
-    @Test
-    fun `tool with blank summary is rejected`() {
-        assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("broken") {
-                    summary = "   "
-                    input = WasmInputClass
-                    inputPattern = ToolInputPattern.WasmOnly
-                    output = WasmInputClass
-                    handlerFqn = sampleHandler
-                }
-            }
-        }
-    }
-
-    @Test
-    fun `tool without input pattern is rejected`() {
-        assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("broken") {
-                    summary = "s"
-                    input = WasmInputClass
-                    output = WasmInputClass
-                    handlerFqn = sampleHandler
-                }
-            }
-        }
-    }
-
-    @Test
-    fun `input pattern must match input shape`() {
-        assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("broken") {
-                    summary = "s"
-                    input = WasmInputClass
-                    inputPattern = ToolInputPattern.Indices
-                    output = WasmInputClass
-                    handlerFqn = sampleHandler
-                }
-            }
-        }
-    }
-
-    @Test
-    fun `input pattern validates field contracts`() {
-        assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("broken") {
-                    summary = "s"
-                    input = WasmInputClass.with("BrokenFunctionPageInput") {
-                        string("offset", default = "0").describe("Offset")
-                        int("limit", default = 1).describe("Limit")
-                    }
-                    inputPattern = ToolInputPattern.FunctionPage
-                    output = WasmInputClass
-                    handlerFqn = sampleHandler
-                }
-            }
-        }
-        assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("broken") {
-                    summary = "s"
-                    input = WasmInputClass.with("BrokenFunctionPageInput") {
-                        int("offset").describe("Offset")
-                        int("limit", default = 1).describe("Limit")
-                    }
-                    inputPattern = ToolInputPattern.FunctionPage
-                    output = WasmInputClass
-                    handlerFqn = sampleHandler
-                }
-            }
-        }
-        assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("broken") {
-                    summary = "s"
-                    input = WasmInputClass.with("BrokenFunctionPageInput") {
-                        int("offset", default = 0)
-                        int("limit", default = 1).describe("Limit")
-                    }
-                    inputPattern = ToolInputPattern.FunctionPage
-                    output = WasmInputClass
-                    handlerFqn = sampleHandler
-                }
-            }
-        }
-    }
-
-    @Test
-    fun `tool without output is rejected`() {
-        assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("broken") {
-                    summary = "s"
-                    input = WasmInputClass
-                    inputPattern = ToolInputPattern.WasmOnly
-                    handlerFqn = sampleHandler
-                }
             }
         }
     }

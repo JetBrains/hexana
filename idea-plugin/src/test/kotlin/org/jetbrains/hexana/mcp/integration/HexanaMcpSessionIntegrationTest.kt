@@ -22,13 +22,12 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
             client.listTools(ListToolsRequest()).tools.map { it.name }.toSet()
         }
 
-        assertTrue(
-            "Missing Hexana MCP tools from authorized session. Expected at least $EXPECTED_HEXANA_TOOLS but got $toolNames",
-            toolNames.containsAll(EXPECTED_HEXANA_TOOLS)
-        )
+        assertTrue("query_artifacts missing from authorized session tools: $toolNames", "query_artifacts" in toolNames)
+        assertFalse("summarize_module should not be exposed: $toolNames", "summarize_module" in toolNames)
+        assertFalse("list_imports should not be exposed: $toolNames", "list_imports" in toolNames)
     }
 
-    fun testSummarizeModuleWorksOverAuthorizedSession() {
+    fun testQueryArtifactsWorksOverAuthorizedSession() {
         val fixture = createWasmFixture(
             "fixtures/integration/session/summary.wasm",
             """
@@ -39,19 +38,20 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
             """.trimIndent()
         )
 
-        val result = callToolViaSession("summarize_module", jsonPath(fixture.projectRelativePath))
+        val result = callToolViaSession("query_artifacts", jsonPath(fixture.projectRelativePath))
 
-        assertFalse("summarize_module returned MCP error over session: $result", result.isError == true)
+        assertFalse("query_artifacts returned MCP error over session: $result", result.isError == true)
         val textJson = json.parseToJsonElement(result.requireSingleText()) as JsonObject
         val structuredContent = result.requireStructuredObject()
 
         assertEquals(textJson, structuredContent)
-        assertEquals(1, structuredContent.int("functions"))
-        assertEquals(1, structuredContent.int("exports"))
-        assertTrue(structuredContent.int("moduleSize") > 0)
+        val module = structuredContent.array("modules").obj(0)
+        assertEquals(1, module.int("functions"))
+        assertEquals(1, module.int("exports"))
+        assertTrue(module.int("moduleSize") > 0)
     }
 
-    fun testListExportedFunctionsWorksOverAuthorizedSession() {
+    fun testQueryArtifactsFindsExportsOverAuthorizedSession() {
         val fixture = createWasmFixture(
             "fixtures/integration/session/exports.wasm",
             """
@@ -64,51 +64,27 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
         )
 
         val result = callToolViaSession(
-            "list_exported_functions",
+            "query_artifacts",
             buildJsonObject {
                 put("path", JsonPrimitive(fixture.projectRelativePath))
-                put("entriesRange", buildJsonObject {
-                    put("from", JsonPrimitive(0))
-                    put("to", JsonPrimitive(0))
+                put("operation", JsonPrimitive("find"))
+                put("entityTypes", kotlinx.serialization.json.buildJsonArray {
+                    add(JsonPrimitive("export"))
+                })
+                put("query", kotlinx.serialization.json.buildJsonArray {
+                    add(JsonPrimitive("a"))
                 })
             }
         )
 
-        assertFalse("list_exported_functions returned MCP error over session: $result", result.isError == true)
+        assertFalse("query_artifacts returned MCP error over session: $result", result.isError == true)
         val textJson = json.parseToJsonElement(result.requireSingleText()) as JsonObject
         val structuredContent = result.requireStructuredObject()
 
         assertEquals(textJson, structuredContent)
-        assertEquals(0, structuredContent.int("from"))
-        assertEquals(0, structuredContent.int("to"))
-        assertEquals(2, structuredContent.int("total"))
-        assertEquals(1, structuredContent.array("returned").size)
-        assertEquals("a", structuredContent.array("returned").obj(0).text("name"))
-    }
-
-    fun testValidationErrorReturnsToolErrorOverAuthorizedSession() {
-        val fixture = createWasmFixture(
-            "fixtures/integration/session/invalid_range.wasm",
-            """
-                (module
-                  (memory 1)
-                  (data (i32.const 0) "Hi"))
-            """.trimIndent()
-        )
-
-        val result = callToolViaSession(
-            "list_data",
-            buildJsonObject {
-                put("path", JsonPrimitive(fixture.projectRelativePath))
-                put("entriesRange", buildJsonObject {
-                    put("from", JsonPrimitive(5))
-                    put("to", JsonPrimitive(1))
-                })
-            }
-        )
-
-        assertEquals(true, result.isError)
-        assertEquals("Invalid entriesRange: `to` must be >= `from`", result.requireSingleText())
+        val record = structuredContent.array("records").obj(0)
+        assertEquals("export", record.text("entityType"))
+        assertEquals("a", record.text("name"))
     }
 
     private fun callToolViaSession(toolName: String, input: JsonObject): CallToolResult {
@@ -158,37 +134,5 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
 
     private fun CallToolResult.requireStructuredObject(): JsonObject {
         return structuredContent ?: error("Expected structuredContent to be present but it was null. Result: $this")
-    }
-
-    private companion object {
-        val EXPECTED_HEXANA_TOOLS = setOf(
-            "list_imports",
-            "list_custom_sections",
-            "list_enabled_features",
-            "list_functions",
-            "list_code_section_offsets",
-            "resolve_function_signature",
-            "disassemble_function",
-            "get_function_call_graph",
-            "search_functions_by_name",
-            "list_data",
-            "list_exports",
-            "search_exports",
-            "list_exported_functions",
-            "functions_for_indices",
-            "list_globals",
-            "list_memory",
-            "get_globals_for_indices",
-            "list_data_segments",
-            "get_memory_for_indices",
-            "list_types",
-            "list_value_types",
-            "list_reference_types",
-            "get_types_for_indices",
-            "get_locals_for_functions",
-            "get_instructions_for_functions",
-            "list_element_segments",
-            "summarize_module"
-        )
     }
 }

@@ -5,6 +5,7 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.mcp.model.data.ListDataSectionsResult
 import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
 import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
+import org.jetbrains.hexana.mcp.model.artifacts.QueryArtifactsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
@@ -35,6 +36,21 @@ import java.util.*
 import kotlin.io.path.extension
 
 interface HexanaAnalysisService {
+    fun queryArtifacts(
+        input: WasmInput,
+        baselineInput: WasmInput?,
+        operation: String,
+        entityTypes: List<String>,
+        query: List<String>,
+        startName: String?,
+        startFuncidx: Int?,
+        relations: List<String>,
+        limit: Int,
+        detail: String
+    ): QueryArtifactsResult {
+        throw UnsupportedOperationException("queryArtifacts is not implemented")
+    }
+
     fun summarizeModule(input: WasmInput): SummarizeModuleResult
     fun listEnabledFeatures(input: WasmInput): ListEnabledFeaturesResult
     fun listCustomSections(input: WasmInput): ListCustomSectionsResult
@@ -80,6 +96,33 @@ class DefaultHexanaAnalysisService(
     private val maxInlineInputBytes: Int = HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES,
     private val maxFileInputBytes: Int = HexanaAnalysisLimits.MAX_FILE_WASM_BYTES
 ) : HexanaAnalysisService {
+
+    override fun queryArtifacts(
+        input: WasmInput,
+        baselineInput: WasmInput?,
+        operation: String,
+        entityTypes: List<String>,
+        query: List<String>,
+        startName: String?,
+        startFuncidx: Int?,
+        relations: List<String>,
+        limit: Int,
+        detail: String
+    ): QueryArtifactsResult {
+        val wasm = load(input)
+        val baseline = baselineInput?.let(::load)
+        return wasm.provider.readArtifactQuery(
+            baseline = baseline?.provider,
+            operation = operation,
+            entityTypes = entityTypes,
+            query = query,
+            startName = startName,
+            startFuncidx = startFuncidx,
+            relations = relations,
+            limit = limit,
+            detail = detail
+        )
+    }
 
     override fun summarizeModule(input: WasmInput): SummarizeModuleResult {
         val wasm = load(input)

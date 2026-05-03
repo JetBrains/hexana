@@ -324,6 +324,7 @@ sealed class ToolInputPattern {
     object Indices : ToolInputPattern()
     data class ClosedRange(val parameterName: String) : ToolInputPattern()
     object DataSegments : ToolInputPattern()
+    object ArtifactQuery : ToolInputPattern()
 }
 
 @HexanaToolsDsl
@@ -541,6 +542,55 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireType(minByteLength, FieldType.Int32)
             requireNullable(minByteLength)
             requireDescribed(minByteLength)
+        }
+        ToolInputPattern.ArtifactQuery -> {
+            val baselinePath = requireField("baselinePath")
+            requireType(baselinePath, FieldType.StringT)
+            requireNullable(baselinePath)
+            requireDescribed(baselinePath)
+
+            val operation = requireField("operation")
+            requireType(operation, FieldType.StringT)
+            requireNonNullable(operation)
+            requireDefault(operation, "String") { it is String }
+            requireDescribed(operation)
+
+            val entityTypes = requireField("entityTypes")
+            requireListOf(entityTypes, FieldType.StringT)
+            requireNullable(entityTypes)
+            requireDescribed(entityTypes)
+
+            val query = requireField("query")
+            requireListOf(query, FieldType.StringT)
+            requireNullable(query)
+            requireDescribed(query)
+
+            val startName = requireField("startName")
+            requireType(startName, FieldType.StringT)
+            requireNullable(startName)
+            requireDescribed(startName)
+
+            val startFuncidx = requireField("startFuncidx")
+            requireType(startFuncidx, FieldType.Int32)
+            requireNullable(startFuncidx)
+            requireDescribed(startFuncidx)
+
+            val relations = requireField("relations")
+            requireListOf(relations, FieldType.StringT)
+            requireNullable(relations)
+            requireDescribed(relations)
+
+            val limit = requireField("limit")
+            requireType(limit, FieldType.Int32)
+            requireNonNullable(limit)
+            requireDefault(limit, "Int") { it is Int }
+            requireDescribed(limit)
+
+            val detail = requireField("detail")
+            requireType(detail, FieldType.StringT)
+            requireNonNullable(detail)
+            requireDefault(detail, "String") { it is String }
+            requireDescribed(detail)
         }
     }
 }

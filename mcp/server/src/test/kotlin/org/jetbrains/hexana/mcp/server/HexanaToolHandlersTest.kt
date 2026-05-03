@@ -47,6 +47,77 @@ class HexanaToolHandlersTest {
     private val handlers = HexanaToolHandlers()
 
     @Test
+    fun queryArtifactsFindsBoundedExportRecords() {
+        val wasm = createWasmFile(
+            "query-artifacts-find.wasm",
+            """
+            (module
+              (func (export "main") (result i32)
+                i32.const 42))
+            """.trimIndent()
+        )
+
+        val result = handlers.queryArtifacts(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("operation", JsonPrimitive("find"))
+                put("entityTypes", buildJsonArray {
+                    add(JsonPrimitive("export"))
+                })
+                put("query", buildJsonArray {
+                    add(JsonPrimitive("main"))
+                })
+                put("limit", JsonPrimitive(5))
+            }
+        )
+
+        assertTrue(result.isError != true)
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertEquals("find", structured["operation"]!!.jsonPrimitive.content)
+        val record = structured["records"]!!.jsonArray.single().jsonObject
+        assertEquals("export", record["entityType"]!!.jsonPrimitive.content)
+        assertEquals("main", record["name"]!!.jsonPrimitive.content)
+        assertEquals("function", record["kind"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun queryArtifactsDiffsCurrentAndBaselineExports() {
+        val baseline = createWasmFile(
+            "query-artifacts-baseline.wasm",
+            """
+            (module
+              (func (export "old") (result i32)
+                i32.const 1))
+            """.trimIndent()
+        )
+        val current = createWasmFile(
+            "query-artifacts-current.wasm",
+            """
+            (module
+              (func (export "new") (result i32)
+                i32.const 2))
+            """.trimIndent()
+        )
+
+        val result = handlers.queryArtifacts(
+            buildJsonObject {
+                put("path", JsonPrimitive(current.toString()))
+                put("baselinePath", JsonPrimitive(baseline.toString()))
+                put("operation", JsonPrimitive("diff"))
+                put("entityTypes", buildJsonArray {
+                    add(JsonPrimitive("export"))
+                })
+                put("limit", JsonPrimitive(10))
+            }
+        )
+
+        assertTrue(result.isError != true)
+        val records = result.structuredContent!!["records"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("added", "removed"), records.map { it["status"]!!.jsonPrimitive.content }.sorted())
+        assertEquals(setOf("new", "old"), records.map { it["name"]!!.jsonPrimitive.content }.toSet())
+    }
+
+    @Test
     fun summarizeModuleReturnsStructuredSuccessPayload() {
         val wasm = createWasmFile(
             "summary.wasm",

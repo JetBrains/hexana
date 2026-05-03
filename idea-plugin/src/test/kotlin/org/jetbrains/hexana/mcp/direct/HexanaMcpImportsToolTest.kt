@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.direct
 
 import kotlinx.serialization.json.JsonObject
 
+@org.junit.Ignore("Low-level MCP tools are no longer exposed; use query_artifacts direct tests.")
 class HexanaMcpImportsToolTest : HexanaMcpToolsetDirectTestBase() {
     fun testListImportsReturnsFunctionImportMetadata() {
         val fixture = createWasmFixture(

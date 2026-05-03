@@ -1,45 +1,11 @@
 package org.jetbrains.hexana.mcp.tools
 
 private val HEXANA_TOOL_ORDER = listOf(
-    "summarize_module",
-    "list_enabled_features",
-    "list_custom_sections",
-    "list_imports",
-    "list_exports",
-    "search_exports",
-    "list_globals",
-    "list_types",
-    "list_value_types",
-    "list_reference_types",
-    "list_memory",
-    "list_element_segments",
-    "list_functions",
-    "list_code_section_offsets",
-    "functions_for_indices",
-    "resolve_function_signature",
-    "disassemble_function",
-    "get_function_call_graph",
-    "search_functions_by_name",
-    "get_globals_for_indices",
-    "get_memory_for_indices",
-    "get_types_for_indices",
-    "get_locals_for_functions",
-    "get_instructions_for_functions",
-    "list_exported_functions",
-    "list_data",
-    "list_data_segments",
+    "query_artifacts",
 )
 
 val HexanaTools: List<ToolSpec> = orderedTools(
-    ModuleTools,
-    ImportTools,
-    ExportTools,
-    GlobalTools,
-    TypeTools,
-    MemoryTools,
-    ElementTools,
-    FunctionTools,
-    DataTools,
+    ArtifactQueryTools,
 )
 
 private fun orderedTools(vararg groups: List<ToolSpec>): List<ToolSpec> {

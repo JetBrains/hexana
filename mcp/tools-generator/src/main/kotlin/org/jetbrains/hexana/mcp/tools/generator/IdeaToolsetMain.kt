@@ -118,6 +118,17 @@ private fun addParameters(builder: FunSpec.Builder, spec: ToolSpec) {
             )
             builder.addParameter(nullableIntParam(inputField(spec.input, "minByteLength")))
         }
+        ToolInputPattern.ArtifactQuery -> {
+            builder.addParameter(stringWithDefault(inputField(spec.input, "operation")))
+            builder.addParameter(nullableStringListParam(inputField(spec.input, "entityTypes")))
+            builder.addParameter(nullableStringListParam(inputField(spec.input, "query")))
+            builder.addParameter(nullableStringParam(inputField(spec.input, "baselinePath")))
+            builder.addParameter(nullableStringParam(inputField(spec.input, "startName")))
+            builder.addParameter(nullableIntParam(inputField(spec.input, "startFuncidx")))
+            builder.addParameter(nullableStringListParam(inputField(spec.input, "relations")))
+            builder.addParameter(intWithDefault(inputField(spec.input, "limit")))
+            builder.addParameter(stringWithDefault(inputField(spec.input, "detail")))
+        }
     }
 }
 
@@ -139,11 +150,36 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec) {
         ToolInputPattern.Funcidx,
         ToolInputPattern.FunctionNameSearch,
         ToolInputPattern.ExportNameSearch,
-        ToolInputPattern.Indices -> Unit
+        ToolInputPattern.Indices,
+        ToolInputPattern.ArtifactQuery -> Unit
     }
     code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
 
     val handlerMember = spec.handlerMemberName()
+    if (spec.inputPattern == ToolInputPattern.ArtifactQuery) {
+        code.addStatement(
+            "val baselineProvider = baselinePath?.let { %M(it).%M() }",
+            REQUIRE_WASM_FILE,
+            REQUIRE_CORE_WASM_BINARY_PROVIDER,
+        )
+        code.addStatement(
+            "return provider.%M(" +
+                "baseline = baselineProvider, " +
+                "operation = operation, " +
+                "entityTypes = entityTypes.orEmpty(), " +
+                "query = query.orEmpty(), " +
+                "startName = startName, " +
+                "startFuncidx = startFuncidx, " +
+                "relations = relations.orEmpty(), " +
+                "limit = limit, " +
+                "detail = detail" +
+                ")",
+            handlerMember,
+        )
+        builder.addCode(code.build())
+        return
+    }
+
     val callArgs: String = when (spec.inputPattern) {
         ToolInputPattern.WasmOnly -> "()"
         ToolInputPattern.FunctionPage -> "(offset, limit)"
@@ -153,6 +189,7 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec) {
         ToolInputPattern.Indices -> "(indices)"
         is ToolInputPattern.ClosedRange -> "(range)"
         ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
+        ToolInputPattern.ArtifactQuery -> error("Handled above")
     }
     code.addStatement("return provider.%M$callArgs", handlerMember)
     builder.addCode(code.build())
@@ -181,6 +218,12 @@ private fun boolWithDefault(field: FieldSpec): ParameterSpec =
         .defaultValue("%L", field.defaultOrError<Boolean>())
         .build()
 
+private fun stringWithDefault(field: FieldSpec): ParameterSpec =
+    ParameterSpec.builder(field.name, String::class)
+        .addAnnotation(describeAnnotation(field.descriptionOrError()))
+        .defaultValue("%S", field.defaultOrError<String>())
+        .build()
+
 private fun intParam(field: FieldSpec): ParameterSpec =
     ParameterSpec.builder(field.name, Int::class)
         .addAnnotation(describeAnnotation(field.descriptionOrError()))
@@ -191,12 +234,27 @@ private fun stringParam(field: FieldSpec): ParameterSpec =
         .addAnnotation(describeAnnotation(field.descriptionOrError()))
         .build()
 
+private fun nullableStringParam(field: FieldSpec): ParameterSpec =
+    ParameterSpec.builder(field.name, String::class.asClassName().copy(nullable = true))
+        .addAnnotation(describeAnnotation(field.descriptionOrError()))
+        .defaultValue("null")
+        .build()
+
 private fun stringListParam(field: FieldSpec): ParameterSpec =
     ParameterSpec.builder(
         field.name,
         List::class.asClassName().parameterizedBy(String::class.asClassName()),
     )
         .addAnnotation(describeAnnotation(field.descriptionOrError()))
+        .build()
+
+private fun nullableStringListParam(field: FieldSpec): ParameterSpec =
+    ParameterSpec.builder(
+        field.name,
+        List::class.asClassName().parameterizedBy(String::class.asClassName()).copy(nullable = true),
+    )
+        .addAnnotation(describeAnnotation(field.descriptionOrError()))
+        .defaultValue("null")
         .build()
 
 private fun nullableIntParam(field: FieldSpec): ParameterSpec =

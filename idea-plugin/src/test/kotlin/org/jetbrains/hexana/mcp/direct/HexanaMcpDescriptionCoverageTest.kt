@@ -38,38 +38,15 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
         assertEmpty("Input fields without a `@McpDescription` annotation", missing)
     }
 
-    fun testSummarizeModuleDescriptionContent() {
-        val descriptor = descriptor("summarize_module")
-        assertContains(descriptor.description, "high-level counts")
-        assertContains(descriptor.description, "low-cost overview")
+    fun testQueryArtifactsDescriptionContent() {
+        val descriptor = descriptor("query_artifacts")
+        assertContains(descriptor.description, "bounded output")
+        assertContains(descriptor.description, "overview")
+        assertContains(descriptor.description, "diff")
         assertContains(inputFieldDescription(descriptor, "path"), "relative")
-    }
-
-    fun testListImportsDescriptionContent() {
-        val descriptor = descriptor("list_imports")
-        assertContains(descriptor.description, "List imported functions")
-        assertContains(descriptor.description, "link-mismatch analysis")
-        assertContains(inputFieldDescription(descriptor, "path"), "relative")
-    }
-
-    fun testListFunctionsDescriptionContent() {
-        val descriptor = descriptor("list_functions")
-        assertContains(descriptor.description, "offset/limit pagination")
-        assertContains(descriptor.description, "unified function index space")
-        assertContains(inputFieldDescription(descriptor, "offset"), "unified function index space")
-        assertContains(inputFieldDescription(descriptor, "limit"), "Maximum number")
-    }
-
-    fun testFunctionsForIndicesDescriptionContent() {
-        val descriptor = descriptor("functions_for_indices")
-        assertContains(descriptor.description, "Resolve")
-        assertContains(descriptor.description, "targeted")
-        assertContains(inputFieldDescription(descriptor, "indices"), "unified function indices")
-    }
-
-    fun testListExportedFunctionsHasExportRangeInput() {
-        val descriptor = descriptor("list_exported_functions")
-        assertContains(inputFieldDescription(descriptor, "entriesRange"), "inclusive")
+        assertContains(inputFieldDescription(descriptor, "operation"), "overview")
+        assertContains(inputFieldDescription(descriptor, "entityTypes"), "export")
+        assertContains(inputFieldDescription(descriptor, "limit"), "Maximum records")
     }
 
     // TODO(hexana-72): Output-field descriptions are currently missing on the generated schemas
