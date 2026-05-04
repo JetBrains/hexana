@@ -73,12 +73,12 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Optional baseline `.wasm` path used by `operation = diff`."))
+        put("description", JsonPrimitive("Optional baseline `.wasm` path used by `operation = diff` or `operation = triage`."))
         put("maxLength", JsonPrimitive(4_096))
       })
       put("operation", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Query operation: `overview`, `find`, `diff`, or `trace`."))
+        put("description", JsonPrimitive("Query operation: `overview`, `find`, `diff`, `trace`, or `triage`."))
         put("default", JsonPrimitive("overview"))
         put("maxLength", JsonPrimitive(32))
       })
@@ -90,7 +90,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Optional entity filter. Supported values include `export`, `import`, `memory`, `global`, and `function`."))
+        put("description", JsonPrimitive("Optional entity filter. Supported values include `export`, `import`, `memory`, `global`, `function`, and `element`."))
         put("maxItems", JsonPrimitive(20))
       })
       put("query", buildJsonObject {

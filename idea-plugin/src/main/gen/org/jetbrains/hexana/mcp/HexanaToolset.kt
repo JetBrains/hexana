@@ -16,13 +16,13 @@ import org.jetbrains.hexana.mcp.query.readArtifactQuery
  */
 public class HexanaToolset : McpToolset {
   @McpTool("query_artifacts")
-  @McpDescription("Query WebAssembly artifact entities, diffs, and function relations with bounded output.\nUse this as the default Hexana MCP entry point instead of low-level list tools.\n`overview` returns module counts, `find` locates matching entities, `diff` compares current and baseline modules, and `trace` follows function calls and memory-write relations from a named or indexed function.\nKeep `limit` and `maxBytes` small, use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets or instruction text.")
+  @McpDescription("Query WebAssembly artifact entities, diffs, and function relations with bounded output.\nUse this as the default Hexana MCP entry point instead of low-level list tools.\n`overview` returns module counts, `find` locates matching entities, `diff` compares current and baseline modules, `trace` follows function calls and memory-write relations from a named or indexed function, and `triage` returns the first production-useful summary for public surface, API, memory, or element-table changes.\nKeep `limit` and `maxBytes` small, use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets or instruction text.")
   public suspend fun queryArtifacts(
     @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
-    @McpDescription("Query operation: `overview`, `find`, `diff`, or `trace`.") operation: String = "overview",
-    @McpDescription("Optional entity filter. Supported values include `export`, `import`, `memory`, `global`, and `function`.") entityTypes: List<String>? = null,
+    @McpDescription("Query operation: `overview`, `find`, `diff`, `trace`, or `triage`.") operation: String = "overview",
+    @McpDescription("Optional entity filter. Supported values include `export`, `import`, `memory`, `global`, `function`, and `element`.") entityTypes: List<String>? = null,
     @McpDescription("Optional case-insensitive terms used to filter matched entities or trace roots.") query: List<String>? = null,
-    @McpDescription("Optional baseline `.wasm` path used by `operation = diff`.") baselinePath: String? = null,
+    @McpDescription("Optional baseline `.wasm` path used by `operation = diff` or `operation = triage`.") baselinePath: String? = null,
     @McpDescription("Optional function, import, export, or debug-name term used by `operation = trace`.") startName: String? = null,
     @McpDescription("Optional unified function index used by `operation = trace`.") startFuncidx: Int? = null,
     @McpDescription("Optional trace relation filter: `direct_call`, `direct_imported_call`, `indirect_call`, or `memory_write`.") relations: List<String>? = null,

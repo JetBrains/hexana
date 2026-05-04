@@ -43,9 +43,12 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
         assertContains(descriptor.description, "bounded output")
         assertContains(descriptor.description, "overview")
         assertContains(descriptor.description, "diff")
+        assertContains(descriptor.description, "triage")
         assertContains(inputFieldDescription(descriptor, "path"), "relative")
         assertContains(inputFieldDescription(descriptor, "operation"), "overview")
+        assertContains(inputFieldDescription(descriptor, "operation"), "triage")
         assertContains(inputFieldDescription(descriptor, "entityTypes"), "export")
+        assertContains(inputFieldDescription(descriptor, "entityTypes"), "element")
         assertContains(inputFieldDescription(descriptor, "limit"), "Maximum records")
     }
 

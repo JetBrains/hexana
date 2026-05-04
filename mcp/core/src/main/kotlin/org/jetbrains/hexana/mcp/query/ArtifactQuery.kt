@@ -9,6 +9,7 @@ import org.jetbrains.hexana.mcp.model.artifacts.ArtifactOmittedResult
 import org.jetbrains.hexana.mcp.model.artifacts.ArtifactRecordResult
 import org.jetbrains.hexana.mcp.model.artifacts.ArtifactSignatureResult
 import org.jetbrains.hexana.mcp.model.artifacts.QueryArtifactsResult
+import org.jetbrains.hexana.mcp.model.elements.ElementSegmentResult
 import org.jetbrains.hexana.mcp.model.exports.ExportResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionCallGraphResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionSignatureResult
@@ -23,12 +24,26 @@ private const val DEFAULT_MAX_BYTES = 24_000
 private const val MIN_MAX_BYTES = 2_000
 private const val MAX_MAX_BYTES = 60_000
 
-private val SUPPORTED_OPERATIONS = setOf("overview", "find", "diff", "trace")
+private val SUPPORTED_OPERATIONS = setOf("overview", "find", "diff", "trace", "triage")
 private val SUPPORTED_DETAILS = setOf("summary", "evidence")
 private val DEFAULT_ENTITY_TYPES = setOf("export", "import", "memory", "global", "function")
-private val DIFF_ENTITY_TYPES = setOf("export", "import", "memory", "global", "function")
+private val DIFF_ENTITY_TYPES = setOf("export", "import", "memory", "global", "function", "element")
+private val TRIAGE_ENTITY_TYPES = setOf("export", "import", "memory", "global", "element")
 private val SUPPORTED_TRACE_RELATIONS = setOf("direct_call", "direct_imported_call", "indirect_call", "memory_write")
 private val DEFAULT_TRACE_RELATIONS = setOf("direct_call", "indirect_call", "memory_write")
+private val TRIAGE_ENTITY_PRIORITY = mapOf(
+    "memory" to 0,
+    "import" to 1,
+    "export" to 2,
+    "element" to 3,
+    "global" to 4,
+    "function" to 5
+)
+private val TRIAGE_STATUS_PRIORITY = mapOf(
+    "changed" to 0,
+    "added" to 1,
+    "removed" to 2
+)
 
 fun WasmBinaryProvider.readArtifactQuery(
     baseline: WasmBinaryProvider? = null,
@@ -95,6 +110,12 @@ fun WasmBinaryProvider.readArtifactQuery(
             detail = effectiveDetail,
             limit = boundedLimit
         )
+        "triage" -> triageRecords(
+            baseline = baseline,
+            entityTypes = entityTypes.normalizedEntityTypes(TRIAGE_ENTITY_TYPES),
+            terms = query.normalizedTerms(),
+            detail = effectiveDetail
+        )
         else -> emptyList()
     }
 
@@ -138,13 +159,56 @@ private fun WasmBinaryProvider.diffRecords(
     terms: List<String>,
     detail: String
 ): List<ArtifactRecordResult> {
-    val current = entities(entityTypes, source = "current", detail = detail).associateBy { it.key }
-    val previous = baseline.entities(entityTypes, source = "baseline", detail = detail).associateBy { it.key }
-    val keys = (current.keys + previous.keys).sorted()
+    return diffEntityRecords(
+        current = entities(entityTypes, source = "current", detail = detail),
+        previous = baseline.entities(entityTypes, source = "baseline", detail = detail),
+        terms = terms,
+        triage = false
+    )
+}
+
+private fun WasmBinaryProvider.triageRecords(
+    baseline: WasmBinaryProvider?,
+    entityTypes: Set<String>,
+    terms: List<String>,
+    detail: String
+): List<ArtifactRecordResult> {
+    val current = entities(entityTypes, source = "current", detail = detail)
+    if (baseline == null) {
+        val records = current
+            .filter { it.matches(terms) }
+            .map { it.record }
+            .sortedWith(compareBy<ArtifactRecordResult> { TRIAGE_ENTITY_PRIORITY[it.entityType] ?: Int.MAX_VALUE }
+                .thenBy { it.name ?: it.id })
+        return listOf(currentSurfaceFinding(records)) + records
+    }
+
+    val changes = diffEntityRecords(
+        current = current,
+        previous = baseline.entities(entityTypes, source = "baseline", detail = detail),
+        terms = terms,
+        triage = true
+    ).sortedWith(
+        compareBy<ArtifactRecordResult> { TRIAGE_STATUS_PRIORITY[it.status] ?: Int.MAX_VALUE }
+            .thenBy { TRIAGE_ENTITY_PRIORITY[it.entityType] ?: Int.MAX_VALUE }
+            .thenBy { it.name ?: it.id }
+    )
+    return listOf(diffTriageFinding(changes, terms)) + changes
+}
+
+private fun diffEntityRecords(
+    current: List<EntitySnapshot>,
+    previous: List<EntitySnapshot>,
+    terms: List<String>,
+    triage: Boolean
+): List<ArtifactRecordResult> {
+    val currentByKey = current.associateBy { it.key }
+    val previousByKey = previous.associateBy { it.key }
+    val keys = (currentByKey.keys + previousByKey.keys).sorted()
 
     return keys.mapNotNull { key ->
-        val currentEntity = current[key]
-        val previousEntity = previous[key]
+        val currentEntity = currentByKey[key]
+        val previousEntity = previousByKey[key]
         val status = when {
             currentEntity != null && previousEntity == null -> "added"
             currentEntity == null && previousEntity != null -> "removed"
@@ -152,21 +216,29 @@ private fun WasmBinaryProvider.diffRecords(
             else -> "unchanged"
         }
         if (status == "unchanged") return@mapNotNull null
+        if (!matchesAny(terms, previousEntity, currentEntity)) return@mapNotNull null
 
         val selected = currentEntity ?: previousEntity ?: return@mapNotNull null
-        if (!selected.matches(terms)) return@mapNotNull null
         selected.record.copy(
             status = status,
             source = when (status) {
                 "removed" -> "baseline"
                 else -> "current"
             },
-            summary = when (status) {
-                "added" -> "Added ${selected.record.summary}"
-                "removed" -> "Removed ${selected.record.summary}"
-                else -> "Changed ${selected.record.summary}"
+            summary = if (triage) {
+                triageSummary(status, selected, previousEntity, currentEntity)
+            } else {
+                when (status) {
+                    "added" -> "Added ${selected.record.summary}"
+                    "removed" -> "Removed ${selected.record.summary}"
+                    else -> "Changed ${selected.record.summary}"
+                }
             },
-            attributes = diffAttributes(previousEntity, currentEntity, selected.record.attributes)
+            attributes = if (triage) {
+                triageAttributes(previousEntity, currentEntity, selected.record.attributes)
+            } else {
+                diffAttributes(previousEntity, currentEntity, selected.record.attributes)
+            }
         )
     }
 }
@@ -335,6 +407,9 @@ private fun WasmBinaryProvider.entities(
         }
         if ("function" in requestedTypes) {
             addAll(functions.map { it.toFunctionEntity(source, detail) })
+        }
+        if ("element" in requestedTypes) {
+            addAll(readElementSegments().segments.map { it.toElementEntity(source, detail) })
         }
     }
 }
@@ -537,6 +612,43 @@ private fun GeneralFunctionEntry.toFunctionEntity(source: String, detail: String
     )
 }
 
+private fun ElementSegmentResult.toElementEntity(source: String, detail: String): EntitySnapshot {
+    val elementValues = elements.orEmpty()
+    val offset = offsetExpr.orEmpty()
+    val table = tableIdx?.toString() ?: if (mode == "active") "0" else "none"
+    val tableSummary = if (table == "none") "" else " table[$table]"
+    val attributes = buildList {
+        add("kindTag", kind.toString())
+        add("mode", mode)
+        add("tableIdx", table)
+        if (offset.isNotEmpty()) add("offsetExpr", offset.compactList(maxItems = 8))
+        add("elementType", elementType)
+        add("elementCount", elementValues.size.toString())
+        add("elements", elementValues.compactList(maxItems = if (detail == "evidence") 80 else 40))
+    }.toAttributes()
+    return EntitySnapshot(
+        key = "element:$elementidx",
+        comparisonKey = buildList {
+            add("kind=$kind")
+            add("mode=$mode")
+            add("tableIdx=$table")
+            add("offset=${offset.joinToString(" ")}")
+            add("elementType=$elementType")
+            add("elements=${elementValues.joinToString(",")}")
+        }.joinToString("|"),
+        record = ArtifactRecordResult(
+            id = "element:$elementidx",
+            entityType = "element",
+            status = "current",
+            source = source,
+            kind = mode,
+            index = elementidx,
+            summary = "element[$elementidx] $mode$tableSummary ${elementType} elements ${elementValues.compactList(maxItems = 12)}",
+            attributes = attributes
+        )
+    )
+}
+
 private fun budgetRecords(
     operation: String,
     detail: String,
@@ -654,6 +766,134 @@ private fun ArtifactRecordResult.compactForBudget(): ArtifactRecordResult =
         attributes = emptyList()
     )
 
+private fun currentSurfaceFinding(records: List<ArtifactRecordResult>): ArtifactRecordResult {
+    val exportRecords = records.filter { it.entityType == "export" }
+    val attributes = buildList {
+        add("exports", exportRecords.size.toString())
+        add("functionExports", exportRecords.count { it.kind == "function" }.toString())
+        add("tableExports", exportRecords.count { it.kind == "table" }.toString())
+        add("memoryExports", exportRecords.count { it.kind == "memory" }.toString())
+        add("globalExports", exportRecords.count { it.kind == "global" }.toString())
+        add("imports", records.count { it.entityType == "import" }.toString())
+        add("memories", records.count { it.entityType == "memory" }.toString())
+        add("globals", records.count { it.entityType == "global" }.toString())
+        add("elementSegments", records.count { it.entityType == "element" }.toString())
+    }.toAttributes()
+    return ArtifactRecordResult(
+        id = "triage:surface",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = "Current module surface has ${exportRecords.size} exports and ${records.count { it.entityType == "element" }} element segments",
+        attributes = attributes
+    )
+}
+
+private fun diffTriageFinding(
+    changes: List<ArtifactRecordResult>,
+    terms: List<String>
+): ArtifactRecordResult {
+    val statusCounts = changes.groupingBy { it.status }.eachCount()
+    val entityStatusCounts = changes.groupingBy { "${it.entityType}.${it.status}" }.eachCount()
+    val attributes = buildList {
+        add("changed", (statusCounts["changed"] ?: 0).toString())
+        add("added", (statusCounts["added"] ?: 0).toString())
+        add("removed", (statusCounts["removed"] ?: 0).toString())
+        entityStatusCounts.toSortedMap().forEach { (name, count) -> add(name, count.toString()) }
+        if (terms.isNotEmpty()) add("query", terms.joinToString(","))
+        if (changes.isNotEmpty()) add("focus", changes.take(5).joinToString("; ") { it.summary })
+    }.toAttributes()
+    val summary = if (changes.isEmpty()) {
+        if (terms.isEmpty()) {
+            "Triage found no public artifact changes"
+        } else {
+            "Triage found no public artifact changes matching ${terms.joinToString(",")}"
+        }
+    } else {
+        "Triage found ${statusCounts["changed"] ?: 0} changed, ${statusCounts["added"] ?: 0} added, and ${statusCounts["removed"] ?: 0} removed records"
+    }
+    return ArtifactRecordResult(
+        id = "triage:diff",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = summary,
+        attributes = attributes
+    )
+}
+
+private fun triageSummary(
+    status: String,
+    selected: EntitySnapshot,
+    previous: EntitySnapshot?,
+    current: EntitySnapshot?
+): String {
+    if (status != "changed") {
+        return when (status) {
+            "added" -> "Added ${selected.record.summary}"
+            "removed" -> "Removed ${selected.record.summary}"
+            else -> selected.record.summary
+        }
+    }
+
+    val previousSignature = previous?.record?.signature?.compact()
+    val currentSignature = current?.record?.signature?.compact()
+    if (previousSignature != currentSignature && (previousSignature != null || currentSignature != null)) {
+        return "Changed ${selected.record.entityType} ${selected.record.displayLabel()} signature from ${previousSignature ?: "<missing>"} to ${currentSignature ?: "<missing>"}"
+    }
+
+    if (selected.record.entityType == "element") {
+        val previousElements = previous?.record?.attrValue("elements") ?: "<missing>"
+        val currentElements = current?.record?.attrValue("elements") ?: "<missing>"
+        return "Changed element ${selected.record.displayLabel()} elements from $previousElements to $currentElements"
+    }
+
+    if (selected.record.entityType == "memory") {
+        val previousRange = previous?.record?.attrValue("range") ?: previous?.record?.summary ?: "<missing>"
+        val currentRange = current?.record?.attrValue("range") ?: current?.record?.summary ?: "<missing>"
+        return "Changed memory ${selected.record.displayLabel()} limits from $previousRange to $currentRange"
+    }
+
+    return "Changed ${selected.record.summary}"
+}
+
+private fun triageAttributes(
+    previous: EntitySnapshot?,
+    current: EntitySnapshot?,
+    fallback: List<ArtifactAttributeResult>
+): List<ArtifactAttributeResult> {
+    val leading = buildList {
+        previous?.record?.summary?.let { add("previousSummary", it) }
+        current?.record?.summary?.let { add("currentSummary", it) }
+
+        val previousSignature = previous?.record?.signature?.compact()
+        val currentSignature = current?.record?.signature?.compact()
+        if (previousSignature != currentSignature && (previousSignature != null || currentSignature != null)) {
+            previousSignature?.let { add("previousSignature", it) }
+            currentSignature?.let { add("currentSignature", it) }
+        }
+
+        if (previous?.record?.entityType == "element" || current?.record?.entityType == "element") {
+            addIfChanged("previousElements", previous?.record?.attrValue("elements"), "currentElements", current?.record?.attrValue("elements"))
+            addIfChanged("previousTableIdx", previous?.record?.attrValue("tableIdx"), "currentTableIdx", current?.record?.attrValue("tableIdx"))
+            addIfChanged("previousOffsetExpr", previous?.record?.attrValue("offsetExpr"), "currentOffsetExpr", current?.record?.attrValue("offsetExpr"))
+        }
+    }.toAttributes()
+
+    return (leading + diffAttributes(previous, current, fallback)).distinctBy { it.name }
+}
+
+private fun MutableList<Pair<String, String>>.addIfChanged(
+    previousName: String,
+    previousValue: String?,
+    currentName: String,
+    currentValue: String?
+) {
+    if (previousValue == currentValue) return
+    previousValue?.let { add(previousName, it) }
+    currentValue?.let { add(currentName, it) }
+}
+
 private fun FunctionCallGraphResult.toTraceFunctionRecord(detail: String): ArtifactRecordResult {
     return ArtifactRecordResult(
         id = "function:$funcidx",
@@ -679,6 +919,22 @@ private fun FunctionCallGraphResult.toTraceFunctionRecord(detail: String): Artif
             if (detail == "evidence") add("locals", locals.joinToString(",") { "${it.count}:${it.type}" })
         }.toAttributes()
     )
+}
+
+private fun matchesAny(terms: List<String>, vararg entities: EntitySnapshot?): Boolean =
+    terms.isEmpty() || entities.any { it?.matches(terms) == true }
+
+private fun ArtifactRecordResult.displayLabel(): String =
+    name?.let { "`$it`" } ?: id
+
+private fun ArtifactRecordResult.attrValue(name: String): String? =
+    attributes.firstOrNull { it.name == name }?.value
+
+private fun List<String>.compactList(maxItems: Int): String {
+    if (isEmpty()) return "[]"
+    val visible = take(maxItems)
+    val suffix = if (size > maxItems) ",...(${size - maxItems} more)" else ""
+    return visible.joinToString(separator = ",", prefix = "[", postfix = "$suffix]")
 }
 
 private fun List<String>.normalizedTerms(): List<String> =

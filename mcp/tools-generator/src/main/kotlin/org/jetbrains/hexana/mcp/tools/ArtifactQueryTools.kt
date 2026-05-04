@@ -4,13 +4,13 @@ private const val ARTIFACT_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.artif
 
 private val QueryArtifactsInput = WasmInputClass.with("QueryArtifactsInput") {
     nullable("baselinePath", of = string())
-        .describe("Optional baseline `.wasm` path used by `operation = diff`.")
+        .describe("Optional baseline `.wasm` path used by `operation = diff` or `operation = triage`.")
         .maxLength(4096)
     string("operation", default = "overview")
-        .describe("Query operation: `overview`, `find`, `diff`, or `trace`.")
+        .describe("Query operation: `overview`, `find`, `diff`, `trace`, or `triage`.")
         .maxLength(32)
     nullable("entityTypes", of = list(of = string()))
-        .describe("Optional entity filter. Supported values include `export`, `import`, `memory`, `global`, and `function`.")
+        .describe("Optional entity filter. Supported values include `export`, `import`, `memory`, `global`, `function`, and `element`.")
         .maxItems(20)
     nullable("query", of = list(of = string()))
         .describe("Optional case-insensitive terms used to filter matched entities or trace roots.")
@@ -93,7 +93,7 @@ val ArtifactQueryTools = tools {
         summary = "Query WebAssembly artifact entities, diffs, and function relations with bounded output."
         guidance = """
             Use this as the default Hexana MCP entry point instead of low-level list tools.
-            `overview` returns module counts, `find` locates matching entities, `diff` compares current and baseline modules, and `trace` follows function calls and memory-write relations from a named or indexed function.
+            `overview` returns module counts, `find` locates matching entities, `diff` compares current and baseline modules, `trace` follows function calls and memory-write relations from a named or indexed function, and `triage` returns the first production-useful summary for public surface, API, memory, or element-table changes.
             Keep `limit` and `maxBytes` small, use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets or instruction text.
         """
         input = QueryArtifactsInput

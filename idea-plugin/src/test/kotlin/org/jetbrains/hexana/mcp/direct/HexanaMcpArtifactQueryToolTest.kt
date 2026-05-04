@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.direct
 
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -92,6 +94,91 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(setOf("new", "old"), records.indices.map { records.obj(it).text("name") }.toSet())
     }
 
+    fun testQueryArtifactsTriageSummarizesExportSignatureChanges() {
+        val baseline = createWasmFixture(
+            "fixtures/direct/artifacts/triage-signature-baseline.wasm",
+            """
+            (module
+              (func (export "transform") (param i32) (result i32)
+                local.get 0))
+            """.trimIndent()
+        )
+        val current = createWasmFixture(
+            "fixtures/direct/artifacts/triage-signature-current.wasm",
+            """
+            (module
+              (func (export "transform") (param i64) (result i64)
+                local.get 0))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(current.projectRelativePath))
+                put("baselinePath", JsonPrimitive(baseline.projectRelativePath))
+                put("operation", JsonPrimitive("triage"))
+                put("entityTypes", buildJsonArray {
+                    add(JsonPrimitive("export"))
+                })
+            }
+        )
+
+        assertEquals("triage", result.text("operation"))
+        val records = result.array("records")
+        assertEquals("finding", records.obj(0).text("entityType"))
+        val changed = records.recordById("export:function:transform")
+        assertEquals("changed", changed.text("status"))
+        assertTrue(changed.text("summary").contains("signature from (i32) -> (i32) to (i64) -> (i64)"))
+        assertEquals("(i32) -> (i32)", changed.attributeValue("previousSignature"))
+        assertEquals("(i64) -> (i64)", changed.attributeValue("currentSignature"))
+    }
+
+    fun testQueryArtifactsTriageIncludesElementSegmentDiff() {
+        val baseline = createWasmFixture(
+            "fixtures/direct/artifacts/triage-element-baseline.wasm",
+            """
+            (module
+              (table 4 funcref)
+              (func)
+              (func)
+              (func)
+              (func)
+              (elem (i32.const 0) func 0 1 2 3))
+            """.trimIndent()
+        )
+        val current = createWasmFixture(
+            "fixtures/direct/artifacts/triage-element-current.wasm",
+            """
+            (module
+              (table 4 funcref)
+              (func)
+              (func)
+              (func)
+              (func)
+              (elem (i32.const 0) func 0 1 3 2))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(current.projectRelativePath))
+                put("baselinePath", JsonPrimitive(baseline.projectRelativePath))
+                put("operation", JsonPrimitive("triage"))
+                put("entityTypes", buildJsonArray {
+                    add(JsonPrimitive("element"))
+                })
+            }
+        )
+
+        val changed = result.array("records").recordById("element:0")
+        assertEquals("changed", changed.text("status"))
+        assertEquals("[0,1,2,3]", changed.attributeValue("previousElements"))
+        assertEquals("[0,1,3,2]", changed.attributeValue("currentElements"))
+        assertTrue(changed.text("summary").contains("elements from [0,1,2,3] to [0,1,3,2]"))
+    }
+
     fun testQueryArtifactsDiffHonorsMaxBytesBudget() {
         val baseline = createWasmFixture(
             "fixtures/direct/artifacts/budget-baseline.wasm",
@@ -167,5 +254,19 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
             }
             appendLine(")")
         }
+    }
+
+    private fun JsonArray.recordById(id: String): JsonObject {
+        return indices
+            .map { obj(it) }
+            .single { it.text("id") == id }
+    }
+
+    private fun JsonObject.attributeValue(name: String): String {
+        val attributes = array("attributes")
+        return attributes.indices
+            .map { attributes.obj(it) }
+            .single { it.text("name") == name }
+            .text("value")
     }
 }
