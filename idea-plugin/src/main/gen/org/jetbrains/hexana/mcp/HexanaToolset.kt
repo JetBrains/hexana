@@ -16,7 +16,7 @@ import org.jetbrains.hexana.mcp.query.readArtifactQuery
  */
 public class HexanaToolset : McpToolset {
   @McpTool("query_artifacts")
-  @McpDescription("Query WebAssembly artifact entities, diffs, and function relations with bounded output.\nUse this as the default Hexana MCP entry point instead of low-level list tools.\n`overview` returns module counts, `find` locates matching entities, `diff` compares current and baseline modules, and `trace` follows function calls and memory-write relations from a named or indexed function.\nKeep `limit` small and use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans.")
+  @McpDescription("Query WebAssembly artifact entities, diffs, and function relations with bounded output.\nUse this as the default Hexana MCP entry point instead of low-level list tools.\n`overview` returns module counts, `find` locates matching entities, `diff` compares current and baseline modules, and `trace` follows function calls and memory-write relations from a named or indexed function.\nKeep `limit` and `maxBytes` small, use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets or instruction text.")
   public suspend fun queryArtifacts(
     @McpDescription(Constants.RELATIVE_PATH_IN_PROJECT_DESCRIPTION) path: String,
     @McpDescription("Query operation: `overview`, `find`, `diff`, or `trace`.") operation: String = "overview",
@@ -26,12 +26,13 @@ public class HexanaToolset : McpToolset {
     @McpDescription("Optional function, import, export, or debug-name term used by `operation = trace`.") startName: String? = null,
     @McpDescription("Optional unified function index used by `operation = trace`.") startFuncidx: Int? = null,
     @McpDescription("Optional trace relation filter: `direct_call`, `direct_imported_call`, `indirect_call`, or `memory_write`.") relations: List<String>? = null,
-    @McpDescription("Maximum records to return. The implementation clamps values above 200.") limit: Int = 50,
+    @McpDescription("Maximum records to consider before byte budgeting. The implementation clamps values above 100.") limit: Int = 25,
     @McpDescription("Detail level: `summary` for compact output or `evidence` for extra offsets and identifiers.") detail: String = "summary",
+    @McpDescription("Approximate maximum JSON response bytes. The implementation clamps values above 60000.") maxBytes: Int = 24_000,
   ): QueryArtifactsResult {
     val file = requireWasmFile(path)
     val provider = file.requireCoreWasmBinaryProvider()
     val baselineProvider = baselinePath?.let { requireWasmFile(it).requireCoreWasmBinaryProvider() }
-    return provider.readArtifactQuery(baseline = baselineProvider, operation = operation, entityTypes = entityTypes.orEmpty(), query = query.orEmpty(), startName = startName, startFuncidx = startFuncidx, relations = relations.orEmpty(), limit = limit, detail = detail)
+    return provider.readArtifactQuery(baseline = baselineProvider, operation = operation, entityTypes = entityTypes.orEmpty(), query = query.orEmpty(), startName = startName, startFuncidx = startFuncidx, relations = relations.orEmpty(), limit = limit, detail = detail, maxBytes = maxBytes)
   }
 }

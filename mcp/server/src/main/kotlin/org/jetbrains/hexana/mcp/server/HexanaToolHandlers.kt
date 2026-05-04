@@ -36,7 +36,8 @@ class HexanaToolHandlers(
                 startFuncidx = arguments.nullableInt("startFuncidx"),
                 relations = arguments.optionalStringList("relations").orEmpty(),
                 limit = arguments.intOrDefault("limit", HexanaToolInputDefaults.QUERY_ARTIFACTS_LIMIT),
-                detail = arguments.stringOrDefault("detail", HexanaToolInputDefaults.QUERY_ARTIFACTS_DETAIL)
+                detail = arguments.stringOrDefault("detail", HexanaToolInputDefaults.QUERY_ARTIFACTS_DETAIL),
+                maxBytes = arguments.intOrDefault("maxBytes", HexanaToolInputDefaults.QUERY_ARTIFACTS_MAX_BYTES)
             )
         }
     }

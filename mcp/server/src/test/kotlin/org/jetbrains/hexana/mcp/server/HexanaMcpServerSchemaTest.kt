@@ -90,16 +90,20 @@ class HexanaMcpServerSchemaTest {
         val schema = queryArtifactsInputSchema()
 
         assertEquals("overview", schema.getValue("operation").jsonObject.getValue("default").jsonPrimitive.content)
-        assertEquals(50, schema.getValue("limit").jsonObject.getValue("default").jsonPrimitive.int)
+        assertEquals(25, schema.getValue("limit").jsonObject.getValue("default").jsonPrimitive.int)
         assertEquals("summary", schema.getValue("detail").jsonObject.getValue("default").jsonPrimitive.content)
+        assertEquals(24_000, schema.getValue("maxBytes").jsonObject.getValue("default").jsonPrimitive.int)
     }
 
     @Test
-    fun limitBoundsArePresentInGeneratedSchema() {
+    fun responseBoundsArePresentInGeneratedSchema() {
         val limit = queryArtifactsInputSchema().getValue("limit").jsonObject
+        val maxBytes = queryArtifactsInputSchema().getValue("maxBytes").jsonObject
 
         assertEquals(1, limit.getValue("minimum").jsonPrimitive.int)
-        assertEquals(200, limit.getValue("maximum").jsonPrimitive.int)
+        assertEquals(100, limit.getValue("maximum").jsonPrimitive.int)
+        assertEquals(2_000, maxBytes.getValue("minimum").jsonPrimitive.int)
+        assertEquals(60_000, maxBytes.getValue("maximum").jsonPrimitive.int)
     }
 
     private fun queryArtifactsInputSchema(): JsonObject {

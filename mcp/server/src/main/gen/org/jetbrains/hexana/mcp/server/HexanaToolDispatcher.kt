@@ -18,9 +18,11 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 internal object HexanaToolInputDefaults {
   public const val QUERY_ARTIFACTS_OPERATION: String = "overview"
 
-  public const val QUERY_ARTIFACTS_LIMIT: Int = 50
+  public const val QUERY_ARTIFACTS_LIMIT: Int = 25
 
   public const val QUERY_ARTIFACTS_DETAIL: String = "summary"
+
+  public const val QUERY_ARTIFACTS_MAX_BYTES: Int = 24_000
 }
 
 /**
@@ -131,16 +133,23 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
       })
       put("limit", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Maximum records to return. The implementation clamps values above 200."))
-        put("default", JsonPrimitive(50))
+        put("description", JsonPrimitive("Maximum records to consider before byte budgeting. The implementation clamps values above 100."))
+        put("default", JsonPrimitive(25))
         put("minimum", JsonPrimitive(1))
-        put("maximum", JsonPrimitive(200))
+        put("maximum", JsonPrimitive(100))
       })
       put("detail", buildJsonObject {
         put("type", JsonPrimitive("string"))
         put("description", JsonPrimitive("Detail level: `summary` for compact output or `evidence` for extra offsets and identifiers."))
         put("default", JsonPrimitive("summary"))
         put("maxLength", JsonPrimitive(32))
+      })
+      put("maxBytes", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Approximate maximum JSON response bytes. The implementation clamps values above 60000."))
+        put("default", JsonPrimitive(24_000))
+        put("minimum", JsonPrimitive(2_000))
+        put("maximum", JsonPrimitive(60_000))
       })
     },
     required = listOf()
@@ -339,7 +348,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
         put("properties", buildJsonObject {
           put("count", buildJsonObject {
             put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of records omitted by the response limit."))
+            put("description", JsonPrimitive("Number of records omitted by response bounds."))
           })
           put("reason", buildJsonObject {
             put("type", JsonPrimitive("string"))
@@ -350,7 +359,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("count"))
           add(JsonPrimitive("reason"))
         })
-        put("description", JsonPrimitive("Omission summary when the result exceeded `limit`."))
+        put("description", JsonPrimitive("Omission summary when the result exceeded `limit` or `maxBytes`."))
       })
       put("warnings", buildJsonObject {
         put("type", JsonPrimitive("array"))

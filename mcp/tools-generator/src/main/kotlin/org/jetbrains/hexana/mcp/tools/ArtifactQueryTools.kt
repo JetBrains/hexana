@@ -24,13 +24,17 @@ private val QueryArtifactsInput = WasmInputClass.with("QueryArtifactsInput") {
     nullable("relations", of = list(of = string()))
         .describe("Optional trace relation filter: `direct_call`, `direct_imported_call`, `indirect_call`, or `memory_write`.")
         .maxItems(20)
-    int("limit", default = 50)
-        .describe("Maximum records to return. The implementation clamps values above 200.")
+    int("limit", default = 25)
+        .describe("Maximum records to consider before byte budgeting. The implementation clamps values above 100.")
         .minimum(1)
-        .maximum(200)
+        .maximum(100)
     string("detail", default = "summary")
         .describe("Detail level: `summary` for compact output or `evidence` for extra offsets and identifiers.")
         .maxLength(32)
+    int("maxBytes", default = 24_000)
+        .describe("Approximate maximum JSON response bytes. The implementation clamps values above 60000.")
+        .minimum(2_000)
+        .maximum(60_000)
 }
 
 private val ArtifactModuleResultClass = class_("ArtifactModuleResult", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
@@ -71,7 +75,7 @@ private val ArtifactRecordResultClass = class_("ArtifactRecordResult", kotlinPac
 }
 
 private val ArtifactOmittedResultClass = class_("ArtifactOmittedResult", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
-    int("count").describe("Number of records omitted by the response limit.")
+    int("count").describe("Number of records omitted by response bounds.")
     string("reason").describe("Why records were omitted.")
 }
 
@@ -80,7 +84,7 @@ private val QueryArtifactsResultClass = class_("QueryArtifactsResult", kotlinPac
     string("detail").describe("Executed detail level.")
     list("modules", of = ArtifactModuleResultClass).describe("Current and optional baseline module summaries.")
     list("records", of = ArtifactRecordResultClass).describe("Bounded query records.")
-    nullable("omitted", of = ArtifactOmittedResultClass).describe("Omission summary when the result exceeded `limit`.")
+    nullable("omitted", of = ArtifactOmittedResultClass).describe("Omission summary when the result exceeded `limit` or `maxBytes`.")
     list("warnings", of = string()).describe("Non-fatal query warnings.")
 }
 
@@ -90,7 +94,7 @@ val ArtifactQueryTools = tools {
         guidance = """
             Use this as the default Hexana MCP entry point instead of low-level list tools.
             `overview` returns module counts, `find` locates matching entities, `diff` compares current and baseline modules, and `trace` follows function calls and memory-write relations from a named or indexed function.
-            Keep `limit` small and use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans.
+            Keep `limit` and `maxBytes` small, use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets or instruction text.
         """
         input = QueryArtifactsInput
         inputPattern = ToolInputPattern.ArtifactQuery

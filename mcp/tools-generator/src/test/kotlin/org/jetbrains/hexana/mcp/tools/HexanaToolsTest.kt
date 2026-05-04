@@ -101,10 +101,13 @@ class HexanaToolsTest {
         val fields = queryArtifacts.input.fields.associateBy { it.name }
 
         assertEquals("overview", fields.getValue("operation").default)
-        assertEquals(50, fields.getValue("limit").default)
+        assertEquals(25, fields.getValue("limit").default)
         assertEquals("summary", fields.getValue("detail").default)
+        assertEquals(24_000, fields.getValue("maxBytes").default)
         assertEquals(1, fields.getValue("limit").minimum)
-        assertEquals(200, fields.getValue("limit").maximum)
+        assertEquals(100, fields.getValue("limit").maximum)
+        assertEquals(2_000, fields.getValue("maxBytes").minimum)
+        assertEquals(60_000, fields.getValue("maxBytes").maximum)
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("entityTypes").maxItems)
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("query").maxItems)
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("relations").maxItems)
@@ -122,7 +125,8 @@ class HexanaToolsTest {
             "startFuncidx",
             "relations",
             "limit",
-            "detail"
+            "detail",
+            "maxBytes"
         ).forEach { fieldName ->
             assertNotNull(fields[fieldName], "Missing query_artifacts input field `$fieldName`")
         }

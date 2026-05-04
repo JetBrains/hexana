@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.query
 
 import org.jetbrains.hexana.mcp.GeneralFunctionEntry
 import org.jetbrains.hexana.mcp.ParameterSignature
+import org.jetbrains.hexana.mcp.encodeHexanaJson
 import org.jetbrains.hexana.mcp.model.artifacts.ArtifactAttributeResult
 import org.jetbrains.hexana.mcp.model.artifacts.ArtifactModuleResult
 import org.jetbrains.hexana.mcp.model.artifacts.ArtifactOmittedResult
@@ -16,10 +17,14 @@ import org.jetbrains.hexana.mcp.model.imports.ImportFunctionResult
 import org.jetbrains.hexana.mcp.model.memory.MemoryResult
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 
-private const val DEFAULT_LIMIT = 50
-private const val MAX_LIMIT = 200
+private const val DEFAULT_LIMIT = 25
+private const val MAX_LIMIT = 100
+private const val DEFAULT_MAX_BYTES = 24_000
+private const val MIN_MAX_BYTES = 2_000
+private const val MAX_MAX_BYTES = 60_000
 
 private val SUPPORTED_OPERATIONS = setOf("overview", "find", "diff", "trace")
+private val SUPPORTED_DETAILS = setOf("summary", "evidence")
 private val DEFAULT_ENTITY_TYPES = setOf("export", "import", "memory", "global", "function")
 private val DIFF_ENTITY_TYPES = setOf("export", "import", "memory", "global", "function")
 private val SUPPORTED_TRACE_RELATIONS = setOf("direct_call", "direct_imported_call", "indirect_call", "memory_write")
@@ -34,27 +39,36 @@ fun WasmBinaryProvider.readArtifactQuery(
     startFuncidx: Int? = null,
     relations: List<String> = emptyList(),
     limit: Int = DEFAULT_LIMIT,
-    detail: String = "summary"
+    detail: String = "summary",
+    maxBytes: Int = DEFAULT_MAX_BYTES
 ): QueryArtifactsResult {
     val normalizedOperation = operation.trim().lowercase().ifBlank { "overview" }
     val normalizedDetail = detail.trim().lowercase().ifBlank { "summary" }
     val boundedLimit = limit.coerceIn(1, MAX_LIMIT)
+    val boundedMaxBytes = maxBytes.coerceIn(MIN_MAX_BYTES, MAX_MAX_BYTES)
     val warnings = mutableListOf<String>()
 
     if (normalizedOperation !in SUPPORTED_OPERATIONS) {
         warnings += "Unsupported operation `$operation`; returned overview instead."
     }
+    if (normalizedDetail !in SUPPORTED_DETAILS) {
+        warnings += "Unsupported detail `$detail`; returned summary detail instead."
+    }
     if (limit != boundedLimit) {
         warnings += "`limit` was clamped to $boundedLimit."
     }
+    if (maxBytes != boundedMaxBytes) {
+        warnings += "`maxBytes` was clamped to $boundedMaxBytes."
+    }
 
     val effectiveOperation = normalizedOperation.takeIf { it in SUPPORTED_OPERATIONS } ?: "overview"
+    val effectiveDetail = normalizedDetail.takeIf { it in SUPPORTED_DETAILS } ?: "summary"
     val records = when (effectiveOperation) {
         "overview" -> emptyList()
         "find" -> findRecords(
             entityTypes = entityTypes.normalizedEntityTypes(DEFAULT_ENTITY_TYPES),
             terms = query.normalizedTerms(),
-            detail = normalizedDetail
+            detail = effectiveDetail
         )
         "diff" -> {
             if (baseline == null) {
@@ -62,14 +76,14 @@ fun WasmBinaryProvider.readArtifactQuery(
                 findRecords(
                     entityTypes = entityTypes.normalizedEntityTypes(DIFF_ENTITY_TYPES),
                     terms = query.normalizedTerms(),
-                    detail = normalizedDetail
+                    detail = effectiveDetail
                 )
             } else {
                 diffRecords(
                     baseline = baseline,
                     entityTypes = entityTypes.normalizedEntityTypes(DIFF_ENTITY_TYPES),
                     terms = query.normalizedTerms(),
-                    detail = normalizedDetail
+                    detail = effectiveDetail
                 )
             }
         }
@@ -78,32 +92,32 @@ fun WasmBinaryProvider.readArtifactQuery(
             startFuncidx = startFuncidx,
             terms = query.normalizedTerms(),
             relations = relations.normalizedRelations(),
-            detail = normalizedDetail,
+            detail = effectiveDetail,
             limit = boundedLimit
         )
         else -> emptyList()
     }
 
-    val boundedRecords = records.take(boundedLimit)
-    val omittedCount = records.size - boundedRecords.size
-    val omitted = if (omittedCount > 0) {
-        ArtifactOmittedResult(
-            count = omittedCount,
-            reason = "Result set exceeded `limit=$boundedLimit`; refine `entityTypes`, `query`, or `start*`."
-        )
-    } else {
-        null
+    val modules = buildList {
+        add(toArtifactModuleResult("current"))
+        baseline?.let { add(it.toArtifactModuleResult("baseline")) }
     }
+    val budgetedRecords = budgetRecords(
+        operation = effectiveOperation,
+        detail = effectiveDetail,
+        modules = modules,
+        records = records,
+        limit = boundedLimit,
+        maxBytes = boundedMaxBytes,
+        warnings = warnings
+    )
 
     return QueryArtifactsResult(
         operation = effectiveOperation,
-        detail = normalizedDetail,
-        modules = buildList {
-            add(toArtifactModuleResult("current"))
-            baseline?.let { add(it.toArtifactModuleResult("baseline")) }
-        },
-        records = boundedRecords,
-        omitted = omitted,
+        detail = effectiveDetail,
+        modules = modules,
+        records = budgetedRecords.records,
+        omitted = budgetedRecords.omitted,
         warnings = warnings
     )
 }
@@ -188,12 +202,12 @@ private fun WasmBinaryProvider.traceRecords(
                         signature = call.target?.signature?.toArtifactSignature(),
                         summary = "function[${function.funcidx}] ${call.op} function[${call.targetFuncidx}]",
                         attributes = buildList {
-                            add("text", call.text)
                             call.offset?.let { add("offset", it.toString()) }
                             call.target?.importInfo?.let { import ->
                                 add("targetImport", "${import.module}.${import.name}")
                             }
                             if (detail == "evidence") {
+                                add("text", call.text)
                                 add("fromFuncidx", function.funcidx.toString())
                             }
                         }.toAttributes()
@@ -215,10 +229,12 @@ private fun WasmBinaryProvider.traceRecords(
                         signature = call.target?.signature?.toArtifactSignature(),
                         summary = "function[${function.funcidx}] calls import ${call.target?.importInfo?.module}.${call.target?.importInfo?.name}",
                         attributes = buildList {
-                            add("text", call.text)
                             call.offset?.let { add("offset", it.toString()) }
                             call.target?.importInfo?.let { import ->
                                 add("targetImport", "${import.module}.${import.name}")
+                            }
+                            if (detail == "evidence") {
+                                add("text", call.text)
                             }
                         }.toAttributes()
                     )
@@ -234,11 +250,12 @@ private fun WasmBinaryProvider.traceRecords(
                         relation = "indirect_call",
                         kind = call.op,
                         summary = "function[${function.funcidx}] ${call.op} type[${call.typeidx}] table[${call.tableidx}]",
-                        attributes = listOf(
-                            "typeidx" to call.typeidx.toString(),
-                            "tableidx" to call.tableidx.toString(),
-                            "text" to call.text
-                        ).toAttributes()
+                        attributes = buildList {
+                            add("typeidx", call.typeidx.toString())
+                            add("tableidx", call.tableidx.toString())
+                            call.offset?.let { add("offset", it.toString()) }
+                            if (detail == "evidence") add("text", call.text)
+                        }.toAttributes()
                     )
                 })
             }
@@ -253,10 +270,10 @@ private fun WasmBinaryProvider.traceRecords(
                         kind = write.op,
                         summary = "function[${function.funcidx}] writes memory with ${write.op}",
                         attributes = buildList {
-                            add("text", write.text)
                             write.offset?.let { add("offset", it.toString()) }
                             write.memoryOffset?.let { add("memoryOffset", it.toString()) }
                             write.alignment?.let { add("alignment", it.toString()) }
+                            if (detail == "evidence") add("text", write.text)
                         }.toAttributes()
                     )
                 })
@@ -353,8 +370,10 @@ private fun ExportResult.toExportEntity(
         function?.let { entry ->
             entry.typeidx?.let { add("typeidx", it.toString()) }
             add("definedIn", entry.definedIn)
-            entry.codeOffset?.let { add("codeOffset", it.toString()) }
-            entry.instructionCount?.let { add("instructionCount", it.toString()) }
+            if (detail == "evidence") {
+                entry.codeOffset?.let { add("codeOffset", it.toString()) }
+                entry.instructionCount?.let { add("instructionCount", it.toString()) }
+            }
         }
         memory?.let { mem ->
             add("memoryMin", mem.limit.min.toString())
@@ -367,8 +386,12 @@ private fun ExportResult.toExportEntity(
     }.toAttributes()
     return EntitySnapshot(
         key = "export:$kindName:$name",
-        comparisonKey = listOf(kindName, externIndex.toString(), signature?.compact().orEmpty(), memory?.limit?.range.orEmpty())
-            .joinToString("|"),
+        comparisonKey = buildList {
+            add(kindName)
+            add(signature?.compact().orEmpty())
+            add(memory?.limit?.range.orEmpty())
+            if (detail == "evidence") add("externIndex=$externIndex")
+        }.joinToString("|"),
         record = ArtifactRecordResult(
             id = "export:$kindName:$name",
             entityType = "export",
@@ -474,18 +497,31 @@ private fun GeneralFunctionEntry.toFunctionEntity(source: String, detail: String
         if (exportedAs.isNotEmpty()) add("exportedAs", exportedAs.joinToString(","))
         typeidx?.let { add("typeidx", it.toString()) }
         add("definedIn", definedIn)
-        codeOffset?.let { add("codeOffset", it.toString()) }
-        codeSize?.let { add("codeSize", it.toString()) }
-        instructionCount?.let { add("instructionCount", it.toString()) }
-        if (detail == "evidence") add("funcidx", funcidx.toString())
+        if (detail == "evidence") {
+            codeOffset?.let { add("codeOffset", it.toString()) }
+            codeSize?.let { add("codeSize", it.toString()) }
+            instructionCount?.let { add("instructionCount", it.toString()) }
+            add("funcidx", funcidx.toString())
+        }
     }.toAttributes()
     val stableName = exportedAs.firstOrNull()?.let { "export:$it" }
         ?: import?.let { "import:${it.module}.${it.name}" }
         ?: "funcidx:$funcidx"
+    val comparisonKey = buildList {
+        add(signature?.compact().orEmpty())
+        add(if (import != null) "import" else "local")
+        import?.let { add("${it.module}.${it.name}") }
+        if (exportedAs.isNotEmpty()) add(exportedAs.joinToString(","))
+        typeidx?.let { add("typeidx=$it") }
+        add("definedIn=$definedIn")
+        if (detail == "evidence") {
+            codeSize?.let { add("codeSize=$it") }
+            instructionCount?.let { add("instructionCount=$it") }
+        }
+    }.joinToString("|")
     return EntitySnapshot(
         key = "function:$stableName",
-        comparisonKey = listOf(signature?.compact().orEmpty(), attributes.joinToString("|") { "${it.name}=${it.value}" })
-            .joinToString("|"),
+        comparisonKey = comparisonKey,
         record = ArtifactRecordResult(
             id = "function:$funcidx",
             entityType = "function",
@@ -500,6 +536,123 @@ private fun GeneralFunctionEntry.toFunctionEntity(source: String, detail: String
         )
     )
 }
+
+private fun budgetRecords(
+    operation: String,
+    detail: String,
+    modules: List<ArtifactModuleResult>,
+    records: List<ArtifactRecordResult>,
+    limit: Int,
+    maxBytes: Int,
+    warnings: MutableList<String>
+): BudgetedRecords {
+    val limitedRecords = records.take(limit)
+    val accepted = mutableListOf<ArtifactRecordResult>()
+    var limitedByBytes = false
+
+    for (record in limitedRecords) {
+        val candidate = accepted + record
+        if (estimatedQueryBytes(operation, detail, modules, candidate, records.size - candidate.size, limit, maxBytes, warnings) <= maxBytes) {
+            accepted += record
+            continue
+        }
+
+        val compactRecord = record.compactForBudget()
+        if (accepted.isEmpty() && estimatedQueryBytes(operation, detail, modules, listOf(compactRecord), records.size - 1, limit, maxBytes, warnings) <= maxBytes) {
+            accepted += compactRecord
+        }
+        limitedByBytes = true
+        break
+    }
+
+    if (limitedRecords.size < records.size) {
+        // The `omitted` field carries the user-facing count; no warning is needed for a normal `limit` truncation.
+    } else if (accepted.size < limitedRecords.size) {
+        limitedByBytes = true
+    }
+    if (limitedByBytes) {
+        warnings += "Result truncated to fit `maxBytes=$maxBytes`; refine `entityTypes`, `query`, `start*`, or use `detail=summary`."
+    }
+
+    var finalRecords = accepted.toList()
+    while (
+        finalRecords.isNotEmpty() &&
+        estimatedQueryBytes(operation, detail, modules, finalRecords, records.size - finalRecords.size, limit, maxBytes, warnings) > maxBytes
+    ) {
+        finalRecords = finalRecords.dropLast(1)
+    }
+
+    val omittedCount = records.size - finalRecords.size
+    val omitted = if (omittedCount > 0) {
+        ArtifactOmittedResult(
+            count = omittedCount,
+            reason = buildOmittedReason(
+                limitedByCount = records.size > limit,
+                limitedByBytes = limitedByBytes || finalRecords.size < limitedRecords.size,
+                limit = limit,
+                maxBytes = maxBytes
+            )
+        )
+    } else {
+        null
+    }
+    return BudgetedRecords(finalRecords, omitted)
+}
+
+private fun estimatedQueryBytes(
+    operation: String,
+    detail: String,
+    modules: List<ArtifactModuleResult>,
+    records: List<ArtifactRecordResult>,
+    omittedCount: Int,
+    limit: Int,
+    maxBytes: Int,
+    warnings: List<String>
+): Int {
+    val omitted = if (omittedCount > 0) {
+        ArtifactOmittedResult(
+            count = omittedCount,
+            reason = buildOmittedReason(
+                limitedByCount = omittedCount > 0,
+                limitedByBytes = true,
+                limit = limit,
+                maxBytes = maxBytes
+            )
+        )
+    } else {
+        null
+    }
+    return encodeHexanaJson(
+        QueryArtifactsResult(
+            operation = operation,
+            detail = detail,
+            modules = modules,
+            records = records,
+            omitted = omitted,
+            warnings = warnings
+        )
+    ).encodeToByteArray().size
+}
+
+private fun buildOmittedReason(
+    limitedByCount: Boolean,
+    limitedByBytes: Boolean,
+    limit: Int,
+    maxBytes: Int
+): String {
+    val constraints = buildList {
+        if (limitedByCount) add("`limit=$limit`")
+        if (limitedByBytes) add("`maxBytes=$maxBytes`")
+    }.ifEmpty { listOf("query bounds") }
+    return "Result set exceeded ${constraints.joinToString(" and ")}; refine `entityTypes`, `query`, or `start*`."
+}
+
+private fun ArtifactRecordResult.compactForBudget(): ArtifactRecordResult =
+    copy(
+        summary = summary.take(240),
+        signature = null,
+        attributes = emptyList()
+    )
 
 private fun FunctionCallGraphResult.toTraceFunctionRecord(detail: String): ArtifactRecordResult {
     return ArtifactRecordResult(
@@ -606,4 +759,9 @@ private data class EntitySnapshot(
     val key: String,
     val comparisonKey: String,
     val record: ArtifactRecordResult
+)
+
+private data class BudgetedRecords(
+    val records: List<ArtifactRecordResult>,
+    val omitted: ArtifactOmittedResult?
 )

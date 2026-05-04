@@ -591,6 +591,12 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireNonNullable(detail)
             requireDefault(detail, "String") { it is String }
             requireDescribed(detail)
+
+            val maxBytes = requireField("maxBytes")
+            requireType(maxBytes, FieldType.Int32)
+            requireNonNullable(maxBytes)
+            requireDefault(maxBytes, "Int") { it is Int }
+            requireDescribed(maxBytes)
         }
     }
 }

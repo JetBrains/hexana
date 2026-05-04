@@ -128,6 +128,7 @@ private fun addParameters(builder: FunSpec.Builder, spec: ToolSpec) {
             builder.addParameter(nullableStringListParam(inputField(spec.input, "relations")))
             builder.addParameter(intWithDefault(inputField(spec.input, "limit")))
             builder.addParameter(stringWithDefault(inputField(spec.input, "detail")))
+            builder.addParameter(intWithDefault(inputField(spec.input, "maxBytes")))
         }
     }
 }
@@ -172,7 +173,8 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec) {
                 "startFuncidx = startFuncidx, " +
                 "relations = relations.orEmpty(), " +
                 "limit = limit, " +
-                "detail = detail" +
+                "detail = detail, " +
+                "maxBytes = maxBytes" +
                 ")",
             handlerMember,
         )

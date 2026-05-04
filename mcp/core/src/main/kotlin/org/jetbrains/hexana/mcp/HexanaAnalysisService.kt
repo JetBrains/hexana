@@ -46,7 +46,8 @@ interface HexanaAnalysisService {
         startFuncidx: Int?,
         relations: List<String>,
         limit: Int,
-        detail: String
+        detail: String,
+        maxBytes: Int
     ): QueryArtifactsResult {
         throw UnsupportedOperationException("queryArtifacts is not implemented")
     }
@@ -107,7 +108,8 @@ class DefaultHexanaAnalysisService(
         startFuncidx: Int?,
         relations: List<String>,
         limit: Int,
-        detail: String
+        detail: String,
+        maxBytes: Int
     ): QueryArtifactsResult {
         val wasm = load(input)
         val baseline = baselineInput?.let(::load)
@@ -120,7 +122,8 @@ class DefaultHexanaAnalysisService(
             startFuncidx = startFuncidx,
             relations = relations,
             limit = limit,
-            detail = detail
+            detail = detail,
+            maxBytes = maxBytes
         )
     }
 
