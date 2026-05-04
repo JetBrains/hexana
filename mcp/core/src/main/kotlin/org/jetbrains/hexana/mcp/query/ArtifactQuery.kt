@@ -17,6 +17,8 @@ import org.jetbrains.hexana.mcp.model.globals.GlobalResult
 import org.jetbrains.hexana.mcp.model.imports.ImportFunctionResult
 import org.jetbrains.hexana.mcp.model.memory.MemoryResult
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.wasm.sections.WasmMemType
+import org.jetbrains.hexana.wasm.sections.WasmTableExternalType
 
 private const val DEFAULT_LIMIT = 25
 private const val MAX_LIMIT = 100
@@ -24,7 +26,17 @@ private const val DEFAULT_MAX_BYTES = 24_000
 private const val MIN_MAX_BYTES = 2_000
 private const val MAX_MAX_BYTES = 60_000
 
-private val SUPPORTED_OPERATIONS = setOf("overview", "find", "diff", "trace", "triage")
+private val SUPPORTED_OPERATIONS = setOf(
+    "overview",
+    "find",
+    "diff",
+    "trace",
+    "triage",
+    "public_surface",
+    "memory_contract",
+    "dispatch_table_diff",
+    "host_call_diff"
+)
 private val SUPPORTED_DETAILS = setOf("summary", "evidence")
 private val DEFAULT_ENTITY_TYPES = setOf("export", "import", "memory", "global", "function")
 private val DIFF_ENTITY_TYPES = setOf("export", "import", "memory", "global", "function", "element")
@@ -115,6 +127,39 @@ fun WasmBinaryProvider.readArtifactQuery(
             entityTypes = entityTypes.normalizedEntityTypes(TRIAGE_ENTITY_TYPES),
             terms = query.normalizedTerms(),
             detail = effectiveDetail
+        )
+        "public_surface" -> publicSurfaceRecords(
+            terms = query.normalizedTerms(),
+            detail = effectiveDetail
+        )
+        "memory_contract" -> memoryContractRecords(
+            baseline = baseline,
+            terms = query.normalizedTerms(),
+            detail = effectiveDetail
+        )
+        "dispatch_table_diff" -> {
+            if (baseline == null) {
+                warnings += "`dispatch_table_diff` requires `baselinePath`; returned current element segments instead."
+                findRecords(
+                    entityTypes = setOf("element"),
+                    terms = query.normalizedTerms(),
+                    detail = effectiveDetail
+                )
+            } else {
+                dispatchTableDiffRecords(
+                    baseline = baseline,
+                    terms = query.normalizedTerms(),
+                    detail = effectiveDetail
+                )
+            }
+        }
+        "host_call_diff" -> hostCallDiffRecords(
+            baseline = baseline,
+            startName = startName?.trim()?.takeIf { it.isNotEmpty() },
+            startFuncidx = startFuncidx,
+            terms = query.normalizedTerms(),
+            detail = effectiveDetail,
+            limit = boundedLimit
         )
         else -> emptyList()
     }
@@ -241,6 +286,116 @@ private fun diffEntityRecords(
             }
         )
     }
+}
+
+private fun WasmBinaryProvider.publicSurfaceRecords(
+    terms: List<String>,
+    detail: String
+): List<ArtifactRecordResult> {
+    val snapshots = entities(setOf("export"), source = "current", detail = detail)
+    val records = snapshots.filterEntitySnapshotsByTermsOrAll(terms)
+        .map { it.record }
+        .sortedWith(
+            compareBy<ArtifactRecordResult> { publicSurfaceKindPriority(it.kind) }
+                .thenBy { it.name ?: it.id }
+        )
+    return listOf(publicSurfaceFinding(records)) + records
+}
+
+private fun WasmBinaryProvider.memoryContractRecords(
+    baseline: WasmBinaryProvider?,
+    terms: List<String>,
+    detail: String
+): List<ArtifactRecordResult> {
+    val current = entities(setOf("memory"), source = "current", detail = detail)
+    if (baseline == null) {
+        val records = current.filterEntitySnapshotsByTermsOrAll(terms).map { it.record }
+        return listOf(memoryContractFinding(records, baseline = false)) + records
+    }
+
+    val exactChanges = diffEntityRecords(
+        current = current,
+        previous = baseline.entities(setOf("memory"), source = "baseline", detail = detail),
+        terms = terms,
+        triage = true
+    )
+    val changes = (exactChanges.takeIf { it.isNotEmpty() || terms.isEmpty() }
+        ?: diffEntityRecords(
+            current = current,
+            previous = baseline.entities(setOf("memory"), source = "baseline", detail = detail),
+            terms = emptyList(),
+            triage = true
+        )).sortedBy { it.index ?: Int.MAX_VALUE }
+    return listOf(memoryContractFinding(changes, baseline = true)) + changes
+}
+
+private fun WasmBinaryProvider.dispatchTableDiffRecords(
+    baseline: WasmBinaryProvider,
+    terms: List<String>,
+    detail: String
+): List<ArtifactRecordResult> {
+    val previousElements = baseline.readElementSegments().segments.associateBy { it.elementidx }
+    val currentElements = readElementSegments().segments.associateBy { it.elementidx }
+    val previousFunctions = baseline.listFunctionEntries().associateBy { it.funcidx }
+    val currentFunctions = listFunctionEntries().associateBy { it.funcidx }
+
+    val records = (previousElements.keys + currentElements.keys).sorted().flatMap { elementidx ->
+        val previous = previousElements[elementidx]
+        val current = currentElements[elementidx]
+        dispatchSlotDiffRecords(
+            elementidx = elementidx,
+            previous = previous,
+            current = current,
+            previousFunctions = previousFunctions,
+            currentFunctions = currentFunctions,
+            detail = detail
+        )
+    }.filterRecordsByTermsOrAll(terms)
+
+    return listOf(dispatchTableDiffFinding(records, terms)) + records
+}
+
+private fun WasmBinaryProvider.hostCallDiffRecords(
+    baseline: WasmBinaryProvider?,
+    startName: String?,
+    startFuncidx: Int?,
+    terms: List<String>,
+    detail: String,
+    limit: Int
+): List<ArtifactRecordResult> {
+    val currentRootIndices = resolveStartFunctions(startName, startFuncidx, terms, limit)
+    if (currentRootIndices.isEmpty()) {
+        return listOf(
+            ArtifactRecordResult(
+                id = "host-call-diff:roots",
+                entityType = "finding",
+                status = "current",
+                source = "current",
+                summary = "No host-call roots matched; pass `startName`, `startFuncidx`, or a function/export query term",
+                attributes = buildList {
+                    startName?.let { add("startName", it) }
+                    startFuncidx?.let { add("startFuncidx", it.toString()) }
+                    if (terms.isNotEmpty()) add("query", terms.joinToString(","))
+                }.toAttributes()
+            )
+        )
+    }
+
+    val currentCalls = hostCallSnapshots(currentRootIndices, source = "current", detail = detail)
+    if (baseline == null) {
+        val records = currentCalls.map { it.record }.filterRecordsByTermsOrAll(terms)
+        return listOf(hostCallFinding(records, baseline = false, terms = terms)) + records
+    }
+
+    val previousRootIndices = baseline.resolveStartFunctions(startName, startFuncidx, terms, limit)
+    val previousCalls = baseline.hostCallSnapshots(previousRootIndices, source = "baseline", detail = detail)
+    val records = diffHostCalls(previousCalls, currentCalls)
+        .filterRecordsByTermsOrAll(terms)
+        .sortedWith(
+            compareBy<ArtifactRecordResult> { TRIAGE_STATUS_PRIORITY[it.status] ?: Int.MAX_VALUE }
+                .thenBy { it.name ?: it.id }
+        )
+    return listOf(hostCallFinding(records, baseline = true, terms = terms)) + records
 }
 
 private fun WasmBinaryProvider.traceRecords(
@@ -385,6 +540,9 @@ private fun WasmBinaryProvider.entities(
     val functionsByIndex = functions.associateBy { it.funcidx }
     val exports = readExports().exports
     val memoriesByIndex = readMemory().memories.associateBy { it.memoryIdx }
+    val globalsByIndex = readGlobals().globals.associateBy { it.globalIdx }
+    val importedMemoriesByIndex = importedMemoriesByIndex()
+    val importedTablesByIndex = importedTablesByIndex()
     val exportedMemoryNames = exports
         .filter { it.kind.kindName() == "memory" }
         .groupBy(
@@ -394,13 +552,23 @@ private fun WasmBinaryProvider.entities(
 
     return buildList {
         if ("export" in requestedTypes) {
-            addAll(exports.map { it.toExportEntity(source, functionsByIndex, memoriesByIndex, detail) })
+            addAll(exports.map {
+                it.toExportEntity(
+                    source = source,
+                    functionsByIndex = functionsByIndex,
+                    memoriesByIndex = memoriesByIndex,
+                    globalsByIndex = globalsByIndex,
+                    importedMemoriesByIndex = importedMemoriesByIndex,
+                    importedTablesByIndex = importedTablesByIndex,
+                    detail = detail
+                )
+            })
         }
         if ("import" in requestedTypes) {
             addAll(readImportFunctions().imports.map { it.toImportEntity(source) })
         }
         if ("memory" in requestedTypes) {
-            addAll(readMemory().memories.map { it.toMemoryEntity(source, exportedMemoryNames, detail) })
+            addAll(readMemory().memories.map { it.toMemoryEntity(source, exportedMemoryNames, importedMemoriesByIndex, detail) })
         }
         if ("global" in requestedTypes) {
             addAll(readGlobals().globals.map { it.toGlobalEntity(source, detail) })
@@ -433,27 +601,60 @@ private fun ExportResult.toExportEntity(
     source: String,
     functionsByIndex: Map<Int, GeneralFunctionEntry>,
     memoriesByIndex: Map<Int, MemoryResult>,
+    globalsByIndex: Map<Int, GlobalResult>,
+    importedMemoriesByIndex: Map<Int, ImportName>,
+    importedTablesByIndex: Map<Int, ImportName>,
     detail: String
 ): EntitySnapshot {
     val kindName = kind.kindName()
     val function = functionsByIndex[externIndex.toInt()].takeIf { kindName == "function" }
     val memory = memoriesByIndex[externIndex.toInt()].takeIf { kindName == "memory" }
+    val global = globalsByIndex[externIndex.toInt()].takeIf { kindName == "global" }
+    val importedMemory = importedMemoriesByIndex[externIndex.toInt()].takeIf { kindName == "memory" }
+    val importedTable = importedTablesByIndex[externIndex.toInt()].takeIf { kindName == "table" }
     val signature = function?.signature?.toArtifactSignature()
     val attributes = buildList {
         add("externIndex", externIndex.toString())
         add("kindTag", kind.toString())
         function?.let { entry ->
             entry.typeidx?.let { add("typeidx", it.toString()) }
+            add("origin", entry.origin())
             add("definedIn", entry.definedIn)
+            entry.import?.let { add("import", "${it.module}.${it.name}") }
             if (detail == "evidence") {
                 entry.codeOffset?.let { add("codeOffset", it.toString()) }
                 entry.instructionCount?.let { add("instructionCount", it.toString()) }
             }
         }
         memory?.let { mem ->
+            add("memidx", mem.memoryIdx.toString())
+            add("origin", mem.origin())
+            importedMemory?.let { import ->
+                add("import", import.render())
+                add("importModule", import.module)
+                add("importName", import.name)
+            }
             add("memoryMin", mem.limit.min.toString())
             add("memoryMax", mem.limit.max?.toString() ?: "none")
+            add("memoryHasMax", mem.limit.hasMax.toString())
             add("memoryAddressType", mem.limit.addressType)
+        }
+        global?.let { glob ->
+            add("globalidx", glob.globalIdx.toString())
+            add("origin", glob.origin())
+            glob.prefix?.let { prefix -> glob.name?.let { name -> add("import", "$prefix.$name") } }
+            add("type", glob.type)
+            add("mutable", glob.mutability.toString())
+            glob.expression?.let { add("initExpr", it) }
+        }
+        if (kindName == "table") {
+            add("tableidx", externIndex.toString())
+            add("origin", if (importedTable != null) "import" else "local")
+            importedTable?.let { import ->
+                add("import", import.render())
+                add("importModule", import.module)
+                add("importName", import.name)
+            }
         }
         if (detail == "evidence") {
             add("idKey", "export:$kindName:$name")
@@ -465,6 +666,7 @@ private fun ExportResult.toExportEntity(
             add(kindName)
             add(signature?.compact().orEmpty())
             add(memory?.limit?.range.orEmpty())
+            global?.let { add("${it.type}:${it.mutability}:${it.expression.orEmpty()}") }
             if (detail == "evidence") add("externIndex=$externIndex")
         }.joinToString("|"),
         record = ArtifactRecordResult(
@@ -508,11 +710,19 @@ private fun ImportFunctionResult.toImportEntity(source: String): EntitySnapshot 
 private fun MemoryResult.toMemoryEntity(
     source: String,
     exportedNames: Map<Int, List<String>>,
+    importedMemoriesByIndex: Map<Int, ImportName>,
     detail: String
 ): EntitySnapshot {
     val exports = exportedNames[memoryIdx].orEmpty()
+    val importedMemory = importedMemoriesByIndex[memoryIdx]
     val attributes = buildList {
         add("definedIn", definedIn)
+        add("origin", origin())
+        importedMemory?.let { import ->
+            add("import", import.render())
+            add("importModule", import.module)
+            add("importName", import.name)
+        }
         add("addressType", limit.addressType)
         add("min", limit.min.toString())
         add("max", limit.max?.toString() ?: "none")
@@ -529,7 +739,7 @@ private fun MemoryResult.toMemoryEntity(
             entityType = "memory",
             status = "current",
             source = source,
-            name = exports.firstOrNull(),
+            name = exports.firstOrNull() ?: importedMemory?.name,
             kind = definedIn,
             index = memoryIdx,
             summary = "memory[$memoryIdx] ${limit.range} pages from $definedIn",
@@ -545,7 +755,8 @@ private fun GlobalResult.toGlobalEntity(source: String, detail: String): EntityS
         add("type", type)
         add("mutable", mutability.toString())
         add("definedIn", definedIn)
-        if (detail == "evidence") expression?.let { add("expression", it) }
+        add("origin", origin())
+        expression?.let { add("expression", it) }
     }.toAttributes()
     return EntitySnapshot(
         key = "global:$globalIdx",
@@ -647,6 +858,157 @@ private fun ElementSegmentResult.toElementEntity(source: String, detail: String)
             attributes = attributes
         )
     )
+}
+
+private fun dispatchSlotDiffRecords(
+    elementidx: Int,
+    previous: ElementSegmentResult?,
+    current: ElementSegmentResult?,
+    previousFunctions: Map<Int, GeneralFunctionEntry>,
+    currentFunctions: Map<Int, GeneralFunctionEntry>,
+    detail: String
+): List<ArtifactRecordResult> {
+    val previousElements = previous?.elements.orEmpty()
+    val currentElements = current?.elements.orEmpty()
+    val maxSize = maxOf(previousElements.size, currentElements.size)
+    val offset = current?.offsetExpr ?: previous?.offsetExpr ?: emptyList()
+    val tableIdx = current?.tableIdx ?: previous?.tableIdx ?: 0
+    val baseSlot = offset.activeElementBaseSlot()
+
+    return (0 until maxSize).mapNotNull { position ->
+        val previousTarget = previousElements.getOrNull(position)
+        val currentTarget = currentElements.getOrNull(position)
+        if (previousTarget == currentTarget) return@mapNotNull null
+
+        val previousFuncidx = previousTarget?.toIntOrNull()
+        val currentFuncidx = currentTarget?.toIntOrNull()
+        val previousFunction = previousFuncidx?.let(previousFunctions::get)
+        val currentFunction = currentFuncidx?.let(currentFunctions::get)
+        val status = when {
+            previousTarget == null -> "added"
+            currentTarget == null -> "removed"
+            else -> "changed"
+        }
+        val slot = baseSlot?.plus(position) ?: position
+        val previousName = previousFunction?.exportedAs?.firstOrNull() ?: previousTarget ?: "<missing>"
+        val currentName = currentFunction?.exportedAs?.firstOrNull() ?: currentTarget ?: "<missing>"
+
+        ArtifactRecordResult(
+            id = "dispatch-slot:$elementidx:$slot",
+            entityType = "dispatch_slot",
+            status = status,
+            source = if (status == "removed") "baseline" else "current",
+            name = currentName.takeUnless { it == "<missing>" } ?: previousName,
+            kind = "table_slot",
+            index = slot,
+            targetId = currentFuncidx?.let { "function:$it" },
+            signature = currentFunction?.signature?.toArtifactSignature() ?: previousFunction?.signature?.toArtifactSignature(),
+            summary = "table[$tableIdx] slot[$slot] target ${status} from function[${previousTarget ?: "<missing>"}] $previousName to function[${currentTarget ?: "<missing>"}] $currentName",
+            attributes = buildList {
+                add("elementidx", elementidx.toString())
+                add("elementPosition", position.toString())
+                add("slot", slot.toString())
+                add("tableIdx", tableIdx.toString())
+                if (offset.isNotEmpty()) add("offsetExpr", offset.compactList(maxItems = 8))
+                previousTarget?.let { add("previousFuncidx", it) }
+                currentTarget?.let { add("currentFuncidx", it) }
+                previousFunction?.let { function ->
+                    add("previousOrigin", function.origin())
+                    if (function.exportedAs.isNotEmpty()) add("previousExportedAs", function.exportedAs.joinToString(","))
+                    function.import?.let { add("previousImport", "${it.module}.${it.name}") }
+                    function.signature?.toArtifactSignature()?.compact()?.let { add("previousSignature", it) }
+                }
+                currentFunction?.let { function ->
+                    add("currentOrigin", function.origin())
+                    if (function.exportedAs.isNotEmpty()) add("currentExportedAs", function.exportedAs.joinToString(","))
+                    function.import?.let { add("currentImport", "${it.module}.${it.name}") }
+                    function.signature?.toArtifactSignature()?.compact()?.let { add("currentSignature", it) }
+                }
+                add("previousElements", previousElements.compactList(maxItems = if (detail == "evidence") 80 else 24))
+                add("currentElements", currentElements.compactList(maxItems = if (detail == "evidence") 80 else 24))
+            }.toAttributes()
+        )
+    }
+}
+
+private fun WasmBinaryProvider.hostCallSnapshots(
+    rootIndices: List<Int>,
+    source: String,
+    detail: String
+): List<HostCallSnapshot> {
+    return readFunctionCallGraph(rootIndices).functions.flatMap { function ->
+        function.directImportedCalls.map { call ->
+            val import = call.target?.importInfo
+            val hostName = import?.let { "${it.module}.${it.name}" } ?: "function:${call.targetFuncidx}"
+            val rootName = function.exportedAs.firstOrNull() ?: "function:${function.funcidx}"
+            val record = ArtifactRecordResult(
+                id = "host-call:${rootName}:${hostName}",
+                entityType = "host_call",
+                status = "current",
+                source = source,
+                name = hostName,
+                kind = "direct_imported_call",
+                index = call.targetFuncidx,
+                relation = "direct_imported_call",
+                targetId = "function:${call.targetFuncidx}",
+                signature = call.target?.signature?.toArtifactSignature(),
+                summary = "`$rootName` directly calls host import `$hostName`",
+                attributes = buildList {
+                    add("rootFuncidx", function.funcidx.toString())
+                    add("rootName", rootName)
+                    if (function.exportedAs.isNotEmpty()) add("rootExportedAs", function.exportedAs.joinToString(","))
+                    function.signature?.toArtifactSignature()?.compact()?.let { add("rootSignature", it) }
+                    import?.let {
+                        add("import", "${it.module}.${it.name}")
+                        add("importModule", it.module)
+                        add("importName", it.name)
+                    }
+                    add("targetFuncidx", call.targetFuncidx.toString())
+                    call.offset?.let { add("offset", it.toString()) }
+                    if (detail == "evidence") add("text", call.text)
+                }.toAttributes()
+            )
+            HostCallSnapshot(
+                key = "${rootName}:${hostName}",
+                rootName = rootName,
+                hostName = hostName,
+                record = record
+            )
+        }
+    }
+}
+
+private fun diffHostCalls(
+    previous: List<HostCallSnapshot>,
+    current: List<HostCallSnapshot>
+): List<ArtifactRecordResult> {
+    val previousByKey = previous.associateBy { it.key }
+    val currentByKey = current.associateBy { it.key }
+    return (previousByKey.keys + currentByKey.keys).sorted().mapNotNull { key ->
+        val previousCall = previousByKey[key]
+        val currentCall = currentByKey[key]
+        val status = when {
+            previousCall == null && currentCall != null -> "added"
+            previousCall != null && currentCall == null -> "removed"
+            else -> "unchanged"
+        }
+        if (status == "unchanged") return@mapNotNull null
+        val selected = currentCall ?: previousCall ?: return@mapNotNull null
+        selected.record.copy(
+            status = status,
+            source = if (status == "removed") "baseline" else "current",
+            summary = when (status) {
+                "added" -> "Added direct host call `${selected.hostName}` from `${selected.rootName}`"
+                else -> "Removed direct host call `${selected.hostName}` from `${selected.rootName}`"
+            },
+            attributes = buildList {
+                add("rootName", selected.rootName)
+                add("hostImport", selected.hostName)
+                previousCall?.record?.attrValue("offset")?.let { add("previousOffset", it) }
+                currentCall?.record?.attrValue("offset")?.let { add("currentOffset", it) }
+            }.toAttributes().plus(selected.record.attributes).distinctBy { it.name }
+        )
+    }
 }
 
 private fun budgetRecords(
@@ -789,6 +1151,107 @@ private fun currentSurfaceFinding(records: List<ArtifactRecordResult>): Artifact
     )
 }
 
+private fun publicSurfaceFinding(records: List<ArtifactRecordResult>): ArtifactRecordResult {
+    val functionExports = records.filter { it.kind == "function" }
+    val memoryExports = records.filter { it.kind == "memory" }
+    val globalExports = records.filter { it.kind == "global" }
+    val tableExports = records.filter { it.kind == "table" }
+    val attributes = buildList {
+        add("exports", records.size.toString())
+        add("functionExports", functionExports.size.toString())
+        add("memoryExports", memoryExports.size.toString())
+        add("globalExports", globalExports.size.toString())
+        add("tableExports", tableExports.size.toString())
+        add("importedFunctionExports", functionExports.count { it.attrValue("origin") == "import" }.toString())
+        add("localFunctionExports", functionExports.count { it.attrValue("origin") == "local" }.toString())
+        val reexportedImports = functionExports
+            .filter { it.attrValue("origin") == "import" }
+            .mapNotNull { export -> export.name?.let { name -> export.attrValue("import")?.let { "$name=$it" } } }
+        if (reexportedImports.isNotEmpty()) add("reexportedImports", reexportedImports.joinToString(","))
+    }.toAttributes()
+    return ArtifactRecordResult(
+        id = "public-surface:summary",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = "Public surface has ${records.size} exports: ${functionExports.size} functions, ${memoryExports.size} memories, ${globalExports.size} globals, ${tableExports.size} tables",
+        attributes = attributes
+    )
+}
+
+private fun memoryContractFinding(
+    records: List<ArtifactRecordResult>,
+    baseline: Boolean
+): ArtifactRecordResult {
+    val changed = records.count { it.status == "changed" }
+    val imported = records.count { it.attrValue("origin") == "import" }
+    return ArtifactRecordResult(
+        id = "memory-contract:summary",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = if (baseline) {
+            "Memory contract diff found $changed changed memories"
+        } else {
+            "Memory contract found ${records.size} current memories"
+        },
+        attributes = buildList {
+            add("memories", records.size.toString())
+            add("changed", changed.toString())
+            add("imported", imported.toString())
+            records.firstOrNull()?.attrValue("import")?.let { add("firstImport", it) }
+            records.firstOrNull()?.attrValue("exportedAs")?.let { add("firstExportedAs", it) }
+        }.toAttributes()
+    )
+}
+
+private fun dispatchTableDiffFinding(
+    records: List<ArtifactRecordResult>,
+    terms: List<String>
+): ArtifactRecordResult {
+    return ArtifactRecordResult(
+        id = "dispatch-table:summary",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = "Dispatch table diff found ${records.size} changed table slots",
+        attributes = buildList {
+            add("changedSlots", records.count { it.status == "changed" }.toString())
+            add("addedSlots", records.count { it.status == "added" }.toString())
+            add("removedSlots", records.count { it.status == "removed" }.toString())
+            if (terms.isNotEmpty()) add("query", terms.joinToString(","))
+            if (records.isNotEmpty()) add("focus", records.take(5).joinToString("; ") { it.summary })
+        }.toAttributes()
+    )
+}
+
+private fun hostCallFinding(
+    records: List<ArtifactRecordResult>,
+    baseline: Boolean,
+    terms: List<String>
+): ArtifactRecordResult {
+    val added = records.filter { it.status == "added" }
+    val removed = records.filter { it.status == "removed" }
+    return ArtifactRecordResult(
+        id = "host-call:summary",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = if (baseline) {
+            "Host-call diff found ${added.size} added and ${removed.size} removed direct host calls"
+        } else {
+            "Host-call scan found ${records.size} direct host calls"
+        },
+        attributes = buildList {
+            add("added", added.size.toString())
+            add("removed", removed.size.toString())
+            if (added.isNotEmpty()) add("newDirectHostCalls", added.mapNotNull { it.attrValue("hostImport") ?: it.name }.distinct().joinToString(","))
+            if (removed.isNotEmpty()) add("removedDirectHostCalls", removed.mapNotNull { it.attrValue("hostImport") ?: it.name }.distinct().joinToString(","))
+            if (terms.isNotEmpty()) add("query", terms.joinToString(","))
+        }.toAttributes()
+    )
+}
+
 private fun diffTriageFinding(
     changes: List<ArtifactRecordResult>,
     terms: List<String>
@@ -878,6 +1341,14 @@ private fun triageAttributes(
             addIfChanged("previousTableIdx", previous?.record?.attrValue("tableIdx"), "currentTableIdx", current?.record?.attrValue("tableIdx"))
             addIfChanged("previousOffsetExpr", previous?.record?.attrValue("offsetExpr"), "currentOffsetExpr", current?.record?.attrValue("offsetExpr"))
         }
+        if (previous?.record?.entityType == "memory" || current?.record?.entityType == "memory") {
+            addIfChanged("previousMin", previous?.record?.attrValue("min"), "currentMin", current?.record?.attrValue("min"))
+            addIfChanged("previousMax", previous?.record?.attrValue("max"), "currentMax", current?.record?.attrValue("max"))
+            addIfChanged("previousHasMax", previous?.record?.attrValue("hasMax"), "currentHasMax", current?.record?.attrValue("hasMax"))
+            current?.record?.attrValue("import")?.let { add("import", it) }
+            current?.record?.attrValue("exportedAs")?.let { add("exportedAs", it) }
+            current?.record?.attrValue("origin")?.let { add("origin", it) }
+        }
     }.toAttributes()
 
     return (leading + diffAttributes(previous, current, fallback)).distinctBy { it.name }
@@ -924,6 +1395,31 @@ private fun FunctionCallGraphResult.toTraceFunctionRecord(detail: String): Artif
 private fun matchesAny(terms: List<String>, vararg entities: EntitySnapshot?): Boolean =
     terms.isEmpty() || entities.any { it?.matches(terms) == true }
 
+private fun List<EntitySnapshot>.filterEntitySnapshotsByTermsOrAll(terms: List<String>): List<EntitySnapshot> {
+    if (terms.isEmpty()) return this
+    return filter { it.matches(terms) }.ifEmpty { this }
+}
+
+private fun List<ArtifactRecordResult>.filterRecordsByTermsOrAll(terms: List<String>): List<ArtifactRecordResult> {
+    if (terms.isEmpty()) return this
+    return filter { it.matches(terms) }.ifEmpty { this }
+}
+
+private fun ArtifactRecordResult.matches(terms: List<String>): Boolean {
+    if (terms.isEmpty()) return true
+    val haystack = buildString {
+        append(id).append('\n')
+        append(entityType).append('\n')
+        append(status).append('\n')
+        append(summary).append('\n')
+        name?.let { append(it).append('\n') }
+        kind?.let { append(it).append('\n') }
+        signature?.let { append(it.compact()).append('\n') }
+        attributes.forEach { append(it.name).append('=').append(it.value).append('\n') }
+    }.lowercase()
+    return terms.any { it in haystack }
+}
+
 private fun ArtifactRecordResult.displayLabel(): String =
     name?.let { "`$it`" } ?: id
 
@@ -935,6 +1431,48 @@ private fun List<String>.compactList(maxItems: Int): String {
     val visible = take(maxItems)
     val suffix = if (size > maxItems) ",...(${size - maxItems} more)" else ""
     return visible.joinToString(separator = ",", prefix = "[", postfix = "$suffix]")
+}
+
+private fun List<String>.activeElementBaseSlot(): Int? {
+    val expr = firstOrNull() ?: return null
+    return Regex("""i32\.const\s+(-?\d+)""").find(expr)?.groupValues?.getOrNull(1)?.toIntOrNull()
+}
+
+private fun publicSurfaceKindPriority(kind: String?): Int = when (kind) {
+    "function" -> 0
+    "memory" -> 1
+    "global" -> 2
+    "table" -> 3
+    else -> 4
+}
+
+private fun GeneralFunctionEntry.origin(): String =
+    if (import != null) "import" else "local"
+
+private fun MemoryResult.origin(): String =
+    if (definedIn == "import") "import" else "local"
+
+private fun GlobalResult.origin(): String =
+    if (definedIn == "import") "import" else "local"
+
+private fun WasmBinaryProvider.importedMemoriesByIndex(): Map<Int, ImportName> {
+    val importSection = wasmModule?.importSection ?: return emptyMap()
+    return with(importSection) {
+        bytes.getImportRecords()
+            .filter { it.type is WasmMemType }
+            .mapIndexed { index, record -> index to ImportName(record.prefix, record.name) }
+            .toMap()
+    }
+}
+
+private fun WasmBinaryProvider.importedTablesByIndex(): Map<Int, ImportName> {
+    val importSection = wasmModule?.importSection ?: return emptyMap()
+    return with(importSection) {
+        bytes.getImportRecords()
+            .filter { it.type is WasmTableExternalType }
+            .mapIndexed { index, record -> index to ImportName(record.prefix, record.name) }
+            .toMap()
+    }
 }
 
 private fun List<String>.normalizedTerms(): List<String> =
@@ -1014,6 +1552,20 @@ private fun MutableList<Pair<String, String>>.add(name: String, value: String) {
 private data class EntitySnapshot(
     val key: String,
     val comparisonKey: String,
+    val record: ArtifactRecordResult
+)
+
+private data class ImportName(
+    val module: String,
+    val name: String
+) {
+    fun render(): String = "$module.$name"
+}
+
+private data class HostCallSnapshot(
+    val key: String,
+    val rootName: String,
+    val hostName: String,
     val record: ArtifactRecordResult
 )
 

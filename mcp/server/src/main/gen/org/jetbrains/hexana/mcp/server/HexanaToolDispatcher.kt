@@ -73,12 +73,12 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Optional baseline `.wasm` path used by `operation = diff` or `operation = triage`."))
+        put("description", JsonPrimitive("Optional baseline `.wasm` path used by diff-style operations."))
         put("maxLength", JsonPrimitive(4_096))
       })
       put("operation", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Query operation: `overview`, `find`, `diff`, `trace`, or `triage`."))
+        put("description", JsonPrimitive("Query operation: `overview`, `find`, `diff`, `trace`, `triage`, `public_surface`, `memory_contract`, `dispatch_table_diff`, or `host_call_diff`."))
         put("default", JsonPrimitive("overview"))
         put("maxLength", JsonPrimitive(32))
       })
@@ -109,7 +109,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Optional function, import, export, or debug-name term used by `operation = trace`."))
+        put("description", JsonPrimitive("Optional function, import, export, or debug-name term used by `operation = trace` or `operation = host_call_diff`."))
         put("maxLength", JsonPrimitive(256))
       })
       put("startFuncidx", buildJsonObject {
@@ -117,7 +117,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("integer"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Optional unified function index used by `operation = trace`."))
+        put("description", JsonPrimitive("Optional unified function index used by `operation = trace` or `operation = host_call_diff`."))
         put("minimum", JsonPrimitive(0))
       })
       put("relations", buildJsonObject {

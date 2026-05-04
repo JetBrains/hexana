@@ -4,10 +4,10 @@ private const val ARTIFACT_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.artif
 
 private val QueryArtifactsInput = WasmInputClass.with("QueryArtifactsInput") {
     nullable("baselinePath", of = string())
-        .describe("Optional baseline `.wasm` path used by `operation = diff` or `operation = triage`.")
+        .describe("Optional baseline `.wasm` path used by diff-style operations.")
         .maxLength(4096)
     string("operation", default = "overview")
-        .describe("Query operation: `overview`, `find`, `diff`, `trace`, or `triage`.")
+        .describe("Query operation: `overview`, `find`, `diff`, `trace`, `triage`, `public_surface`, `memory_contract`, `dispatch_table_diff`, or `host_call_diff`.")
         .maxLength(32)
     nullable("entityTypes", of = list(of = string()))
         .describe("Optional entity filter. Supported values include `export`, `import`, `memory`, `global`, `function`, and `element`.")
@@ -16,10 +16,10 @@ private val QueryArtifactsInput = WasmInputClass.with("QueryArtifactsInput") {
         .describe("Optional case-insensitive terms used to filter matched entities or trace roots.")
         .maxItems(20)
     nullable("startName", of = string())
-        .describe("Optional function, import, export, or debug-name term used by `operation = trace`.")
+        .describe("Optional function, import, export, or debug-name term used by `operation = trace` or `operation = host_call_diff`.")
         .maxLength(256)
     nullable("startFuncidx", of = int())
-        .describe("Optional unified function index used by `operation = trace`.")
+        .describe("Optional unified function index used by `operation = trace` or `operation = host_call_diff`.")
         .minimum(0)
     nullable("relations", of = list(of = string()))
         .describe("Optional trace relation filter: `direct_call`, `direct_imported_call`, `indirect_call`, or `memory_write`.")
@@ -94,6 +94,7 @@ val ArtifactQueryTools = tools {
         guidance = """
             Use this as the default Hexana MCP entry point instead of low-level list tools.
             `overview` returns module counts, `find` locates matching entities, `diff` compares current and baseline modules, `trace` follows function calls and memory-write relations from a named or indexed function, and `triage` returns the first production-useful summary for public surface, API, memory, or element-table changes.
+            Use focused audit operations when the task asks for that production fact: `public_surface` for exported ABI surface, `memory_contract` for memory declarations and baseline limit changes, `dispatch_table_diff` for element-table slot target changes, and `host_call_diff` for direct imported-call regressions from `startName` or `startFuncidx`.
             Keep `limit` and `maxBytes` small, use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets or instruction text.
         """
         input = QueryArtifactsInput

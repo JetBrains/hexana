@@ -179,6 +179,169 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertTrue(changed.text("summary").contains("elements from [0,1,2,3] to [0,1,3,2]"))
     }
 
+    fun testQueryArtifactsPublicSurfaceReturnsExportAuditFacts() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/artifacts/public-surface.wasm",
+            """
+            (module
+              (import "env" "host_log" (func ${'$'}host_log (param i32)))
+              (export "host_log_passthrough" (func ${'$'}host_log))
+              (memory (export "runtime_memory") 2 8)
+              (global (export "abi_version") i32 (i32.const 7))
+              (table (export "handler_table") 1 funcref))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("operation", JsonPrimitive("public_surface"))
+            }
+        )
+
+        assertEquals("public_surface", result.text("operation"))
+        val summary = result.array("records").recordById("public-surface:summary")
+        assertEquals("1", summary.attributeValue("functionExports"))
+        assertEquals("1", summary.attributeValue("importedFunctionExports"))
+        assertEquals("1", summary.attributeValue("memoryExports"))
+        assertEquals("1", summary.attributeValue("globalExports"))
+        assertEquals("1", summary.attributeValue("tableExports"))
+
+        val global = result.array("records").recordById("export:global:abi_version")
+        assertEquals("i32", global.attributeValue("type"))
+        assertEquals("false", global.attributeValue("mutable"))
+        assertEquals("i32.const 7", global.attributeValue("initExpr"))
+    }
+
+    fun testQueryArtifactsMemoryContractCarriesImportIdentityAndLimitDiff() {
+        val baseline = createWasmFixture(
+            "fixtures/direct/artifacts/memory-contract-baseline.wasm",
+            """
+            (module
+              (import "env" "checkout_host_memory" (memory 16 32))
+              (export "checkout_memory" (memory 0)))
+            """.trimIndent()
+        )
+        val current = createWasmFixture(
+            "fixtures/direct/artifacts/memory-contract-current.wasm",
+            """
+            (module
+              (import "env" "checkout_host_memory" (memory 24 48))
+              (export "checkout_memory" (memory 0)))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(current.projectRelativePath))
+                put("baselinePath", JsonPrimitive(baseline.projectRelativePath))
+                put("operation", JsonPrimitive("memory_contract"))
+            }
+        )
+
+        val memory = result.array("records").recordById("memory:0")
+        assertEquals("changed", memory.text("status"))
+        assertEquals("env.checkout_host_memory", memory.attributeValue("import"))
+        assertEquals("checkout_memory", memory.attributeValue("exportedAs"))
+        assertEquals("16", memory.attributeValue("previousMin"))
+        assertEquals("24", memory.attributeValue("currentMin"))
+        assertEquals("32", memory.attributeValue("previousMax"))
+        assertEquals("48", memory.attributeValue("currentMax"))
+    }
+
+    fun testQueryArtifactsDispatchTableDiffResolvesChangedSlotTargets() {
+        val baseline = createWasmFixture(
+            "fixtures/direct/artifacts/dispatch-baseline.wasm",
+            """
+            (module
+              (table 4 funcref)
+              (func (export "warmup"))
+              (func (export "checkout_start"))
+              (func (export "checkout_review"))
+              (func (export "admin_reconcile"))
+              (elem (i32.const 0) func 0 1 2 3))
+            """.trimIndent()
+        )
+        val current = createWasmFixture(
+            "fixtures/direct/artifacts/dispatch-current.wasm",
+            """
+            (module
+              (table 4 funcref)
+              (func (export "warmup"))
+              (func (export "checkout_start"))
+              (func (export "checkout_review"))
+              (func (export "admin_reconcile"))
+              (elem (i32.const 0) func 0 1 3 2))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(current.projectRelativePath))
+                put("baselinePath", JsonPrimitive(baseline.projectRelativePath))
+                put("operation", JsonPrimitive("dispatch_table_diff"))
+            }
+        )
+
+        val slot = result.array("records").recordById("dispatch-slot:0:2")
+        assertEquals("dispatch_slot", slot.text("entityType"))
+        assertEquals("changed", slot.text("status"))
+        assertEquals("2", slot.attributeValue("previousFuncidx"))
+        assertEquals("3", slot.attributeValue("currentFuncidx"))
+        assertEquals("checkout_review", slot.attributeValue("previousExportedAs"))
+        assertEquals("admin_reconcile", slot.attributeValue("currentExportedAs"))
+    }
+
+    fun testQueryArtifactsHostCallDiffFindsAddedDirectImportCall() {
+        val baseline = createWasmFixture(
+            "fixtures/direct/artifacts/host-call-baseline.wasm",
+            """
+            (module
+              (import "env" "log_i32" (func ${'$'}log (param i32)))
+              (import "env" "read_preview_state" (func ${'$'}read (param i32)))
+              (func (export "preview_sync_session") (param i32)
+                local.get 0
+                call ${'$'}read
+                local.get 0
+                call ${'$'}log))
+            """.trimIndent()
+        )
+        val current = createWasmFixture(
+            "fixtures/direct/artifacts/host-call-current.wasm",
+            """
+            (module
+              (import "env" "begin_background_sync" (func ${'$'}begin (param i32)))
+              (import "env" "log_i32" (func ${'$'}log (param i32)))
+              (import "env" "read_preview_state" (func ${'$'}read (param i32)))
+              (func (export "preview_sync_session") (param i32)
+                local.get 0
+                call ${'$'}read
+                local.get 0
+                call ${'$'}begin
+                local.get 0
+                call ${'$'}log))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(current.projectRelativePath))
+                put("baselinePath", JsonPrimitive(baseline.projectRelativePath))
+                put("operation", JsonPrimitive("host_call_diff"))
+                put("startName", JsonPrimitive("preview_sync_session"))
+            }
+        )
+
+        val added = result.array("records").recordById("host-call:preview_sync_session:env.begin_background_sync")
+        assertEquals("added", added.text("status"))
+        assertEquals("env.begin_background_sync", added.attributeValue("hostImport"))
+        assertEquals("preview_sync_session", added.attributeValue("rootName"))
+    }
+
     fun testQueryArtifactsDiffHonorsMaxBytesBudget() {
         val baseline = createWasmFixture(
             "fixtures/direct/artifacts/budget-baseline.wasm",
