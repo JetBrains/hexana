@@ -1,3 +1,4 @@
+import * as https from "https";
 import * as path from "path";
 import * as vscode from "vscode";
 import { WasmEditorProvider } from "./WasmEditorProvider";
@@ -14,7 +15,12 @@ const extensionLib: typeof ExtensionLib | null = (() => {
     }
 })();
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+    const locationAllowed = await checkLocation();
+    if (!locationAllowed) {
+        return;
+    }
+
     // Initialize analytics before registering providers so that events
     // captured during the first file open are not lost.
     if (extensionLib) {
@@ -53,6 +59,29 @@ export function deactivate(): void {
     if (extensionLib) {
         extensionLib.shutdownAnalytics();
     }
+}
+
+function checkLocation(): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+        const req = https.get("https://download.jetbrains.com/check-location", (res) => {
+            // Consume the response body to free resources.
+            res.resume();
+            if (res.statusCode === 451) {
+                vscode.window.showErrorMessage(
+                    "Unavailable For Legal Reasons: We are sorry but we are currently unable " +
+                    "to provide our products or services to you due to export control regulations",
+                );
+                resolve(false);
+            } else {
+                resolve(true);
+            }
+        });
+        req.on("error", () => {
+            // Network failures should not prevent the plugin from loading.
+            resolve(true);
+        });
+        req.end();
+    });
 }
 
 /**
