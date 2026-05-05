@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -44,6 +45,7 @@ import org.jetbrains.jewel.foundation.lazy.tree.TreeState
 import org.jetbrains.jewel.foundation.lazy.tree.buildTree
 import org.jetbrains.jewel.ui.component.LazyTree
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.VerticalScrollbar
 
 private enum class SizeSortColumn { TYPE, SIZE, OFFSET }
 
@@ -129,30 +131,37 @@ private fun SizeTreeContent(
             }
         }
 
-        LazyTree(
-            tree = currentTree,
-            treeState = treeState,
-            modifier = Modifier.fillMaxSize(),
-            onElementClick = { element ->
-                val data = element.data
-                if (data is SizeNode && data.size > 0) {
-                    state.scrollHexViewTo(data.offset, data.size)
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyTree(
+                tree = currentTree,
+                treeState = treeState,
+                modifier = Modifier.fillMaxSize(),
+                onElementClick = { element ->
+                    val data = element.data
+                    if (data is SizeNode && data.size > 0) {
+                        state.scrollHexViewTo(data.offset, data.size)
+                    }
+                },
+            ) { element ->
+                if (element is Tree.Element.Leaf) {
+                    Spacer(Modifier.width(chevronSpacerWidth))
                 }
-            },
-        ) { element ->
-            if (element is Tree.Element.Leaf) {
-                Spacer(Modifier.width(chevronSpacerWidth))
+                val data = element.data
+                if (data is SizeNode) {
+                    SizeNodeRow(data, module.size, nameColumnWidth, sizeColumnWidth, percentColumnWidth, nestingRightPadding)
+                } else {
+                    Text(
+                        data.toString(),
+                        modifier = Modifier.padding(2.dp),
+                        style = TextStyle(fontFamily = FontFamily.Monospace),
+                    )
+                }
             }
-            val data = element.data
-            if (data is SizeNode) {
-                SizeNodeRow(data, module.size, nameColumnWidth, sizeColumnWidth, percentColumnWidth, nestingRightPadding)
-            } else {
-                Text(
-                    data.toString(),
-                    modifier = Modifier.padding(2.dp),
-                    style = TextStyle(fontFamily = FontFamily.Monospace),
-                )
-            }
+
+            VerticalScrollbar(
+                treeState.lazyListState.lazyListState,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
         }
     }
 }
