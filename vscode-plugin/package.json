@@ -1,6 +1,6 @@
 {
   "name": "hexana-wasm",
-  "displayName": "Hexana",
+  "displayName": "Hexana WebAssembly and Hex Viewer",
   "description": "Binary hex viewer and analyzer with a focus on WebAssembly",
   "version": "0.0.1",
   "buildDate": "",
