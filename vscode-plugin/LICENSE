@@ -1,73 +1,269 @@
 JETBRAINS USER AGREEMENT
+
 Version 2.0, effective as of April 16, 2025
-THIS IS A LEGAL AGREEMENT. BY CLICKING ON THE “I AGREE” (OR SIMILAR) BUTTON THAT IS PRESENTED TO YOU AT THE TIME OF INSTALLATION, OR BY DOWNLOADING, INSTALLING, COPYING, SAVING ON YOUR DEVICE, OR OTHERWISE USING THE JETBRAINS PRODUCT, YOU BECOME A PARTY TO THIS AGREEMENT, YOU DECLARE YOU HAVE THE LEGAL CAPACITY TO ENTER INTO THIS AGREEMENT, AND YOU CONSENT TO BE BOUND BY ITS TERMS AND CONDITIONS.
+
+THIS IS A LEGAL AGREEMENT. BY CLICKING ON THE “I AGREE” (OR SIMILAR) BUTTON THAT IS PRESENTED
+TO YOU AT THE TIME OF INSTALLATION, OR BY DOWNLOADING, INSTALLING, COPYING, SAVING ON YOUR
+DEVICE, OR OTHERWISE USING THE JETBRAINS PRODUCT, YOU BECOME A PARTY TO THIS AGREEMENT, YOU
+DECLARE YOU HAVE THE LEGAL CAPACITY TO ENTER INTO THIS AGREEMENT, AND YOU CONSENT TO BE BOUND
+BY ITS TERMS AND CONDITIONS.
+
 1. Introduction
-This JetBrains User Agreement (“Agreement”) is entered into between JetBrains s.r.o., a company with its registered office at Na hřebenech II 1718/8, Nusle, 140 00 Prague 4, Czech Republic, Corporate Identification No.: 265 02 275, registered in the Commercial Register maintained by the Municipal Court in Prague, Section C, File No. 86211 (“JetBrains”, “We”, or “Us”) and You, an individual or a legal entity that you represent (“You”). If You accept this Agreement on behalf of a legal entity, You confirm that You are authorized to enter into agreements on behalf of that legal entity.
+
+This JetBrains User Agreement (“Agreement”) is entered into between JetBrains s.r.o., a company
+with its registered office at Na hřebenech II 1718/8, Nusle, 140 00 Prague 4, Czech Republic,
+Corporate Identification No.: 265 02 275, registered in the Commercial Register maintained by
+the Municipal Court in Prague, Section C, File No. 86211 (“JetBrains”, “We”, or “Us”) and You,
+an individual or a legal entity that you represent (“You”). If You accept this Agreement on
+behalf of a legal entity, You confirm that You are authorized to enter into agreements on
+behalf of that legal entity.
+
 2. Definitions
-“Documentation” means the latest versions of all online Product technical documentation, including the description of the main features of the Product available at https://www.jetbrains.com/help/, or other documentation available at JetBrains Website.
-“JetBrains Website” means the website at https://www.jetbrains.com/ and any other website operated by Us.
+
+“Documentation” means the latest versions of all online Product technical documentation,
+including the description of the main features of the Product available at
+https://www.jetbrains.com/help/, or other documentation available at JetBrains Website.
+
+“JetBrains Website” means the website at https://www.jetbrains.com/ and any other website
+operated by Us.
+
 “Machine” means a computing device used by You for running the Product.
+
 “Product” means JetBrains software licensed to You under this Agreement.
-“Redistributable Product” means an independent module of a Product (or a standalone JetBrains development tool distributed together with the Product) designated by Us as ‘Redistributable’ in its name or in its official description, such as a software development kit (SDK), application programming interface (API), or command-line tool application (CLT).
-“Third-Party Software” means any third-party software program that is owned or licensed by someone other than Us.
-“Trial Period” means the period following the installation of the Product (any subsequent period determined by Us) for which We make the Product available to You for limited testing without the need for any subscription. The length of the Trial Period is described for each Product on the JetBrains Website.
+
+“Redistributable Product” means an independent module of a Product (or a standalone JetBrains
+development tool distributed together with the Product) designated by Us as ‘Redistributable’
+in its name or in its official description, such as a software development kit (SDK),
+application programming interface (API), or command-line tool application (CLT).
+
+“Third-Party Software” means any third-party software program that is owned or licensed by
+someone other than Us.
+
+“Trial Period” means the period following the installation of the Product (any subsequent
+period determined by Us) for which We make the Product available to You for limited testing
+without the need for any subscription. The length of the Trial Period is described for each
+Product on the JetBrains Website.
+
 3. License, Subscription, and Your Responsibilities
-3.1. License. You may install the Product on Your Machine free of charge and use it as described in Section 3 as long as You comply with this Agreement. This license is provided as worldwide, non-exclusive, non-transferable, non-sublicensable, and royalty-free for the term of this Agreement.
-3.2. Free Use. Following the installation, You may use the Product for free for any commercial or non-commercial purposes:
-(a) during the Trial Period; and
-(b) if the Product supports a freemium mode, also after the end of the Trial Period in the freemium mode (in which only some features might be available), always subject to the terms of this Agreement.
-3.3. Subscriptions. If You want to use the Product after the Trial Period (or use all features of the Product that supports freemium mode), You must create a JetBrains Account and obtain a subscription. Further use of the Product under the subscription will be governed by separate legal terms published on the JetBrains Website.
-3.4. Updates. We may issue from time to time updates of the Product in the form of a higher Product version. These updates may change the Product features, and if You install the newer version of the Product, You agree with these changes and acknowledge that updates are subject to the terms of this Agreement unless agreed otherwise in this Agreement.
-3.5. Restrictions. Without Our express written permission (or unless this right is granted by applicable law), You may not:
-(a) use the Product or its features in a manner contrary to this Agreement or applicable laws;
-(b) reverse-engineer, disassemble, or decompile the Product, or parts thereof, or try to derive the source code of the Product in any way;
-(c) modify, alter, adapt, translate, enhance, tamper with, repair, or otherwise create derivative works of the Product or any part thereof;
-(d) sell, rent, lease, sublease, license, sublicense, lend, time-share, transfer, assign, provide the use of, or otherwise provide the Product or access to the Product to any third party, whether in whole or in part;
-(e) use, or try to use the Product in a way that avoids incurring fees, including overcoming technical restrictions, security protection, or authentication methods applicable after the Trial Period;
-(f) access the Product in order to build a similar or competitive product or service, as well as copy any ideas, features, functions, or graphics of the Product or any part thereof.
-3.6. Redistributable Products. If the Product is distributed together with a Redistributable Product, according to the Documentation, We license the Redistributable Product to You under a separate license agreement published at https://www.jetbrains.com/legal/.
+
+3.1. License. You may install the Product on Your Machine free of charge and use it as
+described in Section 3 as long as You comply with this Agreement. This license is provided as
+worldwide, non-exclusive, non-transferable, non-sublicensable, and royalty-free for the term of
+this Agreement.
+
+3.2. Free Use. Following the installation, You may use the Product for free for any commercial
+or non-commercial purposes:
+    (a) during the Trial Period; and
+    (b) if the Product supports a freemium mode, also after the end of the Trial Period in the
+        freemium mode (in which only some features might be available), always subject to the
+        terms of this Agreement.
+
+3.3. Subscriptions. If You want to use the Product after the Trial Period (or use all features
+of the Product that supports freemium mode), You must create a JetBrains Account and obtain a
+subscription. Further use of the Product under the subscription will be governed by separate
+legal terms published on the JetBrains Website.
+
+3.4. Updates. We may issue from time to time updates of the Product in the form of a higher
+Product version. These updates may change the Product features, and if You install the newer
+version of the Product, You agree with these changes and acknowledge that updates are subject
+to the terms of this Agreement unless agreed otherwise in this Agreement.
+
+3.5. Restrictions. Without Our express written permission (or unless this right is granted by
+applicable law), You may not:
+    (a) use the Product or its features in a manner contrary to this Agreement or applicable
+        laws;
+    (b) reverse-engineer, disassemble, or decompile the Product, or parts thereof, or try to
+        derive the source code of the Product in any way;
+    (c) modify, alter, adapt, translate, enhance, tamper with, repair, or otherwise create
+        derivative works of the Product or any part thereof;
+    (d) sell, rent, lease, sublease, license, sublicense, lend, time-share, transfer, assign,
+        provide the use of, or otherwise provide the Product or access to the Product to any
+        third party, whether in whole or in part;
+    (e) use, or try to use the Product in a way that avoids incurring fees, including
+        overcoming technical restrictions, security protection, or authentication methods
+        applicable after the Trial Period;
+    (f) access the Product in order to build a similar or competitive product or service, as
+        well as copy any ideas, features, functions, or graphics of the Product or any part
+        thereof.
+
+3.6. Redistributable Products. If the Product is distributed together with a Redistributable
+Product, according to the Documentation, We license the Redistributable Product to You under a
+separate license agreement published at https://www.jetbrains.com/legal/.
+
 4. Intellectual Property Rights and Ownership
-4.1. Our Rights. All intellectual property rights or other proprietary rights to the Product are retained by Us or our licensors. This includes all Product-related copyrights, trademarks, patents, and other registered or unregistered intellectual property. With the exception of the license granted to You under this Agreement, nothing in this Agreement grants, by implication or otherwise, to You or any third party any intellectual property rights or other right, title, or interest in or to the Product or any other intellectual property.
-4.2. You Own Your Data. You retain ownership of all proprietary and intellectual property rights to data that You transfer to or create in the Product. This means that We never own any of Your data.
-4.3. Feedback. To the extent You provide any ideas, suggestions, recommendations, proposals, or other feedback to the Product, You give Us the right to use, change, commercialize, and incorporate any of it into the Product. You cannot withdraw this permission after it is given (it is irrevocable), and it is perpetual. You acknowledge that We are not required to pay a fee for this feedback and that We can transfer and give similar rights to Your feedback to anyone else worldwide.
-4.4. Third-Party Software. You understand that the Product integrates Third-Party Software and that by using the Product You might be using Third-Party Software. This Third-Party Software is provided to You on the terms and conditions of the respective Third-Party Software, and You need to comply with those terms and conditions, which are available at https://www.jetbrains.com/legal/third-party-software or in the Documentation. Nothing in this Agreement limits Your right to use Third-Party Software under those applicable terms and conditions.
-4.5. Artificial Intelligence Powered Features. The Product may include certain features leveraging artificial intelligence (“AI Features”) as described in the Documentation. These native AI Features are installed on Your Machine, and do not send Your data to Us or any third-party AI service providers. When You use these native AI Features, any content created by them will also be considered Your data. You will be solely responsible for its use, and We will claim no right to, title to, or interest in it. You acknowledge that the content generated by the native AI Features is a non-exclusive response to Your input to these AI Features, and thus, the same or similar content can also be generated for other users who share similar input in the same context.
+
+4.1. Our Rights. All intellectual property rights or other proprietary rights to the Product
+are retained by Us or our licensors. This includes all Product-related copyrights, trademarks,
+patents, and other registered or unregistered intellectual property. With the exception of the
+license granted to You under this Agreement, nothing in this Agreement grants, by implication
+or otherwise, to You or any third party any intellectual property rights or other right, title,
+or interest in or to the Product or any other intellectual property.
+
+4.2. You Own Your Data. You retain ownership of all proprietary and intellectual property
+rights to data that You transfer to or create in the Product. This means that We never own any
+of Your data.
+
+4.3. Feedback. To the extent You provide any ideas, suggestions, recommendations, proposals, or
+other feedback to the Product, You give Us the right to use, change, commercialize, and
+incorporate any of it into the Product. You cannot withdraw this permission after it is given
+(it is irrevocable), and it is perpetual. You acknowledge that We are not required to pay a fee
+for this feedback and that We can transfer and give similar rights to Your feedback to anyone
+else worldwide.
+
+4.4. Third-Party Software. You understand that the Product integrates Third-Party Software and
+that by using the Product You might be using Third-Party Software. This Third-Party Software is
+provided to You on the terms and conditions of the respective Third-Party Software, and You
+need to comply with those terms and conditions, which are available at
+https://www.jetbrains.com/legal/third-party-software or in the Documentation. Nothing in this
+Agreement limits Your right to use Third-Party Software under those applicable terms and
+conditions.
+
+4.5. Artificial Intelligence Powered Features. The Product may include certain features
+leveraging artificial intelligence (“AI Features”) as described in the Documentation. These
+native AI Features are installed on Your Machine, and do not send Your data to Us or any
+third-party AI service providers. When You use these native AI Features, any content created by
+them will also be considered Your data. You will be solely responsible for its use, and We will
+claim no right to, title to, or interest in it. You acknowledge that the content generated by
+the native AI Features is a non-exclusive response to Your input to these AI Features, and
+thus, the same or similar content can also be generated for other users who share similar input
+in the same context.
+
 5. Access and Your Data
-We do not see or have access to Your data in the Product by default. However, some plugins or services used in combination with the Product can allow access to Us or to third parties. It is Your responsibility to become familiar with the terms of these additional plugins or services and set the appropriate level of access to Your data. Any content or data downloaded or otherwise obtained through Your use of the Products are acquired at Your own risk.
+
+We do not see or have access to Your data in the Product by default. However, some plugins or
+services used in combination with the Product can allow access to Us or to third parties. It is
+Your responsibility to become familiar with the terms of these additional plugins or services
+and set the appropriate level of access to Your data. Any content or data downloaded or
+otherwise obtained through Your use of the Products are acquired at Your own risk.
+
 6. Warranty Limitation
-6.1. No Expressed Warranty. The Product is licensed to You on an “as is” and “as available” basis. This means that You agree to use it at Your own risk, and We make no express warranty as to the Products use or performance and do not represent or warrant that in any way that the Product:
-(a) is accurate, reliable, or correct;
-(b) will meet Your requirements;
-(c) will be available at any particular time or location, uninterrupted, or secure;
-(d) is free of defects or errors and that any, if found, will be corrected; and/or
-(e) is free of viruses or other harmful components.
-6.2. Disclaimer of Warranties. To the maximum extent permitted by applicable law, We disclaim all warranties and conditions, whether express or implied (including, but not limited to, implied warranties of merchantability, fitness for a particular purpose, title, and non-infringement) with regard to the Product and the provision of any related support, updates, or upgrades.
-6.3. No Rights from Defective Performance. As the Product is provided free of charge, to the maximum extent permitted by applicable law, You acknowledge that You have no rights from defective performance, and You waive all statutory rights arising from defective performance.
+
+6.1. No Expressed Warranty. The Product is licensed to You on an “as is” and “as available”
+basis. This means that You agree to use it at Your own risk, and We make no express warranty as
+to the Products use or performance and do not represent or warrant that in any way that the
+Product:
+    (a) is accurate, reliable, or correct;
+    (b) will meet Your requirements;
+    (c) will be available at any particular time or location, uninterrupted, or secure;
+    (d) is free of defects or errors and that any, if found, will be corrected; and/or
+    (e) is free of viruses or other harmful components.
+
+6.2. Disclaimer of Warranties. To the maximum extent permitted by applicable law, We disclaim
+all warranties and conditions, whether express or implied (including, but not limited to,
+implied warranties of merchantability, fitness for a particular purpose, title, and
+non-infringement) with regard to the Product and the provision of any related support, updates,
+or upgrades.
+
+6.3. No Rights from Defective Performance. As the Product is provided free of charge, to the
+maximum extent permitted by applicable law, You acknowledge that You have no rights from
+defective performance, and You waive all statutory rights arising from defective performance.
+
 7. Disclaimer of Damages
-7.1. Exclusion of Damages. To the maximum extent permitted by applicable law, in no event will We be liable to You, Your affiliates, users, or anyone else for
-(a) any special, incidental, indirect, consequential, exemplary, or punitive damages whatsoever, including for lost profit;
-(b) any loss of use, data, goodwill, or profits, whether or not foreseeable; and
-(c) any loss or damages in connection with the termination or suspension of Your access to the Product in accordance with this Agreement;
+
+7.1. Exclusion of Damages. To the maximum extent permitted by applicable law, in no event will
+We be liable to You, Your affiliates, users, or anyone else for
+    (a) any special, incidental, indirect, consequential, exemplary, or punitive damages
+        whatsoever, including for lost profit;
+    (b) any loss of use, data, goodwill, or profits, whether or not foreseeable; and
+    (c) any loss or damages in connection with the termination or suspension of Your access to
+        the Product in accordance with this Agreement;
 and You waive a right to claim compensation for any such loss or damage.
-7.2. Limitation of Liability. Our total liability in all matters arising out of or in relation to this Agreement is limited to the greater of ten (10) U.S. dollars or the aggregate amount paid or payable by You under this Agreement during the three-month period preceding the event giving rise to the liability, and You waive a right to claim compensation for any excess loss or damage. This limitation will apply even if We have been advised of the possibility of liability exceeding such an amount and notwithstanding any failure of the essential purpose of any limited remedy. This limitation will not apply to cases when the liability cannot be limited by the applicable law.
+
+7.2. Limitation of Liability. Our total liability in all matters arising out of or in relation
+to this Agreement is limited to the greater of ten (10) U.S. dollars or the aggregate amount
+paid or payable by You under this Agreement during the three-month period preceding the event
+giving rise to the liability, and You waive a right to claim compensation for any excess loss
+or damage. This limitation will apply even if We have been advised of the possibility of
+liability exceeding such an amount and notwithstanding any failure of the essential purpose of
+any limited remedy. This limitation will not apply to cases when the liability cannot be
+limited by the applicable law.
+
 8. Term, Termination, and Withdrawal
-8.1. Term. This Agreement will commence upon acceptance of this Agreement by You, and it will continue for an indefinite period, until it is terminated by either party according to this Agreement or applicable law.
-8.2. Termination. We may terminate this Agreement by a notice sent to You in email or otherwise in writing if:
-(a) You materially breached this Agreement and failed to remedy the breach within thirty (30) days of written notice;
-(b) We are required to do so by law (for example, where the provision of the Product is, or becomes, unlawful); or
-(c) We elect to discontinue providing the Product, in whole or in part; in this case, We will send the notice at least thirty (30) days before the termination.
-8.3. Withdrawal. You have the right to cease using the Product and withdraw from this Agreement at any time without providing any reason. In such case, You must uninstall and cease using the Product.
+
+8.1. Term. This Agreement will commence upon acceptance of this Agreement by You, and it will
+continue for an indefinite period, until it is terminated by either party according to this
+Agreement or applicable law.
+
+8.2. Termination. We may terminate this Agreement by a notice sent to You in email or otherwise
+in writing if:
+    (a) You materially breached this Agreement and failed to remedy the breach within thirty
+        (30) days of written notice;
+    (b) We are required to do so by law (for example, where the provision of the Product is, or
+        becomes, unlawful); or
+    (c) We elect to discontinue providing the Product, in whole or in part; in this case, We
+        will send the notice at least thirty (30) days before the termination.
+
+8.3. Withdrawal. You have the right to cease using the Product and withdraw from this Agreement
+at any time without providing any reason. In such case, You must uninstall and cease using the
+Product.
+
 9. Export Control Laws
-9.1. Export Control Compliance. You must comply with all applicable laws and regulations with regard to economic sanctions, export controls, import regulations, restrictive measures, and trade embargoes (all herein referred to as “Sanctions”), including those of the European Union and the United States. You declare and warrant that You are not a person targeted by Sanctions, nor You are otherwise owned or controlled by or acting on behalf of any entity or person targeted by Sanctions. You agree that You will not download or otherwise export or re-export the Product or any related technical data directly or indirectly to any person targeted by Sanctions or download or otherwise use the Product for any end use prohibited or restricted by Sanctions.
-9.2. Reporting of Non-Compliance. You must immediately report any concerns of non-compliance regarding Sanctions to compliance@jetbrains.com and cooperate with Us in Our efforts to verify and ensure compliance with Sanctions.
+
+9.1. Export Control Compliance. You must comply with all applicable laws and regulations with
+regard to economic sanctions, export controls, import regulations, restrictive measures, and
+trade embargoes (all herein referred to as “Sanctions”), including those of the European Union
+and the United States. You declare and warrant that You are not a person targeted by Sanctions,
+nor You are otherwise owned or controlled by or acting on behalf of any entity or person
+targeted by Sanctions. You agree that You will not download or otherwise export or re-export
+the Product or any related technical data directly or indirectly to any person targeted by
+Sanctions or download or otherwise use the Product for any end use prohibited or restricted by
+Sanctions.
+
+9.2. Reporting of Non-Compliance. You must immediately report any concerns of non-compliance
+regarding Sanctions to compliance@jetbrains.com and cooperate with Us in Our efforts to verify
+and ensure compliance with Sanctions.
+
 10. Miscellaneous
-10.1. Reservation of Rights. We reserve the right at any time to cease Our support of the Product and to alter prices, features, specifications, capabilities, functions, terms of use, release dates, general availability, and other characteristics of the Product.
-10.2. Severability. If any provision of this Agreement is or becomes invalid, illegal, or unenforceable, it shall be deemed deleted, but that shall not affect the validity and enforceability of any other provision of this Agreement.
-10.3. Changes. From time to time, We may ask You to accept the updated version of this Agreement (“Updated Agreement”) in connection with new versions, features, updates, enhancements, or other changes to the Product or how We offer the Product to users. We will notify You about the Updated Agreement either by displaying it to You in the Product, in Your JetBrains Account, or by sending the Updated Agreement to the email address used in Your JetBrains Account. By accepting the Updated Agreement or by continuing to use the Product after the effective date specified in the notification, You agree to be bound by the Updated Agreement instead of this Agreement. We respect that You may not agree to the Updated Agreement. If that is the case, You can withdraw from this Agreement before the effective date of the change by uninstalling the Product according to Section 8.3.
-10.4. No Waiver. Our failure to enforce or exercise any part of this Agreement is not a waiver of the respective Section.
-10.5. No Assignment. You may not assign or otherwise transfer any right or obligation under this Agreement or this Agreement itself to a third party without Our prior written consent.
-10.6. Entire Agreement. This Agreement constitutes the entire agreement between You and Us in relation to its subject matter and replaces and supersedes all prior agreements, representation, understandings, and undertakings of any nature made, whether oral or written, in relation to that subject matter.
-10.7. Governing Law and Disputes Resolution. This Agreement is governed by the laws of the Czech Republic, without reference to conflict of laws principles and specifically excluding the United Nations Convention on Contracts for the International Sale of Goods. Any disputes arising out of or in connection with this Agreement will be finally resolved by a competent court of the Czech Republic having territorial jurisdiction based on Our registered office at the moment of the conclusion of this Agreement unless provided otherwise by applicable consumer laws.
-10.8. Personal Data. If We receive any personal data from You or Your users in connection with the use of the Product, We will process it as described in JetBrains’ Privacy Notice available at https://www.jetbrains.com/company/privacy.html.
-10.9. Consumer Protection. If You are a consumer, You may have certain rights, which may not be limited or excluded and which may vary from jurisdiction to jurisdiction. In the extent to which the exclusions or limitations in this Agreement are not legally permitted, such provisions shall not apply to You. This shall in no way affect the validity or the applicability of the remaining provisions of this Agreement. If You are a consumer, You may further have a right to raise a complaint with a supervisory authority or settle a dispute out of court through the extrajudicial dispute resolution entity. For more information, depending on Your country, please visit https://www.jetbrains.com/legal.
+
+10.1. Reservation of Rights. We reserve the right at any time to cease Our support of the
+Product and to alter prices, features, specifications, capabilities, functions, terms of use,
+release dates, general availability, and other characteristics of the Product.
+
+10.2. Severability. If any provision of this Agreement is or becomes invalid, illegal, or
+unenforceable, it shall be deemed deleted, but that shall not affect the validity and
+enforceability of any other provision of this Agreement.
+
+10.3. Changes. From time to time, We may ask You to accept the updated version of this
+Agreement (“Updated Agreement”) in connection with new versions, features, updates,
+enhancements, or other changes to the Product or how We offer the Product to users. We will
+notify You about the Updated Agreement either by displaying it to You in the Product, in Your
+JetBrains Account, or by sending the Updated Agreement to the email address used in Your
+JetBrains Account. By accepting the Updated Agreement or by continuing to use the Product after
+the effective date specified in the notification, You agree to be bound by the Updated
+Agreement instead of this Agreement. We respect that You may not agree to the Updated
+Agreement. If that is the case, You can withdraw from this Agreement before the effective date
+of the change by uninstalling the Product according to Section 8.3.
+
+10.4. No Waiver. Our failure to enforce or exercise any part of this Agreement is not a waiver
+of the respective Section.
+
+10.5. No Assignment. You may not assign or otherwise transfer any right or obligation under
+this Agreement or this Agreement itself to a third party without Our prior written consent.
+
+10.6. Entire Agreement. This Agreement constitutes the entire agreement between You and Us in
+relation to its subject matter and replaces and supersedes all prior agreements,
+representation, understandings, and undertakings of any nature made, whether oral or written,
+in relation to that subject matter.
+
+10.7. Governing Law and Disputes Resolution. This Agreement is governed by the laws of the
+Czech Republic, without reference to conflict of laws principles and specifically excluding the
+United Nations Convention on Contracts for the International Sale of Goods. Any disputes
+arising out of or in connection with this Agreement will be finally resolved by a competent
+court of the Czech Republic having territorial jurisdiction based on Our registered office at
+the moment of the conclusion of this Agreement unless provided otherwise by applicable consumer
+laws.
+
+10.8. Personal Data. If We receive any personal data from You or Your users in connection with
+the use of the Product, We will process it as described in JetBrains’ Privacy Notice available
+at https://www.jetbrains.com/company/privacy.html.
+
+10.9. Consumer Protection. If You are a consumer, You may have certain rights, which may not be
+limited or excluded and which may vary from jurisdiction to jurisdiction. In the extent to
+which the exclusions or limitations in this Agreement are not legally permitted, such
+provisions shall not apply to You. This shall in no way affect the validity or the
+applicability of the remaining provisions of this Agreement. If You are a consumer, You may
+further have a right to raise a complaint with a supervisory authority or settle a dispute out
+of court through the extrajudicial dispute resolution entity. For more information, depending
+on Your country, please visit https://www.jetbrains.com/legal.
+
 For further information, please contact us at legal@jetbrains.com.
