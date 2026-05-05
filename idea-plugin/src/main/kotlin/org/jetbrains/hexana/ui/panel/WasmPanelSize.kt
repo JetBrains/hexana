@@ -242,7 +242,7 @@ private fun SizeColumnHeaders(
         SortableHeaderCell("Type", SizeSortColumn.TYPE, sortColumn, sortAsc, Modifier.width(nameColumnWidth), onSort)
         SortableHeaderCell("Size", SizeSortColumn.SIZE, sortColumn, sortAsc, Modifier.width(sizeColumnWidth), onSort)
         SortableHeaderCell("%", SizeSortColumn.SIZE, sortColumn, sortAsc, Modifier.width(percentColumnWidth), onSort)
-        SortableHeaderCell("Offset", SizeSortColumn.OFFSET, sortColumn, sortAsc, Modifier, onSort)
+        SortableHeaderCell("Offset", SizeSortColumn.OFFSET, sortColumn, sortAsc, Modifier.width(percentColumnWidth), onSort)
     }
 }
 
