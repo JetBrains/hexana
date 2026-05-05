@@ -78,7 +78,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
       })
       put("operation", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Query operation: `overview`, `find`, `diff`, `trace`, `triage`, `public_surface`, `memory_contract`, `dispatch_table_diff`, or `host_call_diff`."))
+        put("description", JsonPrimitive("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the task; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details."))
         put("default", JsonPrimitive("overview"))
         put("maxLength", JsonPrimitive(32))
       })
@@ -101,7 +101,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Optional case-insensitive terms used to filter matched entities or trace roots."))
+        put("description", JsonPrimitive("Optional case-insensitive terms used to filter matched entities or trace roots; for `crash_frames`, read the crash report first and pass all numeric stack funcidx values as strings in one call, not the word `funcidx`; for `data_payload_audit`, read the policy first and pass forbidden payload strings exactly as they appear in policy files."))
         put("maxItems", JsonPrimitive(20))
       })
       put("startName", buildJsonObject {
@@ -146,7 +146,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
       })
       put("maxBytes", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Approximate maximum JSON response bytes. The implementation clamps values above 60000."))
+        put("description", JsonPrimitive("Approximate maximum JSON response bytes. Start small; the implementation clamps values above 60000."))
         put("default", JsonPrimitive(24_000))
         put("minimum", JsonPrimitive(2_000))
         put("maximum", JsonPrimitive(60_000))

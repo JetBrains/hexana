@@ -1,8 +1,10 @@
 package org.jetbrains.hexana.mcp.query
 
+import org.jetbrains.hexana.mcp.DataEntry
 import org.jetbrains.hexana.mcp.GeneralFunctionEntry
 import org.jetbrains.hexana.mcp.ParameterSignature
 import org.jetbrains.hexana.mcp.encodeHexanaJson
+import org.jetbrains.hexana.mcp.listDataSectionInternal
 import org.jetbrains.hexana.mcp.model.artifacts.ArtifactAttributeResult
 import org.jetbrains.hexana.mcp.model.artifacts.ArtifactModuleResult
 import org.jetbrains.hexana.mcp.model.artifacts.ArtifactOmittedResult
@@ -32,8 +34,14 @@ private val SUPPORTED_OPERATIONS = setOf(
     "diff",
     "trace",
     "triage",
+    "api_diff",
     "public_surface",
+    "abi_surface",
     "memory_contract",
+    "global_state_policy",
+    "data_payload_audit",
+    "local_budget",
+    "crash_frames",
     "dispatch_table_diff",
     "host_call_diff"
 )
@@ -55,6 +63,11 @@ private val TRIAGE_STATUS_PRIORITY = mapOf(
     "changed" to 0,
     "added" to 1,
     "removed" to 2
+)
+private val API_DIFF_STATUS_PRIORITY = mapOf(
+    "added" to 0,
+    "removed" to 1,
+    "changed" to 2
 )
 
 fun WasmBinaryProvider.readArtifactQuery(
@@ -128,14 +141,49 @@ fun WasmBinaryProvider.readArtifactQuery(
             terms = query.normalizedTerms(),
             detail = effectiveDetail
         )
+        "api_diff" -> {
+            if (baseline == null) {
+                warnings += "`api_diff` requires `baselinePath`; returned current public exports instead."
+                publicSurfaceRecords(
+                    terms = query.normalizedTerms(),
+                    detail = effectiveDetail
+                )
+            } else {
+                apiDiffRecords(
+                    baseline = baseline,
+                    terms = query.normalizedTerms()
+                )
+            }
+        }
         "public_surface" -> publicSurfaceRecords(
             terms = query.normalizedTerms(),
             detail = effectiveDetail
+        )
+        "abi_surface" -> abiSurfaceRecords(
+            terms = query.normalizedTerms()
         )
         "memory_contract" -> memoryContractRecords(
             baseline = baseline,
             terms = query.normalizedTerms(),
             detail = effectiveDetail
+        )
+        "global_state_policy" -> globalStatePolicyRecords(
+            baseline = baseline,
+            terms = query.normalizedTerms()
+        )
+        "data_payload_audit" -> dataPayloadAuditRecords(
+            terms = query.trimmedTerms(),
+            detail = effectiveDetail
+        )
+        "local_budget" -> localBudgetRecords(
+            terms = query.normalizedTerms(),
+            detail = effectiveDetail
+        )
+        "crash_frames" -> crashFrameRecords(
+            startName = startName?.trim()?.takeIf { it.isNotEmpty() },
+            startFuncidx = startFuncidx,
+            terms = query.normalizedTerms(),
+            limit = boundedLimit
         )
         "dispatch_table_diff" -> {
             if (baseline == null) {
@@ -210,6 +258,175 @@ private fun WasmBinaryProvider.diffRecords(
         terms = terms,
         triage = false
     )
+}
+
+private fun WasmBinaryProvider.abiSurfaceRecords(
+    terms: List<String>
+): List<ArtifactRecordResult> {
+    val functions = listFunctionEntries()
+    val functionsByIndex = functions.associateBy { it.funcidx }
+    val importRecords = functions
+        .filter { it.import != null }
+        .map { it.toAbiSurfaceImportRecord() }
+    val exportRecords = readExports().exports
+        .filter { it.kind.kindName() == "function" }
+        .mapNotNull { export ->
+            val function = functionsByIndex[export.externIndex.toInt()] ?: return@mapNotNull null
+            function.toAbiSurfaceExportRecord(export.name)
+        }
+    val records = (importRecords + exportRecords)
+        .filterRecordsByTermsOrAll(terms)
+        .sortedWith(
+            compareBy<ArtifactRecordResult> { abiSurfaceKindPriority(it.kind) }
+                .thenBy { it.name ?: it.id }
+        )
+    return listOf(abiSurfaceFinding(records, importRecords, exportRecords)) + records
+}
+
+private fun WasmBinaryProvider.apiDiffRecords(
+    baseline: WasmBinaryProvider,
+    terms: List<String>
+): List<ArtifactRecordResult> {
+    val currentExports = apiExportSnapshots(source = "current")
+    val previousExports = baseline.apiExportSnapshots(source = "baseline")
+    val currentByKey = currentExports.associateBy { it.key }
+    val previousByKey = previousExports.associateBy { it.key }
+
+    val records = (currentByKey.keys + previousByKey.keys).sorted().mapNotNull { key ->
+        val currentExport = currentByKey[key]
+        val previousExport = previousByKey[key]
+        val status = when {
+            currentExport != null && previousExport == null -> "added"
+            currentExport == null && previousExport != null -> "removed"
+            currentExport != null && previousExport != null && currentExport.comparisonKey != previousExport.comparisonKey -> "changed"
+            else -> "unchanged"
+        }
+        if (status == "unchanged") return@mapNotNull null
+        val selected = currentExport ?: previousExport ?: return@mapNotNull null
+        val record = selected.record.copy(
+            status = status,
+            source = if (status == "removed") "baseline" else "current",
+            summary = when (status) {
+                "added" -> "Added public ${selected.kind} export `${selected.name}` ${selected.signature?.compact().orEmpty()}".trim()
+                "removed" -> "Removed public ${selected.kind} export `${selected.name}` ${selected.signature?.compact().orEmpty()}".trim()
+                else -> "Changed public ${selected.kind} export `${selected.name}` signature from ${previousExport?.signature?.compact() ?: "<missing>"} to ${currentExport?.signature?.compact() ?: "<missing>"}"
+            },
+            attributes = buildList {
+                previousExport?.signature?.let { signature ->
+                    add("previousParams", signature.params.compactList(maxItems = 12))
+                    add("previousResults", signature.results.compactList(maxItems = 12))
+                }
+                currentExport?.signature?.let { signature ->
+                    add("currentParams", signature.params.compactList(maxItems = 12))
+                    add("currentResults", signature.results.compactList(maxItems = 12))
+                }
+                previousExport?.record?.index?.let { add("previousIndex", it.toString()) }
+                currentExport?.record?.index?.let { add("currentIndex", it.toString()) }
+                previousExport?.record?.attrValue("typeidx")?.let { add("previousTypeidx", it) }
+                currentExport?.record?.attrValue("typeidx")?.let { add("currentTypeidx", it) }
+                previousExport?.record?.attrValue("funcidx")?.let { add("previousFuncidx", it) }
+                currentExport?.record?.attrValue("funcidx")?.let { add("currentFuncidx", it) }
+            }.toAttributes()
+        )
+        record.takeIf { it.matches(terms) }
+    }.sortedWith(
+        compareBy<ArtifactRecordResult> { API_DIFF_STATUS_PRIORITY[it.status] ?: Int.MAX_VALUE }
+            .thenBy { it.name ?: it.id }
+    )
+
+    val abiRiskRecords = referenceTypeImportRecords(terms)
+
+    return listOf(apiDiffFinding(records, abiRiskRecords)) + records + abiRiskRecords
+}
+
+private fun WasmBinaryProvider.apiExportSnapshots(source: String): List<ApiExportSnapshot> {
+    return entities(setOf("export"), source = source, detail = "summary")
+        .mapNotNull { snapshot ->
+            val record = snapshot.record
+            val name = record.name ?: return@mapNotNull null
+            val kind = record.kind ?: return@mapNotNull null
+            ApiExportSnapshot(
+                key = "$kind:$name",
+                name = name,
+                kind = kind,
+                signature = record.signature,
+                comparisonKey = buildList {
+                    add(kind)
+                    record.signature?.let { add(it.compact()) }
+                    record.attrValue("memoryMin")?.let { add("min=$it") }
+                    record.attrValue("memoryMax")?.let { add("max=$it") }
+                    record.attrValue("type")?.let { add("type=$it") }
+                    record.attrValue("mutable")?.let { add("mutable=$it") }
+                }.joinToString("|"),
+                record = record.copy(
+                    attributes = buildList {
+                        when (kind) {
+                            "function" -> {
+                                record.attrValue("origin")?.let { add("origin", it) }
+                                record.attrValue("import")?.let { add("import", it) }
+                                record.attrValue("typeidx")?.let { add("typeidx", it) }
+                                record.attrValue("funcidx")?.let { add("funcidx", it) }
+                            }
+                            "memory" -> {
+                                record.attrValue("origin")?.let { add("origin", it) }
+                                record.attrValue("memoryMin")?.let { add("min", it) }
+                                record.attrValue("memoryMax")?.let { add("max", it) }
+                            }
+                            "global" -> {
+                                record.attrValue("origin")?.let { add("origin", it) }
+                                record.attrValue("type")?.let { add("type", it) }
+                                record.attrValue("mutable")?.let { add("mutable", it) }
+                            }
+                            "table" -> {
+                                record.attrValue("origin")?.let { add("origin", it) }
+                                record.attrValue("import")?.let { add("import", it) }
+                            }
+                        }
+                    }.toAttributes()
+                )
+            )
+        }
+}
+
+private fun WasmBinaryProvider.referenceTypeImportRecords(terms: List<String>): List<ArtifactRecordResult> {
+    return listFunctionEntries()
+        .asSequence()
+        .filter { it.import != null }
+        .filter { it.signature?.containsReferenceType() == true }
+        .mapNotNull { function ->
+            val import = function.import ?: return@mapNotNull null
+            val signature = function.signature?.toArtifactSignature()
+            ArtifactRecordResult(
+                id = "abi-reference-import:${import.module}.${import.name}",
+                entityType = "import",
+                status = "current",
+                source = "current",
+                name = import.name,
+                kind = "reference_type_import",
+                index = function.funcidx,
+                signature = signature,
+                summary = "Current import `${import.module}.${import.name}` uses reference-type ABI ${signature?.compact().orEmpty()}".trim(),
+                attributes = buildList {
+                    add("module", import.module)
+                    add("name", import.name)
+                    add("import", "${import.module}.${import.name}")
+                    add("where", "import ${import.module}.${import.name}")
+                    add("feature", "reference-types")
+                    add("funcidx", function.funcidx.toString())
+                    function.typeidx?.let { add("typeidx", it.toString()) }
+                    function.signature?.let { signature ->
+                        add("params", signature.params.normalizedReferenceTypes().compactList(maxItems = 12))
+                        add("results", signature.ret.normalizedReferenceTypes().compactList(maxItems = 12))
+                    }
+                }.toAttributes()
+            )
+        }
+        .toList()
+        .filterRecordsByTermsOrAll(terms)
+        .sortedWith(
+            compareBy<ArtifactRecordResult> { it.attrValue("typeidx")?.toIntOrNull() ?: Int.MAX_VALUE }
+                .thenBy { it.attrValue("import") ?: it.name ?: it.id }
+        )
 }
 
 private fun WasmBinaryProvider.triageRecords(
@@ -299,6 +516,7 @@ private fun WasmBinaryProvider.publicSurfaceRecords(
             compareBy<ArtifactRecordResult> { publicSurfaceKindPriority(it.kind) }
                 .thenBy { it.name ?: it.id }
         )
+        .map { it.toPublicSurfaceRecord() }
     return listOf(publicSurfaceFinding(records)) + records
 }
 
@@ -395,7 +613,160 @@ private fun WasmBinaryProvider.hostCallDiffRecords(
             compareBy<ArtifactRecordResult> { TRIAGE_STATUS_PRIORITY[it.status] ?: Int.MAX_VALUE }
                 .thenBy { it.name ?: it.id }
         )
-    return listOf(hostCallFinding(records, baseline = true, terms = terms)) + records
+    return listOf(
+        hostCallFinding(
+            records = records,
+            baseline = true,
+            terms = terms,
+            previousCalls = previousCalls,
+            currentCalls = currentCalls
+        )
+    ) + records
+}
+
+private fun WasmBinaryProvider.globalStatePolicyRecords(
+    baseline: WasmBinaryProvider?,
+    terms: List<String>
+): List<ArtifactRecordResult> {
+    val globals = entities(setOf("global"), source = "current", detail = "summary").map { it.record }
+    val currentGlobalExports = entities(setOf("export"), source = "current", detail = "summary")
+        .map { it.record }
+        .filter { it.kind == "global" }
+    val baselineGlobalExportNames = baseline
+        ?.entities(setOf("export"), source = "baseline", detail = "summary")
+        .orEmpty()
+        .map { it.record }
+        .filter { it.kind == "global" }
+        .mapNotNull { it.name }
+        .toSet()
+
+    val mutableImportedGlobals = globals
+        .filter { it.attrValue("origin") == "import" && it.attrValue("mutable") == "true" }
+        .map { it.toMutableImportedGlobalPolicyRecord() }
+
+    val newPublicGlobals = currentGlobalExports
+        .filter { baseline == null || it.name?.let { name -> name !in baselineGlobalExportNames } == true }
+        .map { it.toNewPublicGlobalPolicyRecord() }
+        .sortedBy { it.name ?: it.id }
+
+    val allowedPublicGlobals = currentGlobalExports
+        .filter { it.name?.let { name -> name in baselineGlobalExportNames } == true }
+        .mapNotNull { it.name }
+        .sorted()
+
+    val records = (mutableImportedGlobals + newPublicGlobals)
+        .filterRecordsByTermsOrAll(terms)
+    return listOf(globalStatePolicyFinding(records, allowedPublicGlobals)) + records
+}
+
+private fun WasmBinaryProvider.dataPayloadAuditRecords(
+    terms: List<String>,
+    detail: String
+): List<ArtifactRecordResult> {
+    val wasmModule = requireNotNull(wasmModule)
+    val segments = bytes.listDataSectionInternal(wasmModule)
+    if (terms.isEmpty()) {
+        return listOf(dataPayloadAuditNeedsQueryFinding(segments))
+    }
+    val records = segments.map { it.toDataPayloadRecord(terms, detail) }
+    return listOf(dataPayloadAuditFinding(records, terms)) + records
+}
+
+private fun WasmBinaryProvider.localBudgetRecords(
+    terms: List<String>,
+    detail: String
+): List<ArtifactRecordResult> {
+    val functionsByIndex = listFunctionEntries().associateBy { it.funcidx }
+    val exports = readExports().exports
+        .filter { it.kind.kindName() == "function" }
+        .mapNotNull { export ->
+            val function = functionsByIndex[export.externIndex.toInt()] ?: return@mapNotNull null
+            ExportedFunction(export.name, function)
+        }
+        .sortedBy { it.name }
+    val selectedExports = if (terms.isEmpty()) {
+        exports
+    } else {
+        exports.filter { export ->
+            terms.any { term ->
+                term in export.name.lowercase() ||
+                    term == export.function.funcidx.toString() ||
+                    export.function.signature?.let { signature ->
+                        term in signature.toArtifactSignature().compact().lowercase()
+                    } == true
+            }
+        }.ifEmpty { exports }
+    }
+    val graphsByIndex = if (selectedExports.isEmpty()) {
+        emptyMap()
+    } else {
+        readFunctionCallGraph(selectedExports.map { it.function.funcidx }).functions.associateBy { it.funcidx }
+    }
+    val records = selectedExports.map { export ->
+        graphsByIndex[export.function.funcidx].toLocalBudgetRecord(
+            exportName = export.name,
+            fallback = export.function,
+            detail = detail
+        )
+    }
+    return listOf(localBudgetFinding(records, terms)) + records
+}
+
+private fun WasmBinaryProvider.crashFrameRecords(
+    startName: String?,
+    startFuncidx: Int?,
+    terms: List<String>,
+    limit: Int
+): List<ArtifactRecordResult> {
+    val startIndices = resolveStartFunctions(startName, startFuncidx, terms, limit)
+    if (startIndices.isEmpty()) {
+        return listOf(
+            ArtifactRecordResult(
+                id = "crash-frames:roots",
+                entityType = "finding",
+                status = "current",
+                source = "current",
+                summary = "No crash frame functions matched; pass `startFuncidx`, `startName`, or `query` funcidx/name values",
+                attributes = buildList {
+                    startName?.let { add("startName", it) }
+                    startFuncidx?.let { add("startFuncidx", it.toString()) }
+                    if (terms.isNotEmpty()) add("query", terms.joinToString(","))
+                }.toAttributes()
+            )
+        )
+    }
+
+    val graph = readFunctionCallGraph(startIndices).functions
+    val frameRecords = graph.map { it.toCrashFrameRecord() }
+    val suspiciousCalls = graph.flatMap { function ->
+        function.directImportedCalls.map { call ->
+            val targetImport = call.target?.importInfo?.let { "${it.module}.${it.name}" }
+            val callerName = function.exportedAs.firstOrNull() ?: "function:${function.funcidx}"
+            ArtifactRecordResult(
+                id = "crash-import-call:${function.funcidx}:${call.targetFuncidx}:${call.offset ?: "unknown"}",
+                entityType = "host_call",
+                status = "current",
+                source = "current",
+                relation = "direct_imported_call",
+                targetId = "function:${call.targetFuncidx}",
+                name = targetImport ?: "function:${call.targetFuncidx}",
+                kind = "direct_imported_call",
+                index = call.targetFuncidx,
+                signature = call.target?.signature?.toArtifactSignature(),
+                summary = "crash frame function[${function.funcidx}] `$callerName` directly calls `${targetImport ?: "function:${call.targetFuncidx}"}`",
+                attributes = buildList {
+                    add("callerFuncidx", function.funcidx.toString())
+                    add("callerExport", callerName)
+                    add("targetFuncidx", call.targetFuncidx.toString())
+                    targetImport?.let { add("targetImport", it) }
+                    add("instruction", call.text)
+                    call.offset?.let { add("offset", it.toString()) }
+                }.toAttributes()
+            )
+        }
+    }
+
+    return listOf(crashFrameFinding(frameRecords, suspiciousCalls)) + frameRecords + suspiciousCalls
 }
 
 private fun WasmBinaryProvider.traceRecords(
@@ -515,17 +886,19 @@ private fun WasmBinaryProvider.resolveStartFunctions(
     terms: List<String>,
     limit: Int
 ): List<Int> {
-    startFuncidx?.let { return listOf(it) }
-
+    val directIndices = buildList {
+        startFuncidx?.let(::add)
+        addAll(terms.mapNotNull { it.toIntOrNull() })
+    }
     val lookups = buildList {
         startName?.let(::add)
-        addAll(terms)
+        addAll(terms.filter { it.toIntOrNull() == null })
     }.distinct()
-    if (lookups.isEmpty()) return emptyList()
+    if (lookups.isEmpty()) return directIndices.distinct().take(limit.coerceAtMost(20))
 
-    return lookups.asSequence()
+    return (directIndices.asSequence() + lookups.asSequence()
         .flatMap { term -> readFunctionsByName(term, limit).functions.asSequence() }
-        .map { it.funcidx }
+        .map { it.funcidx })
         .distinct()
         .take(limit.coerceAtMost(20))
         .toList()
@@ -1179,6 +1552,440 @@ private fun publicSurfaceFinding(records: List<ArtifactRecordResult>): ArtifactR
     )
 }
 
+private fun ArtifactRecordResult.toPublicSurfaceRecord(): ArtifactRecordResult {
+    val compactAttributes = buildList {
+        when (kind) {
+            "function" -> {
+                index?.let { add("funcidx", it.toString()) }
+                attrValue("origin")?.let { add("origin", it) }
+                attrValue("import")?.let { add("import", it) }
+                signature?.let { signature ->
+                    add("params", signature.params.compactList(maxItems = 12))
+                    add("results", signature.results.compactList(maxItems = 12))
+                }
+            }
+            "memory" -> {
+                index?.let { add("memidx", it.toString()) }
+                attrValue("origin")?.let { add("origin", it) }
+                attrValue("import")?.let { add("import", it) }
+                attrValue("memoryMin")?.let { add("min", it) }
+                attrValue("memoryMax")?.let { add("max", it) }
+                attrValue("memoryAddressType")?.let { add("addressType", it) }
+            }
+            "global" -> {
+                index?.let { add("globalidx", it.toString()) }
+                attrValue("origin")?.let { add("origin", it) }
+                attrValue("type")?.let { add("type", it) }
+                attrValue("mutable")?.let { add("mutable", it) }
+                attrValue("initExpr")?.let { add("initExpr", it) }
+            }
+            "table" -> {
+                index?.let { add("tableidx", it.toString()) }
+                attrValue("origin")?.let { add("origin", it) }
+                attrValue("import")?.let { add("import", it) }
+            }
+        }
+    }.toAttributes()
+    return copy(attributes = compactAttributes)
+}
+
+private fun GeneralFunctionEntry.toAbiSurfaceImportRecord(): ArtifactRecordResult {
+    val import = requireNotNull(import)
+    val signature = signature?.toArtifactSignature()
+    return ArtifactRecordResult(
+        id = "abi-surface:import:${import.module}.${import.name}",
+        entityType = "import",
+        status = "current",
+        source = "current",
+        name = import.name,
+        kind = "function_import",
+        index = funcidx,
+        signature = signature,
+        summary = "function import `${import.module}.${import.name}` funcidx[$funcidx] ${signature?.compact().orEmpty()}".trim(),
+        attributes = buildList {
+            add("module", import.module)
+            add("name", import.name)
+            add("import", "${import.module}.${import.name}")
+            add("funcidx", funcidx.toString())
+            typeidx?.let { add("typeidx", it.toString()) }
+            signature?.let {
+                add("params", it.params.compactList(maxItems = 12))
+                add("results", it.results.compactList(maxItems = 12))
+            }
+        }.toAttributes()
+    )
+}
+
+private fun GeneralFunctionEntry.toAbiSurfaceExportRecord(exportName: String): ArtifactRecordResult {
+    val signature = signature?.toArtifactSignature()
+    return ArtifactRecordResult(
+        id = "abi-surface:export:$exportName",
+        entityType = "export",
+        status = "current",
+        source = "current",
+        name = exportName,
+        kind = "function_export",
+        index = funcidx,
+        signature = signature,
+        summary = "function export `$exportName` funcidx[$funcidx] ${signature?.compact().orEmpty()}".trim(),
+        attributes = buildList {
+            add("export", exportName)
+            add("funcidx", funcidx.toString())
+            add("origin", origin())
+            import?.let { add("import", "${it.module}.${it.name}") }
+            typeidx?.let { add("typeidx", it.toString()) }
+            signature?.let {
+                add("params", it.params.compactList(maxItems = 12))
+                add("results", it.results.compactList(maxItems = 12))
+            }
+        }.toAttributes()
+    )
+}
+
+private fun abiSurfaceFinding(
+    records: List<ArtifactRecordResult>,
+    allImports: List<ArtifactRecordResult>,
+    allExports: List<ArtifactRecordResult>
+): ArtifactRecordResult {
+    val returnedImports = records.filter { it.kind == "function_import" }
+    val returnedExports = records.filter { it.kind == "function_export" }
+    return ArtifactRecordResult(
+        id = "abi-surface:summary",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = "ABI surface has ${allImports.size} function imports and ${allExports.size} function exports",
+        attributes = buildList {
+            add("functionImports", allImports.size.toString())
+            add("functionExports", allExports.size.toString())
+            if (returnedImports.isNotEmpty()) {
+                add("imports", returnedImports.mapNotNull { it.attrValue("import") }.distinct().sorted().joinToString(","))
+            }
+            if (returnedExports.isNotEmpty()) {
+                add("exports", returnedExports.mapNotNull { it.name }.distinct().sorted().joinToString(","))
+                add("entrypoints", returnedExports.mapNotNull { it.name }.distinct().sorted().joinToString(","))
+            }
+        }.toAttributes()
+    )
+}
+
+private fun apiDiffFinding(
+    records: List<ArtifactRecordResult>,
+    abiRiskRecords: List<ArtifactRecordResult>
+): ArtifactRecordResult {
+    val added = records.count { it.status == "added" }
+    val removed = records.count { it.status == "removed" }
+    val changed = records.count { it.status == "changed" }
+    return ArtifactRecordResult(
+        id = "api-diff:summary",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = "Public API diff found $added added, $removed removed, $changed changed exports, and ${abiRiskRecords.size} reference-type imports",
+        attributes = buildList {
+            add("added", added.toString())
+            add("removed", removed.toString())
+            add("changed", changed.toString())
+            add("referenceTypeImports", abiRiskRecords.size.toString())
+            val focus = records.take(10).mapNotNull { it.name }
+            if (focus.isNotEmpty()) add("focus", focus.joinToString(","))
+            val targetedTypeIndices = (records + abiRiskRecords)
+                .flatMap { record ->
+                    listOfNotNull(
+                        record.attrValue("previousTypeidx"),
+                        record.attrValue("currentTypeidx"),
+                        record.attrValue("typeidx")
+                    )
+                }
+                .mapNotNull { it.toIntOrNull() }
+                .distinct()
+                .sorted()
+            if (targetedTypeIndices.isNotEmpty()) add("targetedTypeIndices", targetedTypeIndices.joinToString(","))
+            val referenceImports = abiRiskRecords.mapNotNull { it.attrValue("import") }.distinct().sorted()
+            if (referenceImports.isNotEmpty()) add("referenceImports", referenceImports.joinToString(","))
+        }.toAttributes()
+    )
+}
+
+private fun globalStatePolicyFinding(
+    records: List<ArtifactRecordResult>,
+    allowedPublicGlobals: List<String>
+): ArtifactRecordResult {
+    val mutableImports = records.count { it.kind == "mutable_imported_global" }
+    val newPublicGlobals = records.count { it.kind == "new_public_global" }
+    return ArtifactRecordResult(
+        id = "global-policy:summary",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = "Global policy found $mutableImports mutable imported globals and $newPublicGlobals new public globals",
+        attributes = buildList {
+            add("mutableImportedGlobals", mutableImports.toString())
+            add("newPublicGlobals", newPublicGlobals.toString())
+            if (allowedPublicGlobals.isNotEmpty()) add("allowedPublicGlobals", allowedPublicGlobals.joinToString(","))
+            val targetedIndices = records.mapNotNull { it.index?.toString() }.distinct().sorted()
+            if (targetedIndices.isNotEmpty()) add("targetedGlobalIndices", targetedIndices.joinToString(","))
+        }.toAttributes()
+    )
+}
+
+private fun ArtifactRecordResult.toMutableImportedGlobalPolicyRecord(): ArtifactRecordResult {
+    val importModule = attrValue("module")
+    val importName = name ?: attrValue("name")
+    val import = listOfNotNull(importModule, importName).joinToString(".")
+    return ArtifactRecordResult(
+        id = "global-policy:mutable-import:${index ?: id}",
+        entityType = "global",
+        status = "current",
+        source = "current",
+        name = importName,
+        kind = "mutable_imported_global",
+        index = index,
+        summary = "Mutable imported global `$import` violates host global-state policy",
+        attributes = buildList {
+            if (import.isNotEmpty()) add("import", import)
+            importModule?.let { add("importModule", it) }
+            importName?.let { add("importName", it) }
+            attrValue("type")?.let { add("type", it) }
+            attrValue("mutable")?.let { add("mutable", it) }
+        }.toAttributes()
+    )
+}
+
+private fun ArtifactRecordResult.toNewPublicGlobalPolicyRecord(): ArtifactRecordResult {
+    return ArtifactRecordResult(
+        id = "global-policy:new-export:${name ?: id}",
+        entityType = "global",
+        status = "added",
+        source = "current",
+        name = name,
+        kind = "new_public_global",
+        index = index,
+        summary = "New exported global `${name ?: id}` must be reported to the host global-state policy",
+        attributes = buildList {
+            name?.let { add("export", it) }
+            index?.let { add("globalidx", it.toString()) }
+            attrValue("origin")?.let { add("origin", it) }
+            attrValue("type")?.let { add("type", it) }
+            attrValue("mutable")?.let { add("mutable", it) }
+            attrValue("initExpr")?.let { add("initExpr", it) }
+        }.toAttributes()
+    )
+}
+
+private fun DataEntry.toDataPayloadRecord(
+    terms: List<String>,
+    detail: String
+): ArtifactRecordResult {
+    val matchedTerms = matchedPayloadTerms(terms)
+    val mode = if (kind == 1) "passive" else "active"
+    val memory = memoryIndex?.toString() ?: if (mode == "active") "0" else null
+    val preview = utf8PayloadPreview(maxChars = if (detail == "evidence") 320 else 160)
+    val matchText = matchedTerms.joinToString(",")
+    return ArtifactRecordResult(
+        id = "data-segment:$index",
+        entityType = "data_segment",
+        status = "current",
+        source = "current",
+        name = "data[$index]",
+        kind = mode,
+        index = index,
+        summary = if (matchedTerms.isEmpty()) {
+            "data segment[$index] $mode ${data.size} bytes has no query-term match"
+        } else {
+            "data segment[$index] $mode ${data.size} bytes contains raw payload term(s): $matchText"
+        },
+        attributes = buildList {
+            add("segmentIndex", index.toString())
+            add("mode", mode)
+            memory?.let { add("memory", it) }
+            expression?.let { add("offsetExpr", it) }
+            add("byteLength", data.size.toString())
+            add("clean", matchedTerms.isEmpty().toString())
+            if (matchedTerms.isNotEmpty()) {
+                add("matchedTerms", matchText)
+                add("rawBytesConfirmed", "true")
+            }
+            if (preview.isNotBlank()) add("utf8Preview", preview)
+            if (detail == "evidence") {
+                add("hexPreview", data.take(48).joinToString(separator = " ") { it.toHexString() })
+            }
+        }.toAttributes()
+    )
+}
+
+private fun dataPayloadAuditFinding(
+    records: List<ArtifactRecordResult>,
+    terms: List<String>
+): ArtifactRecordResult {
+    val matched = records.filter { it.attrValue("matchedTerms") != null }
+    val clean = records.filter { it.attrValue("matchedTerms") == null }
+    val active = records.count { it.kind == "active" }
+    val passive = records.count { it.kind == "passive" }
+    return ArtifactRecordResult(
+        id = "data-payload-audit:summary",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = "Data payload audit scanned ${records.size} segments and matched ${matched.size} segments",
+        attributes = buildList {
+            add("scannedSegments", records.size.toString())
+            add("activeSegments", active.toString())
+            add("passiveSegments", passive.toString())
+            add("matchedSegments", matched.mapNotNull { it.index }.sorted().joinToString(","))
+            add("cleanSegments", clean.mapNotNull { it.index }.sorted().joinToString(","))
+            if (terms.isNotEmpty()) add("queryTerms", terms.joinToString(","))
+            val matchedTerms = matched.flatMap { it.attrValue("matchedTerms").orEmpty().split(",") }
+                .filter { it.isNotBlank() }
+                .distinct()
+            if (matchedTerms.isNotEmpty()) add("matchedTerms", matchedTerms.joinToString(","))
+        }.toAttributes()
+    )
+}
+
+private fun dataPayloadAuditNeedsQueryFinding(
+    segments: List<DataEntry>
+): ArtifactRecordResult {
+    val active = segments.count { it.kind != 1 }
+    val passive = segments.count { it.kind == 1 }
+    return ArtifactRecordResult(
+        id = "data-payload-audit:needs-query",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = "Data payload audit needs forbidden payload strings in `query`; read the policy file first and call again with exact terms",
+        attributes = buildList {
+            add("queryRequired", "true")
+            add("scannedSegments", segments.size.toString())
+            add("activeSegments", active.toString())
+            add("passiveSegments", passive.toString())
+        }.toAttributes()
+    )
+}
+
+private fun FunctionCallGraphResult?.toLocalBudgetRecord(
+    exportName: String,
+    fallback: GeneralFunctionEntry,
+    detail: String
+): ArtifactRecordResult {
+    val signature = this?.signature?.toArtifactSignature() ?: fallback.signature?.toArtifactSignature()
+    val localsByType = this?.locals.orEmpty()
+        .groupingBy { it.type }
+        .fold(0) { acc, local -> acc + local.count }
+        .toSortedMap()
+    val localCount = localsByType.values.sum()
+    return ArtifactRecordResult(
+        id = "local-budget:export:$exportName",
+        entityType = "function",
+        status = "current",
+        source = "current",
+        name = exportName,
+        kind = "local_profile",
+        index = fallback.funcidx,
+        signature = signature,
+        summary = "export `$exportName` funcidx[${fallback.funcidx}] declares $localCount locals",
+        attributes = buildList {
+            add("export", exportName)
+            add("funcidx", fallback.funcidx.toString())
+            fallback.typeidx?.let { add("typeidx", it.toString()) }
+            signature?.let {
+                add("params", it.params.compactList(maxItems = 12))
+                add("results", it.results.compactList(maxItems = 12))
+            }
+            add("localCount", localCount.toString())
+            if (localsByType.isNotEmpty()) {
+                add("localsByType", localsByType.entries.joinToString(",") { "${it.key}=${it.value}" })
+                add("locals", localsByType.entries.joinToString(",") { "${it.value}:${it.key}" })
+            } else {
+                add("localsByType", "[]")
+                add("locals", "[]")
+            }
+            if (detail == "evidence") {
+                this@toLocalBudgetRecord?.codeOffset?.let { add("codeOffset", it.toString()) }
+                this@toLocalBudgetRecord?.codeSize?.let { add("codeSize", it.toString()) }
+                this@toLocalBudgetRecord?.instructionCount?.let { add("instructionCount", it.toString()) }
+            }
+        }.toAttributes()
+    )
+}
+
+private fun localBudgetFinding(
+    records: List<ArtifactRecordResult>,
+    terms: List<String>
+): ArtifactRecordResult {
+    val maxLocalCount = records.mapNotNull { it.attrValue("localCount")?.toIntOrNull() }.maxOrNull() ?: 0
+    val maxLocalExports = records
+        .filter { it.attrValue("localCount")?.toIntOrNull() == maxLocalCount }
+        .mapNotNull { it.name }
+        .sorted()
+    val zeroLocalExports = records
+        .filter { it.attrValue("localCount") == "0" }
+        .mapNotNull { it.name }
+        .sorted()
+    return ArtifactRecordResult(
+        id = "local-budget:summary",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = "Local budget scan returned ${records.size} exported functions; max declared locals=$maxLocalCount",
+        attributes = buildList {
+            add("checkedExports", records.mapNotNull { it.name }.sorted().joinToString(","))
+            add("functionExports", records.size.toString())
+            add("maxLocalCount", maxLocalCount.toString())
+            if (maxLocalExports.isNotEmpty()) add("maxLocalExports", maxLocalExports.joinToString(","))
+            if (zeroLocalExports.isNotEmpty()) add("zeroLocalExports", zeroLocalExports.joinToString(","))
+            if (terms.isNotEmpty()) add("query", terms.joinToString(","))
+            val localCounts = records
+                .mapNotNull { record -> record.name?.let { name -> record.attrValue("localCount")?.let { "$name=$it" } } }
+                .sorted()
+            if (localCounts.isNotEmpty()) add("localCounts", localCounts.joinToString(","))
+        }.toAttributes()
+    )
+}
+
+private fun FunctionCallGraphResult.toCrashFrameRecord(): ArtifactRecordResult {
+    return ArtifactRecordResult(
+        id = "crash-frame:function:$funcidx",
+        entityType = "crash_frame",
+        status = "current",
+        source = "current",
+        name = exportedAs.firstOrNull() ?: importInfo?.name ?: "function:$funcidx",
+        kind = kind,
+        index = funcidx,
+        signature = signature?.toArtifactSignature(),
+        summary = "crash frame function[$funcidx] ${exportedAs.firstOrNull() ?: importInfo?.name ?: ""}".trim(),
+        attributes = buildList {
+            add("origin", if (importInfo != null) "import" else "local")
+            importInfo?.let { add("import", "${it.module}.${it.name}") }
+            if (exportedAs.isNotEmpty()) add("exportedAs", exportedAs.joinToString(","))
+            if (locals.isNotEmpty()) add("locals", locals.joinToString(",") { "${it.count}:${it.type}" })
+            typeidx?.let { add("typeidx", it.toString()) }
+            codeOffset?.let { add("codeOffset", it.toString()) }
+            codeSize?.let { add("codeSize", it.toString()) }
+            instructionCount?.let { add("instructionCount", it.toString()) }
+        }.toAttributes()
+    )
+}
+
+private fun crashFrameFinding(
+    frames: List<ArtifactRecordResult>,
+    suspiciousCalls: List<ArtifactRecordResult>
+): ArtifactRecordResult {
+    return ArtifactRecordResult(
+        id = "crash-frames:summary",
+        entityType = "finding",
+        status = "current",
+        source = "current",
+        summary = "Crash frame query resolved ${frames.size} functions and ${suspiciousCalls.size} direct imported calls",
+        attributes = buildList {
+            if (frames.isNotEmpty()) add("funcidx", frames.mapNotNull { it.index }.joinToString(","))
+            if (suspiciousCalls.isNotEmpty()) {
+                add("directImportedCalls", suspiciousCalls.mapNotNull { it.attrValue("targetImport") ?: it.name }.distinct().joinToString(","))
+            }
+        }.toAttributes()
+    )
+}
+
 private fun memoryContractFinding(
     records: List<ArtifactRecordResult>,
     baseline: Boolean
@@ -1228,7 +2035,9 @@ private fun dispatchTableDiffFinding(
 private fun hostCallFinding(
     records: List<ArtifactRecordResult>,
     baseline: Boolean,
-    terms: List<String>
+    terms: List<String>,
+    previousCalls: List<HostCallSnapshot> = emptyList(),
+    currentCalls: List<HostCallSnapshot> = emptyList()
 ): ArtifactRecordResult {
     val added = records.filter { it.status == "added" }
     val removed = records.filter { it.status == "removed" }
@@ -1247,6 +2056,9 @@ private fun hostCallFinding(
             add("removed", removed.size.toString())
             if (added.isNotEmpty()) add("newDirectHostCalls", added.mapNotNull { it.attrValue("hostImport") ?: it.name }.distinct().joinToString(","))
             if (removed.isNotEmpty()) add("removedDirectHostCalls", removed.mapNotNull { it.attrValue("hostImport") ?: it.name }.distinct().joinToString(","))
+            if (previousCalls.isNotEmpty()) add("oldDirectHostCalls", previousCalls.hostCallNames().joinToString(","))
+            if (currentCalls.isNotEmpty()) add("currentDirectHostCalls", currentCalls.hostCallNames().joinToString(","))
+            if (currentCalls.isNotEmpty()) add("entrypoints", currentCalls.map { it.rootName }.distinct().sorted().joinToString(","))
             if (terms.isNotEmpty()) add("query", terms.joinToString(","))
         }.toAttributes()
     )
@@ -1405,6 +2217,9 @@ private fun List<ArtifactRecordResult>.filterRecordsByTermsOrAll(terms: List<Str
     return filter { it.matches(terms) }.ifEmpty { this }
 }
 
+private fun List<HostCallSnapshot>.hostCallNames(): List<String> =
+    map { it.hostName }.distinct().sorted()
+
 private fun ArtifactRecordResult.matches(terms: List<String>): Boolean {
     if (terms.isEmpty()) return true
     val haystack = buildString {
@@ -1446,6 +2261,12 @@ private fun publicSurfaceKindPriority(kind: String?): Int = when (kind) {
     else -> 4
 }
 
+private fun abiSurfaceKindPriority(kind: String?): Int = when (kind) {
+    "function_import" -> 0
+    "function_export" -> 1
+    else -> 2
+}
+
 private fun GeneralFunctionEntry.origin(): String =
     if (import != null) "import" else "local"
 
@@ -1477,6 +2298,9 @@ private fun WasmBinaryProvider.importedTablesByIndex(): Map<Int, ImportName> {
 
 private fun List<String>.normalizedTerms(): List<String> =
     map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct()
+
+private fun List<String>.trimmedTerms(): List<String> =
+    map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
 
 private fun List<String>.normalizedEntityTypes(defaults: Set<String>): Set<String> {
     val normalized = map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
@@ -1542,6 +2366,59 @@ private fun FunctionSignatureResult.toArtifactSignature(): ArtifactSignatureResu
 private fun ArtifactSignatureResult.compact(): String =
     "(${params.joinToString(",")}) -> (${results.joinToString(",")})"
 
+private fun ParameterSignature.containsReferenceType(): Boolean =
+    (params + ret).any { it.isReferenceTypeName() }
+
+private fun List<String>.normalizedReferenceTypes(): List<String> =
+    map { it.normalizeReferenceTypeName() }
+
+private fun String.isReferenceTypeName(): Boolean =
+    normalizeReferenceTypeName() in setOf("externref", "funcref") || trim().startsWith("ref ")
+
+private fun String.normalizeReferenceTypeName(): String {
+    val value = trim()
+    return when (value) {
+        "externref" -> "externref"
+        "funcref" -> "funcref"
+        "ref extern" -> "externref"
+        "ref null extern" -> "externref"
+        "ref func" -> "funcref"
+        "ref null func" -> "funcref"
+        else -> value
+    }
+}
+
+private fun DataEntry.matchedPayloadTerms(terms: List<String>): List<String> {
+    if (terms.isEmpty()) return emptyList()
+    val text = String(data, Charsets.UTF_8)
+    val lowerText = text.lowercase()
+    return terms.filter { term ->
+        val lowerTerm = term.lowercase()
+        lowerTerm in lowerText || data.containsBytes(term.encodeToByteArray())
+    }
+}
+
+private fun DataEntry.utf8PayloadPreview(maxChars: Int): String =
+    String(data, Charsets.UTF_8)
+        .replace(Regex("""[\p{Cntrl}&&[^\r\n\t]]"""), " ")
+        .take(maxChars)
+
+private fun ByteArray.containsBytes(needle: ByteArray): Boolean {
+    if (needle.isEmpty()) return true
+    if (needle.size > size) return false
+    for (start in 0..(size - needle.size)) {
+        var matched = true
+        for (index in needle.indices) {
+            if (this[start + index] != needle[index]) {
+                matched = false
+                break
+            }
+        }
+        if (matched) return true
+    }
+    return false
+}
+
 private fun List<Pair<String, String>>.toAttributes(): List<ArtifactAttributeResult> =
     map { (name, value) -> ArtifactAttributeResult(name, value) }
 
@@ -1551,6 +2428,15 @@ private fun MutableList<Pair<String, String>>.add(name: String, value: String) {
 
 private data class EntitySnapshot(
     val key: String,
+    val comparisonKey: String,
+    val record: ArtifactRecordResult
+)
+
+private data class ApiExportSnapshot(
+    val key: String,
+    val name: String,
+    val kind: String,
+    val signature: ArtifactSignatureResult?,
     val comparisonKey: String,
     val record: ArtifactRecordResult
 )
@@ -1567,6 +2453,11 @@ private data class HostCallSnapshot(
     val rootName: String,
     val hostName: String,
     val record: ArtifactRecordResult
+)
+
+private data class ExportedFunction(
+    val name: String,
+    val function: GeneralFunctionEntry
 )
 
 private data class BudgetedRecords(

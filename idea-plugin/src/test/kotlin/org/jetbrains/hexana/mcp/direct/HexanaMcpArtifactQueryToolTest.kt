@@ -94,6 +94,69 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(setOf("new", "old"), records.indices.map { records.obj(it).text("name") }.toSet())
     }
 
+    fun testQueryArtifactsApiDiffReturnsAbiDiffAndReferenceTypeRisks() {
+        val baseline = createWasmFixture(
+            "fixtures/direct/artifacts/api-diff-baseline.wasm",
+            """
+            (module
+              (func (export "stable") (param i32) (result i32)
+                local.get 0)
+              (func (export "changed") (param i32) (result i32)
+                local.get 0)
+              (func (export "removed") (result i64)
+                i64.const 7))
+            """.trimIndent()
+        )
+        val current = createWasmFixture(
+            "fixtures/direct/artifacts/api-diff-current.wasm",
+            """
+            (module
+              (import "host" "bind_external" (func ${'$'}bind_external (param externref)))
+              (func (export "added") (result i32)
+                i32.const 9)
+              (func (export "stable") (param i32) (result i32)
+                local.get 0)
+              (func (export "changed") (param i64) (result i64)
+                local.get 0))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(current.projectRelativePath))
+                put("baselinePath", JsonPrimitive(baseline.projectRelativePath))
+                put("operation", JsonPrimitive("api_diff"))
+                put("detail", JsonPrimitive("evidence"))
+            }
+        )
+
+        assertEquals("api_diff", result.text("operation"))
+        val records = result.array("records")
+        assertEquals(
+            setOf(
+                "api-diff:summary",
+                "export:function:added",
+                "export:function:changed",
+                "export:function:removed",
+                "abi-reference-import:host.bind_external"
+            ),
+            records.ids()
+        )
+        assertEquals("changed", records.recordById("export:function:changed").text("status"))
+        assertEquals("[i32]", records.recordById("export:function:changed").attributeValue("previousParams"))
+        assertEquals("[i64]", records.recordById("export:function:changed").attributeValue("currentParams"))
+        assertEquals("0", records.recordById("export:function:changed").attributeValue("previousTypeidx"))
+        assertEquals("3", records.recordById("export:function:changed").attributeValue("currentTypeidx"))
+
+        val referenceImport = records.recordById("abi-reference-import:host.bind_external")
+        assertEquals("reference_type_import", referenceImport.text("kind"))
+        assertEquals("reference-types", referenceImport.attributeValue("feature"))
+        assertEquals("host.bind_external", referenceImport.attributeValue("import"))
+        assertEquals("[externref]", referenceImport.attributeValue("params"))
+        assertEquals("0", referenceImport.attributeValue("typeidx"))
+    }
+
     fun testQueryArtifactsTriageSummarizesExportSignatureChanges() {
         val baseline = createWasmFixture(
             "fixtures/direct/artifacts/triage-signature-baseline.wasm",
@@ -212,6 +275,215 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals("i32", global.attributeValue("type"))
         assertEquals("false", global.attributeValue("mutable"))
         assertEquals("i32.const 7", global.attributeValue("initExpr"))
+    }
+
+    fun testQueryArtifactsAbiSurfaceReturnsFunctionImportsAndExports() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/artifacts/abi-surface.wasm",
+            """
+            (module
+              (import "host" "log_event" (func ${'$'}log_event (param i32)))
+              (import "host" "read_config" (func ${'$'}read_config (param i64) (result i32)))
+              (func (export "process_order") (param i32 i64) (result i32)
+                i32.const 1))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("operation", JsonPrimitive("abi_surface"))
+            }
+        )
+
+        assertEquals("abi_surface", result.text("operation"))
+        val records = result.array("records")
+        val summary = records.recordById("abi-surface:summary")
+        assertEquals("2", summary.attributeValue("functionImports"))
+        assertEquals("1", summary.attributeValue("functionExports"))
+        assertEquals("host.log_event,host.read_config", summary.attributeValue("imports"))
+        assertEquals("process_order", summary.attributeValue("entrypoints"))
+
+        val import = records.recordById("abi-surface:import:host.read_config")
+        assertEquals("function_import", import.text("kind"))
+        assertEquals("host.read_config", import.attributeValue("import"))
+        assertEquals("[i64]", import.attributeValue("params"))
+        assertEquals("[i32]", import.attributeValue("results"))
+
+        val export = records.recordById("abi-surface:export:process_order")
+        assertEquals("function_export", export.text("kind"))
+        assertEquals("process_order", export.attributeValue("export"))
+        assertEquals("[i32,i64]", export.attributeValue("params"))
+        assertEquals("[i32]", export.attributeValue("results"))
+    }
+
+    fun testQueryArtifactsDataPayloadAuditReturnsRawSegmentMatches() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/artifacts/data-payload-audit.wasm",
+            """
+            (module
+              (memory 1)
+              (data (i32.const 128) "public telemetry endpoint")
+              (data (i32.const 2048) "https://api.shadow.internal/v2/keys")
+              (data "passive release notes")
+              (data "FLAG_ENABLE_UNRELEASED_BILLING"))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("operation", JsonPrimitive("data_payload_audit"))
+                put("query", buildJsonArray {
+                    add(JsonPrimitive("https://api.shadow.internal/v2/keys"))
+                    add(JsonPrimitive("FLAG_ENABLE_UNRELEASED_BILLING"))
+                })
+                put("detail", JsonPrimitive("evidence"))
+            }
+        )
+
+        assertEquals("data_payload_audit", result.text("operation"))
+        val records = result.array("records")
+        val summary = records.recordById("data-payload-audit:summary")
+        assertEquals("4", summary.attributeValue("scannedSegments"))
+        assertEquals("1,3", summary.attributeValue("matchedSegments"))
+        assertEquals("0,2", summary.attributeValue("cleanSegments"))
+
+        val active = records.recordById("data-segment:1")
+        assertEquals("active", active.text("kind"))
+        assertEquals("0", active.attributeValue("memory"))
+        assertEquals("i32.const 2048", active.attributeValue("offsetExpr"))
+        assertEquals("https://api.shadow.internal/v2/keys", active.attributeValue("matchedTerms"))
+        assertEquals("true", active.attributeValue("rawBytesConfirmed"))
+
+        val passive = records.recordById("data-segment:3")
+        assertEquals("passive", passive.text("kind"))
+        assertEquals("FLAG_ENABLE_UNRELEASED_BILLING", passive.attributeValue("matchedTerms"))
+        assertEquals("true", passive.attributeValue("rawBytesConfirmed"))
+    }
+
+    fun testQueryArtifactsDataPayloadAuditWithoutTermsReturnsQueryReminderOnly() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/artifacts/data-payload-audit-empty-query.wasm",
+            """
+            (module
+              (memory 1)
+              (data (i32.const 128) "https://api.shadow.internal/v2/keys")
+              (data "FLAG_ENABLE_UNRELEASED_BILLING"))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("operation", JsonPrimitive("data_payload_audit"))
+                put("query", buildJsonArray {
+                    add(JsonPrimitive(""))
+                })
+            }
+        )
+
+        assertEquals("data_payload_audit", result.text("operation"))
+        val records = result.array("records")
+        assertEquals(1, records.size)
+        val summary = records.recordById("data-payload-audit:needs-query")
+        assertEquals("true", summary.attributeValue("queryRequired"))
+        assertEquals("2", summary.attributeValue("scannedSegments"))
+        assertEquals("1", summary.attributeValue("activeSegments"))
+        assertEquals("1", summary.attributeValue("passiveSegments"))
+    }
+
+    fun testQueryArtifactsLocalBudgetReturnsExportedFunctionLocalCounts() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/artifacts/local-budget.wasm",
+            """
+            (module
+              (func (export "health_check"))
+              (func (export "hydrate_checkout") (local i32 i32 i32 i32 i64 i64))
+              (func (export "render_invoice") (local f64 f64 i32 i32 i32))
+              (func (export "route_cart") (local i32 i32 i32 i32)))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("operation", JsonPrimitive("local_budget"))
+                put("query", buildJsonArray {
+                    add(JsonPrimitive("health_check"))
+                    add(JsonPrimitive("hydrate_checkout"))
+                    add(JsonPrimitive("render_invoice"))
+                    add(JsonPrimitive("route_cart"))
+                })
+            }
+        )
+
+        assertEquals("local_budget", result.text("operation"))
+        val records = result.array("records")
+        val summary = records.recordById("local-budget:summary")
+        assertEquals("4", summary.attributeValue("functionExports"))
+        assertEquals("6", summary.attributeValue("maxLocalCount"))
+        assertEquals("hydrate_checkout", summary.attributeValue("maxLocalExports"))
+
+        val hydrate = records.recordById("local-budget:export:hydrate_checkout")
+        assertEquals("1", hydrate.attributeValue("funcidx"))
+        assertEquals("6", hydrate.attributeValue("localCount"))
+        assertEquals("i32=4,i64=2", hydrate.attributeValue("localsByType"))
+
+        val invoice = records.recordById("local-budget:export:render_invoice")
+        assertEquals("5", invoice.attributeValue("localCount"))
+        assertEquals("f64=2,i32=3", invoice.attributeValue("localsByType"))
+
+        val health = records.recordById("local-budget:export:health_check")
+        assertEquals("0", health.attributeValue("localCount"))
+        assertEquals("[]", health.attributeValue("localsByType"))
+    }
+
+    fun testQueryArtifactsGlobalStatePolicyReturnsPolicyRelevantGlobals() {
+        val baseline = createWasmFixture(
+            "fixtures/direct/artifacts/global-policy-baseline.wasm",
+            """
+            (module
+              (import "env" "readonly_epoch" (global i64))
+              (global (export "abi_version") i32 (i32.const 7)))
+            """.trimIndent()
+        )
+        val current = createWasmFixture(
+            "fixtures/direct/artifacts/global-policy-current.wasm",
+            """
+            (module
+              (import "env" "clock_offset" (global (mut i64)))
+              (import "env" "readonly_epoch" (global i64))
+              (global (export "abi_version") i32 (i32.const 7))
+              (global (export "request_limit") (mut i32) (i32.const 2048))
+              (global (export "feature_flag") i32 (i32.const 1)))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(current.projectRelativePath))
+                put("baselinePath", JsonPrimitive(baseline.projectRelativePath))
+                put("operation", JsonPrimitive("global_state_policy"))
+            }
+        )
+
+        assertEquals("global_state_policy", result.text("operation"))
+        val records = result.array("records")
+        val mutableImport = records.recordById("global-policy:mutable-import:0")
+        assertEquals("mutable_imported_global", mutableImport.text("kind"))
+        assertEquals("env.clock_offset", mutableImport.attributeValue("import"))
+        assertEquals("i64", mutableImport.attributeValue("type"))
+
+        val newExport = records.recordById("global-policy:new-export:request_limit")
+        assertEquals("new_public_global", newExport.text("kind"))
+        assertEquals("request_limit", newExport.attributeValue("export"))
+        assertEquals("true", newExport.attributeValue("mutable"))
     }
 
     fun testQueryArtifactsMemoryContractCarriesImportIdentityAndLimitDiff() {
@@ -340,6 +612,63 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals("added", added.text("status"))
         assertEquals("env.begin_background_sync", added.attributeValue("hostImport"))
         assertEquals("preview_sync_session", added.attributeValue("rootName"))
+
+        val summary = result.array("records").recordById("host-call:summary")
+        assertEquals("env.log_i32,env.read_preview_state", summary.attributeValue("oldDirectHostCalls"))
+        assertEquals(
+            "env.begin_background_sync,env.log_i32,env.read_preview_state",
+            summary.attributeValue("currentDirectHostCalls")
+        )
+        assertEquals("preview_sync_session", summary.attributeValue("entrypoints"))
+    }
+
+    fun testQueryArtifactsCrashFramesResolvesMultipleFuncidxFrames() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/artifacts/crash-frames.wasm",
+            """
+            (module
+              (import "env" "log_error" (func ${'$'}log_error))
+              (import "env" "read_clock" (func ${'$'}read_clock (result i64)))
+              (func ${'$'}handle_checkout (export "handle_checkout") (param i32)
+                local.get 0
+                call ${'$'}apply_discount
+                call ${'$'}log_error)
+              (func ${'$'}validate_cart
+                call ${'$'}read_clock
+                drop)
+              (func ${'$'}apply_discount (export "apply_discount") (param i32) (result i32)
+                call ${'$'}read_clock
+                drop
+                local.get 0))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("operation", JsonPrimitive("crash_frames"))
+                put("query", buildJsonArray {
+                    add(JsonPrimitive("4"))
+                    add(JsonPrimitive("2"))
+                    add(JsonPrimitive("0"))
+                })
+            }
+        )
+
+        assertEquals("crash_frames", result.text("operation"))
+        val records = result.array("records")
+        assertEquals("apply_discount", records.recordById("crash-frame:function:4").text("name"))
+        assertEquals("handle_checkout", records.recordById("crash-frame:function:2").text("name"))
+        assertEquals("env.log_error", records.recordById("crash-frame:function:0").attributeValue("import"))
+        assertEquals(
+            setOf("env.log_error", "env.read_clock"),
+            records.indices
+                .map { records.obj(it) }
+                .filter { it.text("entityType") == "host_call" }
+                .map { it.attributeValue("targetImport") }
+                .toSet()
+        )
     }
 
     fun testQueryArtifactsDiffHonorsMaxBytesBudget() {
@@ -423,6 +752,10 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         return indices
             .map { obj(it) }
             .single { it.text("id") == id }
+    }
+
+    private fun JsonArray.ids(): Set<String> {
+        return indices.map { obj(it).text("id") }.toSet()
     }
 
     private fun JsonObject.attributeValue(name: String): String {
