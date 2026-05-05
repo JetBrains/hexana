@@ -4,6 +4,7 @@ import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer
 import com.intellij.execution.configurations.ConfigurationTypeUtil
 import com.intellij.openapi.util.Ref
+import com.intellij.openapi.vfs.isFile
 import com.intellij.psi.PsiElement
 
 class WasmRunConfigurationProducer : LazyRunConfigurationProducer<WasmRunConfiguration>() {
@@ -27,7 +28,7 @@ class WasmRunConfigurationProducer : LazyRunConfigurationProducer<WasmRunConfigu
         sourceElement: Ref<PsiElement>,
     ): Boolean {
         val file = context.location?.virtualFile ?: return false
-        if (file.extension != "wasm") return false
+        if (file.extension != "wasm" || !file.isFile) return false
         val project = context.project
         configuration.wasmFilePath = file.path
         configuration.name = file.nameWithoutExtension
