@@ -174,7 +174,9 @@ private fun addBody(builder: FunSpec.Builder, spec: ToolSpec) {
                 "relations = relations.orEmpty(), " +
                 "limit = limit, " +
                 "detail = detail, " +
-                "maxBytes = maxBytes" +
+                "maxBytes = maxBytes, " +
+                "pathLabel = path, " +
+                "baselinePathLabel = baselinePath" +
                 ")",
             handlerMember,
         )

@@ -78,7 +78,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
       })
       put("operation", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the task; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details."))
+        put("description", JsonPrimitive("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `import_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `entrypoint_effects`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the task; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details."))
         put("default", JsonPrimitive("overview"))
         put("maxLength", JsonPrimitive(32))
       })
@@ -128,7 +128,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Optional trace relation filter: `direct_call`, `direct_imported_call`, `indirect_call`, or `memory_write`."))
+        put("description", JsonPrimitive("Optional relation/effect filter: `direct_call`, `direct_imported_call`, `indirect_call`, or `memory_write`. For `entrypoint_effects`, omit it to scan both `direct_imported_call` and `memory_write` in one call."))
         put("maxItems", JsonPrimitive(20))
       })
       put("limit", buildJsonObject {
@@ -172,6 +172,13 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
             put("source", buildJsonObject {
               put("type", JsonPrimitive("string"))
               put("description", JsonPrimitive("Module role: `current` or `baseline`."))
+            })
+            put("path", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Input path label for this module when the caller provided `path` or `baselinePath`."))
             })
             put("functions", buildJsonObject {
               put("type", JsonPrimitive("integer"))

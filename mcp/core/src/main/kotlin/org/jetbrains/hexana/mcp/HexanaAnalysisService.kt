@@ -123,7 +123,9 @@ class DefaultHexanaAnalysisService(
             relations = relations,
             limit = limit,
             detail = detail,
-            maxBytes = maxBytes
+            maxBytes = maxBytes,
+            pathLabel = input.artifactPathLabel(),
+            baselinePathLabel = baselineInput?.artifactPathLabel()
         )
     }
 
@@ -506,6 +508,9 @@ class DefaultHexanaAnalysisService(
             )
         }
     }
+
+    private fun WasmInput.artifactPathLabel(): String? =
+        (this as? WasmInput.FilePath)?.path
 
     private data class LoadedWasm(val provider: WasmBinaryProvider)
 

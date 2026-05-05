@@ -90,6 +90,9 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         )
 
         val records = result.array("records")
+        val modules = result.array("modules")
+        assertEquals(current.projectRelativePath, modules.obj(0).text("path"))
+        assertEquals(baseline.projectRelativePath, modules.obj(1).text("path"))
         assertEquals(setOf("added", "removed"), records.indices.map { records.obj(it).text("status") }.toSet())
         assertEquals(setOf("new", "old"), records.indices.map { records.obj(it).text("name") }.toSet())
     }
@@ -316,6 +319,126 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals("process_order", export.attributeValue("export"))
         assertEquals("[i32,i64]", export.attributeValue("params"))
         assertEquals("[i32]", export.attributeValue("results"))
+    }
+
+    fun testQueryArtifactsImportSurfaceReturnsOnlyFunctionImports() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/artifacts/import-surface.wasm",
+            """
+            (module
+              (import "host" "log_event" (func ${'$'}log_event (param i32)))
+              (import "host" "read_config" (func ${'$'}read_config (param i64) (result i32)))
+              (func (export "process_order") (param i32 i64) (result i32)
+                i32.const 1))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("operation", JsonPrimitive("import_surface"))
+            }
+        )
+
+        assertEquals("import_surface", result.text("operation"))
+        val records = result.array("records")
+        assertEquals(
+            setOf(
+                "import-surface:summary",
+                "import-surface:import:host.log_event",
+                "import-surface:import:host.read_config"
+            ),
+            records.ids()
+        )
+        val summary = records.recordById("import-surface:summary")
+        assertEquals("2", summary.attributeValue("functionImports"))
+        assertEquals("host.log_event,host.read_config", summary.attributeValue("imports"))
+
+        val import = records.recordById("import-surface:import:host.read_config")
+        assertEquals("function_import", import.text("kind"))
+        assertEquals("host.read_config", import.attributeValue("import"))
+        assertEquals("[i64]", import.attributeValue("params"))
+        assertEquals("[i32]", import.attributeValue("results"))
+    }
+
+    fun testQueryArtifactsEntrypointEffectsScansExportedMemoryWritesAndHostCalls() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/artifacts/entrypoint-effects.wasm",
+            """
+            (module
+              (import "env" "log_i32" (func ${'$'}log_i32 (param i32)))
+              (import "env" "seed" (func ${'$'}seed (result i64)))
+              (memory 1)
+              (func (export "both") (param i32) (result i64)
+                local.get 0
+                i32.const 7
+                i32.store
+                call ${'$'}seed)
+              (func (export "notify_host") (param i32)
+                local.get 0
+                call ${'$'}log_i32)
+              (func (export "write_u8") (param i32 i32)
+                local.get 0
+                local.get 1
+                i32.store8)
+              (func ${'$'}writer_helper (param i32 i32)
+                local.get 0
+                local.get 1
+                i32.store)
+              (func (export "forward_to_writer") (param i32 i32)
+                local.get 0
+                local.get 1
+                call ${'$'}writer_helper))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("operation", JsonPrimitive("entrypoint_effects"))
+            }
+        )
+
+        assertEquals("entrypoint_effects", result.text("operation"))
+        val records = result.array("records")
+        assertEquals(
+            setOf(
+                "entrypoint-effects:summary",
+                "entrypoint-effects:export:both",
+                "entrypoint-effects:export:notify_host",
+                "entrypoint-effects:export:write_u8"
+            ),
+            records.ids()
+        )
+
+        val summary = records.recordById("entrypoint-effects:summary")
+        assertEquals("4", summary.attributeValue("localFunctionExports"))
+        assertEquals("3", summary.attributeValue("effectfulExports"))
+        assertEquals("2", summary.attributeValue("memoryWritingExports"))
+        assertEquals("2", summary.attributeValue("hostCallingExports"))
+        assertEquals("both,write_u8", summary.attributeValue("memoryWritingExportNames"))
+        assertEquals("both,notify_host", summary.attributeValue("hostCallingExportNames"))
+
+        val write = records.recordById("entrypoint-effects:export:write_u8")
+        assertEquals("[i32,i32]", write.attributeValue("params"))
+        assertEquals("[]", write.attributeValue("results"))
+        assertEquals("1", write.attributeValue("directMemoryWrites"))
+        assertEquals("i32.store8", write.attributeValue("memoryWriteOps"))
+        assertEquals("0", write.attributeValue("directHostCalls"))
+
+        val notify = records.recordById("entrypoint-effects:export:notify_host")
+        assertEquals("0", notify.attributeValue("directMemoryWrites"))
+        assertEquals("1", notify.attributeValue("directHostCalls"))
+        assertEquals("env.log_i32", notify.attributeValue("calledImports"))
+        assertEquals("env.log_i32:(i32) -> ()", notify.attributeValue("calledImportSignatures"))
+
+        val both = records.recordById("entrypoint-effects:export:both")
+        assertEquals("1", both.attributeValue("directMemoryWrites"))
+        assertEquals("1", both.attributeValue("directHostCalls"))
+        assertEquals("env.seed", both.attributeValue("calledImports"))
+        assertEquals("[i64]", both.attributeValue("results"))
     }
 
     fun testQueryArtifactsDataPayloadAuditReturnsRawSegmentMatches() {

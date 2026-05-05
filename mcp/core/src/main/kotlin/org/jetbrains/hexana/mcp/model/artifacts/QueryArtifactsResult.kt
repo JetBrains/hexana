@@ -15,6 +15,7 @@ data class QueryArtifactsResult(
 @Serializable
 data class ArtifactModuleResult(
     val source: String,
+    val path: String? = null,
     val functions: Int,
     val imports: Int,
     val exports: Int,
