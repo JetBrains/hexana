@@ -1,8 +1,10 @@
 {
   "name": "hexana-wasm",
   "displayName": "Hexana",
-  "description": "WebAssembly binary viewer and analyzer with a Compose for Web custom editor",
+  "description": "Binary hex viewer and analyzer with a focus on WebAssembly",
   "version": "0.0.1",
+  "buildDate": "",
+  "author": "JetBrains",
   "publisher": "JetBrains",
   "license": "SEE LICENSE IN LICENSE",
   "icon": "media/icon.png",
@@ -19,13 +21,17 @@
   },
   "categories": [
     "Programming Languages",
-    "Visualization"
+    "Visualization",
+    "Binary Data"
   ],
   "keywords": [
     "wasm",
     "webassembly",
     "binary",
-    "hex"
+    "hex",
+    "hexview",
+    "wasi",
+    "JetBrains"
   ],
   "activationEvents": [
     "onStartupFinished"
