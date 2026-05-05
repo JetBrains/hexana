@@ -4,6 +4,7 @@
   "description": "Binary hex viewer and analyzer with a focus on WebAssembly",
   "version": "0.0.1",
   "buildDate": "",
+  "preview": true,
   "author": "JetBrains",
   "publisher": "JetBrains",
   "license": "SEE LICENSE IN LICENSE",
