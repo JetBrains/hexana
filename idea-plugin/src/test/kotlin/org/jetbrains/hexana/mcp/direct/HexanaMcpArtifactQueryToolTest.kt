@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
 class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
@@ -389,7 +390,13 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
               (func (export "forward_to_writer") (param i32 i32)
                 local.get 0
                 local.get 1
-                call ${'$'}writer_helper))
+                call ${'$'}writer_helper)
+              (func ${'$'}host_helper (param i32)
+                local.get 0
+                call ${'$'}log_i32)
+              (func (export "transitive_host") (param i32)
+                local.get 0
+                call ${'$'}host_helper))
             """.trimIndent()
         )
 
@@ -414,12 +421,18 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         )
 
         val summary = records.recordById("entrypoint-effects:summary")
-        assertEquals("4", summary.attributeValue("localFunctionExports"))
+        assertEquals("5", summary.attributeValue("localFunctionExports"))
         assertEquals("3", summary.attributeValue("effectfulExports"))
         assertEquals("2", summary.attributeValue("memoryWritingExports"))
         assertEquals("2", summary.attributeValue("hostCallingExports"))
         assertEquals("both,write_u8", summary.attributeValue("memoryWritingExportNames"))
         assertEquals("both,notify_host", summary.attributeValue("hostCallingExportNames"))
+        assertEquals("transitive_host", summary.attributeValue("transitiveHostCallingExportNames"))
+
+        val directHostEntries = json.parseToJsonElement(summary.attributeValue("directHostEntryPointsJson")).jsonArray
+        assertEquals(listOf("both", "notify_host"), directHostEntries.map { it.jsonObject.text("export") })
+        val excludedTransitiveExports = json.parseToJsonElement(summary.attributeValue("excludedTransitiveExportsJson")).jsonArray
+        assertEquals(listOf("transitive_host"), excludedTransitiveExports.map { it.textValue() })
 
         val write = records.recordById("entrypoint-effects:export:write_u8")
         assertEquals("[i32,i32]", write.attributeValue("params"))
@@ -433,6 +446,11 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals("1", notify.attributeValue("directHostCalls"))
         assertEquals("env.log_i32", notify.attributeValue("calledImports"))
         assertEquals("env.log_i32:(i32) -> ()", notify.attributeValue("calledImportSignatures"))
+        val notifyPolicyEntry = json.parseToJsonElement(notify.attributeValue("directHostPolicyEntryJson")).jsonObject
+        assertEquals("notify_host", notifyPolicyEntry.text("export"))
+        val notifyCalledImports = notifyPolicyEntry.array("called_imports")
+        assertEquals("env", notifyCalledImports.obj(0).text("module"))
+        assertEquals("log_i32", notifyCalledImports.obj(0).text("name"))
 
         val both = records.recordById("entrypoint-effects:export:both")
         assertEquals("1", both.attributeValue("directMemoryWrites"))

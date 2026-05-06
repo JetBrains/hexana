@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.query
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import org.jetbrains.hexana.mcp.DataEntry
 import org.jetbrains.hexana.mcp.GeneralFunctionEntry
 import org.jetbrains.hexana.mcp.ParameterSignature
@@ -14,6 +16,7 @@ import org.jetbrains.hexana.mcp.model.artifacts.QueryArtifactsResult
 import org.jetbrains.hexana.mcp.model.elements.ElementSegmentResult
 import org.jetbrains.hexana.mcp.model.exports.ExportResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionCallGraphResult
+import org.jetbrains.hexana.mcp.model.functions.FunctionDirectCallResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalResult
 import org.jetbrains.hexana.mcp.model.imports.ImportFunctionResult
@@ -749,7 +752,27 @@ private fun WasmBinaryProvider.entrypointEffectsRecords(
         return listOf(entrypointEffectsFinding(emptyList(), emptyList(), totalLocalExports = 0, effects = effects, terms = terms))
     }
 
-    val graphsByIndex = readFunctionCallGraph(exports.map { it.function.funcidx }).functions.associateBy { it.funcidx }
+    val localGraphsByIndex = readReachableLocalFunctionGraphs(exports.map { it.function.funcidx })
+    val graphsByIndex = exports
+        .mapNotNull { export -> localGraphsByIndex[export.function.funcidx]?.let { export.function.funcidx to it } }
+        .toMap()
+    val policyEntries = if (includeHostCalls) {
+        exports.mapNotNull { export ->
+            graphsByIndex[export.function.funcidx]?.toEntrypointPolicyEntry(export.name)
+        }.sortedBy { it.export }
+    } else {
+        emptyList()
+    }
+    val transitivelyHostCallingExports = if (includeHostCalls) {
+        exports.mapNotNull { export ->
+            val graph = graphsByIndex[export.function.funcidx] ?: return@mapNotNull null
+            export.name.takeIf {
+                graph.directImportedCalls.isEmpty() && graph.reachesImportedCall(localGraphsByIndex)
+            }
+        }.sorted()
+    } else {
+        emptyList()
+    }
     val allRecords = exports.mapNotNull { export ->
         graphsByIndex[export.function.funcidx]?.toEntrypointEffectsRecord(
             exportName = export.name,
@@ -767,9 +790,41 @@ private fun WasmBinaryProvider.entrypointEffectsRecords(
             returnedRecords = records,
             totalLocalExports = exports.size,
             effects = effects,
-            terms = terms
+            terms = terms,
+            policyEntries = policyEntries,
+            transitivelyHostCallingExports = transitivelyHostCallingExports
         )
     ) + records
+}
+
+private fun WasmBinaryProvider.readReachableLocalFunctionGraphs(rootIndices: List<Int>): Map<Int, FunctionCallGraphResult> {
+    val localIndices = listFunctionEntries()
+        .asSequence()
+        .filter { it.import == null }
+        .map { it.funcidx }
+        .toSet()
+    val graphsByIndex = mutableMapOf<Int, FunctionCallGraphResult>()
+    val pending = ArrayDeque(rootIndices.filter { it in localIndices }.distinct())
+
+    while (pending.isNotEmpty()) {
+        val batch = buildList {
+            while (pending.isNotEmpty()) {
+                val funcidx = pending.removeFirst()
+                if (funcidx !in graphsByIndex && funcidx in localIndices) add(funcidx)
+            }
+        }
+        if (batch.isEmpty()) continue
+
+        for (graph in readFunctionCallGraph(batch).functions) {
+            graphsByIndex[graph.funcidx] = graph
+            graph.directCalls
+                .map { it.targetFuncidx }
+                .filter { it in localIndices && it !in graphsByIndex }
+                .forEach { pending.addLast(it) }
+        }
+    }
+
+    return graphsByIndex
 }
 
 private fun WasmBinaryProvider.crashFrameRecords(
@@ -2015,21 +2070,12 @@ private fun FunctionCallGraphResult.toEntrypointEffectsRecord(
 ): ArtifactRecordResult? {
     val memoryWrites = if (includeMemoryWrites) directMemoryWrites else emptyList()
     val directHostCalls = if (includeHostCalls) directImportedCalls else emptyList()
-    val calledImports = directHostCalls
-        .mapNotNull { call ->
-            val import = call.target?.importInfo ?: return@mapNotNull null
-            CalledImport(
-                module = import.module,
-                name = import.name,
-                signature = call.target.signature?.toArtifactSignature()
-            )
-        }
-        .distinctBy { "${it.module}.${it.name}" }
-        .sortedWith(compareBy<CalledImport> { it.module }.thenBy { it.name })
+    val calledImports = directHostCalls.toPolicyCalledImports()
     if (memoryWrites.isEmpty() && calledImports.isEmpty()) return null
 
     val signature = signature?.toArtifactSignature()
     val calledImportNames = calledImports.map { "${it.module}.${it.name}" }
+    val policyEntry = toEntrypointPolicyEntry(exportName)
     val effectSummary = buildList {
         if (memoryWrites.isNotEmpty()) add("${memoryWrites.size} direct memory write(s)")
         if (calledImports.isNotEmpty()) add("direct host import call(s) to ${calledImportNames.joinToString(",")}")
@@ -2063,9 +2109,11 @@ private fun FunctionCallGraphResult.toEntrypointEffectsRecord(
                 add(
                     "calledImportSignatures",
                     calledImports.joinToString(";") { import ->
-                        "${import.module}.${import.name}:${import.signature?.compact() ?: "() -> ()"}"
+                        "${import.module}.${import.name}:${import.signature.compact()}"
                     }
                 )
+                add("calledImportsJson", encodeHexanaJson(calledImports))
+                policyEntry?.let { add("directHostPolicyEntryJson", encodeHexanaJson(it)) }
             }
             if (detail == "evidence") {
                 if (memoryWrites.isNotEmpty()) {
@@ -2077,6 +2125,59 @@ private fun FunctionCallGraphResult.toEntrypointEffectsRecord(
             }
         }.toAttributes()
     )
+}
+
+private fun FunctionCallGraphResult.toEntrypointPolicyEntry(exportName: String): EntrypointPolicyEntry? {
+    val calledImports = directImportedCalls.toPolicyCalledImports()
+    if (calledImports.isEmpty()) return null
+    return EntrypointPolicyEntry(
+        export = exportName,
+        funcidx = funcidx,
+        signature = EntrypointSignature(
+            params = signature?.params.orEmpty(),
+            results = signature?.ret.orEmpty()
+        ),
+        calledImports = calledImports
+    )
+}
+
+private fun List<FunctionDirectCallResult>.toPolicyCalledImports(): List<EntrypointPolicyCalledImport> {
+    return mapNotNull { call ->
+        val import = call.target?.importInfo ?: return@mapNotNull null
+        EntrypointPolicyCalledImport(
+            module = import.module,
+            name = import.name,
+            signature = EntrypointImportSignature(
+                params = call.target.signature?.params.orEmpty(),
+                result = call.target.signature?.ret.orEmpty()
+            )
+        )
+    }
+        .distinctBy { "${it.module}.${it.name}" }
+        .sortedWith(compareBy<EntrypointPolicyCalledImport> { it.module }.thenBy { it.name })
+}
+
+private fun FunctionCallGraphResult.reachesImportedCall(
+    localGraphsByIndex: Map<Int, FunctionCallGraphResult>
+): Boolean {
+    val visited = mutableSetOf(funcidx)
+    val queue = ArrayDeque<Int>()
+    directCalls
+        .map { it.targetFuncidx }
+        .filter { localGraphsByIndex.containsKey(it) }
+        .forEach { queue.addLast(it) }
+
+    while (queue.isNotEmpty()) {
+        val targetFuncidx = queue.removeFirst()
+        if (!visited.add(targetFuncidx)) continue
+        val targetGraph = localGraphsByIndex[targetFuncidx] ?: continue
+        if (targetGraph.directImportedCalls.isNotEmpty()) return true
+        targetGraph.directCalls
+            .map { it.targetFuncidx }
+            .filter { localGraphsByIndex.containsKey(it) }
+            .forEach { queue.addLast(it) }
+    }
+    return false
 }
 
 private fun localBudgetFinding(
@@ -2118,7 +2219,9 @@ private fun entrypointEffectsFinding(
     returnedRecords: List<ArtifactRecordResult>,
     totalLocalExports: Int,
     effects: Set<String>,
-    terms: List<String>
+    terms: List<String>,
+    policyEntries: List<EntrypointPolicyEntry> = emptyList(),
+    transitivelyHostCallingExports: List<String> = emptyList()
 ): ArtifactRecordResult {
     val memoryWritingExports = allRecords.filter { it.attrValue("directMemoryWrites")?.toIntOrNull().orZero() > 0 }
     val hostCallingExports = allRecords.filter { it.attrValue("directHostCalls")?.toIntOrNull().orZero() > 0 }
@@ -2148,6 +2251,13 @@ private fun entrypointEffectsFinding(
                         .sorted()
                         .joinToString(",")
                 )
+            }
+            if ("direct_imported_call" in effects) {
+                add("directHostEntryPointsJson", encodeHexanaJson(policyEntries))
+                add("excludedTransitiveExportsJson", encodeHexanaJson(transitivelyHostCallingExports))
+            }
+            if (transitivelyHostCallingExports.isNotEmpty()) {
+                add("transitiveHostCallingExportNames", transitivelyHostCallingExports.joinToString(","))
             }
             if (returnedRecords.isNotEmpty()) {
                 add("returnedExports", returnedRecords.mapNotNull { it.name }.sorted().joinToString(","))
@@ -2596,6 +2706,9 @@ private fun FunctionSignatureResult.toArtifactSignature(): ArtifactSignatureResu
 private fun ArtifactSignatureResult.compact(): String =
     "(${params.joinToString(",")}) -> (${results.joinToString(",")})"
 
+private fun EntrypointImportSignature.compact(): String =
+    "(${params.joinToString(",")}) -> (${result.joinToString(",")})"
+
 private fun ParameterSignature.containsReferenceType(): Boolean =
     (params + ret).any { it.isReferenceTypeName() }
 
@@ -2685,15 +2798,38 @@ private data class HostCallSnapshot(
     val record: ArtifactRecordResult
 )
 
+@Serializable
+private data class EntrypointPolicyEntry(
+    val export: String,
+    val funcidx: Int,
+    val signature: EntrypointSignature,
+    @SerialName("called_imports")
+    val calledImports: List<EntrypointPolicyCalledImport>
+)
+
+@Serializable
+private data class EntrypointSignature(
+    val params: List<String>,
+    val results: List<String>
+)
+
+@Serializable
+private data class EntrypointPolicyCalledImport(
+    val module: String,
+    val name: String,
+    val signature: EntrypointImportSignature
+)
+
+@Serializable
+private data class EntrypointImportSignature(
+    val params: List<String>,
+    @SerialName("return")
+    val result: List<String>
+)
+
 private data class ExportedFunction(
     val name: String,
     val function: GeneralFunctionEntry
-)
-
-private data class CalledImport(
-    val module: String,
-    val name: String,
-    val signature: ArtifactSignatureResult?
 )
 
 private data class BudgetedRecords(
