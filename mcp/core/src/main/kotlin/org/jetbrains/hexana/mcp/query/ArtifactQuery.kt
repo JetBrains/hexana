@@ -30,6 +30,7 @@ private const val MAX_LIMIT = 100
 private const val DEFAULT_MAX_BYTES = 24_000
 private const val MIN_MAX_BYTES = 2_000
 private const val MAX_MAX_BYTES = 60_000
+private const val SUMMARY_FACT_JSON_LIMIT = 64
 
 private val SUPPORTED_OPERATIONS = setOf(
     "overview",
@@ -281,32 +282,48 @@ private fun WasmBinaryProvider.abiSurfaceRecords(
 ): List<ArtifactRecordResult> {
     val functions = listFunctionEntries()
     val functionsByIndex = functions.associateBy { it.funcidx }
-    val importRecords = functions
-        .filter { it.import != null }
-        .map { it.toAbiSurfaceImportRecord() }
-    val exportRecords = readExports().exports
+    val importFunctions = functions.filter { it.import != null }
+    val importRecords = importFunctions.map { it.toAbiSurfaceImportRecord() }
+    val exportFunctions = readExports().exports
         .filter { it.kind.kindName() == "function" }
         .mapNotNull { export ->
             val function = functionsByIndex[export.externIndex.toInt()] ?: return@mapNotNull null
-            function.toAbiSurfaceExportRecord(export.name)
+            ExportedFunction(export.name, function)
         }
+    val exportRecords = exportFunctions.map { it.function.toAbiSurfaceExportRecord(it.name) }
     val records = (importRecords + exportRecords)
         .filterRecordsByTermsOrAll(terms)
         .sortedWith(
             compareBy<ArtifactRecordResult> { abiSurfaceKindPriority(it.kind) }
                 .thenBy { it.name ?: it.id }
         )
-    return listOf(abiSurfaceFinding(records, importRecords, exportRecords)) + records
+    return listOf(
+        abiSurfaceFinding(
+            records = records,
+            allImports = importRecords,
+            allExports = exportRecords,
+            importFacts = importFunctions.map { it.toFunctionImportFact() },
+            exportFacts = exportFunctions.map { it.function.toFunctionExportFact(it.name) }
+        )
+    ) + records
 }
 
 private fun WasmBinaryProvider.importSurfaceRecords(
     terms: List<String>
 ): List<ArtifactRecordResult> {
-    val importRecords = listFunctionEntries()
-        .filter { it.import != null }
+    val functions = listFunctionEntries()
+    val functionsByIndex = functions.associateBy { it.funcidx }
+    val importFunctions = functions.filter { it.import != null }
+    val importRecords = importFunctions
         .map {
             val record = it.toAbiSurfaceImportRecord()
             record.copy(id = record.id.replace("abi-surface:", "import-surface:"))
+        }
+    val exportFacts = readExports().exports
+        .filter { it.kind.kindName() == "function" }
+        .mapNotNull { export ->
+            val function = functionsByIndex[export.externIndex.toInt()] ?: return@mapNotNull null
+            function.toFunctionExportFact(export.name)
         }
     val records = importRecords
         .filterRecordsByTermsOrAll(terms)
@@ -314,7 +331,15 @@ private fun WasmBinaryProvider.importSurfaceRecords(
             compareBy<ArtifactRecordResult> { it.attrValue("module").orEmpty() }
                 .thenBy { it.name ?: it.id }
         )
-    return listOf(importSurfaceFinding(records, importRecords, terms)) + records
+    return listOf(
+        importSurfaceFinding(
+            records = records,
+            allImports = importRecords,
+            terms = terms,
+            importFacts = importFunctions.map { it.toFunctionImportFact() },
+            exportFacts = exportFacts
+        )
+    ) + records
 }
 
 private fun WasmBinaryProvider.apiDiffRecords(
@@ -1769,13 +1794,41 @@ private fun GeneralFunctionEntry.toAbiSurfaceExportRecord(exportName: String): A
     )
 }
 
+private fun GeneralFunctionEntry.toFunctionImportFact(): FunctionImportFact {
+    val import = requireNotNull(import)
+    return FunctionImportFact(
+        module = import.module,
+        name = import.name,
+        qualifiedName = "${import.module}.${import.name}",
+        funcidx = funcidx,
+        typeidx = typeidx,
+        signature = signature.toArtifactFunctionSignature()
+    )
+}
+
+private fun GeneralFunctionEntry.toFunctionExportFact(exportName: String): FunctionExportFact {
+    return FunctionExportFact(
+        export = exportName,
+        funcidx = funcidx,
+        origin = origin(),
+        typeidx = typeidx,
+        signature = signature.toArtifactFunctionSignature()
+    )
+}
+
 private fun abiSurfaceFinding(
     records: List<ArtifactRecordResult>,
     allImports: List<ArtifactRecordResult>,
-    allExports: List<ArtifactRecordResult>
+    allExports: List<ArtifactRecordResult>,
+    importFacts: List<FunctionImportFact>,
+    exportFacts: List<FunctionExportFact>
 ): ArtifactRecordResult {
     val returnedImports = records.filter { it.kind == "function_import" }
     val returnedExports = records.filter { it.kind == "function_export" }
+    val returnedImportNames = returnedImports.mapNotNull { it.attrValue("import") }.toSet()
+    val returnedExportNames = returnedExports.mapNotNull { it.name }.toSet()
+    val returnedImportFacts = importFacts.filter { it.qualifiedName in returnedImportNames }
+    val returnedExportFacts = exportFacts.filter { it.export in returnedExportNames }
     return ArtifactRecordResult(
         id = "abi-surface:summary",
         entityType = "finding",
@@ -1787,10 +1840,13 @@ private fun abiSurfaceFinding(
             add("functionExports", allExports.size.toString())
             if (returnedImports.isNotEmpty()) {
                 add("imports", returnedImports.mapNotNull { it.attrValue("import") }.distinct().sorted().joinToString(","))
+                addJsonFacts("functionImportsJson", returnedImportFacts)
             }
             if (returnedExports.isNotEmpty()) {
                 add("exports", returnedExports.mapNotNull { it.name }.distinct().sorted().joinToString(","))
                 add("entrypoints", returnedExports.mapNotNull { it.name }.distinct().sorted().joinToString(","))
+                addJsonFacts("functionExportsJson", returnedExportFacts)
+                addJsonFacts("exportedEntrypointsJson", returnedExportFacts.filter { it.origin == "local" })
             }
         }.toAttributes()
     )
@@ -1799,8 +1855,12 @@ private fun abiSurfaceFinding(
 private fun importSurfaceFinding(
     records: List<ArtifactRecordResult>,
     allImports: List<ArtifactRecordResult>,
-    terms: List<String>
+    terms: List<String>,
+    importFacts: List<FunctionImportFact>,
+    exportFacts: List<FunctionExportFact>
 ): ArtifactRecordResult {
+    val returnedImportNames = records.mapNotNull { it.attrValue("import") }.toSet()
+    val returnedImportFacts = importFacts.filter { it.qualifiedName in returnedImportNames }
     return ArtifactRecordResult(
         id = "import-surface:summary",
         entityType = "finding",
@@ -1811,11 +1871,16 @@ private fun importSurfaceFinding(
             add("functionImports", allImports.size.toString())
             if (records.isNotEmpty()) {
                 add("imports", records.mapNotNull { it.attrValue("import") }.distinct().sorted().joinToString(","))
+                addJsonFacts("functionImportsJson", returnedImportFacts)
                 records.mapNotNull { it.attrValue("typeidx")?.toIntOrNull() }
                     .distinct()
                     .sorted()
                     .takeIf { it.isNotEmpty() }
                     ?.let { add("targetedTypeIndices", it.joinToString(",")) }
+            }
+            if (exportFacts.isNotEmpty()) {
+                addJsonFacts("functionExportsJson", exportFacts)
+                addJsonFacts("exportedEntrypointsJson", exportFacts.filter { it.origin == "local" })
             }
             if (terms.isNotEmpty()) add("query", terms.joinToString(","))
         }.toAttributes()
@@ -2703,6 +2768,12 @@ private fun ParameterSignature.toArtifactSignature(): ArtifactSignatureResult =
 private fun FunctionSignatureResult.toArtifactSignature(): ArtifactSignatureResult =
     ArtifactSignatureResult(params = params, results = ret)
 
+private fun ParameterSignature?.toArtifactFunctionSignature(): ArtifactFunctionSignature =
+    ArtifactFunctionSignature(
+        params = this?.params.orEmpty(),
+        results = this?.ret.orEmpty()
+    )
+
 private fun ArtifactSignatureResult.compact(): String =
     "(${params.joinToString(",")}) -> (${results.joinToString(",")})"
 
@@ -2769,6 +2840,15 @@ private fun MutableList<Pair<String, String>>.add(name: String, value: String) {
     add(name to value)
 }
 
+private inline fun <reified T> MutableList<Pair<String, String>>.addJsonFacts(name: String, facts: List<T>) {
+    val visibleFacts = facts.take(SUMMARY_FACT_JSON_LIMIT)
+    add(name, encodeHexanaJson(visibleFacts))
+    add("${name}Count", facts.size.toString())
+    if (visibleFacts.size < facts.size) {
+        add("${name}Truncated", "true")
+    }
+}
+
 private data class EntitySnapshot(
     val key: String,
     val comparisonKey: String,
@@ -2796,6 +2876,32 @@ private data class HostCallSnapshot(
     val rootName: String,
     val hostName: String,
     val record: ArtifactRecordResult
+)
+
+@Serializable
+private data class FunctionImportFact(
+    val module: String,
+    val name: String,
+    @SerialName("import")
+    val qualifiedName: String,
+    val funcidx: Int,
+    val typeidx: Int?,
+    val signature: ArtifactFunctionSignature
+)
+
+@Serializable
+private data class FunctionExportFact(
+    val export: String,
+    val funcidx: Int,
+    val origin: String,
+    val typeidx: Int?,
+    val signature: ArtifactFunctionSignature
+)
+
+@Serializable
+private data class ArtifactFunctionSignature(
+    val params: List<String>,
+    val results: List<String>
 )
 
 @Serializable

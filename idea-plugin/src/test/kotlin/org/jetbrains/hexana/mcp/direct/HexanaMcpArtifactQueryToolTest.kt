@@ -308,6 +308,10 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals("1", summary.attributeValue("functionExports"))
         assertEquals("host.log_event,host.read_config", summary.attributeValue("imports"))
         assertEquals("process_order", summary.attributeValue("entrypoints"))
+        val importFacts = json.parseToJsonElement(summary.attributeValue("functionImportsJson")).jsonArray
+        assertEquals(listOf("host.log_event", "host.read_config"), importFacts.map { it.jsonObject.text("import") })
+        val exportFacts = json.parseToJsonElement(summary.attributeValue("functionExportsJson")).jsonArray
+        assertEquals(listOf("process_order"), exportFacts.map { it.jsonObject.text("export") })
 
         val import = records.recordById("abi-surface:import:host.read_config")
         assertEquals("function_import", import.text("kind"))
@@ -355,12 +359,37 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         val summary = records.recordById("import-surface:summary")
         assertEquals("2", summary.attributeValue("functionImports"))
         assertEquals("host.log_event,host.read_config", summary.attributeValue("imports"))
+        assertEquals("2", summary.attributeValue("functionImportsJsonCount"))
+        val importFacts = json.parseToJsonElement(summary.attributeValue("functionImportsJson")).jsonArray
+        assertEquals(listOf("host.log_event", "host.read_config"), importFacts.map { it.jsonObject.text("import") })
+        val readConfigFact = importFacts.single { it.jsonObject.text("import") == "host.read_config" }.jsonObject
+        assertEquals(listOf("i64"), readConfigFact.obj("signature").array("params").map { it.textValue() })
+        assertEquals(listOf("i32"), readConfigFact.obj("signature").array("results").map { it.textValue() })
+        val entrypoints = json.parseToJsonElement(summary.attributeValue("exportedEntrypointsJson")).jsonArray
+        assertEquals(listOf("process_order"), entrypoints.map { it.jsonObject.text("export") })
 
         val import = records.recordById("import-surface:import:host.read_config")
         assertEquals("function_import", import.text("kind"))
         assertEquals("host.read_config", import.attributeValue("import"))
         assertEquals("[i64]", import.attributeValue("params"))
         assertEquals("[i32]", import.attributeValue("results"))
+
+        val compactResult = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("operation", JsonPrimitive("import_surface"))
+                put("limit", JsonPrimitive(1))
+            }
+        )
+        val compactSummary = compactResult.array("records").recordById("import-surface:summary")
+        assertEquals("2", compactSummary.attributeValue("functionImportsJsonCount"))
+        assertEquals(
+            listOf("process_order"),
+            json.parseToJsonElement(compactSummary.attributeValue("exportedEntrypointsJson"))
+                .jsonArray
+                .map { it.jsonObject.text("export") }
+        )
     }
 
     fun testQueryArtifactsEntrypointEffectsScansExportedMemoryWritesAndHostCalls() {
