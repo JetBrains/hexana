@@ -22,8 +22,7 @@
   },
   "categories": [
     "Programming Languages",
-    "Visualization",
-    "Binary Data"
+    "Visualization"
   ],
   "keywords": [
     "wasm",
