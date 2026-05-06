@@ -9,6 +9,8 @@
 - UX: added an information bar showing file size (hover to see some stats), module kind and with run/debug buttons
 - UX: improvements for the 'Top' tab: added headers, sorting, scrolling
 - UX: when opening a nested module, you now see a backreference allowing to easily navigate back to the containing module
+- Java: [RedHat/Chicory Java completion and inspections](https://github.com/JetBrains/hexana/issues/22)
+- Java: [Oracle/GraalWasm Java completion and inspections](https://github.com/JetBrains/hexana/issues/20)
 ### Changed
 
 ### Deprecated
