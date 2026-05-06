@@ -55,3 +55,5 @@ Run Wasm modules directly from the editor toolbar via [wasmtime](https://wasmtim
 ## License
 
 See [LICENSE](LICENSE).
+
+This extension collects telemetry data, which is used to help understand how to improve the product. Please refer to [JetBrains Privacy Notice](https://www.jetbrains.com/legal/docs/privacy/privacy/) for more information about data collection and use.
