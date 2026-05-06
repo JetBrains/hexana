@@ -3,8 +3,6 @@
 ## Unreleased
 
 ### Added
-- [Support Legacy EH](https://github.com/JetBrains/hexana/issues/85)
-- WAT/MCP rendering reference-types and bulk-memory instructions
 - Experimental support for WASM debugging (requires llvm 22.1 or newer; works only with wasmtime and wamr; works only for targets debuggable with lldb)
 - Added support for WAMR for running and debugging
 - Added an option to specify a custom GraalVM home dir for running (previously only built-in Graal was used)
@@ -18,11 +16,26 @@
 ### Removed
 
 ### Fixed
- - wasm parser fixes (vector, table)
- - Element segment type 6 now reads the reference-type per WebAssembly 3.0 spec §5.5.12 (2026-04-24)  
- - Fixed data race on shared CommonByteBuffer, that cause sporadical UnParsedOpcodeExceptions.
 
 ### Security
+
+## 0.8.2 - 2026-04-30
+
+### Added
+- [Support Legacy EH](https://github.com/JetBrains/hexana/issues/85)
+- WAT/MCP rendering reference-types and bulk-memory instructions
+
+### Fixed
+- run configurations now properly work on Windows
+- wasm parser fixes (vector, table)
+- Element segment type 6 now reads the reference-type per WebAssembly 3.0 spec §5.5.12 (2026-04-24)
+- Fixed data race on shared CommonByteBuffer, that cause sporadical UnParsedOpcodeExceptions.
+
+## 0.8.1 - 2026-04-23
+
+### Fixed
+
+- Minor bug fixes and improvements
 
 ## 0.8 - 2026-04-21
 
