@@ -78,6 +78,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable anonymous usage statistics collection. When disabled, no analytics events are sent regardless of the global VS Code telemetry setting."
+        },
+        "hexana.wasmtimePath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the wasmtime executable. When empty, the extension looks for wasmtime on the system PATH."
         }
       }
     },

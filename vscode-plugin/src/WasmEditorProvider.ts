@@ -339,7 +339,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const terminalName = `Wasm: ${exportName}`;
 
         const isWindows = os.platform() === "win32";
-        const wasmtimeCmd = isWindows ? "wasmtime.exe" : "wasmtime";
+        const wasmtimeCmd = this.getWasmtimeCommand(isWindows);
         const terminal = vscode.window.createTerminal({ name: terminalName });
         terminal.show();
         terminal.sendText(`${wasmtimeCmd} ${args.map((a: string) => extensionLib.shellEscape(a, isWindows)).join(" ")}`);
@@ -408,10 +408,24 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const terminalName = `Wasm: ${exportName}`;
 
         const isWindows = os.platform() === "win32";
-        const wasmtimeCmd = isWindows ? "wasmtime.exe" : "wasmtime";
+        const wasmtimeCmd = this.getWasmtimeCommand(isWindows);
         const terminal = vscode.window.createTerminal({ name: terminalName });
         terminal.show();
         terminal.sendText(`${wasmtimeCmd} ${args.map((a: string) => extensionLib.shellEscape(a, isWindows)).join(" ")}`);
+    }
+
+    /**
+     * Returns the wasmtime command to use, respecting the `hexana.wasmtimePath`
+     * setting. When the setting is empty, falls back to the default `wasmtime`
+     * (or `wasmtime.exe` on Windows) resolved from the system PATH.
+     */
+    private getWasmtimeCommand(isWindows: boolean): string {
+        const config = vscode.workspace.getConfiguration("hexana");
+        const customPath = config.get<string>("wasmtimePath", "").trim();
+        if (customPath) {
+            return customPath;
+        }
+        return isWindows ? "wasmtime.exe" : "wasmtime";
     }
 
     /**
