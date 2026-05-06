@@ -3,14 +3,7 @@
 ## Unreleased
 
 ### Added
-- Experimental support for WASM debugging (requires llvm 22.1 or newer; works only with wasmtime and wamr; works only for targets debuggable with lldb)
-- Added support for WAMR for running and debugging
-- Added an option to specify a custom GraalVM home dir for running (previously only built-in Graal was used)
-- UX: added an information bar showing file size (hover to see some stats), module kind and with run/debug buttons
-- UX: improvements for the 'Top' tab: added headers, sorting, scrolling
-- UX: when opening a nested module, you now see a backreference allowing to easily navigate back to the containing module
-- Java: [RedHat/Chicory Java completion and inspections](https://github.com/JetBrains/hexana/issues/22)
-- Java: [Oracle/GraalWasm Java completion and inspections](https://github.com/JetBrains/hexana/issues/20)
+
 ### Changed
 
 ### Deprecated
@@ -20,6 +13,18 @@
 ### Fixed
 
 ### Security
+
+## 0.9 - 2026-05-07
+
+### Added
+- Experimental support for WASM debugging (requires llvm 22.1 or newer; works only with wasmtime and wamr; works only for targets debuggable with lldb)
+- Added support for WAMR for running and debugging
+- Added an option to specify a custom GraalVM home dir for running (previously only built-in Graal was used)
+- UX: added an information bar showing file size (hover to see some stats), module kind and with run/debug buttons
+- UX: improvements for the 'Top' tab: added headers, sorting, scrolling
+- UX: when opening a nested module, you now see a backreference allowing to easily navigate back to the containing module
+- Java: [RedHat/Chicory Java completion and inspections](https://github.com/JetBrains/hexana/issues/22)
+- Java: [Oracle/GraalWasm Java completion and inspections](https://github.com/JetBrains/hexana/issues/20)
 
 ## 0.8.2 - 2026-04-30
 
