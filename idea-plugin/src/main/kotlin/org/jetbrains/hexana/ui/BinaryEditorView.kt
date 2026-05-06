@@ -49,6 +49,8 @@ internal fun BinaryEditorView(
     state: HexViewStateHolder,
     hexFocusRequester: FocusRequester,
     fileName: String = "",
+    parentFileName: String? = null,
+    onNavigateToParent: (() -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         val pathsNav = remember { PathsNavigationState() }
@@ -71,6 +73,8 @@ internal fun BinaryEditorView(
                             state.setTopFraction(0.5f)
                         }
                     }},
+                    parentFileName = parentFileName,
+                    onNavigateToParent = onNavigateToParent,
                 )
                 Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     HexViewer(binaryProvider, state, focusRequester = hexFocusRequester)

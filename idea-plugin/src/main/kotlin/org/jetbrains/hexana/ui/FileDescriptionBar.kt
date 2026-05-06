@@ -55,6 +55,8 @@ internal fun FileDescriptionBar(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
     onSizeClick: (() -> Unit)? = null,
+    parentFileName: String? = null,
+    onNavigateToParent: (() -> Unit)? = null,
 ) {
     val size = binaryProvider.bytes.limit()
     val moduleType = when (binaryProvider) {
@@ -67,7 +69,10 @@ internal fun FileDescriptionBar(
         buildSizeTooltip(binaryProvider)
     }
 
-    val isRunnable = remember(binaryProvider) {
+    val isSubmodule = parentFileName != null
+
+    val isRunnable = remember(binaryProvider, isSubmodule) {
+        if (isSubmodule) return@remember false
         if (binaryProvider is WasmBinaryProvider) {
             binaryProvider.exports.any { export ->
                 export is WasmFunctionExportRecordEntry &&
@@ -191,6 +196,20 @@ internal fun FileDescriptionBar(
                 color = badgeForeground,
             ),
         )
+
+        if (parentFileName != null) {
+            val linkColor = if (JewelTheme.isDark) Color(0xFF589DF6) else Color(0xFF2470B3)
+            Text(
+                text = "Submodule of $parentFileName",
+                modifier = Modifier
+                    .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                    .clickable { onNavigateToParent?.invoke() },
+                style = TextStyle(
+                    fontSize = 11.sp,
+                    color = linkColor,
+                ),
+            )
+        }
 
         if (isRunnable) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {

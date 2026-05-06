@@ -7,6 +7,7 @@ import com.intellij.openapi.actionSystem.DataKey
 import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.fileEditor.FileEditor
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileEditorStateLevel
 import com.intellij.openapi.fileEditor.TextEditor
@@ -147,13 +148,22 @@ class HexanaFileEditor(
             else -> GenericBinaryProvider(commonBuffer)
         }
 
+        val parentFile = myFile.getUserData(HexanaBinaryVirtualFile.PARENT_FILE_KEY)
+
         val hexView = createComposePanel {
             val hexFocusRequester = remember { FocusRequester() }
             Column {
                 if (stateHolder.showSearchDialog.value) {
                     HexSearchField(binaryProvider!!, stateHolder, hexFocusRequester)
                 }
-                BinaryEditorView(binaryProvider!!, stateHolder, hexFocusRequester, fileName = myFile.name)
+                BinaryEditorView(
+                    binaryProvider!!, stateHolder, hexFocusRequester,
+                    fileName = myFile.name,
+                    parentFileName = parentFile?.name,
+                    onNavigateToParent = parentFile?.let { pf ->
+                        { FileEditorManager.getInstance(myProject).openFile(pf, true) }
+                    },
+                )
             }
         }
         panel.add(hexView)

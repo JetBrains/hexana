@@ -127,6 +127,16 @@ fun postShowWatToHost(watText: String, warning: String? = null) {
 }
 
 /**
+ * Asks the extension host to navigate back to the parent component that
+ * contains this submodule.
+ */
+fun postNavigateToParent() {
+    val msg = js("{}")
+    msg.type = "navigate-to-parent"
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open a nested module in a new editor tab.
  *
  * [moduleIndex] is the zero-based index of the module inside the component,

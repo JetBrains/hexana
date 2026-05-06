@@ -30,7 +30,8 @@ fun WasmComponentPanelModules( wasmBinaryProvider: WasmComponentBinaryProvider,
         val fileName = (wasmBinaryProvider as? WasmComponentBinaryVirtualFileProvider)?.let {
             "${it.file.nameWithoutExtension}_${rowIndex}@$hexedOffset.${it.file.extension}"
         } ?: "module_${rowIndex}@$hexedOffset.wasm"
-        val virtualFile = HexanaBinaryVirtualFile(fileName, buffer, baseOffset = moduleRecord.contentOffset)
+        val parentVirtualFile = (wasmBinaryProvider as? WasmComponentBinaryVirtualFileProvider)?.file
+        val virtualFile = HexanaBinaryVirtualFile(fileName, buffer, baseOffset = moduleRecord.contentOffset, parentFile = parentVirtualFile)
         FileEditorManager.getInstance(state.project).openFile(virtualFile, true)
     }
 }

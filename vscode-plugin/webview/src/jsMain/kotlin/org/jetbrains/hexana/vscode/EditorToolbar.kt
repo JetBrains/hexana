@@ -186,6 +186,20 @@ fun EditorToolbar(
             )
         }
 
+        if (isSubmodule) {
+            val parentName = parentFileNameOf(fileName) ?: "component"
+            Span({
+                style {
+                    property("cursor", "pointer")
+                    property("font-size", "11px")
+                    color(Color("var(--vscode-textLink-foreground, #3794FF)"))
+                }
+                onClick { postNavigateToParent() }
+            }) {
+                Text("Submodule of $parentName")
+            }
+        }
+
         if (isRunnable) {
             ToolbarRunButton(
                 tooltip = "Run Wasm module",

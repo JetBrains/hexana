@@ -228,6 +228,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 });
             } else if (message.type === "open-module") {
                 this.openNestedModule(document, message);
+            } else if (message.type === "navigate-to-parent") {
+                this.navigateToParent(document);
             } else if (message.type === "run-export") {
                 this.runExport(document, message);
             } else if (message.type === "show-wat") {
@@ -641,6 +643,30 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             }
         }
         return undefined;
+    }
+
+    /**
+     * Navigates back to the parent component that contains this submodule.
+     *
+     * The parent URI is encoded in the `?parent=` query parameter of the
+     * nested module's synthetic `hexana-module:` URI.
+     */
+    private async navigateToParent(document: WasmDocument): Promise<void> {
+        const params = new URLSearchParams(document.uri.query);
+        const parentKey = params.get("parent");
+        if (!parentKey) {
+            return;
+        }
+        try {
+            const parentUri = vscode.Uri.parse(decodeURIComponent(parentKey));
+            await vscode.commands.executeCommand(
+                "vscode.openWith",
+                parentUri,
+                WasmEditorProvider.viewType,
+            );
+        } catch (err) {
+            console.error("[Hexana] Failed to navigate to parent:", err);
+        }
     }
 
     /**
