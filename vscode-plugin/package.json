@@ -71,6 +71,16 @@
         ]
       }
     ],
+    "configuration": {
+      "title": "Hexana",
+      "properties": {
+        "hexana.enableStatistics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable anonymous usage statistics collection. When disabled, no analytics events are sent regardless of the global VS Code telemetry setting."
+        }
+      }
+    },
     "configurationDefaults": {
       "workbench.editorAssociations": {
         "*.wasm": "hexana.wasmEditor"

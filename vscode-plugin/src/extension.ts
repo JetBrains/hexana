@@ -25,15 +25,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // captured during the first file open are not lost.
     if (extensionLib) {
         const storagePath = path.join(context.globalStorageUri.fsPath, "hexana-analytics-id");
-        extensionLib.initAnalytics(storagePath, vscode.env.isTelemetryEnabled, vscode.env.appName, vscode.version);
+        const isStatisticsEnabled = (): boolean => {
+            const hexanaConfig = vscode.workspace.getConfiguration("hexana");
+            return vscode.env.isTelemetryEnabled && hexanaConfig.get<boolean>("enableStatistics", true);
+        };
+        extensionLib.initAnalytics(storagePath, isStatisticsEnabled(), vscode.env.appName, vscode.version);
+
+        const reinitAnalytics = () => {
+            // Flush and shut down the previous client before re-initializing
+            // so pending events are not lost and connections are released.
+            extensionLib.shutdownAnalytics();
+            extensionLib.initAnalytics(storagePath, isStatisticsEnabled(), vscode.env.appName, vscode.version);
+        };
 
         // Re-evaluate consent when the user toggles VS Code telemetry.
         context.subscriptions.push(
-            vscode.env.onDidChangeTelemetryEnabled((enabled) => {
-                // Flush and shut down the previous client before re-initializing
-                // so pending events are not lost and connections are released.
-                extensionLib.shutdownAnalytics();
-                extensionLib.initAnalytics(storagePath, enabled, vscode.env.appName, vscode.version);
+            vscode.env.onDidChangeTelemetryEnabled(() => reinitAnalytics()),
+        );
+
+        // Re-evaluate consent when the user toggles the Hexana statistics setting.
+        context.subscriptions.push(
+            vscode.workspace.onDidChangeConfiguration((e) => {
+                if (e.affectsConfiguration("hexana.enableStatistics")) {
+                    reinitAnalytics();
+                }
             }),
         );
     }
