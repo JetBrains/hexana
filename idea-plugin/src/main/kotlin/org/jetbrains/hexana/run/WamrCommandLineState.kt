@@ -8,9 +8,9 @@ import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.util.SystemInfo
-import com.intellij.util.execution.ParametersListUtil
+import org.jetbrains.hexana.shared.WasmRunInput
+import org.jetbrains.hexana.shared.buildWamrRunArgs
 import java.io.File
-import java.nio.file.Files
 
 /**
  * A command-line state that launches [iwasm](https://github.com/bytecodealliance/wasm-micro-runtime)
@@ -34,53 +34,17 @@ class WamrCommandLineState(
         val wasmFile = File(configuration.wasmFilePath)
         val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
 
-        // WAMR resolves imported sub-modules by looking for
-        // <module_name>.wasm files on the filesystem relative to
-        // the current working directory. Write stub modules so
-        // that wasm-bindgen placeholders and similar synthetic
-        // imports are satisfied.
-        val stubDir = generateImportStubFiles(wasmBytes)
+        val input = WasmRunInput(
+            wasmFilePath = configuration.wasmFilePath,
+            wasmBytes = wasmBytes,
+            programArguments = configuration.programArguments,
+            workingDirectory = configuration.workingDirectory,
+            runtimeOptions = configuration.wamrOptions,
+            exportName = configuration.exportName,
+        )
 
-        val commandLine = GeneralCommandLine().apply {
-            exePath = iwasm
-
-            val options = configuration.wamrOptions.trim()
-            if (options.isNotEmpty()) {
-                addParameters(ParametersListUtil.parse(options))
-            }
-
-            // iwasm uses `-f <function_name>` to invoke a specific
-            // exported function instead of the default entry point.
-            val functionName = configuration.exportName.trim()
-            if (functionName.isNotEmpty()) {
-                addParameter("-f")
-                addParameter(functionName)
-            }
-
-            addParameter(configuration.wasmFilePath)
-
-            val args = configuration.programArguments.trim()
-            if (args.isNotEmpty()) {
-                addParameters(args.split("\\s+".toRegex()))
-            }
-
-            // When stub modules were generated, use the stub
-            // directory as the working directory so WAMR can find
-            // the <module_name>.wasm files. Fall back to the
-            // user-configured directory, which is also where WAMR
-            // would look by default.
-            val workDir = stubDir?.absolutePath
-                ?: configuration.workingDirectory.ifBlank { null }
-            if (workDir != null) {
-                withWorkDirectory(workDir)
-            }
-
-            withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
-        }
-
-        val handler = OSProcessHandler(commandLine)
-        ProcessTerminatedListener.attach(handler)
-        return handler
+        val cmdLine = buildWamrRunArgs(input, JvmStubFileWriter)
+        return runCommandLine(iwasm, cmdLine)
     }
 
     companion object {
@@ -111,20 +75,8 @@ class WamrCommandLineState(
          * built-in module reader can locate them by name.
          */
         fun generateImportStubFiles(wasmBytes: ByteArray?): File? {
-            if (wasmBytes == null || !WasmImportStubGenerator.hasImports(wasmBytes)) return null
-
-            val stubs = WasmImportStubGenerator.generateStubs(wasmBytes)
-            if (stubs.isEmpty()) return null
-
-            val tempDir = Files.createTempDirectory("hexana-wamr-stubs").toFile()
-            tempDir.deleteOnExit()
-            for (stub in stubs) {
-                val stubFile = File(tempDir, "${stub.moduleName}.wasm")
-                stubFile.writeBytes(stub.wasmBytes)
-                stubFile.deleteOnExit()
-                LOG.info("Generated WAMR stub module: ${stubFile.absolutePath}")
-            }
-            return tempDir
+            val stubDir = org.jetbrains.hexana.shared.generateWamrStubFiles(wasmBytes, JvmStubFileWriter)
+            return stubDir?.let { File(it) }
         }
     }
 }

@@ -7,7 +7,8 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.util.execution.ParametersListUtil
+import org.jetbrains.hexana.shared.WasmRunInput
+import org.jetbrains.hexana.shared.buildWamrDebugArgs
 import java.io.File
 
 /**
@@ -36,9 +37,6 @@ class WamrDebugCommandLineState(
             exePath = iwasm
             addParameters(result.arguments)
 
-            // When stub modules were generated, use the stub
-            // directory as the working directory so WAMR can find
-            // the <module_name>.wasm files.
             val workDir = result.stubDir?.absolutePath
                 ?: configuration.workingDirectory.ifBlank { null }
             if (workDir != null) {
@@ -77,40 +75,25 @@ class WamrDebugCommandLineState(
             host: String = DEFAULT_DEBUG_HOST,
             port: Int = DEFAULT_DEBUG_PORT,
         ): DebugBuildResult {
-            val args = mutableListOf<String>()
-
             val wasmFile = File(configuration.wasmFilePath)
             val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
-            val stubDir = WamrCommandLineState.generateImportStubFiles(wasmBytes)
 
-            // Enable debug server
-            args.add("-g=$host:$port")
+            val input = WasmRunInput(
+                wasmFilePath = configuration.wasmFilePath,
+                wasmBytes = wasmBytes,
+                programArguments = configuration.programArguments,
+                workingDirectory = configuration.workingDirectory,
+                runtimeOptions = configuration.wamrOptions,
+                exportName = configuration.exportName,
+            )
 
-            val options = configuration.wamrOptions.trim()
-            if (options.isNotEmpty()) {
-                args.addAll(ParametersListUtil.parse(options))
-            }
-
-            // iwasm uses `-f <function_name>` to invoke a specific
-            // exported function instead of the default entry point.
-            val functionName = configuration.exportName.trim()
-            if (functionName.isNotEmpty()) {
-                args.add("-f")
-                args.add(functionName)
-            }
-
-            args.add(configuration.wasmFilePath)
-
-            val programArgs = configuration.programArguments.trim()
-            if (programArgs.isNotEmpty()) {
-                args.addAll(programArgs.split("\\s+".toRegex()))
-            }
+            val sharedResult = buildWamrDebugArgs(input, host, port, JvmStubFileWriter)
 
             return DebugBuildResult(
-                arguments = args,
-                debugHost = host,
-                debugPort = port,
-                stubDir = stubDir,
+                arguments = sharedResult.commandLine.arguments,
+                debugHost = sharedResult.debugHost,
+                debugPort = sharedResult.debugPort,
+                stubDir = sharedResult.stubDir?.let { File(it) },
             )
         }
 

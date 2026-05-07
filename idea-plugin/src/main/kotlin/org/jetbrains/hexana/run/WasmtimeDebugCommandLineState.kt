@@ -9,12 +9,10 @@ import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.util.execution.ParametersListUtil
-import org.jetbrains.hexana.io.toCommonByteBuffer
-import org.jetbrains.hexana.providers.BinaryProviderType
-import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import org.jetbrains.hexana.shared.WasmRunInput
+import org.jetbrains.hexana.shared.buildWasmtimeDebugArgs
+import org.jetbrains.hexana.shared.classifyDependencies
 import java.io.File
-import java.nio.file.Files
 
 /**
  * A command-line state that launches wasmtime with the `-D debug-info` flag
@@ -65,23 +63,13 @@ class WasmtimeDebugCommandLineState(
          *         (which strips DWARF debug info).
          */
         fun buildWasmtimeArguments(configuration: WasmRunConfiguration, project: Project): DebugBuildResult {
-            val args = mutableListOf<String>()
-
             val wasmFile = File(configuration.wasmFilePath)
             val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
             val resolvedDeps = resolveDeps(configuration, wasmBytes, project)
 
-            val coreModuleDeps = mutableMapOf<String, String>()
-            val componentDeps = mutableMapOf<String, String>()
-            for ((name, path) in resolvedDeps) {
-                val depFile = File(path)
-                if (depFile.exists()) {
-                    when (WasmBinaryProviderSelector.select(depFile.readBytes().toCommonByteBuffer())) {
-                        is BinaryProviderType.Wasm -> coreModuleDeps[name] = path
-                        is BinaryProviderType.WasmComponent -> componentDeps[name] = path
-                        else -> {}
-                    }
-                }
+            val (coreModuleDeps, componentDeps) = classifyDependencies(resolvedDeps) { path ->
+                val f = File(path)
+                if (f.exists()) f.readBytes() else null
             }
 
             // Component dependencies must be composed so the binary can
@@ -130,83 +118,24 @@ class WasmtimeDebugCommandLineState(
                 configuration.wasmFilePath
             }
 
-            args.add("run")
+            val input = WasmRunInput(
+                wasmFilePath = configuration.wasmFilePath,
+                wasmBytes = wasmBytes,
+                programArguments = configuration.programArguments,
+                runtimeOptions = configuration.wasmtimeOptions,
+                effectiveWasmPath = effectiveWasmPath,
+            )
 
-            // Enable DWARF debug-info translation for native debuggers
-            args.add("-D")
-            args.add("debug-info")
-
-            // Disable optimizations for better variable inspection
-            args.add("-O")
-            args.add("opt-level=0")
-
-            val options = configuration.wasmtimeOptions.trim()
-            if (options.isNotEmpty()) {
-                args.addAll(ParametersListUtil.parse(options))
-            }
-
-            for ((name, path) in coreModuleDeps) {
-                args.add("--preload")
-                args.add("$name=$path")
-            }
-
-            if (wasmBytes != null && WasmImportStubGenerator.hasImports(wasmBytes)) {
-                args.add("-W")
-                args.add("unknown-imports-default")
-
-                if (WasmImportStubGenerator.hasNonFunctionImports(wasmBytes)) {
-                    val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasmBytes)
-                        .filter { it.moduleName !in coreModuleDeps.keys }
-                    if (stubs.isNotEmpty()) {
-                        val tempDir = Files.createTempDirectory("hexana-wasm-stubs").toFile()
-                        tempDir.deleteOnExit()
-                        for (stub in stubs) {
-                            val stubFile = File(tempDir, "${stub.moduleName}.wasm")
-                            stubFile.writeBytes(stub.wasmBytes)
-                            stubFile.deleteOnExit()
-                            args.add("--preload")
-                            args.add("${stub.moduleName}=${stubFile.absolutePath}")
-                        }
-                    }
-                }
-            }
-
-            args.add(effectiveWasmPath)
-
-            val programArgs = configuration.programArguments.trim()
-            if (programArgs.isNotEmpty()) {
-                args.addAll(programArgs.split("\\s+".toRegex()))
-            }
+            val cmdLine = buildWasmtimeDebugArgs(input, coreModuleDeps, JvmStubFileWriter)
 
             return DebugBuildResult(
-                arguments = args,
+                arguments = cmdLine.arguments,
                 compositionUsed = compositionUsed,
                 dwarfInjected = dwarfInjected,
             )
         }
 
-        /**
-         * Resolves dependencies from the configuration, falling back to
-         * [WasmDependencyResolver] when the stored list is empty so that
-         * debug runs triggered from the IDE toolbar still compose
-         * component dependencies via WAC.
-         */
-        private fun resolveDeps(
-            configuration: WasmRunConfiguration,
-            wasmBytes: ByteArray?,
-            project: Project,
-        ): Map<String, String> {
-            val stored = configuration.dependencies
-                .mapNotNull { entry ->
-                    val parts = entry.split("=", limit = 2)
-                    if (parts.size == 2) parts[0] to parts[1] else null
-                }
-                .toMap()
-            if (stored.isNotEmpty() || wasmBytes == null) return stored
 
-            val vFile = LocalFileSystem.getInstance().findFileByPath(configuration.wasmFilePath)
-            return WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = vFile)
-        }
 
         /**
          * Result of building wasmtime debug arguments.

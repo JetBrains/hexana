@@ -14,6 +14,8 @@ import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.openapi.util.SystemInfo
+import org.jetbrains.hexana.shared.WasmRunInput
+import org.jetbrains.hexana.shared.buildGraalWasmRunArgs
 import org.graalvm.polyglot.Context
 import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.proxy.ProxyObject
@@ -67,33 +69,15 @@ private class ExternalGraalWasmCommandLineState(
         val exeName = if (SystemInfo.isWindows) "wasm.exe" else "wasm"
         val wasmLauncher = File(graalVmHome, "bin" + File.separator + exeName).absolutePath
 
-        val commandLine = GeneralCommandLine().apply {
-            exePath = wasmLauncher
+        val input = WasmRunInput(
+            wasmFilePath = configuration.wasmFilePath,
+            programArguments = configuration.programArguments,
+            workingDirectory = configuration.workingDirectory,
+            exportName = configuration.exportName,
+        )
 
-            val targetExport = configuration.exportName.ifBlank { null }
-            if (targetExport != null) {
-                addParameter("--entry-point")
-                addParameter(targetExport)
-            }
-
-            addParameter(configuration.wasmFilePath)
-
-            val args = configuration.programArguments.trim()
-            if (args.isNotEmpty()) {
-                addParameters(args.split("\\s+".toRegex()))
-            }
-
-            val workDir = configuration.workingDirectory.ifBlank { null }
-            if (workDir != null) {
-                withWorkDirectory(workDir)
-            }
-
-            withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
-        }
-
-        val handler = OSProcessHandler(commandLine)
-        ProcessTerminatedListener.attach(handler)
-        return handler
+        val cmdLine = buildGraalWasmRunArgs(input)
+        return runCommandLine(wasmLauncher, cmdLine)
     }
 }
 

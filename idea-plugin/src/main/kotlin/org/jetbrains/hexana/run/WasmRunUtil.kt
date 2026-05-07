@@ -5,20 +5,26 @@ import com.intellij.execution.ProgramRunnerUtil
 import com.intellij.execution.RunManager
 import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.execution.configurations.ConfigurationTypeUtil
+import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.execution.process.OSProcessHandler
+import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.awt.RelativePoint
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
+import org.jetbrains.hexana.shared.WasmCommandLine
+import org.jetbrains.hexana.shared.WasmRunInput
 import java.awt.MouseInfo
 
 enum class WasmRunMode {
@@ -183,4 +189,44 @@ private fun doRun(file: VirtualFile, project: Project, settings: RunnerAndConfig
             ProgramRunnerUtil.executeConfiguration(settings, executorForMode(mode))
         }
     })
+}
+
+fun runCommandLine(runtimeExecutable: String, cmdLine: WasmCommandLine): OSProcessHandler {
+    val commandLine = GeneralCommandLine().apply {
+        exePath = runtimeExecutable
+        addParameters(cmdLine.arguments)
+
+        if (cmdLine.workingDirectory != null) {
+            withWorkDirectory(cmdLine.workingDirectory)
+        }
+
+        withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+    }
+
+    val handler = OSProcessHandler(commandLine)
+    ProcessTerminatedListener.attach(handler)
+    return handler
+}
+
+/**
+ * Resolves dependencies from the configuration, falling back to
+ * [WasmDependencyResolver] when the stored list is empty so that
+ * debug runs triggered from the IDE toolbar still compose
+ * component dependencies via WAC.
+ */
+fun resolveDeps(
+    configuration: WasmRunConfiguration,
+    wasmBytes: ByteArray?,
+    project: Project,
+): Map<String, String> {
+    val stored = configuration.dependencies
+        .mapNotNull { entry ->
+            val parts = entry.split("=", limit = 2)
+            if (parts.size == 2) parts[0] to parts[1] else null
+        }
+        .toMap()
+    if (stored.isNotEmpty() || wasmBytes == null) return stored
+
+    val vFile = LocalFileSystem.getInstance().findFileByPath(configuration.wasmFilePath)
+    return WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = vFile)
 }
