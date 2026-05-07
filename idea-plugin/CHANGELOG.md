@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Added
-
+- Goto Symbol / Search Everywhere → Symbols now surfaces `.wit` declarations, component-model exports, and regular `.wasm` exports; picking a `.wasm` export opens the file and selects the matching row in the Exports tab
 ### Changed
 
 ### Deprecated
@@ -25,6 +25,15 @@
 - UX: when opening a nested module, you now see a backreference allowing to easily navigate back to the containing module
 - Java: [RedHat/Chicory Java completion and inspections](https://github.com/JetBrains/hexana/issues/22)
 - Java: [Oracle/GraalWasm Java completion and inspections](https://github.com/JetBrains/hexana/issues/20)
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
 
 ## 0.8.2 - 2026-04-30
 

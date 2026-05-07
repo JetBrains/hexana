@@ -73,6 +73,19 @@ class HexViewStateHolder(
     )
     val hexScrollFlow: SharedFlow<Long> = _hexScrollFlow
 
+    // Replay-1 so requests issued before BinaryEditorView is composed (e.g., from a Goto Symbol
+    // navigate() that opens the editor) still reach the late collector that resolves panel index.
+    private val _pendingTabSelection = MutableSharedFlow<String>(
+        replay = 1,
+        extraBufferCapacity = 8,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val pendingTabSelection: SharedFlow<String> = _pendingTabSelection
+
+    fun requestSelectTabByDescription(description: String) {
+        _pendingTabSelection.tryEmit(description)
+    }
+
     private val _cursorPosition = mutableStateOf(HexPosition(-1, -1))
     val cursorPosition: HexPosition get() = _cursorPosition.value
 

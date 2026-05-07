@@ -123,7 +123,9 @@
         <renameInputValidator implementation="org.jetbrains.hexana.wit.psi.WitRenameInputValidator" />
         <fileBasedIndex implementation="org.jetbrains.hexana.wit.WitComponentIndex"/>
         <fileBasedIndex implementation="org.jetbrains.hexana.WasmIndex"/>
+        <fileBasedIndex implementation="org.jetbrains.hexana.WasmExportIndex"/>
         <fileBasedIndex implementation="org.jetbrains.hexana.DwarfIndex"/>
+        <gotoSymbolContributor implementation="org.jetbrains.hexana.navigation.HexanaGotoSymbolContributor"/>
         <platform.backend.documentation.psiTargetProvider implementation="org.jetbrains.hexana.wit.WitDocumentationProvider"/>
         <findUsagesHandlerFactory id="wit" implementation="org.jetbrains.hexana.wit.WitFindUsagesHandlerFactory"/>
         <indexedRootsProvider implementation="org.jetbrains.hexana.wit.WitBuiltInDefinitionsContributor"/>

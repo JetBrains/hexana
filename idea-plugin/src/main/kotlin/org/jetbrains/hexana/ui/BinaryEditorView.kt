@@ -61,6 +61,13 @@ internal fun BinaryEditorView(
 
         val topTabIndex = remember(panels) { panels.indexOfFirst { it.description == "Top" }.takeIf { it >= 0 } }
 
+        LaunchedEffect(panels) {
+            state.pendingTabSelection.collect { desc ->
+                val idx = panels.indexOfFirst { it.description == desc }
+                if (idx >= 0) state.setSelectedTab(idx)
+            }
+        }
+
         VerticalSplitPanel(state, northPanel = {
             Column(modifier = Modifier.fillMaxSize()) {
                 FileDescriptionBar(
