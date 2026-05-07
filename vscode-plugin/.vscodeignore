@@ -23,6 +23,7 @@ extension-lib/src/**
 webview/src/**
 
 # Gradle build files (not needed at runtime)
+build.gradle.kts
 extension-lib/build.gradle.kts
 webview/build.gradle.kts
 

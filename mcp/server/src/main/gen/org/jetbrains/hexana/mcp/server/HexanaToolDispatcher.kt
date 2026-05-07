@@ -4,6 +4,7 @@ package org.jetbrains.hexana.mcp.server
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
+import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlin.Boolean
 import kotlin.Int
@@ -128,6 +129,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("functions", "exports", "memories", "globals", "tables", "types", "imports", "moduleSize")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.summarizeModule(request.arguments)
   }
@@ -226,6 +232,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("imports")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.listImports(request.arguments)
   }
@@ -297,6 +308,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("exports")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.listExports(request.arguments)
   }
@@ -394,6 +410,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("globals")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.listGlobals(request.arguments)
   }
@@ -545,6 +566,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("types")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.listTypes(request.arguments)
   }
@@ -652,6 +678,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("memories")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.listMemory(request.arguments)
   }
@@ -755,6 +786,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("segments")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.listElementSegments(request.arguments)
   }
@@ -910,6 +946,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("functions")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.listFunctions(request.arguments)
   }
@@ -1061,6 +1102,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("functions")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.functionsForIndices(request.arguments)
   }
@@ -1166,6 +1212,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("globals")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.getGlobalsForIndices(request.arguments)
   }
@@ -1281,6 +1332,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("memories")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.getMemoryForIndices(request.arguments)
   }
@@ -1440,6 +1496,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("types")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.getTypesForIndices(request.arguments)
   }
@@ -1531,6 +1592,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("functions")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.getLocalsForFunctions(request.arguments)
   }
@@ -1608,6 +1674,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("functions")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.getInstructionsForFunctions(request.arguments)
   }
@@ -1803,6 +1874,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("from", "to", "returned", "total", "truncate")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.listExportedFunctions(request.arguments)
   }
@@ -1936,6 +2012,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("from", "to", "returned", "total_segments", "truncate")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.listData(request.arguments)
   }
@@ -2246,6 +2327,11 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
     },
     required = listOf("memory", "globals", "segments", "exportedSymbols", "summary")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.listDataSegments(request.arguments)
   }

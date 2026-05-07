@@ -1,16 +1,15 @@
 @echo off
 setlocal
 
-echo == Building Extension Lib ==
-call ..\gradlew.bat :vscode-plugin:extension-lib:jsBrowserProductionWebpack
-if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
 
-echo == Building WebView ==
-call ..\gradlew.bat :vscode-plugin:webview:jsBrowserProductionWebpack
+echo == Building Extension Assets ==
+call "%ROOT_DIR%\gradlew.bat" :vscode-plugin:assembleExtensionAssets
 if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
 echo == Building plugin shim ==
-cd vscode-plugin
+cd /d "%SCRIPT_DIR%"
 call npm install
 call npm run compile
 

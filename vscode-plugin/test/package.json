@@ -4,7 +4,7 @@
   "description": "Selenium-WebDriver UI acceptance tests for the Hexana VS Code extension",
   "scripts": {
     "compile": "tsc -p ./tsconfig.json",
-    "test": "npm run compile && extest get-vscode --code_version max && extest get-chromedriver --code_version max && extest install-vsix --extensions_dir .test-extensions -f ../hexana-wasm-0.0.1.vsix && extest run-tests './out/ui-test/*.test.js' --code_version max --code_settings settings.json --extensions_dir .test-extensions -r fixtures/test-exports.wasm"
+    "test": "npm run compile && node ./out/run-tests.js"
   },
   "devDependencies": {
     "@types/chai": "^4.3.16",

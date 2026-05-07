@@ -8,6 +8,7 @@ build/
 .junie
 out/
 .kotlin
+kotlin-js-store/
 .intellijPlatform
 /teamcity.local.properties
 wasm-modules/wasmprinter_wrapper/target

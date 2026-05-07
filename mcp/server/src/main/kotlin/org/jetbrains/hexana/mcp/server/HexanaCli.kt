@@ -6,14 +6,20 @@ import com.github.ajalt.clikt.parameters.types.int
 import java.net.InetAddress
 
 sealed interface HexanaCommand {
-    data class Stdio(val logLevel: HexanaLogLevel, val analyticsKey: String?) : HexanaCommand
+    data class Stdio(
+        val logLevel: HexanaLogLevel,
+        val analyticsKey: String?,
+        val analyticsEnabled: Boolean
+    ) : HexanaCommand
+
     data class Http(
         val host: String,
         val port: Int,
         val endpoint: String,
         val allowPublicBind: Boolean,
         val logLevel: HexanaLogLevel,
-        val analyticsKey: String?
+        val analyticsKey: String?,
+        val analyticsEnabled: Boolean
     ) : HexanaCommand
 
     data object Version : HexanaCommand
@@ -72,8 +78,16 @@ class HexanaCli {
             envvar = "HEXANA_POSTHOG_KEY"
         )
 
+        private val analyticsEnabled by analyticsEnabledOption()
+
         override fun run() {
-            sink(HexanaCommand.Stdio(logLevel = logLevel, analyticsKey = analyticsKey))
+            sink(
+                HexanaCommand.Stdio(
+                    logLevel = logLevel,
+                    analyticsKey = analyticsKey,
+                    analyticsEnabled = analyticsEnabled
+                )
+            )
         }
     }
 
@@ -115,6 +129,8 @@ class HexanaCli {
             envvar = "HEXANA_POSTHOG_KEY"
         )
 
+        private val analyticsEnabled by analyticsEnabledOption()
+
         override fun run() {
             if (!allowPublicBind && !host.isLoopbackHost()) {
                 throw UsageError("Public HTTP bind requires --allow-public-bind")
@@ -127,7 +143,8 @@ class HexanaCli {
                     endpoint = endpoint.prependIfMissing("/"),
                     allowPublicBind = allowPublicBind,
                     logLevel = logLevel,
-                    analyticsKey = analyticsKey
+                    analyticsKey = analyticsKey,
+                    analyticsEnabled = analyticsEnabled
                 )
             )
         }
@@ -161,6 +178,20 @@ private fun parseLogLevel(value: String): HexanaLogLevel {
         throw UsageError(
             "Unsupported log level: $value. Expected one of: ${HexanaLogLevel.entries.joinToString { it.cliValue() }}"
         )
+    }
+}
+
+private fun CliktCommand.analyticsEnabledOption() = option(
+    "--telemetry-enabled",
+    help = "Whether anonymous usage analytics are allowed.",
+    envvar = "HEXANA_MCP_TELEMETRY_ENABLED"
+).convert("true|false") { parseBooleanOption("--telemetry-enabled", it) }.default(true)
+
+private fun parseBooleanOption(optionName: String, value: String): Boolean {
+    return when (value.lowercase()) {
+        "true" -> true
+        "false" -> false
+        else -> throw UsageError("Unsupported $optionName value: $value. Expected true or false.")
     }
 }
 

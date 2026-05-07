@@ -65,11 +65,16 @@ fun main(args: Array<String>) {
 
 private data class CommandAnalytics(
     val analyticsKey: String?,
+    val analyticsEnabled: Boolean,
     val transport: HexanaEvent.McpTransport,
 )
 
 private inline fun withCommandAnalytics(command: HexanaCommand, block: () -> Unit) {
     val analytics = command.analytics() ?: run {
+        block()
+        return
+    }
+    if (!analytics.analyticsEnabled) {
         block()
         return
     }
@@ -85,11 +90,13 @@ private inline fun withCommandAnalytics(command: HexanaCommand, block: () -> Uni
 private fun HexanaCommand.analytics(): CommandAnalytics? = when (this) {
     is HexanaCommand.Stdio -> CommandAnalytics(
         analyticsKey = analyticsKey,
+        analyticsEnabled = analyticsEnabled,
         transport = HexanaEvent.McpTransport.STDIO,
     )
 
     is HexanaCommand.Http -> CommandAnalytics(
         analyticsKey = analyticsKey,
+        analyticsEnabled = analyticsEnabled,
         transport = HexanaEvent.McpTransport.HTTP,
     )
 

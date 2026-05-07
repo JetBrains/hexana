@@ -9,8 +9,24 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class HexanaMcpServerSchemaTest {
+    @Test
+    fun generatedToolsAreMarkedReadOnly() {
+        val annotations = createHexanaMcpServer()
+            .tools
+            .getValue("summarize_module")
+            .tool
+            .annotations
+            ?: error("Missing summarize_module annotations")
+
+        assertTrue(annotations.readOnlyHint == true)
+        assertFalse(annotations.destructiveHint == true)
+        assertTrue(annotations.idempotentHint == true)
+    }
+
     @Test
     fun wasmInputPropertiesDescribeRuntimeValidation() {
         val summarizeModuleSchema = createHexanaMcpServer()

@@ -1,6 +1,7 @@
 import * as https from "https";
 import * as path from "path";
 import * as vscode from "vscode";
+import { registerMcpServerDefinitionProvider } from "./mcpServerProvider";
 import { WasmEditorProvider } from "./WasmEditorProvider";
 import type * as ExtensionLib from "./extension-lib";
 
@@ -25,17 +26,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // captured during the first file open are not lost.
     if (extensionLib) {
         const storagePath = path.join(context.globalStorageUri.fsPath, "hexana-analytics-id");
-        const isStatisticsEnabled = (): boolean => {
-            const hexanaConfig = vscode.workspace.getConfiguration("hexana");
-            return vscode.env.isTelemetryEnabled && hexanaConfig.get<boolean>("enableStatistics", true);
-        };
-        extensionLib.initAnalytics(storagePath, isStatisticsEnabled(), vscode.env.appName, vscode.version);
+        extensionLib.initAnalytics(storagePath, isHexanaTelemetryEnabled(), vscode.env.appName, vscode.version);
 
         const reinitAnalytics = () => {
             // Flush and shut down the previous client before re-initializing
             // so pending events are not lost and connections are released.
             extensionLib.shutdownAnalytics();
-            extensionLib.initAnalytics(storagePath, isStatisticsEnabled(), vscode.env.appName, vscode.version);
+            extensionLib.initAnalytics(storagePath, isHexanaTelemetryEnabled(), vscode.env.appName, vscode.version);
         };
 
         // Re-evaluate consent when the user toggles VS Code telemetry.
@@ -54,6 +51,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     context.subscriptions.push(WasmEditorProvider.register(context));
+    try {
+        registerMcpServerDefinitionProvider(context, {
+            isTelemetryEnabled: isHexanaTelemetryEnabled,
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[Hexana] MCP integration disabled: ${message}`);
+    }
 
     // Ensure .wasm files are associated with the Hexana custom editor so that
     // VS Code does not show the "binary file not displayed" warning.  The
@@ -97,6 +102,11 @@ function checkLocation(): Promise<boolean> {
         });
         req.end();
     });
+}
+
+function isHexanaTelemetryEnabled(): boolean {
+    const hexanaConfig = vscode.workspace.getConfiguration("hexana");
+    return vscode.env.isTelemetryEnabled && hexanaConfig.get<boolean>("enableStatistics", true);
 }
 
 /**

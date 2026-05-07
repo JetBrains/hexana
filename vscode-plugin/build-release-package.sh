@@ -8,11 +8,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "== Building Extension Lib =="
-"$ROOT_DIR/gradlew" :vscode-plugin:extension-lib:jsBrowserProductionWebpack
-
-echo "== Building WebView =="
-"$ROOT_DIR/gradlew" :vscode-plugin:webview:jsBrowserProductionWebpack
+echo "== Building Extension Assets =="
+"$ROOT_DIR/gradlew" :vscode-plugin:assembleExtensionAssets
 
 echo "== Installing npm dependencies =="
 cd "$SCRIPT_DIR"

@@ -17,17 +17,27 @@ class HexanaCliTest {
 
         assertIs<HexanaCommand.Stdio>(command)
         assertEquals(HexanaLogLevel.INFO, command.logLevel)
+        assertTrue(command.analyticsEnabled)
+    }
+
+    @Test
+    fun parseAcceptsTelemetryOptOutForStdio() {
+        val command = cli.parse(arrayOf("stdio", "--telemetry-enabled", "false"))
+
+        assertIs<HexanaCommand.Stdio>(command)
+        assertFalse(command.analyticsEnabled)
     }
 
     @Test
     fun parseNormalizesHttpEndpointAndKeepsLoopbackDefaults() {
-        val command = cli.parse(arrayOf("http", "--endpoint", "api", "--log-level", "debug"))
+        val command = cli.parse(arrayOf("http", "--endpoint", "api", "--log-level", "debug", "--telemetry-enabled", "false"))
 
         assertIs<HexanaCommand.Http>(command)
         assertEquals("127.0.0.1", command.host)
         assertEquals(3000, command.port)
         assertEquals("/api", command.endpoint)
         assertEquals(HexanaLogLevel.DEBUG, command.logLevel)
+        assertFalse(command.analyticsEnabled)
     }
 
     @Test
@@ -67,5 +77,15 @@ class HexanaCliTest {
         assertTrue(error.message.orEmpty().contains("quiet"))
         assertTrue(error.message.orEmpty().contains("info"))
         assertTrue(error.message.orEmpty().contains("debug"))
+    }
+
+    @Test
+    fun parseRejectsUnsupportedTelemetryValue() {
+        val error = assertFailsWith<CliktError> {
+            cli.parse(arrayOf("stdio", "--telemetry-enabled", "maybe"))
+        }
+
+        assertTrue(error.message.orEmpty().contains("true"))
+        assertTrue(error.message.orEmpty().contains("false"))
     }
 }

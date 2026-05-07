@@ -5,12 +5,8 @@ REM Build the VS Code extension with JavaScript obfuscation.
 REM Unlike build-and-run-locally.bat this script only produces the .vsix
 REM artifact — it does NOT install or launch VS Code.
 
-echo == Building Extension Lib ==
-call ..\gradlew.bat :vscode-plugin:extension-lib:jsBrowserProductionWebpack
-if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
-
-echo == Building WebView ==
-call ..\gradlew.bat :vscode-plugin:webview:jsBrowserProductionWebpack
+echo == Building Extension Assets ==
+call ..\gradlew.bat :vscode-plugin:assembleExtensionAssets
 if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
 echo == Installing npm dependencies ==

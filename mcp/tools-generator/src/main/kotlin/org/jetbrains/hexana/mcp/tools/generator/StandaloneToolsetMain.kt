@@ -22,6 +22,7 @@ import kotlin.system.exitProcess
 private const val SERVER_PACKAGE = "org.jetbrains.hexana.mcp.server"
 private val SERVER_CLASS = ClassName("io.modelcontextprotocol.kotlin.sdk.server", "Server")
 private val TOOL_CLASS = ClassName("io.modelcontextprotocol.kotlin.sdk.types", "Tool")
+private val TOOL_ANNOTATIONS = ClassName("io.modelcontextprotocol.kotlin.sdk.types", "ToolAnnotations")
 private val CALL_TOOL_REQUEST = ClassName("io.modelcontextprotocol.kotlin.sdk.types", "CallToolRequest")
 private val TOOL_HANDLERS = ClassName(SERVER_PACKAGE, "HexanaToolHandlers")
 private val HEXANA_ANALYSIS_LIMITS = ClassName("org.jetbrains.hexana.mcp", "HexanaAnalysisLimits")
@@ -110,8 +111,18 @@ private fun renderAddToolCall(spec: ToolSpec): CodeBlock {
 
     return CodeBlock.builder()
         .add(
-            "addTool(tool = %T(\n  name = %S,\n  description = %S,\n  inputSchema = %L,\n  outputSchema = %L,\n))",
-            TOOL_CLASS, spec.name, spec.summary, inputSchema, outputSchema,
+            "addTool(tool = %T(\n" +
+                "  name = %S,\n" +
+                "  description = %S,\n" +
+                "  inputSchema = %L,\n" +
+                "  outputSchema = %L,\n" +
+                "  annotations = %T(\n" +
+                "    readOnlyHint = true,\n" +
+                "    destructiveHint = false,\n" +
+                "    idempotentHint = true,\n" +
+                "  ),\n" +
+                "))",
+            TOOL_CLASS, spec.name, spec.summary, inputSchema, outputSchema, TOOL_ANNOTATIONS,
         )
         .beginControlFlow(" ")
         .addStatement("request: %T -> handlers.%N(request.arguments)", CALL_TOOL_REQUEST, handlerMethod)

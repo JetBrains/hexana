@@ -1,11 +1,14 @@
-echo "== Building Extension Lib =="
-../gradlew :vscode-plugin:extension-lib:jsBrowserProductionWebpack
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "== Building WebView =="
-../gradlew :vscode-plugin:webview:jsBrowserProductionWebpack
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+echo "== Building Extension Assets =="
+"$ROOT_DIR/gradlew" :vscode-plugin:assembleExtensionAssets
 
 echo "== Building plugin shim =="
-cd vscode-plugin
+cd "$SCRIPT_DIR"
 npm install
 npm run compile
 

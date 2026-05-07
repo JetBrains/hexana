@@ -6,6 +6,7 @@ This folder groups extracted MCP modules.
 
 - If you touch `mcp/core/`, also read `mcp/core/AGENTS.md`.
 - If you touch `mcp/server/`, also read `mcp/server/AGENTS.md`.
+- If you touch `mcp/vscode-server/`, also read `mcp/vscode-server/AGENTS.md`.
 - If you touch `mcp/tools-generator/`, also read `mcp/tools-generator/AGENTS.md`.
 - If you touch `mcp/packaging/`, also read `mcp/packaging/AGENTS.md`.
 
@@ -13,6 +14,8 @@ This folder groups extracted MCP modules.
 
 - `core/`: JVM-only Wasm MCP query/model library used by the IntelliJ plugin bridge in `idea-plugin/`.
 - `server/`: standalone MCP runtime that serves the extracted Wasm tooling over `stdio` and HTTP.
+- `vscode-server/`: thin VS Code-facing MCP server distribution that runs as a separate stdio/http process for the
+  VS Code extension while reusing `server/` runtime code.
 - `tools-generator/`: DSL declaring all Hexana MCP tools and KotlinPoet generators that emit the idea-plugin
   `HexanaToolset.kt` and the standalone-server `HexanaToolDispatcher.kt`.
 - `packaging/`: thin Claude/Codex wrapper layouts around the standalone runtime in `server/`.

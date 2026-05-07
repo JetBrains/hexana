@@ -11,6 +11,8 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 - If you touch `mcp/`, also read `mcp/AGENTS.md`.
 - If you touch `mcp/core/`, also read `mcp/core/AGENTS.md`.
 - If you touch `mcp/server/`, also read `mcp/server/AGENTS.md`.
+- If you touch `mcp/tools-generator/`, also read `mcp/tools-generator/AGENTS.md`.
+- If you touch `mcp/vscode-server/`, also read `mcp/vscode-server/AGENTS.md`.
 - If you touch `mcp/packaging/`, also read `mcp/packaging/AGENTS.md`.
 - If you touch `wasmParser/`, also read `wasmParser/AGENTS.md`.
 - If you touch `plugins-shared/`, also read `plugins-shared/AGENTS.md`.
@@ -27,6 +29,8 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 - `mcp/server/`: standalone Kotlin/JVM MCP runtime that exposes `mcp/core` over `stdio` and HTTP transports.
 - `mcp/tools-generator/`: single source of truth for Hexana MCP tool definitions (DSL + KotlinPoet generators for
   `idea-plugin`'s `HexanaToolset.kt` and `mcp/server`'s `HexanaToolDispatcher.kt`).
+- `mcp/vscode-server/`: thin VS Code-facing MCP server distribution that launches the standalone runtime as a separate
+  process for the VS Code extension.
 - `mcp/packaging/`: thin Claude/Codex wrapper layouts that point at the standalone runtime from `mcp/server/`.
 - `wasmParser/`: Kotlin Multiplatform parser for core Wasm and component-model binaries.
 - `binaryProvider/`: thin provider layer that wraps parsed Wasm data for the UI and navigation features.
@@ -68,6 +72,7 @@ Run the narrowest command that proves your change.
 - Run plugin tests: `./gradlew :idea-plugin:test`
 - Build the extracted MCP core module: `./gradlew :mcp:core:build`
 - Build the standalone MCP server: `./gradlew :mcp:server:build`
+- Build the VS Code MCP server distribution: `./gradlew :mcp:vscode-server:installDist`
 - Regenerate the idea-plugin toolset: `./gradlew :idea-plugin:generateHexanaToolset`
 - Regenerate the standalone server dispatcher: `./gradlew :mcp:server:generateHexanaToolDispatcher`
 - Build the plugin ZIP: `./gradlew :idea-plugin:buildPlugin`

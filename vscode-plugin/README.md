@@ -39,9 +39,16 @@ Run Wasm modules directly from the editor toolbar via [wasmtime](https://wasmtim
 - Automatic component dependency resolution by scanning workspace directories for matching `.wasm` files, including transitive dependencies.
 - Navigate nested modules inside a component binary by opening them in separate editor tabs.
 
+### MCP Tools
+
+Registers a bundled Hexana MCP server in VS Code. The server runs as a separate local stdio process and exposes read-only
+WebAssembly analysis tools for Copilot agent workflows.
+
 ## Requirements
 
-- **VS Code** 1.85 or later.
+- **VS Code** 1.102 or later.
+- **Java** 21 or later — required for the bundled MCP server. If VS Code cannot find Java through `JAVA_HOME` or `PATH`,
+  set `hexana.mcp.javaHome` to a Java 21+ home directory.
 - **[wasmtime](https://wasmtime.dev/)** (optional) — needed for the Run button to execute Wasm modules.
 - **[wasm-tools](https://github.com/bytecodealliance/wasm-tools)** or **[wac](https://github.com/bytecodealliance/wac)** (optional) — used for component composition when running component model binaries with unresolved imports.
 

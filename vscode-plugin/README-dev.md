@@ -25,6 +25,7 @@ VS Code extension for WebAssembly binary analysis. Opens `.wasm` files in a cust
 - **Component dependency resolution** — automatically discovers and resolves component imports by scanning workspace directories for matching `.wasm` files, including transitive dependencies.
 - **Nested module navigation** — open individual modules from a component binary in separate editor tabs using a virtual filesystem provider.
 - **WAT language association** — registers `.wat` file extension for syntax highlighting.
+- **MCP integration** — registers a bundled Hexana MCP server with VS Code and launches it as a separate stdio process.
 
 ## Architecture
 
@@ -68,9 +69,10 @@ VS Code extension for WebAssembly binary analysis. Opens `.wasm` files in a cust
 
 The extension is organised into three layers:
 
-1. **Extension host** (TypeScript) — Registers the custom editor, reads binary files, posts raw bytes into the webview, and handles VS Code-specific operations: terminal management for run configurations, virtual filesystem for nested modules, and WAT content provider for Monaco integration.
+1. **Extension host** (TypeScript) — Registers the custom editor and MCP server definition provider, reads binary files, posts raw bytes into the webview, and handles VS Code-specific operations: terminal management for run configurations, virtual filesystem for nested modules, and WAT content provider for Monaco integration.
 2. **Extension library** (Kotlin/JS) — Pure analysis logic compiled to a single JS bundle and imported by the TypeScript host. Provides binary analysis (`wasmParser`-backed), component dependency resolution, workspace root detection, and shell argument utilities via `@JsExport` functions.
 3. **Webview** (Kotlin/JS + Compose for Web) — Receives the binary via `postMessage`, wraps it in a `CommonByteBuffer`, constructs a `BinaryProvider`, and renders the hex viewer and all analysis panels using Compose for Web.
+4. **MCP server** (Kotlin/JVM) — Built from `mcp/vscode-server` and bundled into `vscode-plugin/server`; VS Code starts it with stdio when MCP tools are used.
 
 All three layers reuse existing Kotlin Multiplatform modules:
 - **wasmParser** — binary decoding for core Wasm and component model.
@@ -88,6 +90,7 @@ vscode-plugin/
 ├── tsconfig.json              # TypeScript configuration
 ├── build-and-run-locally.sh   # one-step build + install script
 ├── .gitignore
+├── server/                    # generated bundled MCP server distribution
 ├── media/
 │   └── editor.css             # webview stylesheet (uses VS Code CSS variables)
 ├── src/                       # TypeScript extension host
@@ -150,16 +153,12 @@ cd vscode-plugin
 1. **Build the Kotlin/JS extension library:**
 
    ```bash
-   ./gradlew :vscode-plugin:extension-lib:jsBrowserProductionWebpack
+   ./gradlew :vscode-plugin:assembleExtensionAssets
    ```
 
-2. **Build the Kotlin/JS webview bundle:**
+   This builds the Kotlin/JS bundles and copies the VS Code MCP server distribution into `vscode-plugin/server`.
 
-   ```bash
-   ./gradlew :vscode-plugin:webview:jsBrowserProductionWebpack
-   ```
-
-3. **Install npm dependencies and compile TypeScript:**
+2. **Install npm dependencies and compile TypeScript:**
 
    ```bash
    cd vscode-plugin
@@ -167,14 +166,42 @@ cd vscode-plugin
    npm run compile
    ```
 
-4. **Package the extension (optional):**
+3. **Package the extension (optional):**
 
    ```bash
    cd vscode-plugin
    npx @vscode/vsce package --allow-missing-repository
    ```
 
-   This creates a `.vsix` file you can install via `code --install-extension hexana-wasm-*.vsix`.
+### MCP Smoke Test
+
+Build the VS Code MCP server distribution:
+
+```bash
+./gradlew :mcp:vscode-server:installDist
+```
+
+For direct VS Code MCP testing without packaging the extension, add a temporary MCP config in your user profile or a local
+scratch workspace and point it at the built launcher:
+
+```json
+{
+  "servers": {
+    "hexana-vscode": {
+      "type": "stdio",
+      "command": "/absolute/path/to/Hexana/mcp/vscode-server/build/install/hexana-vscode-mcp-server/bin/hexana-vscode-mcp-server",
+      "args": ["--transport", "stdio", "--log-level", "quiet"],
+      "env": {
+        "HEXANA_MCP_HOST": "vscode-dev",
+        "HEXANA_MCP_TELEMETRY_ENABLED": "false"
+      }
+    }
+  }
+}
+```
+
+Then use VS Code's MCP server controls to start `hexana-vscode`, list tools, and call `summarize_module` with a local
+`.wasm` path or inline bytes. Do not commit local MCP config files to this repository.
 
 ## Publishing
 
