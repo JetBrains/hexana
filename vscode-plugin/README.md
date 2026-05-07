@@ -2,8 +2,6 @@
 
 A VS Code extension for viewing and analyzing WebAssembly binaries. Open any `.wasm` file to explore its structure, inspect hex data, and run modules — all inside VS Code.
 
-![Hexana](media/icon.png)
-
 ## Features
 
 ### Custom Binary Editor
@@ -54,7 +52,7 @@ Run Wasm modules directly from the editor toolbar via [wasmtime](https://wasmtim
 
 ## License
 
-See [LICENSE](LICENSE).
+See [LICENSE](https://www.jetbrains.com/legal/docs/toolbox/user/).
 
 This extension collects telemetry data, which is used to help understand how to improve the product. Please refer to [JetBrains Privacy Notice](https://www.jetbrains.com/legal/docs/privacy/privacy/) for more information about data collection and use.
 You can opt out of telemetry by setting the `hexana.enableStatistics` setting to `false`.
