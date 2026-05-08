@@ -43,16 +43,22 @@ kotlin {
 val copyWasmPrinter by tasks.registering(Copy::class) {
     from(rootProject.file("graalwasm/wasmprinter/src/main/resources/wasmprinter_wrapper.wasm"))
     into(layout.buildDirectory.dir("kotlin-webpack/js/productionExecutable"))
+    dependsOn(tasks.named("jsBrowserProductionWebpack"))
 }
 
 tasks.named("jsBrowserProductionWebpack") {
     finalizedBy(copyWasmPrinter)
 }
 
+tasks.named("jsBrowserDistribution") {
+    dependsOn(copyWasmPrinter)
+}
+
 // Also copy for development builds.
 val copyWasmPrinterDev by tasks.registering(Copy::class) {
     from(rootProject.file("graalwasm/wasmprinter/src/main/resources/wasmprinter_wrapper.wasm"))
     into(layout.buildDirectory.dir("kotlin-webpack/js/developmentExecutable"))
+    dependsOn(tasks.named("jsBrowserDevelopmentWebpack"))
 }
 
 tasks.named("jsBrowserDevelopmentWebpack") {
