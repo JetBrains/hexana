@@ -274,14 +274,28 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     }
 
     /**
+     * Node.js implementation of the JsStubFileWriter interface that writes
+     * temporary stub files to the OS temp directory.
+     */
+    private readonly nodeStubWriter: ExtensionLib.JsStubFileWriter = {
+        createTempDir(prefix: string): string {
+            return fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}-`));
+        },
+        writeFile(dir: string, fileName: string, bytes: Int8Array): string {
+            const filePath = path.join(dir, fileName);
+            fs.writeFileSync(filePath, Buffer.from(bytes));
+            return filePath;
+        },
+    };
+
+    /**
      * Handles a `run-export` message from the webview by executing the Wasm
-     * module in a VS Code terminal using wasmtime.
+     * module in a VS Code terminal using the configured runtime.
      *
-     * When the webview sends stub modules (for core-module non-function
-     * imports) or component import names, this method writes temporary
-     * stub files and passes `--preload` / `-W unknown-imports-default`
-     * flags, or attempts component composition via `wasm-tools compose`
-     * or `wac plug`.
+     * The runtime is selected via the `hexana.wasmRuntime` setting (default:
+     * `wasmtime`). When the webview sends component import names and the
+     * active runtime supports components, dependency resolution and
+     * composition are attempted before launch.
      */
     private runExport(
         document: WasmDocument,
@@ -306,52 +320,61 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             return;
         }
 
+        const runtime = this.getSelectedRuntime();
+
+        // Component-model binaries require Wasmtime
         if (message.isComponent && message.componentImports && message.componentImports.length > 0) {
+            if (runtime !== "wasmtime") {
+                vscode.window.showWarningMessage(
+                    `Component-model binaries are only supported by Wasmtime. ` +
+                    `The current runtime is '${runtime}'. Falling back to Wasmtime.`,
+                );
+            }
             this.runComponentExport(document, message);
             return;
         }
 
-        const args: string[] = ["run"];
+        const isWindows = os.platform() === "win32";
+        const wasmBytes = this.readWasmBytes(filePath);
 
-        // Handle core-module import stubs
-        if (!message.isComponent && message.hasImports) {
-            args.push("-W", "unknown-imports-default");
+        // Build the command line using the shared builder for the selected runtime
+        const cmdLine = this.buildCommandLine(runtime, {
+            filePath,
+            wasmBytes,
+            exportName: message.exportName,
+            invokeArgs: message.invokeArgs,
+            programArgs: message.programArgs,
+        });
 
-            if (message.stubs && message.stubs.length > 0) {
-                const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hexana-wasm-stubs-"));
-                for (const stub of message.stubs) {
-                    const stubFile = path.join(tempDir, `${stub.moduleName}.wasm`);
-                    fs.writeFileSync(stubFile, Buffer.from(stub.wasmBytes));
-                    args.push("--preload", `${stub.moduleName}=${stubFile}`);
-                }
-            }
+        if (!cmdLine) {
+            return; // error already shown
         }
 
-        if (message.invokeArgs) {
-            args.push(...extensionLib.splitShellArgs(message.invokeArgs));
-        }
-
-        args.push(filePath);
-
-        if (message.programArgs) {
-            args.push(...extensionLib.splitShellArgs(message.programArgs));
+        const runtimeCmd = this.getRuntimeCommand(runtime, isWindows);
+        if (!runtimeCmd) {
+            return; // error already shown
         }
 
         const exportName = message.exportName || path.basename(filePath, ".wasm");
         const terminalName = `Wasm: ${exportName}`;
 
-        const isWindows = os.platform() === "win32";
-        const wasmtimeCmd = this.getWasmtimeCommand(isWindows);
-        const terminal = vscode.window.createTerminal({ name: terminalName });
+        const allArgs = [...cmdLine.arguments];
+        const terminal = vscode.window.createTerminal({
+            name: terminalName,
+            cwd: cmdLine.workingDirectory ?? undefined,
+        });
         terminal.show();
-        terminal.sendText(`${wasmtimeCmd} ${args.map((a: string) => extensionLib.shellEscape(a, isWindows)).join(" ")}`);
+        terminal.sendText(
+            `${extensionLib.shellEscape(runtimeCmd, isWindows)} ${allArgs.map((a: string) => extensionLib.shellEscape(a, isWindows)).join(" ")}`,
+        );
     }
 
     /**
      * Handles running a component-model export by first resolving
      * dependencies from the filesystem (including transitive deps),
      * composing them using `wasm-tools compose` or `wac plug`, and
-     * then running the result.
+     * then running the result via Wasmtime (the only runtime that
+     * supports the Component Model).
      */
     private runComponentExport(
         document: WasmDocument,
@@ -394,40 +417,156 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             }
         }
 
-        const args: string[] = ["run"];
-
-        if (message.invokeArgs) {
-            args.push(...extensionLib.splitShellArgs(message.invokeArgs));
-        }
-
-        args.push(effectiveWasmPath);
-
-        if (message.programArgs) {
-            args.push(...extensionLib.splitShellArgs(message.programArgs));
-        }
+        // Component-model runs always use Wasmtime
+        const cmdLine = extensionLib.buildWasmtimeCommandLine(
+            filePath,
+            null,
+            message.programArgs || "",
+            message.invokeArgs || "",
+            effectiveWasmPath !== filePath ? effectiveWasmPath : null,
+            null,
+        );
 
         const exportName = message.exportName || path.basename(filePath, ".wasm");
         const terminalName = `Wasm: ${exportName}`;
 
         const isWindows = os.platform() === "win32";
-        const wasmtimeCmd = this.getWasmtimeCommand(isWindows);
+        const wasmtimeCmd = this.getRuntimeCommand("wasmtime", isWindows)!;
         const terminal = vscode.window.createTerminal({ name: terminalName });
         terminal.show();
-        terminal.sendText(`${wasmtimeCmd} ${args.map((a: string) => extensionLib.shellEscape(a, isWindows)).join(" ")}`);
+        terminal.sendText(
+            `${extensionLib.shellEscape(wasmtimeCmd, isWindows)} ${cmdLine.arguments.map((a: string) => extensionLib.shellEscape(a, isWindows)).join(" ")}`,
+        );
     }
 
     /**
-     * Returns the wasmtime command to use, respecting the `hexana.wasmtimePath`
-     * setting. When the setting is empty, falls back to the default `wasmtime`
-     * (or `wasmtime.exe` on Windows) resolved from the system PATH.
+     * Returns the currently selected Wasm runtime from settings.
      */
-    private getWasmtimeCommand(isWindows: boolean): string {
+    private getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" {
         const config = vscode.workspace.getConfiguration("hexana");
-        const customPath = config.get<string>("wasmtimePath", "").trim();
-        if (customPath) {
-            return customPath;
+        const runtime = config.get<string>("wasmRuntime", "wasmtime").trim();
+        if (runtime === "wamr" || runtime === "graalwasm") {
+            return runtime;
         }
-        return isWindows ? "wasmtime.exe" : "wasmtime";
+        return "wasmtime";
+    }
+
+    /**
+     * Returns the executable command for the given runtime, respecting
+     * the corresponding `hexana.*` path setting.  Shows an error and
+     * returns `undefined` when the runtime cannot be resolved.
+     */
+    private getRuntimeCommand(runtime: string, isWindows: boolean): string | undefined {
+        const config = vscode.workspace.getConfiguration("hexana");
+
+        switch (runtime) {
+            case "wasmtime": {
+                const custom = config.get<string>("wasmtimePath", "").trim();
+                return custom || (isWindows ? "wasmtime.exe" : "wasmtime");
+            }
+            case "wamr": {
+                const custom = config.get<string>("wamrPath", "").trim();
+                return custom || (isWindows ? "iwasm.exe" : "iwasm");
+            }
+            case "graalwasm": {
+                const graalHome = this.resolveGraalVmHome();
+                if (!graalHome) {
+                    vscode.window.showErrorMessage(
+                        "Cannot run: GraalVM home not configured. " +
+                        "Set 'hexana.graalVmHome' in settings, or set the GRAALVM_HOME or JAVA_HOME environment variable.",
+                    );
+                    return undefined;
+                }
+                const exeName = isWindows ? "wasm.exe" : "wasm";
+                return path.join(graalHome, "bin", exeName);
+            }
+            default:
+                return isWindows ? "wasmtime.exe" : "wasmtime";
+        }
+    }
+
+    /**
+     * Resolves the GraalVM home directory from settings or environment
+     * variables.  Returns `undefined` when no valid path is found.
+     */
+    private resolveGraalVmHome(): string | undefined {
+        const config = vscode.workspace.getConfiguration("hexana");
+        const custom = config.get<string>("graalVmHome", "").trim();
+        if (custom) {
+            return custom;
+        }
+        return process.env.GRAALVM_HOME?.trim() || process.env.JAVA_HOME?.trim() || undefined;
+    }
+
+    /**
+     * Reads the raw bytes of a wasm file, returning `null` on failure.
+     */
+    private readWasmBytes(filePath: string): Int8Array | null {
+        try {
+            const buf = fs.readFileSync(filePath);
+            return new Int8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Builds a runtime-specific command line using the shared builders.
+     * Returns the command line result, or `undefined` on error.
+     */
+    private buildCommandLine(
+        runtime: string,
+        params: {
+            filePath: string;
+            wasmBytes: Int8Array | null;
+            exportName: string;
+            invokeArgs: string;
+            programArgs: string;
+            effectiveWasmPath?: string;
+        },
+    ): ExtensionLib.CommandLineResult | undefined {
+        if (!extensionLib) {
+            return undefined;
+        }
+
+        switch (runtime) {
+            case "wasmtime": {
+                // For wasmtime, invokeArgs are treated as runtimeOptions
+                const runtimeOptions = params.invokeArgs || "";
+                return extensionLib.buildWasmtimeCommandLine(
+                    params.filePath,
+                    params.wasmBytes,
+                    params.programArgs || "",
+                    runtimeOptions,
+                    params.effectiveWasmPath ?? null,
+                    this.nodeStubWriter,
+                );
+            }
+            case "wamr":
+                return extensionLib.buildWamrCommandLine(
+                    params.filePath,
+                    params.wasmBytes,
+                    params.programArgs || "",
+                    "",
+                    params.exportName || "",
+                    this.nodeStubWriter,
+                );
+            case "graalwasm":
+                return extensionLib.buildGraalWasmCommandLine(
+                    params.filePath,
+                    params.programArgs || "",
+                    params.exportName || "",
+                );
+            default:
+                return extensionLib.buildWasmtimeCommandLine(
+                    params.filePath,
+                    params.wasmBytes,
+                    params.programArgs || "",
+                    params.invokeArgs || "",
+                    params.effectiveWasmPath ?? null,
+                    this.nodeStubWriter,
+                );
+        }
     }
 
     /**

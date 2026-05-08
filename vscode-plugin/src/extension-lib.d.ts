@@ -132,3 +132,56 @@ export function resolveAllDependencies(
     wasmFilePath: string,
     fs: FileSystemAccess,
 ): DependencyResolution;
+
+// ── RuntimeCommandLine ──────────────────────────────────────────────
+
+/** Result of building a Wasm runtime command line. */
+export interface CommandLineResult {
+    readonly arguments: string[];
+    readonly workingDirectory: string | null;
+}
+
+/**
+ * Callback interface that TypeScript implements to provide temporary
+ * file writing for import stub generation.
+ */
+export interface JsStubFileWriter {
+    createTempDir(prefix: string): string;
+    writeFile(dir: string, fileName: string, bytes: Int8Array): string;
+}
+
+/**
+ * Builds the argument list for a Wasmtime `run` invocation using
+ * the shared command-line builder.
+ */
+export function buildWasmtimeCommandLine(
+    wasmFilePath: string,
+    wasmBytes?: Int8Array | null,
+    programArguments?: string,
+    runtimeOptions?: string,
+    effectiveWasmPath?: string | null,
+    stubWriter?: JsStubFileWriter | null,
+): CommandLineResult;
+
+/**
+ * Builds the argument list for a WAMR `iwasm` invocation using
+ * the shared command-line builder.
+ */
+export function buildWamrCommandLine(
+    wasmFilePath: string,
+    wasmBytes?: Int8Array | null,
+    programArguments?: string,
+    runtimeOptions?: string,
+    exportName?: string,
+    stubWriter?: JsStubFileWriter | null,
+): CommandLineResult;
+
+/**
+ * Builds the argument list for an external GraalVM `wasm` launcher
+ * using the shared command-line builder.
+ */
+export function buildGraalWasmCommandLine(
+    wasmFilePath: string,
+    programArguments?: string,
+    exportName?: string,
+): CommandLineResult;

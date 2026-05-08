@@ -84,10 +84,31 @@
           "default": true,
           "description": "Enable anonymous usage statistics collection. When disabled, no analytics events are sent regardless of the global VS Code telemetry setting."
         },
+        "hexana.wasmRuntime": {
+          "type": "string",
+          "default": "wasmtime",
+          "enum": ["wasmtime", "wamr", "graalwasm"],
+          "enumDescriptions": [
+            "Wasmtime — full-featured runtime with Component Model support",
+            "WAMR (iwasm) — lightweight runtime for core modules",
+            "GraalWasm — GraalVM WebAssembly launcher for core modules"
+          ],
+          "description": "WebAssembly runtime to use when running exports from the hex viewer."
+        },
         "hexana.wasmtimePath": {
           "type": "string",
           "default": "",
           "description": "Custom path to the wasmtime executable. When empty, the extension looks for wasmtime on the system PATH."
+        },
+        "hexana.wamrPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the iwasm (WAMR) executable. When empty, the extension looks for iwasm on the system PATH."
+        },
+        "hexana.graalVmHome": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a GraalVM installation directory. The extension expects a 'bin/wasm' launcher inside it. When empty, falls back to GRAALVM_HOME or JAVA_HOME environment variables."
         },
         "hexana.mcp.enabled": {
           "type": "boolean",
