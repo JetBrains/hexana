@@ -3,9 +3,9 @@ package org.jetbrains.hexana.ui
 import com.intellij.ide.starter.community.PublicIdeDownloader
 import com.intellij.ide.starter.community.model.BuildType
 import com.intellij.ide.starter.ide.IDETestContext
-import com.intellij.ide.starter.ide.IdeProductProvider
 import com.intellij.ide.starter.ide.installer.StandardInstaller
 import com.intellij.ide.starter.junit5.newContext
+import com.intellij.ide.starter.models.IdeInfo
 import com.intellij.ide.starter.project.LocalProjectInfo
 import com.intellij.ide.starter.runner.Starter
 import com.intellij.tools.ide.util.common.logOutput
@@ -150,39 +150,54 @@ internal object HexanaUiDriverTestSupport {
         return value?.trim()?.lowercase() in setOf("true", "1", "yes")
     }
 
-    private fun resolveIdeInfo() = when {
+    private fun resolveIdeInfo(): IdeInfo = when {
         ideVersion != null && ideBuildNumber != null -> {
             error("Set only one of $ideVersionEnv or $ideBuildNumberEnv.")
         }
 
         ideVersion != null -> {
-            IdeProductProvider.IU.copy(
+            ideaUltimateIdeInfo(
                 buildType = BuildType.RELEASE.type,
                 buildNumber = "",
                 version = ideVersion,
-                tag = null,
                 getInstaller = { StandardInstaller(PublicIdeDownloader()) }
             )
         }
 
         ideBuildNumber != null -> {
-            IdeProductProvider.IU.copy(
+            ideaUltimateIdeInfo(
                 buildType = "",
                 buildNumber = ideBuildNumber,
                 version = "",
-                tag = null,
                 getInstaller = { StandardInstaller(PublicIdeDownloader()) }
             )
         }
 
         else -> {
-            IdeProductProvider.IU.copy(
+            ideaUltimateIdeInfo(
                 buildType = HexanaTeamCityArtifacts.resolveIdeBuildType(),
                 buildNumber = "",
                 version = "",
-                tag = null,
                 getInstaller = { StandardInstaller(HexanaTeamCityIdeDownloader) }
             )
         }
     }
+
+    private fun ideaUltimateIdeInfo(
+        buildType: String,
+        buildNumber: String,
+        version: String,
+        getInstaller: (IdeInfo) -> StandardInstaller,
+    ): IdeInfo = IdeInfo(
+        productCode = "IU",
+        platformPrefix = "idea",
+        executableFileName = "idea",
+        buildType = buildType,
+        buildNumber = buildNumber,
+        version = version,
+        tag = null,
+        qodanaProductCode = "QDJVM",
+        fullName = "IDEA",
+        getInstaller = getInstaller
+    )
 }
