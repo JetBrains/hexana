@@ -96,6 +96,7 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
+                api(project(":debugInfo:dwarf"))
                 implementation(project(":encdec"))
             }
         }
