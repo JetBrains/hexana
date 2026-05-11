@@ -81,6 +81,58 @@ const nodeStubWriter: ExtensionLib.JsStubFileWriter = {
 };
 
 /**
+ * Node.js implementation of the JsProcessRunner interface that executes
+ * CLI tools synchronously via child_process.
+ */
+const nodeProcessRunner: ExtensionLib.JsProcessRunner = {
+    exec(command: string, args: string[]): string {
+        try {
+            execFileSync(command, args, {
+                timeout: 30000,
+                stdio: ["pipe", "pipe", "pipe"],
+            });
+            return "";
+        } catch (e: any) {
+            const stderr = e.stderr ? e.stderr.toString().trim() : "";
+            return stderr || e.message || "unknown error";
+        }
+    },
+};
+
+/**
+ * Node.js implementation of the JsToolResolver interface that resolves
+ * CLI tool paths by checking common locations and the system PATH.
+ */
+const nodeToolResolver: ExtensionLib.JsToolResolver = {
+    resolveToolPath(toolName: string): string | null {
+        const isWindows = os.platform() === "win32";
+        const exeName = isWindows ? `${toolName}.exe` : toolName;
+        const home = os.homedir();
+        const candidates = [
+            path.join(home, ".cargo", "bin", exeName),
+            exeName,
+        ];
+        for (const candidate of candidates) {
+            try {
+                if (candidate === exeName) {
+                    const whichCmd = isWindows ? "where.exe" : "which";
+                    execFileSync(whichCmd, [exeName], { stdio: "pipe" });
+                    return exeName;
+                } else if (fs.existsSync(candidate)) {
+                    return candidate;
+                }
+            } catch {
+                // Not found, try next
+            }
+        }
+        return null;
+    },
+    fileExists(p: string): boolean {
+        return fs.existsSync(p);
+    },
+};
+
+/**
  * Returns the currently selected Wasm runtime from settings.
  * Returns `"ask"` when the user wants to see a picker every time.
  */
@@ -161,45 +213,40 @@ export async function showRuntimePicker(
  * returns `undefined` when the runtime cannot be resolved.
  */
 export function getRuntimeCommand(runtime: string, isWindows: boolean): string | undefined {
-    const config = vscode.workspace.getConfiguration("hexana");
-
-    switch (runtime) {
-        case "wasmtime": {
-            const custom = config.get<string>("wasmtimePath", "").trim();
-            return custom || (isWindows ? "wasmtime.exe" : "wasmtime");
-        }
-        case "wamr": {
-            const custom = config.get<string>("wamrPath", "").trim();
-            return custom || (isWindows ? "iwasm.exe" : "iwasm");
-        }
-        case "graalwasm": {
-            const graalHome = resolveGraalVmHome();
-            if (!graalHome) {
-                vscode.window.showErrorMessage(
-                    "Cannot run: GraalVM home not configured. " +
-                    "Set 'hexana.graalVmHome' in settings, or set the GRAALVM_HOME or JAVA_HOME environment variable.",
-                );
-                return undefined;
-            }
-            const exeName = isWindows ? "wasm.exe" : "wasm";
-            return path.join(graalHome, "bin", exeName);
-        }
-        default:
-            return isWindows ? "wasmtime.exe" : "wasmtime";
+    if (!extensionLib) {
+        return undefined;
     }
+
+    const config = vscode.workspace.getConfiguration("hexana");
+    const wasmtimePath = config.get<string>("wasmtimePath", "");
+    const wamrPath = config.get<string>("wamrPath", "");
+    const graalVmHome = resolveGraalVmHome();
+
+    const result = extensionLib.resolveRuntimeExecutable(
+        runtime, isWindows, wasmtimePath, wamrPath, graalVmHome,
+    );
+
+    if (result === null) {
+        vscode.window.showErrorMessage(
+            "Cannot run: GraalVM home not configured. " +
+            "Set 'hexana.graalVmHome' in settings, or set the GRAALVM_HOME or JAVA_HOME environment variable.",
+        );
+        return undefined;
+    }
+    return result;
 }
 
 /**
  * Resolves the GraalVM home directory from settings or environment
- * variables.  Returns `undefined` when no valid path is found.
+ * variables.  Returns an empty string when no valid path is found.
  */
-function resolveGraalVmHome(): string | undefined {
+function resolveGraalVmHome(): string {
     const config = vscode.workspace.getConfiguration("hexana");
     const custom = config.get<string>("graalVmHome", "").trim();
     if (custom) {
         return custom;
     }
-    return process.env.GRAALVM_HOME?.trim() || process.env.JAVA_HOME?.trim() || undefined;
+    return process.env.GRAALVM_HOME?.trim() || process.env.JAVA_HOME?.trim() || "";
 }
 
 /**
@@ -211,65 +258,6 @@ function readWasmBytes(filePath: string): Int8Array | null {
         return new Int8Array(buf.buffer, buf.byteOffset, buf.byteLength);
     } catch {
         return null;
-    }
-}
-
-/**
- * Builds a runtime-specific command line using the shared builders.
- * Returns the command line result, or `undefined` on error.
- */
-function buildCommandLine(
-    runtime: string,
-    params: {
-        filePath: string;
-        wasmBytes: Int8Array | null;
-        exportName: string;
-        invokeArgs: string;
-        programArgs: string;
-        effectiveWasmPath?: string;
-    },
-): ExtensionLib.CommandLineResult | undefined {
-    if (!extensionLib) {
-        return undefined;
-    }
-
-    switch (runtime) {
-        case "wasmtime": {
-            // For wasmtime, invokeArgs are treated as runtimeOptions
-            const runtimeOptions = params.invokeArgs || "";
-            return extensionLib.buildWasmtimeCommandLine(
-                params.filePath,
-                params.wasmBytes,
-                params.programArgs || "",
-                runtimeOptions,
-                params.effectiveWasmPath ?? null,
-                nodeStubWriter,
-            );
-        }
-        case "wamr":
-            return extensionLib.buildWamrCommandLine(
-                params.filePath,
-                params.wasmBytes,
-                params.programArgs || "",
-                "",
-                params.exportName || "",
-                nodeStubWriter,
-            );
-        case "graalwasm":
-            return extensionLib.buildGraalWasmCommandLine(
-                params.filePath,
-                params.programArgs || "",
-                params.exportName || "",
-            );
-        default:
-            return extensionLib.buildWasmtimeCommandLine(
-                params.filePath,
-                params.wasmBytes,
-                params.programArgs || "",
-                params.invokeArgs || "",
-                params.effectiveWasmPath ?? null,
-                nodeStubWriter,
-            );
     }
 }
 
@@ -298,194 +286,6 @@ function buildScanRoots(wasmFilePath: string): string[] {
     }
 
     return Array.from(roots);
-}
-
-/** Maximum number of iterative compose passes to prevent infinite loops. */
-const MAX_COMPOSE_PASSES = 10;
-
-/**
- * Attempts to compose component dependencies using `wasm-tools compose`
- * or `wac plug`.
- *
- * Because `wasm-tools compose` (and `wac plug`) only satisfy the
- * **direct** imports of the input component, transitive dependencies
- * require iterative composition: after each pass the output is checked
- * for remaining non-runtime component imports, and composition is
- * repeated until all imports are satisfied or no further progress can
- * be made.
- */
-function composeComponents(
-    mainWasmPath: string,
-    deps: Record<string, string>,
-): { wasmPath: string; composed: boolean; error?: string } {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hexana-wac-compose-"));
-
-    // Try wasm-tools compose first
-    const wasmToolsPath = resolveToolPath("wasm-tools");
-    if (wasmToolsPath) {
-        const result = composeIteratively(tempDir, mainWasmPath, deps,
-            (input, d, output) => composeWithWasmTools(wasmToolsPath, input, d, output));
-        if (result.composed) {return result;}
-    }
-
-    // Fall back to wac plug
-    const wacPath = resolveToolPath("wac");
-    if (wacPath) {
-        const result = composeIteratively(tempDir, mainWasmPath, deps,
-            (input, d, output) => composeWithWac(wacPath, input, d, output));
-        if (result.composed) {return result;}
-    }
-
-    const toolNames = [wasmToolsPath ? "wasm-tools" : null, wacPath ? "wac" : null].filter(Boolean);
-    const errorMsg = toolNames.length === 0
-        ? "No composition tool found. Install 'wasm-tools' (cargo install wasm-tools) or 'wac' (cargo install wac-cli)."
-        : `Component composition failed with ${toolNames.join(" and ")}.`;
-    return { wasmPath: mainWasmPath, composed: false, error: errorMsg };
-}
-
-/**
- * Runs the given compose function iteratively until all non-runtime
- * component imports are satisfied or no further progress can be made.
- */
-function composeIteratively(
-    tempDir: string,
-    mainWasmPath: string,
-    deps: Record<string, string>,
-    composeFn: (input: string, deps: Record<string, string>, output: string) => { wasmPath: string; composed: boolean; error?: string },
-): { wasmPath: string; composed: boolean; error?: string } {
-    let currentInput = mainWasmPath;
-    let remainingDeps = { ...deps };
-    let lastResult: { wasmPath: string; composed: boolean; error?: string } | undefined;
-
-    for (let pass = 1; pass <= MAX_COMPOSE_PASSES; pass++) {
-        const outputFile = path.join(tempDir, `composed_pass${pass}.wasm`);
-        const result = composeFn(currentInput, remainingDeps, outputFile);
-        if (!result.composed) {return result;}
-
-        lastResult = result;
-        const unresolvedImports = findUnresolvedComponentImports(result.wasmPath);
-        if (unresolvedImports.size === 0) {
-            return result;
-        }
-
-        const nextDeps: Record<string, string> = {};
-        for (const [name, filePath] of Object.entries(remainingDeps)) {
-            if (unresolvedImports.has(name)) {
-                nextDeps[name] = filePath;
-            }
-        }
-        if (Object.keys(nextDeps).length === 0 ||
-            JSON.stringify(nextDeps) === JSON.stringify(remainingDeps)) {
-            return result;
-        }
-
-        currentInput = result.wasmPath;
-        remainingDeps = nextDeps;
-    }
-
-    return lastResult ?? { wasmPath: mainWasmPath, composed: false, error: "max compose passes reached" };
-}
-
-/**
- * Parses the given wasm file and returns the set of non-runtime component
- * import names that are still unresolved.
- */
-function findUnresolvedComponentImports(wasmPath: string): Set<string> {
-    if (!extensionLib) {return new Set();}
-    try {
-        const bytes = fs.readFileSync(wasmPath);
-        const int8 = new Int8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-        if (!extensionLib.isComponentBinary(int8)) {return new Set();}
-        const importNames: string[] = Array.from(extensionLib.parseComponentImportNames(int8));
-        return new Set(
-            importNames.filter((name: string) => !extensionLib!.isWasiRuntimeImport(name)),
-        );
-    } catch {
-        return new Set();
-    }
-}
-
-function composeWithWasmTools(
-    wasmToolsPath: string,
-    mainWasmPath: string,
-    deps: Record<string, string>,
-    outputFile: string,
-): { wasmPath: string; composed: boolean; error?: string } {
-    const command = [wasmToolsPath, "compose", mainWasmPath];
-    for (const depPath of Object.values(deps)) {
-        command.push("-d", depPath);
-    }
-    command.push("-o", outputFile);
-    return runTool(command, mainWasmPath, outputFile);
-}
-
-function composeWithWac(
-    wacPath: string,
-    mainWasmPath: string,
-    deps: Record<string, string>,
-    outputFile: string,
-): { wasmPath: string; composed: boolean; error?: string } {
-    const command = [wacPath, "plug", mainWasmPath];
-    for (const depPath of Object.values(deps)) {
-        command.push("--plug", depPath);
-    }
-    command.push("-o", outputFile);
-    return runTool(command, mainWasmPath, outputFile);
-}
-
-function runTool(
-    command: string[],
-    mainWasmPath: string,
-    outputFile: string,
-): { wasmPath: string; composed: boolean; error?: string } {
-    try {
-        execFileSync(command[0], command.slice(1), {
-            timeout: 30000,
-            stdio: ["pipe", "pipe", "pipe"],
-        });
-        if (fs.existsSync(outputFile)) {
-            return { wasmPath: outputFile, composed: true };
-        }
-        return { wasmPath: mainWasmPath, composed: false, error: "Output file not created" };
-    } catch (e: any) {
-        const stderr = e.stderr ? e.stderr.toString().trim() : "";
-        return {
-            wasmPath: mainWasmPath,
-            composed: false,
-            error: stderr || e.message || "unknown error",
-        };
-    }
-}
-
-/**
- * Resolves the path to a CLI tool, checking common locations.
- * On Windows, appends `.exe` to binary names and uses `where.exe`
- * instead of `which` to check PATH availability.
- */
-function resolveToolPath(toolName: string): string | undefined {
-    const isWindows = os.platform() === "win32";
-    const exeName = isWindows ? `${toolName}.exe` : toolName;
-    const home = os.homedir();
-    const candidates = [
-        path.join(home, ".cargo", "bin", exeName),
-        exeName,
-    ];
-
-    for (const candidate of candidates) {
-        try {
-            if (candidate === exeName) {
-                // Check if it's on PATH
-                const whichCmd = isWindows ? "where.exe" : "which";
-                execFileSync(whichCmd, [exeName], { stdio: "pipe" });
-                return exeName;
-            } else if (fs.existsSync(candidate)) {
-                return candidate;
-            }
-        } catch {
-            // Not found, try next
-        }
-    }
-    return undefined;
 }
 
 /**
@@ -547,14 +347,17 @@ export async function runExport(
     const isWindows = os.platform() === "win32";
     const wasmBytes = readWasmBytes(filePath);
 
-    // Build the command line using the shared builder for the selected runtime
-    const cmdLine = buildCommandLine(runtime, {
+    // Build the command line using the unified Kotlin dispatcher
+    const cmdLine = extensionLib.buildRuntimeCommandLine(
+        runtime,
         filePath,
         wasmBytes,
-        exportName: message.exportName,
-        invokeArgs: message.invokeArgs,
-        programArgs: message.programArgs,
-    });
+        message.exportName,
+        message.invokeArgs,
+        message.programArgs,
+        null,
+        nodeStubWriter,
+    );
 
     if (!cmdLine) {
         return; // error already shown
@@ -609,15 +412,21 @@ function runComponentExport(
     const resolution = extensionLib.resolveAllDependencies(
         componentImports, scanRoots, filePath, nodeFileSystemAccess,
     );
-    const allResolved: Record<string, string> = {};
+    const depNames: string[] = [];
+    const depPaths: string[] = [];
     for (const dep of resolution.resolved) {
-        allResolved[dep.importName] = dep.filePath;
+        depNames.push(dep.importName);
+        depPaths.push(dep.filePath);
     }
 
     let effectiveWasmPath = filePath;
 
-    if (Object.keys(allResolved).length > 0) {
-        const composeResult = composeComponents(filePath, allResolved);
+    if (depNames.length > 0) {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hexana-wac-compose-"));
+        const composeResult = extensionLib.composeComponents(
+            filePath, depNames, depPaths, tempDir,
+            nodeProcessRunner, nodeToolResolver, nodeFileSystemAccess,
+        );
         if (composeResult.composed && composeResult.wasmPath) {
             effectiveWasmPath = composeResult.wasmPath;
         } else if (composeResult.error) {

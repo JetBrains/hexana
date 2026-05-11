@@ -133,6 +133,86 @@ export function resolveAllDependencies(
     fs: FileSystemAccess,
 ): DependencyResolution;
 
+// ── RuntimeResolver ─────────────────────────────────────────────────
+
+/**
+ * Resolves the executable command for a given Wasm runtime.
+ *
+ * @param runtime      runtime identifier: `"wasmtime"`, `"wamr"`, or `"graalwasm"`
+ * @param isWindows    `true` on Windows (appends `.exe` to bare names)
+ * @param wasmtimePath custom Wasmtime executable path (empty = use default)
+ * @param wamrPath     custom WAMR (iwasm) executable path (empty = use default)
+ * @param graalVmHome  GraalVM home directory (empty = not configured)
+ * @return the resolved executable path, or `null` when the runtime
+ *         requires a home directory that was not provided (GraalWasm)
+ */
+export function resolveRuntimeExecutable(
+    runtime: string,
+    isWindows: boolean,
+    wasmtimePath?: string,
+    wamrPath?: string,
+    graalVmHome?: string,
+): string | null;
+
+/**
+ * Builds a unified runtime command line by dispatching to the
+ * correct shared builder.
+ */
+export function buildRuntimeCommandLine(
+    runtime: string,
+    wasmFilePath: string,
+    wasmBytes?: Int8Array | null,
+    exportName?: string,
+    invokeArgs?: string,
+    programArgs?: string,
+    effectiveWasmPath?: string | null,
+    stubWriter?: JsStubFileWriter | null,
+): CommandLineResult;
+
+// ── ComponentComposition ────────────────────────────────────────────
+
+/**
+ * Callback interface that TypeScript implements to execute external
+ * CLI tools (e.g. `wasm-tools compose`, `wac plug`).
+ */
+export interface JsProcessRunner {
+    /**
+     * Executes a CLI command synchronously.
+     * Returns an empty string on success, or the error message on failure.
+     */
+    exec(command: string, args: string[]): string;
+}
+
+/**
+ * Callback interface that TypeScript implements to resolve the path
+ * to CLI tools and check file existence.
+ */
+export interface JsToolResolver {
+    resolveToolPath(toolName: string): string | null;
+    fileExists(path: string): boolean;
+}
+
+/** Result of a component composition attempt. */
+export interface CompositionResult {
+    readonly wasmPath: string;
+    readonly composed: boolean;
+    readonly error: string | null;
+}
+
+/**
+ * Attempts to compose component dependencies using `wasm-tools compose`
+ * or `wac plug`, with iterative passes for transitive dependencies.
+ */
+export function composeComponents(
+    mainWasmPath: string,
+    depNames: string[],
+    depPaths: string[],
+    tempDir: string,
+    processRunner: JsProcessRunner,
+    toolResolver: JsToolResolver,
+    fs: FileSystemAccess,
+): CompositionResult;
+
 // ── RuntimeCommandLine ──────────────────────────────────────────────
 
 /** Result of building a Wasm runtime command line. */
