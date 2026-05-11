@@ -293,11 +293,12 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
      * module in a VS Code terminal using the configured runtime.
      *
      * The runtime is selected via the `hexana.wasmRuntime` setting (default:
-     * `wasmtime`). When the webview sends component import names and the
-     * active runtime supports components, dependency resolution and
-     * composition are attempted before launch.
+     * `wasmtime`). When the setting is `"ask"`, a QuickPick is shown so
+     * the user can choose a runtime before each run. When the webview sends
+     * component import names and the active runtime supports components,
+     * dependency resolution and composition are attempted before launch.
      */
-    private runExport(
+    private async runExport(
         document: WasmDocument,
         message: {
             exportName: string;
@@ -308,7 +309,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             stubs?: Array<{ moduleName: string; wasmBytes: number[] }>;
             componentImports?: string[];
         },
-    ): void {
+    ): Promise<void> {
         if (!extensionLib) {
             vscode.window.showErrorMessage("Cannot run: extension library is not available.");
             return;
@@ -320,10 +321,19 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             return;
         }
 
-        const runtime = this.getSelectedRuntime();
+        const isComponent = message.isComponent && message.componentImports && message.componentImports.length > 0;
+
+        let runtime = this.getSelectedRuntime();
+        if (runtime === "ask") {
+            const picked = await this.showRuntimePicker(!!isComponent);
+            if (!picked) {
+                return; // user dismissed the picker
+            }
+            runtime = picked;
+        }
 
         // Component-model binaries require Wasmtime
-        if (message.isComponent && message.componentImports && message.componentImports.length > 0) {
+        if (isComponent) {
             if (runtime !== "wasmtime") {
                 vscode.window.showWarningMessage(
                     `Component-model binaries are only supported by Wasmtime. ` +
@@ -441,14 +451,77 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
     /**
      * Returns the currently selected Wasm runtime from settings.
+     * Returns `"ask"` when the user wants to see a picker every time.
      */
-    private getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" {
+    private getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "ask" {
         const config = vscode.workspace.getConfiguration("hexana");
-        const runtime = config.get<string>("wasmRuntime", "wasmtime").trim();
-        if (runtime === "wamr" || runtime === "graalwasm") {
+        const runtime = config.get<string>("wasmRuntime", "ask").trim();
+        if (runtime === "wamr" || runtime === "graalwasm" || runtime === "ask") {
             return runtime;
         }
         return "wasmtime";
+    }
+
+    /**
+     * Shows a VS Code QuickPick to let the user choose a runtime.
+     *
+     * When [isComponent] is true, only runtimes that support the Component
+     * Model are offered. The picker also includes a "Configure Runtimes…"
+     * item that opens the Hexana settings page.
+     *
+     * Returns the chosen runtime identifier, or `undefined` if the user
+     * dismissed the picker.
+     */
+    private async showRuntimePicker(
+        isComponent: boolean = false,
+    ): Promise<"wasmtime" | "wamr" | "graalwasm" | undefined> {
+        interface RuntimeItem extends vscode.QuickPickItem {
+            runtime?: "wasmtime" | "wamr" | "graalwasm";
+            isConfigure?: boolean;
+        }
+
+        const items: RuntimeItem[] = [];
+
+        items.push({
+            label: "$(play) Run with Wasmtime",
+            runtime: "wasmtime",
+        });
+        if (!isComponent) {
+            items.push({
+                label: "$(play) Run with WAMR",
+                runtime: "wamr",
+            });
+            items.push({
+                label: "$(play) Run with GraalWasm",
+                runtime: "graalwasm",
+            });
+        }
+        // If there is only one applicable runtime, skip the picker and run directly
+        if (items.length === 1) {
+            return items[0].runtime;
+        }
+
+        items.push({
+            label: "$(gear) Configure Runtimes\u2026",
+            isConfigure: true,
+        });
+
+        const picked = await vscode.window.showQuickPick<RuntimeItem>(items, {
+            title: "Select Wasm Runtime",
+            placeHolder: "Choose a runtime to run the module",
+        });
+
+        if (!picked) {
+            return undefined;
+        }
+        if (picked.isConfigure) {
+            await vscode.commands.executeCommand(
+                "workbench.action.openSettings",
+                "hexana.wasmRuntime",
+            );
+            return undefined;
+        }
+        return picked.runtime;
     }
 
     /**

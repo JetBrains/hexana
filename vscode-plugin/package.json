@@ -2,7 +2,7 @@
   "name": "hexana-wasm",
   "displayName": "Hexana WebAssembly and Hex Viewer",
   "description": "Binary hex viewer and analyzer with a focus on WebAssembly",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "buildDate": "",
   "preview": true,
   "author": "JetBrains",
@@ -86,12 +86,13 @@
         },
         "hexana.wasmRuntime": {
           "type": "string",
-          "default": "wasmtime",
-          "enum": ["wasmtime", "wamr", "graalwasm"],
+          "default": "ask",
+          "enum": ["wasmtime", "wamr", "graalwasm", "ask"],
           "enumDescriptions": [
             "Wasmtime — full-featured runtime with Component Model support",
             "WAMR (iwasm) — lightweight runtime for core modules",
-            "GraalWasm — GraalVM WebAssembly launcher for core modules"
+            "GraalWasm — GraalVM WebAssembly launcher for core modules",
+            "Show all runtimes every time — display a picker before each run"
           ],
           "description": "WebAssembly runtime to use when running exports from the hex viewer."
         },
