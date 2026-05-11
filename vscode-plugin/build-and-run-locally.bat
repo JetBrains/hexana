@@ -16,15 +16,18 @@ call npm run compile
 echo == Packaging ==
 call npx @vscode/vsce package --allow-missing-repository
 
+for /f "delims=" %%v in ('node -p "require('./package.json').version"') do set VSIX_VERSION=%%v
+set VSIX_FILE=hexana-wasm-%VSIX_VERSION%.vsix
+
 echo == Registering the plugin in VSCode ==
 where code >nul 2>nul
 if %ERRORLEVEL% equ 0 (
-    code --install-extension hexana-wasm-0.0.1.vsix
+    code --install-extension %VSIX_FILE%
     start code
 ) else (
     where code-insiders >nul 2>nul
     if %ERRORLEVEL% equ 0 (
-        code-insiders --install-extension hexana-wasm-0.0.1.vsix
+        code-insiders --install-extension %VSIX_FILE%
         start code-insiders
     ) else (
         echo Please register vscode/vscode-insiders in PATH ^(Help -^> Show All Commands -^> path^)

@@ -15,7 +15,7 @@ powered by [vscode-extension-tester](https://github.com/redhat-developer/vscode-
 ## Prerequisites
 
 1. **Node.js** ≥ 18.
-2. A pre-built extension `.vsix` at `../hexana-wasm-0.0.1.vsix`.
+2. A pre-built extension `.vsix` at `../hexana-wasm-<version>.vsix` (version is read from `package.json`).
    Build it with:
    ```bash
    cd vscode-plugin && ./build-and-run-locally.sh

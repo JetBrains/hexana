@@ -25,7 +25,10 @@ echo == Packaging VSIX ==
 call npx @vscode/vsce package
 if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
+for /f "delims=" %%v in ('node -p "require('./package.json').version"') do set VSIX_VERSION=%%v
+set VSIX_FILE=hexana-wasm-%VSIX_VERSION%.vsix
+
 echo == Done ==
-echo Obfuscated VSIX is at: hexana-wasm-0.0.1.vsix
+echo Obfuscated VSIX is at: %VSIX_FILE%
 
 endlocal
