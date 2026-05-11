@@ -20,6 +20,11 @@ kotlin {
     }
 }
 
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
 dependencies {
     testImplementation(libs.bundles.intellij.driver)
     testImplementation(libs.intellij.starter.junit5) {
