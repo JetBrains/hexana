@@ -11,6 +11,7 @@ import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -122,6 +123,21 @@ fun showEnginePopup(
     popupMode: PopupMode = PopupMode.RUN_AND_DEBUG,
     onSelected: (WasmEngine, WasmRunMode) -> Unit,
 ) {
+    val settings = WasmRuntimeSettings.getInstance()
+    val defaultEngine = settings.resolveDefaultEngine()
+
+    if (defaultEngine != null) {
+        val isCompatible = !isComponentModel || defaultEngine.supportsComponentsModel
+        if (isCompatible) {
+            val mode = when (popupMode) {
+                PopupMode.DEBUG_ONLY -> WasmRunMode.DEBUG
+                else -> WasmRunMode.RUN
+            }
+            onSelected(defaultEngine, mode)
+            return
+        }
+    }
+
     val engines = WasmEngine.entries.filter { !isComponentModel || it.supportsComponentsModel }
     val options = engines.flatMap { engine ->
         buildList {
@@ -138,26 +154,47 @@ fun showEnginePopup(
         onSelected(single.engine, single.mode)
         return
     }
+
+    val configureLabel = HexanaBundle.message("wasm.engine.popup.configure")
+    val allItems: List<Any> = options + configureLabel
+
     val popup = JBPopupFactory.getInstance()
-        .createPopupChooserBuilder(options)
+        .createPopupChooserBuilder(allItems)
         .setTitle(HexanaBundle.message("wasm.engine.popup.title"))
         .setRenderer { _, value, _, isSelected, _ ->
-            val icon = when (value?.mode) {
-                WasmRunMode.DEBUG -> AllIcons.Actions.StartDebugger
-                else -> AllIcons.Actions.Execute
-            }
-            val label = value?.toString() ?: ""
-            javax.swing.JLabel(label, icon, javax.swing.SwingConstants.LEFT).apply {
-                isOpaque = true
-                iconTextGap = 6
-                border = javax.swing.BorderFactory.createEmptyBorder(4, 8, 4, 8)
-                if (isSelected) {
-                    background = javax.swing.UIManager.getColor("List.selectionBackground")
-                    foreground = javax.swing.UIManager.getColor("List.selectionForeground")
+            if (value is EngineRunOption) {
+                val icon = when (value.mode) {
+                    WasmRunMode.DEBUG -> AllIcons.Actions.StartDebugger
+                    else -> AllIcons.Actions.Execute
+                }
+                javax.swing.JLabel(value.toString(), icon, javax.swing.SwingConstants.LEFT).apply {
+                    isOpaque = true
+                    iconTextGap = 6
+                    border = javax.swing.BorderFactory.createEmptyBorder(4, 8, 4, 8)
+                    if (isSelected) {
+                        background = javax.swing.UIManager.getColor("List.selectionBackground")
+                        foreground = javax.swing.UIManager.getColor("List.selectionForeground")
+                    }
+                }
+            } else {
+                javax.swing.JLabel(value?.toString() ?: "", AllIcons.General.Settings, javax.swing.SwingConstants.LEFT).apply {
+                    isOpaque = true
+                    iconTextGap = 6
+                    border = javax.swing.BorderFactory.createEmptyBorder(4, 8, 4, 8)
+                    if (isSelected) {
+                        background = javax.swing.UIManager.getColor("List.selectionBackground")
+                        foreground = javax.swing.UIManager.getColor("List.selectionForeground")
+                    }
                 }
             }
         }
-        .setItemChosenCallback { onSelected(it.engine, it.mode) }
+        .setItemChosenCallback { item ->
+            if (item is EngineRunOption) {
+                onSelected(item.engine, item.mode)
+            } else {
+                ShowSettingsUtil.getInstance().showSettingsDialog(null, WasmRuntimeConfigurable::class.java)
+            }
+        }
         .createPopup()
     val pointerInfo = MouseInfo.getPointerInfo()
     if (pointerInfo != null) {

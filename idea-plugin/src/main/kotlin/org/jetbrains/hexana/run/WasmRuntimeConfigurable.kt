@@ -6,7 +6,9 @@ import com.intellij.openapi.options.SearchableConfigurable
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.ui.emptyText
 import com.intellij.openapi.util.NlsContexts
+import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.bindItem
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.dsl.builder.toNonNullableProperty
@@ -27,6 +29,21 @@ class WasmRuntimeConfigurable : DslConfigurableBase(), SearchableConfigurable {
         val settings = WasmRuntimeSettings.getInstance()
         return panel {
             group(HexanaBundle.message("wasm.runtime.settings.group.runtimes")) {
+                row(HexanaBundle.message("wasm.runtime.settings.default.engine")) {
+                    val items = listOf(WasmRuntimeSettings.ASK_EVERY_TIME) + WasmEngine.entries.map { it.name }
+                    val renderer = SimpleListCellRenderer.create<String> { label, value, _ ->
+                        label.text = if (value == WasmRuntimeSettings.ASK_EVERY_TIME)
+                            HexanaBundle.message("wasm.runtime.settings.default.engine.ask")
+                        else
+                            WasmEngine.fromString(value).displayName
+                    }
+                    comboBox(items, renderer)
+                        .bindItem(
+                            getter = { settings.defaultEngineInUi ?: WasmRuntimeSettings.ASK_EVERY_TIME },
+                            setter = { settings.defaultEngineInUi = it },
+                        )
+                        .comment(HexanaBundle.message("wasm.runtime.settings.default.engine.comment"))
+                }
                 row(HexanaBundle.message("wasm.runtime.settings.wasmtime.path")) {
                     textFieldWithBrowseButton(FileChooserDescriptorFactory.singleFile())
                         .align(AlignX.FILL)

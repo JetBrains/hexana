@@ -14,6 +14,9 @@ import com.intellij.openapi.components.*
 class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsState>(WasmRuntimeSettingsState()) {
 
     companion object {
+        /** Sentinel value stored when the user wants to see the popup every time. */
+        const val ASK_EVERY_TIME: String = "ASK_EVERY_TIME"
+
         @JvmStatic
         fun getInstance(): WasmRuntimeSettings = service()
     }
@@ -40,6 +43,25 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
     var lldbPathInUi: String?
         get() = state.lldbPath
         set(value) { state.lldbPath = value?.takeIf { it.isNotBlank() } }
+
+    /**
+     * The default engine selection. `null` or [ASK_EVERY_TIME]
+     * means the runtime selection popup is shown on every run.
+     * Otherwise holds the [WasmEngine.name] of the chosen default.
+     */
+    var defaultEngineInUi: String?
+        get() = state.defaultEngine
+        set(value) { state.defaultEngine = value }
+
+    /**
+     * Returns the configured default [WasmEngine], or `null` when
+     * the user wants to be prompted every time.
+     */
+    fun resolveDefaultEngine(): WasmEngine? {
+        val raw = state.defaultEngine
+        if (raw.isNullOrBlank() || raw == ASK_EVERY_TIME) return null
+        return WasmEngine.entries.firstOrNull { it.name == raw }
+    }
 
     /**
      * Returns the effective Wasmtime executable path, considering
@@ -85,4 +107,5 @@ class WasmRuntimeSettingsState : BaseState() {
     var wamrPath: String? by string()
     var graalVmPath: String? by string()
     var lldbPath: String? by string()
+    var defaultEngine: String? by string()
 }
