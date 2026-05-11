@@ -15,6 +15,8 @@ The module provides:
 - **WAT text generation** (`WatTextGenerator.kt`) — structural WAT-like text output from parsed core Wasm and component-model binaries.
 - **Wasm run utilities** (`WasmRunUtil.kt`) — runtime import detection, component import/export name extraction, binary type detection, version-name splitting.
 - **Wasm dependency resolver** (`WasmDependencyResolver.kt`) — platform-independent filesystem-based component dependency resolution with `WasmFileSystem` abstraction; used by both `idea-plugin` (JVM `java.io.File` adapter) and `vscode-plugin:extension-lib` (Node.js adapter).
+- **Wasm runtime resolver** (`WasmRuntimeResolver.kt`) — platform-agnostic runtime executable resolution (maps runtime identifiers to executable paths) and unified runtime command-line dispatcher; used by both `idea-plugin` and `vscode-plugin:extension-lib` to avoid duplicating the runtime → executable mapping logic.
+- **Wasm component composer** (`WasmComponentComposer.kt`) — platform-agnostic component composition orchestration using `wasm-tools compose` / `wac plug` with iterative multi-pass support; defines `ProcessRunner`, `ToolResolver`, and `ComposerFileAccess` abstractions that each platform implements. Used by both `idea-plugin` (JVM `ProcessBuilder` adapter) and `vscode-plugin:extension-lib` (Node.js `child_process` adapter).
 - **Import stub generation** (`WasmImportStubGenerator.kt`, `WasmBinaryWriter.kt`) — generates stub Wasm modules for missing imports.
 
 ## KMP Targets

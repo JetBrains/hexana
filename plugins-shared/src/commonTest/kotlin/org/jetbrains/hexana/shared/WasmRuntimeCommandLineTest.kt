@@ -257,4 +257,87 @@ class WasmRuntimeCommandLineTest {
         assertTrue(core.isEmpty())
         assertTrue(component.isEmpty())
     }
+
+    // -----------------------------------------------------------------------
+    // stripWasmtimeInvoke
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun stripInvokeSimple() {
+        assertEquals("", stripWasmtimeInvoke("--invoke add"))
+    }
+
+    @Test
+    fun stripInvokeQuoted() {
+        assertEquals("", stripWasmtimeInvoke("""--invoke "myFunc(1, 2)""""))
+    }
+
+    @Test
+    fun stripInvokePreservesOtherOptions() {
+        assertEquals(
+            "-W unknown-imports-default",
+            stripWasmtimeInvoke("-W unknown-imports-default --invoke add"),
+        )
+    }
+
+    @Test
+    fun stripInvokeQuotedPreservesOtherOptions() {
+        assertEquals(
+            "-W unknown-imports-default",
+            stripWasmtimeInvoke("""-W unknown-imports-default --invoke "myFunc(1, 2)""""),
+        )
+    }
+
+    @Test
+    fun stripInvokeNoInvoke() {
+        assertEquals("--stack-size=65536", stripWasmtimeInvoke("--stack-size=65536"))
+    }
+
+    @Test
+    fun stripInvokeEmptyString() {
+        assertEquals("", stripWasmtimeInvoke(""))
+    }
+
+    // -----------------------------------------------------------------------
+    // WasmRuntimeResolver.buildRuntimeCommandLine – invoke stripping
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun buildRuntimeCommandLineWamrStripsInvoke() {
+        val result = WasmRuntimeResolver.buildRuntimeCommandLine(
+            runtime = "wamr",
+            wasmFilePath = "/mod.wasm",
+            exportName = "add",
+            runtimeOptions = "--invoke add",
+        )
+        val args = result.arguments
+        assertTrue(args.contains("-f"), "WAMR should have -f flag")
+        assertTrue(args.contains("add"), "WAMR should have function name")
+        assertTrue(!args.contains("--invoke"), "WAMR should not have --invoke flag")
+    }
+
+    @Test
+    fun buildRuntimeCommandLineGraalWasmStripsInvoke() {
+        val result = WasmRuntimeResolver.buildRuntimeCommandLine(
+            runtime = "graalwasm",
+            wasmFilePath = "/mod.wasm",
+            exportName = "add",
+            runtimeOptions = "--invoke add",
+        )
+        val args = result.arguments
+        assertTrue(args.contains("--entry-point"), "GraalWasm should have --entry-point flag")
+        assertTrue(!args.contains("--invoke"), "GraalWasm should not have --invoke flag")
+    }
+
+    @Test
+    fun buildRuntimeCommandLineWasmtimeKeepsInvoke() {
+        val result = WasmRuntimeResolver.buildRuntimeCommandLine(
+            runtime = "wasmtime",
+            wasmFilePath = "/mod.wasm",
+            exportName = "add",
+            runtimeOptions = "--invoke add",
+        )
+        val args = result.arguments
+        assertTrue(args.contains("--invoke"), "Wasmtime should keep --invoke flag")
+    }
 }

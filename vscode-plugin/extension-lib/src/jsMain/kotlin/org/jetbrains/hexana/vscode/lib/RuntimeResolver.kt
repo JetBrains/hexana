@@ -2,13 +2,14 @@
 
 package org.jetbrains.hexana.vscode.lib
 
+import org.jetbrains.hexana.shared.WasmRuntimeResolver
+
 /**
  * Resolves the executable command for a given Wasm runtime.
  *
- * This is a pure-logic function that maps a runtime identifier to its
- * default executable name, respecting optional custom paths provided
- * by the caller.  Platform-specific details (reading VS Code settings,
- * environment variables) remain in the TypeScript host.
+ * Delegates to the shared [WasmRuntimeResolver.resolveRuntimeExecutable].
+ * Platform-specific details (reading VS Code settings, environment
+ * variables) remain in the TypeScript host.
  *
  * @param runtime     runtime identifier: `"wasmtime"`, `"wamr"`, or `"graalwasm"`
  * @param isWindows   `true` on Windows (appends `.exe` to bare names)
@@ -25,35 +26,13 @@ fun resolveRuntimeExecutable(
     wasmtimePath: String = "",
     wamrPath: String = "",
     graalVmHome: String = "",
-): String? {
-    return when (runtime) {
-        "wasmtime" -> {
-            val custom = wasmtimePath.trim()
-            if (custom.isNotEmpty()) custom
-            else if (isWindows) "wasmtime.exe" else "wasmtime"
-        }
-        "wamr" -> {
-            val custom = wamrPath.trim()
-            if (custom.isNotEmpty()) custom
-            else if (isWindows) "iwasm.exe" else "iwasm"
-        }
-        "graalwasm" -> {
-            val home = graalVmHome.trim()
-            if (home.isEmpty()) return null
-            val exeName = if (isWindows) "wasm.exe" else "wasm"
-            "$home/bin/$exeName"
-        }
-        else -> if (isWindows) "wasmtime.exe" else "wasmtime"
-    }
-}
+): String? = WasmRuntimeResolver.resolveRuntimeExecutable(runtime, isWindows, wasmtimePath, wamrPath, graalVmHome)
 
 /**
  * Builds a unified runtime command line by dispatching to the
  * correct shared builder.
  *
- * This replaces the TypeScript `buildCommandLine` dispatcher that
- * switched on the runtime string and forwarded to individual
- * `extensionLib.build*CommandLine` calls.
+ * Delegates to the shared [WasmRuntimeResolver.buildRuntimeCommandLine].
  *
  * @param runtime          runtime identifier: `"wasmtime"`, `"wamr"`, or `"graalwasm"`
  * @param wasmFilePath     path to the `.wasm` file
@@ -76,35 +55,24 @@ fun buildRuntimeCommandLine(
     effectiveWasmPath: String? = null,
     stubWriter: JsStubFileWriter? = null,
 ): CommandLineResult {
-    return when (runtime) {
-        "wasmtime" -> buildWasmtimeCommandLine(
-            wasmFilePath = wasmFilePath,
-            wasmBytes = wasmBytes,
-            programArguments = programArgs,
-            runtimeOptions = invokeArgs,
-            effectiveWasmPath = effectiveWasmPath,
-            stubWriter = stubWriter,
-        )
-        "wamr" -> buildWamrCommandLine(
-            wasmFilePath = wasmFilePath,
-            wasmBytes = wasmBytes,
-            programArguments = programArgs,
-            runtimeOptions = "",
-            exportName = exportName,
-            stubWriter = stubWriter,
-        )
-        "graalwasm" -> buildGraalWasmCommandLine(
-            wasmFilePath = wasmFilePath,
-            programArguments = programArgs,
-            exportName = exportName,
-        )
-        else -> buildWasmtimeCommandLine(
-            wasmFilePath = wasmFilePath,
-            wasmBytes = wasmBytes,
-            programArguments = programArgs,
-            runtimeOptions = invokeArgs,
-            effectiveWasmPath = effectiveWasmPath,
-            stubWriter = stubWriter,
-        )
-    }
+    val result = WasmRuntimeResolver.buildRuntimeCommandLine(
+        runtime = runtime,
+        wasmFilePath = wasmFilePath,
+        wasmBytes = wasmBytes,
+        exportName = exportName,
+        runtimeOptions = invokeArgs,
+        programArgs = programArgs,
+        effectiveWasmPath = effectiveWasmPath,
+        stubFileWriter = stubWriter?.let { jsWriter ->
+            object : org.jetbrains.hexana.shared.StubFileWriter {
+                override fun createTempDir(prefix: String): String = jsWriter.createTempDir(prefix)
+                override fun writeFile(dir: String, fileName: String, bytes: ByteArray): String =
+                    jsWriter.writeFile(dir, fileName, bytes)
+            }
+        },
+    )
+    return CommandLineResult(
+        arguments = result.arguments.toTypedArray(),
+        workingDirectory = result.workingDirectory,
+    )
 }
