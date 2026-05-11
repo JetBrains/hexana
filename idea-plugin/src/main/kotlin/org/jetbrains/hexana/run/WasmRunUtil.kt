@@ -126,15 +126,16 @@ fun showEnginePopup(
     val settings = WasmRuntimeSettings.getInstance()
     val defaultEngine = settings.resolveDefaultEngine()
 
-    if (defaultEngine != null) {
-        val isCompatible = !isComponentModel || defaultEngine.supportsComponentsModel
-        if (isCompatible) {
-            val mode = when (popupMode) {
-                PopupMode.DEBUG_ONLY -> WasmRunMode.DEBUG
-                else -> WasmRunMode.RUN
+    if (defaultEngine != null && (!isComponentModel || defaultEngine.supportsComponentsModel)) {
+        when (popupMode) {
+            PopupMode.RUN_AND_DEBUG, PopupMode.RUN_ONLY -> {
+                onSelected(defaultEngine, WasmRunMode.RUN)
+                return
             }
-            onSelected(defaultEngine, mode)
-            return
+            PopupMode.DEBUG_ONLY -> if (defaultEngine.supportsDebug) {
+                onSelected(defaultEngine, WasmRunMode.DEBUG)
+                return
+            }
         }
     }
 

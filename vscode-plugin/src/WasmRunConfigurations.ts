@@ -214,6 +214,7 @@ export async function showRuntimePicker(
  */
 export function getRuntimeCommand(runtime: string, isWindows: boolean): string | undefined {
     if (!extensionLib) {
+        vscode.window.showErrorMessage("Cannot resolve runtime: extension library is not available.");
         return undefined;
     }
 
@@ -341,7 +342,15 @@ function discoverGraalVmHome(): string | null {
             continue; // directory does not exist or is not readable
         }
         for (const entry of entries) {
-            if (!entry.isDirectory()) {
+            let isDir = entry.isDirectory();
+            if (!isDir && entry.isSymbolicLink()) {
+                try {
+                    isDir = fs.statSync(path.join(parentDir, entry.name)).isDirectory();
+                } catch {
+                    continue;
+                }
+            }
+            if (!isDir) {
                 continue;
             }
             // macOS JDK bundles use <name>.jdk/Contents/Home layout
@@ -459,9 +468,9 @@ export async function runExport(
         runtime,
         filePath,
         wasmBytes,
-        message.exportName,
-        message.invokeArgs,
-        message.programArgs,
+        message.exportName ?? "",
+        message.invokeArgs ?? "",
+        message.programArgs ?? "",
         null,
         nodeStubWriter,
     );
@@ -557,7 +566,10 @@ function runComponentExport(
     const terminalName = `Wasm: ${exportName}`;
 
     const isWindows = os.platform() === "win32";
-    const wasmtimeCmd = getRuntimeCommand("wasmtime", isWindows)!;
+    const wasmtimeCmd = getRuntimeCommand("wasmtime", isWindows);
+    if (!wasmtimeCmd) {
+        return; // error already shown
+    }
     const terminal = vscode.window.createTerminal({ name: terminalName });
     terminal.show();
     terminal.sendText(

@@ -132,18 +132,29 @@ fun classifyDependencies(
 
 /**
  * Splits a whitespace-separated option string into individual tokens,
- * respecting double-quoted segments.
+ * respecting double-quoted and single-quoted segments, as well as
+ * backslash-escaped characters within double-quoted segments.
  */
 fun splitOptions(options: String): List<String> {
     val trimmed = options.trim()
     if (trimmed.isEmpty()) return emptyList()
     val result = mutableListOf<String>()
     val current = StringBuilder()
-    var inQuotes = false
-    for (ch in trimmed) {
+    var i = 0
+    var inDoubleQuotes = false
+    var inSingleQuotes = false
+    while (i < trimmed.length) {
+        val ch = trimmed[i]
         when {
-            ch == '"' -> inQuotes = !inQuotes
-            ch.isWhitespace() && !inQuotes -> {
+            ch == '\\' && inDoubleQuotes && i + 1 < trimmed.length -> {
+                // Inside double quotes, backslash escapes the next character
+                current.append(trimmed[i + 1])
+                i += 2
+                continue
+            }
+            ch == '"' && !inSingleQuotes -> inDoubleQuotes = !inDoubleQuotes
+            ch == '\'' && !inDoubleQuotes -> inSingleQuotes = !inSingleQuotes
+            ch.isWhitespace() && !inDoubleQuotes && !inSingleQuotes -> {
                 if (current.isNotEmpty()) {
                     result.add(current.toString())
                     current.clear()
@@ -151,6 +162,7 @@ fun splitOptions(options: String): List<String> {
             }
             else -> current.append(ch)
         }
+        i++
     }
     if (current.isNotEmpty()) {
         result.add(current.toString())

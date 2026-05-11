@@ -27,6 +27,35 @@ class WasmRuntimeCommandLineTest {
         assertEquals(listOf("--name", "hello world"), splitOptions("""--name "hello world""""))
     }
 
+    @Test
+    fun splitOptionsSingleQuoted() {
+        assertEquals(listOf("--dir=/tmp/my dir"), splitOptions("--dir='/tmp/my dir'"))
+    }
+
+    @Test
+    fun splitOptionsEscapedQuoteInDoubleQuotes() {
+        // Input: --flag "\"value\"" → the escaped quotes produce literal " chars
+        assertEquals(listOf("--flag", "\"value\""), splitOptions("""--flag "\"value\"""""))
+    }
+
+    @Test
+    fun splitOptionsMixedQuotes() {
+        assertEquals(
+            listOf("--double", "hello world", "--single", "foo bar"),
+            splitOptions("""--double "hello world" --single 'foo bar'"""),
+        )
+    }
+
+    @Test
+    fun splitOptionsSingleQuotesInsideDouble() {
+        assertEquals(listOf("it's a test"), splitOptions(""""it's a test""""))
+    }
+
+    @Test
+    fun splitOptionsDoubleQuotesInsideSingle() {
+        assertEquals(listOf("""say "hello""""), splitOptions("""'say "hello"'"""))
+    }
+
     // -----------------------------------------------------------------------
     // buildWasmtimeRunArgs – basic
     // -----------------------------------------------------------------------

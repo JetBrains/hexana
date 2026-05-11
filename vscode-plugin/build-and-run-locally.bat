@@ -16,7 +16,7 @@ call npm run compile
 echo == Packaging ==
 call npx @vscode/vsce package --allow-missing-repository
 
-for /f "delims=" %%v in ('node -p "require('./package.json').version"') do set VSIX_VERSION=%%v
+for /f "usebackq delims=" %%v in (`node -p "require('./package.json').version"`) do set VSIX_VERSION=%%v
 set VSIX_FILE=hexana-wasm-%VSIX_VERSION%.vsix
 
 echo == Registering the plugin in VSCode ==

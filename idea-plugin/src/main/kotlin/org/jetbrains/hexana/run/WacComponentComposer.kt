@@ -92,6 +92,12 @@ internal object WacComponentComposer {
             fileAccess = JVM_FILE_ACCESS,
         )
 
+        // Register all files inside the temp directory for deletion so that
+        // deleteOnExit can actually remove the (now-empty) directory on shutdown.
+        // Files must be registered after the directory so they are deleted first
+        // (deleteOnExit processes entries in reverse registration order).
+        tempDir.listFiles()?.forEach { it.deleteOnExit() }
+
         if (!result.composed && result.error != null) {
             LOG.info("Component composition failed: ${result.error}")
         }
