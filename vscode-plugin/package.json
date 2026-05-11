@@ -109,7 +109,7 @@
         "hexana.graalVmHome": {
           "type": "string",
           "default": "",
-          "description": "Path to a GraalVM installation directory. The extension expects a 'bin/wasm' launcher inside it. When empty, falls back to GRAALVM_HOME or JAVA_HOME environment variables."
+          "description": "Path to a GraalVM installation directory. The extension expects a 'bin/wasm' launcher inside it. When empty, falls back to GRAALVM_HOME, then JAVA_HOME (if it contains the wasm launcher), and finally scans common JVM installation directories automatically."
         },
         "hexana.mcp.enabled": {
           "type": "boolean",

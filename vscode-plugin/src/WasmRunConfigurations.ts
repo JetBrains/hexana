@@ -228,8 +228,10 @@ export function getRuntimeCommand(runtime: string, isWindows: boolean): string |
 
     if (result === null) {
         vscode.window.showErrorMessage(
-            "Cannot run: GraalVM home not configured. " +
-            "Set 'hexana.graalVmHome' in settings, or set the GRAALVM_HOME or JAVA_HOME environment variable.",
+            "Cannot run: no GraalVM with GraalWasm found. " +
+            "Install a GraalVM JDK that includes the 'wasm' launcher, then either " +
+            "set 'hexana.graalVmHome' in settings, set the GRAALVM_HOME environment variable, " +
+            "or place it in a standard JVM directory so the extension can detect it automatically.",
         );
         return undefined;
     }
@@ -237,8 +239,17 @@ export function getRuntimeCommand(runtime: string, isWindows: boolean): string |
 }
 
 /**
- * Resolves the GraalVM home directory from settings or environment
- * variables.  Returns an empty string when no valid path is found.
+ * Resolves the GraalVM home directory from settings, environment
+ * variables, or by scanning common JVM installation directories.
+ *
+ * Resolution order:
+ * 1. `hexana.graalVmHome` VS Code setting
+ * 2. `GRAALVM_HOME` environment variable
+ * 3. `JAVA_HOME` environment variable (only if it contains `bin/wasm`)
+ * 4. Scan well-known JVM installation directories for a JVM that
+ *    ships the GraalWasm `wasm` launcher (`bin/wasm` or `bin/wasm.exe`)
+ *
+ * Returns an empty string when no valid path is found.
  */
 function resolveGraalVmHome(): string {
     const config = vscode.workspace.getConfiguration("hexana");
@@ -246,7 +257,103 @@ function resolveGraalVmHome(): string {
     if (custom) {
         return custom;
     }
-    return process.env.GRAALVM_HOME?.trim() || process.env.JAVA_HOME?.trim() || "";
+
+    const graalVmHomeEnv = process.env.GRAALVM_HOME?.trim() || "";
+    if (graalVmHomeEnv) {
+        return graalVmHomeEnv;
+    }
+
+    const javaHome = process.env.JAVA_HOME?.trim() || "";
+    if (javaHome && hasGraalWasmLauncher(javaHome)) {
+        return javaHome;
+    }
+
+    return discoverGraalVmHome() || "";
+}
+
+/**
+ * Checks whether the given JVM home directory contains the GraalWasm
+ * `wasm` launcher under `bin/`.
+ */
+function hasGraalWasmLauncher(jvmHome: string): boolean {
+    const isWindows = os.platform() === "win32";
+    const exeName = isWindows ? "wasm.exe" : "wasm";
+    return fs.existsSync(path.join(jvmHome, "bin", exeName));
+}
+
+/**
+ * Scans well-known JVM installation directories for a JVM that ships
+ * the GraalWasm `wasm` launcher.
+ *
+ * Checked locations by platform:
+ * - **macOS**: `/Library/Java/JavaVirtualMachines`, `~/Library/Java/JavaVirtualMachines`,
+ *   `~/.sdkman/candidates/java`, `~/.jenv/versions`, `~/.jabba/jdk`
+ * - **Linux**: `/usr/lib/jvm`, `/usr/java`, `~/.sdkman/candidates/java`,
+ *   `~/.jenv/versions`, `~/.jabba/jdk`
+ * - **Windows**: `C:\Program Files\Java`, `C:\Program Files\GraalVM`,
+ *   `~\.sdkman\candidates\java`, `~\.jenv\versions`, `~\.jabba\jdk`
+ *
+ * On macOS the effective JVM home is `<dir>/Contents/Home` (the standard
+ * JDK bundle layout); on other platforms it is the directory itself.
+ *
+ * Returns the first JVM home that contains `bin/wasm`, or `null` when
+ * none is found.
+ */
+function discoverGraalVmHome(): string | null {
+    const platform = os.platform();
+    const home = os.homedir();
+    const isWindows = platform === "win32";
+    const isMacOS = platform === "darwin";
+
+    const parentDirs: string[] = [];
+    if (isMacOS) {
+        parentDirs.push(
+            "/Library/Java/JavaVirtualMachines",
+            path.join(home, "Library", "Java", "JavaVirtualMachines"),
+            path.join(home, ".sdkman", "candidates", "java"),
+            path.join(home, ".jenv", "versions"),
+            path.join(home, ".jabba", "jdk"),
+        );
+    } else if (isWindows) {
+        parentDirs.push(
+            "C:\\Program Files\\Java",
+            "C:\\Program Files\\GraalVM",
+            path.join(home, ".sdkman", "candidates", "java"),
+            path.join(home, ".jenv", "versions"),
+            path.join(home, ".jabba", "jdk"),
+        );
+    } else {
+        // Linux and other Unix-like systems
+        parentDirs.push(
+            "/usr/lib/jvm",
+            "/usr/java",
+            path.join(home, ".sdkman", "candidates", "java"),
+            path.join(home, ".jenv", "versions"),
+            path.join(home, ".jabba", "jdk"),
+        );
+    }
+
+    for (const parentDir of parentDirs) {
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(parentDir, { withFileTypes: true });
+        } catch {
+            continue; // directory does not exist or is not readable
+        }
+        for (const entry of entries) {
+            if (!entry.isDirectory()) {
+                continue;
+            }
+            // macOS JDK bundles use <name>.jdk/Contents/Home layout
+            const jvmHome = isMacOS
+                ? path.join(parentDir, entry.name, "Contents", "Home")
+                : path.join(parentDir, entry.name);
+            if (hasGraalWasmLauncher(jvmHome)) {
+                return jvmHome;
+            }
+        }
+    }
+    return null;
 }
 
 /**
