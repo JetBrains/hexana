@@ -411,6 +411,22 @@ class ElfParserTest {
     }
 
     @Test
+    fun `returns null when ELF program header file range is unrepresentable`() {
+        val bytes = elf64LeHeader().copyOf(128)
+        bytes.putU16Le(0x38, 1)
+        bytes.writeElf64ProgramHeader(
+            offset = 64,
+            type = 1u,
+            fileOffset = Int.MAX_VALUE.toULong() + 1uL,
+            fileSize = 1uL,
+        )
+
+        val header = ElfParser.parseHeader(bytes.toCommonByteBuffer())!!
+
+        assertNull(ElfParser.parseProgramHeaders(bytes.toCommonByteBuffer(), header))
+    }
+
+    @Test
     fun `parses ELF64 symbol table names`() {
         val bytes = elf64LeHeader().copyOf(0x400)
         bytes.putU64Le(0x28, 0x100uL)

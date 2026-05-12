@@ -478,8 +478,8 @@ object ElfParser {
             NativeBinaryWordSize.Unknown -> return null
         }
 
-        val fileOffset = programHeader.fileOffset.toBoundedInt() ?: return programHeader
-        val fileSize = programHeader.fileSize.toBoundedInt() ?: return programHeader
+        val fileOffset = programHeader.fileOffset.toBoundedInt() ?: return null
+        val fileSize = programHeader.fileSize.toBoundedInt() ?: return null
         val fileRange = if (fileSize == 0) {
             NativeByteRange(fileOffset.coerceAtMost(bytes.size), 0)
         } else {

@@ -177,7 +177,10 @@ object PeParser {
             )
 
             offset = contentOffset + sizeInt
-            if (offset % 2 != 0) offset++
+            if (offset % 2 != 0) {
+                if (offset >= bytes.size || bytes.byteOrNull(offset) != '\n'.code) return null
+                offset++
+            }
             index++
         }
 
@@ -573,9 +576,9 @@ object PeParser {
                 if (hasOverflowCount) {
                     if (!bytes.containsRange(relocationOffset, COFF_RELOCATION_SIZE)) return null
                     val storedCount = bytes.u32LeOrNull(relocationOffset)?.toBoundedInt() ?: return null
-                    if (storedCount <= 1 || storedCount > MAX_COFF_RELOCATIONS_PER_SECTION) return null
+                    if (storedCount <= 0 || storedCount > MAX_COFF_RELOCATIONS_PER_SECTION) return null
                     firstRelocationIndex = 1
-                    relocationCount = storedCount - 1
+                    relocationCount = storedCount
                 } else {
                     firstRelocationIndex = 0
                     relocationCount = section.relocationCount

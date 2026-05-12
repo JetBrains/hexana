@@ -392,6 +392,9 @@ class PeParserTest {
         bytes.putU32Le(24, 0x20u)
         bytes.putU32Le(28, 2u)
         bytes.putU16Le(32, 0x30)
+        bytes.putU32Le(34, 0x30u)
+        bytes.putU32Le(38, 3u)
+        bytes.putU16Le(42, 0x40)
         val section = PeSection(
             index = 0,
             name = ".text",
@@ -410,10 +413,11 @@ class PeParserTest {
 
         val relocations = PeParser.parseCoffRelocations(bytes.toCommonByteBuffer(), listOf(section), emptyList())!!
 
-        assertEquals(2, relocations.size)
+        assertEquals(3, relocations.size)
         assertEquals(0x10u, relocations[0].virtualAddress)
         assertEquals(4 + 10, relocations[0].recordRange.offset)
         assertEquals(0x20u, relocations[1].virtualAddress)
+        assertEquals(0x30u, relocations[2].virtualAddress)
     }
 
     @Test
@@ -436,6 +440,13 @@ class PeParserTest {
         assertEquals(7, file.members[3].contentRange.size)
         assertEquals('P'.code.toByte(), archive[file.members[3].contentRange.offset])
         assertTrue(file.members[3].contentRange.offset > file.members[3].headerRange.offset + 60)
+    }
+
+    @Test
+    fun `returns null for COFF archive with missing odd member padding`() {
+        val archive = coffArchiveBytes("odd.obj" to byteArrayOf(1)).copyOf(ARCHIVE_MAGIC_AND_HEADER_SIZE + 1)
+
+        assertNull(PeParser.parseArchive(archive.toCommonByteBuffer()))
     }
 
     @Test
@@ -628,3 +639,5 @@ private fun coffArchiveBytes(vararg members: Pair<String, ByteArray>): ByteArray
     }
     return output.toByteArray()
 }
+
+private const val ARCHIVE_MAGIC_AND_HEADER_SIZE = 68

@@ -105,6 +105,8 @@ object NativeBinaryFormatDetector {
 
         val sectionCount = reader.u16OrNull(2) ?: return null
         if (sectionCount !in 1..96) return null
+        val sectionTableSize = sectionCount * COFF_SECTION_HEADER_SIZE
+        if (sectionTableSize > reader.size - COFF_HEADER_SIZE) return null
 
         val symbolTableOffset = reader.u32OrNull(8)?.takeIf { it <= Int.MAX_VALUE.toUInt() }?.toInt() ?: return null
         val symbolCount = reader.u32OrNull(12) ?: return null
@@ -124,6 +126,7 @@ object NativeBinaryFormatDetector {
     }
 
     private const val COFF_HEADER_SIZE = 20
+    private const val COFF_SECTION_HEADER_SIZE = 40
     private const val COFF_SYMBOL_SIZE = 18
 
     private val coffMachineTypes = setOf(

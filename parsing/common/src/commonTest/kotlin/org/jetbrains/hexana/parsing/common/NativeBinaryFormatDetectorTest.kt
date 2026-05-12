@@ -111,7 +111,7 @@ class NativeBinaryFormatDetectorTest {
 
     @Test
     fun `detects COFF object file`() {
-        val bytes = ByteArray(64)
+        val bytes = ByteArray(20 + 3 * 40)
         bytes.putU16Le(0, 0x8664)
         bytes.putU16Le(2, 3)
         bytes.putU32Le(8, 0u)
@@ -129,6 +129,18 @@ class NativeBinaryFormatDetectorTest {
         val bytes = ByteArray(64)
         bytes.putU16Le(0, 0x8664)
         bytes.putU16Le(2, 0)
+        bytes.putU32Le(8, 0u)
+        bytes.putU32Le(12, 0u)
+        bytes.putU16Le(16, 0)
+
+        assertNull(NativeBinaryFormatDetector.detect(bytes.toCommonByteBuffer()))
+    }
+
+    @Test
+    fun `rejects COFF object file with truncated section table`() {
+        val bytes = ByteArray(20)
+        bytes.putU16Le(0, 0x8664)
+        bytes.putU16Le(2, 1)
         bytes.putU32Le(8, 0u)
         bytes.putU32Le(12, 0u)
         bytes.putU16Le(16, 0)
