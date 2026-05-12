@@ -392,7 +392,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
         )
     }
 
-    fun testGenerateNonFunctionStubsExcludesFunctions() {
+    fun testGenerateNonFunctionStubsIncludesFunctionsFromSameModule() {
         val wasm = wat2wasm("""
             (module
               (import "env" "log" (func (param i32)))
@@ -412,9 +412,10 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
 
         val stubProvider = WasmBinaryProvider(stubs[0].wasmBytes.toCommonByteBuffer())
         val exports = stubProvider.exports
-        assertEquals("Should export only non-function imports (memory + global)", 2, exports.size)
-        assertEquals("memory", exports[0].name)
-        assertEquals("base", exports[1].name)
+        assertEquals("Should export all imports including functions from the same module", 3, exports.size)
+        assertEquals("log", exports[0].name)
+        assertEquals("memory", exports[1].name)
+        assertEquals("base", exports[2].name)
     }
 
     fun testGenerateNonFunctionStubsReturnsEmptyForFunctionOnlyImports() {
@@ -453,12 +454,201 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
         assertValidWasmModule(hostStub.wasmBytes)
 
         val envExports = WasmBinaryProvider(envStub.wasmBytes.toCommonByteBuffer()).exports
-        assertEquals("env stub should export only memory (not the function)", 1, envExports.size)
+        assertEquals("env stub should export memory and function", 2, envExports.size)
         assertEquals("memory", envExports[0].name)
+        assertEquals("log", envExports[1].name)
 
         val hostExports = WasmBinaryProvider(hostStub.wasmBytes.toCommonByteBuffer()).exports
         assertEquals(1, hostExports.size)
         assertEquals("table", hostExports[0].name)
+    }
+
+    fun testNonFunctionStubsDoNotConflictWithUnknownImportsDefault() {
+        // Reproduces the wasmtime "import of `foo::bar` defined twice" error.
+        // When a module imports a memory from "foo" and functions from other
+        // modules, the generated stub for "foo" must include ALL imports from
+        // "foo" (even though there are no function imports from "foo") so that
+        // wasmtime's --preload fully owns the "foo" namespace and
+        // -W unknown-imports-default does not try to redefine "foo::bar".
+        val wasm = wat2wasm("""
+            (module
+              (memory (export "memory") (import "foo" "bar") 1 1 shared)
+              (func (import "wasi" "thread-spawn") (param i32) (result i32))
+              (func (import "wasi_snapshot_preview1" "proc_exit") (param i32))
+              (func (export "_start")
+                unreachable
+              )
+            )
+        """.trimIndent())
+
+        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm)
+        assertEquals("Should generate one stub for 'foo' (the only module with non-function imports)", 1, stubs.size)
+        assertEquals("foo", stubs[0].moduleName)
+
+        assertValidWasmModule(stubs[0].wasmBytes)
+
+        val stubProvider = WasmBinaryProvider(stubs[0].wasmBytes.toCommonByteBuffer())
+        val exports = stubProvider.exports
+        assertEquals("Stub should export the memory 'bar'", 1, exports.size)
+        assertEquals("bar", exports[0].name)
+
+        // Verify that no stub is generated for "wasi" or "wasi_snapshot_preview1"
+        // — those are function-only modules handled by -W unknown-imports-default.
+        assertTrue(stubs.none { it.moduleName == "wasi" })
+        assertTrue(stubs.none { it.moduleName == "wasi_snapshot_preview1" })
+    }
+
+    fun testNonFunctionStubsIncludeFunctionsFromMixedModule() {
+        // When a module has both function AND non-function imports from the
+        // same module, the stub must include function stubs too, otherwise
+        // wasmtime would try to resolve those functions via
+        // -W unknown-imports-default and fail with "defined twice".
+        val wasm = wat2wasm("""
+            (module
+              (memory (import "foo" "mem") 1 1 shared)
+              (func (import "foo" "do_something") (param i32))
+              (func (import "other" "log") (param i32))
+              (func (export "_start")
+                unreachable
+              )
+            )
+        """.trimIndent())
+
+        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm)
+        assertEquals("Should generate one stub for 'foo'", 1, stubs.size)
+        assertEquals("foo", stubs[0].moduleName)
+
+        assertValidWasmModule(stubs[0].wasmBytes)
+
+        val stubProvider = WasmBinaryProvider(stubs[0].wasmBytes.toCommonByteBuffer())
+        val exports = stubProvider.exports
+        assertEquals("Stub should export both mem and do_something", 2, exports.size)
+        assertEquals("mem", exports[0].name)
+        assertEquals("do_something", exports[1].name)
+
+        // "other" module only has function imports — no stub needed.
+        assertTrue(stubs.none { it.moduleName == "other" })
+    }
+
+    fun testDuplicateImportNamesDeduplication() {
+        // Build a Wasm module that imports the same module::name twice
+        // (different type signatures). This is legal in the core spec but
+        // the generated stub must not export the same name twice because
+        // runtimes like wasmtime reject duplicate exports.
+        val wasm = buildWasmWithDuplicateImports()
+
+        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        assertEquals("Should generate one stub module for 'foo'", 1, stubs.size)
+        assertEquals("foo", stubs[0].moduleName)
+
+        assertValidWasmModule(stubs[0].wasmBytes)
+
+        val stubProvider = WasmBinaryProvider(stubs[0].wasmBytes.toCommonByteBuffer())
+        val exports = stubProvider.exports
+        assertEquals("Duplicate import name 'bar' should be deduplicated to one export", 1, exports.size)
+        assertEquals("bar", exports[0].name)
+    }
+
+    fun testDuplicateImportNamesNonFunctionStubsDeduplication() {
+        // Build a Wasm module that imports the same memory name twice
+        // from the same module.
+        val wasm = buildWasmWithDuplicateMemoryImports()
+
+        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm)
+        assertEquals("Should generate one stub module for 'env'", 1, stubs.size)
+        assertEquals("env", stubs[0].moduleName)
+
+        assertValidWasmModule(stubs[0].wasmBytes)
+
+        val stubProvider = WasmBinaryProvider(stubs[0].wasmBytes.toCommonByteBuffer())
+        val exports = stubProvider.exports
+        assertEquals("Duplicate memory import 'memory' should be deduplicated to one export", 1, exports.size)
+        assertEquals("memory", exports[0].name)
+    }
+
+    /**
+     * Builds a minimal Wasm module that imports `foo::bar` twice with
+     * different function signatures: `(func (param i32))` and `(func (param i64))`.
+     */
+    private fun buildWasmWithDuplicateImports(): ByteArray {
+        val buf = java.io.ByteArrayOutputStream()
+        // magic + version
+        buf.write(byteArrayOf(0x00, 0x61, 0x73, 0x6D))
+        buf.write(byteArrayOf(0x01, 0x00, 0x00, 0x00))
+
+        // Type section (id=1): 2 func types
+        // type 0: (param i32) -> ()
+        // type 1: (param i64) -> ()
+        val typePayload = byteArrayOf(
+            0x02,                   // 2 types
+            0x60, 0x01, 0x7F, 0x00, // func type 0: (i32) -> ()
+            0x60, 0x01, 0x7E, 0x00, // func type 1: (i64) -> ()
+        )
+        buf.write(0x01) // section id
+        buf.write(typePayload.size) // section size
+        buf.write(typePayload)
+
+        // Import section (id=2): 2 imports, both "foo" "bar"
+        val importPayload = java.io.ByteArrayOutputStream()
+        importPayload.write(0x02) // 2 imports
+        // import 0: "foo" "bar" (func type 0)
+        importPayload.write(0x03) // len("foo")
+        importPayload.write("foo".toByteArray())
+        importPayload.write(0x03) // len("bar")
+        importPayload.write("bar".toByteArray())
+        importPayload.write(0x00) // func import
+        importPayload.write(0x00) // type index 0
+        // import 1: "foo" "bar" (func type 1)
+        importPayload.write(0x03) // len("foo")
+        importPayload.write("foo".toByteArray())
+        importPayload.write(0x03) // len("bar")
+        importPayload.write("bar".toByteArray())
+        importPayload.write(0x00) // func import
+        importPayload.write(0x01) // type index 1
+
+        val importBytes = importPayload.toByteArray()
+        buf.write(0x02) // section id
+        buf.write(importBytes.size) // section size
+        buf.write(importBytes)
+
+        return buf.toByteArray()
+    }
+
+    /**
+     * Builds a minimal Wasm module that imports `env::memory` as a memory twice.
+     */
+    private fun buildWasmWithDuplicateMemoryImports(): ByteArray {
+        val buf = java.io.ByteArrayOutputStream()
+        // magic + version
+        buf.write(byteArrayOf(0x00, 0x61, 0x73, 0x6D))
+        buf.write(byteArrayOf(0x01, 0x00, 0x00, 0x00))
+
+        // Import section (id=2): 2 memory imports, both "env" "memory"
+        val importPayload = java.io.ByteArrayOutputStream()
+        importPayload.write(0x02) // 2 imports
+        // import 0: "env" "memory" (memory min=1)
+        importPayload.write(0x03) // len("env")
+        importPayload.write("env".toByteArray())
+        importPayload.write(0x06) // len("memory")
+        importPayload.write("memory".toByteArray())
+        importPayload.write(0x02) // memory import
+        importPayload.write(0x00) // limits: no max
+        importPayload.write(0x01) // min = 1
+        // import 1: "env" "memory" (memory min=2)
+        importPayload.write(0x03) // len("env")
+        importPayload.write("env".toByteArray())
+        importPayload.write(0x06) // len("memory")
+        importPayload.write("memory".toByteArray())
+        importPayload.write(0x02) // memory import
+        importPayload.write(0x00) // limits: no max
+        importPayload.write(0x02) // min = 2
+
+        val importBytes = importPayload.toByteArray()
+        buf.write(0x02) // section id
+        buf.write(importBytes.size) // section size
+        buf.write(importBytes)
+
+        return buf.toByteArray()
     }
 
     fun testGraalWasmTypedArgumentPassing() {

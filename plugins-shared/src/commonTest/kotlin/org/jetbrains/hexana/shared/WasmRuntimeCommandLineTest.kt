@@ -518,6 +518,143 @@ class WasmRuntimeCommandLineTest {
     }
 
     // -----------------------------------------------------------------------
+    // Wasmtime stub generation & unknown-imports-default interaction
+    // -----------------------------------------------------------------------
+
+    /**
+     * Builds a minimal Wasm module that **imports** a shared memory from
+     * `"foo" "bar"` and two functions from other modules (`"wasi"` and
+     * `"wasi_snapshot_preview1"`). This mirrors the structure of the
+     * `wasi_threads_exit_main_busy.wat` reproduction case.
+     *
+     * Binary layout:
+     *   magic + version
+     *   type section (id=1): 2 func types
+     *   import section (id=2): 3 imports (1 memory + 2 functions)
+     */
+    private fun buildImportedSharedMemoryWasm(): ByteArray {
+        val w = WasmBinaryWriter()
+        w.writeBytes(byteArrayOf(0x00, 0x61, 0x73, 0x6D)) // magic
+        w.writeBytes(byteArrayOf(0x01, 0x00, 0x00, 0x00)) // version
+
+        // Type section: 2 func types
+        val types = WasmBinaryWriter()
+        types.writeULEB128(2) // count
+        // type 0: (param i32) -> (result i32)
+        types.writeByte(0x60); types.writeULEB128(1); types.writeByte(0x7F)
+        types.writeULEB128(1); types.writeByte(0x7F)
+        // type 1: (param i32) -> ()
+        types.writeByte(0x60); types.writeULEB128(1); types.writeByte(0x7F)
+        types.writeULEB128(0)
+        w.writeSection(1, types.toByteArray())
+
+        // Import section: 3 imports
+        val imports = WasmBinaryWriter()
+        imports.writeULEB128(3) // count
+        // import 0: memory "foo" "bar" (shared, min=1, max=1)
+        imports.writeName("foo"); imports.writeName("bar")
+        imports.writeByte(0x02) // memory import
+        imports.writeByte(0x03) // flags: has-max(0x01) | shared(0x02)
+        imports.writeULEB128(1) // min
+        imports.writeULEB128(1) // max
+        // import 1: func "wasi" "thread-spawn" (type 0)
+        imports.writeName("wasi"); imports.writeName("thread-spawn")
+        imports.writeByte(0x00) // func import
+        imports.writeULEB128(0) // type index 0
+        // import 2: func "wasi_snapshot_preview1" "proc_exit" (type 1)
+        imports.writeName("wasi_snapshot_preview1"); imports.writeName("proc_exit")
+        imports.writeByte(0x00) // func import
+        imports.writeULEB128(1) // type index 1
+        w.writeSection(2, imports.toByteArray())
+
+        return w.toByteArray()
+    }
+
+    /**
+     * A fake [StubFileWriter] that records stub writes in memory,
+     * returning predictable paths.
+     */
+    private class InMemoryStubFileWriter : StubFileWriter {
+        val writtenStubs = mutableMapOf<String, ByteArray>()
+        override fun createTempDir(prefix: String): String = "/tmp/$prefix"
+        override fun writeFile(dir: String, fileName: String, bytes: ByteArray): String {
+            writtenStubs[fileName] = bytes
+            return "$dir/$fileName"
+        }
+    }
+
+    @Test
+    fun wasmtimeRunArgsUsesUnknownImportsDefaultForSharedMemoryModule() {
+        // Reproduces the wasmtime "import of foo::bar defined twice" error:
+        // wasmtime's --preload conflicts with any import mechanism, so we
+        // must use -W unknown-imports-default exclusively and never preload.
+        val stubWriter = InMemoryStubFileWriter()
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildImportedSharedMemoryWasm(),
+        )
+        val result = buildWasmtimeRunArgs(input, stubFileWriter = stubWriter)
+        val args = result.arguments
+
+        assertTrue(args.contains("unknown-imports-default"),
+            "Should use unknown-imports-default for shared-memory modules")
+
+        // Must NOT contain any --preload for stub modules
+        val preloadPairs: List<String> = args.windowed(2).filter { it[0] == "--preload" }.map { it[1] }
+        assertTrue(preloadPairs.isEmpty(), "Should not preload any stub modules")
+
+        // No stubs should have been written
+        assertTrue(stubWriter.writtenStubs.isEmpty(), "Should not write any stubs")
+    }
+
+    @Test
+    fun wasmtimeDebugArgsUsesUnknownImportsDefaultForSharedMemoryModule() {
+        val stubWriter = InMemoryStubFileWriter()
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildImportedSharedMemoryWasm(),
+        )
+        val result = buildWasmtimeDebugArgs(input, stubFileWriter = stubWriter)
+        val args = result.arguments
+
+        assertTrue(args.contains("unknown-imports-default"),
+            "Debug should use unknown-imports-default for shared-memory modules")
+
+        val preloadPairs: List<String> = args.windowed(2).filter { it[0] == "--preload" }.map { it[1] }
+        assertTrue(preloadPairs.isEmpty(), "Debug should not preload any stub modules")
+        assertTrue(stubWriter.writtenStubs.isEmpty(), "Debug should not write any stubs")
+    }
+
+    @Test
+    fun wasmtimeRunArgsUsesUnknownImportsDefaultForFunctionOnlyImports() {
+        // When a module has ONLY function imports (no memory/table/global/tag),
+        // we should still use -W unknown-imports-default and not preload stubs.
+        val w = WasmBinaryWriter()
+        w.writeBytes(byteArrayOf(0x00, 0x61, 0x73, 0x6D))
+        w.writeBytes(byteArrayOf(0x01, 0x00, 0x00, 0x00))
+        val types = WasmBinaryWriter()
+        types.writeULEB128(1)
+        types.writeByte(0x60); types.writeULEB128(1); types.writeByte(0x7F); types.writeULEB128(0)
+        w.writeSection(1, types.toByteArray())
+        val imports = WasmBinaryWriter()
+        imports.writeULEB128(1) // 1 function import
+        imports.writeName("env"); imports.writeName("log")
+        imports.writeByte(0x00); imports.writeULEB128(0)
+        w.writeSection(2, imports.toByteArray())
+
+        val stubWriter = InMemoryStubFileWriter()
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = w.toByteArray(),
+        )
+        val result = buildWasmtimeRunArgs(input, stubFileWriter = stubWriter)
+        val args = result.arguments
+
+        assertTrue(args.contains("unknown-imports-default"), "Should use unknown-imports-default for function-only imports")
+        assertTrue(stubWriter.writtenStubs.isEmpty(), "Should not write any stubs")
+    }
+
+    // -----------------------------------------------------------------------
     // classifyDependencies
     // -----------------------------------------------------------------------
 

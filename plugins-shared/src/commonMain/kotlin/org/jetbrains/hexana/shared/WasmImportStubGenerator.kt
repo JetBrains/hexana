@@ -42,9 +42,15 @@ object WasmImportStubGenerator {
     }
 
     /**
-     * Generates stub modules containing only non-function imports
-     * (memory, table, global, tag). Function imports are excluded
-     * because wasmtime handles them natively with `-W unknown-imports-default`.
+     * Generates stub modules for import modules that contain at least one
+     * non-function import (memory, table, global, or tag).
+     *
+     * Each generated stub includes **all** imports from qualifying modules
+     * (both function and non-function). This is necessary because
+     * wasmtime's `--preload` makes the preloaded module the sole provider
+     * for its namespace — if the stub only exported the non-function
+     * symbols, `-W unknown-imports-default` would try to re-define the
+     * same names as function traps, causing a "defined twice" linker error.
      */
     fun generateNonFunctionStubs(wasmBytes: ByteArray): List<ImportModuleStub> {
         val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
@@ -60,7 +66,12 @@ object WasmImportStubGenerator {
             }
         } ?: emptyList()
 
-        val byModule = nonFuncImports.groupBy { it.prefix }
+        // Collect the module names that have at least one non-function import.
+        val modulesWithNonFuncImports = nonFuncImports.map { it.prefix }.toSet()
+
+        // Generate full stubs (all import types) for those modules so that
+        // the preloaded module completely owns the namespace.
+        val byModule = imports.filter { it.prefix in modulesWithNonFuncImports }.groupBy { it.prefix }
 
         return byModule.map { (moduleName, moduleImports) ->
             ImportModuleStub(moduleName, buildStubModule(moduleImports, types))
@@ -105,12 +116,18 @@ object WasmImportStubGenerator {
         imports: List<WasmImportRecord>,
         types: List<WasmTypeRecord>,
     ): ByteArray {
+        // Deduplicate imports by name, keeping the first occurrence of each
+        // export name. Wasm modules can legally import the same module::name
+        // pair multiple times, but the generated stub must not export the
+        // same name twice — runtimes (notably wasmtime) reject that.
+        val deduplicatedImports = imports.distinctBy { it.name }
+
         val buf = WasmBinaryWriter()
 
         val funcTypes = mutableListOf<WasmSectionFunctionTypeRecord>()
         val funcTypeIndexMap = mutableMapOf<Int, Int>()
 
-        for (imp in imports) {
+        for (imp in deduplicatedImports) {
             when (val t = imp.type) {
                 is WasmTypeIndexExternalType -> {
                     val origIndex = t.index.toInt()
@@ -142,7 +159,7 @@ object WasmImportStubGenerator {
         val globalImports = mutableListOf<Pair<WasmImportRecord, WasmGlobalType>>()
         val tagImports = mutableListOf<Pair<WasmImportRecord, Int>>()
 
-        for (imp in imports) {
+        for (imp in deduplicatedImports) {
             when (val t = imp.type) {
                 is WasmTypeIndexExternalType -> {
                     funcImports.add(imp to funcTypeIndexMap[t.index.toInt()]!!)
@@ -245,7 +262,7 @@ object WasmImportStubGenerator {
         var globalIdx = 0
         var tagIdx = 0
 
-        for (imp in imports) {
+        for (imp in deduplicatedImports) {
             when (imp.type) {
                 is WasmTypeIndexExternalType -> {
                     exportSection.writeName(imp.name)

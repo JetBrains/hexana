@@ -300,14 +300,17 @@ fun splitOptions(options: String): List<String> {
 /**
  * Builds the argument list for a Wasmtime `run` invocation.
  *
- * The caller must supply a [StubFileWriter] when import stubs should be
- * materialised on disk. When [stubFileWriter] is `null`, stub-related
- * `--preload` flags are omitted.
+ * Unresolved imports are handled exclusively via
+ * `-W unknown-imports-default`, which lets wasmtime supply default
+ * values for every import type (functions, memories, tables, globals).
+ * `--preload` stubs are **not** used because wasmtime registers both
+ * the preloaded export and its own linker-level definition for the
+ * same import name, causing a "defined twice" linker error.
  */
 fun buildWasmtimeRunArgs(
     input: WasmRunInput,
     coreModuleDeps: Map<String, String> = emptyMap(),
-    stubFileWriter: StubFileWriter? = null,
+    @Suppress("UNUSED_PARAMETER") stubFileWriter: StubFileWriter? = null,
 ): WasmCommandLine {
     val args = mutableListOf<String>()
     args.add("run")
@@ -329,21 +332,13 @@ fun buildWasmtimeRunArgs(
 
     val wasmBytes = input.wasmBytes
     if (wasmBytes != null && WasmImportStubGenerator.hasImports(wasmBytes)) {
+        // Wasmtime's `-W unknown-imports-default` supplies default values
+        // for ALL unresolved import types (functions, memories, tables,
+        // globals). Using `--preload` stubs is incompatible: wasmtime
+        // registers both the preloaded export and its own default for the
+        // same import name, causing a "defined twice" linker error.
         args.add("-W")
         args.add("unknown-imports-default")
-
-        if (stubFileWriter != null && WasmImportStubGenerator.hasNonFunctionImports(wasmBytes)) {
-            val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasmBytes)
-                .filter { it.moduleName !in coreModuleDeps.keys }
-            if (stubs.isNotEmpty()) {
-                val tempDir = stubFileWriter.createTempDir("hexana-wasm-stubs")
-                for (stub in stubs) {
-                    val stubPath = stubFileWriter.writeFile(tempDir, "${stub.moduleName}.wasm", stub.wasmBytes)
-                    args.add("--preload")
-                    args.add("${stub.moduleName}=$stubPath")
-                }
-            }
-        }
     }
 
     args.add(input.effectiveWasmPath ?: input.wasmFilePath)
@@ -367,7 +362,7 @@ fun buildWasmtimeRunArgs(
 fun buildWasmtimeDebugArgs(
     input: WasmRunInput,
     coreModuleDeps: Map<String, String> = emptyMap(),
-    stubFileWriter: StubFileWriter? = null,
+    @Suppress("UNUSED_PARAMETER") stubFileWriter: StubFileWriter? = null,
 ): WasmCommandLine {
     val args = mutableListOf<String>()
     args.add("run")
@@ -397,21 +392,9 @@ fun buildWasmtimeDebugArgs(
 
     val wasmBytes = input.wasmBytes
     if (wasmBytes != null && WasmImportStubGenerator.hasImports(wasmBytes)) {
+        // See buildWasmtimeRunArgs — same rationale applies.
         args.add("-W")
         args.add("unknown-imports-default")
-
-        if (stubFileWriter != null && WasmImportStubGenerator.hasNonFunctionImports(wasmBytes)) {
-            val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasmBytes)
-                .filter { it.moduleName !in coreModuleDeps.keys }
-            if (stubs.isNotEmpty()) {
-                val tempDir = stubFileWriter.createTempDir("hexana-wasm-stubs")
-                for (stub in stubs) {
-                    val stubPath = stubFileWriter.writeFile(tempDir, "${stub.moduleName}.wasm", stub.wasmBytes)
-                    args.add("--preload")
-                    args.add("${stub.moduleName}=$stubPath")
-                }
-            }
-        }
     }
 
     args.add(input.effectiveWasmPath ?: input.wasmFilePath)
