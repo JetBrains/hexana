@@ -210,17 +210,50 @@ internal fun wamrProposalFlags(proposals: Set<WasmProposal>): List<String> {
  * Returns GraalWasm external launcher flags needed to enable support
  * for the given set of detected proposals.
  *
- * GraalWasm uses `--wasm.<Option>=true` flags. The `Threads` option
- * defaults to `false` and requires `--experimental-options`.
- * Additionally, `UseUnsafeMemory` must be enabled because GraalWasm
- * requires it for shared linear memories used by the Threads proposal.
+ * GraalWasm uses `--wasm.<Option>=true` flags.  All proposal-related
+ * options in GraalWasm 25.0.0 are experimental and require
+ * `--experimental-options` when any flag is emitted.
+ *
+ * Options that default to `true` (no flags needed):
+ *   `BulkMemoryAndRefTypes`, `SaturatingFloatToInt`, `SignExtensionOps`,
+ *   `MultiValue`, `SIMD`.
+ *
+ * Options that default to `false` (flags emitted here):
+ * - **Threads**: `--wasm.Threads=true` and `--wasm.UseUnsafeMemory=true`
+ *   (GraalWasm requires unsafe memory for shared linear memories).
+ * - **Memory64**: `--wasm.Memory64=true`.
+ * - **MultiMemory**: `--wasm.MultiMemory=true`.
+ * - **RelaxedSIMD**: `--wasm.RelaxedSIMD=true`.
+ * - **ExtendedConstExpressions**: `--wasm.ExtendedConstExpressions=true`.
+ *
+ * Options not present in GraalWasm 25.0.0 (no flags to emit):
+ *   Exceptions, TypedFunctionReferences, GC, TailCall.
+ *
+ * Source of truth: `WasmOptions.java` in the GraalWasm 25.0.0 codebase.
+ * See also https://www.graalvm.org/webassembly/docs/#experimental-options
  */
 internal fun graalWasmProposalFlags(proposals: Set<WasmProposal>): List<String> {
     val flags = mutableListOf<String>()
     if (WasmProposal.Threads in proposals) {
-        flags.add("--experimental-options")
         flags.add("--wasm.Threads=true")
         flags.add("--wasm.UseUnsafeMemory=true")
+    }
+    if (WasmProposal.Memory64 in proposals) {
+        flags.add("--wasm.Memory64=true")
+    }
+    if (WasmProposal.MultipleMemories in proposals) {
+        flags.add("--wasm.MultiMemory=true")
+    }
+    if (WasmProposal.RelaxedSIMD in proposals) {
+        flags.add("--wasm.RelaxedSIMD=true")
+    }
+    // ExtendedConstExpressions is not reliably detected as a WasmProposal,
+    // but if the parser ever reports ExceptionHandling (which uses the tag
+    // section) in a context where extended-const matters, this block would
+    // be the place to add it.  For now we omit it since there is no
+    // matching WasmProposal entry.
+    if (flags.isNotEmpty()) {
+        flags.add(0, "--experimental-options")
     }
     return flags
 }
@@ -237,12 +270,24 @@ internal fun graalWasmProposalFlags(proposals: Set<WasmProposal>): List<String> 
  * The caller should apply these via `Context.Builder.option(key, value)`
  * and, when the list is non-empty, also call
  * `Context.Builder.allowExperimentalOptions(true)`.
+ *
+ * Only proposals that default to `false` in GraalWasm 25.0.0 are
+ * included.  See [graalWasmProposalFlags] for the full mapping.
  */
 fun graalWasmContextOptions(proposals: Set<WasmProposal>): List<Pair<String, String>> {
     val options = mutableListOf<Pair<String, String>>()
     if (WasmProposal.Threads in proposals) {
         options.add("wasm.Threads" to "true")
         options.add("wasm.UseUnsafeMemory" to "true")
+    }
+    if (WasmProposal.Memory64 in proposals) {
+        options.add("wasm.Memory64" to "true")
+    }
+    if (WasmProposal.MultipleMemories in proposals) {
+        options.add("wasm.MultiMemory" to "true")
+    }
+    if (WasmProposal.RelaxedSIMD in proposals) {
+        options.add("wasm.RelaxedSIMD" to "true")
     }
     return options
 }

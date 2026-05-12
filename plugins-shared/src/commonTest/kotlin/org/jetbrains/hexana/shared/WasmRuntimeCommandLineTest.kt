@@ -307,6 +307,30 @@ class WasmRuntimeCommandLineTest {
     }
 
     /**
+     * Builds a minimal valid Wasm module with a memory64 memory, which
+     * triggers the [WasmProposal.Memory64] proposal.
+     *
+     * Binary layout:
+     *   magic + version (8 bytes)
+     *   memory section (id=5): 1 memory with i64-indexed limits
+     *     flags = 0x04 (i64, no max), min = 1
+     */
+    private fun buildMemory64Wasm(): ByteArray {
+        val writer = WasmBinaryWriter()
+        // Wasm magic
+        writer.writeBytes(byteArrayOf(0x00, 0x61, 0x73, 0x6D))
+        // Wasm version 1
+        writer.writeBytes(byteArrayOf(0x01, 0x00, 0x00, 0x00))
+        // Memory section (id = 5)
+        val memContent = WasmBinaryWriter()
+        memContent.writeULEB128(1)    // count = 1 memory
+        memContent.writeByte(0x04)    // flags: i64 (memory64)
+        memContent.writeULEB128(1)    // min = 1 page
+        writer.writeSection(5, memContent.toByteArray())
+        return writer.toByteArray()
+    }
+
+    /**
      * Builds a minimal valid Wasm module (just magic + version) that
      * uses no special proposals.
      */
@@ -370,9 +394,91 @@ class WasmRuntimeCommandLineTest {
     }
 
     @Test
+    fun graalWasmProposalFlagsIncludesMemory64() {
+        val flags = graalWasmProposalFlags(setOf(WasmProposal.Memory64))
+        assertTrue(flags.contains("--experimental-options"), "Should contain --experimental-options")
+        assertTrue(flags.contains("--wasm.Memory64=true"), "Should contain --wasm.Memory64=true")
+        assertFalse(flags.contains("--wasm.Threads=true"), "Should not contain Threads flag")
+    }
+
+    @Test
+    fun graalWasmProposalFlagsIncludesThreadsAndMemory64() {
+        val flags = graalWasmProposalFlags(setOf(WasmProposal.Threads, WasmProposal.Memory64))
+        assertTrue(flags.contains("--experimental-options"), "Should contain --experimental-options")
+        assertTrue(flags.contains("--wasm.Threads=true"), "Should contain --wasm.Threads=true")
+        assertTrue(flags.contains("--wasm.UseUnsafeMemory=true"), "Should contain --wasm.UseUnsafeMemory=true")
+        assertTrue(flags.contains("--wasm.Memory64=true"), "Should contain --wasm.Memory64=true")
+        assertEquals(1, flags.count { it == "--experimental-options" }, "--experimental-options should appear only once")
+    }
+
+    @Test
     fun graalWasmProposalFlagsEmptyForMvp() {
         val flags = graalWasmProposalFlags(emptySet())
         assertTrue(flags.isEmpty())
+    }
+
+    @Test
+    fun graalWasmProposalFlagsIncludesMultiMemory() {
+        val flags = graalWasmProposalFlags(setOf(WasmProposal.MultipleMemories))
+        assertTrue(flags.contains("--experimental-options"), "Should contain --experimental-options")
+        assertTrue(flags.contains("--wasm.MultiMemory=true"), "Should contain --wasm.MultiMemory=true")
+    }
+
+    @Test
+    fun graalWasmProposalFlagsIncludesRelaxedSIMD() {
+        val flags = graalWasmProposalFlags(setOf(WasmProposal.RelaxedSIMD))
+        assertTrue(flags.contains("--experimental-options"), "Should contain --experimental-options")
+        assertTrue(flags.contains("--wasm.RelaxedSIMD=true"), "Should contain --wasm.RelaxedSIMD=true")
+    }
+
+    @Test
+    fun graalWasmProposalFlagsAllFalseDefaults() {
+        val allFalseDefault = setOf(
+            WasmProposal.Threads,
+            WasmProposal.Memory64,
+            WasmProposal.MultipleMemories,
+            WasmProposal.RelaxedSIMD,
+        )
+        val flags = graalWasmProposalFlags(allFalseDefault)
+        assertTrue(flags.contains("--experimental-options"), "Should contain --experimental-options")
+        assertTrue(flags.contains("--wasm.Threads=true"), "Should contain Threads")
+        assertTrue(flags.contains("--wasm.UseUnsafeMemory=true"), "Should contain UseUnsafeMemory")
+        assertTrue(flags.contains("--wasm.Memory64=true"), "Should contain Memory64")
+        assertTrue(flags.contains("--wasm.MultiMemory=true"), "Should contain MultiMemory")
+        assertTrue(flags.contains("--wasm.RelaxedSIMD=true"), "Should contain RelaxedSIMD")
+        assertEquals(1, flags.count { it == "--experimental-options" }, "--experimental-options should appear only once")
+    }
+
+    @Test
+    fun graalWasmProposalFlagsOmitsDefaultEnabledProposals() {
+        // These proposals default to true in GraalWasm 25.0.0 and should
+        // NOT produce any flags.
+        val defaultEnabled = setOf(
+            WasmProposal.SignExtensionOps,
+            WasmProposal.NonTrappingFloatToInt,
+            WasmProposal.MultiValue,
+            WasmProposal.ReferenceTypes,
+            WasmProposal.BulkMemoryOperations,
+            WasmProposal.SIMD,
+        )
+        val flags = graalWasmProposalFlags(defaultEnabled)
+        assertTrue(flags.isEmpty(), "Proposals enabled by default in GraalWasm should not produce flags")
+    }
+
+    @Test
+    fun graalWasmProposalFlagsOmitsUnsupportedProposals() {
+        // These proposals have no corresponding option in GraalWasm 25.0.0
+        // and should NOT produce any flags.
+        val unsupported = setOf(
+            WasmProposal.ExceptionHandling,
+            WasmProposal.TypedFunctionReferences,
+            WasmProposal.GarbageCollection,
+            WasmProposal.TailCall,
+            WasmProposal.MutableGlobals,
+            WasmProposal.LegacyExceptionHandling,
+        )
+        val flags = graalWasmProposalFlags(unsupported)
+        assertTrue(flags.isEmpty(), "Proposals without GraalWasm options should not produce flags")
     }
 
     @Test
@@ -380,6 +486,33 @@ class WasmRuntimeCommandLineTest {
         val options = graalWasmContextOptions(setOf(WasmProposal.Threads))
         assertTrue(options.any { it.first == "wasm.Threads" && it.second == "true" })
         assertTrue(options.any { it.first == "wasm.UseUnsafeMemory" && it.second == "true" })
+    }
+
+    @Test
+    fun graalWasmContextOptionsIncludesMemory64() {
+        val options = graalWasmContextOptions(setOf(WasmProposal.Memory64))
+        assertTrue(options.any { it.first == "wasm.Memory64" && it.second == "true" })
+        assertFalse(options.any { it.first == "wasm.Threads" }, "Should not contain Threads option")
+    }
+
+    @Test
+    fun graalWasmContextOptionsIncludesMultiMemory() {
+        val options = graalWasmContextOptions(setOf(WasmProposal.MultipleMemories))
+        assertTrue(options.any { it.first == "wasm.MultiMemory" && it.second == "true" })
+    }
+
+    @Test
+    fun graalWasmContextOptionsIncludesRelaxedSIMD() {
+        val options = graalWasmContextOptions(setOf(WasmProposal.RelaxedSIMD))
+        assertTrue(options.any { it.first == "wasm.RelaxedSIMD" && it.second == "true" })
+    }
+
+    @Test
+    fun graalWasmContextOptionsIncludesThreadsAndMemory64() {
+        val options = graalWasmContextOptions(setOf(WasmProposal.Threads, WasmProposal.Memory64))
+        assertTrue(options.any { it.first == "wasm.Threads" && it.second == "true" })
+        assertTrue(options.any { it.first == "wasm.UseUnsafeMemory" && it.second == "true" })
+        assertTrue(options.any { it.first == "wasm.Memory64" && it.second == "true" })
     }
 
     @Test
@@ -465,6 +598,18 @@ class WasmRuntimeCommandLineTest {
         assertTrue(result.arguments.contains("--experimental-options"), "Should contain --experimental-options")
         assertTrue(result.arguments.contains("--wasm.Threads=true"), "Should contain --wasm.Threads=true")
         assertTrue(result.arguments.contains("--wasm.UseUnsafeMemory=true"), "Should contain --wasm.UseUnsafeMemory=true")
+    }
+
+    @Test
+    fun graalWasmRunArgsIncludesMemory64FlagsForMemory64Module() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildMemory64Wasm(),
+        )
+        val result = buildGraalWasmRunArgs(input)
+        assertTrue(result.arguments.contains("--experimental-options"), "Should contain --experimental-options")
+        assertTrue(result.arguments.contains("--wasm.Memory64=true"), "Should contain --wasm.Memory64=true")
+        assertFalse(result.arguments.contains("--wasm.Threads=true"), "Should not contain Threads flag for Memory64 module")
     }
 
     @Test
