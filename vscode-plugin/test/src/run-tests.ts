@@ -27,6 +27,7 @@ runExtest([
     wasmWorkspace,
     wasmFixture,
 ], {
+    HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests',
     VSIX_PATH: vsixPath,
     WASM_FIXTURE: wasmFixture,
     WASM_WORKSPACE: wasmWorkspace,
@@ -50,6 +51,7 @@ try {
         wasmWorkspace,
         wasmFixture,
     ], {
+        HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests (Java hidden)',
         PATH: noJavaPathDir,
         Path: noJavaPathDir,
         VSIX_PATH: vsixPath,

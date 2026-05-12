@@ -42,6 +42,12 @@ This will:
 3. Install the Hexana `.vsix` into the test VS Code instance.
 4. Open a `.wasm` fixture file and run the Mocha test suite.
 
+On TeamCity, the Mocha run uses the checked-in TeamCity reporter from
+`src/teamcity-reporter.ts`. It emits `testSuiteStarted`, `testStarted`,
+`testFailed`, and `testFinished` service messages so the build results page
+shows passed and failed VS Code tests instead of only the command-line step
+status.
+
 ## Test Fixtures
 
 - `fixtures/test-exports.wasm` — a minimal 50-byte WebAssembly module
