@@ -166,12 +166,18 @@ fun detectProposals(wasmBytes: ByteArray?): Set<WasmProposal> {
  * The Threads proposal is the notable exception: `wasm_threads` is
  * gated behind a crate feature that may not be compiled in, and the
  * WASI `threads` support must be explicitly opted in via `-S threads`.
+ * Additionally, `shared-memory` must be enabled (`-W shared-memory`)
+ * because Wasmtime's shared-memory gate is off by default and the
+ * engine will refuse to instantiate modules with shared linear memories
+ * without it.
  */
 internal fun wasmtimeProposalFlags(proposals: Set<WasmProposal>): List<String> {
     val flags = mutableListOf<String>()
     if (WasmProposal.Threads in proposals) {
         flags.add("-W")
         flags.add("threads")
+        flags.add("-W")
+        flags.add("shared-memory")
         flags.add("-S")
         flags.add("threads")
     }
@@ -208,12 +214,15 @@ internal fun wamrProposalFlags(proposals: Set<WasmProposal>): List<String> {
  *
  * GraalWasm uses `--wasm.<Option>=true` flags. The `Threads` option
  * defaults to `false` and requires `--experimental-options`.
+ * Additionally, `UseUnsafeMemory` must be enabled because GraalWasm
+ * requires it for shared linear memories used by the Threads proposal.
  */
 internal fun graalWasmProposalFlags(proposals: Set<WasmProposal>): List<String> {
     val flags = mutableListOf<String>()
     if (WasmProposal.Threads in proposals) {
         flags.add("--experimental-options")
         flags.add("--wasm.Threads=true")
+        flags.add("--wasm.UseUnsafeMemory=true")
     }
     return flags
 }
@@ -235,6 +244,7 @@ fun graalWasmContextOptions(proposals: Set<WasmProposal>): List<Pair<String, Str
     val options = mutableListOf<Pair<String, String>>()
     if (WasmProposal.Threads in proposals) {
         options.add("wasm.Threads" to "true")
+        options.add("wasm.UseUnsafeMemory" to "true")
     }
     return options
 }

@@ -345,6 +345,7 @@ class WasmRuntimeCommandLineTest {
         val flags = wasmtimeProposalFlags(setOf(WasmProposal.Threads))
         assertTrue(flags.contains("-W"))
         assertTrue(flags.contains("threads"))
+        assertTrue(flags.contains("shared-memory"))
         assertTrue(flags.contains("-S"))
     }
 
@@ -365,6 +366,7 @@ class WasmRuntimeCommandLineTest {
         val flags = graalWasmProposalFlags(setOf(WasmProposal.Threads))
         assertTrue(flags.contains("--experimental-options"))
         assertTrue(flags.contains("--wasm.Threads=true"))
+        assertTrue(flags.contains("--wasm.UseUnsafeMemory=true"))
     }
 
     @Test
@@ -377,6 +379,7 @@ class WasmRuntimeCommandLineTest {
     fun graalWasmContextOptionsIncludesThreads() {
         val options = graalWasmContextOptions(setOf(WasmProposal.Threads))
         assertTrue(options.any { it.first == "wasm.Threads" && it.second == "true" })
+        assertTrue(options.any { it.first == "wasm.UseUnsafeMemory" && it.second == "true" })
     }
 
     @Test
@@ -394,6 +397,7 @@ class WasmRuntimeCommandLineTest {
         val result = buildWasmtimeRunArgs(input)
         assertTrue(result.arguments.contains("-W"), "Should contain -W flag")
         assertTrue(result.arguments.contains("threads"), "Should contain threads")
+        assertTrue(result.arguments.contains("shared-memory"), "Should contain shared-memory")
         assertTrue(result.arguments.contains("-S"), "Should contain -S flag")
     }
 
@@ -417,6 +421,7 @@ class WasmRuntimeCommandLineTest {
         val result = buildWasmtimeDebugArgs(input)
         assertTrue(result.arguments.contains("-W"), "Debug should contain -W flag")
         assertTrue(result.arguments.contains("threads"), "Debug should contain threads")
+        assertTrue(result.arguments.contains("shared-memory"), "Debug should contain shared-memory")
         assertTrue(result.arguments.contains("-S"), "Debug should contain -S flag")
     }
 
@@ -459,6 +464,7 @@ class WasmRuntimeCommandLineTest {
         val result = buildGraalWasmRunArgs(input)
         assertTrue(result.arguments.contains("--experimental-options"), "Should contain --experimental-options")
         assertTrue(result.arguments.contains("--wasm.Threads=true"), "Should contain --wasm.Threads=true")
+        assertTrue(result.arguments.contains("--wasm.UseUnsafeMemory=true"), "Should contain --wasm.UseUnsafeMemory=true")
     }
 
     @Test
