@@ -14,6 +14,7 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.wasm.analysis.SizeNode
+import org.jetbrains.hexana.wasm.analysis.WasmProposal
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 
 /**
@@ -206,6 +207,18 @@ fun EditorToolbar(
                 onClick = { showArgsDialog = true }
             )
         }
+
+        val proposals = remember(buffer, providerType) {
+            if (buffer == null || providerType !is BinaryProviderType.Wasm) return@remember emptyList()
+            buffer.position(0)
+            val provider = WasmBinaryProvider(buffer)
+            if (!provider.canProvideWasmModule()) return@remember emptyList()
+            provider.usedProposals.sorted()
+        }
+
+        if (proposals.isNotEmpty()) {
+            ProposalBadges(proposals)
+        }
     }
 }
 
@@ -248,6 +261,44 @@ private fun ToolbarRunButton(tooltip: String = "Run", onClick: () -> Unit) {
         }
         Span {
             Text("Run")
+        }
+    }
+}
+
+private const val MAX_INDIVIDUAL_PROPOSAL_BADGES = 3
+
+@Composable
+private fun ProposalBadges(proposals: List<WasmProposal>) {
+    if (proposals.size <= MAX_INDIVIDUAL_PROPOSAL_BADGES) {
+        for (proposal in proposals) {
+            Span({
+                classes("hexana-proposal-badge")
+                attr("title", "Uses ${proposal.displayName} proposal")
+                style {
+                    property("padding", "2px 8px")
+                    property("border-radius", "4px")
+                    property("font-size", "11px")
+                    property("background", "var(--hexana-proposal-badge-bg, #3D5040)")
+                    property("color", "var(--hexana-proposal-badge-fg, #A8D8B0)")
+                }
+            }) {
+                Text(proposal.displayName)
+            }
+        }
+    } else {
+        val tooltipText = proposals.joinToString("\n") { it.displayName }
+        Span({
+            classes("hexana-proposal-badge")
+            attr("title", tooltipText)
+            style {
+                property("padding", "2px 8px")
+                property("border-radius", "4px")
+                property("font-size", "11px")
+                property("background", "var(--hexana-proposal-badge-bg, #3D5040)")
+                property("color", "var(--hexana-proposal-badge-fg, #A8D8B0)")
+            }
+        }) {
+            Text("${proposals.size} proposals")
         }
     }
 }

@@ -40,6 +40,7 @@ import org.jetbrains.hexana.run.showEnginePopup
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
 import org.jetbrains.hexana.wasm.analysis.SizeNode
+import org.jetbrains.hexana.wasm.analysis.WasmProposal
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Divider
@@ -237,6 +238,14 @@ internal fun FileDescriptionBar(
                 }
             }
         }
+
+        val proposals = remember(binaryProvider) {
+            (binaryProvider as? WasmBinaryProvider)?.usedProposals?.sorted() ?: emptyList()
+        }
+
+        if (proposals.isNotEmpty()) {
+            ProposalBadges(proposals)
+        }
     }
 
     Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
@@ -291,6 +300,56 @@ private fun ToolbarActionButton(
                 style = TextStyle(
                     fontSize = 11.sp,
                     color = buttonForeground,
+                ),
+            )
+        }
+    }
+}
+
+private const val MAX_INDIVIDUAL_PROPOSAL_BADGES = 3
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ProposalBadges(proposals: List<WasmProposal>) {
+    val proposalBackground = if (JewelTheme.isDark) {
+        Color(0xFF3D5040)
+    } else {
+        Color(0xFFD4EDDA)
+    }
+    val proposalForeground = if (JewelTheme.isDark) {
+        Color(0xFFA8D8B0)
+    } else {
+        Color(0xFF2D6A3F)
+    }
+
+    if (proposals.size <= MAX_INDIVIDUAL_PROPOSAL_BADGES) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            for (proposal in proposals) {
+                Tooltip(tooltip = { Text("Uses ${proposal.displayName} proposal") }) {
+                    Text(
+                        text = proposal.displayName,
+                        modifier = Modifier
+                            .background(proposalBackground, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = TextStyle(
+                            fontSize = 11.sp,
+                            color = proposalForeground,
+                        ),
+                    )
+                }
+            }
+        }
+    } else {
+        val tooltipText = proposals.joinToString("\n") { it.displayName }
+        Tooltip(tooltip = { Text(tooltipText) }) {
+            Text(
+                text = "${proposals.size} proposals",
+                modifier = Modifier
+                    .background(proposalBackground, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                style = TextStyle(
+                    fontSize = 11.sp,
+                    color = proposalForeground,
                 ),
             )
         }
