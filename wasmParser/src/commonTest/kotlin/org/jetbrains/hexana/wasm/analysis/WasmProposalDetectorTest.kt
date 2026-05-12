@@ -522,4 +522,78 @@ class WasmProposalDetectorTest {
         """.trimIndent())
         assertContains(proposals, WasmProposal.SignExtensionOps)
     }
+
+    // ========================================================================
+    // Threads / Atomics
+    // ========================================================================
+
+    @Test
+    fun `threads — shared memory triggers detection`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (memory 1 1 shared)
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.Threads)
+    }
+
+    @Test
+    fun `threads — atomic instruction triggers detection`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (memory 1 1 shared)
+              (func (param i32) (result i32)
+                local.get 0
+                i32.atomic.load
+              )
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.Threads)
+    }
+
+    @Test
+    fun `threads — shared imported memory triggers detection`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (import "env" "mem" (memory 1 1 shared))
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.Threads)
+    }
+
+    // ========================================================================
+    // Multiple memories
+    // ========================================================================
+
+    @Test
+    fun `multiple memories — two imported memories without memory section`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (import "env" "m1" (memory 1))
+              (import "env" "m2" (memory 1))
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.MultipleMemories)
+    }
+
+    @Test
+    fun `multiple memories — one defined and one imported`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (import "env" "m" (memory 1))
+              (memory 1)
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.MultipleMemories)
+    }
+
+    @Test
+    fun `single imported memory does not trigger multiple memories`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (import "env" "m" (memory 1))
+            )
+        """.trimIndent())
+        assertFalse(WasmProposal.MultipleMemories in proposals)
+    }
 }

@@ -484,6 +484,33 @@ class WasmRuntimeCommandLineTest {
         assertTrue(threadsIdx < customIdx, "Proposal flags should come before user options")
     }
 
+    @Test
+    fun wamrProposalFlagsBeforeUserOptions() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildSharedMemoryWasm(),
+            runtimeOptions = "--custom-flag",
+        )
+        val result = buildWamrRunArgs(input)
+        val maxThreadsIdx = result.arguments.indexOf("--max-threads=4")
+        val customIdx = result.arguments.indexOf("--custom-flag")
+        assertTrue(maxThreadsIdx >= 0, "Should contain --max-threads=4")
+        assertTrue(maxThreadsIdx < customIdx, "WAMR proposal flags should come before user options")
+    }
+
+    @Test
+    fun graalWasmProposalFlagsBeforeWasmFile() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildSharedMemoryWasm(),
+        )
+        val result = buildGraalWasmRunArgs(input)
+        val threadsIdx = result.arguments.indexOf("--wasm.Threads=true")
+        val wasmFileIdx = result.arguments.indexOf("/mod.wasm")
+        assertTrue(threadsIdx >= 0, "Should contain --wasm.Threads=true")
+        assertTrue(threadsIdx < wasmFileIdx, "GraalWasm proposal flags should come before wasm file path")
+    }
+
     // -----------------------------------------------------------------------
     // classifyDependencies
     // -----------------------------------------------------------------------

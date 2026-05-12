@@ -62,18 +62,28 @@ object WasmProposalDetector {
     }
 
     private fun detectFromMemories(module: WasmModule, buffer: CommonByteBuffer, result: MutableSet<WasmProposal>) {
-        val memorySection = module.memorySection ?: return
-        val memories = with(memorySection) { buffer.scan() }
-        var memoryCount = memories.size
-        for (mem in memories) {
-            detectFromLimits(mem.limits, result)
+        var memoryCount = 0
+
+        val memorySection = module.memorySection
+        if (memorySection != null) {
+            val memories = with(memorySection) { buffer.scan() }
+            memoryCount += memories.size
+            for (mem in memories) {
+                detectFromLimits(mem.limits, result)
+            }
         }
-        // Count memory imports for multiple-memories detection
+
+        // Count memory imports for multiple-memories detection and check their limits
         val importSection = module.importSection
         if (importSection != null) {
             val imports = with(importSection) { buffer.getImportRecords() }
-            memoryCount += imports.count { it.type is WasmMemType }
+            for (imp in imports) {
+                val memType = imp.type as? WasmMemType ?: continue
+                memoryCount++
+                detectFromLimits(memType.limits, result)
+            }
         }
+
         if (memoryCount > 1) {
             result.add(WasmProposal.MultipleMemories)
         }
