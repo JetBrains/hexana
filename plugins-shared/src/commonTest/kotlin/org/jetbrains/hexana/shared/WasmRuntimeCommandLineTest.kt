@@ -350,9 +350,9 @@ class WasmRuntimeCommandLineTest {
     }
 
     @Test
-    fun wamrProposalFlagsIncludesMaxThreads() {
+    fun wamrProposalFlagsEmptyForThreads() {
         val flags = wamrProposalFlags(setOf(WasmProposal.Threads))
-        assertTrue(flags.contains("--max-threads=4"))
+        assertTrue(flags.isEmpty(), "WAMR thread support is compile-time; no CLI flags needed")
     }
 
     @Test
@@ -426,13 +426,13 @@ class WasmRuntimeCommandLineTest {
     }
 
     @Test
-    fun wamrRunArgsIncludesMaxThreadsForSharedMemory() {
+    fun wamrRunArgsNoProposalFlagsForSharedMemory() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
             wasmBytes = buildSharedMemoryWasm(),
         )
         val result = buildWamrRunArgs(input)
-        assertTrue(result.arguments.contains("--max-threads=4"), "Should contain --max-threads=4")
+        assertEquals(listOf("/mod.wasm"), result.arguments, "WAMR should not emit proposal flags")
     }
 
     @Test
@@ -446,13 +446,13 @@ class WasmRuntimeCommandLineTest {
     }
 
     @Test
-    fun wamrDebugArgsIncludesMaxThreadsForSharedMemory() {
+    fun wamrDebugArgsNoProposalFlagsForSharedMemory() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
             wasmBytes = buildSharedMemoryWasm(),
         )
         val result = buildWamrDebugArgs(input)
-        assertTrue(result.commandLine.arguments.contains("--max-threads=4"), "Debug should contain --max-threads=4")
+        assertFalse(result.commandLine.arguments.contains("--max-threads=4"), "Debug should not contain --max-threads=4")
     }
 
     @Test
@@ -491,17 +491,16 @@ class WasmRuntimeCommandLineTest {
     }
 
     @Test
-    fun wamrProposalFlagsBeforeUserOptions() {
+    fun wamrUserOptionsStillWork() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
             wasmBytes = buildSharedMemoryWasm(),
             runtimeOptions = "--custom-flag",
         )
         val result = buildWamrRunArgs(input)
-        val maxThreadsIdx = result.arguments.indexOf("--max-threads=4")
         val customIdx = result.arguments.indexOf("--custom-flag")
-        assertTrue(maxThreadsIdx >= 0, "Should contain --max-threads=4")
-        assertTrue(maxThreadsIdx < customIdx, "WAMR proposal flags should come before user options")
+        assertTrue(customIdx >= 0, "User options should be present")
+        assertTrue(customIdx < result.arguments.indexOf("/mod.wasm"), "User options should come before wasm file")
     }
 
     @Test

@@ -192,16 +192,14 @@ internal fun wasmtimeProposalFlags(proposals: Set<WasmProposal>): List<String> {
  * Returns iwasm CLI flags needed to enable support for the given
  * set of detected proposals.
  *
- * WAMR has limited CLI surface for proposals. The main flag is
- * `--max-threads=N` which is required when the module uses the
- * Threads proposal (it enables the threading runtime).
+ * WAMR has very limited CLI surface for proposals. Thread support
+ * is a compile-time option (`WAMR_BUILD_LIB_WASI_THREADS=1`) and
+ * cannot be toggled at runtime. The `--max-threads=N` flag only
+ * exists in builds that already have threads compiled in, and the
+ * default (4) is sufficient, so we do not emit any extra flags.
  */
 internal fun wamrProposalFlags(proposals: Set<WasmProposal>): List<String> {
-    val flags = mutableListOf<String>()
-    if (WasmProposal.Threads in proposals) {
-        flags.add("--max-threads=4")
-    }
-    return flags
+    return emptyList()
 }
 
 // ---------------------------------------------------------------------------
