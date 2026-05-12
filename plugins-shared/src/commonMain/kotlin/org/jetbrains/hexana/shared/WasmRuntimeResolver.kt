@@ -91,10 +91,10 @@ object WasmRuntimeResolver {
             effectiveWasmPath = effectiveWasmPath,
         )
         return when (runtime) {
-            "wasmtime" -> buildWasmtimeRunArgs(input, stubFileWriter = stubFileWriter)
+            "wasmtime" -> buildWasmtimeRunArgs(input)
             "wamr" -> buildWamrRunArgs(input, stubFileWriter = stubFileWriter)
             "graalwasm" -> buildGraalWasmRunArgs(input)
-            else -> buildWasmtimeRunArgs(input, stubFileWriter = stubFileWriter)
+            else -> buildWasmtimeRunArgs(input)
         }
     }
 }

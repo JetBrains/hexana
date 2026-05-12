@@ -48,7 +48,7 @@ class WasmtimeCommandLineState(
             effectiveWasmPath = effectiveWasmPath,
         )
 
-        val cmdLine = buildWasmtimeRunArgs(input, coreModuleDeps, JvmStubFileWriter)
+        val cmdLine = buildWasmtimeRunArgs(input, coreModuleDeps)
         return runCommandLine(wasmtimePath, cmdLine)
     }
 

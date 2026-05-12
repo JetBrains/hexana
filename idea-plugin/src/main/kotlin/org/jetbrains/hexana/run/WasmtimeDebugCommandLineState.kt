@@ -126,7 +126,7 @@ class WasmtimeDebugCommandLineState(
                 effectiveWasmPath = effectiveWasmPath,
             )
 
-            val cmdLine = buildWasmtimeDebugArgs(input, coreModuleDeps, JvmStubFileWriter)
+            val cmdLine = buildWasmtimeDebugArgs(input, coreModuleDeps)
 
             return DebugBuildResult(
                 arguments = cmdLine.arguments,

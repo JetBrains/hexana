@@ -714,30 +714,16 @@ class WasmRuntimeCommandLineTest {
         return w.toByteArray()
     }
 
-    /**
-     * A fake [StubFileWriter] that records stub writes in memory,
-     * returning predictable paths.
-     */
-    private class InMemoryStubFileWriter : StubFileWriter {
-        val writtenStubs = mutableMapOf<String, ByteArray>()
-        override fun createTempDir(prefix: String): String = "/tmp/$prefix"
-        override fun writeFile(dir: String, fileName: String, bytes: ByteArray): String {
-            writtenStubs[fileName] = bytes
-            return "$dir/$fileName"
-        }
-    }
-
     @Test
     fun wasmtimeRunArgsUsesUnknownImportsDefaultForSharedMemoryModule() {
         // Reproduces the wasmtime "import of foo::bar defined twice" error:
         // wasmtime's --preload conflicts with any import mechanism, so we
         // must use -W unknown-imports-default exclusively and never preload.
-        val stubWriter = InMemoryStubFileWriter()
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
             wasmBytes = buildImportedSharedMemoryWasm(),
         )
-        val result = buildWasmtimeRunArgs(input, stubFileWriter = stubWriter)
+        val result = buildWasmtimeRunArgs(input)
         val args = result.arguments
 
         assertTrue(args.contains("unknown-imports-default"),
@@ -746,19 +732,15 @@ class WasmRuntimeCommandLineTest {
         // Must NOT contain any --preload for stub modules
         val preloadPairs: List<String> = args.windowed(2).filter { it[0] == "--preload" }.map { it[1] }
         assertTrue(preloadPairs.isEmpty(), "Should not preload any stub modules")
-
-        // No stubs should have been written
-        assertTrue(stubWriter.writtenStubs.isEmpty(), "Should not write any stubs")
     }
 
     @Test
     fun wasmtimeDebugArgsUsesUnknownImportsDefaultForSharedMemoryModule() {
-        val stubWriter = InMemoryStubFileWriter()
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
             wasmBytes = buildImportedSharedMemoryWasm(),
         )
-        val result = buildWasmtimeDebugArgs(input, stubFileWriter = stubWriter)
+        val result = buildWasmtimeDebugArgs(input)
         val args = result.arguments
 
         assertTrue(args.contains("unknown-imports-default"),
@@ -766,7 +748,6 @@ class WasmRuntimeCommandLineTest {
 
         val preloadPairs: List<String> = args.windowed(2).filter { it[0] == "--preload" }.map { it[1] }
         assertTrue(preloadPairs.isEmpty(), "Debug should not preload any stub modules")
-        assertTrue(stubWriter.writtenStubs.isEmpty(), "Debug should not write any stubs")
     }
 
     @Test
@@ -786,16 +767,14 @@ class WasmRuntimeCommandLineTest {
         imports.writeByte(0x00); imports.writeULEB128(0)
         w.writeSection(2, imports.toByteArray())
 
-        val stubWriter = InMemoryStubFileWriter()
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
             wasmBytes = w.toByteArray(),
         )
-        val result = buildWasmtimeRunArgs(input, stubFileWriter = stubWriter)
+        val result = buildWasmtimeRunArgs(input)
         val args = result.arguments
 
         assertTrue(args.contains("unknown-imports-default"), "Should use unknown-imports-default for function-only imports")
-        assertTrue(stubWriter.writtenStubs.isEmpty(), "Should not write any stubs")
     }
 
     // -----------------------------------------------------------------------

@@ -73,10 +73,7 @@ fun buildWasmtimeCommandLine(
         effectiveWasmPath = effectiveWasmPath,
     )
 
-    val result = buildWasmtimeRunArgs(
-        input = input,
-        stubFileWriter = stubWriter?.toStubFileWriter(),
-    )
+    val result = buildWasmtimeRunArgs(input = input)
 
     return CommandLineResult(
         arguments = result.arguments.toTypedArray(),

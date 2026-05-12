@@ -142,10 +142,15 @@ fun classifyDependencies(
  */
 fun detectProposals(wasmBytes: ByteArray?): Set<WasmProposal> {
     if (wasmBytes == null) return emptySet()
-    val buffer = wasmBytes.toCommonByteBuffer()
-    val result = WasmParser().parse(buffer)
-    val module = (result as? WasmParseSuccess)?.wasmModule as? WasmModule ?: return emptySet()
-    return WasmProposalDetector.detect(module, wasmBytes.toCommonByteBuffer())
+    return try {
+        val buffer = wasmBytes.toCommonByteBuffer()
+        val result = WasmParser().parse(buffer)
+        val module = (result as? WasmParseSuccess)?.wasmModule as? WasmModule ?: return emptySet()
+        buffer.position(0)
+        WasmProposalDetector.detect(module, buffer)
+    } catch (_: Exception) {
+        emptySet()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +229,6 @@ internal fun wamrProposalFlags(proposals: Set<WasmProposal>): List<String> {
  * - **Memory64**: `--wasm.Memory64=true`.
  * - **MultiMemory**: `--wasm.MultiMemory=true`.
  * - **RelaxedSIMD**: `--wasm.RelaxedSIMD=true`.
- * - **ExtendedConstExpressions**: `--wasm.ExtendedConstExpressions=true`.
  *
  * Options not present in GraalWasm 25.0.0 (no flags to emit):
  *   Exceptions, TypedFunctionReferences, GC, TailCall.
@@ -247,11 +251,9 @@ internal fun graalWasmProposalFlags(proposals: Set<WasmProposal>): List<String> 
     if (WasmProposal.RelaxedSIMD in proposals) {
         flags.add("--wasm.RelaxedSIMD=true")
     }
-    // ExtendedConstExpressions is not reliably detected as a WasmProposal,
-    // but if the parser ever reports ExceptionHandling (which uses the tag
-    // section) in a context where extended-const matters, this block would
-    // be the place to add it.  For now we omit it since there is no
-    // matching WasmProposal entry.
+    // ExtendedConstExpressions: not emitted because the proposal cannot be
+    // reliably detected from binary inspection alone (const-expr validation
+    // is not performed by the parser).
     if (flags.isNotEmpty()) {
         flags.add(0, "--experimental-options")
     }
@@ -353,7 +355,6 @@ fun splitOptions(options: String): List<String> {
 fun buildWasmtimeRunArgs(
     input: WasmRunInput,
     coreModuleDeps: Map<String, String> = emptyMap(),
-    @Suppress("UNUSED_PARAMETER") stubFileWriter: StubFileWriter? = null,
 ): WasmCommandLine {
     val args = mutableListOf<String>()
     args.add("run")
@@ -405,7 +406,6 @@ fun buildWasmtimeRunArgs(
 fun buildWasmtimeDebugArgs(
     input: WasmRunInput,
     coreModuleDeps: Map<String, String> = emptyMap(),
-    @Suppress("UNUSED_PARAMETER") stubFileWriter: StubFileWriter? = null,
 ): WasmCommandLine {
     val args = mutableListOf<String>()
     args.add("run")
