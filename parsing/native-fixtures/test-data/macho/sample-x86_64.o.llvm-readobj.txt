@@ -1,0 +1,358 @@
+
+File: /out/macho/sample-x86_64.o
+Format: Mach-O 64-bit x86-64
+Arch: x86_64
+AddressSize: 64bit
+MachHeader {
+  Magic: Magic64 (0xFEEDFACF)
+  CpuType: X86-64 (0x1000007)
+  CpuSubType: CPU_SUBTYPE_X86_64_ALL (0x3)
+  FileType: Relocatable (0x1)
+  NumOfLoadCommands: 4
+  SizeOfLoadCommands: 1240
+  Flags [ (0x2000)
+    MH_SUBSECTIONS_VIA_SYMBOLS (0x2000)
+  ]
+  Reserved: 0x0
+}
+Sections [
+  Section {
+    Index: 0
+    Name: __text (5F 5F 74 65 78 74 00 00 00 00 00 00 00 00 00 00)
+    Segment: __TEXT (5F 5F 54 45 58 54 00 00 00 00 00 00 00 00 00 00)
+    Address: 0x0
+    Size: 0xD4
+    Offset: 1272
+    Alignment: 4
+    RelocationOffset: 0xCA0
+    RelocationCount: 5
+    Type: Regular (0x0)
+    Attributes [ (0x800004)
+      PureInstructions (0x800000)
+      SomeInstructions (0x4)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 1
+    Name: __data (5F 5F 64 61 74 61 00 00 00 00 00 00 00 00 00 00)
+    Segment: __DATA (5F 5F 44 41 54 41 00 00 00 00 00 00 00 00 00 00)
+    Address: 0xD8
+    Size: 0x10
+    Offset: 1488
+    Alignment: 3
+    RelocationOffset: 0xCC8
+    RelocationCount: 1
+    Type: Regular (0x0)
+    Attributes [ (0x0)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 2
+    Name: __const (5F 5F 63 6F 6E 73 74 00 00 00 00 00 00 00 00 00)
+    Segment: __TEXT (5F 5F 54 45 58 54 00 00 00 00 00 00 00 00 00 00)
+    Address: 0xF0
+    Size: 0x1D
+    Offset: 1512
+    Alignment: 4
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x0)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 3
+    Name: __debug_abbrev (5F 5F 64 65 62 75 67 5F 61 62 62 72 65 76 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x10D
+    Size: 0xAE
+    Offset: 1541
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 4
+    Name: __debug_info (5F 5F 64 65 62 75 67 5F 69 6E 66 6F 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x1BB
+    Size: 0x174
+    Offset: 1715
+    Alignment: 0
+    RelocationOffset: 0xCD0
+    RelocationCount: 8
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 5
+    Name: __debug_str (5F 5F 64 65 62 75 67 5F 73 74 72 00 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x32F
+    Size: 0xD2
+    Offset: 2087
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 6
+    Name: __apple_names (5F 5F 61 70 70 6C 65 5F 6E 61 6D 65 73 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x401
+    Size: 0xE4
+    Offset: 2297
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 7
+    Name: __apple_objc (5F 5F 61 70 70 6C 65 5F 6F 62 6A 63 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x4E5
+    Size: 0x24
+    Offset: 2525
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 8
+    Name: __apple_namespac (5F 5F 61 70 70 6C 65 5F 6E 61 6D 65 73 70 61 63)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x509
+    Size: 0x24
+    Offset: 2561
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 9
+    Name: __apple_types (5F 5F 61 70 70 6C 65 5F 74 79 70 65 73 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x52D
+    Size: 0x85
+    Offset: 2597
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 10
+    Name: __compact_unwind (5F 5F 63 6F 6D 70 61 63 74 5F 75 6E 77 69 6E 64)
+    Segment: __LD (5F 5F 4C 44 00 00 00 00 00 00 00 00 00 00 00 00)
+    Address: 0x5B8
+    Size: 0x80
+    Offset: 2736
+    Alignment: 3
+    RelocationOffset: 0xD10
+    RelocationCount: 4
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 11
+    Name: __eh_frame (5F 5F 65 68 5F 66 72 61 6D 65 00 00 00 00 00 00)
+    Segment: __TEXT (5F 5F 54 45 58 54 00 00 00 00 00 00 00 00 00 00)
+    Address: 0x638
+    Size: 0xB8
+    Offset: 2864
+    Alignment: 3
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Coalesced (0xB)
+    Attributes [ (0x680000)
+      LiveSupport (0x80000)
+      NoTOC (0x400000)
+      StripStaticSyms (0x200000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 12
+    Name: __debug_line (5F 5F 64 65 62 75 67 5F 6C 69 6E 65 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x6F0
+    Size: 0xB2
+    Offset: 3048
+    Alignment: 0
+    RelocationOffset: 0xD30
+    RelocationCount: 1
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+]
+NeededLibraries [
+]
+Relocations [
+  Section __text {
+    0xBA 1 2 1 X86_64_RELOC_BRANCH 0 _hexana_dispatch
+    0x7B 1 2 1 X86_64_RELOC_SIGNED 0 _hexana_message
+    0x6C 1 2 1 X86_64_RELOC_BRANCH 0 _hexana_square
+    0x5A 1 2 1 X86_64_RELOC_BRANCH 0 _hexana_add
+    0x12 1 2 1 X86_64_RELOC_SIGNED 0 _hexana_counter
+  }
+  Section __data {
+    0x8 0 3 1 X86_64_RELOC_UNSIGNED 0 _hexana_add
+  }
+  Section __debug_info {
+    0x134 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0x10C 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0xE4 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0xAE 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0x90 0 3 0 X86_64_RELOC_UNSIGNED 0 __data
+    0x5C 0 3 0 X86_64_RELOC_UNSIGNED 0 __const
+    0x3B 0 3 0 X86_64_RELOC_UNSIGNED 0 __data
+    0x22 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+  }
+  Section __compact_unwind {
+    0x60 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0x40 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0x20 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0x0 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+  }
+  Section __debug_line {
+    0x36 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+  }
+]
+Symbols [
+  Symbol {
+    Name: _hexana_square (56)
+    Type: Section (0xE)
+    Section: __text (0x1)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x90
+  }
+  Symbol {
+    Name: _hexana_add (87)
+    Extern
+    Type: Section (0xE)
+    Section: __text (0x1)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x0
+  }
+  Symbol {
+    Name: _hexana_add_ptr (1)
+    Extern
+    Type: Section (0xE)
+    Section: __data (0x2)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0xE0
+  }
+  Symbol {
+    Name: _hexana_counter (17)
+    Extern
+    Type: Section (0xE)
+    Section: __data (0x2)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0xD8
+  }
+  Symbol {
+    Name: _hexana_dispatch (39)
+    Extern
+    Type: Section (0xE)
+    Section: __text (0x1)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x20
+  }
+  Symbol {
+    Name: _hexana_message (71)
+    Extern
+    Type: Section (0xE)
+    Section: __const (0x3)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0xF0
+  }
+  Symbol {
+    Name: _main (33)
+    Extern
+    Type: Section (0xE)
+    Section: __text (0x1)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0xA0
+  }
+]

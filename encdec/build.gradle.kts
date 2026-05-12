@@ -17,6 +17,8 @@ fun KotlinJsTest.passTestFlagsToEnvironment() {
 }
 
 kotlin {
+    jvmToolchain(21)
+
     jvm()
 
     js {

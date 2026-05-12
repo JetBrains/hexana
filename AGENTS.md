@@ -33,6 +33,11 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
   process for the VS Code extension.
 - `mcp/packaging/`: thin Claude/Codex wrapper layouts that point at the standalone runtime from `mcp/server/`.
 - `wasmParser/`: Kotlin Multiplatform parser for core Wasm and component-model binaries.
+- `parsing/`: parent folder for native binary parsing modules.
+- `parsing/common/`: shared native parser primitives such as byte ranges, native word size/endian metadata, checked binary reading, parse diagnostics, unresolved records, and format detection.
+- `parsing/elf/`: ELF parser module.
+- `parsing/macho/`: Mach-O parser module.
+- `parsing/pe/`: PE/COFF parser module.
 - `binaryProvider/`: thin provider layer that wraps parsed Wasm data for the UI and navigation features.
 - `plugins-shared/`: Kotlin Multiplatform shared logic (no UI framework) used by both `idea-plugin` and `vscode-plugin:webview` — component description formatting, type labels, signature resolution, WAT text generation.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
@@ -78,6 +83,7 @@ Run the narrowest command that proves your change.
 - Build the plugin ZIP: `./gradlew :idea-plugin:buildPlugin`
 - Build the FUS scheme artifact: `./gradlew :idea-plugin:buildEventsScheme`
 - Run JVM parser tests: `./gradlew :wasmParser:jvmTest`
+- Run native parser JVM tests: `./gradlew :parsing:common:jvmTest :parsing:elf:jvmTest :parsing:macho:jvmTest :parsing:pe:jvmTest`
 - Run JS browser parser tests: `./gradlew :wasmParser:jsBrowserTest`
 - Run WasmJS browser parser tests: `./gradlew :wasmParser:wasmJsBrowserTest`
 - Build shared module: `./gradlew :plugins-shared:build`
@@ -148,6 +154,7 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
   bundled skill/MCP wiring.
 - `plugins-shared/` changes: run `:plugins-shared:build`, then `:idea-plugin:test` and `:vscode-plugin:webview:compileKotlinJs`.
 - `wasmParser/` changes: run at least the relevant parser tests and any affected plugin tests.
+- `parsing/` changes: run the affected `:parsing:*:jvmTest` task first; add JS/WasmJS checks when changing shared parser behavior that should work outside the JVM.
 - `mcp/` changes in the plugin: run the direct MCP tests under `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp/direct`.
 - `graalwasm/` or embedded converter changes: run the directly affected plugin tests and the existing `:graalwasm:wat2wasm:test` run configuration if relevant.
 - `ui-driver-tests/` is intentionally expensive. Do not run it unless your change affects plugin packaging, IDE startup, installation flow, or end-to-end UI behavior.

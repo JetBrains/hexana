@@ -1,0 +1,295 @@
+
+File: /out/pe/sample_cpp.coff
+Format: COFF-x86-64
+Arch: x86_64
+AddressSize: 64bit
+ImageFileHeader {
+  Machine: IMAGE_FILE_MACHINE_AMD64 (0x8664)
+  SectionCount: 6
+  TimeDateStamp: 2026-05-12 10:43:31 (0x6A030453)
+  PointerToSymbolTable: 0xB64
+  SymbolCount: 17
+  StringTableSize: 67
+  OptionalHeaderSize: 0
+  Characteristics [ (0x0)
+  ]
+}
+Sections [
+  Section {
+    Number: 1
+    Name: .text (2E 74 65 78 74 00 00 00)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 20
+    PointerToRawData: 0x104
+    PointerToRelocations: 0x0
+    PointerToLineNumbers: 0x0
+    RelocationCount: 0
+    LineNumberCount: 0
+    Characteristics [ (0x60500020)
+      IMAGE_SCN_ALIGN_16BYTES (0x500000)
+      IMAGE_SCN_CNT_CODE (0x20)
+      IMAGE_SCN_MEM_EXECUTE (0x20000000)
+      IMAGE_SCN_MEM_READ (0x40000000)
+    ]
+  }
+  Section {
+    Number: 2
+    Name: .data (2E 64 61 74 61 00 00 00)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 0
+    PointerToRawData: 0x118
+    PointerToRelocations: 0x0
+    PointerToLineNumbers: 0x0
+    RelocationCount: 0
+    LineNumberCount: 0
+    Characteristics [ (0xC0300040)
+      IMAGE_SCN_ALIGN_4BYTES (0x300000)
+      IMAGE_SCN_CNT_INITIALIZED_DATA (0x40)
+      IMAGE_SCN_MEM_READ (0x40000000)
+      IMAGE_SCN_MEM_WRITE (0x80000000)
+    ]
+  }
+  Section {
+    Number: 3
+    Name: .bss (2E 62 73 73 00 00 00 00)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 0
+    PointerToRawData: 0x0
+    PointerToRelocations: 0x0
+    PointerToLineNumbers: 0x0
+    RelocationCount: 0
+    LineNumberCount: 0
+    Characteristics [ (0xC0300080)
+      IMAGE_SCN_ALIGN_4BYTES (0x300000)
+      IMAGE_SCN_CNT_UNINITIALIZED_DATA (0x80)
+      IMAGE_SCN_MEM_READ (0x40000000)
+      IMAGE_SCN_MEM_WRITE (0x80000000)
+    ]
+  }
+  Section {
+    Number: 4
+    Name: .debug$S (2E 64 65 62 75 67 24 53)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 876
+    PointerToRawData: 0x118
+    PointerToRelocations: 0x484
+    PointerToLineNumbers: 0x0
+    RelocationCount: 22
+    LineNumberCount: 0
+    Characteristics [ (0x42300040)
+      IMAGE_SCN_ALIGN_4BYTES (0x300000)
+      IMAGE_SCN_CNT_INITIALIZED_DATA (0x40)
+      IMAGE_SCN_MEM_DISCARDABLE (0x2000000)
+      IMAGE_SCN_MEM_READ (0x40000000)
+    ]
+  }
+  Section {
+    Number: 5
+    Name: .debug$T (2E 64 65 62 75 67 24 54)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 1540
+    PointerToRawData: 0x560
+    PointerToRelocations: 0x0
+    PointerToLineNumbers: 0x0
+    RelocationCount: 0
+    LineNumberCount: 0
+    Characteristics [ (0x42300040)
+      IMAGE_SCN_ALIGN_4BYTES (0x300000)
+      IMAGE_SCN_CNT_INITIALIZED_DATA (0x40)
+      IMAGE_SCN_MEM_DISCARDABLE (0x2000000)
+      IMAGE_SCN_MEM_READ (0x40000000)
+    ]
+  }
+  Section {
+    Number: 6
+    Name: .llvm_addrsig (2F 32 31 00 00 00 00 00)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 0
+    PointerToRawData: 0xB64
+    PointerToRelocations: 0x0
+    PointerToLineNumbers: 0x0
+    RelocationCount: 0
+    LineNumberCount: 0
+    Characteristics [ (0x100800)
+      IMAGE_SCN_ALIGN_1BYTES (0x100000)
+      IMAGE_SCN_LNK_REMOVE (0x800)
+    ]
+  }
+]
+NeededLibraries [
+]
+Relocations [
+  Section (4) .debug$S {
+    0x9C IMAGE_REL_AMD64_SECREL ?compute@hexana_fixture@@YAHH@Z (13)
+    0xA0 IMAGE_REL_AMD64_SECTION ?compute@hexana_fixture@@YAHH@Z (13)
+    0xF4 IMAGE_REL_AMD64_SECREL .text (0)
+    0xF8 IMAGE_REL_AMD64_SECTION .text (0)
+    0x11C IMAGE_REL_AMD64_SECREL .text (0)
+    0x120 IMAGE_REL_AMD64_SECTION .text (0)
+    0x12C IMAGE_REL_AMD64_SECREL .text (0)
+    0x130 IMAGE_REL_AMD64_SECTION .text (0)
+    0x178 IMAGE_REL_AMD64_SECREL ?compute@hexana_fixture@@YAHH@Z (13)
+    0x17C IMAGE_REL_AMD64_SECTION ?compute@hexana_fixture@@YAHH@Z (13)
+    0x1C0 IMAGE_REL_AMD64_SECREL hexana_cpp_entry (14)
+    0x1C4 IMAGE_REL_AMD64_SECTION hexana_cpp_entry (14)
+    0x210 IMAGE_REL_AMD64_SECREL .text (0)
+    0x214 IMAGE_REL_AMD64_SECTION .text (0)
+    0x244 IMAGE_REL_AMD64_SECREL .text (0)
+    0x248 IMAGE_REL_AMD64_SECTION .text (0)
+    0x26C IMAGE_REL_AMD64_SECREL .text (0)
+    0x270 IMAGE_REL_AMD64_SECTION .text (0)
+    0x27C IMAGE_REL_AMD64_SECREL .text (0)
+    0x280 IMAGE_REL_AMD64_SECTION .text (0)
+    0x2CC IMAGE_REL_AMD64_SECREL hexana_cpp_entry (14)
+    0x2D0 IMAGE_REL_AMD64_SECTION hexana_cpp_entry (14)
+  }
+]
+Symbols [
+  Symbol {
+    Name: .text
+    Value: 0
+    Section: .text (1)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 20
+      RelocationCount: 0
+      LineNumberCount: 0
+      Checksum: 0x5F5E5F1A
+      Number: 1
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .data
+    Value: 0
+    Section: .data (2)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 0
+      RelocationCount: 0
+      LineNumberCount: 0
+      Checksum: 0x0
+      Number: 2
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .bss
+    Value: 0
+    Section: .bss (3)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 0
+      RelocationCount: 0
+      LineNumberCount: 0
+      Checksum: 0x0
+      Number: 3
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .debug$S
+    Value: 0
+    Section: .debug$S (4)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 876
+      RelocationCount: 22
+      LineNumberCount: 0
+      Checksum: 0xB751D029
+      Number: 4
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .debug$T
+    Value: 0
+    Section: .debug$T (5)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 1540
+      RelocationCount: 0
+      LineNumberCount: 0
+      Checksum: 0xAEBFDF8A
+      Number: 5
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .llvm_addrsig
+    Value: 0
+    Section: .llvm_addrsig (6)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 0
+      RelocationCount: 0
+      LineNumberCount: 0
+      Checksum: 0x0
+      Number: 6
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: @feat.00
+    Value: 0
+    Section: IMAGE_SYM_ABSOLUTE (-1)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 0
+  }
+  Symbol {
+    Name: ?compute@hexana_fixture@@YAHH@Z
+    Value: 0
+    Section: .text (1)
+    BaseType: Null (0x0)
+    ComplexType: Function (0x2)
+    StorageClass: External (0x2)
+    AuxSymbolCount: 0
+  }
+  Symbol {
+    Name: hexana_cpp_entry
+    Value: 16
+    Section: .text (1)
+    BaseType: Null (0x0)
+    ComplexType: Function (0x2)
+    StorageClass: External (0x2)
+    AuxSymbolCount: 0
+  }
+  Symbol {
+    Name: .file
+    Value: 0
+    Section: IMAGE_SYM_DEBUG (-2)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: File (0x67)
+    AuxSymbolCount: 1
+    AuxFileRecord {
+      FileName: sample_cpp.cpp
+    }
+  }
+]

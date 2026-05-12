@@ -32,6 +32,11 @@ dependencyResolutionManagement {
 rootProject.name = "hexana"
 
 include("binaryProvider")
+include("parsing")
+include("parsing:common")
+include("parsing:elf")
+include("parsing:macho")
+include("parsing:pe")
 include("debugInfo:dwarf")
 include("wasmParser")
 include("encdec")

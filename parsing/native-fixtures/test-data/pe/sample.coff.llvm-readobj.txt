@@ -1,0 +1,508 @@
+
+File: /out/pe/sample.coff
+Format: COFF-x86-64
+Arch: x86_64
+AddressSize: 64bit
+ImageFileHeader {
+  Machine: IMAGE_FILE_MACHINE_AMD64 (0x8664)
+  SectionCount: 10
+  TimeDateStamp: 2026-05-12 10:43:31 (0x6A030453)
+  PointerToSymbolTable: 0xDF1
+  SymbolCount: 30
+  StringTableSize: 119
+  OptionalHeaderSize: 0
+  Characteristics [ (0x0)
+  ]
+}
+Sections [
+  Section {
+    Number: 1
+    Name: .text (2E 74 65 78 74 00 00 00)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 196
+    PointerToRawData: 0x1A4
+    PointerToRelocations: 0x268
+    PointerToLineNumbers: 0x0
+    RelocationCount: 5
+    LineNumberCount: 0
+    Characteristics [ (0x60500020)
+      IMAGE_SCN_ALIGN_16BYTES (0x500000)
+      IMAGE_SCN_CNT_CODE (0x20)
+      IMAGE_SCN_MEM_EXECUTE (0x20000000)
+      IMAGE_SCN_MEM_READ (0x40000000)
+    ]
+  }
+  Section {
+    Number: 2
+    Name: .data (2E 64 61 74 61 00 00 00)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 16
+    PointerToRawData: 0x29A
+    PointerToRelocations: 0x2AA
+    PointerToLineNumbers: 0x0
+    RelocationCount: 1
+    LineNumberCount: 0
+    Characteristics [ (0xC0400040)
+      IMAGE_SCN_ALIGN_8BYTES (0x400000)
+      IMAGE_SCN_CNT_INITIALIZED_DATA (0x40)
+      IMAGE_SCN_MEM_READ (0x40000000)
+      IMAGE_SCN_MEM_WRITE (0x80000000)
+    ]
+  }
+  Section {
+    Number: 3
+    Name: .bss (2E 62 73 73 00 00 00 00)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 0
+    PointerToRawData: 0x0
+    PointerToRelocations: 0x0
+    PointerToLineNumbers: 0x0
+    RelocationCount: 0
+    LineNumberCount: 0
+    Characteristics [ (0xC0300080)
+      IMAGE_SCN_ALIGN_4BYTES (0x300000)
+      IMAGE_SCN_CNT_UNINITIALIZED_DATA (0x80)
+      IMAGE_SCN_MEM_READ (0x40000000)
+      IMAGE_SCN_MEM_WRITE (0x80000000)
+    ]
+  }
+  Section {
+    Number: 4
+    Name: .xdata (2E 78 64 61 74 61 00 00)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 32
+    PointerToRawData: 0x2B4
+    PointerToRelocations: 0x0
+    PointerToLineNumbers: 0x0
+    RelocationCount: 0
+    LineNumberCount: 0
+    Characteristics [ (0x40300040)
+      IMAGE_SCN_ALIGN_4BYTES (0x300000)
+      IMAGE_SCN_CNT_INITIALIZED_DATA (0x40)
+      IMAGE_SCN_MEM_READ (0x40000000)
+    ]
+  }
+  Section {
+    Number: 5
+    Name: .rdata (2E 72 64 61 74 61 00 00)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 29
+    PointerToRawData: 0x2D4
+    PointerToRelocations: 0x0
+    PointerToLineNumbers: 0x0
+    RelocationCount: 0
+    LineNumberCount: 0
+    Characteristics [ (0x40500040)
+      IMAGE_SCN_ALIGN_16BYTES (0x500000)
+      IMAGE_SCN_CNT_INITIALIZED_DATA (0x40)
+      IMAGE_SCN_MEM_READ (0x40000000)
+    ]
+  }
+  Section {
+    Number: 6
+    Name: .drectve (2E 64 72 65 63 74 76 65)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 43
+    PointerToRawData: 0x2F1
+    PointerToRelocations: 0x0
+    PointerToLineNumbers: 0x0
+    RelocationCount: 0
+    LineNumberCount: 0
+    Characteristics [ (0x100A00)
+      IMAGE_SCN_ALIGN_1BYTES (0x100000)
+      IMAGE_SCN_LNK_INFO (0x200)
+      IMAGE_SCN_LNK_REMOVE (0x800)
+    ]
+  }
+  Section {
+    Number: 7
+    Name: .debug$S (2E 64 65 62 75 67 24 53)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 1012
+    PointerToRawData: 0x31C
+    PointerToRelocations: 0x710
+    PointerToLineNumbers: 0x0
+    RelocationCount: 30
+    LineNumberCount: 0
+    Characteristics [ (0x42300040)
+      IMAGE_SCN_ALIGN_4BYTES (0x300000)
+      IMAGE_SCN_CNT_INITIALIZED_DATA (0x40)
+      IMAGE_SCN_MEM_DISCARDABLE (0x2000000)
+      IMAGE_SCN_MEM_READ (0x40000000)
+    ]
+  }
+  Section {
+    Number: 8
+    Name: .debug$T (2E 64 65 62 75 67 24 54)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 1288
+    PointerToRawData: 0x83C
+    PointerToRelocations: 0x0
+    PointerToLineNumbers: 0x0
+    RelocationCount: 0
+    LineNumberCount: 0
+    Characteristics [ (0x42300040)
+      IMAGE_SCN_ALIGN_4BYTES (0x300000)
+      IMAGE_SCN_CNT_INITIALIZED_DATA (0x40)
+      IMAGE_SCN_MEM_DISCARDABLE (0x2000000)
+      IMAGE_SCN_MEM_READ (0x40000000)
+    ]
+  }
+  Section {
+    Number: 9
+    Name: .pdata (2E 70 64 61 74 61 00 00)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 48
+    PointerToRawData: 0xD44
+    PointerToRelocations: 0xD74
+    PointerToLineNumbers: 0x0
+    RelocationCount: 12
+    LineNumberCount: 0
+    Characteristics [ (0x40300040)
+      IMAGE_SCN_ALIGN_4BYTES (0x300000)
+      IMAGE_SCN_CNT_INITIALIZED_DATA (0x40)
+      IMAGE_SCN_MEM_READ (0x40000000)
+    ]
+  }
+  Section {
+    Number: 10
+    Name: .llvm_addrsig (2F 36 35 00 00 00 00 00)
+    VirtualSize: 0x0
+    VirtualAddress: 0x0
+    RawDataSize: 5
+    PointerToRawData: 0xDEC
+    PointerToRelocations: 0x0
+    PointerToLineNumbers: 0x0
+    RelocationCount: 0
+    LineNumberCount: 0
+    Characteristics [ (0x100800)
+      IMAGE_SCN_ALIGN_1BYTES (0x100000)
+      IMAGE_SCN_LNK_REMOVE (0x800)
+    ]
+  }
+]
+NeededLibraries [
+]
+Relocations [
+  Section (1) .text {
+    0x11 IMAGE_REL_AMD64_REL32 hexana_counter (22)
+    0x5A IMAGE_REL_AMD64_REL32 hexana_add (21)
+    0x6D IMAGE_REL_AMD64_REL32 hexana_square (24)
+    0x7D IMAGE_REL_AMD64_REL32 hexana_message (25)
+    0xBA IMAGE_REL_AMD64_REL32 hexana_dispatch (23)
+  }
+  Section (2) .data {
+    0x8 IMAGE_REL_AMD64_ADDR64 hexana_add (21)
+  }
+  Section (7) .debug$S {
+    0x78 IMAGE_REL_AMD64_SECREL hexana_add (21)
+    0x7C IMAGE_REL_AMD64_SECTION hexana_add (21)
+    0xC4 IMAGE_REL_AMD64_SECREL .text (0)
+    0xC8 IMAGE_REL_AMD64_SECTION .text (0)
+    0xE4 IMAGE_REL_AMD64_SECREL .text (0)
+    0xE8 IMAGE_REL_AMD64_SECTION .text (0)
+    0xF8 IMAGE_REL_AMD64_SECREL hexana_add (21)
+    0xFC IMAGE_REL_AMD64_SECTION hexana_add (21)
+    0x148 IMAGE_REL_AMD64_SECREL hexana_dispatch (23)
+    0x14C IMAGE_REL_AMD64_SECTION hexana_dispatch (23)
+    0x19C IMAGE_REL_AMD64_SECREL .text (0)
+    0x1A0 IMAGE_REL_AMD64_SECTION .text (0)
+    0x1B0 IMAGE_REL_AMD64_SECREL hexana_dispatch (23)
+    0x1B4 IMAGE_REL_AMD64_SECTION hexana_dispatch (23)
+    0x220 IMAGE_REL_AMD64_SECREL hexana_square (24)
+    0x224 IMAGE_REL_AMD64_SECTION hexana_square (24)
+    0x270 IMAGE_REL_AMD64_SECREL .text (0)
+    0x274 IMAGE_REL_AMD64_SECTION .text (0)
+    0x284 IMAGE_REL_AMD64_SECREL hexana_square (24)
+    0x288 IMAGE_REL_AMD64_SECTION hexana_square (24)
+    0x2D4 IMAGE_REL_AMD64_SECREL mainCRTStartup (26)
+    0x2D8 IMAGE_REL_AMD64_SECTION mainCRTStartup (26)
+    0x318 IMAGE_REL_AMD64_SECREL mainCRTStartup (26)
+    0x31C IMAGE_REL_AMD64_SECTION mainCRTStartup (26)
+    0x350 IMAGE_REL_AMD64_SECREL hexana_counter (22)
+    0x354 IMAGE_REL_AMD64_SECTION hexana_counter (22)
+    0x370 IMAGE_REL_AMD64_SECREL hexana_message (25)
+    0x374 IMAGE_REL_AMD64_SECTION hexana_message (25)
+    0x390 IMAGE_REL_AMD64_SECREL hexana_add_ptr (27)
+    0x394 IMAGE_REL_AMD64_SECTION hexana_add_ptr (27)
+  }
+  Section (9) .pdata {
+    0x0 IMAGE_REL_AMD64_ADDR32NB .text (0)
+    0x4 IMAGE_REL_AMD64_ADDR32NB .text (0)
+    0x8 IMAGE_REL_AMD64_ADDR32NB .xdata (6)
+    0xC IMAGE_REL_AMD64_ADDR32NB .text (0)
+    0x10 IMAGE_REL_AMD64_ADDR32NB .text (0)
+    0x14 IMAGE_REL_AMD64_ADDR32NB .xdata (6)
+    0x18 IMAGE_REL_AMD64_ADDR32NB .text (0)
+    0x1C IMAGE_REL_AMD64_ADDR32NB .text (0)
+    0x20 IMAGE_REL_AMD64_ADDR32NB .xdata (6)
+    0x24 IMAGE_REL_AMD64_ADDR32NB .text (0)
+    0x28 IMAGE_REL_AMD64_ADDR32NB .text (0)
+    0x2C IMAGE_REL_AMD64_ADDR32NB .xdata (6)
+  }
+]
+Symbols [
+  Symbol {
+    Name: .text
+    Value: 0
+    Section: .text (1)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 196
+      RelocationCount: 5
+      LineNumberCount: 0
+      Checksum: 0x18B2E930
+      Number: 1
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .data
+    Value: 0
+    Section: .data (2)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 16
+      RelocationCount: 1
+      LineNumberCount: 0
+      Checksum: 0xFDF9F875
+      Number: 2
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .bss
+    Value: 0
+    Section: .bss (3)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 0
+      RelocationCount: 0
+      LineNumberCount: 0
+      Checksum: 0x0
+      Number: 3
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .xdata
+    Value: 0
+    Section: .xdata (4)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 32
+      RelocationCount: 0
+      LineNumberCount: 0
+      Checksum: 0x9EE4757C
+      Number: 4
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .rdata
+    Value: 0
+    Section: .rdata (5)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 29
+      RelocationCount: 0
+      LineNumberCount: 0
+      Checksum: 0x42231C88
+      Number: 5
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .drectve
+    Value: 0
+    Section: .drectve (6)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 43
+      RelocationCount: 0
+      LineNumberCount: 0
+      Checksum: 0xFB9EC2CD
+      Number: 6
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .debug$S
+    Value: 0
+    Section: .debug$S (7)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 1012
+      RelocationCount: 30
+      LineNumberCount: 0
+      Checksum: 0x9F5DE09B
+      Number: 7
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .debug$T
+    Value: 0
+    Section: .debug$T (8)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 1288
+      RelocationCount: 0
+      LineNumberCount: 0
+      Checksum: 0x9009B660
+      Number: 8
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .pdata
+    Value: 0
+    Section: .pdata (9)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 48
+      RelocationCount: 12
+      LineNumberCount: 0
+      Checksum: 0x6F2FAEA0
+      Number: 9
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: .llvm_addrsig
+    Value: 0
+    Section: .llvm_addrsig (10)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 1
+    AuxSectionDef {
+      Length: 5
+      RelocationCount: 0
+      LineNumberCount: 0
+      Checksum: 0xF08980B
+      Number: 10
+      Selection: 0x0
+    }
+  }
+  Symbol {
+    Name: @feat.00
+    Value: 0
+    Section: IMAGE_SYM_ABSOLUTE (-1)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 0
+  }
+  Symbol {
+    Name: hexana_add
+    Value: 0
+    Section: .text (1)
+    BaseType: Null (0x0)
+    ComplexType: Function (0x2)
+    StorageClass: External (0x2)
+    AuxSymbolCount: 0
+  }
+  Symbol {
+    Name: hexana_counter
+    Value: 0
+    Section: .data (2)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: External (0x2)
+    AuxSymbolCount: 0
+  }
+  Symbol {
+    Name: hexana_dispatch
+    Value: 32
+    Section: .text (1)
+    BaseType: Null (0x0)
+    ComplexType: Function (0x2)
+    StorageClass: External (0x2)
+    AuxSymbolCount: 0
+  }
+  Symbol {
+    Name: hexana_square
+    Value: 160
+    Section: .text (1)
+    BaseType: Null (0x0)
+    ComplexType: Function (0x2)
+    StorageClass: Static (0x3)
+    AuxSymbolCount: 0
+  }
+  Symbol {
+    Name: hexana_message
+    Value: 0
+    Section: .rdata (5)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: External (0x2)
+    AuxSymbolCount: 0
+  }
+  Symbol {
+    Name: mainCRTStartup
+    Value: 176
+    Section: .text (1)
+    BaseType: Null (0x0)
+    ComplexType: Function (0x2)
+    StorageClass: External (0x2)
+    AuxSymbolCount: 0
+  }
+  Symbol {
+    Name: hexana_add_ptr
+    Value: 8
+    Section: .data (2)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: External (0x2)
+    AuxSymbolCount: 0
+  }
+  Symbol {
+    Name: .file
+    Value: 0
+    Section: IMAGE_SYM_DEBUG (-2)
+    BaseType: Null (0x0)
+    ComplexType: Null (0x0)
+    StorageClass: File (0x67)
+    AuxSymbolCount: 1
+    AuxFileRecord {
+      FileName: sample.c
+    }
+  }
+]

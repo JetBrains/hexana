@@ -1,0 +1,279 @@
+
+File: /out/macho/sample_cpp-x86_64.o
+Format: Mach-O 64-bit x86-64
+Arch: x86_64
+AddressSize: 64bit
+MachHeader {
+  Magic: Magic64 (0xFEEDFACF)
+  CpuType: X86-64 (0x1000007)
+  CpuSubType: CPU_SUBTYPE_X86_64_ALL (0x3)
+  FileType: Relocatable (0x1)
+  NumOfLoadCommands: 4
+  SizeOfLoadCommands: 1160
+  Flags [ (0x2000)
+    MH_SUBSECTIONS_VIA_SYMBOLS (0x2000)
+  ]
+  Reserved: 0x0
+}
+Sections [
+  Section {
+    Index: 0
+    Name: __text (5F 5F 74 65 78 74 00 00 00 00 00 00 00 00 00 00)
+    Segment: __TEXT (5F 5F 54 45 58 54 00 00 00 00 00 00 00 00 00 00)
+    Address: 0x0
+    Size: 0x19
+    Offset: 1192
+    Alignment: 4
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x800004)
+      PureInstructions (0x800000)
+      SomeInstructions (0x4)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 1
+    Name: __debug_loc (5F 5F 64 65 62 75 67 5F 6C 6F 63 00 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x19
+    Size: 0x6C
+    Offset: 1217
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 2
+    Name: __debug_abbrev (5F 5F 64 65 62 75 67 5F 61 62 62 72 65 76 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x85
+    Size: 0x139
+    Offset: 1325
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 3
+    Name: __debug_info (5F 5F 64 65 62 75 67 5F 69 6E 66 6F 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x1BE
+    Size: 0x176
+    Offset: 1638
+    Alignment: 0
+    RelocationOffset: 0xB50
+    RelocationCount: 6
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 4
+    Name: __debug_str (5F 5F 64 65 62 75 67 5F 73 74 72 00 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x334
+    Size: 0xE0
+    Offset: 2012
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 5
+    Name: __apple_names (5F 5F 61 70 70 6C 65 5F 6E 61 6D 65 73 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x414
+    Size: 0xBC
+    Offset: 2236
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 6
+    Name: __apple_objc (5F 5F 61 70 70 6C 65 5F 6F 62 6A 63 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x4D0
+    Size: 0x24
+    Offset: 2424
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 7
+    Name: __apple_namespac (5F 5F 61 70 70 6C 65 5F 6E 61 6D 65 73 70 61 63)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x4F4
+    Size: 0x3C
+    Offset: 2460
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 8
+    Name: __apple_types (5F 5F 61 70 70 6C 65 5F 74 79 70 65 73 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x530
+    Size: 0x66
+    Offset: 2520
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 9
+    Name: __compact_unwind (5F 5F 63 6F 6D 70 61 63 74 5F 75 6E 77 69 6E 64)
+    Segment: __LD (5F 5F 4C 44 00 00 00 00 00 00 00 00 00 00 00 00)
+    Address: 0x598
+    Size: 0x40
+    Offset: 2624
+    Alignment: 3
+    RelocationOffset: 0xB80
+    RelocationCount: 2
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 10
+    Name: __eh_frame (5F 5F 65 68 5F 66 72 61 6D 65 00 00 00 00 00 00)
+    Segment: __TEXT (5F 5F 54 45 58 54 00 00 00 00 00 00 00 00 00 00)
+    Address: 0x5D8
+    Size: 0x68
+    Offset: 2688
+    Alignment: 3
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Coalesced (0xB)
+    Attributes [ (0x680000)
+      LiveSupport (0x80000)
+      NoTOC (0x400000)
+      StripStaticSyms (0x200000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 11
+    Name: __debug_line (5F 5F 64 65 62 75 67 5F 6C 69 6E 65 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x640
+    Size: 0x65
+    Offset: 2792
+    Alignment: 0
+    RelocationOffset: 0xB90
+    RelocationCount: 1
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+]
+NeededLibraries [
+]
+Relocations [
+  Section __debug_info {
+    0x15D 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0x139 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0x10F 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0x9F 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0x78 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0x22 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+  }
+  Section __compact_unwind {
+    0x20 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+    0x0 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+  }
+  Section __debug_line {
+    0x3C 0 3 0 X86_64_RELOC_UNSIGNED 0 __text
+  }
+]
+Symbols [
+  Symbol {
+    Name: __ZN14hexana_fixture7computeEi (19)
+    Extern
+    Type: Section (0xE)
+    Section: __text (0x1)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x0
+  }
+  Symbol {
+    Name: _hexana_cpp_entry (1)
+    Extern
+    Type: Section (0xE)
+    Section: __text (0x1)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x10
+  }
+]
