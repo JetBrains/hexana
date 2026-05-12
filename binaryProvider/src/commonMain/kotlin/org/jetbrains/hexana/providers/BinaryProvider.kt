@@ -7,6 +7,8 @@ import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.analysis.MonosAnalyzer
 import org.jetbrains.hexana.wasm.analysis.MonosResult
+import org.jetbrains.hexana.wasm.analysis.WasmProposal
+import org.jetbrains.hexana.wasm.analysis.WasmProposalDetector
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageAnalyzer
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageResult
 import org.jetbrains.hexana.wasm.analysis.SizeAnalysisBuilder
@@ -311,6 +313,11 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
         val cg = callGraphResult ?: return@lazy null
         val dom = callGraphDominators ?: return@lazy null
         GarbageAnalyzer(cg, dom, codeOffsets, importFuncCount, bytes, wasmModule).analyze()
+    }
+
+    val usedProposals: Set<WasmProposal> by lazy {
+        val module = wasmModule ?: return@lazy emptySet()
+        WasmProposalDetector.detect(module, bytes)
     }
 
     fun getCodeRecordByIndex(index: Int): WasmCodeRecord? {
