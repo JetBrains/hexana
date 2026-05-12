@@ -43,5 +43,9 @@ Read these files before making structural changes:
 - Add focused server tests in this module for tool argument handling and runtime behavior.
 - Use `src/integrationTest/kotlin` plus `./gradlew :mcp:server:integrationTest` for black-box process tests against the
   installed standalone distribution.
+- Release packaging has two explicit smoke gates:
+  `./gradlew :mcp:assembleMcpPackagingPlain :mcp:server:plainMcpPackagingSmoke` for pre-R8 packages and
+  `./gradlew :mcp:assembleMcpPackaging :mcp:server:obfuscatedMcpPackagingSmoke` for R8-obfuscated release packages.
+  Both gates exercise the standalone runtime plus Claude and Codex wrappers.
 - Run `./gradlew :mcp:server:build` after changes here.
 - If a change crosses the `mcp/core` boundary, also run `./gradlew :mcp:core:build`.

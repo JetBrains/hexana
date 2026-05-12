@@ -1,5 +1,6 @@
 import java.net.InetAddress
 import java.util.*
+import org.gradle.jvm.toolchain.JavaLanguageVersion
 
 val serverPropertiesFile = layout.projectDirectory.file("server/gradle.properties").asFile
 require(serverPropertiesFile.isFile) {
@@ -46,6 +47,24 @@ val jibAllowPublicBind = providers.gradleProperty("hexanaMcpAllowPublicBind")
     .orElse("true")
     .map(::parseRequiredBoolean)
 val standaloneInstallDir = project(":mcp:server").layout.buildDirectory.dir("install/server")
+val plainPackagingDir = layout.buildDirectory.dir("packaging-plain")
+val obfuscatedPackagingDir = layout.buildDirectory.dir("packaging")
+val obfuscatedInstallDir = project(":mcp").layout.buildDirectory.dir("install/server-r8")
+val r8RulesFile = layout.projectDirectory.file("packaging/r8-rules.pro")
+val r8OwnedJarNames = setOf(
+    "analytics-jvm.jar",
+    "binaryProvider-jvm.jar",
+    "core.jar",
+    "dwarf-jvm.jar",
+    "encdec-jvm.jar",
+    "server-$mcpServerVersion.jar",
+    "wasmParser-jvm.jar",
+)
+
+val r8Tool by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
 
 require(jibAllowPublicBind.get() || jibHost.get().isLoopbackHost()) {
     "Non-loopback `hexanaMcpHost` requires `-PhexanaMcpAllowPublicBind=true`."
@@ -90,18 +109,21 @@ fun registerPackagingSync(
     taskName: String,
     packagingDirName: String,
     pluginManifestPath: String,
-    rewriteMcpJson: Boolean = true,
+    runtimeInstallDir: Provider<Directory>,
+    runtimeTask: Any,
+    outputRootDir: Provider<Directory>,
+    rewriteMcpJson: Boolean = false,
 ) = tasks.register<Sync>(taskName) {
-    dependsOn(":mcp:server:installDist")
+    dependsOn(runtimeTask)
     from(layout.projectDirectory.dir("packaging/$packagingDirName")) {
         filesMatching(pluginManifestPath) {
             filter { line -> line.replace(GENERATED_VERSION_TOKEN, mcpServerVersion) }
         }
     }
-    from(standaloneInstallDir) {
+    from(runtimeInstallDir) {
         into("server")
     }
-    into(layout.buildDirectory.dir("packaging/$packagingDirName"))
+    into(outputRootDir.map { it.dir(packagingDirName) })
     if (rewriteMcpJson) {
         doLast {
             val launcherPath = destinationDir.resolve("bin/hexana-mcp").absolutePath
@@ -110,10 +132,154 @@ fun registerPackagingSync(
     }
 }
 
+dependencies {
+    r8Tool(libs.r8)
+}
+
+val copyMcpServerRuntimeForR8 = tasks.register<Sync>("copyMcpServerRuntimeForR8") {
+    group = "distribution"
+    description = "Copies the standalone MCP server runtime before R8 obfuscation."
+    dependsOn(":mcp:server:installDist")
+    from(standaloneInstallDir)
+    into(obfuscatedInstallDir)
+}
+
+val r8ProgramJarFiles = r8OwnedJarNames.map { obfuscatedInstallDir.map { dir -> dir.file("lib/$it") } }
+val r8LibraryJarFiles = obfuscatedInstallDir.map { dir ->
+    dir.dir("lib").asFileTree.matching {
+        exclude(r8OwnedJarNames.map { name -> name })
+    }
+}
+val r8OutputDir = layout.buildDirectory.dir("r8/output")
+val r8JarDir = layout.buildDirectory.dir("r8/jars")
+val r8MappingFile = layout.buildDirectory.file("r8/mapping.txt")
+val obfuscatedRuntimeJarName = "hexana-runtime-obfuscated.jar"
+
+val obfuscateMcpServerRuntime = tasks.register<JavaExec>("obfuscateMcpServerRuntime") {
+    group = "distribution"
+    description = "Runs R8 over Hexana-owned MCP runtime JARs for public plugin ZIPs."
+    dependsOn(copyMcpServerRuntimeForR8)
+
+    javaLauncher.set(javaToolchains.launcherFor {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    })
+    classpath = r8Tool
+    mainClass.set("com.android.tools.r8.R8")
+
+    inputs.file(r8RulesFile)
+    inputs.files(r8ProgramJarFiles)
+    inputs.files(r8LibraryJarFiles)
+    outputs.dir(r8OutputDir)
+    outputs.file(r8MappingFile)
+
+    doFirst {
+        r8OutputDir.get().asFile.deleteRecursively()
+        r8OutputDir.get().asFile.mkdirs()
+        r8MappingFile.get().asFile.parentFile.mkdirs()
+        args(
+            "--classfile",
+            "--release",
+            "--pg-conf",
+            r8RulesFile.asFile.absolutePath,
+            "--output",
+            r8OutputDir.get().asFile.absolutePath,
+            "--pg-map-output",
+            r8MappingFile.get().asFile.absolutePath,
+            "--lib",
+            javaLauncher.get().metadata.installationPath.asFile.absolutePath,
+        )
+        r8LibraryJarFiles.get().files.sortedBy { it.name }.forEach { jar ->
+            args("--lib", jar.absolutePath)
+        }
+        r8ProgramJarFiles.forEach { jar ->
+            args(jar.get().asFile.absolutePath)
+        }
+    }
+
+}
+
+val jarObfuscatedMcpRuntime = tasks.register<Jar>("jarObfuscatedMcpRuntime") {
+    group = "distribution"
+    description = "Packs R8 output into a single obfuscated Hexana runtime JAR."
+    dependsOn(obfuscateMcpServerRuntime)
+    from(r8OutputDir)
+    archiveFileName.set(obfuscatedRuntimeJarName)
+    destinationDirectory.set(r8JarDir)
+}
+
+val installObfuscatedMcpServerRuntime = tasks.register("installObfuscatedMcpServerRuntime") {
+    group = "distribution"
+    description = "Installs the standalone MCP server runtime with obfuscated Hexana-owned classes."
+    dependsOn(copyMcpServerRuntimeForR8, jarObfuscatedMcpRuntime)
+    inputs.file(jarObfuscatedMcpRuntime.flatMap { it.archiveFile })
+    inputs.files(obfuscatedInstallDir.map { dir -> r8OwnedJarNames.map { dir.file("lib/$it") } })
+    outputs.dir(obfuscatedInstallDir)
+
+    doLast {
+        val installDir = obfuscatedInstallDir.get().asFile
+        r8OwnedJarNames.forEach { jarName ->
+            installDir.resolve("lib/$jarName").delete()
+        }
+        jarObfuscatedMcpRuntime.get().archiveFile.get().asFile.copyTo(
+            installDir.resolve("lib/$obfuscatedRuntimeJarName"),
+            overwrite = true,
+        )
+
+        installDir.resolve("bin/server").takeIf { it.isFile }?.let { script ->
+            script.writeText(
+                Regex("(?m)^CLASSPATH=.*$").replace(script.readText()) {
+                    "CLASSPATH=\$APP_HOME/lib/*"
+                }
+            )
+        }
+        installDir.resolve("bin/server.bat").takeIf { it.isFile }?.let { script ->
+            script.writeText(
+                Regex("(?m)^set CLASSPATH=.*$").replace(script.readText()) {
+                    "set CLASSPATH=%APP_HOME%\\\\lib\\\\*"
+                }
+            )
+        }
+    }
+}
+
+val zipObfuscatedMcpServer = tasks.register<Zip>("zipObfuscatedMcpServer") {
+    group = "distribution"
+    description = "Zips the R8-obfuscated standalone MCP server runtime into mcp/build/distributions."
+    dependsOn(installObfuscatedMcpServerRuntime)
+    from(obfuscatedInstallDir) {
+        into("server")
+    }
+    archiveBaseName.set("server")
+    archiveVersion.set(mcpServerVersion)
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+}
+
+val assemblePlainClaudePluginPackage = registerPackagingSync(
+    taskName = "assemblePlainClaudePluginPackage",
+    packagingDirName = "claude-plugin",
+    pluginManifestPath = ".claude-plugin/plugin.json",
+    runtimeInstallDir = standaloneInstallDir,
+    runtimeTask = ":mcp:server:installDist",
+    outputRootDir = plainPackagingDir,
+    rewriteMcpJson = false,
+)
+
+val assemblePlainCodexPluginPackage = registerPackagingSync(
+    taskName = "assemblePlainCodexPluginPackage",
+    packagingDirName = "codex-plugin",
+    pluginManifestPath = ".codex-plugin/plugin.json",
+    runtimeInstallDir = standaloneInstallDir,
+    runtimeTask = ":mcp:server:installDist",
+    outputRootDir = plainPackagingDir,
+)
+
 val assembleClaudePluginPackage = registerPackagingSync(
     taskName = "assembleClaudePluginPackage",
     packagingDirName = "claude-plugin",
     pluginManifestPath = ".claude-plugin/plugin.json",
+    runtimeInstallDir = obfuscatedInstallDir,
+    runtimeTask = "installObfuscatedMcpServerRuntime",
+    outputRootDir = obfuscatedPackagingDir,
     rewriteMcpJson = false,
 )
 
@@ -121,6 +287,9 @@ val assembleCodexPluginPackage = registerPackagingSync(
     taskName = "assembleCodexPluginPackage",
     packagingDirName = "codex-plugin",
     pluginManifestPath = ".codex-plugin/plugin.json",
+    runtimeInstallDir = obfuscatedInstallDir,
+    runtimeTask = "installObfuscatedMcpServerRuntime",
+    outputRootDir = obfuscatedPackagingDir,
 )
 
 tasks.register<Sync>("installRepoLocalClaudePlugin") {
@@ -160,13 +329,15 @@ tasks.register<Sync>("installRepoLocalCodexPlugin") {
 fun registerPluginZip(
     taskName: String,
     assembleTaskName: String,
+    packagingRootDir: Provider<Directory>,
     packagingDirName: String,
     archiveBaseNameValue: String,
+    distributionDirName: String = "distributions",
 ) = tasks.register<Zip>(taskName) {
     group = "distribution"
     description = "Zip the assembled $packagingDirName wrapper into mcp/build/distributions."
     dependsOn(assembleTaskName)
-    from(layout.buildDirectory.dir("packaging/$packagingDirName")) {
+    from(packagingRootDir.map { it.dir(packagingDirName) }) {
         filesMatching(listOf("bin/hexana-mcp", "server/bin/*")) {
             if (!name.endsWith(".bat") && !name.endsWith(".cmd")) {
                 permissions { unix("rwxr-xr-x") }
@@ -175,12 +346,31 @@ fun registerPluginZip(
     }
     archiveBaseName.set(archiveBaseNameValue)
     archiveVersion.set(mcpServerVersion)
-    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+    destinationDirectory.set(layout.buildDirectory.dir(distributionDirName))
 }
+
+val zipPlainClaudePlugin = registerPluginZip(
+    taskName = "zipPlainClaudePlugin",
+    assembleTaskName = "assemblePlainClaudePluginPackage",
+    packagingRootDir = plainPackagingDir,
+    packagingDirName = "claude-plugin",
+    archiveBaseNameValue = "hexana-claude-plugin",
+    distributionDirName = "distributions-plain",
+)
+
+val zipPlainCodexPlugin = registerPluginZip(
+    taskName = "zipPlainCodexPlugin",
+    assembleTaskName = "assemblePlainCodexPluginPackage",
+    packagingRootDir = plainPackagingDir,
+    packagingDirName = "codex-plugin",
+    archiveBaseNameValue = "hexana-codex-plugin",
+    distributionDirName = "distributions-plain",
+)
 
 val zipClaudePlugin = registerPluginZip(
     taskName = "zipClaudePlugin",
     assembleTaskName = "assembleClaudePluginPackage",
+    packagingRootDir = obfuscatedPackagingDir,
     packagingDirName = "claude-plugin",
     archiveBaseNameValue = "hexana-claude-plugin",
 )
@@ -188,14 +378,21 @@ val zipClaudePlugin = registerPluginZip(
 val zipCodexPlugin = registerPluginZip(
     taskName = "zipCodexPlugin",
     assembleTaskName = "assembleCodexPluginPackage",
+    packagingRootDir = obfuscatedPackagingDir,
     packagingDirName = "codex-plugin",
     archiveBaseNameValue = "hexana-codex-plugin",
 )
 
+tasks.register("assembleMcpPackagingPlain") {
+    group = "distribution"
+    description = "Assemble pre-R8 standalone, Claude, and Codex MCP wrapper layouts for smoke testing."
+    dependsOn(":mcp:server:distZip", assemblePlainClaudePluginPackage, assemblePlainCodexPluginPackage, zipPlainClaudePlugin, zipPlainCodexPlugin)
+}
+
 tasks.register("assembleMcpPackaging") {
     group = "distribution"
     description = "Assemble self-contained Claude and Codex MCP wrapper layouts under mcp/build/packaging and their distributable ZIPs."
-    dependsOn(assembleClaudePluginPackage, assembleCodexPluginPackage, zipClaudePlugin, zipCodexPlugin)
+    dependsOn(assembleClaudePluginPackage, assembleCodexPluginPackage, zipClaudePlugin, zipCodexPlugin, zipObfuscatedMcpServer)
 }
 
 val GENERATED_VERSION_TOKEN = "__GENERATED_BY_ASSEMBLY__"

@@ -35,6 +35,12 @@ internal data class StdioLauncher(
             windowsRelativePath = "bin/hexana-mcp.cmd",
             clientName = "hexana-claude-plugin-integration-test",
         )
+        val CodexPluginWrapper = StdioLauncher(
+            installDirSystemProperty = "hexana.integration.codexPluginDir",
+            unixRelativePath = "bin/hexana-mcp",
+            windowsRelativePath = "bin/hexana-mcp.cmd",
+            clientName = "hexana-codex-plugin-integration-test",
+        )
     }
 }
 

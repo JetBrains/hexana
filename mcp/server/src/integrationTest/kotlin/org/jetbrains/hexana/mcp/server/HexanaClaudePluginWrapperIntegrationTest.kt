@@ -24,8 +24,26 @@ class HexanaClaudePluginWrapperIntegrationTest {
 
     @Test
     fun assembledClaudePluginVersionCommandExitsPromptly() = runBlocking {
-        val result = HexanaInstalledStdioClient.runCommand(StdioLauncher.ClaudePluginWrapper, "version")
+        assertVersionCommandExitsPromptly(StdioLauncher.ClaudePluginWrapper)
+    }
 
+    @Test
+    fun assembledCodexPluginVersionCommandExitsPromptly() = runBlocking {
+        assertVersionCommandExitsPromptly(StdioLauncher.CodexPluginWrapper)
+    }
+
+    @Test
+    fun assembledClaudePluginExposesAllToolsOverStdio() = runBlocking {
+        assertWrapperExposesAllToolsOverStdio("Claude", StdioLauncher.ClaudePluginWrapper)
+    }
+
+    @Test
+    fun assembledCodexPluginExposesAllToolsOverStdio() = runBlocking {
+        assertWrapperExposesAllToolsOverStdio("Codex", StdioLauncher.CodexPluginWrapper)
+    }
+
+    private suspend fun assertVersionCommandExitsPromptly(launcher: StdioLauncher) {
+        val result = HexanaInstalledStdioClient.runCommand(launcher, "version")
         assertFalse(
             result.timedOut,
             "Version command timed out. stdout=${result.stdout}, stderr=${result.stderr}, command=${result.command}"
@@ -37,15 +55,14 @@ class HexanaClaudePluginWrapperIntegrationTest {
         )
     }
 
-    @Test
-    fun assembledClaudePluginExposesAllToolsOverStdio() = runBlocking {
+    private suspend fun assertWrapperExposesAllToolsOverStdio(clientLabel: String, launcher: StdioLauncher) {
         KotlinLoggingConfiguration.logStartupMessage = false
-        withInstalledStdioClient(launcher = StdioLauncher.ClaudePluginWrapper) { server ->
-            logger.info("Connected Claude plugin wrapper stdio client")
+        withInstalledStdioClient(launcher = launcher) { server ->
+            logger.info("Connected {} plugin wrapper stdio client", clientLabel)
 
             val tools = server.client.listTools(ListToolsRequest())
             val toolNames = tools.tools.map { it.name }.sorted()
-            logger.info("Claude wrapper tools: {}", toolNames)
+            logger.info("{} wrapper tools: {}", clientLabel, toolNames)
             assertEquals(
                 listOf(
                     "functions_for_indices",
@@ -86,12 +103,12 @@ class HexanaClaudePluginWrapperIntegrationTest {
             )
             assertFalse(summary.isError == true)
             val summaryText = summary.content.single() as TextContent
-            logger.info("Claude wrapper summarize_module payload: {}", summaryText.text)
+            logger.info("{} wrapper summarize_module payload: {}", clientLabel, summaryText.text)
             assertEquals(1, summary.structuredContent?.get("functions")?.jsonPrimitive?.int)
 
             assertTrue(
                 server.stderr.contains("Starting stdio MCP transport"),
-                "Claude plugin wrapper should proxy stdio server logs on stderr. stderr was: ${server.stderr}"
+                "$clientLabel plugin wrapper should proxy stdio server logs on stderr. stderr was: ${server.stderr}"
             )
         }
     }

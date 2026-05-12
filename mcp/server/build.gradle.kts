@@ -138,16 +138,19 @@ tasks.jar {
     }
 }
 
+val plainClaudePluginDir = project(":mcp").layout.buildDirectory.dir("packaging-plain/claude-plugin")
+val plainCodexPluginDir = project(":mcp").layout.buildDirectory.dir("packaging-plain/codex-plugin")
+val obfuscatedServerInstallDir = project(":mcp").layout.buildDirectory.dir("install/server-r8")
+val obfuscatedClaudePluginDir = project(":mcp").layout.buildDirectory.dir("packaging/claude-plugin")
+val obfuscatedCodexPluginDir = project(":mcp").layout.buildDirectory.dir("packaging/codex-plugin")
 val overrideClaudePluginDir = providers.gradleProperty("hexanaClaudePluginDir").orNull
+val overrideCodexPluginDir = providers.gradleProperty("hexanaCodexPluginDir").orNull
 
-tasks.register<Test>("integrationTest") {
-    description = "Runs black-box HTTP and stdio integration tests against the installed standalone MCP server."
-    group = "verification"
-    dependsOn(tasks.named("installDist"))
-    if (overrideClaudePluginDir == null) {
-        dependsOn(":mcp:assembleClaudePluginPackage")
-    }
-    shouldRunAfter(tasks.named("test"))
+fun Test.configureMcpPackageSmoke(
+    serverInstallDir: Provider<Directory>,
+    claudePluginDir: Provider<Directory>,
+    codexPluginDir: Provider<Directory>,
+) {
     testClassesDirs = integrationTestSourceSet.output.classesDirs
     classpath = integrationTestSourceSet.runtimeClasspath
     testLogging {
@@ -156,12 +159,70 @@ tasks.register<Test>("integrationTest") {
     }
     systemProperty(
         "hexana.integration.installDir",
-        layout.buildDirectory.dir("install/${application.applicationName}").get().asFile.absolutePath
+        serverInstallDir.get().asFile.absolutePath
     )
     systemProperty(
         "hexana.integration.claudePluginDir",
-        overrideClaudePluginDir
-            ?: project(":mcp").layout.buildDirectory.dir("packaging/claude-plugin").get().asFile.absolutePath
+        claudePluginDir.get().asFile.absolutePath
+    )
+    systemProperty(
+        "hexana.integration.codexPluginDir",
+        codexPluginDir.get().asFile.absolutePath
+    )
+    filter {
+        includeTestsMatching("*HexanaStdioIntegrationTest")
+        includeTestsMatching("*HexanaHttpIntegrationTest")
+        includeTestsMatching("*HexanaClaudePluginWrapperIntegrationTest")
+    }
+}
+
+tasks.register<Test>("integrationTest") {
+    description = "Runs black-box HTTP and stdio integration tests against the installed standalone MCP server."
+    group = "verification"
+    dependsOn(tasks.named("installDist"))
+    if (overrideClaudePluginDir == null) {
+        dependsOn(":mcp:assemblePlainClaudePluginPackage")
+    }
+    if (overrideCodexPluginDir == null) {
+        dependsOn(":mcp:assemblePlainCodexPluginPackage")
+    }
+    shouldRunAfter(tasks.named("test"))
+    configureMcpPackageSmoke(
+        serverInstallDir = layout.buildDirectory.dir("install/${application.applicationName}"),
+        claudePluginDir = layout.dir(
+            providers.provider {
+                file(overrideClaudePluginDir ?: plainClaudePluginDir.get().asFile.absolutePath)
+            }
+        ),
+        codexPluginDir = layout.dir(
+            providers.provider {
+                file(overrideCodexPluginDir ?: plainCodexPluginDir.get().asFile.absolutePath)
+            }
+        ),
+    )
+}
+
+tasks.register<Test>("plainMcpPackagingSmoke") {
+    description = "Smoke-tests pre-R8 standalone, Claude, and Codex MCP packages."
+    group = "verification"
+    dependsOn(":mcp:assembleMcpPackagingPlain")
+    shouldRunAfter(tasks.named("test"))
+    configureMcpPackageSmoke(
+        serverInstallDir = layout.buildDirectory.dir("install/${application.applicationName}"),
+        claudePluginDir = plainClaudePluginDir,
+        codexPluginDir = plainCodexPluginDir,
+    )
+}
+
+tasks.register<Test>("obfuscatedMcpPackagingSmoke") {
+    description = "Smoke-tests R8-obfuscated standalone, Claude, and Codex MCP packages."
+    group = "verification"
+    dependsOn(":mcp:assembleMcpPackaging")
+    shouldRunAfter(tasks.named("plainMcpPackagingSmoke"))
+    configureMcpPackageSmoke(
+        serverInstallDir = obfuscatedServerInstallDir,
+        claudePluginDir = obfuscatedClaudePluginDir,
+        codexPluginDir = obfuscatedCodexPluginDir,
     )
 }
 

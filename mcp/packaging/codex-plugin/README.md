@@ -5,7 +5,7 @@ This package is the Codex-facing wrapper for the standalone Hexana MCP runtime i
 ## What is bundled
 
 - `.codex-plugin/plugin.json`: required Codex plugin manifest
-- `.mcp.json`: source template rewritten to an absolute launcher path during assembly or repo-local install
+- `.mcp.json`: distributable MCP config that launches `./bin/hexana-mcp` relative to the plugin root
 - `bin/hexana-mcp`: thin launcher that delegates to the bundled standalone server
 - `skills/wasm-inspector/`: bundled Codex skill plus `agents/openai.yaml` metadata
 
@@ -21,7 +21,7 @@ That task:
 
 - installs the assembled plugin to `plugins/hexana/`
 - keeps the committed repo marketplace at `.agents/plugins/marketplace.json`
-- rewrites `.mcp.json` to the absolute `plugins/hexana/bin/hexana-mcp` launcher path
+- rewrites the installed `.mcp.json` to the absolute `plugins/hexana/bin/hexana-mcp` launcher path
 
 After running the task, restart Codex and install `Hexana` from the `Hexana Local` marketplace.
 

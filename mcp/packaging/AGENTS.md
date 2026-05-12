@@ -8,15 +8,33 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
 - Do not duplicate MCP runtime logic here. The executable source of truth stays in `mcp/server`.
 - Wrapper scripts should prefer a bundled `server/bin/server` runtime inside the assembled package.
 - `HEXANA_SERVER_BIN` may override the bundled runtime for local testing.
-- The source `.mcp.json` files in this folder are templates; assembled outputs should rewrite them to an absolute
-  `bin/hexana-mcp` launcher path through `./gradlew :mcp:assembleMcpPackaging`.
+- The source `.mcp.json` files in this folder must be safe for distributable ZIP assembly. Do not let
+  `./gradlew :mcp:assembleMcpPackaging` write local absolute paths into ZIP artifacts.
+- Repo-local Codex install may rewrite `.mcp.json` to an absolute `plugins/hexana/bin/hexana-mcp` launcher path for
+  local testing only.
 - Keep local-first defaults. The packaged wrappers should launch the standalone server in `stdio` mode unless a client
   manifest explicitly requires something else.
+- `release-codex-claude-plugins.sh` owns the Codex/Claude release mechanics: package artifacts, GitHub release asset
+  upload, public bundle validation, marketplace PR publishing, and public-file safety checks. TeamCity should
+  orchestrate branches, credentials, and gates, then call this script instead of duplicating release shell logic in
+  Kotlin DSL.
+- Public Claude/Codex release packages run R8 at build time and ship `server/lib/hexana-runtime-obfuscated.jar`.
+  Do not ship R8 itself, `mcp/build/r8/mapping.txt`, or the pre-obfuscation Hexana-owned runtime jars.
 
 ## Testing
 
-- Run `./gradlew :mcp:assembleMcpPackaging` before smoke-testing assembled wrappers.
-- Do not point clients at the source-tree `.mcp.json` templates; they intentionally contain assembly placeholders.
+- Run `./gradlew :mcp:assembleMcpPackagingPlain :mcp:server:plainMcpPackagingSmoke` to verify the pre-R8 standalone
+  runtime plus Claude and Codex wrappers.
+- Run `./gradlew :mcp:assembleMcpPackaging :mcp:server:obfuscatedMcpPackagingSmoke` before publishing release ZIPs.
+- For R8 rule or obfuscated-runtime layout changes, also run
+  `./gradlew :mcp:server:obfuscatedMcpPackagingSmoke --rerun-tasks`.
+- Release ZIPs must pass `release-codex-claude-plugins.sh`'s artifact security check before any GitHub Release upload.
+  The check fails on local machine paths, internal repository URLs, token names/patterns, private-key markers, source
+  files, private/build path names, R8 mapping output, and pre-obfuscation Hexana runtime jars.
+- For changes to `release-codex-claude-plugins.sh`, run `bash -n mcp/packaging/release-codex-claude-plugins.sh`.
+  Use `DRY_RUN=true` against a disposable public-repo clone or fixture when credentials are available.
+- Do not point clients at source-tree wrapper layouts unless you are explicitly testing packaging templates. Build with
+  `./gradlew :mcp:assembleMcpPackaging` first so manifests and bundled runtime layout match the release artifact.
 - Prefer smoke checks like `mcp/build/packaging/claude-plugin/bin/hexana-mcp version` and
   `mcp/build/packaging/codex-plugin/bin/hexana-mcp version` over ad hoc script edits.
 - For Codex repo-local install-flow changes, run `./gradlew :mcp:installRepoLocalCodexPlugin` and verify the installed
