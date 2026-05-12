@@ -23,6 +23,8 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import org.jetbrains.hexana.shared.detectProposals
+import org.jetbrains.hexana.shared.graalWasmContextOptions
 import org.jetbrains.hexana.wasm.sections.*
 import java.io.File
 import java.io.OutputStream
@@ -69,8 +71,12 @@ private class ExternalGraalWasmCommandLineState(
         val exeName = if (SystemInfo.isWindows) "wasm.exe" else "wasm"
         val wasmLauncher = File(graalVmHome, "bin" + File.separator + exeName).absolutePath
 
+        val wasmFile = File(configuration.wasmFilePath)
+        val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
+
         val input = WasmRunInput(
             wasmFilePath = configuration.wasmFilePath,
+            wasmBytes = wasmBytes,
             programArguments = configuration.programArguments,
             workingDirectory = configuration.workingDirectory,
             exportName = configuration.exportName,
@@ -165,10 +171,19 @@ class GraalWasmProcessHandler(
 
         val targetExport = configuration.exportName.ifBlank { null }
 
+        val proposals = detectProposals(wasmBytes)
+        val proposalOptions = graalWasmContextOptions(proposals)
+
         val contextBuilder = Context.newBuilder("wasm")
             .option("engine.WarnInterpreterOnly", "false")
             .out(stdoutPipe)
             .err(stderrPipe)
+        if (proposalOptions.isNotEmpty()) {
+            contextBuilder.allowExperimentalOptions(true)
+            for ((key, value) in proposalOptions) {
+                contextBuilder.option(key, value)
+            }
+        }
         if (targetExport == null) {
             contextBuilder.arguments("wasm", programArgs.toTypedArray())
         }

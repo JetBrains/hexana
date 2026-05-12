@@ -3,6 +3,11 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import org.jetbrains.hexana.wasm.WasmModule
+import org.jetbrains.hexana.wasm.WasmParser
+import org.jetbrains.hexana.wasm.WasmParseSuccess
+import org.jetbrains.hexana.wasm.analysis.WasmProposal
+import org.jetbrains.hexana.wasm.analysis.WasmProposalDetector
 
 /**
  * Platform-agnostic input for building a Wasm runtime command line.
@@ -127,6 +132,114 @@ fun classifyDependencies(
 }
 
 // ---------------------------------------------------------------------------
+// Proposal detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Detects which WebAssembly proposals are used by the given binary.
+ *
+ * Returns an empty set when [wasmBytes] is `null` or cannot be parsed.
+ */
+fun detectProposals(wasmBytes: ByteArray?): Set<WasmProposal> {
+    if (wasmBytes == null) return emptySet()
+    val buffer = wasmBytes.toCommonByteBuffer()
+    val result = WasmParser().parse(buffer)
+    val module = (result as? WasmParseSuccess)?.wasmModule as? WasmModule ?: return emptySet()
+    return WasmProposalDetector.detect(module, wasmBytes.toCommonByteBuffer())
+}
+
+// ---------------------------------------------------------------------------
+// Proposal flags for Wasmtime
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns Wasmtime CLI flags (`-W` / `-S`) needed to enable support
+ * for the given set of detected proposals.
+ *
+ * Only proposals that require explicit opt-in are included — proposals
+ * enabled by default in modern Wasmtime (e.g. SIMD, bulk memory,
+ * reference types, multi-value, sign-extension, non-trapping float-to-int,
+ * mutable globals, tail-call, GC, function-references, exception-handling,
+ * multi-memory, memory64, relaxed-simd) are omitted because Wasmtime
+ * already enables them.
+ *
+ * The Threads proposal is the notable exception: `wasm_threads` is
+ * gated behind a crate feature that may not be compiled in, and the
+ * WASI `threads` support must be explicitly opted in via `-S threads`.
+ */
+internal fun wasmtimeProposalFlags(proposals: Set<WasmProposal>): List<String> {
+    val flags = mutableListOf<String>()
+    if (WasmProposal.Threads in proposals) {
+        flags.add("-W")
+        flags.add("threads")
+        flags.add("-S")
+        flags.add("threads")
+    }
+    return flags
+}
+
+// ---------------------------------------------------------------------------
+// Proposal flags for WAMR (iwasm)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns iwasm CLI flags needed to enable support for the given
+ * set of detected proposals.
+ *
+ * WAMR has limited CLI surface for proposals. The main flag is
+ * `--max-threads=N` which is required when the module uses the
+ * Threads proposal (it enables the threading runtime).
+ */
+internal fun wamrProposalFlags(proposals: Set<WasmProposal>): List<String> {
+    val flags = mutableListOf<String>()
+    if (WasmProposal.Threads in proposals) {
+        flags.add("--max-threads=4")
+    }
+    return flags
+}
+
+// ---------------------------------------------------------------------------
+// Proposal flags for GraalWasm (external launcher)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns GraalWasm external launcher flags needed to enable support
+ * for the given set of detected proposals.
+ *
+ * GraalWasm uses `--wasm.<Option>=true` flags. The `Threads` option
+ * defaults to `false` and requires `--experimental-options`.
+ */
+internal fun graalWasmProposalFlags(proposals: Set<WasmProposal>): List<String> {
+    val flags = mutableListOf<String>()
+    if (WasmProposal.Threads in proposals) {
+        flags.add("--experimental-options")
+        flags.add("--wasm.Threads=true")
+    }
+    return flags
+}
+
+// ---------------------------------------------------------------------------
+// Proposal context options for embedded GraalWasm
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns GraalWasm context option key-value pairs needed to enable
+ * support for the given set of detected proposals when running
+ * GraalWasm in-process via the Polyglot API.
+ *
+ * The caller should apply these via `Context.Builder.option(key, value)`
+ * and, when the list is non-empty, also call
+ * `Context.Builder.allowExperimentalOptions(true)`.
+ */
+fun graalWasmContextOptions(proposals: Set<WasmProposal>): List<Pair<String, String>> {
+    val options = mutableListOf<Pair<String, String>>()
+    if (WasmProposal.Threads in proposals) {
+        options.add("wasm.Threads" to "true")
+    }
+    return options
+}
+
+// ---------------------------------------------------------------------------
 // Argument list splitter (shell-like)
 // ---------------------------------------------------------------------------
 
@@ -188,6 +301,11 @@ fun buildWasmtimeRunArgs(
 ): WasmCommandLine {
     val args = mutableListOf<String>()
     args.add("run")
+
+    // Inject proposal-specific flags before user options so that user
+    // options can override them if needed.
+    val proposals = detectProposals(input.wasmBytes)
+    args.addAll(wasmtimeProposalFlags(proposals))
 
     val options = input.runtimeOptions.trim()
     if (options.isNotEmpty()) {
@@ -252,6 +370,11 @@ fun buildWasmtimeDebugArgs(
     args.add("-O")
     args.add("opt-level=0")
 
+    // Inject proposal-specific flags before user options so that user
+    // options can override them if needed.
+    val proposals = detectProposals(input.wasmBytes)
+    args.addAll(wasmtimeProposalFlags(proposals))
+
     val options = input.runtimeOptions.trim()
     if (options.isNotEmpty()) {
         args.addAll(splitOptions(options))
@@ -315,6 +438,11 @@ fun buildWamrRunArgs(
         generateWamrStubFiles(wasmBytes, stubFileWriter)
     } else null
 
+    // Inject proposal-specific flags before user options so that user
+    // options can override them if needed.
+    val proposals = detectProposals(wasmBytes)
+    args.addAll(wamrProposalFlags(proposals))
+
     val options = input.runtimeOptions.trim()
     if (options.isNotEmpty()) {
         args.addAll(splitOptions(options))
@@ -361,6 +489,11 @@ fun buildWamrDebugArgs(
 
     // Enable debug server
     args.add("-g=$host:$port")
+
+    // Inject proposal-specific flags before user options so that user
+    // options can override them if needed.
+    val proposals = detectProposals(wasmBytes)
+    args.addAll(wamrProposalFlags(proposals))
 
     val options = input.runtimeOptions.trim()
     if (options.isNotEmpty()) {
@@ -421,6 +554,10 @@ fun generateWamrStubFiles(
  */
 fun buildGraalWasmRunArgs(input: WasmRunInput): WasmCommandLine {
     val args = mutableListOf<String>()
+
+    // Inject proposal-specific flags before other options.
+    val proposals = detectProposals(input.wasmBytes)
+    args.addAll(graalWasmProposalFlags(proposals))
 
     val targetExport = input.exportName.ifBlank { null }
     if (targetExport != null) {

@@ -1,7 +1,9 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.wasm.analysis.WasmProposal
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -273,6 +275,213 @@ class WasmRuntimeCommandLineTest {
         )
         val result = buildGraalWasmRunArgs(input)
         assertEquals("/some/dir", result.workingDirectory)
+    }
+
+    // -----------------------------------------------------------------------
+    // Proposal flags
+    // -----------------------------------------------------------------------
+
+    /**
+     * Builds a minimal valid Wasm module with a shared memory, which
+     * triggers the [WasmProposal.Threads] proposal.
+     *
+     * Binary layout:
+     *   magic + version (8 bytes)
+     *   memory section (id=5): 1 memory with shared + max flags
+     *     flags = 0x03 (has-max | shared), min = 1, max = 1
+     */
+    private fun buildSharedMemoryWasm(): ByteArray {
+        val writer = WasmBinaryWriter()
+        // Wasm magic
+        writer.writeBytes(byteArrayOf(0x00, 0x61, 0x73, 0x6D))
+        // Wasm version 1
+        writer.writeBytes(byteArrayOf(0x01, 0x00, 0x00, 0x00))
+        // Memory section (id = 5)
+        val memContent = WasmBinaryWriter()
+        memContent.writeULEB128(1)    // count = 1 memory
+        memContent.writeByte(0x03)    // flags: has-max(0x01) | shared(0x02)
+        memContent.writeULEB128(1)    // min = 1 page
+        memContent.writeULEB128(1)    // max = 1 page
+        writer.writeSection(5, memContent.toByteArray())
+        return writer.toByteArray()
+    }
+
+    /**
+     * Builds a minimal valid Wasm module (just magic + version) that
+     * uses no special proposals.
+     */
+    private fun buildMvpWasm(): ByteArray {
+        val writer = WasmBinaryWriter()
+        writer.writeBytes(byteArrayOf(0x00, 0x61, 0x73, 0x6D))
+        writer.writeBytes(byteArrayOf(0x01, 0x00, 0x00, 0x00))
+        return writer.toByteArray()
+    }
+
+    @Test
+    fun detectProposalsReturnsEmptyForNull() {
+        assertTrue(detectProposals(null).isEmpty())
+    }
+
+    @Test
+    fun detectProposalsReturnsEmptyForMvpModule() {
+        val proposals = detectProposals(buildMvpWasm())
+        assertFalse(WasmProposal.Threads in proposals)
+    }
+
+    @Test
+    fun detectProposalsDetectsThreads() {
+        val proposals = detectProposals(buildSharedMemoryWasm())
+        assertTrue(WasmProposal.Threads in proposals)
+    }
+
+    @Test
+    fun wasmtimeProposalFlagsEmptyForMvp() {
+        val flags = wasmtimeProposalFlags(emptySet())
+        assertTrue(flags.isEmpty())
+    }
+
+    @Test
+    fun wasmtimeProposalFlagsIncludesThreads() {
+        val flags = wasmtimeProposalFlags(setOf(WasmProposal.Threads))
+        assertTrue(flags.contains("-W"))
+        assertTrue(flags.contains("threads"))
+        assertTrue(flags.contains("-S"))
+    }
+
+    @Test
+    fun wamrProposalFlagsIncludesMaxThreads() {
+        val flags = wamrProposalFlags(setOf(WasmProposal.Threads))
+        assertTrue(flags.contains("--max-threads=4"))
+    }
+
+    @Test
+    fun wamrProposalFlagsEmptyForMvp() {
+        val flags = wamrProposalFlags(emptySet())
+        assertTrue(flags.isEmpty())
+    }
+
+    @Test
+    fun graalWasmProposalFlagsIncludesThreads() {
+        val flags = graalWasmProposalFlags(setOf(WasmProposal.Threads))
+        assertTrue(flags.contains("--experimental-options"))
+        assertTrue(flags.contains("--wasm.Threads=true"))
+    }
+
+    @Test
+    fun graalWasmProposalFlagsEmptyForMvp() {
+        val flags = graalWasmProposalFlags(emptySet())
+        assertTrue(flags.isEmpty())
+    }
+
+    @Test
+    fun graalWasmContextOptionsIncludesThreads() {
+        val options = graalWasmContextOptions(setOf(WasmProposal.Threads))
+        assertTrue(options.any { it.first == "wasm.Threads" && it.second == "true" })
+    }
+
+    @Test
+    fun graalWasmContextOptionsEmptyForMvp() {
+        val options = graalWasmContextOptions(emptySet())
+        assertTrue(options.isEmpty())
+    }
+
+    @Test
+    fun wasmtimeRunArgsIncludesThreadsFlagsForSharedMemory() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildSharedMemoryWasm(),
+        )
+        val result = buildWasmtimeRunArgs(input)
+        assertTrue(result.arguments.contains("-W"), "Should contain -W flag")
+        assertTrue(result.arguments.contains("threads"), "Should contain threads")
+        assertTrue(result.arguments.contains("-S"), "Should contain -S flag")
+    }
+
+    @Test
+    fun wasmtimeRunArgsNoProposalFlagsForMvp() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildMvpWasm(),
+        )
+        val result = buildWasmtimeRunArgs(input)
+        // Should only have "run" and the wasm file path
+        assertEquals(listOf("run", "/mod.wasm"), result.arguments)
+    }
+
+    @Test
+    fun wasmtimeDebugArgsIncludesThreadsFlags() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildSharedMemoryWasm(),
+        )
+        val result = buildWasmtimeDebugArgs(input)
+        assertTrue(result.arguments.contains("-W"), "Debug should contain -W flag")
+        assertTrue(result.arguments.contains("threads"), "Debug should contain threads")
+        assertTrue(result.arguments.contains("-S"), "Debug should contain -S flag")
+    }
+
+    @Test
+    fun wamrRunArgsIncludesMaxThreadsForSharedMemory() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildSharedMemoryWasm(),
+        )
+        val result = buildWamrRunArgs(input)
+        assertTrue(result.arguments.contains("--max-threads=4"), "Should contain --max-threads=4")
+    }
+
+    @Test
+    fun wamrRunArgsNoProposalFlagsForMvp() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildMvpWasm(),
+        )
+        val result = buildWamrRunArgs(input)
+        assertEquals(listOf("/mod.wasm"), result.arguments)
+    }
+
+    @Test
+    fun wamrDebugArgsIncludesMaxThreadsForSharedMemory() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildSharedMemoryWasm(),
+        )
+        val result = buildWamrDebugArgs(input)
+        assertTrue(result.commandLine.arguments.contains("--max-threads=4"), "Debug should contain --max-threads=4")
+    }
+
+    @Test
+    fun graalWasmRunArgsIncludesThreadsFlagsForSharedMemory() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildSharedMemoryWasm(),
+        )
+        val result = buildGraalWasmRunArgs(input)
+        assertTrue(result.arguments.contains("--experimental-options"), "Should contain --experimental-options")
+        assertTrue(result.arguments.contains("--wasm.Threads=true"), "Should contain --wasm.Threads=true")
+    }
+
+    @Test
+    fun graalWasmRunArgsNoProposalFlagsForMvp() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildMvpWasm(),
+        )
+        val result = buildGraalWasmRunArgs(input)
+        assertEquals(listOf("/mod.wasm"), result.arguments)
+    }
+
+    @Test
+    fun proposalFlagsBeforeUserOptions() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            wasmBytes = buildSharedMemoryWasm(),
+            runtimeOptions = "--custom-flag",
+        )
+        val result = buildWasmtimeRunArgs(input)
+        val threadsIdx = result.arguments.indexOf("threads")
+        val customIdx = result.arguments.indexOf("--custom-flag")
+        assertTrue(threadsIdx < customIdx, "Proposal flags should come before user options")
     }
 
     // -----------------------------------------------------------------------
