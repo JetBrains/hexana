@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
-import { execFileSync } from "child_process";
+import { execFileSync, spawn, ChildProcess } from "child_process";
 import { extensionLib, getRuntimeCommand } from "./WasmRunConfigurations";
 import type * as ExtensionLib from "./extension-lib";
 
@@ -171,13 +171,252 @@ class WasmDebugConfigurationProvider implements vscode.DebugConfigurationProvide
 }
 
 /**
+ * Output channel for debug adapter diagnostic logging.
+ */
+let debugOutputChannel: vscode.OutputChannel | undefined;
+
+function getDebugOutputChannel(): vscode.OutputChannel {
+    if (!debugOutputChannel) {
+        debugOutputChannel = vscode.window.createOutputChannel("Hexana Wasm Debug");
+    }
+    return debugOutputChannel;
+}
+
+/**
+ * DAP message interface used for JSON-level manipulation.
+ * The actual wire format adds `Content-Length` headers.
+ */
+interface DapMessage {
+    seq: number;
+    type: string;
+    command?: string;
+    request_seq?: number;
+    event?: string;
+    success?: boolean;
+    body?: Record<string, unknown>;
+    arguments?: Record<string, unknown>;
+    [key: string]: unknown;
+}
+
+/**
+ * An inline debug adapter that proxies DAP messages between VS Code
+ * and an lldb-dap child process.  It intercepts `scopes` responses
+ * from lldb-dap and injects an `expression -- __vmctx->set()` call
+ * before forwarding the response to VS Code.
+ *
+ * The key insight is that lldb-dap's `ScopesRequestHandler` selects
+ * the correct frame (`SetSelectedFrame`) when processing a scopes
+ * request.  By waiting for the scopes RESPONSE (meaning the frame
+ * is already selected), the injected LLDB `expression` command runs
+ * on the correct Wasm frame — matching IntelliJ's
+ * `WasmStackFrame.computeChildren()` which does `frame select` then
+ * `expression -- __vmctx->set()` then `frame variable`.
+ *
+ * The VM context is initialized on-demand before variable inspection,
+ * not on every stop (which would interfere with breakpoint
+ * resolution).
+ */
+class LldbDapProxy implements vscode.DebugAdapter {
+    private readonly emitter = new vscode.EventEmitter<vscode.DebugProtocolMessage>();
+    readonly onDidSendMessage: vscode.Event<vscode.DebugProtocolMessage> = this.emitter.event;
+
+    private process: ChildProcess | undefined;
+    private rawBuffer = Buffer.alloc(0);
+    private nextSeq = 100_000;
+    /**
+     * Maps the seq of an injected `__vmctx->set()` evaluate
+     * request to the original `scopes` response that was
+     * deferred until the evaluate completes.
+     */
+    private readonly pendingVmCtx = new Map<number, DapMessage>();
+    private readonly log = getDebugOutputChannel();
+    private isWasmtime: boolean;
+
+    constructor(
+        private readonly lldbDapPath: string,
+        private readonly cliArgs: string[],
+        isWasmtime: boolean,
+    ) {
+        this.isWasmtime = isWasmtime;
+    }
+
+    /**
+     * Called by VS Code to send a DAP message (request) to the
+     * debug adapter.
+     */
+    handleMessage(message: vscode.DebugProtocolMessage): void {
+        const msg = message as unknown as DapMessage;
+        this.log.appendLine(`[DAP →] ${msg.type}: ${msg.command || msg.event || ""} ${JSON.stringify(msg.arguments || msg.body || "").substring(0, 200)}`);
+
+        this.sendToLldbDap(msg);
+    }
+
+    /**
+     * Starts the lldb-dap child process.
+     */
+    start(): void {
+        this.log.appendLine(`[Hexana] Starting lldb-dap: ${this.lldbDapPath} ${this.cliArgs.join(" ")}`);
+        this.process = spawn(this.lldbDapPath, this.cliArgs, {
+            stdio: ["pipe", "pipe", "pipe"],
+        });
+
+        this.process.stdout?.on("data", (chunk: Buffer) => {
+            this.onStdoutData(chunk);
+        });
+
+        this.process.stderr?.on("data", (chunk: Buffer) => {
+            this.log.appendLine(`[lldb-dap stderr] ${chunk.toString()}`);
+        });
+
+        this.process.on("error", (err) => {
+            this.log.appendLine(`[DAP ERROR] ${err.message}`);
+        });
+
+        this.process.on("exit", (code, signal) => {
+            this.log.appendLine(`[DAP EXIT] code=${code}, signal=${signal}`);
+        });
+    }
+
+    dispose(): void {
+        if (this.process) {
+            this.process.kill();
+            this.process = undefined;
+        }
+        this.emitter.dispose();
+    }
+
+    /**
+     * Serializes a DAP message and writes it to lldb-dap's stdin.
+     */
+    private sendToLldbDap(msg: DapMessage): void {
+        const json = JSON.stringify(msg);
+        const header = `Content-Length: ${Buffer.byteLength(json, "utf-8")}\r\n\r\n`;
+        this.process?.stdin?.write(header + json, "utf-8");
+    }
+
+    /**
+     * Accumulates stdout data from lldb-dap, parses complete DAP
+     * messages, and forwards them to VS Code (or handles injected
+     * responses internally).
+     */
+    private onStdoutData(chunk: Buffer): void {
+        this.rawBuffer = Buffer.concat([this.rawBuffer, chunk]);
+
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            const headerEnd = this.rawBuffer.indexOf("\r\n\r\n");
+            if (headerEnd < 0) break;
+
+            const headerStr = this.rawBuffer.subarray(0, headerEnd).toString("utf-8");
+            const match = headerStr.match(/Content-Length:\s*(\d+)/i);
+            if (!match) {
+                // Malformed header — skip past it
+                this.rawBuffer = this.rawBuffer.subarray(headerEnd + 4);
+                continue;
+            }
+
+            const contentLength = parseInt(match[1], 10);
+            const totalLength = headerEnd + 4 + contentLength;
+            if (this.rawBuffer.length < totalLength) break;
+
+            const body = this.rawBuffer.subarray(headerEnd + 4, totalLength).toString("utf-8");
+            this.rawBuffer = this.rawBuffer.subarray(totalLength);
+
+            let parsed: DapMessage;
+            try {
+                parsed = JSON.parse(body) as DapMessage;
+            } catch {
+                continue;
+            }
+
+            this.handleLldbDapMessage(parsed);
+        }
+    }
+
+    /**
+     * Processes a parsed DAP message from lldb-dap.
+     *
+     * For Wasmtime sessions, intercepts `scopes` responses to
+     * inject `__vmctx->set()` before VS Code sees the response.
+     *
+     * The ScopesRequestHandler in lldb-dap selects the correct
+     * frame (`SetSelectedFrame`) when processing the scopes
+     * request.  By waiting until the scopes RESPONSE comes back,
+     * we know the frame is already selected.  We then inject
+     * `expression -- __vmctx->set()` (via the backtick-prefixed
+     * "repl" context, which forces the LLDB CLI command path
+     * matching IntelliJ's `LldbCommunicator`) to initialize
+     * Wasmtime's VM context.  The deferred scopes response is
+     * forwarded to VS Code only after the evaluate completes,
+     * ensuring the VM context is ready before VS Code sends any
+     * `variables` requests.
+     *
+     * See: https://docs.wasmtime.dev/examples-debugging-native-debugger.html
+     */
+    private handleLldbDapMessage(msg: DapMessage): void {
+        // Check if this is a response to our injected
+        // __vmctx->set() evaluate request.
+        if (
+            msg.type === "response" &&
+            msg.request_seq !== undefined &&
+            this.pendingVmCtx.has(msg.request_seq)
+        ) {
+            const deferredScopesResponse = this.pendingVmCtx.get(msg.request_seq)!;
+            this.pendingVmCtx.delete(msg.request_seq);
+
+            this.log.appendLine(
+                `[Hexana] __vmctx->set() response (seq=${msg.request_seq}, success=${msg.success}, ` +
+                `result=${JSON.stringify((msg.body as Record<string, unknown>)?.result ?? "").substring(0, 200)}); ` +
+                `forwarding deferred scopes response (seq=${deferredScopesResponse.request_seq})`,
+            );
+            // Now forward the original scopes response to VS Code.
+            this.emitter.fire(deferredScopesResponse as unknown as vscode.DebugProtocolMessage);
+            return;
+        }
+
+        // For Wasmtime sessions, intercept successful scopes
+        // responses.  At this point lldb-dap has already selected
+        // the frame, so the LLDB CLI `expression` command will
+        // execute on the correct Wasm frame.
+        if (
+            this.isWasmtime &&
+            msg.type === "response" &&
+            msg.command === "scopes" &&
+            msg.success
+        ) {
+            const vmCtxSeq = this.nextSeq++;
+            const evalRequest: DapMessage = {
+                seq: vmCtxSeq,
+                type: "request",
+                command: "evaluate",
+                arguments: {
+                    expression: "`expression -- __vmctx->set()",
+                    context: "repl",
+                },
+            };
+            this.pendingVmCtx.set(vmCtxSeq, msg);
+            this.log.appendLine(
+                `[Hexana] Scopes response received; injecting __vmctx->set() ` +
+                `(seq=${vmCtxSeq}) before forwarding scopes response`,
+            );
+            this.sendToLldbDap(evalRequest);
+            return;
+        }
+
+        this.log.appendLine(`[DAP ←] ${msg.type}: ${msg.command || msg.event || ""} success=${msg.success ?? ""} ${JSON.stringify(msg.body || "").substring(0, 200)}`);
+        this.emitter.fire(msg as unknown as vscode.DebugProtocolMessage);
+    }
+}
+
+/**
  * A VS Code `DebugAdapterDescriptorFactory` that launches `lldb-dap`
  * as the debug adapter for Wasmtime debugging.
  *
  * For Wasmtime:
- *   `lldb-dap` is launched directly. The launch configuration passes
- *   wasmtime as the program with debug-info flags, and the .wasm file
- *   as an argument.
+ *   An `LldbDapProxy` is returned as an inline implementation.
+ *   The proxy spawns lldb-dap as a child process and intercepts DAP
+ *   messages to inject `__vmctx->set()` before variable inspection,
+ *   matching the IntelliJ plugin's on-demand approach.
  *
  * For WAMR:
  *   `iwasm -g=host:port module.wasm` is started as a separate process,
@@ -220,6 +459,15 @@ class WasmDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
                 "--pre-init-command",
                 "settings set plugin.jit-loader.gdb.enable on",
             );
+        }
+
+        // For Wasmtime, use the inline proxy adapter so we can
+        // intercept DAP messages and inject __vmctx->set() on
+        // demand before variable inspection.
+        if (runtime === "wasmtime") {
+            const proxy = new LldbDapProxy(lldbDapPath, args, true);
+            proxy.start();
+            return new vscode.DebugAdapterInlineImplementation(proxy);
         }
 
         return new vscode.DebugAdapterExecutable(lldbDapPath, args);
@@ -329,30 +577,41 @@ class WasmDebugAdapterTracker implements vscode.DebugAdapterTracker {
                         "settings set plugin.jit-loader.gdb.enable on",
                     );
                     args.initCommands = initCmds;
+                }
 
-                    // On macOS/ARM64, Wasmtime JIT emits 4-byte `brk`
-                    // (trap) instructions at breakpoint sites.  When
-                    // LLDB stops on such a trap the PC still points at
-                    // the `brk`; a plain `continue` would re-execute
-                    // the same trap, causing an infinite
-                    // EXC_BREAKPOINT loop.
-                    //
-                    // The stopCommands below run after every stop and
-                    // advance the PC past the 4-byte `brk` when the
-                    // current instruction is indeed a trap.  The `?`
-                    // prefix silences console output on success.
-                    if (os.arch() === "arm64") {
-                        const stopCmds =
-                            (args.stopCommands as string[] | undefined) || [];
-                        stopCmds.push(
-                            "?script import lldb; t = lldb.debugger.GetSelectedTarget().GetProcess().GetSelectedThread(); " +
-                            "f = t.GetSelectedFrame(); " +
-                            "err = lldb.SBError(); " +
-                            "inst = f.GetThread().GetProcess().ReadUnsignedFromMemory(f.GetPC(), 4, err); " +
-                            "f.SetPC(f.GetPC() + 4) if err.Success() and (inst & 0xFFE0001F) == 0xD4200000 else None",
-                        );
-                        args.stopCommands = stopCmds;
-                    }
+                // On macOS/ARM64, Wasmtime JIT emits 4-byte `brk`
+                // (trap) instructions at breakpoint sites.  When
+                // LLDB stops on such a trap the PC still points at
+                // the `brk`; a plain `continue` would re-execute
+                // the same trap, causing an infinite
+                // EXC_BREAKPOINT loop.
+                //
+                // The stopCommands below run after every stop and
+                // advance the PC past the 4-byte `brk` when the
+                // current instruction is indeed a trap.  The `?`
+                // prefix silences console output on success.
+                //
+                // Note: __vmctx->set() is NOT placed here — running
+                // `expression` in stopCommands interferes with
+                // breakpoint resolution.  Instead, the LldbDapProxy
+                // intercepts scopes responses and injects
+                // __vmctx->set() after the frame is selected but
+                // before variables are requested (matching
+                // IntelliJ's approach).
+                if (
+                    os.platform() === "darwin" &&
+                    os.arch() === "arm64"
+                ) {
+                    const stopCmds =
+                        (args.stopCommands as string[] | undefined) || [];
+                    stopCmds.push(
+                        "?script import lldb; t = lldb.debugger.GetSelectedTarget().GetProcess().GetSelectedThread(); " +
+                        "f = t.GetSelectedFrame(); " +
+                        "err = lldb.SBError(); " +
+                        "inst = f.GetThread().GetProcess().ReadUnsignedFromMemory(f.GetPC(), 4, err); " +
+                        "f.SetPC(f.GetPC() + 4) if err.Success() and (inst & 0xFFE0001F) == 0xD4200000 else None",
+                    );
+                    args.stopCommands = stopCmds;
                 }
 
                 message.arguments = args;
