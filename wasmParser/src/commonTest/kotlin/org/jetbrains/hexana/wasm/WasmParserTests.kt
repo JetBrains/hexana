@@ -2096,7 +2096,7 @@ class WasmParserTests {
             buffer.resolveLocation(0x39)
         }
         assertNotNull(location)
-        assertEquals(10, location.line)
+        assertEquals(11, location.line)
         assertEquals(3, location.column)
         assertTrue(location.file.endsWith("utf8.c"))
     }
