@@ -158,9 +158,10 @@ export interface RuntimePickerResult {
  * Shows a VS Code QuickPick to let the user choose a runtime and action.
  *
  * When [isComponent] is true, only runtimes that support the Component
- * Model are offered and debug options are hidden (component debugging
- * is not yet supported). The picker also includes a "Configure Runtimes…"
- * item that opens the Hexana settings page.
+ * Model are offered for running (Wasmtime only); debugging is available
+ * via Wasmtime for both core and component modules, while WAMR debugging
+ * is limited to core modules. The picker also includes a "Configure
+ * Runtimes…" item that opens the Hexana settings page.
  *
  * Returns the chosen runtime and action, or `undefined` if the user
  * dismissed the picker.
@@ -194,14 +195,14 @@ export async function showRuntimePicker(
         });
     }
 
-    // Debug options — only Wasmtime and WAMR support debugging, and
-    // component-model debugging is not yet available.
+    // Debug options — Wasmtime supports debugging for both core and
+    // component modules; WAMR only supports core modules.
+    items.push({
+        label: "$(bug) Debug with Wasmtime",
+        runtime: "wasmtime",
+        action: "debug",
+    });
     if (!isComponent) {
-        items.push({
-            label: "$(bug) Debug with Wasmtime",
-            runtime: "wasmtime",
-            action: "debug",
-        });
         items.push({
             label: "$(bug) Debug with WAMR",
             runtime: "wamr",
@@ -488,6 +489,19 @@ export async function runExport(
                 `The current runtime is '${runtime}'. Falling back to Wasmtime.`,
             );
         }
+        if (action === "debug") {
+            const componentImports = message.componentImports || [];
+            const effectiveWasmPath = composeComponentDependencies(filePath, componentImports);
+            await launchDebugSession(
+                filePath,
+                "wasmtime",
+                message.programArgs ?? "",
+                message.exportName ?? "",
+                message.invokeArgs ?? "",
+                effectiveWasmPath !== filePath ? effectiveWasmPath : undefined,
+            );
+            return;
+        }
         runComponentExport(document, message);
         return;
     }
@@ -559,6 +573,7 @@ async function launchDebugSession(
     programArgs: string,
     exportName: string = "",
     invokeArgs: string = "",
+    effectiveWasmPath?: string,
 ): Promise<void> {
     if (runtime !== "wasmtime" && runtime !== "wamr") {
         vscode.window.showErrorMessage(
@@ -576,10 +591,59 @@ async function launchDebugSession(
         programArgs,
         exportName,
         invokeArgs,
+        ...(effectiveWasmPath ? { effectiveWasmPath } : {}),
     };
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     await vscode.debug.startDebugging(workspaceFolder, debugConfig);
+}
+
+/**
+ * Resolves component dependencies from the filesystem and composes
+ * them using `wasm-tools compose` or `wac plug`.
+ *
+ * Returns the path to the composed `.wasm` file when composition
+ * succeeds, or the original [filePath] when no dependencies are
+ * found or composition fails (a warning is shown to the user in
+ * the latter case).
+ */
+function composeComponentDependencies(
+    filePath: string,
+    componentImports: string[],
+): string {
+    if (!extensionLib) {
+        return filePath;
+    }
+
+    const scanRoots = buildScanRoots(filePath);
+    const resolution = extensionLib.resolveAllDependencies(
+        componentImports, scanRoots, filePath, nodeFileSystemAccess,
+    );
+    const depNames: string[] = [];
+    const depPaths: string[] = [];
+    for (const dep of resolution.resolved) {
+        depNames.push(dep.importName);
+        depPaths.push(dep.filePath);
+    }
+
+    if (depNames.length === 0) {
+        return filePath;
+    }
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hexana-wac-compose-"));
+    const composeResult = extensionLib.composeComponents(
+        filePath, depNames, depPaths, tempDir,
+        nodeProcessRunner, nodeToolResolver, nodeFileSystemAccess,
+    );
+    if (composeResult.composed && composeResult.wasmPath) {
+        return composeResult.wasmPath;
+    }
+    if (composeResult.error) {
+        vscode.window.showWarningMessage(
+            `Component composition failed: ${composeResult.error}. Running original file.`,
+        );
+    }
+    return filePath;
 }
 
 /**
@@ -606,35 +670,7 @@ function runComponentExport(
 
     const filePath = document.uri.fsPath;
     const componentImports = message.componentImports || [];
-
-    // Resolve dependencies using the Kotlin/JS library
-    const scanRoots = buildScanRoots(filePath);
-    const resolution = extensionLib.resolveAllDependencies(
-        componentImports, scanRoots, filePath, nodeFileSystemAccess,
-    );
-    const depNames: string[] = [];
-    const depPaths: string[] = [];
-    for (const dep of resolution.resolved) {
-        depNames.push(dep.importName);
-        depPaths.push(dep.filePath);
-    }
-
-    let effectiveWasmPath = filePath;
-
-    if (depNames.length > 0) {
-        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hexana-wac-compose-"));
-        const composeResult = extensionLib.composeComponents(
-            filePath, depNames, depPaths, tempDir,
-            nodeProcessRunner, nodeToolResolver, nodeFileSystemAccess,
-        );
-        if (composeResult.composed && composeResult.wasmPath) {
-            effectiveWasmPath = composeResult.wasmPath;
-        } else if (composeResult.error) {
-            vscode.window.showWarningMessage(
-                `Component composition failed: ${composeResult.error}. Running original file.`,
-            );
-        }
-    }
+    const effectiveWasmPath = composeComponentDependencies(filePath, componentImports);
 
     // Component-model runs always use Wasmtime
     const cmdLine = extensionLib.buildWasmtimeCommandLine(

@@ -1186,8 +1186,19 @@ function buildWasmtimeLaunchConfig(config: vscode.DebugConfiguration): Record<st
     const wasmBytes = readWasmBytes(wasmFilePath);
     const programArgs = config.programArgs || "";
     const runtimeOptions = config.runtimeOptions || "";
-    const exportName = (config.exportName || "") as string;
     const invokeArgs = (config.invokeArgs || "") as string;
+
+    // The webview sends `invokeArgs` as a ready-made wasmtime CLI
+    // fragment, e.g. `--invoke add` for core modules or
+    // `--invoke "calculate(add, 0, 0)"` for components.  The run
+    // path passes this as `runtimeOptions` so it gets spliced into
+    // the argument list by `buildWasmtimeCommandLine`.  We do the
+    // same here: combine user-supplied `runtimeOptions` with
+    // `invokeArgs` so the debug command line matches the run one.
+    const combinedOptions = [runtimeOptions, invokeArgs]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(" ");
 
     const isWindows = os.platform() === "win32";
     const wasmtimeCmd = getRuntimeCommand("wasmtime", isWindows);
@@ -1195,43 +1206,19 @@ function buildWasmtimeLaunchConfig(config: vscode.DebugConfiguration): Record<st
         throw new Error("Cannot resolve wasmtime executable");
     }
 
+    const effectiveWasmPath = (config.effectiveWasmPath || null) as string | null;
+
     const debugCmdLine = extensionLib.buildWasmtimeDebugCommandLine(
         wasmFilePath,
         wasmBytes,
         programArgs,
-        runtimeOptions,
-        null,
+        combinedOptions,
+        effectiveWasmPath,
     );
-
-    const debugArgs = [...debugCmdLine.arguments];
-
-    // When debugging a specific export (e.g. from the hex viewer's
-    // exports tab), inject `--invoke <name>` so wasmtime calls that
-    // function instead of the default `_start` entry point.  The
-    // flag must appear before the .wasm path in the argument list.
-    if (exportName) {
-        // Find the position of the .wasm file path in the args and
-        // insert --invoke before it.
-        const wasmIdx = debugArgs.findIndex(
-            (a) => a === wasmFilePath || a.endsWith(".wasm"),
-        );
-        if (wasmIdx >= 0) {
-            debugArgs.splice(wasmIdx, 0, "--invoke", exportName);
-        }
-
-        // Append invoke arguments (the function parameters) after
-        // the program arguments so they are passed to wasmtime.
-        const trimmedInvokeArgs = invokeArgs.trim();
-        if (trimmedInvokeArgs) {
-            debugArgs.push(
-                ...trimmedInvokeArgs.split(/\s+/),
-            );
-        }
-    }
 
     return {
         program: wasmtimeCmd,
-        args: debugArgs,
+        args: [...debugCmdLine.arguments],
         cwd: debugCmdLine.workingDirectory || path.dirname(wasmFilePath),
     };
 }
