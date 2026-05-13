@@ -1,0 +1,8 @@
+Hexana native disassembly fixture manifest
+llvm-objdump: Debian LLVM version 14.0.6
+input: /src/parsing/native-fixtures/test-data
+
+llvm-objdump/elf/sample.elf.disassemble.txt
+llvm-objdump/elf/sample.o.disassemble.txt
+llvm-objdump/macho/sample-x86_64.o.disassemble.txt
+llvm-objdump/pe/sample.coff.disassemble.txt

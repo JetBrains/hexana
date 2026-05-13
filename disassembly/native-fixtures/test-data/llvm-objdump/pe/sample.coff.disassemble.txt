@@ -1,0 +1,62 @@
+
+/src/parsing/native-fixtures/test-data/pe/sample.coff:	file format coff-x86-64
+
+Disassembly of section .text:
+
+0000000000000000 <hexana_add>:
+       0: 50                           	pushq	%rax
+       1: 89 54 24 04                  	movl	%edx, 4(%rsp)
+       5: 89 0c 24                     	movl	%ecx, (%rsp)
+       8: 8b 04 24                     	movl	(%rsp), %eax
+       b: 03 44 24 04                  	addl	4(%rsp), %eax
+       f: 8b 0d 00 00 00 00            	movl	(%rip), %ecx            # 0x15 <hexana_add+0x15>
+      15: 01 c8                        	addl	%ecx, %eax
+      17: 59                           	popq	%rcx
+      18: c3                           	retq
+      19: 0f 1f 80 00 00 00 00         	nopl	(%rax)
+
+0000000000000020 <hexana_dispatch>:
+      20: 48 83 ec 38                  	subq	$56, %rsp
+      24: 89 4c 24 30                  	movl	%ecx, 48(%rsp)
+      28: 8b 44 24 30                  	movl	48(%rsp), %eax
+      2c: 89 44 24 2c                  	movl	%eax, 44(%rsp)
+      30: 85 c0                        	testl	%eax, %eax
+      32: 0f 84 17 00 00 00            	je	0x4f <hexana_dispatch+0x2f>
+      38: e9 00 00 00 00               	jmp	0x3d <hexana_dispatch+0x1d>
+      3d: 8b 44 24 2c                  	movl	44(%rsp), %eax
+      41: 83 e8 01                     	subl	$1, %eax
+      44: 0f 84 1d 00 00 00            	je	0x67 <hexana_dispatch+0x47>
+      4a: e9 2b 00 00 00               	jmp	0x7a <hexana_dispatch+0x5a>
+      4f: b9 01 00 00 00               	movl	$1, %ecx
+      54: ba 02 00 00 00               	movl	$2, %edx
+      59: e8 00 00 00 00               	callq	0x5e <hexana_dispatch+0x3e>
+      5e: 89 44 24 34                  	movl	%eax, 52(%rsp)
+      62: e9 22 00 00 00               	jmp	0x89 <hexana_dispatch+0x69>
+      67: b9 05 00 00 00               	movl	$5, %ecx
+      6c: e8 00 00 00 00               	callq	0x71 <hexana_dispatch+0x51>
+      71: 89 44 24 34                  	movl	%eax, 52(%rsp)
+      75: e9 0f 00 00 00               	jmp	0x89 <hexana_dispatch+0x69>
+      7a: 0f be 05 00 00 00 00         	movsbl	(%rip), %eax            # 0x81 <hexana_dispatch+0x61>
+      81: 03 44 24 30                  	addl	48(%rsp), %eax
+      85: 89 44 24 34                  	movl	%eax, 52(%rsp)
+      89: 8b 44 24 34                  	movl	52(%rsp), %eax
+      8d: 48 83 c4 38                  	addq	$56, %rsp
+      91: c3                           	retq
+      92: 66 2e 0f 1f 84 00 00 00 00 00	nopw	%cs:(%rax,%rax)
+      9c: 0f 1f 40 00                  	nopl	(%rax)
+
+00000000000000a0 <hexana_square>:
+      a0: 50                           	pushq	%rax
+      a1: 89 4c 24 04                  	movl	%ecx, 4(%rsp)
+      a5: 8b 44 24 04                  	movl	4(%rsp), %eax
+      a9: 0f af 44 24 04               	imull	4(%rsp), %eax
+      ae: 59                           	popq	%rcx
+      af: c3                           	retq
+
+00000000000000b0 <mainCRTStartup>:
+      b0: 48 83 ec 28                  	subq	$40, %rsp
+      b4: b9 01 00 00 00               	movl	$1, %ecx
+      b9: e8 00 00 00 00               	callq	0xbe <mainCRTStartup+0xe>
+      be: 90                           	nop
+      bf: 48 83 c4 28                  	addq	$40, %rsp
+      c3: c3                           	retq

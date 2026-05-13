@@ -38,6 +38,10 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 - `parsing/elf/`: ELF parser module.
 - `parsing/macho/`: Mach-O parser module.
 - `parsing/pe/`: PE/COFF parser module.
+- `disassembly/`: parent folder for native disassembly modules.
+- `disassembly/core/`: UI-free native disassembly model: functions, instructions, addresses, xrefs, source locations, relocations, and basic-block candidates.
+- `disassembly/llvm-objdump/`: JVM `llvm-objdump` command construction, candidate discovery, probing, execution result handling, output parsing, and conversion into the core disassembly model.
+- `disassembly/native-fixtures/`: Docker-based generator for committed `llvm-objdump` disassembly snapshots built from `parsing/native-fixtures/test-data`.
 - `binaryProvider/`: thin provider layer that wraps parsed Wasm data for the UI and navigation features.
 - `plugins-shared/`: Kotlin Multiplatform shared logic (no UI framework) used by both `idea-plugin` and `vscode-plugin:webview` — component description formatting, type labels, signature resolution, WAT text generation.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
@@ -84,6 +88,7 @@ Run the narrowest command that proves your change.
 - Build the FUS scheme artifact: `./gradlew :idea-plugin:buildEventsScheme`
 - Run JVM parser tests: `./gradlew :wasmParser:jvmTest`
 - Run native parser JVM tests: `./gradlew :parsing:common:jvmTest :parsing:elf:jvmTest :parsing:macho:jvmTest :parsing:pe:jvmTest`
+- Run native disassembly tests: `./gradlew :disassembly:core:jvmTest :disassembly:llvm-objdump:test`
 - Run JS browser parser tests: `./gradlew :wasmParser:jsBrowserTest`
 - Run WasmJS browser parser tests: `./gradlew :wasmParser:wasmJsBrowserTest`
 - Build shared module: `./gradlew :plugins-shared:build`
@@ -155,6 +160,7 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
 - `plugins-shared/` changes: run `:plugins-shared:build`, then `:idea-plugin:test` and `:vscode-plugin:webview:compileKotlinJs`.
 - `wasmParser/` changes: run at least the relevant parser tests and any affected plugin tests.
 - `parsing/` changes: run the affected `:parsing:*:jvmTest` task first; add JS/WasmJS checks when changing shared parser behavior that should work outside the JVM.
+- `disassembly/` changes: run `:disassembly:core:jvmTest :disassembly:llvm-objdump:test`; keep IntelliJ-specific settings, CLion toolchain discovery, progress, and notification code in `idea-plugin`.
 - `mcp/` changes in the plugin: run the direct MCP tests under `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp/direct`.
 - `graalwasm/` or embedded converter changes: run the directly affected plugin tests and the existing `:graalwasm:wat2wasm:test` run configuration if relevant.
 - `ui-driver-tests/` is intentionally expensive. Do not run it unless your change affects plugin packaging, IDE startup, installation flow, or end-to-end UI behavior.

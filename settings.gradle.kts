@@ -32,6 +32,9 @@ dependencyResolutionManagement {
 rootProject.name = "hexana"
 
 include("binaryProvider")
+include("disassembly")
+include("disassembly:core")
+include("disassembly:llvm-objdump")
 include("parsing")
 include("parsing:common")
 include("parsing:elf")

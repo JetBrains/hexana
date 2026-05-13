@@ -1,0 +1,76 @@
+
+/src/parsing/native-fixtures/test-data/elf/sample.o:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+0000000000000000 <hexana_add>:
+       0: 55                           	pushq	%rbp
+       1: 48 89 e5                     	movq	%rsp, %rbp
+       4: 89 7d fc                     	movl	%edi, -4(%rbp)
+       7: 89 75 f8                     	movl	%esi, -8(%rbp)
+       a: 8b 45 fc                     	movl	-4(%rbp), %eax
+       d: 03 45 f8                     	addl	-8(%rbp), %eax
+      10: 8b 0c 25 00 00 00 00         	movl	0, %ecx
+      17: 01 c8                        	addl	%ecx, %eax
+      19: 5d                           	popq	%rbp
+      1a: c3                           	retq
+      1b: 0f 1f 44 00 00               	nopl	(%rax,%rax)
+
+0000000000000020 <hexana_dispatch>:
+      20: 55                           	pushq	%rbp
+      21: 48 89 e5                     	movq	%rsp, %rbp
+      24: 48 83 ec 10                  	subq	$16, %rsp
+      28: 89 7d f8                     	movl	%edi, -8(%rbp)
+      2b: 8b 45 f8                     	movl	-8(%rbp), %eax
+      2e: 89 45 f4                     	movl	%eax, -12(%rbp)
+      31: 85 c0                        	testl	%eax, %eax
+      33: 0f 84 16 00 00 00            	je	0x4f <hexana_dispatch+0x2f>
+      39: e9 00 00 00 00               	jmp	0x3e <hexana_dispatch+0x1e>
+      3e: 8b 45 f4                     	movl	-12(%rbp), %eax
+      41: 83 e8 01                     	subl	$1, %eax
+      44: 0f 84 1c 00 00 00            	je	0x66 <hexana_dispatch+0x46>
+      4a: e9 29 00 00 00               	jmp	0x78 <hexana_dispatch+0x58>
+      4f: bf 01 00 00 00               	movl	$1, %edi
+      54: be 02 00 00 00               	movl	$2, %esi
+      59: e8 00 00 00 00               	callq	0x5e <hexana_dispatch+0x3e>
+      5e: 89 45 fc                     	movl	%eax, -4(%rbp)
+      61: e9 20 00 00 00               	jmp	0x86 <hexana_dispatch+0x66>
+      66: bf 05 00 00 00               	movl	$5, %edi
+      6b: e8 20 00 00 00               	callq	0x90 <hexana_square>
+      70: 89 45 fc                     	movl	%eax, -4(%rbp)
+      73: e9 0e 00 00 00               	jmp	0x86 <hexana_dispatch+0x66>
+      78: 0f be 04 25 00 00 00 00      	movsbl	0, %eax
+      80: 03 45 f8                     	addl	-8(%rbp), %eax
+      83: 89 45 fc                     	movl	%eax, -4(%rbp)
+      86: 8b 45 fc                     	movl	-4(%rbp), %eax
+      89: 48 83 c4 10                  	addq	$16, %rsp
+      8d: 5d                           	popq	%rbp
+      8e: c3                           	retq
+      8f: 90                           	nop
+
+0000000000000090 <hexana_square>:
+      90: 55                           	pushq	%rbp
+      91: 48 89 e5                     	movq	%rsp, %rbp
+      94: 89 7d fc                     	movl	%edi, -4(%rbp)
+      97: 8b 45 fc                     	movl	-4(%rbp), %eax
+      9a: 0f af 45 fc                  	imull	-4(%rbp), %eax
+      9e: 5d                           	popq	%rbp
+      9f: c3                           	retq
+
+00000000000000a0 <main>:
+      a0: 55                           	pushq	%rbp
+      a1: 48 89 e5                     	movq	%rsp, %rbp
+      a4: 48 83 ec 10                  	subq	$16, %rsp
+      a8: c7 45 fc 00 00 00 00         	movl	$0, -4(%rbp)
+      af: 89 7d f8                     	movl	%edi, -8(%rbp)
+      b2: 48 89 75 f0                  	movq	%rsi, -16(%rbp)
+      b6: 8b 7d f8                     	movl	-8(%rbp), %edi
+      b9: e8 00 00 00 00               	callq	0xbe <main+0x1e>
+      be: 48 83 7d f0 00               	cmpq	$0, -16(%rbp)
+      c3: 0f 95 c1                     	setne	%cl
+      c6: 80 e1 01                     	andb	$1, %cl
+      c9: 0f b6 c9                     	movzbl	%cl, %ecx
+      cc: 01 c8                        	addl	%ecx, %eax
+      ce: 48 83 c4 10                  	addq	$16, %rsp
+      d2: 5d                           	popq	%rbp
+      d3: c3                           	retq
