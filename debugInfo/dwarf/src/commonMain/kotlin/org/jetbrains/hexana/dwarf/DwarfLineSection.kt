@@ -194,6 +194,7 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
         val opcodeBase = readUByte()
         val unit = object : DwarfUnit {
             override val addressSize: UByte = addressSize
+            override val offsetSize: UByte = 4.toUByte()
         }
         val standardOpcodeLengths = ByteArray(opcodeBase.toInt() - 1).also {
             get(it, 0, opcodeBase.toInt() - 1)
@@ -218,14 +219,20 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
                 Entry(formatName, form, readForm(form, unit))
             }
         }
+        // DWARF v5 line table headers include address_size and
+        // segment_selector_size before header_length, so the v4 formula does
+        // not apply. The declared header_length remains the authoritative line
+        // program boundary. See DWARF v5 section 6.2.4.
+        // https://dwarfstd.org/doc/DWARF5.pdf
+        val programOffset = prologLength + 12u
         return DwarfLineUnitHeader.Dwarf32LineUnitHeader.V5(
             unitOffset,
             unitSize,
             prologLength.toUInt(),
-            maximumOperationsPerInstruction,
             minimumInstructionLength,
+            maximumOperationsPerInstruction,
             defaultIsStatement,
-            prologLength + 10u,
+            programOffset,
             unitSize + 4u,
             lineRange,
             lineBase,
@@ -239,7 +246,8 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
             fileNameEntryFormats,
             fileNamesCount,
             fileNames,
-            accessor)
+            accessor,
+        )
     }
 }
 
@@ -478,7 +486,13 @@ sealed class DwarfLineUnitHeader<T>(
                             }
 
                             0x02.toUByte() -> {
-                                val address = readUInt().toULong()
+                                // DW_LNE_set_address carries one target address
+                                // after the extended opcode byte. The preceding
+                                // extended length gives this payload width, so
+                                // using a fixed UInt corrupts 64-bit line
+                                // programs. See DWARF v5 section 6.2.5.3.
+                                // https://dwarfstd.org/doc/DWARF5.pdf
+                                val address = readAddressFromExtendedOpcode(extendedLength - 1)
                                 LneOpcode.DW_LNE_set_address(
                                     extendedOffset, extendedLength,
                                     arrayOf(address).toULongArray()
@@ -607,6 +621,21 @@ sealed class DwarfLineUnitHeader<T>(
         }
         return result
     }
+
+    private fun CommonByteBuffer.readAddressFromExtendedOpcode(byteSize: Int): ULong =
+        when (byteSize) {
+            1 -> readUByte().toULong()
+            2 -> readUShort().toULong()
+            4 -> readUInt().toULong()
+            8 -> readULong()
+            else -> {
+                var value = 0uL
+                repeat(byteSize) { index ->
+                    value = value or (readUByte().toULong() shl (index * 8))
+                }
+                value
+            }
+        }
 
     private fun CommonByteBuffer.extendedArgumentsLoading(
         extendedOffset: Int,
@@ -806,5 +835,3 @@ fun findLineNumberHeaderEntryFormatName(value: UShort): LineNumberHeaderEntryFor
     LineNumberHeaderEntryFormatName.DW_LNCT_hi_user.value -> LineNumberHeaderEntryFormatName.DW_LNCT_user(value)
     else -> null
 }
-
-

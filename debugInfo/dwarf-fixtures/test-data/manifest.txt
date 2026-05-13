@@ -1,0 +1,10 @@
+Hexana DWARF fixture manifest
+compiler: Debian clang version 14.0.6
+llvm-objcopy: llvm-objcopy, compatible with GNU objcopy
+llvm-dwarfdump: Debian LLVM version 14.0.6
+
+elf/line-table-64.elf
+elf/line-table-64.elf.debug_line.bin
+elf/line-table-64.elf.dwarfdump.txt
+elf/line-table-64.o
+manifest.txt
