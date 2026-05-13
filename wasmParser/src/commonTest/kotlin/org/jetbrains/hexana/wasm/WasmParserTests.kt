@@ -2101,6 +2101,28 @@ class WasmParserTests {
         assertTrue(location.file.endsWith("utf8.c"))
     }
 
+    @OptIn(ExperimentalUnsignedTypes::class)
+    @Test
+    fun testV5LineTableLocations() = runTest {
+        val buffer = resourceAsByteBuffer("c/utf8-c.dwarf5.wasm")
+        val wasmParseResult = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(wasmParseResult)
+        val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
+        val accessor = WasmDwarfAccessor(wasmModule as BaseModule)
+        val resolver = DwarfSourceLocationResolver(accessor)
+        val locations = with(resolver) {
+            buffer.resolveLineTableLocations()
+        }
+        val location = locations
+            .filter { it.sourceLocation.file.endsWith("utf8.c") && it.offset <= 0x39 }
+            .maxByOrNull { it.offset }
+
+        assertNotNull(location)
+        assertEquals(11, location.sourceLocation.line)
+        assertEquals(3, location.sourceLocation.column)
+        assertTrue(location.sourceLocation.file.isNotBlank())
+    }
+
     @Test
     fun `#77 NIE on go-wasm module`() = runTest {
         val buffer = resourceAsByteBuffer("wasm-component-experiment-2/repl-api.wasm")
