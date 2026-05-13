@@ -146,20 +146,31 @@ export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "ask" 
 }
 
 /**
- * Shows a VS Code QuickPick to let the user choose a runtime.
+ * Result of the runtime picker indicating both the chosen runtime and
+ * whether the user selected a run or debug action.
+ */
+export interface RuntimePickerResult {
+    runtime: "wasmtime" | "wamr" | "graalwasm";
+    action: "run" | "debug";
+}
+
+/**
+ * Shows a VS Code QuickPick to let the user choose a runtime and action.
  *
  * When [isComponent] is true, only runtimes that support the Component
- * Model are offered. The picker also includes a "Configure Runtimes…"
+ * Model are offered and debug options are hidden (component debugging
+ * is not yet supported). The picker also includes a "Configure Runtimes…"
  * item that opens the Hexana settings page.
  *
- * Returns the chosen runtime identifier, or `undefined` if the user
+ * Returns the chosen runtime and action, or `undefined` if the user
  * dismissed the picker.
  */
 export async function showRuntimePicker(
     isComponent: boolean = false,
-): Promise<"wasmtime" | "wamr" | "graalwasm" | undefined> {
+): Promise<RuntimePickerResult | undefined> {
     interface RuntimeItem extends vscode.QuickPickItem {
         runtime?: "wasmtime" | "wamr" | "graalwasm";
+        action?: "run" | "debug";
         isConfigure?: boolean;
     }
 
@@ -168,20 +179,39 @@ export async function showRuntimePicker(
     items.push({
         label: "$(play) Run with Wasmtime",
         runtime: "wasmtime",
+        action: "run",
     });
     if (!isComponent) {
         items.push({
             label: "$(play) Run with WAMR",
             runtime: "wamr",
+            action: "run",
         });
         items.push({
             label: "$(play) Run with GraalWasm",
             runtime: "graalwasm",
+            action: "run",
         });
     }
-    // If there is only one applicable runtime, skip the picker and run directly
+
+    // Debug options — only Wasmtime and WAMR support debugging, and
+    // component-model debugging is not yet available.
+    if (!isComponent) {
+        items.push({
+            label: "$(bug) Debug with Wasmtime",
+            runtime: "wasmtime",
+            action: "debug",
+        });
+        items.push({
+            label: "$(bug) Debug with WAMR",
+            runtime: "wamr",
+            action: "debug",
+        });
+    }
+
+    // If there is only one applicable item, use it directly
     if (items.length === 1) {
-        return items[0].runtime;
+        return { runtime: items[0].runtime!, action: items[0].action! };
     }
 
     items.push({
@@ -191,7 +221,7 @@ export async function showRuntimePicker(
 
     const picked = await vscode.window.showQuickPick<RuntimeItem>(items, {
         title: "Select Wasm Runtime",
-        placeHolder: "Choose a runtime to run the module",
+        placeHolder: "Choose a runtime to run or debug the module",
     });
 
     if (!picked) {
@@ -204,7 +234,7 @@ export async function showRuntimePicker(
         );
         return undefined;
     }
-    return picked.runtime;
+    return { runtime: picked.runtime!, action: picked.action! };
 }
 
 /**
@@ -440,12 +470,14 @@ export async function runExport(
     const isComponent = message.isComponent && message.componentImports && message.componentImports.length > 0;
 
     let runtime = getSelectedRuntime();
+    let action: "run" | "debug" = "run";
     if (runtime === "ask") {
         const picked = await showRuntimePicker(!!isComponent);
         if (!picked) {
             return; // user dismissed the picker
         }
-        runtime = picked;
+        runtime = picked.runtime;
+        action = picked.action;
     }
 
     // Component-model binaries require Wasmtime
@@ -457,6 +489,18 @@ export async function runExport(
             );
         }
         runComponentExport(document, message);
+        return;
+    }
+
+    // Launch a debug session instead of a terminal when the user chose debug
+    if (action === "debug") {
+        await launchDebugSession(
+            filePath,
+            runtime,
+            message.programArgs ?? "",
+            message.exportName ?? "",
+            message.invokeArgs ?? "",
+        );
         return;
     }
 
@@ -496,6 +540,46 @@ export async function runExport(
     terminal.sendText(
         `${extensionLib.shellEscape(runtimeCmd, isWindows)} ${allArgs.map((a: string) => extensionLib!.shellEscape(a, isWindows)).join(" ")}`,
     );
+}
+
+/**
+ * Launches a VS Code debug session for the given `.wasm` file using
+ * the registered `wasm` debug configuration type.
+ *
+ * This creates an ad-hoc launch configuration and delegates to the
+ * `WasmDebugAdapter` infrastructure (configuration provider, adapter
+ * factory, and tracker) already registered in `extension.ts`.
+ *
+ * Only Wasmtime and WAMR are supported for debugging. If the caller
+ * passes a different runtime, an error is shown and no session starts.
+ */
+async function launchDebugSession(
+    wasmFilePath: string,
+    runtime: string,
+    programArgs: string,
+    exportName: string = "",
+    invokeArgs: string = "",
+): Promise<void> {
+    if (runtime !== "wasmtime" && runtime !== "wamr") {
+        vscode.window.showErrorMessage(
+            `Debugging is only supported for Wasmtime and WAMR runtimes, not '${runtime}'.`,
+        );
+        return;
+    }
+
+    const debugConfig: vscode.DebugConfiguration = {
+        type: "wasm",
+        request: "launch",
+        name: `Debug Wasm (${runtime === "wasmtime" ? "Wasmtime" : "WAMR"})`,
+        wasmFile: wasmFilePath,
+        runtime,
+        programArgs,
+        exportName,
+        invokeArgs,
+    };
+
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    await vscode.debug.startDebugging(workspaceFolder, debugConfig);
 }
 
 /**

@@ -213,10 +213,11 @@ class WasmDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
         const args: string[] = [];
 
         // On macOS, enable JIT loader for Wasmtime so LLDB can see
-        // JIT-compiled symbols
+        // JIT-compiled symbols.  The lldb-dap binary accepts
+        // `--pre-init-command` (alias `-c`) — NOT `--init-command`.
         if (os.platform() === "darwin" && runtime === "wasmtime") {
             args.push(
-                "--init-command",
+                "--pre-init-command",
                 "settings set plugin.jit-loader.gdb.enable on",
             );
         }
@@ -239,6 +240,8 @@ function buildWasmtimeLaunchConfig(config: vscode.DebugConfiguration): Record<st
     const wasmBytes = readWasmBytes(wasmFilePath);
     const programArgs = config.programArgs || "";
     const runtimeOptions = config.runtimeOptions || "";
+    const exportName = (config.exportName || "") as string;
+    const invokeArgs = (config.invokeArgs || "") as string;
 
     const isWindows = os.platform() === "win32";
     const wasmtimeCmd = getRuntimeCommand("wasmtime", isWindows);
@@ -254,9 +257,35 @@ function buildWasmtimeLaunchConfig(config: vscode.DebugConfiguration): Record<st
         null,
     );
 
+    const debugArgs = [...debugCmdLine.arguments];
+
+    // When debugging a specific export (e.g. from the hex viewer's
+    // exports tab), inject `--invoke <name>` so wasmtime calls that
+    // function instead of the default `_start` entry point.  The
+    // flag must appear before the .wasm path in the argument list.
+    if (exportName) {
+        // Find the position of the .wasm file path in the args and
+        // insert --invoke before it.
+        const wasmIdx = debugArgs.findIndex(
+            (a) => a === wasmFilePath || a.endsWith(".wasm"),
+        );
+        if (wasmIdx >= 0) {
+            debugArgs.splice(wasmIdx, 0, "--invoke", exportName);
+        }
+
+        // Append invoke arguments (the function parameters) after
+        // the program arguments so they are passed to wasmtime.
+        const trimmedInvokeArgs = invokeArgs.trim();
+        if (trimmedInvokeArgs) {
+            debugArgs.push(
+                ...trimmedInvokeArgs.split(/\s+/),
+            );
+        }
+    }
+
     return {
         program: wasmtimeCmd,
-        args: [...debugCmdLine.arguments],
+        args: debugArgs,
         cwd: debugCmdLine.workingDirectory || path.dirname(wasmFilePath),
     };
 }
@@ -269,7 +298,11 @@ function buildWasmtimeLaunchConfig(config: vscode.DebugConfiguration): Record<st
 class WasmDebugAdapterTracker implements vscode.DebugAdapterTracker {
     constructor(private readonly session: vscode.DebugSession) {}
 
-    onWillReceiveMessage(message: { type: string; command?: string; arguments?: Record<string, unknown> }): void {
+    onWillReceiveMessage(message: {
+        type: string;
+        command?: string;
+        arguments?: Record<string, unknown>;
+    }): void {
         if (message.type !== "request" || message.command !== "launch") {
             return;
         }
@@ -284,14 +317,28 @@ class WasmDebugAdapterTracker implements vscode.DebugAdapterTracker {
                 args.program = launchConfig.program;
                 args.args = launchConfig.args;
                 args.cwd = launchConfig.cwd;
-                // Do not set a sourceMap; DWARF paths will be resolved
-                // by LLDB's built-in source mapping.
+
+                // On macOS, enable the JIT loader inside the DAP
+                // launch request as well so LLDB can discover
+                // Wasmtime's JIT-compiled Wasm symbols and resolve
+                // breakpoints set in Wasm source files.
+                if (os.platform() === "darwin") {
+                    const initCmds =
+                        (args.initCommands as string[] | undefined) || [];
+                    initCmds.push(
+                        "settings set plugin.jit-loader.gdb.enable on",
+                    );
+                    args.initCommands = initCmds;
+                }
+
                 message.arguments = args;
             }
             // WAMR uses remote attach — handled separately
         } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            vscode.window.showErrorMessage(`Failed to configure debug session: ${msg}`);
+            const errMsg = e instanceof Error ? e.message : String(e);
+            vscode.window.showErrorMessage(
+                `Failed to configure debug session: ${errMsg}`,
+            );
         }
     }
 }
