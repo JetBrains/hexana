@@ -329,6 +329,30 @@ class WasmDebugAdapterTracker implements vscode.DebugAdapterTracker {
                         "settings set plugin.jit-loader.gdb.enable on",
                     );
                     args.initCommands = initCmds;
+
+                    // On macOS/ARM64, Wasmtime JIT emits 4-byte `brk`
+                    // (trap) instructions at breakpoint sites.  When
+                    // LLDB stops on such a trap the PC still points at
+                    // the `brk`; a plain `continue` would re-execute
+                    // the same trap, causing an infinite
+                    // EXC_BREAKPOINT loop.
+                    //
+                    // The stopCommands below run after every stop and
+                    // advance the PC past the 4-byte `brk` when the
+                    // current instruction is indeed a trap.  The `?`
+                    // prefix silences console output on success.
+                    if (os.arch() === "arm64") {
+                        const stopCmds =
+                            (args.stopCommands as string[] | undefined) || [];
+                        stopCmds.push(
+                            "?script import lldb; t = lldb.debugger.GetSelectedTarget().GetProcess().GetSelectedThread(); " +
+                            "f = t.GetSelectedFrame(); " +
+                            "err = lldb.SBError(); " +
+                            "inst = f.GetThread().GetProcess().ReadUnsignedFromMemory(f.GetPC(), 4, err); " +
+                            "f.SetPC(f.GetPC() + 4) if err.Success() and (inst & 0xFFE0001F) == 0xD4200000 else None",
+                        );
+                        args.stopCommands = stopCmds;
+                    }
                 }
 
                 message.arguments = args;
