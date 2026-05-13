@@ -2114,7 +2114,7 @@ class WasmParserTests {
             buffer.resolveLineTableLocations()
         }
         val location = locations
-            .filter { it.sourceLocation.file.endsWith("utf8.c") && it.offset <= 0x39 }
+            .filter { it.sourceLocation.file.endsWith("utf8.c") && it.offset <= 0x39uL }
             .maxByOrNull { it.offset }
 
         assertNotNull(location)
