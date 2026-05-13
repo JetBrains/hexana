@@ -98,6 +98,41 @@ internal class PieceTableDocument(
         listeners.remove(listener)
     }
 
+    override fun clearPersistedJournal() {
+        // Asks the persister to drop the sidecar without touching in-memory
+        // state. Future commits will rewrite it from the current `entries`,
+        // so the user's undo history isn't lost — the file just disappears
+        // from disk until they make another edit.
+        persister.save(null)
+    }
+
+    override fun loadJournal(journal: Journal) {
+        check(cursor == -1) {
+            "loadJournal must be called on a fresh document; current cursor=$cursor"
+        }
+        require(journal.originalLength == original.size.toLong()) {
+            "journal originalLength ${journal.originalLength} doesn't match document " +
+                "original length ${original.size}; caller should have validated via JournalCodec"
+        }
+        for (entry in journal.entries) replayEntry(entry)
+    }
+
+    /**
+     * Applies [entry] from a loaded sidecar: mutate live pieces, append to
+     * `entries` + `snapshots`, advance `cursor`. Skips [persistCurrent] (we
+     * just read the journal off disk) and skips [fireEvent] (listeners
+     * attach after construction; the load happens before any listener exists).
+     */
+    private fun replayEntry(entry: JournalEntry) {
+        for (op in entry.ops) applyToLive(op)
+        val newSnapshot = freezeSnapshot()
+        entries.add(entry)
+        snapshots.add(newSnapshot)
+        cursor = entries.size - 1
+        current = newSnapshot
+        stamp += 1L
+    }
+
     // -- Undo / redo --------------------------------------------------------
 
     override fun canUndo(): Boolean = cursor >= 0

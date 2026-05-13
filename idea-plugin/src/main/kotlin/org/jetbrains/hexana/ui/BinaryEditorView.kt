@@ -19,8 +19,13 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import org.jetbrains.hexana.document.DocumentListener
 import org.jetbrains.hexana.document.EditableBinaryDocument
+import org.jetbrains.hexana.document.IdeaJournalPersister
 import org.jetbrains.hexana.document.editableBinaryDocumentOf
 import org.jetbrains.hexana.document.format.ChunkId
+import org.jetbrains.hexana.document.journal.JournalLoadResult
+import org.jetbrains.hexana.document.journal.JournalPersister
+import org.jetbrains.hexana.document.loadSidecarIfPresent
+import org.jetbrains.hexana.document.notifyJournalMismatch
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
@@ -62,33 +67,83 @@ internal fun BinaryEditorView(
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
 ) {
-    // Phase A.1: every opened file gets one editable BinaryDocument shared by
-    // the editor's lifecycle. Edits land in this doc; on every commit we
-    // rebuild a fresh BinaryProvider from the new bytes and swap liveProvider
-    // so all panels recompose against the post-edit state.
-    //
-    // The original provider may be a file-aware WasmBinaryVirtualFileProvider
-    // (which contributes an extra "Wat" text panel + DWARF source-location
-    // capability). Rebuilds drop to plain WasmBinaryProvider — those file-
-    // editor-bound panels can't be reconstructed without the IDE-side glue
-    // that lives in HexanaFileEditor, so they don't survive an edit. The
-    // panel list shrinks accordingly; the tab index is clamped so the user's
-    // selection never points past the new list.
+    // Phase F: every opened file gets one editable BinaryDocument shared by
+    // the editor's lifecycle. Edits land in this doc, but ONLY the WAT
+    // virtualized + Hex view track the post-edit state. Other panels (Top,
+    // Functions, Imports, Exports, Garbage, Dominators, …) keep showing the
+    // original bytes — they don't need to follow intermediate edits, and
+    // re-parsing the in-progress mutation can crash analyses that walk
+    // section content (e.g. `sizeAnalysis` deep-scans data records, which
+    // explodes on bytes that the encoder hasn't yet finished cascading).
+    // The user explicitly invokes "Finalize" to write the result to a new
+    // file — that's the moment all derived analyses re-run from scratch.
     val editableDoc: EditableBinaryDocument = remember(binaryProvider) {
-        editableBinaryDocumentOf(binaryProvider.bytes.toByteArray())
+        // Wire a journal persister when we have a backing VirtualFile; the
+        // sidecar gets written to `<source>.hexana.json` on every commit
+        // and deleted on Finalize via clearPersistedJournal. Providers
+        // without a file (synthetic / generic) fall back to NoOp — there's
+        // nothing to attach a sidecar to.
+        val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
+        val persister: JournalPersister = if (sourceFile != null) {
+            IdeaJournalPersister(sourceFile)
+        } else {
+            JournalPersister.NoOp
+        }
+        val originalBytes = binaryProvider.bytes.toByteArray()
+        val doc = editableBinaryDocumentOf(bytes = originalBytes, persister = persister)
+        // Restore in-progress edits from a previously-persisted sidecar.
+        // The codec validates hash + length; on Mismatch we leave the doc
+        // empty and log — the stale sidecar stays on disk so the user can
+        // still recover it manually. Discard / Backup-then-discard UX is
+        // a follow-up.
+        if (sourceFile != null) {
+            val result = loadSidecarIfPresent(sourceFile, originalBytes)
+            when (result) {
+                is JournalLoadResult.Loaded -> {
+                    doc.loadJournal(result.journal)
+                    org.jetbrains.hexana.HexanaLog.LOG.info(
+                        "Restored ${result.journal.entries.size} journal entries from " +
+                            "${sourceFile.name}.hexana.json",
+                    )
+                }
+                is JournalLoadResult.Empty -> { /* no-op: design contract — codec never returns Empty */ }
+                is JournalLoadResult.Mismatch -> {
+                    org.jetbrains.hexana.HexanaLog.LOG.warn(
+                        "Sidecar ${sourceFile.name}.hexana.json doesn't match the binary " +
+                            "(reason=${result.reason}); ignoring and starting fresh",
+                    )
+                    notifyJournalMismatch(state.project, sourceFile, result.reason)
+                }
+                null -> { /* no sidecar present */ }
+            }
+        }
+        doc
     }
-    var liveProvider by remember(binaryProvider) {
-        mutableStateOf<BinaryProvider>(binaryProvider)
+    // The "live" provider for the WAT virtualized panel + Hex view. If the
+    // doc replayed a sidecar, the original bytes are stale — build a live
+    // provider from the post-replay bytes so the WAT view + Hex view render
+    // the user's restored edits, not the on-disk original. If the doc is
+    // empty (no sidecar / Mismatch), fall back to the original provider.
+    var liveProvider by remember(binaryProvider, editableDoc) {
+        val initial: BinaryProvider = if (editableDoc.canUndo()) {
+            val bytes = editableDoc.read(0L, editableDoc.length.toInt())
+            try {
+                rebuildProviderFromBytes(binaryProvider, bytes) ?: binaryProvider
+            } catch (t: Throwable) {
+                org.jetbrains.hexana.HexanaLog.LOG.warn(
+                    "Parser rejected replayed-journal bytes; showing original provider",
+                    t,
+                )
+                binaryProvider
+            }
+        } else {
+            binaryProvider
+        }
+        mutableStateOf<BinaryProvider>(initial)
     }
     DisposableEffect(editableDoc, binaryProvider) {
         val listener = DocumentListener {
             val newBytes = editableDoc.read(0L, editableDoc.length.toInt())
-            // The parser is allowed to reject malformed input by returning
-            // WasmParseFailure, but it can also throw on edge cases like
-            // negative array sizes when a section's length ULEB decodes to
-            // an unsigned value too big for Int. Either way, we must not
-            // take the panel down — keep showing the previous live provider
-            // and let the user undo / fix the edit.
             val rebuilt = try {
                 rebuildProviderFromBytes(binaryProvider, newBytes)
             } catch (t: Throwable) {
@@ -115,13 +170,20 @@ internal fun BinaryEditorView(
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         val pathsNav = remember { PathsNavigationState() }
-        val panels = remember(liveProvider) {
-            val p = liveProvider.resolvePanels(
+        // Panels are keyed to the ORIGINAL provider, not liveProvider — so
+        // they don't rebuild on every commit. The WAT virtualized lambda
+        // captures `liveProvider` (a Compose State delegate); its body
+        // reads the current value on each composition and recomposes when
+        // it changes. Non-edit panel lambdas use `this` (the original
+        // provider) and stay frozen across edits.
+        val panels = remember(binaryProvider) {
+            val p = binaryProvider.resolvePanels(
                 state = state,
                 pathsNav = pathsNav,
                 editableDoc = editableDoc,
                 watVirtualizedListState = watVirtualizedListState,
                 watVirtualizedFolded = watVirtualizedFolded,
+                liveProviderProvider = { liveProvider },
             )
             mutableStateListOf(*p)
         }
@@ -158,7 +220,11 @@ internal fun BinaryEditorView(
                     parentFileName = parentFileName,
                     onNavigateToParent = onNavigateToParent,
                 )
-                EditingDemoBar(doc = editableDoc, stampKey = editableDoc.modificationStamp)
+                EditingDemoBar(
+                    doc = editableDoc,
+                    stampKey = editableDoc.modificationStamp,
+                    binaryProvider = binaryProvider,
+                )
                 Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     HexViewer(
                         binaryProvider = liveProvider,
@@ -199,11 +265,18 @@ internal fun BinaryEditorView(
  * [HexViewer]. Once that lands, the demo strip can be removed.
  */
 @Composable
-private fun EditingDemoBar(doc: EditableBinaryDocument, stampKey: Long) {
+private fun EditingDemoBar(
+    doc: EditableBinaryDocument,
+    stampKey: Long,
+    binaryProvider: BinaryProvider,
+) {
     @Suppress("UNUSED_PARAMETER") val unused = stampKey
     val byteZeroHex = if (doc.length > 0L) {
         ((doc.readByte(0L).toInt() and 0xFF).toString(16).uppercase().padStart(2, '0'))
     } else "—"
+    val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
+    val finalizedName = sourceFile?.name?.let { computeFinalizedName(it) }
+    val canFinalize = doc.canUndo() && sourceFile != null
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -236,11 +309,62 @@ private fun EditingDemoBar(doc: EditableBinaryDocument, stampKey: Long) {
             onClick = { if (doc.canRedo()) doc.redo() },
             enabled = doc.canRedo(),
         ) { Text("Redo") }
+        Spacer(modifier = Modifier.width(8.dp))
+        DefaultButton(
+            onClick = {
+                if (sourceFile != null && finalizedName != null) {
+                    val bytes = doc.read(0L, doc.length.toInt())
+                    finalizeWriteToSibling(sourceFile, finalizedName, bytes)
+                    // Clear the on-disk sidecar — the user has captured the
+                    // current state in <source>.edited.<ext>, so the journal
+                    // bound to the original file is no longer needed. The
+                    // doc keeps its in-memory undo history, so the user can
+                    // keep editing; the next commit will recreate the sidecar.
+                    doc.clearPersistedJournal()
+                }
+            },
+            enabled = canFinalize,
+        ) { Text(if (finalizedName != null) "Finalize → $finalizedName" else "Finalize") }
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = "byte0=0x$byteZeroHex  stamp=${doc.modificationStamp}  len=${doc.length}",
             style = TextStyle(fontSize = 10.sp, color = HexanaTheme.hexTextColor),
         )
+    }
+}
+
+/**
+ * `<base>.edited.<ext>` next to the original. Plain `<name>.edited` if there
+ * is no extension. Subsequent finalizes overwrite the same target — the user
+ * can clone it before re-finalizing if they want history.
+ */
+private fun computeFinalizedName(originalName: String): String {
+    val dot = originalName.lastIndexOf('.')
+    return if (dot < 0) "$originalName.edited"
+    else originalName.substring(0, dot) + ".edited" + originalName.substring(dot)
+}
+
+/**
+ * Writes [bytes] to a sibling of [source] named [outputName]. Creates the
+ * file on first finalize; overwrites on subsequent ones. Runs on the EDT
+ * inside a write action — required by the IntelliJ VFS contract.
+ */
+private fun finalizeWriteToSibling(
+    source: com.intellij.openapi.vfs.VirtualFile,
+    outputName: String,
+    bytes: ByteArray,
+) {
+    com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+        com.intellij.openapi.application.WriteAction.run<Throwable> {
+            val parent = source.parent
+                ?: error("source file has no parent directory: ${source.path}")
+            val existing = parent.findChild(outputName)
+            val target = existing ?: parent.createChildData(parent, outputName)
+            target.setBinaryContent(bytes)
+            org.jetbrains.hexana.HexanaLog.LOG.info(
+                "Finalized ${bytes.size} bytes → ${target.path}",
+            )
+        }
     }
 }
 
@@ -335,12 +459,28 @@ private fun rebuildProviderFromBytes(original: BinaryProvider, newBytes: ByteArr
     }
 }
 
+/**
+ * Resolves the panel list for an editor.
+ *
+ * `this` is the ORIGINAL, immutable [BinaryProvider]. All non-edit panels
+ * (size, functions, imports, exports, dominators, …) bind to it directly —
+ * they never re-derive from intermediate edit bytes, so their analyses
+ * stay stable while the user is mid-edit.
+ *
+ * [liveProviderProvider] is a closure that returns the CURRENT live
+ * provider (rebuilt from `editableDoc` bytes on every commit). It's read
+ * inside the WAT virtualized panel's lambda so Compose recomposes that
+ * panel — and only that panel — whenever the live provider changes.
+ * `null` means "no live state, use original everywhere" (callers without
+ * an editable doc).
+ */
 private fun BinaryProvider.resolvePanels(
     state: HexViewStateHolder,
     pathsNav: PathsNavigationState,
     editableDoc: EditableBinaryDocument? = null,
     watVirtualizedListState: LazyListState? = null,
     watVirtualizedFolded: MutableState<Set<ChunkId>>? = null,
+    liveProviderProvider: (() -> BinaryProvider)? = null,
 ): Array<Panel> {
     val panels = when (this) {
         is GenericBinaryProvider -> emptyArray()
@@ -357,8 +497,13 @@ private fun BinaryProvider.resolvePanels(
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 Panel("Wat") { WasmPanelWat(this, state) },
                 Panel("WAT (virtualized)") {
+                    // Read the live provider INSIDE the lambda so Compose
+                    // re-renders this panel (and only this panel) on each
+                    // post-commit rebuild. Falls back to `this` (original)
+                    // when no live provider is wired.
+                    val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
                     WasmPanelWatVirtualized(
-                        provider = this,
+                        provider = live,
                         state = state,
                         editableDoc = editableDoc,
                         listState = watVirtualizedListState,
@@ -393,8 +538,9 @@ private fun BinaryProvider.resolvePanels(
                 Panel("Garbage") { WasmPanelGarbage(this, state) },
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 Panel("WAT (virtualized)") {
+                    val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
                     WasmPanelWatVirtualized(
-                        provider = this,
+                        provider = live,
                         state = state,
                         editableDoc = editableDoc,
                         listState = watVirtualizedListState,

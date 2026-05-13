@@ -669,6 +669,78 @@ class EditableRowEncoderTest {
         assertIs<RowEncodeResult.Error>(result)
     }
 
+    // -- Row delete (D.4) --------------------------------------------------
+
+    @Test
+    fun encode_delete_emits_three_ops_with_empty_replace() {
+        // Body shrinks by 2 (deleting i32.const 5 = 2 bytes from a 5-byte body).
+        val cascade = CascadeContext(
+            funcSizePrefixStart = 22L,
+            funcSizePrefixLength = 1,
+            currentBodyLength = 5L,
+            sectionSizePrefixStart = 20L,
+            sectionSizePrefixLength = 1,
+            currentSectionLength = 7L,
+        )
+        val result = EditableRowEncoder.encodeDelete(
+            rowStart = 25L,
+            rowLength = 2,
+            cascade = cascade,
+        )
+        val ok = assertIs<RowEncodeResult.Success>(result, message = "got: $result")
+        assertEquals(3, ok.ops.size)
+
+        // Op 1: Replace([25, 27), empty) — same as Delete([25, 27)) for replay.
+        val rowOp = assertIs<JournalOp.Replace>(ok.ops[0])
+        assertEquals(25L, rowOp.start)
+        assertEquals(27L, rowOp.end)
+        assertContentEquals(ByteArray(0), Base64.decode(rowOp.data))
+
+        // funcSize: 5 - 2 = 3 → ULEB(3) = 0x03.
+        val funcOp = assertIs<JournalOp.Replace>(ok.ops[1])
+        assertContentEquals(bytes(0x03), Base64.decode(funcOp.data))
+
+        // sectionSize: 7 - 2 + 0 = 5 → ULEB(5) = 0x05.
+        val secOp = assertIs<JournalOp.Replace>(ok.ops[2])
+        assertContentEquals(bytes(0x05), Base64.decode(secOp.data))
+    }
+
+    @Test
+    fun encode_delete_without_cascade_returns_error_with_requiresCascade_set() {
+        val result = EditableRowEncoder.encodeDelete(rowStart = 0L, rowLength = 2, cascade = null)
+        val err = assertIs<RowEncodeResult.Error>(result)
+        assertEquals(true, err.requiresCascade)
+    }
+
+    @Test
+    fun encode_delete_zero_length_rejected() {
+        val cascade = CascadeContext(0L, 1, 5L, 0L, 1, 7L)
+        val result = EditableRowEncoder.encodeDelete(rowStart = 0L, rowLength = 0, cascade = cascade)
+        val err = assertIs<RowEncodeResult.Error>(result)
+        assertEquals(false, err.requiresCascade)
+    }
+
+    @Test
+    fun encode_delete_handles_funcSize_narrowing() {
+        // Body crosses 128 → 127 boundary, funcSize narrows 2 → 1 bytes.
+        val cascade = CascadeContext(
+            funcSizePrefixStart = 50L,
+            funcSizePrefixLength = 2,
+            currentBodyLength = 128L,
+            sectionSizePrefixStart = 40L,
+            sectionSizePrefixLength = 1,
+            currentSectionLength = 131L,
+        )
+        val result = EditableRowEncoder.encodeDelete(rowStart = 100L, rowLength = 1, cascade = cascade)
+        val ok = assertIs<RowEncodeResult.Success>(result, message = "got: $result")
+        // funcSize: 128 - 1 = 127 → ULEB(127) = 0x7F (1 byte; was 2 bytes).
+        val funcOp = assertIs<JournalOp.Replace>(ok.ops[1])
+        assertContentEquals(bytes(0x7F), Base64.decode(funcOp.data))
+        // sectionSize: 131 - 1 + (-1) = 129 → ULEB(129) = 0x81 0x01.
+        val secOp = assertIs<JournalOp.Replace>(ok.ops[2])
+        assertContentEquals(bytes(0x81, 0x01), Base64.decode(secOp.data))
+    }
+
     // -- Locals declaration (D.2) ------------------------------------------
 
     @Test

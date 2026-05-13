@@ -93,6 +93,42 @@ public object EditableRowEncoder {
     }
 
     /**
+     * Encodes a row DELETE: removes the bytes `[rowStart, rowStart+rowLength)`
+     * and cascades the funcSize / sectionSize ULEB128s to reflect the
+     * shrunk body.
+     *
+     * Used by the panel's Phase D.4 "empty the field + Enter" UX — the row
+     * vanishes from the binary on commit. No mnemonic / text parsing
+     * happens here; the caller has already decided the row should go.
+     *
+     * In-place cascade only: deletion never needs the append+redirect
+     * dance (the body shrinks, so it always fits). [cascade] is required.
+     */
+    public fun encodeDelete(
+        rowStart: Long,
+        rowLength: Int,
+        cascade: CascadeContext? = null,
+    ): RowEncodeResult {
+        if (cascade == null) {
+            return RowEncodeResult.Error(
+                message = "no cascade context available for row delete",
+                requiresCascade = true,
+            )
+        }
+        if (rowLength <= 0) {
+            return RowEncodeResult.Error("rowLength must be > 0 (got $rowLength)")
+        }
+        return RowEncodeResult.Success(
+            ops = computeCascadeOps(
+                cascade = cascade,
+                rowStart = rowStart,
+                oldRowLength = rowLength,
+                newRowBytes = ByteArray(0),
+            ),
+        )
+    }
+
+    /**
      * Encodes a NEW instruction inserted at [insertOffset]. Same mnemonic
      * dispatch as [encode]; produces a [JournalOp.Insert] (not Replace)
      * plus the funcSize/sectionSize cascade ops for the bytes shifted by

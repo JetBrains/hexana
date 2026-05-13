@@ -30,6 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -119,6 +121,61 @@ internal fun WasmPanelWatVirtualized(
     val foldedSectionsState: MutableState<Set<ChunkId>> =
         foldedSectionsExternal ?: remember { mutableStateOf(emptySet<ChunkId>()) }
     var foldedSections by foldedSectionsState
+
+    // After an append+redirect commit, the user's actual edit lives in the
+    // newly-appended last code chunk — not in the redirect stub that took
+    // the original body's place. Track the code-chunk count across panel
+    // rebuilds; when it grows (= a function was appended), unfold the code
+    // section if needed and scroll to the new entry so the user immediately
+    // sees the result of their edit.
+    val totalCodeChunks = remember(chunkTree) {
+        var n = 0
+        for (i in 0 until chunkTree.totalChunks) {
+            val c = chunkTree.chunkAt(i)
+            if (c is BinaryChunk.Element && c.kind == WasmSectionKinds.CODE) n++
+        }
+        n
+    }
+    var lastTotalCodeCount by remember { mutableStateOf(-1) }
+    androidx.compose.runtime.LaunchedEffect(totalCodeChunks) {
+        val prev = lastTotalCodeCount
+        lastTotalCodeCount = totalCodeChunks
+        if (prev >= 0 && totalCodeChunks > prev) {
+            // Auto-unfold the code section so the new entry is reachable.
+            var codeHeaderId: ChunkId? = null
+            for (i in 0 until chunkTree.totalChunks) {
+                val c = chunkTree.chunkAt(i)
+                if (c is BinaryChunk.SectionHeader && c.kind == WasmSectionKinds.CODE) {
+                    codeHeaderId = c.id
+                    break
+                }
+            }
+            if (codeHeaderId != null && codeHeaderId in foldedSections) {
+                foldedSections = foldedSections - codeHeaderId
+            }
+            // Walk the tree (in current fold state) to find the LazyColumn item
+            // index of the LAST visible code element. That's our scroll target.
+            var lazyIdx = -1
+            var lazyCursor = 0
+            var hidden = false
+            for (i in 0 until chunkTree.totalChunks) {
+                val c = chunkTree.chunkAt(i)
+                when (c) {
+                    is BinaryChunk.SectionHeader -> {
+                        hidden = c.id in foldedSections
+                        lazyCursor++
+                    }
+                    is BinaryChunk.Element -> {
+                        if (!hidden) {
+                            if (c.kind == WasmSectionKinds.CODE) lazyIdx = lazyCursor
+                            lazyCursor++
+                        }
+                    }
+                }
+            }
+            if (lazyIdx >= 0) effectiveListState.animateScrollToItem(lazyIdx)
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
@@ -283,12 +340,32 @@ private fun ChunkRow(
     // the chunk rebuilds (after a successful commit). Map<rowIndex, true>
     // means an empty insert TextField is showing below that row.
     val insertOpen = remember(chunk.id) { mutableStateMapOf<Int, Boolean>() }
+    // FocusRequester per editable row index. Lets arrow Up/Down hop focus
+    // between editable rows inside this chunk. Keyed on `chunk.id` plus
+    // `rows.size` so the requesters survive snapshot-only rebuilds (length-
+    // preserving edits) and only rebuild when the row count actually
+    // changes (insert / delete / append redirect into a different chunk).
+    val focusRequesters: Map<Int, FocusRequester> = remember(chunk.id, rows.size) {
+        rows.indices
+            .filter { rows[it].editable != null }
+            .associateWith { FocusRequester() }
+    }
+    val editableIndices: List<Int> = remember(chunk.id, rows.size) {
+        rows.indices.filter { rows[it].editable != null }
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 1.dp),
     ) {
         rows.forEachIndexed { rowIndex, row ->
+            val pos = editableIndices.indexOf(rowIndex)
+            val onArrowUp: (() -> Unit)? = if (pos > 0) {
+                { focusRequesters[editableIndices[pos - 1]]?.requestFocus() }
+            } else null
+            val onArrowDown: (() -> Unit)? = if (pos in 0 until editableIndices.size - 1) {
+                { focusRequesters[editableIndices[pos + 1]]?.requestFocus() }
+            } else null
             RenderedRowView(
                 row = row,
                 chunkId = chunk.id,
@@ -301,6 +378,9 @@ private fun ChunkRow(
                 } else {
                     null
                 },
+                focusRequester = focusRequesters[rowIndex],
+                onArrowUp = onArrowUp,
+                onArrowDown = onArrowDown,
             )
             val editable = row.editable
             if (insertOpen[rowIndex] == true && editableDoc != null && editable != null) {
@@ -349,6 +429,15 @@ private fun RenderedRowView(
      * in this slice).
      */
     onEnterRequestInsert: (() -> Unit)? = null,
+    /**
+     * Owned by [ChunkRow]; attached to the inner [BasicTextField] so the
+     * row above / below can request focus on arrow-key nav.
+     */
+    focusRequester: FocusRequester? = null,
+    /** Move focus to the previous editable row in the chunk. */
+    onArrowUp: (() -> Unit)? = null,
+    /** Move focus to the next editable row in the chunk. */
+    onArrowDown: (() -> Unit)? = null,
 ) {
     val info = row.editable
     val color = HexanaTheme.textColor
@@ -379,6 +468,13 @@ private fun RenderedRowView(
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(text = prefix, style = ROW_TEXT_STYLE.copy(color = color))
+        // Local capture so the lambdas below see a stable reference even
+        // when the parent recomposes the requester map.
+        val requesterModifier = if (focusRequester != null) {
+            Modifier.focusRequester(focusRequester)
+        } else {
+            Modifier
+        }
         BasicTextField(
             value = fieldText,
             onValueChange = { fieldText = it; lastError = null },
@@ -390,27 +486,46 @@ private fun RenderedRowView(
                 onDone = {
                     val err = commitRowEdit(editableDoc, info, fieldText, provider, chunk)
                     lastError = err
-                    if (err == null) {
-                        // Either nothing changed or the commit succeeded —
-                        // either way, open an empty insert row below.
-                        onEnterRequestInsert?.invoke()
-                    }
+                    if (err == null) onEnterRequestInsert?.invoke()
                 },
             ),
             modifier = Modifier
                 // Red border on encoder failure — clears as soon as the
                 // user types again (onValueChange resets lastError).
                 .then(borderModifier)
-                // Esc reverts the field to the last committed text. If
-                // there was an error, also clears it. Returns true so the
-                // event doesn't propagate to other panel handlers.
+                .then(requesterModifier)
+                // Direct keyboard handling. KeyboardActions.onDone catches
+                // the IME path; on desktop Compose with no IME the Enter
+                // key doesn't always reach it, so we handle Enter / arrows
+                // / Esc explicitly here. Returning `true` consumes the
+                // event so the BasicTextField doesn't also process it.
                 .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
-                        fieldText = info.watText
-                        lastError = null
-                        true
-                    } else {
-                        false
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Escape -> {
+                            fieldText = info.watText
+                            lastError = null
+                            true
+                        }
+                        Key.Enter, Key.NumPadEnter -> {
+                            val err = commitRowEdit(editableDoc, info, fieldText, provider, chunk)
+                            lastError = err
+                            if (err == null) onEnterRequestInsert?.invoke()
+                            true
+                        }
+                        Key.DirectionUp -> {
+                            if (onArrowUp != null) {
+                                onArrowUp.invoke()
+                                true
+                            } else false
+                        }
+                        Key.DirectionDown -> {
+                            if (onArrowDown != null) {
+                                onArrowDown.invoke()
+                                true
+                            } else false
+                        }
+                        else -> false
                     }
                 }
                 .onFocusChanged { focusState ->
@@ -489,6 +604,21 @@ private fun commitRowEdit(
             null
         }
         is RowEncodeResult.Error -> result.message
+    }
+
+    // -- D.4 row delete: blanking the field + Enter removes the row.
+    // Only applies to OPCODE rows — locals declarations have a fixed
+    // position in the body (the byte right after the funcSize prefix);
+    // dropping them would corrupt the body shape, so we keep the
+    // length-changing path for locals.
+    if (text.isBlank() && info.kind == EditableRowInfo.Kind.OPCODE) {
+        return applyOps(
+            EditableRowEncoder.encodeDelete(
+                rowStart = info.opStart,
+                rowLength = info.opEncodedLength,
+                cascade = info.cascade,
+            ),
+        )
     }
 
     // -- LOCALS row: stays in-place via encodeLocals. Phase E doesn't move

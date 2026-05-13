@@ -38,4 +38,35 @@ public interface EditableBinaryDocument : BinaryDocument {
     public fun canRedo(): Boolean
     public fun undo()
     public fun redo()
+
+    /**
+     * Asks the configured [JournalPersister] to drop the on-disk sidecar
+     * (calls `save(null)`). In-memory state — entries, snapshots, cursor,
+     * undo/redo — is unchanged; the next [edit] commit will recreate the
+     * sidecar from the current journal contents.
+     *
+     * Used by the IDE-side Finalize action: the user has written the
+     * post-edit bytes to a separate output file, so the sidecar bound to
+     * the original is no longer the source of truth and should disappear
+     * from the directory until the user makes a new edit.
+     */
+    public fun clearPersistedJournal()
+
+    /**
+     * Replays [journal] into the live state as if each entry had been
+     * committed in order. Used at file-open time to restore in-progress
+     * edits from a previously-persisted sidecar.
+     *
+     * Persistence is **suppressed** during replay — the journal we're
+     * loading came from disk, so re-saving each entry would loop. After
+     * replay finishes, normal commits/undos/redos resume normal
+     * persistence.
+     *
+     * Must be called on a fresh document (no commits applied yet).
+     * [journal]'s `originalLength` and `originalHash` are NOT validated
+     * here — the caller is expected to validate via
+     * [org.jetbrains.hexana.document.journal.JournalCodec.loadFromJson]
+     * before invoking this.
+     */
+    public fun loadJournal(journal: org.jetbrains.hexana.document.journal.Journal)
 }

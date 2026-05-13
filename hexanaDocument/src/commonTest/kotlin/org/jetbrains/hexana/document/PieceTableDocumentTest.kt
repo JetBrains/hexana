@@ -1,7 +1,11 @@
 package org.jetbrains.hexana.document
 
+import kotlin.io.encoding.Base64
 import org.jetbrains.hexana.document.journal.Journal
+import org.jetbrains.hexana.document.journal.JournalEntry
+import org.jetbrains.hexana.document.journal.JournalOp
 import org.jetbrains.hexana.document.journal.JournalPersister
+import org.jetbrains.hexana.document.journal.Sha256
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -176,6 +180,76 @@ class PieceTableDocumentTest {
         assertEquals(2, saved.size)
         assertNotNull(saved[0])
         assertNull(saved[1], "expected null journal after undoing back to zero entries")
+    }
+
+    @Test
+    fun loadJournal_replays_entries_without_persisting() {
+        val saved = mutableListOf<Journal?>()
+        val doc = editableBinaryDocumentOf(
+            bytes = byteArrayOf(0x01, 0x02, 0x03),
+            persister = { saved += it },
+        )
+
+        // Build a journal that flips byte 0 to 0xFF then byte 2 to 0xEE.
+        val journal = Journal(
+            originalHash = "sha256:" + Sha256.hex(byteArrayOf(0x01, 0x02, 0x03)),
+            originalLength = 3L,
+            entries = listOf(
+                JournalEntry(
+                    timestamp = "T1",
+                    ops = listOf(JournalOp.Replace(0L, 1L, Base64.encode(byteArrayOf(0xFF.toByte())))),
+                ),
+                JournalEntry(
+                    timestamp = "T2",
+                    ops = listOf(JournalOp.Replace(2L, 3L, Base64.encode(byteArrayOf(0xEE.toByte())))),
+                ),
+            ),
+        )
+
+        doc.loadJournal(journal)
+
+        // State reflects the replayed edits.
+        assertContentEquals(byteArrayOf(0xFF.toByte(), 0x02, 0xEE.toByte()), bytesOf(doc))
+        assertTrue(doc.canUndo())
+
+        // Persister was NOT called during replay — we just read the journal
+        // from disk; rewriting it would loop.
+        assertTrue(saved.isEmpty(), "loadJournal must not invoke the persister")
+
+        // Undo still works against the loaded entries.
+        doc.undo()
+        assertContentEquals(byteArrayOf(0xFF.toByte(), 0x02, 0x03), bytesOf(doc))
+        // The post-replay undo DOES persist (it's a real document state change).
+        assertEquals(1, saved.size)
+    }
+
+    @Test
+    fun clearPersistedJournal_invokes_persister_with_null_without_touching_state() {
+        val saved = mutableListOf<Journal?>()
+        val doc = editableBinaryDocumentOf(
+            bytes = byteArrayOf(0x01, 0x02),
+            persister = { saved += it },
+        )
+
+        doc.edit().apply { replace(0L, 1L, byteArrayOf(0xFF.toByte())); commit() }
+        // First save happens on commit and is non-null.
+        assertEquals(1, saved.size)
+        assertNotNull(saved[0])
+
+        doc.clearPersistedJournal()
+
+        // clearPersistedJournal asks the persister to delete the sidecar.
+        assertEquals(2, saved.size)
+        assertNull(saved[1], "expected null journal after clearPersistedJournal")
+
+        // In-memory state is untouched: undo still works, byte 0 still 0xFF.
+        assertTrue(doc.canUndo())
+        assertContentEquals(byteArrayOf(0xFF.toByte(), 0x02), bytesOf(doc))
+
+        // The next commit re-persists from the live entries (cumulative).
+        doc.edit().apply { replace(1L, 2L, byteArrayOf(0xEE.toByte())); commit() }
+        val seen = assertNotNull(saved.last())
+        assertEquals(2, seen.entries.size, "persister gets the full journal on next commit")
     }
 
     @Test
