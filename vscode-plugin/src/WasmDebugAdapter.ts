@@ -232,12 +232,26 @@ class LldbDapProxy implements vscode.DebugAdapter {
     private readonly log = getDebugOutputChannel();
     private isWasmtime: boolean;
 
+    /**
+     * Optional iwasm child process for WAMR debugging.
+     * The proxy owns this process and kills it on dispose.
+     */
+    private iwasmProcess: ChildProcess | undefined;
+
     constructor(
         private readonly lldbDapPath: string,
         private readonly cliArgs: string[],
         isWasmtime: boolean,
     ) {
         this.isWasmtime = isWasmtime;
+    }
+
+    /**
+     * Registers an iwasm child process to be managed by this proxy.
+     * The process will be killed when the proxy is disposed.
+     */
+    setIwasmProcess(proc: ChildProcess): void {
+        this.iwasmProcess = proc;
     }
 
     /**
@@ -281,6 +295,10 @@ class LldbDapProxy implements vscode.DebugAdapter {
         if (this.process) {
             this.process.kill();
             this.process = undefined;
+        }
+        if (this.iwasmProcess) {
+            this.iwasmProcess.kill();
+            this.iwasmProcess = undefined;
         }
         this.emitter.dispose();
     }
@@ -470,8 +488,213 @@ class WasmDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
             return new vscode.DebugAdapterInlineImplementation(proxy);
         }
 
+        // For WAMR: launch iwasm with the debug server, wait for
+        // it to be ready, then return an LldbDapProxy that will
+        // be configured with `launchCommands` by the tracker.
+        if (runtime === "wamr") {
+            const wamrResult = launchIwasmDebugServer(config);
+            if (!wamrResult) {
+                return undefined; // error already shown
+            }
+
+            // Store connection info on the session config so the
+            // tracker can inject `launchCommands` later.
+            config._wamrDebugHost = wamrResult.debugHost;
+            config._wamrDebugPort = wamrResult.debugPort;
+
+            // Wait for iwasm to print "Debug server listening on"
+            // on stdout (matching IntelliJ's approach), or for the
+            // process to exit early.  Only after the server is
+            // confirmed ready do we return the debug adapter.
+            return waitForIwasmReady(
+                wamrResult.iwasmProcess,
+                WAMR_DEBUG_SERVER_READY_TIMEOUT_MS,
+            ).then(() => {
+                const proxy = new LldbDapProxy(lldbDapPath, args, false);
+                proxy.setIwasmProcess(wamrResult.iwasmProcess);
+                proxy.start();
+                return new vscode.DebugAdapterInlineImplementation(proxy);
+            }, (err) => {
+                wamrResult.iwasmProcess.kill();
+                const errMsg = err instanceof Error ? err.message : String(err);
+                vscode.window.showErrorMessage(
+                    `WAMR debug server did not become ready: ${errMsg}`,
+                );
+                return undefined;
+            });
+        }
+
         return new vscode.DebugAdapterExecutable(lldbDapPath, args);
     }
+}
+
+/** Timeout for waiting for iwasm's debug server to start listening. */
+const WAMR_DEBUG_SERVER_READY_TIMEOUT_MS = 10_000;
+
+/**
+ * Waits for the iwasm process to print "Debug server listening on"
+ * on stdout/stderr, indicating the GDB remote stub is ready for
+ * connections.  This matches the IntelliJ plugin's readiness
+ * detection in `WasmDebugRunner.prepareWamrSession()`.
+ *
+ * Resolves when the message is detected.  Rejects if the process
+ * exits before the message appears or if the timeout elapses.
+ */
+function waitForIwasmReady(
+    iwasmProcess: ChildProcess,
+    timeoutMs: number,
+): Promise<void> {
+    const log = getDebugOutputChannel();
+    log.appendLine(
+        `[Hexana] Waiting for iwasm to print debug server ready message ` +
+        `(timeout=${timeoutMs}ms)`,
+    );
+
+    return new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const collectedOutput: string[] = [];
+
+        function settle(fn: () => void): void {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            fn();
+        }
+
+        function onData(chunk: Buffer): void {
+            const text = chunk.toString();
+            collectedOutput.push(text);
+            if (
+                text.includes("Debug server listening on") ||
+                text.includes("debug server listening on")
+            ) {
+                log.appendLine(
+                    `[Hexana] WAMR debug server is ready`,
+                );
+                settle(() => resolve());
+            }
+        }
+
+        function onExit(code: number | null, signal: string | null): void {
+            const output = collectedOutput.join("").trim();
+            let details = `iwasm exited before debug server started ` +
+                `(code=${code}, signal=${signal}).`;
+            if (extensionLib?.isWamrDebugNotSupported(output)) {
+                details += "\n\nThe installed iwasm does not support " +
+                    "the \"-g\" debug option. Rebuild iwasm with:\n" +
+                    "  cmake .. -DWAMR_BUILD_DEBUG_INTERP=1\n" +
+                    "  make";
+            } else if (output) {
+                details += `\n\niwasm output:\n${output}`;
+            }
+            settle(() => reject(new Error(details)));
+        }
+
+        function onError(err: Error): void {
+            settle(() => reject(
+                new Error(`iwasm failed to start: ${err.message}`),
+            ));
+        }
+
+        function cleanup(): void {
+            clearTimeout(timer);
+            iwasmProcess.stdout?.off("data", onData);
+            iwasmProcess.stderr?.off("data", onData);
+            iwasmProcess.off("exit", onExit);
+            iwasmProcess.off("error", onError);
+        }
+
+        const timer = setTimeout(() => {
+            const output = collectedOutput.join("").trim();
+            settle(() => reject(new Error(
+                `Timed out after ${timeoutMs}ms waiting for iwasm debug server.` +
+                (output ? `\n\niwasm output so far:\n${output}` : ""),
+            )));
+        }, timeoutMs);
+
+        iwasmProcess.stdout?.on("data", onData);
+        iwasmProcess.stderr?.on("data", onData);
+        iwasmProcess.on("exit", onExit);
+        iwasmProcess.on("error", onError);
+    });
+}
+
+/**
+ * Launches the iwasm process with GDB remote stub enabled.
+ *
+ * Returns the iwasm child process and the debug connection address,
+ * or `undefined` if the launch failed (error is shown to the user).
+ *
+ * Note: the caller is responsible for waiting until the debug
+ * server is ready (via `waitForIwasmReady()`) before sending
+ * `process connect` to LLDB.
+ */
+function launchIwasmDebugServer(
+    config: vscode.DebugConfiguration,
+): { iwasmProcess: ChildProcess; debugHost: string; debugPort: number } | undefined {
+    if (!extensionLib) {
+        vscode.window.showErrorMessage("Cannot debug: extension library is not available.");
+        return undefined;
+    }
+
+    const wasmFilePath = config.wasmFile as string;
+    const wasmBytes = readWasmBytes(wasmFilePath);
+    const programArgs = config.programArgs || "";
+    const runtimeOptions = config.runtimeOptions || "";
+    const exportName = (config.exportName || "") as string;
+
+    const isWindows = os.platform() === "win32";
+    const iwasmCmd = getRuntimeCommand("wamr", isWindows);
+    if (!iwasmCmd) {
+        vscode.window.showErrorMessage(
+            "Cannot debug: iwasm executable not found. " +
+            "Install WAMR (iwasm) or set 'hexana.wamrPath' in settings.",
+        );
+        return undefined;
+    }
+
+    const debugCmdLine = extensionLib.buildWamrDebugCommandLine(
+        wasmFilePath,
+        wasmBytes,
+        programArgs,
+        runtimeOptions,
+        exportName,
+        "127.0.0.1",
+        1234,
+        nodeStubWriter,
+    );
+
+    const log = getDebugOutputChannel();
+    const iwasmArgs = [...debugCmdLine.arguments];
+    const cwd = debugCmdLine.workingDirectory || path.dirname(wasmFilePath);
+
+    log.appendLine(
+        `[Hexana] Starting iwasm debug server: ${iwasmCmd} ${iwasmArgs.join(" ")} (cwd=${cwd})`,
+    );
+
+    const iwasmProcess = spawn(iwasmCmd, iwasmArgs, {
+        cwd,
+        stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    iwasmProcess.stdout?.on("data", (chunk: Buffer) => {
+        log.appendLine(`[iwasm stdout] ${chunk.toString().trimEnd()}`);
+    });
+    iwasmProcess.stderr?.on("data", (chunk: Buffer) => {
+        log.appendLine(`[iwasm stderr] ${chunk.toString().trimEnd()}`);
+    });
+    iwasmProcess.on("error", (err) => {
+        log.appendLine(`[iwasm ERROR] ${err.message}`);
+    });
+    iwasmProcess.on("exit", (code, signal) => {
+        log.appendLine(`[iwasm EXIT] code=${code}, signal=${signal}`);
+    });
+
+    return {
+        iwasmProcess,
+        debugHost: debugCmdLine.debugHost,
+        debugPort: debugCmdLine.debugPort,
+    };
 }
 
 /**
@@ -615,8 +838,26 @@ class WasmDebugAdapterTracker implements vscode.DebugAdapterTracker {
                 }
 
                 message.arguments = args;
+            } else if (runtime === "wamr") {
+                // WAMR uses a GDB remote debug stub model:
+                // iwasm is already running (launched by the factory),
+                // and we configure lldb-dap to connect via
+                // `process connect --plugin wasm connect://host:port`.
+                //
+                // IMPORTANT: Do NOT set `program` — the WAMR wasm
+                // process plugin in LLDB creates its own target from
+                // the remote stub.  A pre-existing local target from
+                // `target create` (which lldb-dap does when `program`
+                // is set) interferes with the plugin.
+                const debugHost = config._wamrDebugHost || "127.0.0.1";
+                const debugPort = config._wamrDebugPort || 1234;
+
+                const args = message.arguments || {};
+                args.launchCommands = [
+                    `process connect --plugin wasm connect://${debugHost}:${debugPort}`,
+                ];
+                message.arguments = args;
             }
-            // WAMR uses remote attach — handled separately
         } catch (e) {
             const errMsg = e instanceof Error ? e.message : String(e);
             vscode.window.showErrorMessage(
