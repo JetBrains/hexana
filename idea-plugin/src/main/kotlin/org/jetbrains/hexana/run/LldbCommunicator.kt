@@ -57,6 +57,15 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         private set
 
     /**
+     * Set to `true` once [destroy] has been called. Commands sent
+     * after this point are silently dropped — the stream is expected
+     * to be (or become) closed, so IOExceptions are not logged as
+     * warnings.
+     */
+    @Volatile
+    private var destroyed = false
+
+    /**
      * Installs a [ProcessAdapter] on the handler that parses every
      * output line for stop-event patterns. Call this before starting
      * the process handler.
@@ -108,11 +117,18 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
      * Sends a command to LLDB via stdin.
      */
     fun sendCommand(command: String) {
+        if (destroyed) {
+            LOG.debug("LLDB CMD (dropped, already destroyed): $command")
+            return
+        }
         LOG.debug("LLDB CMD: $command")
         try {
             writer.write(command)
             writer.newLine()
             writer.flush()
+        } catch (e: java.io.IOException) {
+            // Expected during shutdown — the process stream is closed.
+            LOG.debug("LLDB stream closed while sending command: $command")
         } catch (e: Exception) {
             LOG.warn("Failed to send LLDB command: $command", e)
         }
@@ -217,6 +233,8 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         command: String,
         timeoutMs: Long = 5_000,
     ): List<String> {
+        if (destroyed) return emptyList()
+
         val marker = "__HEXANA_END_${System.nanoTime()}__"
         val latch = CountDownLatch(1)
         val collector = mutableListOf<String>()
@@ -241,7 +259,7 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
             responseEndMarker = null
         }
 
-        if (!completed) {
+        if (!completed && !destroyed) {
             LOG.warn("Timed out collecting output for LLDB command: $command")
         }
         return collector.toList()
@@ -266,9 +284,13 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     }
 
     fun destroy() {
+        destroyed = true
         try {
-            sendCommand("process kill")
-            sendCommand("quit")
+            writer.write("process kill")
+            writer.newLine()
+            writer.write("quit")
+            writer.newLine()
+            writer.flush()
         } catch (_: Exception) {
             // Ignore — process may already be dead
         }
