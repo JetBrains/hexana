@@ -6,19 +6,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.analytics.HexanaAnalytics
 import org.jetbrains.hexana.analytics.HexanaEvent
+import org.jetbrains.hexana.document.DocumentListener
+import org.jetbrains.hexana.document.EditableBinaryDocument
+import org.jetbrains.hexana.document.editableBinaryDocumentOf
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
-import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.panel.Panel
@@ -53,11 +59,46 @@ internal fun BinaryEditorView(
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
 ) {
+    // Phase A.1: every opened file gets one editable BinaryDocument shared by
+    // the editor's lifecycle. Edits land in this doc; on every commit we
+    // rebuild a fresh BinaryProvider from the new bytes and swap liveProvider
+    // so all panels recompose against the post-edit state.
+    //
+    // The original provider may be a file-aware WasmBinaryVirtualFileProvider
+    // (which contributes an extra "Wat" text panel + DWARF source-location
+    // capability). Rebuilds drop to plain WasmBinaryProvider — those file-
+    // editor-bound panels can't be reconstructed without the IDE-side glue
+    // that lives in HexanaFileEditor, so they don't survive an edit. The
+    // panel list shrinks accordingly; the tab index is clamped so the user's
+    // selection never points past the new list.
+    val editableDoc: EditableBinaryDocument = remember(binaryProvider) {
+        editableBinaryDocumentOf(binaryProvider.bytes.toByteArray())
+    }
+    var liveProvider by remember(binaryProvider) {
+        mutableStateOf<BinaryProvider>(binaryProvider)
+    }
+    DisposableEffect(editableDoc, binaryProvider) {
+        val listener = DocumentListener {
+            val newBytes = editableDoc.read(0L, editableDoc.length.toInt())
+            liveProvider = rebuildProviderFromBytes(binaryProvider, newBytes) ?: binaryProvider
+        }
+        editableDoc.addListener(listener)
+        onDispose { editableDoc.removeListener(listener) }
+    }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         val pathsNav = remember { PathsNavigationState() }
-        val panels = remember {
-            val p = binaryProvider.resolvePanels(state, pathsNav)
+        val panels = remember(liveProvider) {
+            val p = liveProvider.resolvePanels(state, pathsNav)
             mutableStateListOf(*p)
+        }
+
+        // If the panel list shrank because of a file-aware → plain provider
+        // downgrade, clamp the tab index so we don't render past the end.
+        LaunchedEffect(panels.size) {
+            if (state.currentState.value.tabIndex >= panels.size && panels.isNotEmpty()) {
+                state.setSelectedTab(panels.size - 1)
+            }
         }
 
         val topTabIndex = remember(panels) { panels.indexOfFirst { it.description == "Top" }.takeIf { it >= 0 } }
@@ -73,7 +114,7 @@ internal fun BinaryEditorView(
             Column(modifier = Modifier.fillMaxSize()) {
                 FileDescriptionBar(
                     fileName = fileName,
-                    binaryProvider = binaryProvider,
+                    binaryProvider = liveProvider,
                     state = state,
                     onSizeClick = topTabIndex?.let { idx -> {
                         state.setSelectedTab(idx)
@@ -84,10 +125,16 @@ internal fun BinaryEditorView(
                     parentFileName = parentFileName,
                     onNavigateToParent = onNavigateToParent,
                 )
+                EditingDemoBar(doc = editableDoc, stampKey = editableDoc.modificationStamp)
                 Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                    HexViewer(binaryProvider, state, focusRequester = hexFocusRequester)
+                    HexViewer(
+                        binaryProvider = liveProvider,
+                        state = state,
+                        focusRequester = hexFocusRequester,
+                        editableDoc = editableDoc,
+                    )
                 }
-                HexViewStatusBar(state = state, totalBytes = binaryProvider.bytes.limit())
+                HexViewStatusBar(state = state, totalBytes = liveProvider.bytes.limit())
             }
         }, southPanel = {
             TabsPanel(panels, state.currentState.value,  onExpand = { expanded ->
@@ -104,6 +151,63 @@ internal fun BinaryEditorView(
                 }
             })
         })
+    }
+}
+
+/**
+ * Demo strip: button that flips byte 0 to 0xFF, plus Undo / Redo, plus a
+ * live readout of byte 0 and the modification stamp. Wired to the shared
+ * [EditableBinaryDocument]; the [stampKey] parameter (the document's
+ * `modificationStamp` at the time of recomposition) is the recomposition
+ * trigger that keeps the readout fresh — recomposition is driven from the
+ * parent, which reads the stamp after the live provider rebuild.
+ *
+ * This strip is a placeholder for the eventual hex-cell edit affordance in
+ * [HexViewer]. Once that lands, the demo strip can be removed.
+ */
+@Composable
+private fun EditingDemoBar(doc: EditableBinaryDocument, stampKey: Long) {
+    @Suppress("UNUSED_PARAMETER") val unused = stampKey
+    val byteZeroHex = if (doc.length > 0L) {
+        ((doc.readByte(0L).toInt() and 0xFF).toString(16).uppercase().padStart(2, '0'))
+    } else "—"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(HexanaTheme.backgroundColor)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Editing demo (A.0):",
+            style = TextStyle(fontSize = 11.sp, color = HexanaTheme.hexTextColor),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        DefaultButton(
+            onClick = {
+                if (doc.length > 0L) {
+                    doc.edit().apply {
+                        replace(0L, 1L, byteArrayOf(0xFF.toByte()))
+                        commit()
+                    }
+                }
+            },
+        ) { Text("Flip byte 0 → 0xFF") }
+        Spacer(modifier = Modifier.width(8.dp))
+        OutlinedButton(
+            onClick = { if (doc.canUndo()) doc.undo() },
+            enabled = doc.canUndo(),
+        ) { Text("Undo") }
+        Spacer(modifier = Modifier.width(4.dp))
+        OutlinedButton(
+            onClick = { if (doc.canRedo()) doc.redo() },
+            enabled = doc.canRedo(),
+        ) { Text("Redo") }
+        Spacer(modifier = Modifier.weight(1f))
+        Text(
+            text = "byte0=0x$byteZeroHex  stamp=${doc.modificationStamp}  len=${doc.length}",
+            style = TextStyle(fontSize = 10.sp, color = HexanaTheme.hexTextColor),
+        )
     }
 }
 
@@ -171,6 +275,25 @@ private fun TabsPanel(
     }
 }
 
+
+/**
+ * Builds a fresh [BinaryProvider] from [newBytes] when the editable document
+ * commits a change. File-aware capabilities (the old WAT-text panel that
+ * needs `createTextEditor`, DWARF source-location lookups) live on the
+ * concrete [WasmBinaryVirtualFileProvider] subclass instantiated in
+ * `HexanaFileEditor` and aren't reachable from a freshly-built provider —
+ * panels that depend on them are dropped from the post-edit panel list.
+ * Returns `null` if [original]'s type isn't supported for rebuild.
+ */
+private fun rebuildProviderFromBytes(original: BinaryProvider, newBytes: ByteArray): BinaryProvider? {
+    val buf = newBytes.toCommonByteBuffer()
+    return when (original) {
+        is WasmBinaryVirtualFileProvider, is WasmBinaryProvider -> WasmBinaryProvider(buf)
+        is WasmComponentBinaryVirtualFileProvider, is WasmComponentBinaryProvider -> WasmComponentBinaryProvider(buf)
+        is GenericBinaryProvider -> GenericBinaryProvider(buf)
+        else -> null
+    }
+}
 
 private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: PathsNavigationState): Array<Panel> {
     val panels = when (this) {

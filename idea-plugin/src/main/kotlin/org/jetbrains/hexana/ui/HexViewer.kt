@@ -48,6 +48,7 @@ import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.HexanaService
+import org.jetbrains.hexana.document.EditableBinaryDocument
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toByteBuffer
 import org.jetbrains.hexana.providers.*
@@ -95,7 +96,8 @@ internal fun HexViewer(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
     showOffsets: Boolean = true,
-    focusRequester: FocusRequester
+    focusRequester: FocusRequester,
+    editableDoc: EditableBinaryDocument? = null,
 ) {
     val buf = binaryProvider.bytes
 
@@ -104,6 +106,13 @@ internal fun HexViewer(
 
     val arrowKeyHandler = remember { mutableStateOf<((Key, Boolean) -> Unit)?>(null) }
 
+    // Pending hex digit for in-cell editing: when non-null, the cursor cell
+    // shows `<digit>_` and the next hex digit typed combines into a byte and
+    // commits via `editableDoc.edit().replace(...).commit()`. Cleared on
+    // Escape, on cursor move, or after a successful commit. Null when no
+    // editable document is wired or the hex viewer is not in edit mode.
+    var pendingDigit by remember(editableDoc) { mutableStateOf<Int?>(null) }
+
     BoxWithConstraints(
         modifier = Modifier
             .focusRequester(focusRequester)
@@ -111,8 +120,28 @@ internal fun HexViewer(
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
                         Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight -> {
+                            pendingDigit = null
                             arrowKeyHandler.value?.invoke(event.key, event.isShiftPressed)
                             return@onPreviewKeyEvent true
+                        }
+                        Key.Escape -> {
+                            if (pendingDigit != null) {
+                                pendingDigit = null
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                        else -> {
+                            val digit = hexDigitValue(event.key)
+                            if (digit != null && editableDoc != null) {
+                                pendingDigit = handleHexDigit(
+                                    digit = digit,
+                                    pending = pendingDigit,
+                                    bytesPerRow = state.bytesPerRow.value,
+                                    state = state,
+                                    doc = editableDoc,
+                                )
+                                return@onPreviewKeyEvent true
+                            }
                         }
                     }
                 }
@@ -480,9 +509,15 @@ internal fun HexViewer(
                                         (start until end).forEachIndexed { byteIndex, absoluteIndex ->
                                             buf.position(absoluteIndex)
                                             val byte = buf.get()
-                                            val byteText = (byte.toInt() and 0xFF).asHexString()
+                                            val originalText = (byte.toInt() and 0xFF).asHexString()
                                             val isUnderCursor = byteIndex == state.cursorPosition.lineOffset &&
                                                     rowIndex == state.cursorPosition.line
+                                            // Show pending edit digit on the cursor cell when one is queued.
+                                            val byteText = if (isUnderCursor && pendingDigit != null) {
+                                                pendingDigit!!.toString(16).uppercase() + "_"
+                                            } else {
+                                                originalText
+                                            }
 
                                             val isHover =
                                                 byteIndex == state.hoverPosition.lineOffset && rowIndex == state.hoverPosition.line
@@ -756,6 +791,72 @@ private fun getContextActions(
     return result
 }
 
+
+/**
+ * Maps a Compose [Key] to its hex-digit value `[0..15]` if it represents one,
+ * or null otherwise. Accepts `0-9` (number row OR numpad) and `a-f` /`A-F`
+ * (letter shift state doesn't matter — `Key.A` represents the physical key).
+ */
+private fun hexDigitValue(key: Key): Int? = when (key) {
+    Key.Zero, Key.NumPad0 -> 0
+    Key.One, Key.NumPad1 -> 1
+    Key.Two, Key.NumPad2 -> 2
+    Key.Three, Key.NumPad3 -> 3
+    Key.Four, Key.NumPad4 -> 4
+    Key.Five, Key.NumPad5 -> 5
+    Key.Six, Key.NumPad6 -> 6
+    Key.Seven, Key.NumPad7 -> 7
+    Key.Eight, Key.NumPad8 -> 8
+    Key.Nine, Key.NumPad9 -> 9
+    Key.A -> 0xA
+    Key.B -> 0xB
+    Key.C -> 0xC
+    Key.D -> 0xD
+    Key.E -> 0xE
+    Key.F -> 0xF
+    else -> null
+}
+
+/**
+ * Applies a single hex digit to the current cursor cell.
+ *
+ * - When [pending] is `null`, this is the high nibble — store and wait for
+ *   the second digit; returns the new pending value.
+ * - When [pending] is non-null, this is the low nibble — combine into a byte,
+ *   commit `replace(off, off+1, byte)` on [doc], advance the cursor to the
+ *   next cell, and return `null` to clear the pending state.
+ *
+ * If the cursor sits past the end of the document we drop the digit silently
+ * (return whatever [pending] was).
+ */
+private fun handleHexDigit(
+    digit: Int,
+    pending: Int?,
+    bytesPerRow: Int,
+    state: HexViewStateHolder,
+    doc: EditableBinaryDocument,
+): Int? {
+    val absoluteOffset = (state.cursorPosition.line.toLong() * bytesPerRow.toLong()) +
+        state.cursorPosition.lineOffset.toLong()
+    if (absoluteOffset < 0L || absoluteOffset >= doc.length) return pending
+
+    if (pending == null) {
+        return digit
+    }
+
+    val byte = ((pending and 0xF) shl 4) or (digit and 0xF)
+    doc.edit().apply {
+        replace(absoluteOffset, absoluteOffset + 1L, byteArrayOf(byte.toByte()))
+        commit()
+    }
+    val nextOffset = absoluteOffset + 1L
+    if (nextOffset < doc.length) {
+        val nextLine = (nextOffset / bytesPerRow.toLong()).toInt()
+        val nextLineOffset = (nextOffset % bytesPerRow.toLong()).toInt()
+        state.setCursorPosition(nextLine, nextLineOffset)
+    }
+    return null
+}
 
 private fun Int.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
 private fun Byte.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
