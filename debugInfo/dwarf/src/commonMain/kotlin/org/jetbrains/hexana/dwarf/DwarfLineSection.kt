@@ -238,6 +238,7 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
             lineRange,
             lineBase,
             standardOpcodeLengths,
+            addressSize,
             segmentSelectorSize,
             directoryEntryFormatCount,
             directoryEntryFormats,
@@ -339,6 +340,7 @@ sealed class DwarfLineUnitHeader<T>(
             lineRange: UByte,
             lineBase: Byte,
             standardOpcodeLengths: ByteArray,
+            val addressSize: UByte,
             val segmentSelectorSize: UByte,
             val directoryEntryFormatCount: UByte,
             val directoryEntryFormats: List<DwarfEntryFormat>,
@@ -430,6 +432,8 @@ sealed class DwarfLineUnitHeader<T>(
             lineBase: Byte,
             lineRange: UByte,
             standardOpcodeLengths: ByteArray,
+            val addressSize: UByte,
+            val segmentSelectorSize: UByte,
             programOffset: ULong,
             unitSize: ULong, accessor: DwarfAccessor,
         ) : Dwarf64LineUnitHeader(
@@ -479,6 +483,9 @@ sealed class DwarfLineUnitHeader<T>(
                 val op = when (opEncoding) {
                     0x0.toUByte() -> {
                         val extendedLength = getULEB128().toInt()
+                        require(extendedLength >= 1) {
+                            "Malformed DWARF extended line opcode length: $extendedLength"
+                        }
                         val extendedOffset = position()
                         val extendedOpCode = readUByte()
                         when (extendedOpCode) {
@@ -487,13 +494,13 @@ sealed class DwarfLineUnitHeader<T>(
                             }
 
                             0x02.toUByte() -> {
-                                // DW_LNE_set_address carries one target address
+                                // DW_LNE_set_address carries a target address
                                 // after the extended opcode byte. The preceding
                                 // extended length gives this payload width, so
                                 // using a fixed UInt corrupts 64-bit line
                                 // programs. See DWARF v5 section 6.2.5.3.
                                 // https://dwarfstd.org/doc/DWARF5.pdf
-                                val address = readAddressFromExtendedOpcode(extendedLength - 1)
+                                val address = readSetAddressOperand(extendedLength - 1)
                                 LneOpcode.DW_LNE_set_address(
                                     extendedOffset, extendedLength,
                                     arrayOf(address).toULongArray()
@@ -623,19 +630,55 @@ sealed class DwarfLineUnitHeader<T>(
         return result
     }
 
+    private fun CommonByteBuffer.readSetAddressOperand(byteSize: Int): ULong {
+        return when (this@DwarfLineUnitHeader) {
+            is Dwarf32LineUnitHeader.V5 -> readSetAddressOperand(
+                byteSize,
+                addressSize.toInt(),
+                segmentSelectorSize.toInt()
+            )
+            is Dwarf64LineUnitHeader.V5 -> readSetAddressOperand(
+                byteSize,
+                addressSize.toInt(),
+                segmentSelectorSize.toInt()
+            )
+            else -> readAddressFromExtendedOpcode(byteSize)
+        }
+    }
+
+    private fun CommonByteBuffer.readSetAddressOperand(
+        byteSize: Int,
+        addressSize: Int,
+        segmentSelectorSize: Int,
+    ): ULong {
+        return when (byteSize) {
+            addressSize -> readAddressFromExtendedOpcode(addressSize)
+            addressSize + segmentSelectorSize -> {
+                repeat(segmentSelectorSize) {
+                    readUByte()
+                }
+                readAddressFromExtendedOpcode(addressSize)
+            }
+            else -> throw IllegalArgumentException(
+                "DW_LNE_set_address payload size $byteSize does not match address size $addressSize"
+            )
+        }
+    }
+
     private fun CommonByteBuffer.readAddressFromExtendedOpcode(byteSize: Int): ULong =
         when (byteSize) {
             1 -> readUByte().toULong()
             2 -> readUShort().toULong()
             4 -> readUInt().toULong()
             8 -> readULong()
-            else -> {
+            in 3..7 -> {
                 var value = 0uL
                 repeat(byteSize) { index ->
                     value = value or (readUByte().toULong() shl (index * 8))
                 }
                 value
             }
+            else -> throw IllegalArgumentException("Unsupported DWARF address size in line opcode: $byteSize")
         }
 
     private fun CommonByteBuffer.extendedArgumentsLoading(

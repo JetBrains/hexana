@@ -11,26 +11,7 @@ import kotlin.test.assertIs
 class DwarfLineSectionTest {
     @Test
     fun `DWARF32 v5 line program starts after address and segment size fields`() {
-        val bytes = byteArrayOf(
-            0x1f, 0x00, 0x00, 0x00, // unit_length
-            0x05, 0x00, // version
-            0x08, // address_size
-            0x00, // segment_selector_size
-            0x16, 0x00, 0x00, 0x00, // header_length
-            0x01, // minimum_instruction_length
-            0x01, // maximum_operations_per_instruction
-            0x01, // default_is_stmt
-            0xfb.toByte(), // line_base = -5
-            0x0e, // line_range
-            0x0d, // opcode_base
-            0x00, 0x01, 0x01, 0x01, 0x01, 0x00,
-            0x00, 0x00, 0x01, 0x00, 0x00, 0x01, // standard_opcode_lengths
-            0x00, // directory_entry_format_count
-            0x00, // directories_count
-            0x00, // file_name_entry_format_count
-            0x00, // file_names_count
-            0x19, // first line-program opcode
-        ).toCommonByteBuffer()
+        val bytes = dwarf32V5LineTable(program = intArrayOf(0x19))
         val section = DwarfLineSection(0, bytes.size, EmptyDwarfAccessor)
 
         val header = with(section) {
