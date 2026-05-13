@@ -333,7 +333,16 @@ open class WasmDebugProcess(
     private fun handleStopImpl(communicator: LldbCommunicator, event: LldbCommunicator.StopEvent) {
         // Use sendCommandAndCollectOutput so the response is fenced
         // and stop-event detection is suppressed for the output lines.
-        val lines = communicator.sendCommandAndCollectOutput("frame info")
+        var lines = communicator.sendCommandAndCollectOutput("frame info")
+
+        // WAMR remote debugging sometimes causes the marker-based
+        // output collection to time out (the Python `script` command
+        // may not interleave reliably with the GDB remote protocol).
+        // Retry once with a longer timeout before giving up.
+        if (lines.isEmpty()) {
+            LOG.info("frame info returned empty output, retrying with longer timeout")
+            lines = communicator.sendCommandAndCollectOutput("frame info", timeoutMs = 10_000)
+        }
 
         val rawDwarfPath = parseRawDwarfPath(lines)
         val rawDwarfLine = parseRawDwarfLine(lines)
@@ -502,7 +511,16 @@ open class WasmDebugProcess(
         // trap (e.g. `unreachable`, bounds check, or other JIT-emitted
         // `brk` instruction) — not a user breakpoint.  Auto-resume
         // instead of pausing the IDE.
-        if (event is LldbCommunicator.StopEvent.BreakpointHit) {
+        //
+        // WAMR is an exception: it uses an interpreter-based GDB
+        // remote stub (not JIT compilation), so it does not emit
+        // spurious EXC_BREAKPOINT / trap signals. Every BreakpointHit
+        // from WAMR is a real user breakpoint. When location
+        // resolution fails (e.g. `frame info` timed out or the DWARF
+        // path could not be mapped to a local file), we must NOT
+        // auto-resume — doing so would silently skip every
+        // breakpoint the user set.
+        if (event is LldbCommunicator.StopEvent.BreakpointHit && engine == WasmEngine.WASMTIME) {
             LOG.info(
                 "No matching IDE breakpoint for stop at " +
                     "${verifiedPath ?: rawDwarfPath}:${rawDwarfLine ?: "?"} " +
@@ -511,6 +529,55 @@ open class WasmDebugProcess(
             )
             resumePastTrap(communicator)
             return
+        }
+
+        // For WAMR (and other non-Wasmtime engines): when the stop
+        // location could not be resolved to a source position, try
+        // to find a matching registered breakpoint by LLDB breakpoint
+        // number so we can still report it as a breakpoint hit in
+        // the IDE. LLDB assigns breakpoint numbers in the order
+        // they are set (1, 2, 3 …). The `replayBreakpointsToLldb`
+        // method sets them in `registeredBreakpoints` iteration
+        // order, so breakpoint number N corresponds to the Nth
+        // registered breakpoint.
+        if (event is LldbCommunicator.StopEvent.BreakpointHit &&
+            resolvedPosition == null
+        ) {
+            val bpNumber = event.breakpointId.substringBefore('.').toIntOrNull()
+            val matchedEntry = if (bpNumber != null && bpNumber >= 1) {
+                registeredBreakpoints.entries.drop(bpNumber - 1).firstOrNull()
+            } else null
+
+            if (matchedEntry != null) {
+                val (bp, loc) = matchedEntry
+                val bpFile = LocalFileSystem.getInstance().findFileByPath(loc.first)
+                val bpPosition = if (bpFile != null) {
+                    XDebuggerUtilImpl.getInstance()
+                        .createPosition(bpFile, loc.second - 1)
+                } else null
+                LOG.info(
+                    "WAMR breakpoint hit (id='${event.breakpointId}') — " +
+                        "resolved via breakpoint number to ${loc.first}:${loc.second}"
+                )
+                val frame = WasmStackFrame(
+                    bpPosition, functionName, lldb,
+                    dwarfVariableResolver = dwarfVariableResolver,
+                    engine = engine,
+                )
+                val context = WasmSuspendContext(frame, lldb, this)
+                ApplicationManager.getApplication().invokeLater {
+                    session.breakpointReached(bp, null, context)
+                }
+                return
+            }
+
+            // Could not match by breakpoint number — still present
+            // the stop so the user is not silently skipped.
+            LOG.info(
+                "WAMR breakpoint hit (id='${event.breakpointId}') at " +
+                    "${rawDwarfPath ?: "unknown"}:${rawDwarfLine ?: "?"} — " +
+                    "could not match to IDE breakpoint, presenting stop"
+            )
         }
 
         val frame = WasmStackFrame(

@@ -200,6 +200,55 @@ class LldbOutputParserTest {
         assertNull(parseLldbFunctionName(lines))
     }
 
+    // ── WAMR-specific stop events and frame output ────────────────
+
+    @Test
+    fun wamrTraceStopOnConnect() {
+        // WAMR produces `stop reason = trace` when LLDB first connects.
+        val event = parseLldbStopEvent(
+            "* thread #1, name = 'nobody', stop reason = trace"
+        )
+        assertIs<LldbStopEvent.Stepped>(event)
+    }
+
+    @Test
+    fun wamrBreakpointHit() {
+        // WAMR breakpoint hit with the `name = 'nobody'` thread name.
+        val event = parseLldbStopEvent(
+            "* thread #1, name = 'nobody', stop reason = breakpoint 1.1"
+        )
+        assertIs<LldbStopEvent.BreakpointHit>(event)
+        assertEquals(1, event.threadId)
+        assertEquals("1.1", event.breakpointId)
+    }
+
+    @Test
+    fun wamrGoFrameLocation() {
+        // WAMR frame output for Go — no backtick or JIT module identifier.
+        val lines = listOf(
+            "frame #0: 0x400000000000041a add(x=<unavailable>, y=<unavailable>) at main.go:15:14"
+        )
+        val loc = parseLldbFrameLocation(lines)
+        assertEquals("main.go", loc?.filePath)
+        assertEquals(15, loc?.line)
+    }
+
+    @Test
+    fun wamrGoRawDwarfPath() {
+        val lines = listOf(
+            "frame #0: 0x400000000000041a add(x=<unavailable>, y=<unavailable>) at main.go:15:14"
+        )
+        assertEquals("main.go", parseRawDwarfPath(lines))
+    }
+
+    @Test
+    fun wamrGoRawDwarfLine() {
+        val lines = listOf(
+            "frame #0: 0x400000000000041a add(x=<unavailable>, y=<unavailable>) at main.go:15:14"
+        )
+        assertEquals(15, parseRawDwarfLine(lines))
+    }
+
     // ── looksLikeWamrDebugNotSupported ──────────────────────────────
 
     @Test
