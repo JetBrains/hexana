@@ -44,11 +44,19 @@
         "label": "Hexana MCP"
       }
     ],
+    "breakpoints": [
+      { "language": "c" },
+      { "language": "cpp" },
+      { "language": "rust" },
+      { "language": "go" },
+      { "language": "zig" },
+      { "language": "wat" }
+    ],
     "debuggers": [
       {
         "type": "wasm",
         "label": "WebAssembly Debug",
-        "languages": ["wasm"],
+        "languages": ["wasm", "c", "cpp", "rust", "go", "zig", "wat"],
         "configurationAttributes": {
           "launch": {
             "required": ["wasmFile"],
