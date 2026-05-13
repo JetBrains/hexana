@@ -168,6 +168,115 @@ open class WasmDebugProcess(
         }
     }
 
+    /**
+     * Queries LLDB to determine whether the current stop location
+     * corresponds to any registered breakpoint and, if so, returns
+     * the matching IDE breakpoint. This is used by WAMR after
+     * connecting and replaying breakpoints: the initial `trace` stop
+     * may already be at (or very near) the breakpoint address, so
+     * resuming would skip past it.
+     *
+     * Two checks are performed in order:
+     *
+     * 1. **Exact PC match** — compare the current `lldb.frame.pc`
+     *    against every breakpoint-location load address.  This is
+     *    the most precise check and produces no false positives.
+     *
+     * 2. **Source-line match** — if the PC check returns "none"
+     *    (which happens with WAMR when the trace-stop PC is a few
+     *    bytes past the breakpoint address), fall back to comparing
+     *    the frame's resolved source file + line against each
+     *    breakpoint location's resolved source file + line.  The
+     *    comparison uses `SBFileSpec.GetDirectory()` and
+     *    `SBFileSpec.GetFilename()` so that files with the same
+     *    basename but different directories (e.g. multiple Rust
+     *    crates each having `src/lib.rs`) are distinguished.
+     *
+     * When a match is found, the LLDB breakpoint number is used to
+     * map back to the corresponding IDE breakpoint (breakpoints are
+     * replayed in `registeredBreakpoints` iteration order, so LLDB
+     * breakpoint N corresponds to the Nth registered entry).
+     *
+     * @return the matching breakpoint entry (breakpoint → file+line),
+     *         or `null` if the current stop does not match any
+     *         breakpoint.
+     */
+    protected fun checkInitialStopMatchesBreakpoint(
+        communicator: LldbCommunicator,
+    ): Map.Entry<XLineBreakpoint<WasmBreakpointProperties>, Pair<String, Int>>? {
+        if (registeredBreakpoints.isEmpty()) return null
+
+        // --- Tier 1: exact PC-vs-address comparison ---
+        //
+        // Uses a single-line `script print(...)` invocation to avoid
+        // entering the interactive Python REPL, which requires a
+        // blank-line terminator and can interfere with the marker-
+        // based response collection.
+        val pcScriptLines = communicator.sendCommandAndCollectOutput(
+            "script print(next((str(bp.GetID()) for bp in lldb.target.breakpoint_iter() " +
+                "for loc in bp if loc.GetAddress().GetLoadAddress(lldb.target) == lldb.frame.pc), 'none'))",
+            timeoutMs = 10_000,
+        )
+
+        val pcBpIdStr = pcScriptLines
+            .firstOrNull { it.trim() != "" && !it.trim().startsWith("(lldb)") }
+            ?.trim()
+
+        LOG.debug("Initial stop PC check: scriptOutput=$pcScriptLines, parsed bpId=$pcBpIdStr")
+
+        val pcMatch = pcBpIdStr?.toIntOrNull()?.let { bpNumber ->
+            if (bpNumber >= 1) registeredBreakpoints.entries.drop(bpNumber - 1).firstOrNull() else null
+        }
+
+        if (pcMatch != null) {
+            LOG.debug(
+                "Initial stop at PC matches LLDB breakpoint (exact address) " +
+                    "→ IDE breakpoint at ${pcMatch.value.first}:${pcMatch.value.second}"
+            )
+            return pcMatch
+        }
+
+        // --- Tier 2: source file + line match ---
+        //
+        // WAMR's trace stop can place the PC a few bytes past the
+        // breakpoint address (e.g. PC=0x41a vs BP=0x418).  In that
+        // case the exact-address check above returns "none".  Compare
+        // the frame's resolved source line against each breakpoint
+        // location's resolved source line (including directory to
+        // prevent false positives from shared basenames).
+        val lineScriptLines = communicator.sendCommandAndCollectOutput(
+            "script " +
+                "le=lldb.frame.GetLineEntry(); " +
+                "fs=le.GetFileSpec(); " +
+                "fd=fs.GetDirectory() or ''; fn=fs.GetFilename() or ''; fl=le.GetLine(); " +
+                "print(next((str(bp.GetID()) for bp in lldb.target.breakpoint_iter() " +
+                "for loc in bp " +
+                "for ble in [loc.GetAddress().GetLineEntry()] " +
+                "for bfs in [ble.GetFileSpec()] " +
+                "if (bfs.GetDirectory() or '')==fd and (bfs.GetFilename() or '')==fn and ble.GetLine()==fl), 'none'))",
+            timeoutMs = 10_000,
+        )
+
+        val lineBpIdStr = lineScriptLines
+            .firstOrNull { it.trim() != "" && !it.trim().startsWith("(lldb)") }
+            ?.trim()
+
+        LOG.debug("Initial stop line check: scriptOutput=$lineScriptLines, parsed bpId=$lineBpIdStr")
+
+        val lineMatch = lineBpIdStr?.toIntOrNull()?.let { bpNumber ->
+            if (bpNumber >= 1) registeredBreakpoints.entries.drop(bpNumber - 1).firstOrNull() else null
+        }
+
+        if (lineMatch != null) {
+            LOG.debug(
+                "Initial stop at PC matches LLDB breakpoint (source line) " +
+                    "→ IDE breakpoint at ${lineMatch.value.first}:${lineMatch.value.second}"
+            )
+        }
+
+        return lineMatch
+    }
+
     fun unregisterBreakpointInLldb(breakpoint: XLineBreakpoint<WasmBreakpointProperties>) {
         registeredBreakpoints.remove(breakpoint)
         // Remove all and re-add remaining breakpoints using basenames.

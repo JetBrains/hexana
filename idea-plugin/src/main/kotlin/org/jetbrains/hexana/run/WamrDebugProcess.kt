@@ -2,8 +2,13 @@ package org.jetbrains.hexana.run
 
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.ui.ExecutionConsole
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.xdebugger.XDebugSession
+import com.intellij.xdebugger.impl.XDebuggerUtilImpl
+import com.intellij.openapi.vfs.LocalFileSystem
+import org.jetbrains.hexana.shared.parseLldbFrameLocation
+import org.jetbrains.hexana.shared.parseLldbFunctionName
 
 /**
  * A debug process for the WAMR runtime that extends [WasmDebugProcess]
@@ -96,8 +101,81 @@ class WamrDebugProcess(
             // so they don't confuse the event loop.
             communicator.drainPendingStopEvents()
 
-            communicator.resume()
+            // WAMR's initial `trace` stop may already be at a location
+            // that matches a user breakpoint (e.g. the first line of
+            // the function where the breakpoint is set). In that case,
+            // issuing `continue` would resume past the breakpoint
+            // address — the PC has already advanced beyond it, so the
+            // breakpoint is never re-triggered and the process runs to
+            // completion without stopping.
+            //
+            // To handle this, query `frame info` before resuming to
+            // check if the current stop location matches any registered
+            // breakpoint. If it does, present the stop to the IDE
+            // immediately instead of resuming.
+            val initialBreakpoint = checkInitialStopMatchesBreakpoint(communicator)
+
+            // Start the event loop BEFORE resuming so that the consumer
+            // thread is already waiting when a fast program hits a
+            // breakpoint or exits. Without this ordering, the stop
+            // event can arrive in the queue before the loop thread
+            // starts, and a very short program may exit before the
+            // event is ever consumed.
             startEventLoopForSession()
+
+            if (initialBreakpoint != null) {
+                val bp = initialBreakpoint.key
+                val loc = initialBreakpoint.value
+                LOG.info(
+                    "Initial WAMR trace stop matches breakpoint at " +
+                        "${loc.first}:${loc.second} " +
+                        "— presenting stop instead of resuming"
+                )
+
+                // Query the actual frame info from LLDB so we can
+                // populate the stack frame with the correct function
+                // name and source position (instead of just the IDE
+                // breakpoint registration data).
+                val frameLines = communicator.sendCommandAndCollectOutput(
+                    "frame info", timeoutMs = 10_000
+                )
+                val frameLocation = parseLldbFrameLocation(frameLines)
+                val functionName = parseLldbFunctionName(frameLines)
+
+                // Try to resolve the source position from LLDB's
+                // frame output (exact path, then DWARF suffix match).
+                val sourcePosition = if (frameLocation != null) {
+                    val vFile = LocalFileSystem.getInstance()
+                        .findFileByPath(frameLocation.filePath)
+                        ?: resolveFileByDwarfPath(frameLocation.filePath)
+                    if (vFile != null) {
+                        XDebuggerUtilImpl.getInstance()
+                            .createPosition(vFile, frameLocation.line - 1)
+                    } else null
+                } else null
+
+                // Fall back to the breakpoint registration position
+                // when `frame info` couldn't provide a source.
+                val effectivePosition = sourcePosition ?: run {
+                    val bpFile = LocalFileSystem.getInstance().findFileByPath(loc.first)
+                    if (bpFile != null) {
+                        XDebuggerUtilImpl.getInstance()
+                            .createPosition(bpFile, loc.second - 1)
+                    } else null
+                }
+
+                val frame = WasmStackFrame(
+                    effectivePosition, functionName, getLldb(),
+                    dwarfVariableResolver = dwarfVariableResolver,
+                    engine = engine,
+                )
+                val context = WasmSuspendContext(frame, getLldb(), this)
+                ApplicationManager.getApplication().invokeLater {
+                    session.breakpointReached(bp, null, context)
+                }
+            } else {
+                communicator.resume()
+            }
         }
     }
 
