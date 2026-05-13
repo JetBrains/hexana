@@ -11,7 +11,11 @@ import org.jetbrains.hexana.io.crossSectionOperation
  * @property declLine the source line number (`DW_AT_decl_line`)
  * @property typeOffset the DIE offset of the type (`DW_AT_type`)
  * @property location the decoded location description, or `null` if no
- *           `DW_AT_location` attribute was present (variable optimized away)
+ *           `DW_AT_location` attribute was present (variable optimized away).
+ *           When the variable uses a location list, this is the first entry's
+ *           location (for backward compatibility).
+ * @property locationList the full location list when `DW_AT_location` references
+ *           a `.debug_loc` entry. Empty when the location is a single expression.
  * @property isParameter `true` when the DIE tag is `DW_TAG_formal_parameter`
  */
 data class DwarfVariableInfo(
@@ -20,6 +24,7 @@ data class DwarfVariableInfo(
     val declLine: Int?,
     val typeOffset: Int?,
     val location: DwarfLocationDescription?,
+    val locationList: List<DwarfLocationListEntry> = emptyList(),
     val isParameter: Boolean,
 )
 
@@ -31,6 +36,8 @@ data class DwarfVariableInfo(
  * @property lowPc the start code address (`DW_AT_low_pc`)
  * @property highPc the end code address (`DW_AT_high_pc`)
  * @property frameBase the decoded frame base expression (`DW_AT_frame_base`), or `null`
+ * @property frameBaseList the full location list for the frame base, if it uses a
+ *           `.debug_loc` reference. Empty when the frame base is a single expression.
  * @property variables the local variables and parameters declared in this subprogram
  */
 data class DwarfSubprogramInfo(
@@ -39,6 +46,7 @@ data class DwarfSubprogramInfo(
     val lowPc: Int?,
     val highPc: Int?,
     val frameBase: DwarfLocationDescription?,
+    val frameBaseList: List<DwarfLocationListEntry> = emptyList(),
     val variables: List<DwarfVariableInfo>,
 )
 
@@ -167,7 +175,7 @@ class DwarfVariableInfoExtractor(private val dwarfAccessor: DwarfAccessor) {
             }
         } else null
 
-        val frameBase = extractLocation(die, Attribute.DW_AT_frame_base, addressSize)
+        val (frameBase, frameBaseList) = extractLocationWithList(die, Attribute.DW_AT_frame_base, addressSize)
 
         val variables = mutableListOf<DwarfVariableInfo>()
         collectVariables(die, addressSize, cu, variables)
@@ -178,6 +186,7 @@ class DwarfVariableInfoExtractor(private val dwarfAccessor: DwarfAccessor) {
             lowPc = lowPc,
             highPc = highPc,
             frameBase = frameBase,
+            frameBaseList = frameBaseList,
             variables = variables,
         )
     }
@@ -211,7 +220,7 @@ class DwarfVariableInfoExtractor(private val dwarfAccessor: DwarfAccessor) {
         val declFile = die.attributes.find { it.attribute.name == Attribute.DW_AT_decl_file }?.intValue
         val declLine = die.attributes.find { it.attribute.name == Attribute.DW_AT_decl_line }?.intValue
         val typeOffset = die.attributes.find { it.attribute.name == Attribute.DW_AT_type }?.intValue
-        val location = extractLocation(die, Attribute.DW_AT_location, addressSize)
+        val (location, locationList) = extractLocationWithList(die, Attribute.DW_AT_location, addressSize)
 
         return DwarfVariableInfo(
             name = name,
@@ -219,6 +228,7 @@ class DwarfVariableInfoExtractor(private val dwarfAccessor: DwarfAccessor) {
             declLine = declLine,
             typeOffset = typeOffset,
             location = location,
+            locationList = locationList,
             isParameter = die.tag == Tag.DW_TAG_formal_parameter,
         )
     }
@@ -231,6 +241,49 @@ class DwarfVariableInfoExtractor(private val dwarfAccessor: DwarfAccessor) {
         val field = die.attributes.find { it.attribute.name == attr } ?: return null
         val bytes = field.value as? ByteArray ?: return null
         return DwarfExpressionParser.parse(bytes, addressSize)
+    }
+
+    /**
+     * Extracts a location attribute that may be either an inline expression
+     * (`DW_FORM_exprloc` / `DW_FORM_block*`) or a reference into the
+     * `.debug_loc` section (`DW_FORM_sec_offset` / `DW_FORM_data4`).
+     *
+     * @return a pair of (single location description, location list).
+     *         For inline expressions, the list is empty.
+     *         For location list references, the single location is the
+     *         first entry's location (or `null` if the list is empty).
+     */
+    private fun CommonByteBuffer.extractLocationWithList(
+        die: DebugInformationEntry,
+        attr: Attribute,
+        addressSize: Int,
+    ): Pair<DwarfLocationDescription?, List<DwarfLocationListEntry>> {
+        val field = die.attributes.find { it.attribute.name == attr }
+            ?: return Pair(null, emptyList())
+
+        // Inline expression (DW_FORM_exprloc, DW_FORM_block*)
+        val bytes = field.value as? ByteArray
+        if (bytes != null) {
+            return Pair(DwarfExpressionParser.parse(bytes, addressSize), emptyList())
+        }
+
+        // Location list reference (DW_FORM_sec_offset, DW_FORM_data4, etc.)
+        val form = field.attribute.form
+        if (form is Form.DW_FORM_sec_offset ||
+            form is Form.DW_FORM_data4 ||
+            form is Form.DW_FORM_data8
+        ) {
+            val locListOffset = field.intValue ?: return Pair(null, emptyList())
+            val locSection = dwarfAccessor.debugLocSection()
+                ?: return Pair(null, emptyList())
+            val entries = crossSectionOperation {
+                readLocationList(locSection, locListOffset, addressSize)
+            }
+            val firstLocation = entries.firstOrNull()?.location
+            return Pair(firstLocation, entries)
+        }
+
+        return Pair(null, emptyList())
     }
 
     private fun CommonByteBuffer.resolveStringAttribute(

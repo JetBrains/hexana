@@ -164,6 +164,10 @@ object DwarfExpressionParser {
     private fun readOperation(buffer: CommonByteBuffer, addressSize: Int): DwarfExprOp {
         val opByte = buffer.get().toUByte()
         return when {
+            // DW_OP_litN: 0x30..0x4f → push literal N (0..31)
+            opByte in 0x30u..0x4fu -> DwarfExprOp.ConstFixed(
+                (opByte - 0x30u).toLong(), 0, false,
+            )
             // DW_OP_regN: 0x50..0x6f → registers 0..31
             opByte in 0x50u..0x6fu -> DwarfExprOp.Register((opByte - 0x50u).toInt())
             // DW_OP_bregN: 0x70..0x8f → base register + SLEB128 offset

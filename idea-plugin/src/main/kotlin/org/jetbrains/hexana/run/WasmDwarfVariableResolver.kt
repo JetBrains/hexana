@@ -3,6 +3,7 @@ package org.jetbrains.hexana.run
 import com.intellij.openapi.diagnostic.Logger
 import org.jetbrains.hexana.dwarf.DwarfExprOp
 import org.jetbrains.hexana.dwarf.DwarfLocationDescription
+import org.jetbrains.hexana.dwarf.DwarfLocationListEntry
 import org.jetbrains.hexana.dwarf.DwarfSubprogramInfo
 import org.jetbrains.hexana.dwarf.DwarfVariableInfo
 import org.jetbrains.hexana.dwarf.DwarfVariableInfoExtractor
@@ -55,14 +56,14 @@ internal class WasmDwarfVariableResolver private constructor(
         // First, try to find the variable in the matching subprogram
         val dwarfVar = findDwarfVariable(variable.name, functionName)
         if (dwarfVar != null) {
-            val resolved = tryResolveFromLocation(communicator, variable, dwarfVar, functionName)
+            val resolved = tryResolveFromDwarfVar(communicator, variable, dwarfVar, functionName)
             if (resolved != null) return resolved
         }
 
         // Fall back to global variables
         val globalVar = globalVariables.find { it.name == variable.name }
         if (globalVar != null) {
-            val resolved = tryResolveFromLocation(communicator, variable, globalVar, functionName)
+            val resolved = tryResolveFromDwarfVar(communicator, variable, globalVar, functionName)
             if (resolved != null) return resolved
         }
 
@@ -79,6 +80,37 @@ internal class WasmDwarfVariableResolver private constructor(
     }
 
     /**
+     * Tries to resolve a variable using its DWARF metadata. If the
+     * variable has a location list, tries all entries (not just the
+     * first) in case the single-location path fails. Location lists
+     * are common in Go/TinyGo WASM binaries where variable storage
+     * changes across the function's address range.
+     */
+    private fun tryResolveFromDwarfVar(
+        communicator: LldbCommunicator,
+        variable: WasmLocalVariable,
+        dwarfVar: DwarfVariableInfo,
+        functionName: String?,
+    ): WasmLocalVariable? {
+        // Try the primary location first (works for inline expressions
+        // and is the first entry for location lists)
+        val resolved = tryResolveFromLocation(communicator, variable, dwarfVar, functionName)
+        if (resolved != null) return resolved
+
+        // For location lists, try remaining entries — the variable
+        // may be stored differently at different PC addresses
+        if (dwarfVar.locationList.size > 1) {
+            for (entry in dwarfVar.locationList.drop(1)) {
+                val entryResolved = tryResolveFromLocationDesc(
+                    communicator, variable, entry.location, functionName,
+                )
+                if (entryResolved != null) return entryResolved
+            }
+        }
+        return null
+    }
+
+    /**
      * Returns a human-readable description of the DWARF location for
      * the given variable, or `null` if no DWARF metadata is found.
      * This is used to enrich the display message for unavailable
@@ -91,7 +123,27 @@ internal class WasmDwarfVariableResolver private constructor(
         val dwarfVar = findDwarfVariable(variableName, functionName)
             ?: globalVariables.find { it.name == variableName }
             ?: return null
+        // For location lists, describe all entries for a comprehensive view
+        if (dwarfVar.locationList.isNotEmpty()) {
+            return dwarfVar.locationList.joinToString("; ") { entry ->
+                "[0x${entry.startAddress.toString(16)}..0x${entry.endAddress.toString(16)}): ${entry.location.describe()}"
+            }
+        }
         return dwarfVar.location?.describe()
+    }
+
+    /**
+     * Returns `true` when we have any DWARF location metadata for the
+     * given variable (either an inline expression or a location list).
+     */
+    fun hasLocationMetadata(
+        variableName: String,
+        functionName: String?,
+    ): Boolean {
+        val dwarfVar = findDwarfVariable(variableName, functionName)
+            ?: globalVariables.find { it.name == variableName }
+            ?: return false
+        return dwarfVar.location != null || dwarfVar.locationList.isNotEmpty()
     }
 
     private fun findDwarfVariable(
@@ -120,6 +172,15 @@ internal class WasmDwarfVariableResolver private constructor(
         functionName: String?,
     ): WasmLocalVariable? {
         val location = dwarfVar.location ?: return null
+        return tryResolveFromLocationDesc(communicator, variable, location, functionName)
+    }
+
+    private fun tryResolveFromLocationDesc(
+        communicator: LldbCommunicator,
+        variable: WasmLocalVariable,
+        location: DwarfLocationDescription,
+        functionName: String?,
+    ): WasmLocalVariable? {
         if (location.isEmpty) return null
 
         return try {

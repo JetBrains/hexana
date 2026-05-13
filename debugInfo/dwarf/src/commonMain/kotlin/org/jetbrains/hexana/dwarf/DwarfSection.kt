@@ -15,4 +15,6 @@ interface DwarfAccessor {
     fun debugStrSection(): DwarfStringSection?
 
     fun debugAddrSection(): DwarfAddressSection?
+
+    fun debugLocSection(): DwarfLocSection?
 }

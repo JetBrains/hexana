@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.dwarf
 
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import kotlin.test.*
 
 class DwarfExpressionParserTest {
@@ -264,6 +265,55 @@ class DwarfExpressionParserTest {
         assertContentEquals(byteArrayOf(0x01, 0x02, 0x03), op.bytes)
     }
 
+    // --- DW_OP_litN (0x30..0x4f) ---
+
+    @Test
+    fun parseLit0() {
+        // DW_OP_lit0 (0x30) — push literal 0
+        val bytes = byteArrayOf(0x30)
+        val result = DwarfExpressionParser.parse(bytes)
+        assertEquals(1, result.operations.size)
+        val op = result.operations[0]
+        assertIs<DwarfExprOp.ConstFixed>(op)
+        assertEquals(0L, op.value)
+        assertEquals(0, op.byteSize)
+    }
+
+    @Test
+    fun parseLit23() {
+        // DW_OP_lit23 (0x47) — push literal 23
+        val bytes = byteArrayOf(0x47)
+        val result = DwarfExpressionParser.parse(bytes)
+        assertEquals(1, result.operations.size)
+        val op = result.operations[0]
+        assertIs<DwarfExprOp.ConstFixed>(op)
+        assertEquals(23L, op.value)
+    }
+
+    @Test
+    fun parseLit31() {
+        // DW_OP_lit31 (0x4f) — push literal 31
+        val bytes = byteArrayOf(0x4f)
+        val result = DwarfExpressionParser.parse(bytes)
+        assertEquals(1, result.operations.size)
+        val op = result.operations[0]
+        assertIs<DwarfExprOp.ConstFixed>(op)
+        assertEquals(31L, op.value)
+    }
+
+    @Test
+    fun parseLit0WithStackValue() {
+        // DW_OP_lit0, DW_OP_stack_value — constant value 0
+        // This pattern is used by TinyGo in location lists.
+        val bytes = byteArrayOf(0x30, 0x9F.toByte())
+        val result = DwarfExpressionParser.parse(bytes)
+        assertEquals(2, result.operations.size)
+        assertIs<DwarfExprOp.ConstFixed>(result.operations[0])
+        assertEquals(0L, (result.operations[0] as DwarfExprOp.ConstFixed).value)
+        assertIs<DwarfExprOp.StackValue>(result.operations[1])
+        assertTrue(result.isStackValue)
+    }
+
     // --- Multi-operation expressions ---
 
     @Test
@@ -337,5 +387,125 @@ class DwarfExpressionParserTest {
             )
         )
         assertIs<DwarfExprOp.WasmGlobalU32>(desc.wasmLocation)
+    }
+
+    // --- Location list parsing ---
+
+    @Test
+    fun readLocationListSingleEntry() {
+        // Build a minimal .debug_loc section with one entry:
+        //   start=0x100, end=0x200, expr = DW_OP_WASM_location 0x00 0x02, DW_OP_stack_value
+        // Terminated by (0, 0)
+        val expr = byteArrayOf(0xED.toByte(), 0x00, 0x02, 0x9F.toByte())
+        val sectionBytes = buildLocSectionBytes(
+            listOf(LocEntry(0x100, 0x200, expr)),
+        )
+        val buffer = sectionBytes.toCommonByteBuffer()
+        val locSection = DwarfLocSection(0, sectionBytes.size, stubAccessor)
+        val entries = buffer.readLocationList(locSection, 0, addressSize = 4)
+
+        assertEquals(1, entries.size)
+        assertEquals(0x100L, entries[0].startAddress)
+        assertEquals(0x200L, entries[0].endAddress)
+        assertEquals(2, entries[0].location.operations.size)
+        assertIs<DwarfExprOp.WasmLocal>(entries[0].location.operations[0])
+        assertEquals(2L, (entries[0].location.operations[0] as DwarfExprOp.WasmLocal).index)
+        assertIs<DwarfExprOp.StackValue>(entries[0].location.operations[1])
+    }
+
+    @Test
+    fun readLocationListMultipleEntries() {
+        // Two entries like TinyGo's .debug_loc for runtime.printstring:
+        //   [0x2aa, 0x2ac): DW_OP_WASM_location 0x0 0x2, DW_OP_stack_value
+        //   [0x1b1, 0x1bf): DW_OP_lit0, DW_OP_stack_value
+        val expr1 = byteArrayOf(0xED.toByte(), 0x00, 0x02, 0x9F.toByte())
+        val expr2 = byteArrayOf(0x30, 0x9F.toByte())  // DW_OP_lit0, DW_OP_stack_value
+        val sectionBytes = buildLocSectionBytes(
+            listOf(
+                LocEntry(0x2aa, 0x2ac, expr1),
+                LocEntry(0x1b1, 0x1bf, expr2),
+            ),
+        )
+        val buffer = sectionBytes.toCommonByteBuffer()
+        val locSection = DwarfLocSection(0, sectionBytes.size, stubAccessor)
+        val entries = buffer.readLocationList(locSection, 0, addressSize = 4)
+
+        assertEquals(2, entries.size)
+        assertEquals(0x2aaL, entries[0].startAddress)
+        assertEquals(0x2acL, entries[0].endAddress)
+        assertIs<DwarfExprOp.WasmLocal>(entries[0].location.operations[0])
+        assertEquals(0x1b1L, entries[1].startAddress)
+        assertEquals(0x1bfL, entries[1].endAddress)
+        assertIs<DwarfExprOp.ConstFixed>(entries[1].location.operations[0])
+        assertEquals(0L, (entries[1].location.operations[0] as DwarfExprOp.ConstFixed).value)
+    }
+
+    @Test
+    fun readLocationListEmptySection() {
+        // Just the terminator (0, 0)
+        val sectionBytes = buildLocSectionBytes(emptyList())
+        val buffer = sectionBytes.toCommonByteBuffer()
+        val locSection = DwarfLocSection(0, sectionBytes.size, stubAccessor)
+        val entries = buffer.readLocationList(locSection, 0, addressSize = 4)
+        assertTrue(entries.isEmpty())
+    }
+
+    @Test
+    fun readLocationListWithOffset() {
+        // First loc list at offset 0, second at offset after the first
+        val expr1 = byteArrayOf(0x30, 0x9F.toByte())  // DW_OP_lit0, DW_OP_stack_value
+        val expr2 = byteArrayOf(0xED.toByte(), 0x00, 0x05, 0x9F.toByte())
+        val firstList = buildLocSectionBytes(listOf(LocEntry(0x100, 0x200, expr1)))
+        val secondList = buildLocSectionBytes(listOf(LocEntry(0x300, 0x400, expr2)))
+        val combined = firstList + secondList
+        val buffer = combined.toCommonByteBuffer()
+        val locSection = DwarfLocSection(0, combined.size, stubAccessor)
+
+        // Read the second list at offset = firstList.size
+        val entries = buffer.readLocationList(locSection, firstList.size, addressSize = 4)
+        assertEquals(1, entries.size)
+        assertEquals(0x300L, entries[0].startAddress)
+        assertIs<DwarfExprOp.WasmLocal>(entries[0].location.operations[0])
+        assertEquals(5L, (entries[0].location.operations[0] as DwarfExprOp.WasmLocal).index)
+    }
+
+    // --- Helpers for location list tests ---
+
+    private data class LocEntry(val start: Int, val end: Int, val expr: ByteArray)
+
+    private fun buildLocSectionBytes(entries: List<LocEntry>): ByteArray {
+        val out = mutableListOf<Byte>()
+        for (e in entries) {
+            // 4-byte little-endian start address
+            out.addAll(intToLE(e.start))
+            // 4-byte little-endian end address
+            out.addAll(intToLE(e.end))
+            // 2-byte little-endian expression length
+            out.add((e.expr.size and 0xFF).toByte())
+            out.add(((e.expr.size shr 8) and 0xFF).toByte())
+            // Expression bytes
+            out.addAll(e.expr.toList())
+        }
+        // Terminator: (0, 0)
+        out.addAll(intToLE(0))
+        out.addAll(intToLE(0))
+        return out.toByteArray()
+    }
+
+    private fun intToLE(value: Int): List<Byte> = listOf(
+        (value and 0xFF).toByte(),
+        ((value shr 8) and 0xFF).toByte(),
+        ((value shr 16) and 0xFF).toByte(),
+        ((value shr 24) and 0xFF).toByte(),
+    )
+
+    private val stubAccessor = object : DwarfAccessor {
+        override fun section(name: String): DwarfSection? = null
+        override fun debugLineSection(): DwarfLineSection? = null
+        override fun debugInfoSection(): DwarfInfoSection? = null
+        override fun debugAbbrevSection(): DwarfAbbrevSection? = null
+        override fun debugStrSection(): DwarfStringSection? = null
+        override fun debugAddrSection(): DwarfAddressSection? = null
+        override fun debugLocSection(): DwarfLocSection? = null
     }
 }
