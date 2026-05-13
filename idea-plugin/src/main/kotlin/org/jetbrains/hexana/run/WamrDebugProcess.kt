@@ -91,8 +91,8 @@ class WamrDebugProcess(
         // resume the already-connected process and start the event
         // loop directly.
         if (communicator != null) {
-            // Drain the initial stop event(s) produced by the
-            // `process connect` command (e.g. `stop reason = trace`)
+            // Drain any extra stop events that may have been queued
+            // after the primary stop event consumed by connectWithRetry
             // so they don't confuse the event loop.
             communicator.drainPendingStopEvents()
 
@@ -105,11 +105,17 @@ class WamrDebugProcess(
      * Attempts to connect LLDB to the WAMR debug stub, retrying up
      * to [MAX_CONNECT_ATTEMPTS] times with a delay between attempts.
      *
-     * Uses [LldbCommunicator.sendCommandAndCollectOutput] so the
-     * connect command's output is captured and inspected. A successful
-     * connection produces output containing "Process" and "stopped"
-     * (e.g. `Process 1 stopped`). A failed connection produces
-     * "error: Failed to connect" or similar error text.
+     * Sends the `process connect` command directly (not via
+     * [LldbCommunicator.sendCommandAndCollectOutput]) and then waits
+     * for a stop event in the queue. A successful connection always
+     * produces a stop event (typically `stop reason = trace`), which
+     * is the most reliable signal that the connection is established.
+     *
+     * The marker-based output collection approach is intentionally
+     * avoided here because `process connect` is a blocking LLDB
+     * command whose output may arrive asynchronously (outside the
+     * command response stream), causing the marker-based collector
+     * to miss the "Process 1 stopped" text or time out.
      *
      * @return `true` if the connection was established successfully.
      */
@@ -119,26 +125,20 @@ class WamrDebugProcess(
         for (attempt in 1..MAX_CONNECT_ATTEMPTS) {
             LOG.info("WAMR connect attempt $attempt/$MAX_CONNECT_ATTEMPTS: $connectCmd")
 
-            val output = communicator.sendCommandAndCollectOutput(
-                connectCmd,
-                timeoutMs = CONNECT_COMMAND_TIMEOUT_MS,
-            )
+            communicator.sendCommand(connectCmd)
 
-            val joined = output.joinToString("\n")
-            LOG.info("WAMR connect attempt $attempt output: $joined")
+            // Wait for a stop event that proves the connection succeeded.
+            // A successful `process connect` produces a stop like
+            //   `* thread #1, name = 'nobody', stop reason = trace`
+            // which the LldbCommunicator parses into a StopEvent.
+            val event = communicator.waitForStopEvent(CONNECT_COMMAND_TIMEOUT_MS)
 
-            // A successful connection produces output like:
-            //   Process 1 stopped
-            //   * thread #1, name = 'nobody', stop reason = trace
-            if (joined.contains("Process") && joined.contains("stopped")) {
-                LOG.info("Successfully connected to WAMR debug stub on attempt $attempt")
+            if (event != null) {
+                LOG.info("Successfully connected to WAMR debug stub on attempt $attempt (event: $event)")
                 return true
             }
 
-            // Check for definitive error messages
-            if (joined.contains("error:")) {
-                LOG.warn("WAMR connect attempt $attempt failed: $joined")
-            }
+            LOG.warn("WAMR connect attempt $attempt: no stop event within timeout")
 
             if (attempt < MAX_CONNECT_ATTEMPTS) {
                 Thread.sleep(CONNECT_RETRY_DELAY_MS)
