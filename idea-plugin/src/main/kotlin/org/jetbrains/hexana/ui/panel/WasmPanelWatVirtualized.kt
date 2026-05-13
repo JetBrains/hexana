@@ -998,7 +998,7 @@ private fun RenderedRowView(
  * value so the user always lands on *something* sensible rather than getting
  * a silent no-op.
  */
-private fun parseCallTarget(fieldText: String, originalOp: OpCodes.Flow.Call): Int? {
+internal fun parseCallTarget(fieldText: String, originalOp: OpCodes.Flow.Call): Int? {
     val tokens = fieldText.trim().split(Regex("\\s+"))
     if (tokens.size >= 2 && tokens[0] == "call") {
         val raw = tokens[1]
