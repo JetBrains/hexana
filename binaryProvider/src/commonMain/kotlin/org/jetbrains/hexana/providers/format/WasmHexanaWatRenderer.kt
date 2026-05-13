@@ -139,6 +139,223 @@ public class WasmHexanaWatRenderer(
         return TokenStream(tokens)
     }
 
+    /**
+     * Same content as [render] but pre-grouped into one [RenderedRow] per
+     * on-screen line. Code-chunk rows whose opcode is in
+     * [EditableRows.isEditable] additionally carry an [EditableRowInfo]
+     * payload so the panel can wire that row to a `BasicTextField` and
+     * route Enter / focus-loss commits through [EditableRowEncoder].
+     *
+     * For every other chunk kind the rows are returned with `editable = null`.
+     */
+    public fun renderRows(snapshot: BinaryDocumentSnapshot, chunk: BinaryChunk): List<RenderedRow> {
+        val rawRows = splitOnLineBreaks(render(snapshot, chunk).tokens)
+        if (chunk !is BinaryChunk.Element || chunk.kind != WasmSectionKinds.CODE) {
+            return rawRows.map { RenderedRow(tokens = it) }
+        }
+        val opMap = buildOpMapForCode(chunk, snapshot.byteSource())
+        val localCount = computeLocalCount(chunk)
+        val cascadeContext = computeCascadeContext(chunk, snapshot.byteSource())
+        val localsRowMeta = computeLocalsRowMeta(chunk, snapshot.byteSource())
+        return rawRows.map { rowTokens ->
+            val rowOpStart = rowTokens
+                .firstOrNull { it.kind == RenderTokenKind.OFFSET_ANNOTATION }
+                ?.sourceOffset
+            val opInfo = rowOpStart?.let { opMap[it] }
+            val editable = when {
+                opInfo != null && EditableRows.isEditable(opInfo.op) -> EditableRowInfo(
+                    op = opInfo.op,
+                    opStart = opInfo.opStart,
+                    opEncodedLength = opInfo.length,
+                    watText = extractWatText(rowTokens),
+                    kind = EditableRowInfo.Kind.OPCODE,
+                    localCount = if (isLocalAccessOp(opInfo.op)) localCount else null,
+                    cascade = cascadeContext,
+                )
+                localsRowMeta != null && isLocalsDeclRow(rowTokens) -> EditableRowInfo(
+                    op = null,
+                    opStart = localsRowMeta.byteStart,
+                    opEncodedLength = localsRowMeta.byteLength,
+                    watText = extractWatText(rowTokens),
+                    kind = EditableRowInfo.Kind.LOCALS,
+                    cascade = cascadeContext,
+                )
+                else -> null
+            }
+            RenderedRow(tokens = rowTokens, editable = editable)
+        }
+    }
+
+    /**
+     * Locates the `(local …)` declaration row in a code chunk and returns
+     * its byte range. Returns `null` when the function has no locals (the
+     * renderer skips the row in that case) or when the parsed code record
+     * is unavailable.
+     */
+    private fun computeLocalsRowMeta(chunk: BinaryChunk.Element, source: ByteSource): LocalsRowMeta? {
+        if (chunk.kind != WasmSectionKinds.CODE) return null
+        val codeRecord = runCatching { provider.parseCodeRecord(chunk.indexInSection) }.getOrNull()
+            ?: return null
+        if (codeRecord.locals.isEmpty()) return null
+        val entryStart = chunk.byteRange.first
+        val funcSizeULEBLen = decodeULEB128(source, entryStart).byteCount
+        val localsByteStart = entryStart + funcSizeULEBLen.toLong()
+        val initialCursor = (codeRecord.opCodes.firstOrNull() as? OpCodeWithOffset)
+            ?.offset?.toLong()?.takeIf { it > 0L }
+            ?: estimateBodyStart(codeRecord)
+        return LocalsRowMeta(
+            byteStart = localsByteStart,
+            byteLength = (initialCursor - localsByteStart).toInt(),
+        )
+    }
+
+    /**
+     * The function header and locals rows both display offset = entryStart,
+     * so we disambiguate by token content. The locals row contains a
+     * KEYWORD token with text "local"; the function header has "func".
+     */
+    private fun isLocalsDeclRow(rowTokens: List<RenderToken>): Boolean =
+        rowTokens.any { it.kind == RenderTokenKind.KEYWORD && it.text == "local" }
+
+    private data class LocalsRowMeta(val byteStart: Long, val byteLength: Int)
+
+    /**
+     * Reads the surrounding-structure size prefixes for a code-chunk row so
+     * the encoder can emit cascade ops on length-changing edits. Returns
+     * `null` if the parsed code section isn't available.
+     */
+    private fun computeCascadeContext(
+        chunk: BinaryChunk.Element,
+        source: ByteSource,
+    ): CascadeContext? {
+        val codeSection = provider.wasmModule?.codeSection ?: return null
+        val funcEntryStart = chunk.byteRange.first
+        val funcSizeDecoded = decodeULEB128(source, funcEntryStart)
+        val sectionSizePrefixStart = (codeSection.sectionOffset + 1).toLong()
+        val sectionSizePrefixLength = codeSection.contentOffset - codeSection.sectionOffset - 1
+        return CascadeContext(
+            funcSizePrefixStart = funcEntryStart,
+            funcSizePrefixLength = funcSizeDecoded.byteCount,
+            currentBodyLength = funcSizeDecoded.value,
+            sectionSizePrefixStart = sectionSizePrefixStart,
+            sectionSizePrefixLength = sectionSizePrefixLength,
+            currentSectionLength = codeSection.contentSize.toLong(),
+        )
+    }
+
+    /**
+     * Total params + locals count for the function whose body lives in
+     * [chunk]. Returns `null` if the parsed structure is unavailable; the
+     * caller treats null as "no semantic validation possible" (the encoder
+     * accepts any u32 index in that case).
+     */
+    private fun computeLocalCount(chunk: BinaryChunk.Element): Int? {
+        val codeIdx = chunk.indexInSection
+        val record = runCatching { provider.parseCodeRecord(codeIdx) }.getOrNull() ?: return null
+        val locals = record.locals.sumOf { it.local }
+        val params = (provider.functions.getOrNull(codeIdx) as? WasmSectionFunctionTypeRecord)
+            ?.params?.size ?: 0
+        return params + locals
+    }
+
+    private fun isLocalAccessOp(op: OpCode): Boolean =
+        op is OpCodes.Local.Get || op is OpCodes.Local.Set || op is OpCodes.Local.Tee
+
+    /**
+     * Walks the function body's parsed opcodes and computes a
+     * `(opStart → op + encoded length)` map. Mirrors [emitOps]'s
+     * byte-offset bookkeeping; kept separate so [renderRows] can be added
+     * without rewriting [renderCodeElement].
+     */
+    private fun buildOpMapForCode(
+        chunk: BinaryChunk.Element,
+        source: ByteSource,
+    ): Map<Long, OpAtOffset> {
+        val codeRecord = runCatching { provider.parseCodeRecord(chunk.indexInSection) }.getOrNull()
+            ?: return emptyMap()
+        val out = HashMap<Long, OpAtOffset>()
+        val initialCursor = (codeRecord.opCodes.firstOrNull() as? OpCodeWithOffset)
+            ?.offset?.toLong()?.takeIf { it > 0L }
+            ?: estimateBodyStart(codeRecord)
+        walkOpsForOffsets(codeRecord.opCodes, initialCursor, source, out)
+        return out
+    }
+
+    private fun walkOpsForOffsets(
+        ops: List<OpCode>,
+        startCursor: Long,
+        source: ByteSource,
+        out: MutableMap<Long, OpAtOffset>,
+    ): Long {
+        var cursor = startCursor
+        for (op in ops) {
+            val anchor = (op as? OpCodeWithOffset)?.offset?.toLong()?.takeIf { it > 0L }
+            if (anchor != null && anchor >= cursor) cursor = anchor
+
+            when (op) {
+                is OpCodes.Flow.Block, is OpCodes.Flow.Loop, is OpCodes.Flow.If, is OpCodes.Flow.Else -> {
+                    val children = @Suppress("UNCHECKED_CAST") (
+                        ((op as OpCodeWithValue<*>).value as? List<OpCode>) ?: emptyList()
+                    )
+                    val headerLen = blockHeaderLength(source, cursor)
+                    out[cursor] = OpAtOffset(op, cursor, headerLen)
+                    cursor += headerLen
+                    cursor = walkOpsForOffsets(children, cursor, source, out)
+                    if (cursor < source.length) cursor += 1L // closing 0x0B end byte
+                }
+                else -> {
+                    val length = opcodeLength(op, cursor, source).coerceAtLeast(1)
+                    out[cursor] = OpAtOffset(op, cursor, length)
+                    cursor += length
+                }
+            }
+        }
+        return cursor
+    }
+
+    /**
+     * Splits a flat token stream into rows. Each `LINE_BREAK` ends a row
+     * (the break itself is not included). A trailing partial row is
+     * emitted when the stream doesn't end with a break.
+     */
+    private fun splitOnLineBreaks(tokens: List<RenderToken>): List<List<RenderToken>> {
+        val rows = ArrayList<List<RenderToken>>()
+        var current = ArrayList<RenderToken>()
+        for (t in tokens) {
+            if (t.kind == RenderTokenKind.LINE_BREAK) {
+                rows += current
+                current = ArrayList()
+            } else {
+                current += t
+            }
+        }
+        if (current.isNotEmpty()) rows += current
+        return rows
+    }
+
+    /**
+     * Strips the structural decoration (offset gutter, hex bytes column,
+     * surrounding whitespace, leb-annotation comment) from a row's tokens
+     * and returns just the editable mnemonic + immediates as a plain
+     * string. Trims surrounding whitespace so a `BasicTextField` shows
+     * `"i32.const 5"` rather than `"  i32.const 5  "`.
+     */
+    private fun extractWatText(rowTokens: List<RenderToken>): String {
+        val sb = StringBuilder()
+        for (t in rowTokens) {
+            when (t.kind) {
+                RenderTokenKind.OFFSET_ANNOTATION,
+                RenderTokenKind.RAW_BYTES,
+                RenderTokenKind.COMMENT,
+                RenderTokenKind.LINE_BREAK -> Unit
+                else -> sb.append(t.text)
+            }
+        }
+        return sb.toString().trim()
+    }
+
+    private data class OpAtOffset(val op: OpCode, val opStart: Long, val length: Int)
+
     private fun renderElement(
         chunk: BinaryChunk.Element,
         source: ByteSource,

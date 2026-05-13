@@ -15,9 +15,12 @@ import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.analytics.HexanaAnalytics
 import org.jetbrains.hexana.analytics.HexanaEvent
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import org.jetbrains.hexana.document.DocumentListener
 import org.jetbrains.hexana.document.EditableBinaryDocument
 import org.jetbrains.hexana.document.editableBinaryDocumentOf
+import org.jetbrains.hexana.document.format.ChunkId
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
@@ -80,16 +83,46 @@ internal fun BinaryEditorView(
     DisposableEffect(editableDoc, binaryProvider) {
         val listener = DocumentListener {
             val newBytes = editableDoc.read(0L, editableDoc.length.toInt())
-            liveProvider = rebuildProviderFromBytes(binaryProvider, newBytes) ?: binaryProvider
+            // The parser is allowed to reject malformed input by returning
+            // WasmParseFailure, but it can also throw on edge cases like
+            // negative array sizes when a section's length ULEB decodes to
+            // an unsigned value too big for Int. Either way, we must not
+            // take the panel down — keep showing the previous live provider
+            // and let the user undo / fix the edit.
+            val rebuilt = try {
+                rebuildProviderFromBytes(binaryProvider, newBytes)
+            } catch (t: Throwable) {
+                org.jetbrains.hexana.HexanaLog.LOG.warn(
+                    "Parser rejected post-edit bytes; keeping previous live provider",
+                    t,
+                )
+                null
+            }
+            if (rebuilt != null) liveProvider = rebuilt
         }
         editableDoc.addListener(listener)
         onDispose { editableDoc.removeListener(listener) }
     }
 
+    // State hoisted ABOVE the panel-rebuild boundary so commits don't
+    // reset the user's scroll position or fold pattern. The panels array
+    // re-`remember`s on every liveProvider change (rebuilding lambdas);
+    // anything held inside those lambdas via positional `remember` resets.
+    // Lifting it here means each new lambda captures the SAME LazyListState
+    // and folded-section MutableState references, preserving state.
+    val watVirtualizedListState = rememberLazyListState()
+    val watVirtualizedFolded = remember { mutableStateOf<Set<ChunkId>>(emptySet()) }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
         val pathsNav = remember { PathsNavigationState() }
         val panels = remember(liveProvider) {
-            val p = liveProvider.resolvePanels(state, pathsNav)
+            val p = liveProvider.resolvePanels(
+                state = state,
+                pathsNav = pathsNav,
+                editableDoc = editableDoc,
+                watVirtualizedListState = watVirtualizedListState,
+                watVirtualizedFolded = watVirtualizedFolded,
+            )
             mutableStateListOf(*p)
         }
 
@@ -270,7 +303,14 @@ private fun TabsPanel(
         Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
 
         Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-            panels.get(state.tabIndex).render()
+            // The panel list shrinks when liveProvider rebuilds from
+            // file-aware → plain (Phase A.1a). The LaunchedEffect clamp
+            // runs asynchronously, so on the FIRST recomposition after
+            // shrinkage state.tabIndex can still point past the new end.
+            // Defensive coerce here so we never throw IndexOutOfBounds —
+            // the LaunchedEffect catches up on the next composition.
+            val safeIndex = state.tabIndex.coerceIn(0, panels.size - 1)
+            panels.get(safeIndex).render()
         }
     }
 }
@@ -295,7 +335,13 @@ private fun rebuildProviderFromBytes(original: BinaryProvider, newBytes: ByteArr
     }
 }
 
-private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: PathsNavigationState): Array<Panel> {
+private fun BinaryProvider.resolvePanels(
+    state: HexViewStateHolder,
+    pathsNav: PathsNavigationState,
+    editableDoc: EditableBinaryDocument? = null,
+    watVirtualizedListState: LazyListState? = null,
+    watVirtualizedFolded: MutableState<Set<ChunkId>>? = null,
+): Array<Panel> {
     val panels = when (this) {
         is GenericBinaryProvider -> emptyArray()
         is WasmBinaryVirtualFileProvider -> {
@@ -310,7 +356,15 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: Pa
                 Panel("Garbage") { WasmPanelGarbage(this, state) },
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 Panel("Wat") { WasmPanelWat(this, state) },
-                Panel("WAT (virtualized)") { WasmPanelWatVirtualized(this, state) },
+                Panel("WAT (virtualized)") {
+                    WasmPanelWatVirtualized(
+                        provider = this,
+                        state = state,
+                        editableDoc = editableDoc,
+                        listState = watVirtualizedListState,
+                        foldedSectionsExternal = watVirtualizedFolded,
+                    )
+                },
                 *dwarfPanels(this, state).toTypedArray()
             ) else {
                 errorPanel(state)
@@ -338,7 +392,15 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: Pa
                 Panel("Monos") { WasmPanelMonos(this, state) },
                 Panel("Garbage") { WasmPanelGarbage(this, state) },
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
-                Panel("WAT (virtualized)") { WasmPanelWatVirtualized(this, state) },
+                Panel("WAT (virtualized)") {
+                    WasmPanelWatVirtualized(
+                        provider = this,
+                        state = state,
+                        editableDoc = editableDoc,
+                        listState = watVirtualizedListState,
+                        foldedSectionsExternal = watVirtualizedFolded,
+                    )
+                },
                 *dwarfPanels(this, state).toTypedArray()
             ) else emptyArray()
         }
