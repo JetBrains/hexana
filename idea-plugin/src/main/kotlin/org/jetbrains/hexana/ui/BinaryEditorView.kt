@@ -119,6 +119,14 @@ internal fun BinaryEditorView(
         }
         doc
     }
+    // Set to true when a HEX cell edit commits. From then on, raw byte
+    // mutations bypass the WAT encoder so the binary's structural shape
+    // (section sizes, function counts, DWARF offsets …) is no longer
+    // trustworthy. The live provider gets demoted to GenericBinaryProvider
+    // and the panel list collapses to just the Hex view + status bar —
+    // matching what GenericBinaryProvider would surface for an unknown-
+    // format file.
+    var hexEditedSinceOpen by remember(binaryProvider) { mutableStateOf(false) }
     // The "live" provider for the WAT virtualized panel + Hex view. If the
     // doc replayed a sidecar, the original bytes are stale — build a live
     // provider from the post-replay bytes so the WAT view + Hex view render
@@ -144,14 +152,21 @@ internal fun BinaryEditorView(
     DisposableEffect(editableDoc, binaryProvider) {
         val listener = DocumentListener {
             val newBytes = editableDoc.read(0L, editableDoc.length.toInt())
-            val rebuilt = try {
-                rebuildProviderFromBytes(binaryProvider, newBytes)
-            } catch (t: Throwable) {
-                org.jetbrains.hexana.HexanaLog.LOG.warn(
-                    "Parser rejected post-edit bytes; keeping previous live provider",
-                    t,
-                )
-                null
+            // After a hex edit, force GenericBinaryProvider for the rest of
+            // the session. WAT-encoder-mediated edits keep the typed
+            // provider so structural panels stay consistent with the bytes.
+            val rebuilt: BinaryProvider? = if (hexEditedSinceOpen) {
+                GenericBinaryProvider(newBytes.toCommonByteBuffer())
+            } else {
+                try {
+                    rebuildProviderFromBytes(binaryProvider, newBytes)
+                } catch (t: Throwable) {
+                    org.jetbrains.hexana.HexanaLog.LOG.warn(
+                        "Parser rejected post-edit bytes; keeping previous live provider",
+                        t,
+                    )
+                    null
+                }
             }
             if (rebuilt != null) liveProvider = rebuilt
         }
@@ -176,15 +191,20 @@ internal fun BinaryEditorView(
         // reads the current value on each composition and recomposes when
         // it changes. Non-edit panel lambdas use `this` (the original
         // provider) and stay frozen across edits.
-        val panels = remember(binaryProvider) {
-            val p = binaryProvider.resolvePanels(
-                state = state,
-                pathsNav = pathsNav,
-                editableDoc = editableDoc,
-                watVirtualizedListState = watVirtualizedListState,
-                watVirtualizedFolded = watVirtualizedFolded,
-                liveProviderProvider = { liveProvider },
-            )
+        val panels = remember(binaryProvider, hexEditedSinceOpen) {
+            val p: Array<Panel> = if (hexEditedSinceOpen) {
+                // Demoted to generic — only the Hex view + status bar remain.
+                emptyArray()
+            } else {
+                binaryProvider.resolvePanels(
+                    state = state,
+                    pathsNav = pathsNav,
+                    editableDoc = editableDoc,
+                    watVirtualizedListState = watVirtualizedListState,
+                    watVirtualizedFolded = watVirtualizedFolded,
+                    liveProviderProvider = { liveProvider },
+                )
+            }
             mutableStateListOf(*p)
         }
 
@@ -231,6 +251,7 @@ internal fun BinaryEditorView(
                         state = state,
                         focusRequester = hexFocusRequester,
                         editableDoc = editableDoc,
+                        onHexCommit = { hexEditedSinceOpen = true },
                     )
                 }
                 HexViewStatusBar(state = state, totalBytes = liveProvider.bytes.limit())

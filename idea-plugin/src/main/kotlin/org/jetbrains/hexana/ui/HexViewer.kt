@@ -98,6 +98,14 @@ internal fun HexViewer(
     showOffsets: Boolean = true,
     focusRequester: FocusRequester,
     editableDoc: EditableBinaryDocument? = null,
+    /**
+     * Invoked after a hex-cell edit successfully commits. The binary
+     * editor uses this to demote the provider to [GenericBinaryProvider]
+     * for the rest of the session — raw byte mutations bypass the WAT
+     * encoder, so structural panels (size analysis, dominators, etc.)
+     * can no longer trust the file's shape.
+     */
+    onHexCommit: (() -> Unit)? = null,
 ) {
     val buf = binaryProvider.bytes
 
@@ -139,6 +147,7 @@ internal fun HexViewer(
                                     bytesPerRow = state.bytesPerRow.value,
                                     state = state,
                                     doc = editableDoc,
+                                    onCommit = onHexCommit,
                                 )
                                 return@onPreviewKeyEvent true
                             }
@@ -835,6 +844,7 @@ private fun handleHexDigit(
     bytesPerRow: Int,
     state: HexViewStateHolder,
     doc: EditableBinaryDocument,
+    onCommit: (() -> Unit)? = null,
 ): Int? {
     val absoluteOffset = (state.cursorPosition.line.toLong() * bytesPerRow.toLong()) +
         state.cursorPosition.lineOffset.toLong()
@@ -849,6 +859,7 @@ private fun handleHexDigit(
         replace(absoluteOffset, absoluteOffset + 1L, byteArrayOf(byte.toByte()))
         commit()
     }
+    onCommit?.invoke()
     val nextOffset = absoluteOffset + 1L
     if (nextOffset < doc.length) {
         val nextLine = (nextOffset / bytesPerRow.toLong()).toInt()

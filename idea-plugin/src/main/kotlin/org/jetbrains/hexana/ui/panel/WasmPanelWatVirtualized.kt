@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -136,6 +137,53 @@ internal fun WasmPanelWatVirtualized(
         }
         n
     }
+    // Cross-chunk arrow navigation: each ChunkRow registers its
+    // FocusRequesters into this panel-level map keyed by (chunkId, rowIdx).
+    // When a row receives arrow Up at the top edge / arrow Down at the
+    // bottom edge of its chunk, it asks the panel to hop to the
+    // prev/next code chunk via [navUp] / [navDown]. Only works when the
+    // target chunk is currently composed (i.e. visible or in the
+    // LazyColumn pre-fetch window) — out-of-view targets do nothing.
+    val focusMap = remember { mutableStateMapOf<Pair<ChunkId, Int>, FocusRequester>() }
+    val codeChunkOrder: List<ChunkId> = remember(chunkTree) {
+        val out = ArrayList<ChunkId>()
+        for (i in 0 until chunkTree.totalChunks) {
+            val c = chunkTree.chunkAt(i)
+            if (c is BinaryChunk.Element && c.kind == WasmSectionKinds.CODE) out += c.id
+        }
+        out
+    }
+    val navUp: (ChunkId) -> Unit = { currentId ->
+        val pos = codeChunkOrder.indexOf(currentId)
+        if (pos > 0) {
+            val prevId = codeChunkOrder[pos - 1]
+            val maxRow = focusMap.keys
+                .filter { it.first == prevId }
+                .maxOfOrNull { it.second }
+            if (maxRow != null) {
+                runCatching { focusMap[prevId to maxRow]?.requestFocus() }
+            }
+        }
+    }
+    val navDown: (ChunkId) -> Unit = { currentId ->
+        val pos = codeChunkOrder.indexOf(currentId)
+        if (pos in 0 until codeChunkOrder.size - 1) {
+            val nextId = codeChunkOrder[pos + 1]
+            val minRow = focusMap.keys
+                .filter { it.first == nextId }
+                .minOfOrNull { it.second }
+            if (minRow != null) {
+                runCatching { focusMap[nextId to minRow]?.requestFocus() }
+            }
+        }
+    }
+
+    // Code-entry indices that this session's append+redirect ops created.
+    // Edits on these chunks bypass the append+redirect path and use
+    // in-place cascade — we already cloned the function once; cloning the
+    // clone every keystroke produces a chain of redirects with no value.
+    var appendedCodeIndices by remember { mutableStateOf(emptySet<Int>()) }
+
     var lastTotalCodeCount by remember { mutableStateOf(-1) }
     androidx.compose.runtime.LaunchedEffect(totalCodeChunks) {
         val prev = lastTotalCodeCount
@@ -154,8 +202,10 @@ internal fun WasmPanelWatVirtualized(
                 foldedSections = foldedSections - codeHeaderId
             }
             // Walk the tree (in current fold state) to find the LazyColumn item
-            // index of the LAST visible code element. That's our scroll target.
+            // index AND chunk id of the LAST visible code element.
             var lazyIdx = -1
+            var targetChunkId: ChunkId? = null
+            var targetIndexInSection = -1
             var lazyCursor = 0
             var hidden = false
             for (i in 0 until chunkTree.totalChunks) {
@@ -167,13 +217,54 @@ internal fun WasmPanelWatVirtualized(
                     }
                     is BinaryChunk.Element -> {
                         if (!hidden) {
-                            if (c.kind == WasmSectionKinds.CODE) lazyIdx = lazyCursor
+                            if (c.kind == WasmSectionKinds.CODE) {
+                                lazyIdx = lazyCursor
+                                targetChunkId = c.id
+                                targetIndexInSection = c.indexInSection
+                            }
                             lazyCursor++
                         }
                     }
                 }
             }
-            if (lazyIdx >= 0) effectiveListState.animateScrollToItem(lazyIdx)
+            // Remember the new code-entry index so subsequent edits on it
+            // don't trigger another append+redirect. The set lives across
+            // panel rebuilds because `remember { … }` (no key) preserves
+            // the slot through liveProvider changes.
+            if (targetIndexInSection >= 0) {
+                appendedCodeIndices = appendedCodeIndices + targetIndexInSection
+            }
+            if (lazyIdx >= 0 && targetChunkId != null) {
+                // First, scroll the new chunk into view. animateScrollToItem
+                // suspends until the animation completes — by then LazyColumn
+                // has composed the target item.
+                effectiveListState.animateScrollToItem(lazyIdx)
+                // Then focus the chunk's FIRST editable row. ChunkRow's
+                // DisposableEffect registers FocusRequesters into the panel-
+                // level focusMap on composition; once the entry appears, a
+                // requestFocus() call lands on a real attached requester and
+                // Compose's bring-into-view fine-tunes the scroll inside the
+                // chunk so the user's cursor sits on the body, not the header.
+                //
+                // Composition can lag the scroll by a frame or two — poll
+                // briefly (max ~250 ms total) until the focusMap entry shows
+                // up. If it never does (e.g. the chunk has no editable rows),
+                // we silently give up; the scroll alone is still useful.
+                var focused = false
+                for (attempt in 0 until 5) {
+                    val firstRow = focusMap.keys
+                        .filter { it.first == targetChunkId }
+                        .minOfOrNull { it.second }
+                    val req = firstRow?.let { focusMap[targetChunkId!! to it] }
+                    if (req != null) {
+                        runCatching { req.requestFocus() }
+                        focused = true
+                        break
+                    }
+                    kotlinx.coroutines.delay(50)
+                }
+                @Suppress("UNUSED_VARIABLE") focused
+            }
         }
     }
 
@@ -211,6 +302,11 @@ internal fun WasmPanelWatVirtualized(
                                         snapshot = snapshot,
                                         provider = provider,
                                         editableDoc = editableDoc,
+                                        focusMap = focusMap,
+                                        onCrossChunkUp = navUp,
+                                        onCrossChunkDown = navDown,
+                                        isAppendedFunc = chunk.kind == WasmSectionKinds.CODE &&
+                                            chunk.indexInSection in appendedCodeIndices,
                                     )
                                 }
                             }
@@ -326,6 +422,24 @@ private fun ChunkRow(
     snapshot: BinaryDocumentSnapshot,
     provider: WasmBinaryProvider,
     editableDoc: EditableBinaryDocument?,
+    /**
+     * Panel-level map of `(chunkId, rowIdx) → FocusRequester`. ChunkRow
+     * registers its requesters here on first composition and removes them
+     * on dispose, so the panel-level cross-chunk navigation can look up
+     * neighbors' requesters by (id, rowIdx).
+     */
+    focusMap: androidx.compose.runtime.snapshots.SnapshotStateMap<Pair<ChunkId, Int>, FocusRequester>? = null,
+    /** Move focus to the previous code chunk's last editable row. */
+    onCrossChunkUp: ((ChunkId) -> Unit)? = null,
+    /** Move focus to the next code chunk's first editable row. */
+    onCrossChunkDown: ((ChunkId) -> Unit)? = null,
+    /**
+     * `true` when this chunk was created by an append+redirect commit in
+     * the current session. Edits on it bypass append+redirect and use
+     * the in-place cascade path — we already cloned the function once;
+     * cloning the clone every keystroke produces a chain of redirects.
+     */
+    isAppendedFunc: Boolean = false,
 ) {
     // Re-render whenever the renderer or snapshot changes (i.e. after a
     // commit replaces `liveProvider` and rebuilds `panelState`). Keying on
@@ -353,6 +467,18 @@ private fun ChunkRow(
     val editableIndices: List<Int> = remember(chunk.id, rows.size) {
         rows.indices.filter { rows[it].editable != null }
     }
+    // Register/unregister this chunk's editable-row requesters into the
+    // panel-level map so cross-chunk navigation can find them. Re-keyed
+    // when the requester set changes (insert / delete row, append+redirect
+    // adds new code chunk).
+    if (focusMap != null) {
+        DisposableEffect(chunk.id, focusRequesters) {
+            for ((rowIdx, req) in focusRequesters) focusMap[chunk.id to rowIdx] = req
+            onDispose {
+                for (rowIdx in focusRequesters.keys) focusMap.remove(chunk.id to rowIdx)
+            }
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -360,12 +486,30 @@ private fun ChunkRow(
     ) {
         rows.forEachIndexed { rowIndex, row ->
             val pos = editableIndices.indexOf(rowIndex)
-            val onArrowUp: (() -> Unit)? = if (pos > 0) {
-                { focusRequesters[editableIndices[pos - 1]]?.requestFocus() }
-            } else null
-            val onArrowDown: (() -> Unit)? = if (pos in 0 until editableIndices.size - 1) {
-                { focusRequesters[editableIndices[pos + 1]]?.requestFocus() }
-            } else null
+            // Within-chunk arrow nav. At the top of the first editable row,
+            // fall through to the cross-chunk callback (prev chunk's last
+            // editable row); at the bottom of the last, similarly call the
+            // cross-chunk-down. When the cross callback is null or no
+            // neighbor is currently composed, the boundary row's TextField
+            // sees the arrow normally.
+            val onArrowUp: (() -> Unit)? = when {
+                pos > 0 -> {
+                    { focusRequesters[editableIndices[pos - 1]]?.requestFocus() }
+                }
+                pos == 0 && onCrossChunkUp != null -> {
+                    { onCrossChunkUp(chunk.id) }
+                }
+                else -> null
+            }
+            val onArrowDown: (() -> Unit)? = when {
+                pos in 0 until editableIndices.size - 1 -> {
+                    { focusRequesters[editableIndices[pos + 1]]?.requestFocus() }
+                }
+                pos == editableIndices.size - 1 && pos >= 0 && onCrossChunkDown != null -> {
+                    { onCrossChunkDown(chunk.id) }
+                }
+                else -> null
+            }
             RenderedRowView(
                 row = row,
                 chunkId = chunk.id,
@@ -381,6 +525,7 @@ private fun ChunkRow(
                 focusRequester = focusRequesters[rowIndex],
                 onArrowUp = onArrowUp,
                 onArrowDown = onArrowDown,
+                isAppendedFunc = isAppendedFunc,
             )
             val editable = row.editable
             if (insertOpen[rowIndex] == true && editableDoc != null && editable != null) {
@@ -389,7 +534,10 @@ private fun ChunkRow(
                     cascade = editable.cascade,
                     localCount = editable.localCount,
                     editableDoc = editableDoc,
+                    provider = provider,
+                    chunk = chunk,
                     onClose = { insertOpen.remove(rowIndex) },
+                    isAppendedFunc = isAppendedFunc,
                 )
             }
         }
@@ -438,6 +586,8 @@ private fun RenderedRowView(
     onArrowUp: (() -> Unit)? = null,
     /** Move focus to the next editable row in the chunk. */
     onArrowDown: (() -> Unit)? = null,
+    /** See [ChunkRow.isAppendedFunc]. Forwarded to `commitRowEdit`. */
+    isAppendedFunc: Boolean = false,
 ) {
     val info = row.editable
     val color = HexanaTheme.textColor
@@ -484,7 +634,7 @@ private fun RenderedRowView(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
                 onDone = {
-                    val err = commitRowEdit(editableDoc, info, fieldText, provider, chunk)
+                    val err = commitRowEdit(editableDoc, info, fieldText, provider, chunk, isAppendedFunc)
                     lastError = err
                     if (err == null) onEnterRequestInsert?.invoke()
                 },
@@ -508,7 +658,7 @@ private fun RenderedRowView(
                             true
                         }
                         Key.Enter, Key.NumPadEnter -> {
-                            val err = commitRowEdit(editableDoc, info, fieldText, provider, chunk)
+                            val err = commitRowEdit(editableDoc, info, fieldText, provider, chunk, isAppendedFunc)
                             lastError = err
                             if (err == null) onEnterRequestInsert?.invoke()
                             true
@@ -530,7 +680,7 @@ private fun RenderedRowView(
                 }
                 .onFocusChanged { focusState ->
                     if (!focusState.isFocused && fieldText != info.watText) {
-                        lastError = commitRowEdit(editableDoc, info, fieldText, provider, chunk)
+                        lastError = commitRowEdit(editableDoc, info, fieldText, provider, chunk, isAppendedFunc)
                     }
                 },
         )
@@ -586,6 +736,12 @@ private fun commitRowEdit(
     text: String,
     provider: WasmBinaryProvider? = null,
     chunk: BinaryChunk.Element? = null,
+    /**
+     * `true` if the chunk was created by this session's append+redirect
+     * ops. The append+redirect routing is suppressed for these chunks —
+     * length-changing edits go straight to in-place cascade.
+     */
+    isAppendedFunc: Boolean = false,
 ): String? {
     if (text == info.watText) return null // nothing to do
 
@@ -657,8 +813,10 @@ private fun commitRowEdit(
 
     // -- Length-changing edit. Phase E.1 path: append + redirect, when we
     // have provider + chunk metadata. Falls back to in-place cascade if
-    // the redirect stub doesn't fit.
-    if (provider != null && chunk != null && chunk.kind == WasmSectionKinds.CODE) {
+    // the redirect stub doesn't fit. Skipped entirely when this chunk is
+    // itself a function we already appended in this session — chaining
+    // redirects on each keystroke produces garbage with no value.
+    if (!isAppendedFunc && provider != null && chunk != null && chunk.kind == WasmSectionKinds.CODE) {
         val appendResult = EditableRowEncoder.encodeAppendFunctionEditFromText(
             provider = provider,
             chunk = chunk,
@@ -708,7 +866,16 @@ private fun InsertedInstructionRow(
     cascade: org.jetbrains.hexana.providers.format.CascadeContext?,
     localCount: Int?,
     editableDoc: EditableBinaryDocument,
+    /**
+     * Provider + chunk are needed to attempt append+redirect when an
+     * inserted instruction grows the function. Without them
+     * `commitInsertEdit` falls back to the in-place cascade path.
+     */
+    provider: WasmBinaryProvider? = null,
+    chunk: BinaryChunk.Element? = null,
     onClose: () -> Unit,
+    /** See [ChunkRow.isAppendedFunc]. Forwarded to `commitInsertEdit`. */
+    isAppendedFunc: Boolean = false,
 ) {
     var fieldText by remember { mutableStateOf("") }
     var lastError by remember { mutableStateOf<String?>(null) }
@@ -725,36 +892,78 @@ private fun InsertedInstructionRow(
             onClose()
             return true
         }
-        val err = commitInsertEdit(editableDoc, insertOffset, cascade, localCount, fieldText)
+        val err = commitInsertEdit(editableDoc, insertOffset, cascade, localCount, fieldText, provider, chunk, isAppendedFunc)
         lastError = err
         return err == null
     }
 
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        // Indent placeholder so the empty field roughly aligns with the
-        // mnemonic column on the row above. Two spaces matches the
-        // structural-row prefix the renderer uses for code body lines.
-        Text(text = "  ", style = ROW_TEXT_STYLE.copy(color = color))
+    // Auto-focus the empty field as soon as the row appears so the user
+    // can start typing without clicking. The requester is only attached
+    // when the row is present, so this `requestFocus()` always lands on a
+    // ready target.
+    val requester = remember { FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        runCatching { requester.requestFocus() }
+    }
+    // Tracks whether the field has ever been focused. The empty-and-
+    // unfocused close-on-blur logic below races the auto-focus
+    // LaunchedEffect — without this guard the field gets closed on its
+    // very first onFocusChanged callback (initial isFocused = false),
+    // before the LaunchedEffect even runs, and the row vanishes.
+    var hadFocus by remember { mutableStateOf(false) }
+    val accentColor = colorFor(RenderTokenKind.KEYWORD)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            // Subtle left border in the accent color so the empty insert
+            // row is visually distinct from the regular rows above and
+            // below. Without this it's an invisible 1-line gap between
+            // the existing rows — easy to miss.
+            .border(width = 0.dp, color = Color.Transparent)
+            .padding(start = 0.dp),
+    ) {
+        // Visible "+" gutter marker so the user can see at a glance that
+        // a new-instruction row is open. Same hex-text color used for
+        // structural decoration in regular rows so it visually blends
+        // into the gutter without being flashy.
+        Text(
+            text = " + ",
+            style = ROW_TEXT_STYLE.copy(color = accentColor, fontWeight = FontWeight.Bold),
+        )
         BasicTextField(
             value = fieldText,
             onValueChange = { fieldText = it; lastError = null },
             singleLine = true,
-            cursorBrush = SolidColor(color),
-            textStyle = ROW_TEXT_STYLE.copy(color = colorFor(RenderTokenKind.KEYWORD)),
+            cursorBrush = SolidColor(accentColor),
+            textStyle = ROW_TEXT_STYLE.copy(color = accentColor),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { tryCommit() }),
             modifier = Modifier
                 .then(borderModifier)
+                .focusRequester(requester)
+                // Direct keyboard handling. KeyboardActions.onDone catches
+                // the IME path; on Compose Desktop without a soft keyboard
+                // Enter doesn't always reach it, so we handle Enter / Esc
+                // explicitly here. Returning `true` consumes the event so
+                // the BasicTextField doesn't also process it.
                 .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
-                        onClose()
-                        true
-                    } else {
-                        false
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Escape -> {
+                            onClose()
+                            true
+                        }
+                        Key.Enter, Key.NumPadEnter -> {
+                            tryCommit()
+                            true
+                        }
+                        else -> false
                     }
                 }
                 .onFocusChanged { focusState ->
-                    if (!focusState.isFocused && fieldText.isBlank()) {
+                    if (focusState.isFocused) {
+                        hadFocus = true
+                    } else if (hadFocus && fieldText.isBlank()) {
                         onClose()
                     }
                 },
@@ -773,6 +982,14 @@ private fun InsertedInstructionRow(
  * Encodes the user's typed instruction for an inserted row at
  * [insertOffset] and applies the JournalOps. Returns null on success or a
  * short error message on failure.
+ *
+ * Routing matches the EDIT path:
+ * 1. **Append + redirect** if [provider] + [chunk] are available and the
+ *    function body has room for the redirect stub. The original function
+ *    becomes a stub `(local.get …; call $newIdx; nop pad)` and a new
+ *    function carrying the post-insert body is appended.
+ * 2. **In-place cascade** otherwise — single Insert + funcSize/section
+ *    cascade ops; the original function bytes mutate in place.
  */
 private fun commitInsertEdit(
     doc: EditableBinaryDocument,
@@ -780,7 +997,56 @@ private fun commitInsertEdit(
     cascade: org.jetbrains.hexana.providers.format.CascadeContext?,
     localCount: Int?,
     text: String,
+    provider: WasmBinaryProvider? = null,
+    chunk: BinaryChunk.Element? = null,
+    /**
+     * `true` if the host chunk was created by this session's append+
+     * redirect ops — suppress the append+redirect routing for inserts
+     * into it.
+     */
+    isAppendedFunc: Boolean = false,
 ): String? {
+    fun applyOps(ops: List<JournalOp>): String? {
+        doc.edit().apply {
+            for (op in ops) {
+                when (op) {
+                    is JournalOp.Replace -> replace(op.start, op.end, Base64.decode(op.data))
+                    is JournalOp.Insert -> insert(op.offset, Base64.decode(op.data))
+                    is JournalOp.Delete -> delete(op.start, op.end)
+                }
+            }
+            commit()
+        }
+        return null
+    }
+
+    // Try append+redirect first when we have the structural metadata.
+    // Reuses encodeAppendFunctionEdit with `oldRowLength = 0`, which makes
+    // the encoder build `prefix ++ newRowBytes ++ suffix` — exactly an
+    // insert at `insertOffset`. Skipped for chunks already created by this
+    // session's append+redirect — chaining redirects on every keystroke
+    // produces garbage with no value.
+    if (!isAppendedFunc && provider != null && chunk != null && chunk.kind == WasmSectionKinds.CODE) {
+        val appendResult = EditableRowEncoder.encodeAppendFunctionEditFromText(
+            provider = provider,
+            chunk = chunk,
+            rowStart = insertOffset,
+            oldRowLength = 0,
+            text = text,
+            localCount = localCount,
+        )
+        when (appendResult) {
+            is RowEncodeResult.Success -> return applyOps(appendResult.ops)
+            is RowEncodeResult.Error -> {
+                val msg = appendResult.message
+                // Body too small for the redirect stub → fall through to
+                // in-place cascade. Other errors surface to the user.
+                if (!msg.contains("body too small")) return msg
+            }
+        }
+    }
+
+    // Fallback: in-place cascade.
     val result = EditableRowEncoder.encodeInsert(
         insertOffset = insertOffset,
         text = text,
@@ -788,19 +1054,7 @@ private fun commitInsertEdit(
         cascade = cascade,
     )
     return when (result) {
-        is RowEncodeResult.Success -> {
-            doc.edit().apply {
-                for (op in result.ops) {
-                    when (op) {
-                        is JournalOp.Replace -> replace(op.start, op.end, Base64.decode(op.data))
-                        is JournalOp.Insert -> insert(op.offset, Base64.decode(op.data))
-                        is JournalOp.Delete -> delete(op.start, op.end)
-                    }
-                }
-                commit()
-            }
-            null
-        }
+        is RowEncodeResult.Success -> applyOps(result.ops)
         is RowEncodeResult.Error -> result.message
     }
 }

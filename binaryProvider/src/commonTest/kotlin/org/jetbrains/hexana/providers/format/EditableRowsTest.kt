@@ -249,10 +249,19 @@ class EditableRowsTest {
     // -- Read-only (structural / variable-length / unsupported) ------------
 
     @Test
-    fun structural_control_flow_is_read_only() {
-        // We can't construct full Block/Loop/If instances without children;
-        // verifying via the singleton terminal/end variants is sufficient.
+    fun terminal_end_is_read_only() {
+        // The trailing 0x0B is consumed by parseOpCodes without an opCode
+        // entry; the synthetic-end render row carries no editable info.
         opNotEditable(OpCodes.Flow.Terminal)
+    }
+
+    @Test
+    fun block_like_openers_are_editable() {
+        // `Block` covers `Block`, `Loop`, `If`, `Else` via the class
+        // hierarchy. Need a non-null block-type for Loop / If; Block /
+        // Else accept null.
+        opEditable(OpCodes.Flow.Block(type = null, value = emptyList()))
+        opEditable(OpCodes.Flow.Else(value = emptyList()))
     }
 
     @Test

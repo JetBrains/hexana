@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.providers.format
 
 import kotlin.io.encoding.Base64
+import org.jetbrains.hexana.document.binaryDocumentOf
 import org.jetbrains.hexana.document.format.BinaryChunk
 import org.jetbrains.hexana.document.format.ChunkId
 import org.jetbrains.hexana.document.journal.JournalOp
@@ -739,6 +740,77 @@ class EditableRowEncoderTest {
         // sectionSize: 131 - 1 + (-1) = 129 → ULEB(129) = 0x81 0x01.
         val secOp = assertIs<JournalOp.Replace>(ok.ops[2])
         assertContentEquals(bytes(0x81, 0x01), Base64.decode(secOp.data))
+    }
+
+    // -- Block-like control flow openers (block / loop / if / else / end) ---
+
+    private fun assertEncodesViaInsert(
+        text: String,
+        expected: ByteArray,
+    ) {
+        val cascade = CascadeContext(0L, 1, 1L, 0L, 1, 1L)
+        val result = EditableRowEncoder.encodeInsert(insertOffset = 0L, text = text, cascade = cascade)
+        val ok = assertIs<RowEncodeResult.Success>(result, message = "got: $result")
+        // First op is the actual instruction insert; subsequent ops are funcSize/sectionSize cascade.
+        val insertOp = assertIs<JournalOp.Insert>(ok.ops[0])
+        assertContentEquals(expected, Base64.decode(insertOp.data), "encoded bytes mismatch")
+    }
+
+    @Test
+    fun block_with_no_blocktype_encodes_to_02_40() {
+        assertEncodesViaInsert("block", bytes(0x02, 0x40))
+    }
+
+    @Test
+    fun block_with_result_i32_encodes_to_02_7F() {
+        assertEncodesViaInsert("block (result i32)", bytes(0x02, 0x7F))
+    }
+
+    @Test
+    fun loop_with_result_i64_encodes_to_03_7E() {
+        assertEncodesViaInsert("loop (result i64)", bytes(0x03, 0x7E))
+    }
+
+    @Test
+    fun if_with_result_f32_encodes_to_04_7D() {
+        assertEncodesViaInsert("if (result f32)", bytes(0x04, 0x7D))
+    }
+
+    @Test
+    fun if_empty_encodes_to_04_40() {
+        assertEncodesViaInsert("if", bytes(0x04, 0x40))
+    }
+
+    @Test
+    fun else_encodes_to_05() {
+        assertEncodesViaInsert("else", bytes(0x05))
+    }
+
+    @Test
+    fun end_encodes_to_0B() {
+        assertEncodesViaInsert("end", bytes(0x0B))
+    }
+
+    @Test
+    fun block_with_unsupported_result_type_rejected() {
+        val cascade = CascadeContext(0L, 1, 1L, 0L, 1, 1L)
+        val result = EditableRowEncoder.encodeInsert(0L, "block (result v128)", cascade = cascade)
+        val err = assertIs<RowEncodeResult.Error>(result)
+        assertTrue("unsupported result type" in err.message, "got: ${err.message}")
+    }
+
+    @Test
+    fun block_with_param_form_rejected() {
+        val cascade = CascadeContext(0L, 1, 1L, 0L, 1, 1L)
+        val result = EditableRowEncoder.encodeInsert(0L, "block (param i32) (result i32)", cascade = cascade)
+        assertIs<RowEncodeResult.Error>(result, message = "got: $result")
+    }
+
+    @Test
+    fun else_rejects_immediates() {
+        val cascade = CascadeContext(0L, 1, 1L, 0L, 1, 1L)
+        val result = EditableRowEncoder.encodeInsert(0L, "else 42", cascade = cascade)
+        assertIs<RowEncodeResult.Error>(result, message = "got: $result")
     }
 
     // -- Locals declaration (D.2) ------------------------------------------
@@ -1588,6 +1660,21 @@ class EditableRowEncoderTest {
         // `Unknown data record type: <opcode-byte>`.
         val sizeAnalysis = rebuilt.sizeAnalysis
         assertNotNull(sizeAnalysis, "sizeAnalysis must build without throwing")
+
+        // The original code chunk (index 0) is now a redirect stub. Renderer
+        // should detect the shape and prepend a `(; redirected to func N ;)`
+        // comment row above the body. Annotation is purely visual — it has
+        // no `editable` info, so the panel renders it as plain text.
+        val rebuiltSnapshot = binaryDocumentOf(newBytes).snapshot()
+        val rebuiltParsed = WasmParsedBinary.fromProvider(rebuilt, rebuiltSnapshot)
+        val rebuiltRenderer = WasmHexanaWatRenderer(rebuiltParsed)
+        val rebuiltChunk = codeChunkFor(rebuilt, indexInSection = 0)
+        val rebuiltRows = rebuiltRenderer.renderRows(rebuiltSnapshot, rebuiltChunk)
+        val firstRowText = rebuiltRows.first().tokens.joinToString("") { it.text }
+        assertTrue(
+            "redirected to func 1" in firstRowText,
+            "expected the first row of the redirect-stub function to be the redirect annotation, got: $firstRowText",
+        )
     }
 
     /**

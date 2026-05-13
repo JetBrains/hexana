@@ -723,6 +723,20 @@ public object EditableRowEncoder {
         "br" -> encodeULebOp(opcode = 0x0c, rest)
         "br_if" -> encodeULebOp(opcode = 0x0d, rest)
 
+        // Structural control-flow openers: opcode + 1-byte blocktype.
+        // Empty `block` / `loop` / `if` → 0x40 (empty block). Single-result
+        // forms accept `(result <i32|i64|f32|f64>)`; the corresponding
+        // value-type byte goes after the opcode. Multi-value blocks
+        // (typeidx form) are not supported in Phase 1 — caller falls back
+        // on the encoder error.
+        "block" -> encodeBlockOp(opcode = 0x02, rest)
+        "loop" -> encodeBlockOp(opcode = 0x03, rest)
+        "if" -> encodeBlockOp(opcode = 0x04, rest)
+
+        // Structural control-flow no-immediate ops.
+        "else" -> encodeNoImmediate(rest, 0x05)
+        "end" -> encodeNoImmediate(rest, 0x0B)
+
         // Memory load/store with MemArg.
         "i32.load" -> encodeMemArgOp(opcode = 0x28, rest, naturalAlign = 2)
         "i32.load8_s" -> encodeMemArgOp(opcode = 0x2c, rest, naturalAlign = 0)
@@ -1011,6 +1025,46 @@ public object EditableRowEncoder {
         } else {
             BytesResult.Success(byteArrayOf(opcode.toByte()))
         }
+    }
+
+    /**
+     * `block` / `loop` / `if` openers. Emits `[opcode, blocktype]`.
+     *
+     * Accepted forms (after the mnemonic):
+     * - `` (empty)            → `0x40` (empty blocktype, no result)
+     * - `(result i32)`        → `0x7F`
+     * - `(result i64)`        → `0x7E`
+     * - `(result f32)`        → `0x7D`
+     * - `(result f64)`        → `0x7C`
+     *
+     * Multi-value blocks (typeidx form) and `(param …)` headers are
+     * deliberately rejected — adding a typeidx requires the user to know
+     * an existing type-section index, which the WAT panel doesn't surface
+     * yet, and adding a fresh type record to the type section is a much
+     * bigger change.
+     */
+    private fun encodeBlockOp(opcode: Int, rest: List<String>): BytesResult {
+        // Re-tokenize in paren-aware mode so `(`, `result`, `i32`, `)`
+        // arrive as four separate tokens regardless of how the user
+        // spaced them.
+        val tokens = tokenizeWat(rest.joinToString(" "))
+        val blocktypeByte: Byte = when {
+            tokens.isEmpty() -> 0x40.toByte()
+            tokens.size == 4 && tokens[0] == "(" && tokens[1] == "result" && tokens[3] == ")" ->
+                when (tokens[2]) {
+                    "i32" -> 0x7F.toByte()
+                    "i64" -> 0x7E.toByte()
+                    "f32" -> 0x7D.toByte()
+                    "f64" -> 0x7C.toByte()
+                    else -> return BytesResult.Failure(
+                        "unsupported result type '${tokens[2]}'; expected i32 / i64 / f32 / f64",
+                    )
+                }
+            else -> return BytesResult.Failure(
+                "block-like opcode: expected '' or '(result <i32|i64|f32|f64>)'",
+            )
+        }
+        return BytesResult.Success(byteArrayOf(opcode.toByte(), blocktypeByte))
     }
 
     // -- Tokenizer ---------------------------------------------------------

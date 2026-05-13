@@ -157,7 +157,16 @@ public class WasmHexanaWatRenderer(
         val localCount = computeLocalCount(chunk)
         val cascadeContext = computeCascadeContext(chunk, snapshot.byteSource())
         val localsRowMeta = computeLocalsRowMeta(chunk, snapshot.byteSource())
-        return rawRows.map { rowTokens ->
+        // Phase F: detect redirect-stub bodies produced by the append+redirect
+        // path. If matched, prepend a `(; redirected to func N ;)` comment row
+        // so the user can tell at a glance that this isn't real code anymore.
+        val redirectTarget: Int? = detectRedirectStubTarget(chunk)
+        val redirectAnnotation: List<RenderedRow> = if (redirectTarget != null) {
+            listOf(RenderedRow(tokens = redirectAnnotationRow(redirectTarget)))
+        } else {
+            emptyList()
+        }
+        val bodyRows = rawRows.map { rowTokens ->
             val rowOpStart = rowTokens
                 .firstOrNull { it.kind == RenderTokenKind.OFFSET_ANNOTATION }
                 ?.sourceOffset
@@ -184,7 +193,79 @@ public class WasmHexanaWatRenderer(
             }
             RenderedRow(tokens = rowTokens, editable = editable)
         }
+        return redirectAnnotation + bodyRows
     }
+
+    /**
+     * Returns the funcidx that this code chunk's body redirects to, or
+     * `null` if the body doesn't match the redirect-stub shape produced
+     * by `EditableRowEncoder.encodeAppendFunctionEdit`.
+     *
+     * Stub shape (after locals decl, in opcode order):
+     *
+     * ```
+     * local.get 0       \
+     * local.get 1        |  exactly N consecutive sequential local.gets
+     * …                  |  where N = paramCount (≥ 0)
+     * local.get N-1     /
+     * call M             ← exactly one Call; M is the redirect target
+     * nop                \
+     * nop                 |  zero or more nops (padding to fit oldBodyLen)
+     * …                  /
+     * end
+     * ```
+     *
+     * Anything else (a real handwritten function that happens to have a
+     * `call` is rejected by the leading-local.gets-must-be-sequential
+     * check or by any non-`Nop` opcode after the call). Heuristic — false
+     * positives are possible for hand-crafted stubs, but the shape is
+     * specific enough that real toolchain output never matches.
+     */
+    private fun detectRedirectStubTarget(chunk: BinaryChunk.Element): Int? {
+        val codeRecord = runCatching { provider.parseCodeRecord(chunk.indexInSection) }.getOrNull()
+            ?: return null
+        val ops = codeRecord.opCodes
+        if (ops.isEmpty()) return null
+
+        // `parseOpCodes` consumes the trailing 0x0B (Flow.Terminal) without
+        // appending it to the list — every well-formed function body ends
+        // there implicitly — so the expected shape we match against is just
+        //   (local.get N)* call M nop*
+        // No explicit Terminal entry to look for at the end.
+
+        // 1. Skip leading local.get N for N = 0, 1, 2, …
+        var i = 0
+        while (i < ops.size) {
+            val op = ops[i]
+            if (op !is OpCodes.Local.Get) break
+            if (op.value.toInt() != i) return null  // sequence broken → not a stub
+            i++
+        }
+
+        // 2. Exactly one Call.
+        val callOp = ops.getOrNull(i) as? OpCodes.Flow.Call ?: return null
+        i++
+
+        // 3. Everything from here to the end of `ops` must be Nop. (No explicit
+        //    Terminal — see comment above.)
+        while (i < ops.size) {
+            if (ops[i] !is OpCodes.ParametricInstructions.Nop) return null
+            i++
+        }
+
+        return callOp.value.toInt()
+    }
+
+    /**
+     * Builds the synthetic comment row prepended above a redirect-stub
+     * function body. The token kinds match what the panel's
+     * `RenderedRowView` treats as a non-editable row (no editable info
+     * payload is attached, so the comment is rendered as plain text).
+     */
+    private fun redirectAnnotationRow(targetFuncIdx: Int): List<RenderToken> = listOf(
+        RenderToken("    ", RenderTokenKind.WHITESPACE),
+        RenderToken("(; redirected to func $targetFuncIdx ;)", RenderTokenKind.COMMENT),
+    )
 
     /**
      * Locates the `(local …)` declaration row in a code chunk and returns

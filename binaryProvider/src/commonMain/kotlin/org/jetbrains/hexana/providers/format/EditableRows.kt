@@ -48,6 +48,19 @@ public object EditableRows {
         // -- Conditional / unconditional branches (single ULEB128 labelidx) ---
         is OpCodes.Flow.Br, is OpCodes.Flow.BrIf -> true
 
+        // -- Structural block-like openers (opcode + 1-byte blocktype) ---
+        // `OpCodes.Flow.Block` covers `Block`, `Loop`, `If`, `Else` via the
+        // class hierarchy. The encoder accepts the matching mnemonics with
+        // an empty or `(result <vtype>)` blocktype; multi-value typeidx
+        // forms are still rejected by the encoder (see `encodeBlockOp`).
+        //
+        // Scope balance — every `block`/`loop`/`if` needs a matching
+        // `end` — is the user's responsibility. A break in the scope
+        // structure produces an invalid binary; the live-provider rebuild
+        // catches the parse failure and keeps the previous good state on
+        // screen, so the user can undo.
+        is OpCodes.Flow.Block -> true
+
         // -- Memory load/store (MemArg = align ULEB128 + offset ULEB128) -
         is OpCodes.Memory.i32.Load,
         is OpCodes.Memory.i32.Load8_S,
