@@ -1,8 +1,11 @@
 package org.jetbrains.hexana.providers.format
 
 import kotlin.io.encoding.Base64
+import org.jetbrains.hexana.document.format.BinaryChunk
 import org.jetbrains.hexana.document.journal.JournalOp
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.opcodes.OpCode
+import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 
 /**
  * Inverse of [WatMnemonics]: takes a row's edited WAT text plus the
@@ -347,6 +350,307 @@ public object EditableRowEncoder {
                 data = Base64.encode(newSectionSizeBytes),
             ),
         )
+    }
+
+    // -- Append + redirect path (Phase E.1) -----------------------------------
+
+    /**
+     * Length-changing function-body edit via **append + redirect** instead of
+     * in-place cascade. For length-changing edits this is simpler than the
+     * existing 3-op cascade because it avoids mid-section byte shifts: all
+     * structural ops are at section boundaries.
+     *
+     * The algorithm:
+     * 1. Assembles the new function body by splicing [newRowBytes] over the
+     *    bytes at [[rowStart], [rowStart]+[oldRowLength]) inside the original
+     *    code entry's body.
+     * 2. Appends the new body as a fresh function entry at the end of the code
+     *    section, with a matching new typeidx appended at the end of the
+     *    function section. The new function gets absolute funcidx
+     *    `importFuncCount + oldCodeEntryCount`.
+     * 3. Overwrites the original code entry's body with a **redirect stub**
+     *    (exactly the same number of bytes as the original body): the locals
+     *    declaration is kept verbatim; the opcode area becomes
+     *    `local.get 0 ... local.get (p-1) ; call $newIdx ; nop... ; end`, where
+     *    `p` is the param count of the function's type.
+     *
+     * **Fallback contract.** If the redirect stub does not fit (original body
+     * is too small — requires `2*p + 1 + uleb_len(newFuncIdx) + 1` bytes
+     * minimum in the opcode area), returns [RowEncodeResult.Error] with a
+     * "body too small for redirect stub" message. The panel can route those
+     * edits through the existing in-place cascade path.
+     *
+     * @param provider the parsed WASM binary (reads original body bytes and
+     *   section structural metadata).
+     * @param chunk the code-section [BinaryChunk.Element] being edited;
+     *   [BinaryChunk.Element.indexInSection] identifies the code entry.
+     * @param rowStart logical byte offset of the row being edited.
+     * @param oldRowLength current encoded byte length of the row.
+     * @param newRowBytes the user's new bytes for the row (the replacement).
+     */
+    /**
+     * Convenience overload for the panel: takes the user's edited text and
+     * a localCount (for `local.{get,set,tee}` index validation). Tokenizes
+     * + encodes via [encodeByMnemonic], then routes to the byte-array form
+     * of [encodeAppendFunctionEdit]. Returns the same shape of result —
+     * `Error("body too small for redirect stub")` when the stub doesn't
+     * fit, which the caller treats as the signal to fall back to the
+     * existing in-place cascade.
+     */
+    public fun encodeAppendFunctionEditFromText(
+        provider: WasmBinaryProvider,
+        chunk: BinaryChunk.Element,
+        rowStart: Long,
+        oldRowLength: Int,
+        text: String,
+        localCount: Int? = null,
+    ): RowEncodeResult {
+        val tokens = tokenize(text)
+        if (tokens.isEmpty()) return RowEncodeResult.Error("row text is empty")
+        val mnemonic = tokens[0]
+        val rest = tokens.drop(1)
+        val newBytes = encodeByMnemonic(mnemonic, rest, localCount)
+        return when (newBytes) {
+            is BytesResult.Success -> encodeAppendFunctionEdit(
+                provider = provider,
+                chunk = chunk,
+                rowStart = rowStart,
+                oldRowLength = oldRowLength,
+                newRowBytes = newBytes.bytes,
+            )
+            is BytesResult.Failure -> RowEncodeResult.Error(newBytes.message)
+        }
+    }
+
+    public fun encodeAppendFunctionEdit(
+        provider: WasmBinaryProvider,
+        chunk: BinaryChunk.Element,
+        rowStart: Long,
+        oldRowLength: Int,
+        newRowBytes: ByteArray,
+    ): RowEncodeResult {
+        val wasmModule = provider.wasmModule
+            ?: return RowEncodeResult.Error("no parsed WASM module available")
+        val codeSection = wasmModule.codeSection
+            ?: return RowEncodeResult.Error("module has no code section")
+        val funcSection = wasmModule.functionSection
+            ?: return RowEncodeResult.Error("module has no function section")
+        val typesSection = wasmModule.typesSection
+            ?: return RowEncodeResult.Error("module has no type section")
+
+        val codeEntryIndex = chunk.indexInSection
+
+        // --- 1. Read funcSize prefix and locate body boundaries. ---
+
+        val entryStart = chunk.byteRange.first
+        val buf = provider.bytes  // independent cursor
+        buf.position(entryStart.toInt())
+        val rawFuncSize = buf.getULEB128()       // value = bodyLength
+        val entrySizePrefixLen = buf.position() - entryStart.toInt()
+        val bodyLength = rawFuncSize.toInt()
+        val bodyStart = entryStart + entrySizePrefixLen.toLong()  // first byte of body
+
+        // --- 2. Read locals declaration and locate opcode area. ---
+
+        val localsBytes: ByteArray
+        val opcodeAreaStart: Long
+        run {
+            val preLocals = buf.position()   // = bodyStart.toInt()
+            val localsGroupCount = buf.getULEB128().toInt()
+            repeat(localsGroupCount) {
+                buf.getULEB128()   // run count in group
+                buf.get()          // type byte
+            }
+            val localsDeclarationLength = buf.position() - preLocals
+            opcodeAreaStart = bodyStart + localsDeclarationLength.toLong()
+            localsBytes = ByteArray(localsDeclarationLength)
+            for (i in 0 until localsDeclarationLength) localsBytes[i] = buf[preLocals + i]
+        }
+
+        // --- 3. Validate that rowStart is in the opcode area, not locals. ---
+
+        if (rowStart < opcodeAreaStart) {
+            return RowEncodeResult.Error(
+                "row at offset $rowStart is inside the locals declaration " +
+                    "(opcode area starts at $opcodeAreaStart); use encodeLocals for this row",
+            )
+        }
+        val bodyEndExclusive = bodyStart + bodyLength.toLong()
+        if (rowStart + oldRowLength.toLong() > bodyEndExclusive) {
+            return RowEncodeResult.Error(
+                "row [$rowStart, ${rowStart + oldRowLength}) extends beyond the function body " +
+                    "(body ends at $bodyEndExclusive)",
+            )
+        }
+
+        // --- 4. Assemble the new function body. ---
+
+        val rowStartInBody = (rowStart - bodyStart).toInt()
+        val originalBodyBytes = ByteArray(bodyLength)
+        for (i in 0 until bodyLength) originalBodyBytes[i] = buf[bodyStart.toInt() + i]
+        val newBody = originalBodyBytes.copyOfRange(0, rowStartInBody) +
+            newRowBytes +
+            originalBodyBytes.copyOfRange(rowStartInBody + oldRowLength, bodyLength)
+
+        // --- 5. Look up param count from the type section. ---
+
+        val funcTypeIdxs = with(funcSection) { provider.bytes.parseFunctions() }
+        val typeidx = funcTypeIdxs.getOrNull(codeEntryIndex)
+            ?: return RowEncodeResult.Error("code entry $codeEntryIndex has no matching typeidx")
+        val typeRecords = with(typesSection) { provider.bytes.parseTypes() }
+        val typeRecord = typeRecords.getOrNull(typeidx)
+            ?: return RowEncodeResult.Error("typeidx $typeidx has no matching type record")
+        val paramCount = when (typeRecord) {
+            is WasmSectionFunctionTypeRecord -> typeRecord.params.size
+            else -> return RowEncodeResult.Error(
+                "typeidx $typeidx maps to a non-functype record (${typeRecord::class.simpleName}); " +
+                    "cannot compute param count for redirect stub",
+            )
+        }
+
+        // --- 6. Compute new funcidx and redirect stub. ---
+
+        val importFuncCount = provider.importFuncCount
+        val codeEntryCount = provider.codeOffsets.size
+        val newFuncIdx = importFuncCount + codeEntryCount  // one past the last current entry
+
+        val callImmediate = encodeULEB128(newFuncIdx.toLong())
+        // Minimum opcode-area bytes needed: 2 per param + 1 (call opcode) + |callImmediate| + 1 (end)
+        val redirectOpcodeSize = 2 * paramCount + 1 + callImmediate.size + 1
+        val nopPad = bodyLength - localsBytes.size - redirectOpcodeSize
+        if (nopPad < 0) {
+            return RowEncodeResult.Error(
+                "body too small for redirect stub; in-place edit required " +
+                    "(body=$bodyLength bytes, stub needs ${localsBytes.size + redirectOpcodeSize})",
+            )
+        }
+
+        val redirectStub = buildRedirectStub(localsBytes, paramCount, callImmediate, nopPad)
+        check(redirectStub.size == bodyLength) {
+            "redirect stub size (${redirectStub.size}) must equal bodyLength ($bodyLength)"
+        }
+
+        // --- 7. Assemble the new function entry bytes (funcSize ULEB + new body). ---
+
+        val newBodySizeBytes = encodeULEB128(newBody.size.toLong())
+        val newFuncEntry = newBodySizeBytes + newBody
+
+        // --- 8. Assemble the new typeidx bytes (same type as original). ---
+
+        val newTypeidxBytes = encodeULEB128(typeidx.toLong())
+
+        // --- 9. Compute new function-section count and size. ---
+        //
+        // Note: we measure the EXISTING count ULEB128 by reading it from
+        // the file (not by re-encoding the value canonically). Some WASM
+        // toolchains emit non-canonical multi-byte ULEBs for small values;
+        // if we assumed canonical encoding here our Replace op would
+        // overwrite only the first byte and leave trailing continuation
+        // bytes in place — corrupting subsequent section content. The size
+        // ULEB128 has the same risk but we already read its actual length
+        // from `contentOffset - sectionOffset - 1`.
+
+        val funcCountReader = provider.bytes
+        funcCountReader.position(funcSection.contentOffset)
+        funcCountReader.getULEB128()
+        val funcCountLen = funcCountReader.position() - funcSection.contentOffset
+
+        val newFuncCountBytes = encodeULEB128((codeEntryCount + 1).toLong())
+        val funcCountDelta = newFuncCountBytes.size - funcCountLen
+        val newFuncContentSize = funcSection.contentSize + newTypeidxBytes.size + funcCountDelta
+        val newFuncSectionSizeBytes = encodeULEB128(newFuncContentSize.toLong())
+
+        // --- 10. Compute new code-section count and size. ---
+
+        val codeCountReader = provider.bytes
+        codeCountReader.position(codeSection.contentOffset)
+        codeCountReader.getULEB128()
+        val codeCountLen = codeCountReader.position() - codeSection.contentOffset
+
+        val newCodeCountBytes = encodeULEB128((codeEntryCount + 1).toLong())
+        val codeCountDelta = newCodeCountBytes.size - codeCountLen
+        val newCodeContentSize = codeSection.contentSize + newFuncEntry.size + codeCountDelta
+        val newCodeSectionSizeBytes = encodeULEB128(newCodeContentSize.toLong())
+
+        // --- 11. Assemble the 7 ops in descending byte-position order. ---
+
+        val codeContentEnd = (codeSection.contentOffset + codeSection.contentSize).toLong()
+        val codeCountOffset = codeSection.contentOffset.toLong()
+        val codeSizePrefixStart = (codeSection.sectionOffset + 1).toLong()
+        val codeSizePrefixLen = codeSection.contentOffset - codeSection.sectionOffset - 1
+        val funcContentEnd = (funcSection.contentOffset + funcSection.contentSize).toLong()
+        val funcCountOffset = funcSection.contentOffset.toLong()
+        val funcSizePrefixStart = (funcSection.sectionOffset + 1).toLong()
+        val funcSizePrefixLen = funcSection.contentOffset - funcSection.sectionOffset - 1
+
+        val ops = listOf(
+            // Op 1 (highest offset): append new function body to code section end.
+            JournalOp.Insert(
+                offset = codeContentEnd,
+                data = Base64.encode(newFuncEntry),
+            ),
+            // Op 2: overwrite original body with redirect stub (length-preserving).
+            JournalOp.Replace(
+                start = bodyStart,
+                end = bodyStart + bodyLength.toLong(),
+                data = Base64.encode(redirectStub),
+            ),
+            // Op 3: update code-section entry count.
+            JournalOp.Replace(
+                start = codeCountOffset,
+                end = codeCountOffset + codeCountLen.toLong(),
+                data = Base64.encode(newCodeCountBytes),
+            ),
+            // Op 4: update code-section outer size ULEB128.
+            JournalOp.Replace(
+                start = codeSizePrefixStart,
+                end = codeSizePrefixStart + codeSizePrefixLen.toLong(),
+                data = Base64.encode(newCodeSectionSizeBytes),
+            ),
+            // Op 5: append typeidx to function section end.
+            JournalOp.Insert(
+                offset = funcContentEnd,
+                data = Base64.encode(newTypeidxBytes),
+            ),
+            // Op 6: update function-section entry count.
+            JournalOp.Replace(
+                start = funcCountOffset,
+                end = funcCountOffset + funcCountLen.toLong(),
+                data = Base64.encode(newFuncCountBytes),
+            ),
+            // Op 7 (lowest offset): update function-section outer size ULEB128.
+            JournalOp.Replace(
+                start = funcSizePrefixStart,
+                end = funcSizePrefixStart + funcSizePrefixLen.toLong(),
+                data = Base64.encode(newFuncSectionSizeBytes),
+            ),
+        )
+
+        return RowEncodeResult.Success(ops)
+    }
+
+    /**
+     * Assembles the redirect stub that replaces the original function body.
+     * Structure: localsBytes ++ (local.get 0 ... local.get p-1) ++
+     * (call newFuncIdx) ++ (nop * nopPad) ++ end.
+     */
+    private fun buildRedirectStub(
+        localsBytes: ByteArray,
+        paramCount: Int,
+        callImmediate: ByteArray,
+        nopPad: Int,
+    ): ByteArray {
+        val out = ArrayList<Byte>(localsBytes.size + 2 * paramCount + 1 + callImmediate.size + nopPad + 1)
+        out += localsBytes.toList()
+        for (i in 0 until paramCount) {
+            out += 0x20.toByte()                           // local.get opcode
+            out += encodeULEB128(i.toLong()).toList()       // param index ULEB128
+        }
+        out += 0x10.toByte()                               // call opcode
+        out += callImmediate.toList()                      // funcidx ULEB128
+        repeat(nopPad) { out += 0x01.toByte() }            // nop padding
+        out += 0x0B.toByte()                               // end
+        return out.toByteArray()
     }
 
     /**

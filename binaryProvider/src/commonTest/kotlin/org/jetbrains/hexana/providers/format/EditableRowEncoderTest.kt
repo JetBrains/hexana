@@ -1,7 +1,11 @@
 package org.jetbrains.hexana.providers.format
 
 import kotlin.io.encoding.Base64
+import org.jetbrains.hexana.document.format.BinaryChunk
+import org.jetbrains.hexana.document.format.ChunkId
 import org.jetbrains.hexana.document.journal.JournalOp
+import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.opcodes.numeric.F32
@@ -12,6 +16,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -1111,5 +1116,484 @@ class EditableRowEncoderTest {
             text = "i32.const 5  (; sleb128 05 ;)",
             expected = bytes(0x41, 0x05),
         )
+    }
+
+    // -- Phase E.1: encodeAppendFunctionEdit --------------------------------
+
+    /**
+     * Synthetic WASM fixture with a single function that has 2 params.
+     *
+     * Binary layout:
+     * ```
+     *  00 61 73 6D 01 00 00 00   header           offset 0-7
+     *  01 07 01 60 02 7F 7F 01 7F  type section   offset 8-16
+     *       ; type[0] = (func (param i32 i32) (result i32))
+     *  03 02 01 00               function section  offset 17-20
+     *       ; function[0] uses type 0
+     *  0A 0F 01 0D               code section hdr  offset 21-24
+     *       ; contentSize=15, count=1, funcSize=13
+     *  00 20 00 20 01 6A 20 00 20 01 6C 6A 0B   body[0]  offset 25-37
+     *       ; 0 locals; local.get 0; local.get 1; i32.add; local.get 0;
+     *       ;           local.get 1; i32.mul; i32.add; end
+     * ```
+     *
+     * Key offsets:
+     * - code section: sectionOffset=21, contentOffset=23, contentSize=15
+     * - code entry 0: entryStart=24 (funcSize byte), bodyStart=25, bodyLength=13
+     * - func section: sectionOffset=17, contentOffset=19, contentSize=2
+     * - opcode area in body: starts at 26 (after 1-byte locals decl `00`)
+     *   - 26..27: local.get 0
+     *   - 28..29: local.get 1
+     *   - 30:     i32.add   (rowStart=30, oldRowLength=1)
+     *   - 31..32: local.get 0
+     *   - 33..34: local.get 1
+     *   - 35:     i32.mul
+     *   - 36:     i32.add
+     *   - 37:     end (0x0B)
+     */
+    private val twoParamModule: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,  // header
+        0x01, 0x07, 0x01, 0x60, 0x02, 0x7F, 0x7F, 0x01, 0x7F,  // type section
+        0x03, 0x02, 0x01, 0x00,  // function section
+        0x0A, 0x0F, 0x01, 0x0D,  // code section header + count + funcSize
+        0x00, 0x20, 0x00, 0x20, 0x01, 0x6A, 0x20, 0x00, 0x20, 0x01, 0x6C, 0x6A, 0x0B, // body[0]
+    )
+
+    /**
+     * Same layout as [twoParamModule] but the body is minimal —
+     * only 7 bytes — so the redirect stub (needing 8 bytes) does not fit.
+     *
+     * ```
+     *  00 61 73 6D 01 00 00 00   header            offset 0-7
+     *  01 07 01 60 02 7F 7F 01 7F  type section    offset 8-16
+     *  03 02 01 00               function section   offset 17-20
+     *  0A 09 01 07               code section hdr   offset 21-24
+     *       ; contentSize=9, count=1, funcSize=7
+     *  00 20 00 20 01 6A 0B      body[0]            offset 25-31
+     *       ; locals=0; local.get 0; local.get 1; i32.add; end
+     * ```
+     *
+     * Redirect needs 1 (locals) + 4 (two local.gets) + 2 (call) + 1 (end) = 8 bytes > 7 body bytes.
+     */
+    private val tooSmallBodyModule: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x07, 0x01, 0x60, 0x02, 0x7F, 0x7F, 0x01, 0x7F,
+        0x03, 0x02, 0x01, 0x00,
+        0x0A, 0x09, 0x01, 0x07,
+        0x00, 0x20, 0x00, 0x20, 0x01, 0x6A, 0x0B,
+    )
+
+    /**
+     * Single function with 0 params returning i32.
+     *
+     * ```
+     *  00 61 73 6D 01 00 00 00   header            offset 0-7
+     *  01 05 01 60 00 01 7F      type section       offset 8-14
+     *       ; type[0] = (func (result i32))
+     *  03 02 01 00               function section   offset 15-18
+     *       ; function[0] uses type 0
+     *  0A 08 01 06               code section hdr   offset 19-22
+     *       ; contentSize=8, count=1, funcSize=6
+     *  00 41 2A 41 01 0B         body[0]            offset 23-28
+     *       ; locals=0; i32.const 42; i32.const 1; end
+     * ```
+     *
+     * Key offsets:
+     * - code entry 0: entryStart=22, bodyStart=23, bodyLength=6
+     * - func section: sectionOffset=15, contentOffset=17, contentSize=2
+     * - code section: sectionOffset=19, contentOffset=21, contentSize=8
+     * - opcodeAreaStart=24 (after 1-byte locals decl)
+     *   - 24..25: i32.const 42 (rowStart=24, oldRowLength=2)
+     *   - 26..27: i32.const 1
+     *   - 28: end
+     */
+    private val zeroParamModule: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F,
+        0x03, 0x02, 0x01, 0x00,
+        0x0A, 0x08, 0x01, 0x06,
+        0x00, 0x41, 0x2A, 0x41, 0x01, 0x0B,
+    )
+
+    private fun providerFor(moduleBytes: ByteArray): WasmBinaryProvider =
+        WasmBinaryProvider(moduleBytes.toCommonByteBuffer())
+
+    /**
+     * Builds a code-chunk [BinaryChunk.Element] for the code entry at
+     * [indexInSection] using the provider's parsed code offsets.
+     */
+    private fun codeChunkFor(provider: WasmBinaryProvider, indexInSection: Int): BinaryChunk.Element {
+        val off = provider.codeOffsets[indexInSection]
+        return BinaryChunk.Element(
+            id = ChunkId.Indexed(WasmSectionKinds.CODE, indexInSection),
+            byteRange = off.offset.toLong()..(off.offset + off.size - 1).toLong(),
+            estimatedLines = 1,
+            kind = WasmSectionKinds.CODE,
+            indexInSection = indexInSection,
+            displayName = null,
+        )
+    }
+
+    @Test
+    fun append_edit_2params_emits_7_ops_correct_offsets_and_bytes() {
+        // Edit: i32.add (0x6A, 1 byte) at offset 30 → i32.const 5 (2 bytes)
+        // This widens the body from 13 to 14 bytes.
+        val provider = providerFor(twoParamModule)
+        val chunk = codeChunkFor(provider, indexInSection = 0)
+
+        val rowStart = 30L        // i32.add opcode byte
+        val oldRowLength = 1
+        val newRowBytes = bytes(0x41, 0x05)  // i32.const 5
+
+        val result = EditableRowEncoder.encodeAppendFunctionEdit(
+            provider = provider,
+            chunk = chunk,
+            rowStart = rowStart,
+            oldRowLength = oldRowLength,
+            newRowBytes = newRowBytes,
+        )
+        val ok = assertIs<RowEncodeResult.Success>(result, message = "got: $result")
+        assertEquals(7, ok.ops.size, "must emit exactly 7 ops")
+
+        // Op 1: Insert at code section content end (= 23 + 15 = 38)
+        val op1 = assertIs<JournalOp.Insert>(ok.ops[0], "op1 must be Insert")
+        assertEquals(38L, op1.offset, "op1 offset = codeSection.contentEnd")
+        // newFuncEntry = ULEB128(14) + newBody (14 bytes) = 0x0E + 14 bytes = 15 bytes
+        // newBody = [00 20 00 20 01] ++ [41 05] ++ [20 00 20 01 6C 6A 0B] = 14 bytes
+        val expectedNewBody = bytes(0x00, 0x20, 0x00, 0x20, 0x01, 0x41, 0x05, 0x20, 0x00, 0x20, 0x01, 0x6C, 0x6A, 0x0B)
+        val expectedNewFuncEntry = bytes(0x0E) + expectedNewBody
+        assertContentEquals(expectedNewFuncEntry, Base64.decode(op1.data), "op1 = new func entry")
+
+        // Op 2: Replace original body with redirect stub (length-preserving, 13 bytes)
+        val op2 = assertIs<JournalOp.Replace>(ok.ops[1], "op2 must be Replace")
+        assertEquals(25L, op2.start, "op2 start = bodyStart")
+        assertEquals(38L, op2.end, "op2 end = bodyStart + bodyLength")
+        // stub = [00] (locals) ++ [20 00] (local.get 0) ++ [20 01] (local.get 1) ++
+        //        [10 01] (call 1, newFuncIdx=1) ++ [01 01 01 01 01] (5 nops) ++ [0B] (end)
+        // nopPad = 13 - 1 - (2*2 + 2 + 1) = 13 - 1 - 7 = 5
+        val expectedStub = bytes(0x00, 0x20, 0x00, 0x20, 0x01, 0x10, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x0B)
+        assertContentEquals(expectedStub, Base64.decode(op2.data), "op2 = redirect stub")
+
+        // Op 3: Replace code-section count (at contentOffset=23): 01 → 02
+        val op3 = assertIs<JournalOp.Replace>(ok.ops[2], "op3 must be Replace")
+        assertEquals(23L, op3.start, "op3 start = codeSection.contentOffset")
+        assertEquals(24L, op3.end)
+        assertContentEquals(bytes(0x02), Base64.decode(op3.data), "op3 = new code count = 2")
+
+        // Op 4: Replace code-section size ULEB (at sectionOffset+1=22): 0F → 1E
+        // newCodeContentSize = 15 + 15 (newFuncEntry) + 0 (no count widening) = 30 = 0x1E
+        val op4 = assertIs<JournalOp.Replace>(ok.ops[3], "op4 must be Replace")
+        assertEquals(22L, op4.start, "op4 start = codeSizePrefixStart")
+        assertEquals(23L, op4.end)
+        assertContentEquals(bytes(0x1E), Base64.decode(op4.data), "op4 = new code section size = 30")
+
+        // Op 5: Insert typeidx at func section content end (= 19 + 2 = 21)
+        val op5 = assertIs<JournalOp.Insert>(ok.ops[4], "op5 must be Insert")
+        assertEquals(21L, op5.offset, "op5 offset = funcSection.contentEnd")
+        assertContentEquals(bytes(0x00), Base64.decode(op5.data), "op5 = typeidx 0 (same as original)")
+
+        // Op 6: Replace func-section count (at contentOffset=19): 01 → 02
+        val op6 = assertIs<JournalOp.Replace>(ok.ops[5], "op6 must be Replace")
+        assertEquals(19L, op6.start, "op6 start = funcSection.contentOffset")
+        assertEquals(20L, op6.end)
+        assertContentEquals(bytes(0x02), Base64.decode(op6.data), "op6 = new func count = 2")
+
+        // Op 7: Replace func-section size ULEB (at sectionOffset+1=18): 02 → 03
+        // newFuncContentSize = 2 + 1 (new typeidx) + 0 (no count widening) = 3
+        val op7 = assertIs<JournalOp.Replace>(ok.ops[6], "op7 must be Replace")
+        assertEquals(18L, op7.start, "op7 start = funcSizePrefixStart")
+        assertEquals(19L, op7.end)
+        assertContentEquals(bytes(0x03), Base64.decode(op7.data), "op7 = new func section size = 3")
+    }
+
+    @Test
+    fun append_edit_0params_redirect_stub_has_no_local_gets() {
+        // Function with 0 params: redirect stub has no local.get instructions.
+        // zeroParamModule body[0]: bodyLength=6, bodyStart=23
+        // Edit: i32.const 42 (0x41 0x2A, 2 bytes) at offset 24 → i32.const 1000 (3 bytes)
+        // newRowBytes = i32.const 1000 = 0x41 + SLEB128(1000) = 0x41 0xE8 0x07
+        val provider = providerFor(zeroParamModule)
+        val chunk = codeChunkFor(provider, indexInSection = 0)
+
+        val rowStart = 24L         // i32.const 42 byte offset
+        val oldRowLength = 2       // 0x41 0x2A
+        val newRowBytes = bytes(0x41, 0xE8, 0x07)  // i32.const 1000 (3 bytes)
+
+        val result = EditableRowEncoder.encodeAppendFunctionEdit(
+            provider = provider,
+            chunk = chunk,
+            rowStart = rowStart,
+            oldRowLength = oldRowLength,
+            newRowBytes = newRowBytes,
+        )
+        val ok = assertIs<RowEncodeResult.Success>(result, message = "got: $result")
+        assertEquals(7, ok.ops.size)
+
+        // Op 1: Insert new func entry at code content end = 21 + 8 = 29
+        val op1 = assertIs<JournalOp.Insert>(ok.ops[0])
+        assertEquals(29L, op1.offset, "op1 offset = codeSection.contentEnd = 29")
+        // newBody = [00] (locals) ++ [41 E8 07] (i32.const 1000) ++ [41 01 0B]
+        // = 00 41 E8 07 41 01 0B = 7 bytes
+        val expectedNewBody = bytes(0x00, 0x41, 0xE8, 0x07, 0x41, 0x01, 0x0B)
+        val expectedNewFuncEntry = bytes(0x07) + expectedNewBody
+        assertContentEquals(expectedNewFuncEntry, Base64.decode(op1.data), "new func entry for 0-param function")
+
+        // Op 2: Replace original body with redirect stub (6 bytes, length-preserving)
+        val op2 = assertIs<JournalOp.Replace>(ok.ops[1])
+        assertEquals(23L, op2.start, "op2 start = bodyStart = 23")
+        assertEquals(29L, op2.end, "op2 end = bodyStart + bodyLength = 29")
+        val stubBytes = Base64.decode(op2.data)
+        assertEquals(6, stubBytes.size, "stub must be exactly bodyLength=6 bytes")
+        // stub = [00] (locals) ++ [10 01] (call 1, newFuncIdx=0+1=1) ++
+        //        [01 01] (2 nops) ++ [0B] (end)
+        // redirectOpcodeSize = 0 (params) + 1 (call opcode) + 1 (ULEB imm) + 1 (end) = 3
+        // nopPad = 6 - 1 - 3 = 2
+        val expectedStub = bytes(0x00, 0x10, 0x01, 0x01, 0x01, 0x0B)
+        assertContentEquals(expectedStub, stubBytes, "0-param stub: locals + call 1 + 2 nops + end")
+
+        // Op 5: Insert typeidx at func content end = 17 + 2 = 19
+        val op5 = assertIs<JournalOp.Insert>(ok.ops[4])
+        assertEquals(19L, op5.offset, "op5 offset = funcSection.contentEnd = 19")
+        assertContentEquals(bytes(0x00), Base64.decode(op5.data), "typeidx 0")
+    }
+
+    @Test
+    fun append_edit_body_too_small_returns_error() {
+        // tooSmallBodyModule: 2-param function, bodyLength=7.
+        // Redirect needs 1 + 4 + 2 + 1 = 8 bytes, body only has 7. → Error.
+        val provider = providerFor(tooSmallBodyModule)
+        val chunk = codeChunkFor(provider, indexInSection = 0)
+
+        // Edit i32.add (1 byte) at offset 30 → something 2-byte (doesn't matter; check fails first).
+        val result = EditableRowEncoder.encodeAppendFunctionEdit(
+            provider = provider,
+            chunk = chunk,
+            rowStart = 30L,
+            oldRowLength = 1,
+            newRowBytes = bytes(0x41, 0x05),
+        )
+        val err = assertIs<RowEncodeResult.Error>(result, "expected Error for too-small body")
+        assertTrue(
+            "body too small" in err.message,
+            "error message must mention 'body too small', got: '${err.message}'",
+        )
+    }
+
+    @Test
+    fun append_edit_row_inside_locals_returns_error() {
+        // rowStart = bodyStart (first byte of body = locals decl). Should be rejected.
+        val provider = providerFor(twoParamModule)
+        val chunk = codeChunkFor(provider, indexInSection = 0)
+
+        // bodyStart = 25, opcodeAreaStart = 26 (after 1-byte locals decl)
+        val result = EditableRowEncoder.encodeAppendFunctionEdit(
+            provider = provider,
+            chunk = chunk,
+            rowStart = 25L,   // this is inside the locals decl
+            oldRowLength = 1,
+            newRowBytes = bytes(0x00),
+        )
+        val err = assertIs<RowEncodeResult.Error>(result, "expected Error for locals-area row")
+        assertTrue(
+            "locals declaration" in err.message,
+            "error message must mention 'locals declaration', got: '${err.message}'",
+        )
+    }
+
+    @Test
+    fun append_edit_ops_are_in_strictly_descending_byte_position_order() {
+        // Verify the offset ordering invariant: each op's start/offset is strictly
+        // less than the prior op's start/offset (or Insert offset).
+        val provider = providerFor(twoParamModule)
+        val chunk = codeChunkFor(provider, indexInSection = 0)
+
+        val result = EditableRowEncoder.encodeAppendFunctionEdit(
+            provider = provider,
+            chunk = chunk,
+            rowStart = 30L,
+            oldRowLength = 1,
+            newRowBytes = bytes(0x41, 0x05),
+        )
+        val ok = assertIs<RowEncodeResult.Success>(result, "got: $result")
+        assertEquals(7, ok.ops.size)
+
+        val offsets = ok.ops.map { op ->
+            when (op) {
+                is JournalOp.Insert -> op.offset
+                is JournalOp.Replace -> op.start
+                is JournalOp.Delete -> op.start
+            }
+        }
+        for (i in 1 until offsets.size) {
+            assertTrue(
+                offsets[i] < offsets[i - 1],
+                "op[$i] offset (${offsets[i]}) must be < op[${i - 1}] offset (${offsets[i - 1]})",
+            )
+        }
+    }
+
+    /**
+     * End-to-end check: a module with a Data section AFTER the Code section
+     * is the exact shape the IDE crash trace pointed at. After applying the
+     * append+redirect ops in order, re-parsing the new bytes must succeed and
+     * the data section must still parse cleanly. If our code-section size or
+     * any earlier op is off by even one byte, the section walker arrives in
+     * the middle of the new function entry and reads opcode bytes (e.g.
+     * 0x41 = i32.const) as data record types — which is the user-visible
+     * crash signature `Unknown data record type: 65`.
+     *
+     * Layout:
+     * ```
+     *   00 61 73 6D 01 00 00 00          header                 0..7
+     *   01 05 01 60 00 01 7F             type[0] = (func()->i32) 8..14
+     *   03 02 01 00                      function[0] = type 0   15..18
+     *   05 03 01 00 01                   memory[0] limits min=1 19..23
+     *   0A 06 01 04 00 41 05 0B          code[0] body=4         24..31
+     *   0B 07 01 00 41 00 0B 01 7F       data[0] active mem 0   32..40
+     *        ; data[0] = (i32.const 0) 0x7F (1 byte payload)
+     * ```
+     */
+    private val moduleWithDataSection: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F,
+        0x03, 0x02, 0x01, 0x00,
+        0x05, 0x03, 0x01, 0x00, 0x01,
+        0x0A, 0x06, 0x01, 0x04, 0x00, 0x41, 0x05, 0x0B,
+        0x0B, 0x07, 0x01, 0x00, 0x41, 0x00, 0x0B, 0x01, 0x7F,
+    )
+
+    @Test
+    fun append_edit_then_replay_preserves_data_section_parse() {
+        // Replicates the IDE-side flow: encoder emits ops, panel applies them
+        // to the editable doc in declared order, panel re-parses the resulting
+        // bytes. The re-parse must NOT throw, and the data section must remain
+        // intact (1 segment, payload 0x7F).
+        val provider = providerFor(moduleWithDataSection)
+        val chunk = codeChunkFor(provider, indexInSection = 0)
+
+        // i32.const 5 (0x41 0x05) at offset 29 → i32.const 200 (0x41 0xC8 0x01)
+        // — the exact length-changing edit shape the user reported.
+        val result = EditableRowEncoder.encodeAppendFunctionEdit(
+            provider = provider,
+            chunk = chunk,
+            rowStart = 29L,
+            oldRowLength = 2,
+            newRowBytes = bytes(0x41, 0xC8, 0x01),
+        )
+        val ok = assertIs<RowEncodeResult.Success>(result, message = "encode failed: $result")
+
+        // Apply ops in declaration order to a mutable buffer (mirrors how
+        // the panel feeds them into the EditableBinaryDocument).
+        val buf = moduleWithDataSection.toMutableList()
+        for (op in ok.ops) {
+            when (op) {
+                is JournalOp.Insert -> {
+                    val data = Base64.decode(op.data).toList()
+                    buf.addAll(op.offset.toInt(), data)
+                }
+                is JournalOp.Replace -> {
+                    val data = Base64.decode(op.data).toList()
+                    repeat((op.end - op.start).toInt()) { buf.removeAt(op.start.toInt()) }
+                    buf.addAll(op.start.toInt(), data)
+                }
+                is JournalOp.Delete -> {
+                    repeat((op.end - op.start).toInt()) { buf.removeAt(op.start.toInt()) }
+                }
+            }
+        }
+        val newBytes = buf.toByteArray()
+
+        // Re-parse the new bytes. This is the operation that crashes in the IDE.
+        val rebuilt = WasmBinaryProvider(newBytes.toCommonByteBuffer())
+        val module = rebuilt.wasmModule
+            ?: error("re-parse returned null wasmModule — section walker fell off the end")
+        assertNotNull(module.dataSection, "data section must survive append+redirect")
+        assertEquals(2, rebuilt.codeOffsets.size, "code section now has 2 entries (orig + appended)")
+
+        // Force the exact crashing path: SizeAnalysisBuilder.buildDataSection
+        // calls section.scan() which decodes data record types. If anything
+        // upstream (code section size, etc.) shifted, this throws
+        // `Unknown data record type: <opcode-byte>`.
+        val sizeAnalysis = rebuilt.sizeAnalysis
+        assertNotNull(sizeAnalysis, "sizeAnalysis must build without throwing")
+    }
+
+    /**
+     * Module with an Import section so `importFuncCount > 0`. Real-world
+     * binaries (Skiko, Emscripten output) have hundreds of imports — if the
+     * encoder mis-handles funcidx ULEB widths or section accounting in the
+     * presence of imports, this trips. The new function's funcidx in the
+     * global function index space is `importFuncCount + codeEntryCount`,
+     * which is what the redirect stub's `call` immediate must encode.
+     *
+     * Layout:
+     * ```
+     *   00 61 73 6D 01 00 00 00          header
+     *   01 05 01 60 00 01 7F             type[0] = (func()->i32)
+     *   02 0B 01 03 65 6E 76 03 6C 6F 67 00 00
+     *        ; import "env" "log" func type 0  (content=11 bytes)
+     *   03 02 01 00                      function[0] = type 0
+     *   05 03 01 00 01                   memory[0] limits min=1
+     *   0A 06 01 04 00 41 05 0B          code[0] body=4 (i32.const 5; end)
+     *   0B 07 01 00 41 00 0B 01 7F       data[0] active mem 0, payload 0x7F
+     * ```
+     */
+    private val moduleWithImportAndData: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F,
+        0x02, 0x0B, 0x01, 0x03, 0x65, 0x6E, 0x76, 0x03, 0x6C, 0x6F, 0x67, 0x00, 0x00,
+        0x03, 0x02, 0x01, 0x00,
+        0x05, 0x03, 0x01, 0x00, 0x01,
+        0x0A, 0x06, 0x01, 0x04, 0x00, 0x41, 0x05, 0x0B,
+        0x0B, 0x07, 0x01, 0x00, 0x41, 0x00, 0x0B, 0x01, 0x7F,
+    )
+
+    @Test
+    fun append_edit_with_imports_replay_preserves_data_section_parse() {
+        val provider = providerFor(moduleWithImportAndData)
+        // codeEntryCount = 1, importFuncCount = 1 → newFuncIdx = 2.
+        val chunk = codeChunkFor(provider, indexInSection = 0)
+
+        val rowStart = chunk.byteRange.first + 2  // body start (after funcSize + locals)
+        // i32.const 5 at row 5 byte (1 byte: 0x41 0x05? no, 2 bytes)
+        // Use the actual offset: the body is after [entryStart, +1 funcSize, +1 locals].
+        val entryStart = chunk.byteRange.first.toInt()
+        val rowAtI32Const = (entryStart + 2).toLong()  // funcSize(1) + locals(1) → opcode area
+        val result = EditableRowEncoder.encodeAppendFunctionEdit(
+            provider = provider,
+            chunk = chunk,
+            rowStart = rowAtI32Const,
+            oldRowLength = 2,                 // 0x41 0x05
+            newRowBytes = bytes(0x41, 0xC8, 0x01),  // i32.const 200 (3 bytes)
+        )
+        val ok = assertIs<RowEncodeResult.Success>(result, message = "encode failed: $result")
+
+        // Apply ops in declaration order to a mutable buffer.
+        val buf = moduleWithImportAndData.toMutableList()
+        for (op in ok.ops) {
+            when (op) {
+                is JournalOp.Insert -> {
+                    val data = Base64.decode(op.data).toList()
+                    buf.addAll(op.offset.toInt(), data)
+                }
+                is JournalOp.Replace -> {
+                    val data = Base64.decode(op.data).toList()
+                    repeat((op.end - op.start).toInt()) { buf.removeAt(op.start.toInt()) }
+                    buf.addAll(op.start.toInt(), data)
+                }
+                is JournalOp.Delete -> {
+                    repeat((op.end - op.start).toInt()) { buf.removeAt(op.start.toInt()) }
+                }
+            }
+        }
+        val newBytes = buf.toByteArray()
+
+        // Re-parse must succeed and the data section parser must not throw.
+        val rebuilt = WasmBinaryProvider(newBytes.toCommonByteBuffer())
+        val module = rebuilt.wasmModule
+            ?: error("re-parse returned null wasmModule")
+        assertNotNull(module.dataSection, "data section must survive append+redirect with imports")
+        val sizeAnalysis = rebuilt.sizeAnalysis
+        assertNotNull(sizeAnalysis, "sizeAnalysis must build without throwing")
     }
 }

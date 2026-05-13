@@ -152,6 +152,7 @@ internal fun WasmPanelWatVirtualized(
                                         chunk = chunk,
                                         renderer = renderer,
                                         snapshot = snapshot,
+                                        provider = provider,
                                         editableDoc = editableDoc,
                                     )
                                 }
@@ -266,9 +267,18 @@ private fun ChunkRow(
     chunk: BinaryChunk.Element,
     renderer: WasmHexanaWatRenderer,
     snapshot: BinaryDocumentSnapshot,
+    provider: WasmBinaryProvider,
     editableDoc: EditableBinaryDocument?,
 ) {
-    val rows = remember(chunk.id) { renderer.renderRows(snapshot, chunk) }
+    // Re-render whenever the renderer or snapshot changes (i.e. after a
+    // commit replaces `liveProvider` and rebuilds `panelState`). Keying on
+    // `chunk.id` alone is wrong: LazyColumn preserves the item slot across
+    // panel rebuilds because `chunk.id` is stable, so a `remember(chunk.id)`
+    // returns the PRE-edit `EditableRowInfo` objects (with stale opStart
+    // anchors). Subsequent length-changing edits then feed those stale
+    // offsets to the encoder, which corrupts the section sizes and crashes
+    // the post-edit re-parse with `Unknown data record type: …`.
+    val rows = remember(chunk.id, renderer, snapshot) { renderer.renderRows(snapshot, chunk) }
     // Per-row "open insert below" state — survives recompositions until
     // the chunk rebuilds (after a successful commit). Map<rowIndex, true>
     // means an empty insert TextField is showing below that row.
@@ -284,6 +294,8 @@ private fun ChunkRow(
                 chunkId = chunk.id,
                 rowIndex = rowIndex,
                 editableDoc = editableDoc,
+                provider = provider,
+                chunk = chunk,
                 onEnterRequestInsert = if (editableDoc != null && row.editable?.kind == EditableRowInfo.Kind.OPCODE) {
                     { insertOpen[rowIndex] = true }
                 } else {
@@ -321,6 +333,15 @@ private fun RenderedRowView(
     chunkId: ChunkId,
     rowIndex: Int,
     editableDoc: EditableBinaryDocument?,
+    /**
+     * Provider + chunk are needed for the Phase E append+redirect path
+     * (the encoder reads function-section / type-section / code-section
+     * structural metadata from the provider, and locates the original
+     * function entry via the chunk). Null when the row isn't in a code
+     * chunk — append-edit only applies to function-body edits.
+     */
+    provider: WasmBinaryProvider? = null,
+    chunk: BinaryChunk.Element? = null,
     /**
      * Called after a successful commit (or no-op if the field is unchanged)
      * so the panel can open an empty insert row below this one. Null when
@@ -367,7 +388,7 @@ private fun RenderedRowView(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
                 onDone = {
-                    val err = commitRowEdit(editableDoc, info, fieldText)
+                    val err = commitRowEdit(editableDoc, info, fieldText, provider, chunk)
                     lastError = err
                     if (err == null) {
                         // Either nothing changed or the commit succeeded —
@@ -394,7 +415,7 @@ private fun RenderedRowView(
                 }
                 .onFocusChanged { focusState ->
                     if (!focusState.isFocused && fieldText != info.watText) {
-                        lastError = commitRowEdit(editableDoc, info, fieldText)
+                        lastError = commitRowEdit(editableDoc, info, fieldText, provider, chunk)
                     }
                 },
         )
@@ -427,30 +448,33 @@ private fun List<RenderToken>.toAnnotatedString(): AnnotatedString = buildAnnota
  * Encodes the user's edited [text] for [info] and applies the resulting
  * `JournalOp`s to [doc]. Returns `null` on success, or a short error
  * message on failure.
+ *
+ * Routing for opcode rows in code chunks (when [provider] and [chunk] are
+ * supplied):
+ *
+ * 1. Try the length-preserving / cascade path first via [EditableRowEncoder.encode].
+ * 2. If that returns `Error(requiresCascade = true)` — i.e. the new bytes
+ *    don't fit and we'd otherwise mid-section-cascade — try
+ *    [EditableRowEncoder.encodeAppendFunctionEditFromText] (Phase E.1).
+ * 3. If append-edit returns `Error("body too small for redirect stub")`,
+ *    fall back to the original cascade attempt (re-issue with cascade
+ *    context). This is rare and only happens for very small bodies.
+ *
+ * The shape of error messages doesn't change for the user. The only
+ * observable difference is which JournalOps land — append+redirect for
+ * length-changing edits with a sufficiently large body, in-place cascade
+ * for everything else.
  */
 private fun commitRowEdit(
     doc: EditableBinaryDocument,
     info: EditableRowInfo,
     text: String,
+    provider: WasmBinaryProvider? = null,
+    chunk: BinaryChunk.Element? = null,
 ): String? {
     if (text == info.watText) return null // nothing to do
-    val result = when (info.kind) {
-        EditableRowInfo.Kind.OPCODE -> EditableRowEncoder.encode(
-            op = info.op ?: return "internal: opcode row missing op metadata",
-            opStartOffset = info.opStart,
-            opEncodedLength = info.opEncodedLength,
-            text = text,
-            localCount = info.localCount,
-            cascade = info.cascade,
-        )
-        EditableRowInfo.Kind.LOCALS -> EditableRowEncoder.encodeLocals(
-            opStartOffset = info.opStart,
-            opEncodedLength = info.opEncodedLength,
-            text = text,
-            cascade = info.cascade,
-        )
-    }
-    return when (result) {
+
+    fun applyOps(result: RowEncodeResult): String? = when (result) {
         is RowEncodeResult.Success -> {
             doc.edit().apply {
                 for (op in result.ops) {
@@ -466,6 +490,78 @@ private fun commitRowEdit(
         }
         is RowEncodeResult.Error -> result.message
     }
+
+    // -- LOCALS row: stays in-place via encodeLocals. Phase E doesn't move
+    // locals to append-edit because the locals declaration is INSIDE the
+    // function body — there's no "append a copy" alternative.
+    if (info.kind == EditableRowInfo.Kind.LOCALS) {
+        return applyOps(
+            EditableRowEncoder.encodeLocals(
+                opStartOffset = info.opStart,
+                opEncodedLength = info.opEncodedLength,
+                text = text,
+                cascade = info.cascade,
+            ),
+        )
+    }
+
+    // -- OPCODE row. First attempt: length-preserving (no cascade context).
+    // If that succeeds, we're done — single Replace op, fastest path.
+    val op = info.op ?: return "internal: opcode row missing op metadata"
+    val noCascade = EditableRowEncoder.encode(
+        op = op,
+        opStartOffset = info.opStart,
+        opEncodedLength = info.opEncodedLength,
+        text = text,
+        localCount = info.localCount,
+        cascade = null,
+    )
+    if (noCascade is RowEncodeResult.Success) {
+        return applyOps(noCascade)
+    }
+    val noCascadeErr = noCascade as RowEncodeResult.Error
+    if (!noCascadeErr.requiresCascade) {
+        // Parse / range / mnemonic error. No cascade will fix that.
+        return noCascadeErr.message
+    }
+
+    // -- Length-changing edit. Phase E.1 path: append + redirect, when we
+    // have provider + chunk metadata. Falls back to in-place cascade if
+    // the redirect stub doesn't fit.
+    if (provider != null && chunk != null && chunk.kind == WasmSectionKinds.CODE) {
+        val appendResult = EditableRowEncoder.encodeAppendFunctionEditFromText(
+            provider = provider,
+            chunk = chunk,
+            rowStart = info.opStart,
+            oldRowLength = info.opEncodedLength,
+            text = text,
+            localCount = info.localCount,
+        )
+        when (appendResult) {
+            is RowEncodeResult.Success -> return applyOps(appendResult)
+            is RowEncodeResult.Error -> {
+                val msg = appendResult.message
+                // "body too small for redirect stub" → fall through to
+                // the in-place cascade. Other errors (parse / structural)
+                // are surfaced to the user.
+                if (!msg.contains("body too small")) {
+                    return msg
+                }
+            }
+        }
+    }
+
+    // -- Fallback: in-place cascade (the path that worked through Phase C).
+    return applyOps(
+        EditableRowEncoder.encode(
+            op = op,
+            opStartOffset = info.opStart,
+            opEncodedLength = info.opEncodedLength,
+            text = text,
+            localCount = info.localCount,
+            cascade = info.cascade,
+        ),
+    )
 }
 
 /**
