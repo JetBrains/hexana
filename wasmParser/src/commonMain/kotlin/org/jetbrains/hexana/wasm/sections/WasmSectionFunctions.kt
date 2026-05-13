@@ -21,4 +21,26 @@ class WasmSectionFunctions(sectionSize: Int, sectionOffset: Int, contentSize: In
 
         return typeRefs
     }
+
+    /**
+     * Per-entry byte ranges. Each function-section entry is a single ULEB128
+     * `typeidx`; this returns the start offset, byte length, and decoded
+     * `typeidx` for entry `i` (0-based). Use when you need to display the
+     * Function section as one row per entry (offset + hex + description)
+     * instead of the single-chunk roll-up that `parseFunctions` powers.
+     */
+    fun CommonByteBuffer.scanRanges(): List<FunctionEntryRange> {
+        position(contentOffset)
+        val count = getULEB128().toInt()
+        val out = ArrayList<FunctionEntryRange>(count)
+        repeat(count) {
+            val start = position()
+            val typeIdx = getULEB128().toInt()
+            val size = position() - start
+            out.add(FunctionEntryRange(offset = start, size = size, typeIdx = typeIdx))
+        }
+        return out
+    }
 }
+
+data class FunctionEntryRange(val offset: Int, val size: Int, val typeIdx: Int)

@@ -6,7 +6,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextStyle
+import com.intellij.openapi.actionSystem.IdeActions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
@@ -46,6 +50,7 @@ import org.jetbrains.hexana.ui.panel.WasmPanelGarbage
 import org.jetbrains.hexana.ui.panel.WasmPanelData
 import org.jetbrains.hexana.ui.panel.WasmPanelExports
 import org.jetbrains.hexana.ui.panel.WasmPanelImports
+import org.jetbrains.hexana.ui.panel.KeymapShortcuts
 import org.jetbrains.hexana.ui.panel.WasmPanelWat
 import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelExports
 import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelImports
@@ -183,7 +188,32 @@ internal fun BinaryEditorView(
     val watVirtualizedListState = rememberLazyListState()
     val watVirtualizedFolded = remember { mutableStateOf<Set<ChunkId>>(emptySet()) }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
+    // IDE-keymap-routed Undo / Redo for the editable document. Attached at
+    // the BinaryEditorView root so the shortcut fires from anywhere inside
+    // — Hex view, WAT panel, status bar — without each surface needing its
+    // own handler. `$Undo` / `$Redo` are the action IDs the platform's
+    // keymap binds (Cmd+Z / Cmd+Shift+Z by default on macOS); we look up
+    // the user's actual shortcut at runtime via `KeymapShortcuts` so any
+    // remapping in Settings → Keymap takes effect.
+    val docKeyHandler: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = handler@ { event ->
+        if (event.type != KeyEventType.KeyDown) return@handler false
+        if (KeymapShortcuts.isModifierOnly(event)) return@handler false
+        when {
+            KeymapShortcuts.matches(event, IdeActions.ACTION_UNDO) -> {
+                if (editableDoc.canUndo()) editableDoc.undo()
+                true
+            }
+            KeymapShortcuts.matches(event, IdeActions.ACTION_REDO) -> {
+                if (editableDoc.canRedo()) editableDoc.redo()
+                true
+            }
+            else -> false
+        }
+    }
+    BoxWithConstraints(modifier = Modifier
+        .fillMaxSize()
+        .background(HexanaTheme.backgroundColor)
+        .onPreviewKeyEvent(docKeyHandler)) {
         val pathsNav = remember { PathsNavigationState() }
         // Panels are keyed to the ORIGINAL provider, not liveProvider — so
         // they don't rebuild on every commit. The WAT virtualized lambda
@@ -292,12 +322,10 @@ private fun EditingDemoBar(
     binaryProvider: BinaryProvider,
 ) {
     @Suppress("UNUSED_PARAMETER") val unused = stampKey
-    val byteZeroHex = if (doc.length > 0L) {
-        ((doc.readByte(0L).toInt() and 0xFF).toString(16).uppercase().padStart(2, '0'))
-    } else "—"
     val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
     val finalizedName = sourceFile?.name?.let { computeFinalizedName(it) }
-    val canFinalize = doc.canUndo() && sourceFile != null
+    val hasEdits = doc.canUndo()
+    val canFinalize = hasEdits && sourceFile != null
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -305,31 +333,19 @@ private fun EditingDemoBar(
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = "Editing demo (A.0):",
-            style = TextStyle(fontSize = 11.sp, color = HexanaTheme.hexTextColor),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        DefaultButton(
+        // Discard: walks the undo journal back to its origin then deletes
+        // the on-disk sidecar via `clearPersistedJournal()`. The end state
+        // is the original bytes with no journal entries — equivalent to
+        // re-opening the file fresh. Undo / Redo themselves now ride the
+        // user's IDE keymap (Cmd+Z / Cmd+Shift+Z by default) — they're
+        // handled at the BinaryEditorView root via `KeymapShortcuts`.
+        OutlinedButton(
             onClick = {
-                if (doc.length > 0L) {
-                    doc.edit().apply {
-                        replace(0L, 1L, byteArrayOf(0xFF.toByte()))
-                        commit()
-                    }
-                }
+                while (doc.canUndo()) doc.undo()
+                doc.clearPersistedJournal()
             },
-        ) { Text("Flip byte 0 → 0xFF") }
-        Spacer(modifier = Modifier.width(8.dp))
-        OutlinedButton(
-            onClick = { if (doc.canUndo()) doc.undo() },
-            enabled = doc.canUndo(),
-        ) { Text("Undo") }
-        Spacer(modifier = Modifier.width(4.dp))
-        OutlinedButton(
-            onClick = { if (doc.canRedo()) doc.redo() },
-            enabled = doc.canRedo(),
-        ) { Text("Redo") }
+            enabled = hasEdits,
+        ) { Text("Discard") }
         Spacer(modifier = Modifier.width(8.dp))
         DefaultButton(
             onClick = {
@@ -347,10 +363,6 @@ private fun EditingDemoBar(
             enabled = canFinalize,
         ) { Text(if (finalizedName != null) "Finalize → $finalizedName" else "Finalize") }
         Spacer(modifier = Modifier.weight(1f))
-        Text(
-            text = "byte0=0x$byteZeroHex  stamp=${doc.modificationStamp}  len=${doc.length}",
-            style = TextStyle(fontSize = 10.sp, color = HexanaTheme.hexTextColor),
-        )
     }
 }
 

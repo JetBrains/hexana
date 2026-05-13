@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +40,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -65,14 +71,19 @@ import org.jetbrains.hexana.document.journal.JournalOp
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.format.EditableRowEncoder
 import org.jetbrains.hexana.providers.format.EditableRowInfo
+import org.jetbrains.hexana.providers.format.DataViewMode
+import org.jetbrains.hexana.providers.format.FollowTarget
 import org.jetbrains.hexana.providers.format.RenderedRow
 import org.jetbrains.hexana.providers.format.RowEncodeResult
+import org.jetbrains.hexana.providers.format.RowKind
 import org.jetbrains.hexana.providers.format.WasmChunkTree
 import org.jetbrains.hexana.providers.format.WasmHexanaWatRenderer
 import org.jetbrains.hexana.providers.format.WasmParsedBinary
 import org.jetbrains.hexana.providers.format.WasmSectionKinds
 import org.jetbrains.hexana.providers.format.buildWasmChunkTree
+import com.intellij.openapi.actionSystem.IdeActions
 import org.jetbrains.hexana.ui.HexanaTheme
+import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.Orientation
 import org.jetbrains.jewel.ui.component.Divider
@@ -122,6 +133,35 @@ internal fun WasmPanelWatVirtualized(
     val foldedSectionsState: MutableState<Set<ChunkId>> =
         foldedSectionsExternal ?: remember { mutableStateOf(emptySet<ChunkId>()) }
     var foldedSections by foldedSectionsState
+
+    // Per-chunk expand state for Data-section entries. Held without a
+    // `provider` key so toggles survive edit-commit panel rebuilds (the
+    // chunk id is stable across rebuilds via the symbol resolver / index
+    // mapping). Empty set means "all data chunks collapsed", which is the
+    // default — large Data sections (Skiko: tens of MB) would otherwise
+    // compose millions of body rows up front.
+    val expandedDataChunksState: MutableState<Set<ChunkId>> =
+        remember { mutableStateOf(emptySet<ChunkId>()) }
+
+    // Per-chunk view mode override for Data-section entries. Missing key →
+    // default U8_HEX. Lives next to `expandedDataChunksState` and survives
+    // edit-commit rebuilds for the same reason.
+    val dataChunkViewModesState: MutableState<Map<ChunkId, DataViewMode>> =
+        remember { mutableStateOf(emptyMap()) }
+
+    // Per-chunk expand state for Import-section entries. Same lifecycle
+    // and rationale as `expandedDataChunksState` — by default all imports
+    // collapse to a single `(import "mod" "name" …)` line; expanding
+    // surfaces module / symbol / type descriptor rows.
+    val expandedImportChunksState: MutableState<Set<ChunkId>> =
+        remember { mutableStateOf(emptySet<ChunkId>()) }
+
+    // Per-chunk expand state for Export-section entries. Expanding shows
+    // the symbol slice + descriptor slice as xxd rows; the descriptor's
+    // first row carries a follow target so Cmd+B on it jumps to the
+    // referenced function's declaration.
+    val expandedExportChunksState: MutableState<Set<ChunkId>> =
+        remember { mutableStateOf(emptySet<ChunkId>()) }
 
     // After an append+redirect commit, the user's actual edit lives in the
     // newly-appended last code chunk — not in the redirect stub that took
@@ -184,91 +224,112 @@ internal fun WasmPanelWatVirtualized(
     // clone every keystroke produces a chain of redirects with no value.
     var appendedCodeIndices by remember { mutableStateOf(emptySet<Int>()) }
 
+    // Navigation history slot. Held without a `provider` key so the user's
+    // back / forward stack survives edit-commit panel rebuilds. The Compose
+    // scope below is also panel-scoped; gotoFunc launches scroll animations
+    // there.
+    val navHistory = remember { NavHistoryState() }
+    val navScope = rememberCoroutineScope()
+    val navigator = remember(chunkTree, effectiveListState, focusMap) {
+        WasmWatNavigator(
+            chunkTree = chunkTree,
+            provider = provider,
+            listState = effectiveListState,
+            foldedSectionsState = foldedSectionsState,
+            focusMap = focusMap,
+            scope = navScope,
+            history = navHistory,
+        )
+    }
+
     var lastTotalCodeCount by remember { mutableStateOf(-1) }
     androidx.compose.runtime.LaunchedEffect(totalCodeChunks) {
         val prev = lastTotalCodeCount
         lastTotalCodeCount = totalCodeChunks
         if (prev >= 0 && totalCodeChunks > prev) {
-            // Auto-unfold the code section so the new entry is reachable.
-            var codeHeaderId: ChunkId? = null
+            // The newly-appended function is the last code element. Find its
+            // index-in-section so we can (a) record it as an appended chunk
+            // and (b) ask the navigator to scroll-and-focus.
+            var lastCodeIdx = -1
             for (i in 0 until chunkTree.totalChunks) {
                 val c = chunkTree.chunkAt(i)
-                if (c is BinaryChunk.SectionHeader && c.kind == WasmSectionKinds.CODE) {
-                    codeHeaderId = c.id
-                    break
+                if (c is BinaryChunk.Element && c.kind == WasmSectionKinds.CODE) {
+                    lastCodeIdx = c.indexInSection
                 }
             }
-            if (codeHeaderId != null && codeHeaderId in foldedSections) {
-                foldedSections = foldedSections - codeHeaderId
-            }
-            // Walk the tree (in current fold state) to find the LazyColumn item
-            // index AND chunk id of the LAST visible code element.
-            var lazyIdx = -1
-            var targetChunkId: ChunkId? = null
-            var targetIndexInSection = -1
-            var lazyCursor = 0
-            var hidden = false
-            for (i in 0 until chunkTree.totalChunks) {
-                val c = chunkTree.chunkAt(i)
-                when (c) {
-                    is BinaryChunk.SectionHeader -> {
-                        hidden = c.id in foldedSections
-                        lazyCursor++
-                    }
-                    is BinaryChunk.Element -> {
-                        if (!hidden) {
-                            if (c.kind == WasmSectionKinds.CODE) {
-                                lazyIdx = lazyCursor
-                                targetChunkId = c.id
-                                targetIndexInSection = c.indexInSection
-                            }
-                            lazyCursor++
-                        }
-                    }
-                }
-            }
-            // Remember the new code-entry index so subsequent edits on it
-            // don't trigger another append+redirect. The set lives across
-            // panel rebuilds because `remember { … }` (no key) preserves
-            // the slot through liveProvider changes.
-            if (targetIndexInSection >= 0) {
-                appendedCodeIndices = appendedCodeIndices + targetIndexInSection
-            }
-            if (lazyIdx >= 0 && targetChunkId != null) {
-                // First, scroll the new chunk into view. animateScrollToItem
-                // suspends until the animation completes — by then LazyColumn
-                // has composed the target item.
-                effectiveListState.animateScrollToItem(lazyIdx)
-                // Then focus the chunk's FIRST editable row. ChunkRow's
-                // DisposableEffect registers FocusRequesters into the panel-
-                // level focusMap on composition; once the entry appears, a
-                // requestFocus() call lands on a real attached requester and
-                // Compose's bring-into-view fine-tunes the scroll inside the
-                // chunk so the user's cursor sits on the body, not the header.
-                //
-                // Composition can lag the scroll by a frame or two — poll
-                // briefly (max ~250 ms total) until the focusMap entry shows
-                // up. If it never does (e.g. the chunk has no editable rows),
-                // we silently give up; the scroll alone is still useful.
-                var focused = false
-                for (attempt in 0 until 5) {
-                    val firstRow = focusMap.keys
-                        .filter { it.first == targetChunkId }
-                        .minOfOrNull { it.second }
-                    val req = firstRow?.let { focusMap[targetChunkId!! to it] }
-                    if (req != null) {
-                        runCatching { req.requestFocus() }
-                        focused = true
-                        break
-                    }
-                    kotlinx.coroutines.delay(50)
-                }
-                @Suppress("UNUSED_VARIABLE") focused
+            if (lastCodeIdx >= 0) {
+                // The set lives across panel rebuilds because the surrounding
+                // `remember { … }` slot has no key — subsequent edits on this
+                // chunk bypass append+redirect.
+                appendedCodeIndices = appendedCodeIndices + lastCodeIdx
+                // recordHistory=false: an append is not a user nav step, so
+                // it shouldn't push onto the back stack.
+                navigator.gotoFunc(provider.importFuncCount + lastCodeIdx, recordHistory = false)
             }
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
+    // Lowercase function name → global funcidx, built from the chunk tree's
+    // already-resolved displayName field. Excludes imports (they have no
+    // body chunk in the code section). Powers the goto-by-name popup.
+    val funcNamesIndex: Map<String, Int> = remember(chunkTree, provider) {
+        val out = HashMap<String, Int>(chunkTree.totalChunks)
+        for (i in 0 until chunkTree.totalChunks) {
+            val c = chunkTree.chunkAt(i)
+            if (c is BinaryChunk.Element && c.kind == WasmSectionKinds.CODE) {
+                val name = c.displayName ?: continue
+                out[name.lowercase()] = provider.importFuncCount + c.indexInSection
+            }
+        }
+        out
+    }
+    var gotoPopupOpen by remember { mutableStateOf(false) }
+
+    // Panel-level shortcuts: Back / Forward / GotoSymbol. Attached at the
+    // outer Column so they fire regardless of which row currently owns
+    // keyboard focus. The preview pass runs before the focused element's
+    // own handler, so these win over any built-in BasicTextField caret
+    // bindings for the same combo.
+    val panelKeyHandler: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = handler@ { event ->
+        if (event.type != KeyEventType.KeyDown) return@handler false
+        if (KeymapShortcuts.isModifierOnly(event)) return@handler false
+        // Every non-modifier KeyDown reaching the panel — captures whether
+        // Cmd+B even arrives here. Combined with the more selective `back/fwd
+        // /goto` log below this answers "did the keystroke get to the
+        // handler, and did the keymap recognise it?" in one greppable trace.
+        org.jetbrains.hexana.HexanaLog.LOG.warn(
+            "[wat-nav-debug] panel handler key=${event.key} keyCode=${event.key.keyCode} " +
+                "isMeta=${event.isMetaPressed} isCtrl=${event.isCtrlPressed} " +
+                "isShift=${event.isShiftPressed} isAlt=${event.isAltPressed}",
+        )
+        val back = KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_BACK)
+        val fwd = KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_FORWARD)
+        // No `IdeActions.ACTION_GOTO_SYMBOL` constant exists — the platform
+        // registers the id as a plain string in PlatformActions.xml.
+        val goto = KeymapShortcuts.matches(event, "GotoSymbol")
+        if (back || fwd || goto) {
+            org.jetbrains.hexana.HexanaLog.LOG.warn(
+                "[wat-nav-debug] panel matched back=$back fwd=$fwd goto=$goto " +
+                    "canBack=${navigator.canBack} canForward=${navigator.canForward}",
+            )
+        }
+        when {
+            back -> navigator.back()
+            fwd -> navigator.forward()
+            goto -> {
+                gotoPopupOpen = true
+                true
+            }
+            else -> false
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(HexanaTheme.backgroundColor)
+            .onPreviewKeyEvent(panelKeyHandler),
+    ) {
+        SectionShortcutBar(chunkTree = chunkTree, navigator = navigator)
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
             LazyColumn(state = effectiveListState, modifier = Modifier.fillMaxSize()) {
                 var hidden = false
@@ -307,6 +368,19 @@ internal fun WasmPanelWatVirtualized(
                                         onCrossChunkDown = navDown,
                                         isAppendedFunc = chunk.kind == WasmSectionKinds.CODE &&
                                             chunk.indexInSection in appendedCodeIndices,
+                                        expandedDataChunks = expandedDataChunksState,
+                                        dataChunkViewModes = dataChunkViewModesState,
+                                        expandedImportChunks = expandedImportChunksState,
+                                        expandedExportChunks = expandedExportChunksState,
+                                        onFollow = { tgt ->
+                                            org.jetbrains.hexana.HexanaLog.LOG.warn(
+                                                "[wat-nav-debug] panel onFollow target=$tgt",
+                                            )
+                                            val ok = navigator.gotoFunc(tgt.funcIdx, tgt.section)
+                                            org.jetbrains.hexana.HexanaLog.LOG.warn(
+                                                "[wat-nav-debug] panel onFollow navigator.gotoFunc returned $ok",
+                                            )
+                                        },
                                     )
                                 }
                             }
@@ -316,6 +390,19 @@ internal fun WasmPanelWatVirtualized(
             }
         }
         StatusBar(chunkTree = chunkTree, currentIndex = firstVisibleIndex)
+    }
+    if (gotoPopupOpen) {
+        WasmGotoFuncPopup(
+            funcNamesIndex = funcNamesIndex,
+            onResolved = { funcIdx ->
+                gotoPopupOpen = false
+                // Land on the Function-section declaration row so the user
+                // gets the same starting view as Cmd+B from a call site —
+                // a second Cmd+B (or click) continues to the Code body.
+                navigator.gotoFunc(funcIdx, WasmSectionKinds.FUNCTION)
+            },
+            onDismiss = { gotoPopupOpen = false },
+        )
     }
 }
 
@@ -409,7 +496,7 @@ private fun SectionHeaderRow(
     }
 }
 
-private val ROW_TEXT_STYLE = TextStyle(
+internal val ROW_TEXT_STYLE = TextStyle(
     fontFamily = FontFamily.Monospace,
     fontSize = 12.sp,
     color = Color.Unspecified,
@@ -440,6 +527,40 @@ private fun ChunkRow(
      * cloning the clone every keystroke produces a chain of redirects.
      */
     isAppendedFunc: Boolean = false,
+    /**
+     * Per-Data-chunk expand state. When `chunk.id` is in the set, body
+     * rows ([RowKind.DataBody]) are rendered; otherwise only the header
+     * and expander rows are shown. Owned by the panel so toggles survive
+     * edit-commit rebuilds.
+     */
+    expandedDataChunks: MutableState<Set<ChunkId>>? = null,
+    /**
+     * Per-Data-chunk view mode override. Missing key means default
+     * [DataViewMode.U8_HEX]. Drives [WasmHexanaWatRenderer.renderRows]'s
+     * body layout and the inline mode-bar's highlighted button.
+     */
+    dataChunkViewModes: MutableState<Map<ChunkId, DataViewMode>>? = null,
+    /**
+     * Per-Import-chunk expand state. When `chunk.id` is in the set, the
+     * module / symbol / type descriptor rows are rendered; otherwise
+     * only the single-line header is shown.
+     */
+    expandedImportChunks: MutableState<Set<ChunkId>>? = null,
+    /**
+     * Per-Export-chunk expand state. When `chunk.id` is in the set, the
+     * symbol / descriptor rows are rendered; otherwise only the
+     * single-line header is shown.
+     */
+    expandedExportChunks: MutableState<Set<ChunkId>>? = null,
+    /**
+     * Invoked when the user presses GotoDeclaration on an editable `call
+     * N` row, GotoDeclaration on a Function-section row, or clicks a
+     * Function-section row. The lambda receives the target funcidx + the
+     * section to land in (Function for "go to declaration" from a call
+     * site, Code for "go to body" from a Function row). Null when no
+     * navigator is available.
+     */
+    onFollow: ((FollowTarget) -> Unit)? = null,
 ) {
     // Re-render whenever the renderer or snapshot changes (i.e. after a
     // commit replaces `liveProvider` and rebuilds `panelState`). Keying on
@@ -449,7 +570,10 @@ private fun ChunkRow(
     // anchors). Subsequent length-changing edits then feed those stale
     // offsets to the encoder, which corrupts the section sizes and crashes
     // the post-edit re-parse with `Unknown data record type: …`.
-    val rows = remember(chunk.id, renderer, snapshot) { renderer.renderRows(snapshot, chunk) }
+    val viewMode = dataChunkViewModes?.value?.get(chunk.id) ?: DataViewMode.U8_HEX
+    val rows = remember(chunk.id, renderer, snapshot, viewMode) {
+        renderer.renderRows(snapshot, chunk, viewMode)
+    }
     // Per-row "open insert below" state — survives recompositions until
     // the chunk rebuilds (after a successful commit). Map<rowIndex, true>
     // means an empty insert TextField is showing below that row.
@@ -479,12 +603,98 @@ private fun ChunkRow(
             }
         }
     }
+    val isDataExpanded = expandedDataChunks != null && chunk.id in expandedDataChunks.value
+    val isImportExpanded = expandedImportChunks != null && chunk.id in expandedImportChunks.value
+    val isExportExpanded = expandedExportChunks != null && chunk.id in expandedExportChunks.value
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 1.dp),
     ) {
         rows.forEachIndexed { rowIndex, row ->
+            // Skip Data body and descriptor rows when the chunk is
+            // collapsed. The header and the expander itself stay visible
+            // so the user always has a click target to open the body.
+            if ((row.kind is RowKind.DataBody || row.kind is RowKind.DataDescriptor) && !isDataExpanded) {
+                return@forEachIndexed
+            }
+            // Same gate for Import descriptor rows.
+            if (row.kind is RowKind.ImportDescriptor && !isImportExpanded) {
+                return@forEachIndexed
+            }
+            if (row.kind is RowKind.ExportDescriptor && !isExportExpanded) {
+                return@forEachIndexed
+            }
+            // Import / Export expander: clickable `▶ show details` / `▼
+            // hide details`. Sits below the single-line `(import ...)`
+            // / `(export ...)` header.
+            if (row.kind is RowKind.ImportExpander && expandedImportChunks != null) {
+                Text(
+                    text = if (isImportExpanded) "▼ hide details" else "▶ show details",
+                    style = ROW_TEXT_STYLE.copy(color = colorFor(RenderTokenKind.KEYWORD)),
+                    modifier = Modifier
+                        .padding(start = 90.dp)
+                        .clickable {
+                            expandedImportChunks.value = if (isImportExpanded) {
+                                expandedImportChunks.value - chunk.id
+                            } else {
+                                expandedImportChunks.value + chunk.id
+                            }
+                        },
+                )
+                return@forEachIndexed
+            }
+            if (row.kind is RowKind.ExportExpander && expandedExportChunks != null) {
+                Text(
+                    text = if (isExportExpanded) "▼ hide details" else "▶ show details",
+                    style = ROW_TEXT_STYLE.copy(color = colorFor(RenderTokenKind.KEYWORD)),
+                    modifier = Modifier
+                        .padding(start = 90.dp)
+                        .clickable {
+                            expandedExportChunks.value = if (isExportExpanded) {
+                                expandedExportChunks.value - chunk.id
+                            } else {
+                                expandedExportChunks.value + chunk.id
+                            }
+                        },
+                )
+                return@forEachIndexed
+            }
+            if (row.kind is RowKind.DataExpander && expandedDataChunks != null) {
+                val byteCount = (row.kind as RowKind.DataExpander).bodyByteCount
+                val label = if (isDataExpanded) {
+                    "▼ hide $byteCount bytes"
+                } else {
+                    "▶ show $byteCount bytes"
+                }
+                Text(
+                    text = label,
+                    style = ROW_TEXT_STYLE.copy(color = colorFor(RenderTokenKind.KEYWORD)),
+                    modifier = Modifier
+                        // Rough alignment with the offset gutter column; perfect
+                        // pixel match would need a per-frame font-metrics read.
+                        .padding(start = 90.dp)
+                        .clickable {
+                            expandedDataChunks.value = if (isDataExpanded) {
+                                expandedDataChunks.value - chunk.id
+                            } else {
+                                expandedDataChunks.value + chunk.id
+                            }
+                        },
+                )
+                // Inline mode bar — only when expanded, only if state slot
+                // is provided. Sits between the expander row and the first
+                // body row so a mode switch visibly updates the bytes below.
+                if (isDataExpanded && dataChunkViewModes != null) {
+                    DataViewModeBar(
+                        current = viewMode,
+                        onSelect = { mode ->
+                            dataChunkViewModes.value = dataChunkViewModes.value + (chunk.id to mode)
+                        },
+                    )
+                }
+                return@forEachIndexed
+            }
             val pos = editableIndices.indexOf(rowIndex)
             // Within-chunk arrow nav. At the top of the first editable row,
             // fall through to the cross-chunk callback (prev chunk's last
@@ -526,6 +736,7 @@ private fun ChunkRow(
                 onArrowUp = onArrowUp,
                 onArrowDown = onArrowDown,
                 isAppendedFunc = isAppendedFunc,
+                onFollow = onFollow,
             )
             val editable = row.editable
             if (insertOpen[rowIndex] == true && editableDoc != null && editable != null) {
@@ -588,10 +799,55 @@ private fun RenderedRowView(
     onArrowDown: (() -> Unit)? = null,
     /** See [ChunkRow.isAppendedFunc]. Forwarded to `commitRowEdit`. */
     isAppendedFunc: Boolean = false,
+    /** See [ChunkRow.onFollow]. */
+    onFollow: ((FollowTarget) -> Unit)? = null,
 ) {
     val info = row.editable
     val color = HexanaTheme.textColor
     if (info == null || editableDoc == null) {
+        val target = row.followTarget
+        if (target != null && onFollow != null) {
+            // Non-editable but navigable row (Function-section entry).
+            // Click → follow; Cmd+B → follow. We attach a FocusRequester so
+            // the key event has somewhere to land; clicking the row also
+            // grabs focus via the click handler.
+            val rowFocus = remember(chunkId, rowIndex) { FocusRequester() }
+            Text(
+                text = row.tokens.toAnnotatedString(),
+                style = ROW_TEXT_STYLE.copy(color = color),
+                modifier = Modifier
+                    .focusRequester(rowFocus)
+                    .focusable()
+                    .clickable {
+                        org.jetbrains.hexana.HexanaLog.LOG.warn(
+                            "[wat-nav-debug] func-row click target=$target chunkId=$chunkId rowIndex=$rowIndex",
+                        )
+                        // Don't requestFocus() on the source row before
+                        // navigating — once `scrollToItem` jumps the
+                        // viewport, Compose's LazyColumn auto-scrolls a
+                        // focused-but-offscreen child back into view (a
+                        // smooth scroll), which makes the click feel like
+                        // a slow drift instead of an instant jump. Focus
+                        // stays wherever it was; the navigation does its
+                        // own scrolling.
+                        onFollow.invoke(target)
+                    }
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        if (KeymapShortcuts.isModifierOnly(event)) return@onPreviewKeyEvent false
+                        val isGoto = KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_DECLARATION)
+                        org.jetbrains.hexana.HexanaLog.LOG.warn(
+                            "[wat-nav-debug] func-row handler chunkId=$chunkId rowIndex=$rowIndex " +
+                                "key=${event.key} isGoto=$isGoto target=$target",
+                        )
+                        if (isGoto) {
+                            onFollow.invoke(target)
+                            true
+                        } else false
+                    },
+            )
+            return
+        }
         Text(
             text = row.tokens.toAnnotatedString(),
             style = ROW_TEXT_STYLE.copy(color = color),
@@ -651,6 +907,44 @@ private fun RenderedRowView(
                 // event so the BasicTextField doesn't also process it.
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    if (KeymapShortcuts.isModifierOnly(event)) return@onPreviewKeyEvent false
+                    // Every non-modifier KeyDown reaching this row's text
+                    // field — useful to confirm whether the row even sees the
+                    // key (focus issues) before checking matcher logs.
+                    org.jetbrains.hexana.HexanaLog.LOG.warn(
+                        "[wat-nav-debug] row handler chunkId=$chunkId rowIndex=$rowIndex " +
+                            "key=${event.key} keyCode=${event.key.keyCode} " +
+                            "isMeta=${event.isMetaPressed} isCtrl=${event.isCtrlPressed} " +
+                            "isShift=${event.isShiftPressed} isAlt=${event.isAltPressed} " +
+                            "info.op=${info.op?.let { it::class.simpleName }} fieldText='$fieldText'",
+                    )
+                    // GotoDeclaration on a `call N` row → follow to the
+                    // Function-section row for N (the declaration; the
+                    // user's next Cmd+B from there continues to the body).
+                    // Checked before the literal-key dispatch so a keymap
+                    // that bound F4 / Cmd+B / etc. always wins over any
+                    // built-in BasicTextField caret behaviour for that combo.
+                    val callOp = info.op as? OpCodes.Flow.Call
+                    val isGoto = KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_DECLARATION)
+                    if (isGoto) {
+                        org.jetbrains.hexana.HexanaLog.LOG.warn(
+                            "[wat-nav-debug] row key=${event.key} GotoDeclaration matched " +
+                                "onFollow=${onFollow != null} " +
+                                "info.op=${info.op?.let { it::class.simpleName }} " +
+                                "callOp=${callOp != null} fieldText='$fieldText'",
+                        )
+                    }
+                    if (onFollow != null && callOp != null && isGoto) {
+                        val funcIdx = parseCallTarget(fieldText, callOp)
+                        org.jetbrains.hexana.HexanaLog.LOG.warn(
+                            "[wat-nav-debug] follow-call parse fieldText='$fieldText' " +
+                                "originalValue=${callOp.value} parsed=$funcIdx",
+                        )
+                        if (funcIdx != null) {
+                            onFollow.invoke(FollowTarget(funcIdx = funcIdx, section = WasmSectionKinds.FUNCTION))
+                            return@onPreviewKeyEvent true
+                        }
+                    }
                     when (event.key) {
                         Key.Escape -> {
                             fieldText = info.watText
@@ -692,6 +986,29 @@ private fun RenderedRowView(
             )
         }
     }
+}
+
+/**
+ * Pull the funcidx immediate out of a `call N` row's text. Falls back to the
+ * original parsed opcode's value when the field text isn't a recognisable
+ * `call <u32>` form (mid-edit, or the user changed the mnemonic but the
+ * follow-call shortcut was still fired on the original `Call`).
+ *
+ * Accepts decimal and `0x`-prefixed hex; anything else returns the original
+ * value so the user always lands on *something* sensible rather than getting
+ * a silent no-op.
+ */
+private fun parseCallTarget(fieldText: String, originalOp: OpCodes.Flow.Call): Int? {
+    val tokens = fieldText.trim().split(Regex("\\s+"))
+    if (tokens.size >= 2 && tokens[0] == "call") {
+        val raw = tokens[1]
+        val parsed = when {
+            raw.startsWith("0x") || raw.startsWith("0X") -> raw.substring(2).toLongOrNull(radix = 16)
+            else -> raw.toLongOrNull()
+        }
+        if (parsed != null && parsed in 0..Int.MAX_VALUE.toLong()) return parsed.toInt()
+    }
+    return originalOp.value.toLong().takeIf { it in 0..Int.MAX_VALUE.toLong() }?.toInt()
 }
 
 private val PREFIX_KINDS = setOf(

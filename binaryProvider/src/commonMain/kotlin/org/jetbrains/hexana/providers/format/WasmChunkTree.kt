@@ -106,13 +106,49 @@ public fun buildWasmChunkTree(parsed: WasmParsedBinary): WasmChunkTree {
         )
 
         when (kind) {
-            WasmSectionKinds.FUNCTION -> Unit // single-chunk per decision 5
+            WasmSectionKinds.FUNCTION ->
+                appendFunctionChunks(chunks, provider, resolver, section as WasmSectionFunctions)
             WasmSectionKinds.CODE -> appendCodeChunks(chunks, provider, resolver)
             else -> appendGenericRecords(chunks, kind, records)
         }
     }
 
     return WasmChunkTree(chunks)
+}
+
+/**
+ * One chunk per Function-section entry. Each entry is a single ULEB128
+ * `typeidx`; the chunk's byteRange spans those bytes so the renderer can
+ * emit a per-entry row (offset gutter + hex column + `(; func[i] : type[N]
+ * → $name ;)` description). Symbolic ChunkId uses the resolved function
+ * name (same as the Code section) so cross-section navigation can pair
+ * them up by id space.
+ */
+private fun appendFunctionChunks(
+    chunks: MutableList<BinaryChunk>,
+    provider: WasmBinaryProvider,
+    resolver: WasmSymbolResolver,
+    section: WasmSectionFunctions,
+) {
+    val importFuncCount = provider.importFuncCount
+    val ranges = with(section) { provider.bytes.scanRanges() }
+    ranges.forEachIndexed { i, r ->
+        val funcIdx = importFuncCount + i
+        val name = resolver.resolve(SymbolKind.FUNCTION, funcIdx)
+        chunks += BinaryChunk.Element(
+            // Distinct from the CODE chunk's id (SectionKind is part of
+            // Symbolic / Indexed equality) so per-section nav targets stay
+            // unambiguous.
+            id = name
+                ?.let { ChunkId.Symbolic(WasmSectionKinds.FUNCTION, it) }
+                ?: ChunkId.Indexed(WasmSectionKinds.FUNCTION, funcIdx),
+            byteRange = r.offset.toLong()..(r.offset + r.size - 1).toLong(),
+            estimatedLines = 1,
+            kind = WasmSectionKinds.FUNCTION,
+            indexInSection = i,
+            displayName = name,
+        )
+    }
 }
 
 private fun appendCodeChunks(

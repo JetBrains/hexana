@@ -89,19 +89,19 @@ class WasmChunkTreeIntegrationTest {
     }
 
     @Test
-    fun function_section_is_a_single_chunk_with_no_elements() {
+    fun function_section_emits_one_element_per_entry() {
         val tree = buildWasmChunkTree(parsed())
-        val funcSectionIdx = (0 until tree.totalChunks).first {
-            val c = tree.chunkAt(it)
-            c is BinaryChunk.SectionHeader && c.kind == WasmSectionKinds.FUNCTION
-        }
-        // The next chunk after the function section header must NOT be a
-        // function-section element — decision 5 says no per-entry breakout.
-        val next = tree.chunkAt(funcSectionIdx + 1)
-        assertTrue(
-            next is BinaryChunk.SectionHeader,
-            "expected next chunk after function section to be another section header, got $next",
-        )
+        val funcElements = (0 until tree.totalChunks)
+            .map { tree.chunkAt(it) }
+            .filterIsInstance<BinaryChunk.Element>()
+            .filter { it.kind == WasmSectionKinds.FUNCTION }
+        // The test fixture declares one function; the Function section
+        // must surface it as a single per-entry chunk so the user can scroll
+        // to and Cmd+B from it.
+        assertEquals(1, funcElements.size, "expected one Function-section element, got $funcElements")
+        val fn = funcElements.single()
+        assertEquals(0, fn.indexInSection)
+        assertTrue(fn.byteRange.first > 0L, "function entry's byteRange must be inside the section")
     }
 
     @Test

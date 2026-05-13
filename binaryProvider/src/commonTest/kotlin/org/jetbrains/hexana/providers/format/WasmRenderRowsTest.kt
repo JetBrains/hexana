@@ -117,6 +117,78 @@ class WasmRenderRowsTest {
         assertNull(rows.last().editable, "function close row is not editable")
     }
 
+    /**
+     * Same as [moduleBytes] but the function declares 2 i32 locals so the
+     * editable `i32.const 5` row has a non-zero `params + locals` count to
+     * assert against.
+     *
+     * Code entry layout:
+     *   `04 02 ; entry size 4 → 6, count=1`
+     *   `01 02 7F          ; 1 local group: count=2, type=i32`
+     *   `41 05 0B          ; i32.const 5, end`
+     */
+    private val moduleWithLocalsBytes: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F,
+        0x03, 0x02, 0x01, 0x00,
+        0x0A, 0x08, 0x01, 0x06, 0x01, 0x02, 0x7F, 0x41, 0x05, 0x0B,
+    )
+
+    private fun parsedWithLocals(): WasmParsedBinary {
+        val snapshot = binaryDocumentOf(moduleWithLocalsBytes).snapshot()
+        val provider = WasmBinaryProvider(snapshot.toCommonByteBuffer())
+        return WasmParsedBinary.fromProvider(provider, snapshot)
+    }
+
+    /**
+     * Regression — every editable opcode row in a code chunk must carry the
+     * function's `params + locals` count, not just rows whose original op is
+     * already a `local.{get,set,tee}`. Without this, the user can edit an
+     * `i32.const`-style row into `local.get 10` (out-of-range) and the
+     * encoder lets it through because `info.localCount == null` disables
+     * semantic validation.
+     */
+    @Test
+    fun editable_opcode_row_always_carries_localCount() {
+        val parsed = parsedWithLocals()
+        val renderer = WasmHexanaWatRenderer(parsed)
+        val rows = renderer.renderRows(parsed.snapshot, codeChunk(parsed))
+
+        val info = rows.first { it.editable?.kind == EditableRowInfo.Kind.OPCODE }.editable!!
+        assertTrue(info.op is I32.Const, "fixture row is i32.const, not a local-access op")
+        assertEquals(2, info.localCount, "i32.const row should still carry params+locals=2")
+    }
+
+    /**
+     * End-to-end regression for the user-reported scenario: a function with
+     * `(local i32 i32)` had its `i32.const 5` row edited to `local.get 10`
+     * and the editor accepted it. With the renderer always passing
+     * `localCount`, the encoder now rejects the out-of-range index.
+     */
+    @Test
+    fun editing_non_local_op_to_out_of_range_local_get_is_rejected() {
+        val parsed = parsedWithLocals()
+        val renderer = WasmHexanaWatRenderer(parsed)
+        val rows = renderer.renderRows(parsed.snapshot, codeChunk(parsed))
+        val info = rows.first { it.editable?.kind == EditableRowInfo.Kind.OPCODE }.editable!!
+
+        val result = EditableRowEncoder.encode(
+            op = info.op!!,
+            opStartOffset = info.opStart,
+            opEncodedLength = info.opEncodedLength,
+            text = "local.get 10",
+            localCount = info.localCount,
+            cascade = info.cascade,
+        )
+        check(result is RowEncodeResult.Error) {
+            "expected out-of-range error for local.get 10 when localCount=2, got $result"
+        }
+        assertTrue(
+            "out of range" in result.message,
+            "expected 'out of range' in error message, got '${result.message}'",
+        )
+    }
+
     @Test
     fun rendered_row_text_strips_offset_gutter_and_hex_column() {
         val parsed = parsed()
