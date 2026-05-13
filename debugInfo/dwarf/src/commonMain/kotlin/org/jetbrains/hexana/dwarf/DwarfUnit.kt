@@ -4,6 +4,10 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 
 interface DwarfUnit {
     val addressSize: UByte
+    // DWARF section offsets are sized by the DWARF32/DWARF64 format, not by the
+    // target address size. See DWARF v5 section 7.4 and 7.5.5.
+    // https://dwarfstd.org/doc/DWARF5.pdf
+    val offsetSize: UByte get() = addressSize
 }
 
 fun CommonByteBuffer.readForm(
@@ -15,7 +19,13 @@ fun CommonByteBuffer.readForm(
     Form.DW_FORM_ref4, Form.DW_FORM_data4, Form.DW_FORM_strx4 ->  readUInt()
     Form.DW_FORM_ref8, Form.DW_FORM_data8, Form.DW_FORM_strx8 ->  readULong()
     Form.DW_FORM_data16 -> ByteArray(16).also { get(it, 0, 16) }
-    Form.DW_FORM_strp, Form.DW_FORM_sec_offset, Form.DW_FORM_ref_addr -> when (header.addressSize) {
+    Form.DW_FORM_strp, Form.DW_FORM_sec_offset -> when (header.offsetSize) {
+        4.toUByte() -> readUInt()
+        8.toUByte() -> readULong()
+        else -> throw IllegalArgumentException("Unsupported DWARF offset size: ${header.offsetSize}")
+    }
+
+    Form.DW_FORM_ref_addr -> when (header.addressSize) {
         4.toUByte() -> readUInt()
         8.toUByte() -> readULong()
         else -> throw IllegalArgumentException("Unsupported address size: ${header.addressSize}")
@@ -74,10 +84,10 @@ fun CommonByteBuffer.readForm(
     // read from v4 .debug_str
     // read from v5 .debug_line_str
     Form.DW_FORM_line_strp -> {
-        when (header.addressSize) {
+        when (header.offsetSize) {
              4.toUByte() -> readUInt().toInt()
              8.toUByte() -> readULong().toInt()
-            else -> throw IllegalArgumentException("Unsupported address size: ${header.addressSize}")
+            else -> throw IllegalArgumentException("Unsupported DWARF offset size: ${header.offsetSize}")
         }
     }
     else -> TODO("Unsupported form: ${form::class.simpleName}")

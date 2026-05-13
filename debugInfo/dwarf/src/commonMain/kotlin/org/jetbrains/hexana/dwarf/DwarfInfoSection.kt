@@ -195,6 +195,8 @@ sealed class CompilationUnitHeader<T>(offset: Int, size: Int, val next: Int, val
     }
 
     sealed class Dwarf32Header(offset: Int, size: Int, next: Int, version: Int, debugAbbrevOffset: UInt, addressSize: UByte) : CompilationUnitHeader<UInt>(offset, size, next, version, debugAbbrevOffset, addressSize) {
+        override val offsetSize: UByte = 4.toUByte()
+
         class V4(offset: Int, size: Int, next: Int, debugAbbrevOffset: UInt, addressSize: UByte) : Dwarf32Header(offset, size, next,4, debugAbbrevOffset, addressSize)
         sealed class V5(
             offset: Int,
@@ -210,6 +212,8 @@ sealed class CompilationUnitHeader<T>(offset: Int, size: Int, val next: Int, val
         }
     }
     sealed class Dwarf64Header(offset: Int, size: Int, next: Int, version: Int, debugAbbrevOffset: ULong, addressSize: UByte) : CompilationUnitHeader<ULong>(offset, size, next, version, debugAbbrevOffset, addressSize){
+        override val offsetSize: UByte = 8.toUByte()
+
         class V4(offset: Int, size: Int, next: Int, debugAbbrevOffset: ULong, addressSize: UByte) : Dwarf64Header(offset, size, next, 4, debugAbbrevOffset, addressSize)
         sealed class V5(
             offset: Int,
