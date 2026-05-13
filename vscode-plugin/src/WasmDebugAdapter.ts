@@ -537,8 +537,10 @@ const WAMR_DEBUG_SERVER_READY_TIMEOUT_MS = 10_000;
  * connections.  This matches the IntelliJ plugin's readiness
  * detection in `WasmDebugRunner.prepareWamrSession()`.
  *
- * Resolves when the message is detected.  Rejects if the process
- * exits before the message appears or if the timeout elapses.
+ * Resolves when the message is detected **or** when the timeout
+ * elapses (matching IntelliJ's behavior of proceeding anyway).
+ * Rejects only if the process exits or fails to start before
+ * the server is ready.
  */
 function waitForIwasmReady(
     iwasmProcess: ChildProcess,
@@ -564,9 +566,12 @@ function waitForIwasmReady(
         function onData(chunk: Buffer): void {
             const text = chunk.toString();
             collectedOutput.push(text);
+            // Check accumulated output (not just this chunk) because
+            // Node.js may split the ready message across chunks.
+            const accumulated = collectedOutput.join("");
             if (
-                text.includes("Debug server listening on") ||
-                text.includes("debug server listening on")
+                accumulated.includes("Debug server listening on") ||
+                accumulated.includes("debug server listening on")
             ) {
                 log.appendLine(
                     `[Hexana] WAMR debug server is ready`,
@@ -606,10 +611,17 @@ function waitForIwasmReady(
 
         const timer = setTimeout(() => {
             const output = collectedOutput.join("").trim();
-            settle(() => reject(new Error(
-                `Timed out after ${timeoutMs}ms waiting for iwasm debug server.` +
-                (output ? `\n\niwasm output so far:\n${output}` : ""),
-            )));
+            // Match IntelliJ's behavior: on timeout, proceed with
+            // the LLDB connection anyway.  The `process connect`
+            // command in launchCommands will fail gracefully if
+            // the server isn't actually ready.
+            log.appendLine(
+                `[Hexana] Timed out after ${timeoutMs}ms waiting for ` +
+                `iwasm debug server ready message. ` +
+                `Proceeding with LLDB connection anyway.` +
+                (output ? `\n  iwasm output so far: ${output}` : ""),
+            );
+            settle(() => resolve());
         }, timeoutMs);
 
         iwasmProcess.stdout?.on("data", onData);
