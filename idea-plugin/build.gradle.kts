@@ -79,6 +79,7 @@ dependencies {
     implementation(project(":analytics"))
     implementation(project(":encdec"))
     implementation(project(":wasmParser"))
+    implementation(project(":hexanaDocument"))
     implementation(project(":binaryProvider"))
     implementation(project(":plugins-shared"))
     implementation(project(":mcp:core"))

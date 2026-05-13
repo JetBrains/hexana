@@ -18,6 +18,13 @@ kotlin {
             dependencies {
                 implementation(project(":wasmParser"))
                 implementation(project(":encdec"))
+                api(project(":hexanaDocument"))
+            }
+        }
+
+        commonTest {
+            dependencies {
+                implementation(libs.kotlin.test)
             }
         }
 

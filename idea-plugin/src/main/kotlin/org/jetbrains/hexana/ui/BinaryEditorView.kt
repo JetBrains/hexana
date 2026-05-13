@@ -38,6 +38,7 @@ import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelImports
 import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelModules
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.ui.panel.WasmPanelWatVirtualized
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -186,6 +187,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: Pa
                 Panel("Garbage") { WasmPanelGarbage(this, state) },
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 Panel("Wat") { WasmPanelWat(this, state) },
+                Panel("WAT (virtualized)") { WasmPanelWatVirtualized(this, state) },
                 *dwarfPanels(this, state).toTypedArray()
             ) else {
                 errorPanel(state)
@@ -213,6 +215,7 @@ private fun BinaryProvider.resolvePanels(state: HexViewStateHolder, pathsNav: Pa
                 Panel("Monos") { WasmPanelMonos(this, state) },
                 Panel("Garbage") { WasmPanelGarbage(this, state) },
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
+                Panel("WAT (virtualized)") { WasmPanelWatVirtualized(this, state) },
                 *dwarfPanels(this, state).toTypedArray()
             ) else emptyArray()
         }
