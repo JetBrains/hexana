@@ -3,6 +3,7 @@ package org.jetbrains.hexana.dwarf
 import org.jetbrains.hexana.io.CommonByteBuffer
 
 interface DwarfUnit {
+    val version: Int
     val addressSize: UByte
     // DWARF section offsets are sized by the DWARF32/DWARF64 format, not by the
     // target address size. See DWARF v5 section 7.4 and 7.5.5.
@@ -25,10 +26,10 @@ fun CommonByteBuffer.readForm(
         else -> throw IllegalArgumentException("Unsupported DWARF offset size: ${header.offsetSize}")
     }
 
-    Form.DW_FORM_ref_addr -> when (header.addressSize) {
+    Form.DW_FORM_ref_addr -> when (val size = if (header.version <= 2) header.addressSize else header.offsetSize) {
         4.toUByte() -> readUInt()
         8.toUByte() -> readULong()
-        else -> throw IllegalArgumentException("Unsupported address size: ${header.addressSize}")
+        else -> throw IllegalArgumentException("Unsupported DWARF reference address size: $size")
     }
 
     Form.DW_FORM_addr -> when (header.addressSize) {
@@ -86,9 +87,16 @@ fun CommonByteBuffer.readForm(
     Form.DW_FORM_line_strp -> {
         when (header.offsetSize) {
              4.toUByte() -> readUInt().toInt()
-             8.toUByte() -> readULong().toInt()
+             8.toUByte() -> readULong().toIntExact("DW_FORM_line_strp")
             else -> throw IllegalArgumentException("Unsupported DWARF offset size: ${header.offsetSize}")
         }
     }
     else -> TODO("Unsupported form: ${form::class.simpleName}")
+}
+
+private fun ULong.toIntExact(formName: String): Int {
+    require(this <= Int.MAX_VALUE.toULong()) {
+        "$formName offset $this does not fit into Int"
+    }
+    return toInt()
 }

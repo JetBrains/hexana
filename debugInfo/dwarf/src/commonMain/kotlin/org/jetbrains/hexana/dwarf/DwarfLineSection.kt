@@ -193,6 +193,7 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
         val lineRange = readUByte()
         val opcodeBase = readUByte()
         val unit = object : DwarfUnit {
+            override val version: Int = 5
             override val addressSize: UByte = addressSize
             override val offsetSize: UByte = 4.toUByte()
         }

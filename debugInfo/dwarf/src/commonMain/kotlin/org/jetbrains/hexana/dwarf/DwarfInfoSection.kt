@@ -186,7 +186,7 @@ class DieField(val attribute: DwarfAttribute, val value: Any) {
 
 open class DebugInformationEntry(offset: Int, size: Int, val tag: Tag, val attributes: List<DieField> = listOf(), open val children: List<DebugInformationEntry> = listOf()):DwarfEntry(offset, size)
 
-sealed class CompilationUnitHeader<T>(offset: Int, size: Int, val next: Int, val version: Int, val debugAbbrevOffset: T, override val addressSize: UByte) : DebugInformationEntry(offset, size, Tag.DW_TAG_compile_unit), DwarfUnit {
+sealed class CompilationUnitHeader<T>(offset: Int, size: Int, val next: Int, override val version: Int, val debugAbbrevOffset: T, override val addressSize: UByte) : DebugInformationEntry(offset, size, Tag.DW_TAG_compile_unit), DwarfUnit {
     private val children_ = mutableListOf<DebugInformationEntry>()
     override val children: List<DebugInformationEntry> = children_
 
