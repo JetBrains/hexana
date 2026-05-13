@@ -229,6 +229,44 @@ class LldbDapProxy implements vscode.DebugAdapter {
      * deferred until the evaluate completes.
      */
     private readonly pendingVmCtx = new Map<number, DapMessage>();
+    /**
+     * Maps the `request_seq` of a `setBreakpoints` request to
+     * the original full source info that was rewritten to
+     * basename-only before forwarding to lldb-dap.
+     * Used to restore the original paths in the response so
+     * VS Code still associates breakpoints with the correct
+     * source files.
+     */
+    private readonly pendingBpSource = new Map<number, { path: string; name: string }>();
+    /**
+     * Persistent mapping from source-file basename to the full
+     * IDE path, built from `setBreakpoints` requests.  Used to
+     * resolve DWARF-relative paths in `stackTrace` responses and
+     * `breakpoint` events back to the actual local files so VS
+     * Code can open them.  Matches IntelliJ's
+     * `resolveFileByDwarfPath()` suffix-matching approach.
+     *
+     * When multiple full paths share the same basename, the map
+     * stores all of them; `resolveSourcePath` tries suffix
+     * matching to disambiguate.
+     */
+    private readonly sourcePathMap = new Map<string, Set<string>>();
+    /**
+     * Tracks registered breakpoint locations (basename → set of
+     * line numbers) from `setBreakpoints` requests.  Used by the
+     * WAMR initial-stop handler to check whether the first `trace`
+     * stop matches a user breakpoint — matching IntelliJ's
+     * `checkInitialStopMatchesBreakpoint()`.
+     */
+    private readonly registeredBreakpoints = new Map<string, Set<number>>();
+    /**
+     * Whether we are still waiting for the first WAMR `stopped`
+     * event (the initial `trace` stop from `process connect`).
+     * Set to `true` when `configurationDone` is forwarded for a
+     * WAMR session with `stopOnEntry`, and cleared after the
+     * initial stop is handled.
+     */
+    private wamrInitialStopPending = false;
     private readonly log = getDebugOutputChannel();
     private isWasmtime: boolean;
 
@@ -261,6 +299,77 @@ class LldbDapProxy implements vscode.DebugAdapter {
     handleMessage(message: vscode.DebugProtocolMessage): void {
         const msg = message as unknown as DapMessage;
         this.log.appendLine(`[DAP →] ${msg.type}: ${msg.command || msg.event || ""} ${JSON.stringify(msg.arguments || msg.body || "").substring(0, 200)}`);
+
+        // Rewrite setBreakpoints source paths to use basename
+        // only.  DWARF debug info inside Wasm binaries records
+        // relative source paths (e.g. "src/lib.rs", "main.go").
+        // LLDB's `breakpoint set --file` matches against
+        // compilation-unit filenames, so a full absolute IDE path
+        // would fail to resolve.  The IntelliJ plugin uses
+        // `position.file.name` (basename) for exactly this
+        // reason (see registerBreakpointInLldb /
+        // replayBreakpointsToLldb).
+        //
+        // We save the original full path per-request (for
+        // response patching) and in a persistent basename→path
+        // map (for resolving DWARF paths in stackTrace
+        // responses).
+        if (
+            msg.type === "request" &&
+            msg.command === "setBreakpoints" &&
+            msg.arguments
+        ) {
+            const source = msg.arguments.source as Record<string, unknown> | undefined;
+            const sourcePath = source?.path as string | undefined;
+            if (source && sourcePath) {
+                const baseName = path.basename(sourcePath);
+                this.pendingBpSource.set(
+                    msg.seq as number,
+                    { path: sourcePath, name: (source.name as string) || baseName },
+                );
+                // Record in persistent map for stackTrace
+                // response path resolution.
+                let paths = this.sourcePathMap.get(baseName);
+                if (!paths) {
+                    paths = new Set();
+                    this.sourcePathMap.set(baseName, paths);
+                }
+                paths.add(sourcePath);
+                // Track breakpoint lines for the initial-stop
+                // matching used in WAMR sessions.
+                const bpLines = msg.arguments.breakpoints as Array<{ line: number }> | undefined;
+                if (bpLines) {
+                    let lineSet = this.registeredBreakpoints.get(baseName);
+                    if (!lineSet) {
+                        lineSet = new Set();
+                        this.registeredBreakpoints.set(baseName, lineSet);
+                    }
+                    for (const bp of bpLines) {
+                        lineSet.add(bp.line);
+                    }
+                }
+                source.path = baseName;
+                source.name = baseName;
+                this.log.appendLine(
+                    `[Hexana] Rewrote setBreakpoints source path ` +
+                    `from '${sourcePath}' to basename '${baseName}'`,
+                );
+            }
+        }
+
+        // For WAMR sessions, mark that we expect the initial
+        // trace stop after configurationDone so the proxy can
+        // check it against registered breakpoints.
+        if (
+            !this.isWasmtime &&
+            msg.type === "request" &&
+            msg.command === "configurationDone"
+        ) {
+            this.wamrInitialStopPending = true;
+            this.log.appendLine(
+                `[Hexana] WAMR: configurationDone sent, waiting for initial trace stop`,
+            );
+        }
 
         this.sendToLldbDap(msg);
     }
@@ -372,6 +481,161 @@ class LldbDapProxy implements vscode.DebugAdapter {
      * See: https://docs.wasmtime.dev/examples-debugging-native-debugger.html
      */
     private handleLldbDapMessage(msg: DapMessage): void {
+        // Swallow responses to internally-injected requests
+        // (e.g. continue after WAMR initial-stop check) so
+        // VS Code doesn't see unexpected responses.
+        if (
+            msg.type === "response" &&
+            msg.request_seq !== undefined &&
+            this.injectedRequestSeqs.has(msg.request_seq)
+        ) {
+            this.injectedRequestSeqs.delete(msg.request_seq);
+            this.log.appendLine(
+                `[Hexana] Swallowed response to injected request ` +
+                `(seq=${msg.request_seq}, command=${msg.command})`,
+            );
+            return;
+        }
+
+        // Restore original source paths in setBreakpoints
+        // responses so VS Code still shows breakpoints in the
+        // correct files.
+        if (
+            msg.type === "response" &&
+            msg.command === "setBreakpoints" &&
+            msg.request_seq !== undefined &&
+            this.pendingBpSource.has(msg.request_seq)
+        ) {
+            const original = this.pendingBpSource.get(msg.request_seq)!;
+            this.pendingBpSource.delete(msg.request_seq);
+
+            // Patch each breakpoint in the response to use the
+            // original full path.
+            const body = msg.body as Record<string, unknown> | undefined;
+            const breakpoints = body?.breakpoints as Array<Record<string, unknown>> | undefined;
+            if (breakpoints) {
+                for (const bp of breakpoints) {
+                    const bpSource = bp.source as Record<string, unknown> | undefined;
+                    if (bpSource) {
+                        bpSource.path = original.path;
+                        bpSource.name = original.name;
+                    }
+                }
+            }
+            this.log.appendLine(
+                `[Hexana] Restored original source path ` +
+                `'${original.path}' in setBreakpoints response`,
+            );
+        }
+
+        // Resolve DWARF source paths in stackTrace responses.
+        // lldb-dap returns source paths as recorded in DWARF
+        // debug info (e.g. "main.go", "src/lib.rs") which VS
+        // Code can't open.  We suffix-match them against the
+        // registered breakpoint paths to find the full local
+        // path — matching IntelliJ's resolveFileByDwarfPath().
+        if (
+            msg.type === "response" &&
+            msg.command === "stackTrace" &&
+            msg.success
+        ) {
+            this.patchSourcePathsInStackTrace(msg);
+        }
+
+        // Also patch source paths in breakpoint events
+        // (e.g. when a breakpoint becomes verified after JIT
+        // compilation resolves it).
+        if (
+            msg.type === "event" &&
+            msg.event === "breakpoint"
+        ) {
+            this.patchSourcePathInBreakpointEvent(msg);
+        }
+
+        // WAMR initial-stop handling: after configurationDone,
+        // lldb-dap sends a `stopped` event for the process that
+        // was already stopped at a `trace` stop.  We intercept
+        // this first stop, query the frame location via
+        // stackTrace, and check if it matches a user breakpoint.
+        // If it does, we present the stop as a breakpoint hit;
+        // otherwise we send `continue` to resume the process.
+        // This matches IntelliJ's checkInitialStopMatchesBreakpoint().
+        if (
+            !this.isWasmtime &&
+            this.wamrInitialStopPending &&
+            msg.type === "event" &&
+            msg.event === "stopped"
+        ) {
+            this.wamrInitialStopPending = false;
+            this.handleWamrInitialStop(msg);
+            return;
+        }
+
+        // Handle the stackTrace response for our WAMR
+        // initial-stop breakpoint check.
+        if (
+            this.pendingWamrInitialStopCheck &&
+            msg.type === "response" &&
+            msg.command === "stackTrace" &&
+            msg.request_seq === this.pendingWamrInitialStopCheck.seq
+        ) {
+            const { stoppedEvent } = this.pendingWamrInitialStopCheck;
+            this.pendingWamrInitialStopCheck = undefined;
+
+            let matched = false;
+            if (msg.success) {
+                const stBody = msg.body as Record<string, unknown> | undefined;
+                const frames = stBody?.stackFrames as Array<Record<string, unknown>> | undefined;
+                const topFrame = frames?.[0];
+                if (topFrame) {
+                    const source = topFrame.source as Record<string, unknown> | undefined;
+                    const sourcePath = (source?.path as string) || (source?.name as string) || "";
+                    const line = topFrame.line as number | undefined;
+                    const baseName = sourcePath ? path.basename(sourcePath) : "";
+
+                    this.log.appendLine(
+                        `[Hexana] WAMR initial stop frame: ${baseName}:${line}`,
+                    );
+
+                    if (baseName && line !== undefined) {
+                        matched = this.matchesBreakpoint(baseName, line);
+                    }
+                }
+            }
+
+            if (matched) {
+                this.log.appendLine(
+                    `[Hexana] WAMR initial stop matches breakpoint — presenting stop to VS Code`,
+                );
+                // Change stop reason from "entry" to "breakpoint"
+                // so VS Code highlights it properly.
+                const evtBody = stoppedEvent.body as Record<string, unknown> | undefined;
+                if (evtBody) {
+                    evtBody.reason = "breakpoint";
+                }
+                this.log.appendLine(`[DAP ←] ${stoppedEvent.type}: ${stoppedEvent.event || ""} ${JSON.stringify(stoppedEvent.body || "").substring(0, 200)}`);
+                this.emitter.fire(stoppedEvent as unknown as vscode.DebugProtocolMessage);
+            } else {
+                this.log.appendLine(
+                    `[Hexana] WAMR initial stop does not match any breakpoint — sending continue`,
+                );
+                const contSeq = this.nextSeq++;
+                const continueReq: DapMessage = {
+                    seq: contSeq,
+                    type: "request",
+                    command: "continue",
+                    arguments: {
+                        threadId: (stoppedEvent.body as Record<string, unknown>)?.threadId,
+                    },
+                };
+                this.injectedRequestSeqs.add(contSeq);
+                this.sendToLldbDap(continueReq);
+            }
+            // Don't forward the stackTrace response to VS Code —
+            // it was our internal request.
+            return;
+        }
+
         // Check if this is a response to our injected
         // __vmctx->set() evaluate request.
         if (
@@ -423,6 +687,205 @@ class LldbDapProxy implements vscode.DebugAdapter {
 
         this.log.appendLine(`[DAP ←] ${msg.type}: ${msg.command || msg.event || ""} success=${msg.success ?? ""} ${JSON.stringify(msg.body || "").substring(0, 200)}`);
         this.emitter.fire(msg as unknown as vscode.DebugProtocolMessage);
+    }
+
+    /**
+     * Handles WAMR's initial `trace` stop after `configurationDone`.
+     *
+     * Sends a `stackTrace` request to lldb-dap to determine the
+     * current frame's source file and line, then checks whether
+     * this location matches any registered breakpoint.  If it
+     * does, the stopped event is forwarded to VS Code (presenting
+     * the hit); otherwise a `continue` request is sent to resume
+     * the process.
+     *
+     * This mirrors IntelliJ's `checkInitialStopMatchesBreakpoint()`
+     * in `WamrDebugProcess.kt`.
+     */
+    private handleWamrInitialStop(stoppedEvent: DapMessage): void {
+        const body = stoppedEvent.body as Record<string, unknown> | undefined;
+        const threadId = body?.threadId as number | undefined;
+        if (threadId === undefined) {
+            // Can't query without a threadId — just forward.
+            this.log.appendLine(
+                `[Hexana] WAMR initial stop: no threadId, forwarding stopped event`,
+            );
+            this.emitter.fire(stoppedEvent as unknown as vscode.DebugProtocolMessage);
+            return;
+        }
+
+        // Send stackTrace request to get frame 0's source location.
+        const stSeq = this.nextSeq++;
+        const stackTraceReq: DapMessage = {
+            seq: stSeq,
+            type: "request",
+            command: "stackTrace",
+            arguments: { threadId, startFrame: 0, levels: 1 },
+        };
+
+        // Store a handler for the response keyed by request seq.
+        this.pendingWamrInitialStopCheck = {
+            seq: stSeq,
+            stoppedEvent,
+        };
+
+        this.log.appendLine(
+            `[Hexana] WAMR initial stop: sending stackTrace (seq=${stSeq}) to check frame location`,
+        );
+        this.sendToLldbDap(stackTraceReq);
+    }
+
+    /**
+     * Pending WAMR initial-stop check state: the seq of the
+     * injected stackTrace request and the deferred stopped event.
+     */
+    private pendingWamrInitialStopCheck: {
+        seq: number;
+        stoppedEvent: DapMessage;
+    } | undefined;
+    /**
+     * Seq numbers of internally-injected requests (continue,
+     * stackTrace, etc.) whose responses should be swallowed
+     * rather than forwarded to VS Code.
+     */
+    private readonly injectedRequestSeqs = new Set<number>();
+
+    /**
+     * Checks if a source file basename + line matches any
+     * registered breakpoint.
+     */
+    private matchesBreakpoint(sourceBasename: string, line: number): boolean {
+        const lines = this.registeredBreakpoints.get(sourceBasename);
+        return lines !== undefined && lines.has(line);
+    }
+
+    /**
+     * Resolves a DWARF source path (which may be relative, e.g.
+     * "main.go" or "src/lib.rs") to a full local filesystem path
+     * using the registered breakpoint paths.
+     *
+     * Matching strategy (mirrors IntelliJ's
+     * `resolveFileByDwarfPath`):
+     *
+     * 1. Extract the basename from the DWARF path.
+     * 2. Look up all registered full paths that share that
+     *    basename.
+     * 3. If the DWARF path contains directory components
+     *    (e.g. "src/lib.rs"), narrow candidates to those whose
+     *    full path ends with the DWARF path preceded by a
+     *    separator.
+     * 4. If exactly one candidate remains, return it; otherwise
+     *    return `undefined` (ambiguous or no match).
+     */
+    private resolveSourcePath(dwarfPath: string): string | undefined {
+        if (!dwarfPath) return undefined;
+        const normalised = dwarfPath.replace(/\\/g, "/");
+        const baseName = path.basename(normalised);
+        const candidates = this.sourcePathMap.get(baseName);
+        if (!candidates || candidates.size === 0) return undefined;
+
+        // If the DWARF path has directory components, use suffix
+        // matching to narrow down candidates.
+        if (normalised.includes("/")) {
+            const suffix = "/" + normalised;
+            const matched: string[] = [];
+            for (const fullPath of candidates) {
+                if (fullPath.endsWith(suffix) || fullPath === normalised) {
+                    matched.push(fullPath);
+                }
+            }
+            if (matched.length === 1) return matched[0];
+            // Ambiguous or no suffix match — fall through.
+            if (matched.length > 1) {
+                this.log.appendLine(
+                    `[Hexana] Ambiguous DWARF path '${normalised}' matches ` +
+                    `${matched.length} registered files: ${matched.join(", ")}`,
+                );
+                return undefined;
+            }
+        }
+
+        // Basename-only: return the single candidate if
+        // unambiguous.
+        if (candidates.size === 1) {
+            return candidates.values().next().value;
+        }
+        this.log.appendLine(
+            `[Hexana] Ambiguous basename '${baseName}' matches ` +
+            `${candidates.size} registered files`,
+        );
+        return undefined;
+    }
+
+    /**
+     * Patches source paths in all stack frames of a `stackTrace`
+     * response, resolving DWARF-relative paths to full local
+     * paths so VS Code can open the correct source files.
+     */
+    private patchSourcePathsInStackTrace(msg: DapMessage): void {
+        const body = msg.body as Record<string, unknown> | undefined;
+        const frames = body?.stackFrames as Array<Record<string, unknown>> | undefined;
+        if (!frames) return;
+
+        for (const frame of frames) {
+            const source = frame.source as Record<string, unknown> | undefined;
+            if (!source) continue;
+
+            const sourcePath = (source.path as string) || "";
+            if (!sourcePath) continue;
+            // Skip absolute paths that look like real local files
+            // (non-Wasm frames like system libraries).  lldb-dap
+            // uses synthetic paths like "/usr/lib/dyld`_dyld_start"
+            // for frames without source — those contain a backtick
+            // and should be left as-is (they won't resolve anyway).
+            if (sourcePath.startsWith("/") && !sourcePath.includes("`")) {
+                continue;
+            }
+
+            const resolved = this.resolveSourcePath(sourcePath);
+            if (resolved) {
+                this.log.appendLine(
+                    `[Hexana] Resolved stackTrace source path ` +
+                    `'${sourcePath}' → '${resolved}'`,
+                );
+                source.path = resolved;
+                source.name = path.basename(resolved);
+                // Remove sourceReference so VS Code opens the
+                // local file instead of requesting source content
+                // from the debug adapter (which would fail with
+                // "Unknown source reference").
+                if (source.sourceReference !== undefined) {
+                    source.sourceReference = 0;
+                }
+            }
+        }
+    }
+
+    /**
+     * Patches the source path in a `breakpoint` event body,
+     * resolving DWARF-relative paths to full local paths.
+     */
+    private patchSourcePathInBreakpointEvent(msg: DapMessage): void {
+        const body = msg.body as Record<string, unknown> | undefined;
+        const bp = body?.breakpoint as Record<string, unknown> | undefined;
+        if (!bp) return;
+
+        const source = bp.source as Record<string, unknown> | undefined;
+        if (!source) return;
+
+        const sourcePath = (source.path as string) || "";
+        const resolved = this.resolveSourcePath(sourcePath);
+        if (resolved) {
+            this.log.appendLine(
+                `[Hexana] Resolved breakpoint event source path ` +
+                `'${sourcePath}' → '${resolved}'`,
+            );
+            source.path = resolved;
+            source.name = path.basename(resolved);
+            if (source.sourceReference !== undefined) {
+                source.sourceReference = 0;
+            }
+        }
     }
 }
 
@@ -868,6 +1331,14 @@ class WasmDebugAdapterTracker implements vscode.DebugAdapterTracker {
                 args.launchCommands = [
                     `process connect --plugin wasm connect://${debugHost}:${debugPort}`,
                 ];
+                // Force stopOnEntry so that configurationDone sends
+                // a stopped event instead of calling
+                // process.Continue().  The LldbDapProxy will
+                // intercept this initial stop and check if it
+                // matches a user breakpoint (matching IntelliJ's
+                // checkInitialStopMatchesBreakpoint); if not, it
+                // sends `continue` itself.
+                args.stopOnEntry = true;
                 message.arguments = args;
             }
         } catch (e) {
