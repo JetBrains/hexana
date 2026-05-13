@@ -8,6 +8,7 @@ import com.intellij.xdebugger.evaluation.XDebuggerEvaluator
 import com.intellij.xdebugger.frame.XCompositeNode
 import com.intellij.xdebugger.frame.XStackFrame
 import com.intellij.xdebugger.frame.XValueChildrenList
+import org.jetbrains.hexana.shared.parseLldbExpressionResult
 
 /**
  * A stack frame that points to a source position reported by LLDB
@@ -214,7 +215,7 @@ internal class WasmStackFrame(
             if (joined.isEmpty() || joined.startsWith("error:")) {
                 return variable
             }
-            val result = WasmDebuggerEvaluator.parseLldbExpressionResult(joined)
+            val result = parseLldbExpressionResult(joined)
             // Only replace if we actually got a meaningful value
             if (result.displayValue.contains("variable not available") ||
                 result.displayValue.contains("<unavailable>")

@@ -1,12 +1,19 @@
 package org.jetbrains.hexana.run
 
 import com.intellij.testFramework.UsefulTestCase
+import org.jetbrains.hexana.shared.cuPathEndsWithProjectRelative
+import org.jetbrains.hexana.shared.cuPathMatchesIdePath
+import org.jetbrains.hexana.shared.extractCrateName
+import org.jetbrains.hexana.shared.functionNameMatchesIdePath
+import org.jetbrains.hexana.shared.parseLldbFunctionName
+import org.jetbrains.hexana.shared.pathMatchesBreakpointLocation
+import org.jetbrains.hexana.shared.stripCuHashSuffix
 
 /**
  * Tests for the path-matching logic used by the debugger to decide
  * whether a stop location belongs to a registered IDE breakpoint.
  *
- * These tests exercise [WasmDebugProcess.pathMatchesBreakpointLocation]
+ * These tests exercise [pathMatchesBreakpointLocation]
  * which is the core predicate that prevents false breakpoint hits when
  * multiple compilation units share the same relative DWARF filename
  * (e.g. `calculator/src/lib.rs` vs `adder/src/lib.rs`).
@@ -19,7 +26,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testExactPathMatch() {
         assertTrue(
-            WasmDebugProcess.pathMatchesBreakpointLocation(
+            pathMatchesBreakpointLocation(
                 "/Users/dev/calculator/src/lib.rs",
                 "/Users/dev/calculator/src/lib.rs",
             )
@@ -32,7 +39,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testDwarfRelativeMatchesIdeAbsolute() {
         assertTrue(
-            WasmDebugProcess.pathMatchesBreakpointLocation(
+            pathMatchesBreakpointLocation(
                 "src/lib.rs",
                 "/Users/dev/calculator/src/lib.rs",
             )
@@ -43,7 +50,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // "src/lib.rs" should NOT match a breakpoint whose full path
         // doesn't end with "/src/lib.rs" preceded by a separator.
         assertFalse(
-            WasmDebugProcess.pathMatchesBreakpointLocation(
+            pathMatchesBreakpointLocation(
                 "src/lib.rs",
                 "/Users/dev/other/main.rs",
             )
@@ -58,7 +65,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // When the breakpoint was registered with a relative path
         // and the stop location has a longer resolved path.
         assertTrue(
-            WasmDebugProcess.pathMatchesBreakpointLocation(
+            pathMatchesBreakpointLocation(
                 "/Users/dev/calculator/src/lib.rs",
                 "calculator/src/lib.rs",
             )
@@ -73,7 +80,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // The critical case: calculator's lib.rs should not match
         // a breakpoint set in adder's lib.rs.
         assertFalse(
-            WasmDebugProcess.pathMatchesBreakpointLocation(
+            pathMatchesBreakpointLocation(
                 "/Users/dev/adder/src/lib.rs",
                 "/Users/dev/calculator/src/lib.rs",
             )
@@ -82,7 +89,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testDifferentDirectoriesSameBasenameReversed() {
         assertFalse(
-            WasmDebugProcess.pathMatchesBreakpointLocation(
+            pathMatchesBreakpointLocation(
                 "/Users/dev/calculator/src/lib.rs",
                 "/Users/dev/adder/src/lib.rs",
             )
@@ -96,7 +103,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
     fun testPartialBasenameSuffixDoesNotMatch() {
         // "lib.rs" should not match "mylib.rs" via suffix trick.
         assertFalse(
-            WasmDebugProcess.pathMatchesBreakpointLocation(
+            pathMatchesBreakpointLocation(
                 "lib.rs",
                 "/Users/dev/project/src/mylib.rs",
             )
@@ -107,7 +114,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // Even with similar directory structure, only exact suffix
         // at a path-separator boundary should match.
         assertTrue(
-            WasmDebugProcess.pathMatchesBreakpointLocation(
+            pathMatchesBreakpointLocation(
                 "calculator/src/lib.rs",
                 "/Users/dev/calculator/src/lib.rs",
             )
@@ -116,7 +123,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testSameFilenameInDifferentNestedDirectories() {
         assertFalse(
-            WasmDebugProcess.pathMatchesBreakpointLocation(
+            pathMatchesBreakpointLocation(
                 "adder/src/lib.rs",
                 "/Users/dev/calculator/src/lib.rs",
             )
@@ -128,7 +135,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // the full DWARF comp_dir + filename that matches the IDE
         // breakpoint path exactly.
         assertTrue(
-            WasmDebugProcess.pathMatchesBreakpointLocation(
+            pathMatchesBreakpointLocation(
                 "/Users/dev/calculator/src/lib.rs",
                 "/Users/dev/calculator/src/lib.rs",
             )
@@ -139,7 +146,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // Simulates the case where the compilation-unit path reveals
         // the stop is in adder, not calculator.
         assertFalse(
-            WasmDebugProcess.pathMatchesBreakpointLocation(
+            pathMatchesBreakpointLocation(
                 "/Users/dev/adder/src/lib.rs",
                 "/Users/dev/calculator/src/lib.rs",
             )
@@ -155,7 +162,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // CU and IDE paths share "calculator/src/lib.rs" (3 matching
         // trailing components) → consistent.
         assertTrue(
-            WasmDebugProcess.cuPathMatchesIdePath(
+            cuPathMatchesIdePath(
                 cuPath = "/build/calculator/src/lib.rs",
                 idePath = "/Users/dev/calculator/src/lib.rs",
             )
@@ -166,7 +173,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // CU says "adder" but IDE says "calculator" — only 2 trailing
         // components match ("src/lib.rs") → inconsistent.
         assertFalse(
-            WasmDebugProcess.cuPathMatchesIdePath(
+            cuPathMatchesIdePath(
                 cuPath = "/build/adder/src/lib.rs",
                 idePath = "/Users/dev/calculator/src/lib.rs",
             )
@@ -176,7 +183,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
     fun testCuPathMatchesShortCuPath() {
         // CU path has ≤ 2 components → optimistic true.
         assertTrue(
-            WasmDebugProcess.cuPathMatchesIdePath(
+            cuPathMatchesIdePath(
                 cuPath = "src/lib.rs",
                 idePath = "/Users/dev/calculator/src/lib.rs",
             )
@@ -187,7 +194,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // Both paths share "calculator/src/lib.rs" despite different
         // multi-component roots.
         assertTrue(
-            WasmDebugProcess.cuPathMatchesIdePath(
+            cuPathMatchesIdePath(
                 cuPath = "/tmp/workspace/calculator/src/lib.rs",
                 idePath = "/home/user/projects/calculator/src/lib.rs",
             )
@@ -197,7 +204,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
     fun testCuPathMismatchDeepNesting() {
         // Different crate names with deep nesting.
         assertFalse(
-            WasmDebugProcess.cuPathMatchesIdePath(
+            cuPathMatchesIdePath(
                 cuPath = "/tmp/workspace/adder/src/lib.rs",
                 idePath = "/home/user/projects/calculator/src/lib.rs",
             )
@@ -208,7 +215,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // Crates with deeper internal structure still share at
         // least "calculator/rust/src/lib.rs" (4 components).
         assertTrue(
-            WasmDebugProcess.cuPathMatchesIdePath(
+            cuPathMatchesIdePath(
                 cuPath = "/build/calculator/rust/src/lib.rs",
                 idePath = "/Users/dev/calculator/rust/src/lib.rs",
             )
@@ -219,7 +226,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // Backslashes should be normalised; same crate shares
         // "calculator/src/lib.rs" (3 components).
         assertTrue(
-            WasmDebugProcess.cuPathMatchesIdePath(
+            cuPathMatchesIdePath(
                 cuPath = "C:\\build\\calculator\\src\\lib.rs",
                 idePath = "C:\\Users\\dev\\calculator\\src\\lib.rs",
             )
@@ -228,7 +235,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testCuPathMatchesExactPaths() {
         assertTrue(
-            WasmDebugProcess.cuPathMatchesIdePath(
+            cuPathMatchesIdePath(
                 cuPath = "/Users/dev/calculator/src/lib.rs",
                 idePath = "/Users/dev/calculator/src/lib.rs",
             )
@@ -237,7 +244,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testCuPathMatchesCuIsSuffixOfIde() {
         assertTrue(
-            WasmDebugProcess.cuPathMatchesIdePath(
+            cuPathMatchesIdePath(
                 cuPath = "calculator/src/lib.rs",
                 idePath = "/Users/dev/calculator/src/lib.rs",
             )
@@ -251,7 +258,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testCuEndsWithProjectRelativeSameCrate() {
         assertTrue(
-            WasmDebugProcess.cuPathEndsWithProjectRelative(
+            cuPathEndsWithProjectRelative(
                 cuPath = "/build/calculator/src/lib.rs",
                 projectRelative = "calculator/src/lib.rs",
             )
@@ -260,7 +267,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testCuEndsWithProjectRelativeDifferentCrate() {
         assertFalse(
-            WasmDebugProcess.cuPathEndsWithProjectRelative(
+            cuPathEndsWithProjectRelative(
                 cuPath = "/build/adder/src/lib.rs",
                 projectRelative = "calculator/src/lib.rs",
             )
@@ -269,7 +276,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testCuEndsWithProjectRelativeDeepRoot() {
         assertTrue(
-            WasmDebugProcess.cuPathEndsWithProjectRelative(
+            cuPathEndsWithProjectRelative(
                 cuPath = "/tmp/workspace/calculator/src/lib.rs",
                 projectRelative = "calculator/src/lib.rs",
             )
@@ -278,7 +285,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testCuEndsWithProjectRelativeDifferentCrateDeepRoot() {
         assertFalse(
-            WasmDebugProcess.cuPathEndsWithProjectRelative(
+            cuPathEndsWithProjectRelative(
                 cuPath = "/tmp/workspace/adder/src/lib.rs",
                 projectRelative = "calculator/src/lib.rs",
             )
@@ -288,7 +295,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
     fun testCuEndsWithProjectRelativeBasenameOnly() {
         // CU for adder does not end with "calculator/src/lib.rs"
         assertFalse(
-            WasmDebugProcess.cuPathEndsWithProjectRelative(
+            cuPathEndsWithProjectRelative(
                 cuPath = "/build/adder/src/lib.rs",
                 projectRelative = "calculator/src/lib.rs",
             )
@@ -297,7 +304,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testCuEndsWithProjectRelativeWindowsPaths() {
         assertTrue(
-            WasmDebugProcess.cuPathEndsWithProjectRelative(
+            cuPathEndsWithProjectRelative(
                 cuPath = "C:\\build\\calculator\\src\\lib.rs",
                 projectRelative = "calculator\\src\\lib.rs",
             )
@@ -308,7 +315,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // Deeper internal structure: "adder/rust/src/lib.rs"
         // doesn't match "calculator/rust/src/lib.rs"
         assertFalse(
-            WasmDebugProcess.cuPathEndsWithProjectRelative(
+            cuPathEndsWithProjectRelative(
                 cuPath = "/build/adder/rust/src/lib.rs",
                 projectRelative = "calculator/rust/src/lib.rs",
             )
@@ -317,7 +324,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testCuEndsWithProjectRelativeDeeperInternalSameCrate() {
         assertTrue(
-            WasmDebugProcess.cuPathEndsWithProjectRelative(
+            cuPathEndsWithProjectRelative(
                 cuPath = "/build/calculator/rust/src/lib.rs",
                 projectRelative = "calculator/rust/src/lib.rs",
             )
@@ -327,7 +334,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
     fun testCuEndsWithProjectRelativeExactMatch() {
         // CU path equals the project-relative path (no root).
         assertTrue(
-            WasmDebugProcess.cuPathEndsWithProjectRelative(
+            cuPathEndsWithProjectRelative(
                 cuPath = "calculator/src/lib.rs",
                 projectRelative = "calculator/src/lib.rs",
             )
@@ -353,8 +360,8 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
      * heuristic fallback.
      */
     private fun combinedVerification(cuPath: String, idePath: String, projectRelative: String): Boolean =
-        WasmDebugProcess.cuPathEndsWithProjectRelative(cuPath, projectRelative) ||
-            WasmDebugProcess.cuPathMatchesIdePath(cuPath, idePath)
+        cuPathEndsWithProjectRelative(cuPath, projectRelative) ||
+            cuPathMatchesIdePath(cuPath, idePath)
 
     fun testCombinedVerificationShortCuPathBasenameOnly() {
         // CU path is just "lib.rs" (DWARF basename only) — too short
@@ -438,7 +445,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
     fun testExtractCrateNameComponentModelCalculator() {
         assertEquals(
             "calculator",
-            WasmDebugProcess.extractCrateName(
+            extractCrateName(
                 "_\$LT\$calculator..Component\$u20\$as\$u20\$calculator" +
                     "..bindings..exports..component..calculator..calculate" +
                     "..Guest\$GT\$::calculate::hfae709776712b47f"
@@ -449,7 +456,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
     fun testExtractCrateNameComponentModelAdder() {
         assertEquals(
             "adder",
-            WasmDebugProcess.extractCrateName(
+            extractCrateName(
                 "_\$LT\$adder..Component\$u20\$as\$u20\$adder" +
                     "..bindings..exports..component..adder..add" +
                     "..Guest\$GT\$::add::h1c828aaccb5c9012"
@@ -460,20 +467,20 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
     fun testExtractCrateNamePlainRustSymbol() {
         assertEquals(
             "some_module",
-            WasmDebugProcess.extractCrateName("some_module::some_function::h123456")
+            extractCrateName("some_module::some_function::h123456")
         )
     }
 
     fun testExtractCrateNameShortPlainSymbol() {
         assertEquals(
             "add",
-            WasmDebugProcess.extractCrateName("add::hdeadbeef")
+            extractCrateName("add::hdeadbeef")
         )
     }
 
     fun testExtractCrateNameNoMatch() {
         assertNull(
-            WasmDebugProcess.extractCrateName("just_a_bare_function")
+            extractCrateName("just_a_bare_function")
         )
     }
 
@@ -484,7 +491,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testFunctionNameMatchesIdePathCalculator() {
         assertTrue(
-            WasmDebugProcess.functionNameMatchesIdePath(
+            functionNameMatchesIdePath(
                 "_\$LT\$calculator..Component\$u20\$as\$u20\$calculator" +
                     "..bindings..exports..component..calculator..calculate" +
                     "..Guest\$GT\$::calculate::hfae709776712b47f",
@@ -496,7 +503,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
     fun testFunctionNameDoesNotMatchDifferentCrate() {
         // Function says "adder" but IDE path is calculator.
         assertFalse(
-            WasmDebugProcess.functionNameMatchesIdePath(
+            functionNameMatchesIdePath(
                 "_\$LT\$adder..Component\$u20\$as\$u20\$adder" +
                     "..bindings..exports..component..adder..add" +
                     "..Guest\$GT\$::add::h1c828aaccb5c9012",
@@ -507,7 +514,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testFunctionNameMatchesIdePathPlainSymbol() {
         assertTrue(
-            WasmDebugProcess.functionNameMatchesIdePath(
+            functionNameMatchesIdePath(
                 "calculator::calculate::h123456",
                 "/Users/dev/project/calculator/src/lib.rs",
             )
@@ -518,7 +525,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // Bare function name without :: or $LT$ → cannot extract
         // crate → returns false (conservative).
         assertFalse(
-            WasmDebugProcess.functionNameMatchesIdePath(
+            functionNameMatchesIdePath(
                 "bare_function",
                 "/Users/dev/project/calculator/src/lib.rs",
             )
@@ -527,7 +534,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testFunctionNameMatchesCaseInsensitive() {
         assertTrue(
-            WasmDebugProcess.functionNameMatchesIdePath(
+            functionNameMatchesIdePath(
                 "_\$LT\$Calculator..Component\$GT\$::calc::h123",
                 "/Users/dev/project/calculator/src/lib.rs",
             )
@@ -536,7 +543,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testFunctionNameMatchesWindowsPath() {
         assertTrue(
-            WasmDebugProcess.functionNameMatchesIdePath(
+            functionNameMatchesIdePath(
                 "_\$LT\$calculator..Component\$GT\$::calc::h123",
                 "C:\\Users\\dev\\project\\calculator\\src\\lib.rs",
             )
@@ -563,14 +570,14 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         var verified = false
         if (cuPath != null) {
             verified = if (projectRelative != null) {
-                WasmDebugProcess.cuPathEndsWithProjectRelative(cuPath, projectRelative) ||
-                    WasmDebugProcess.cuPathMatchesIdePath(cuPath, idePath)
+                cuPathEndsWithProjectRelative(cuPath, projectRelative) ||
+                    cuPathMatchesIdePath(cuPath, idePath)
             } else {
-                WasmDebugProcess.cuPathMatchesIdePath(cuPath, idePath)
+                cuPathMatchesIdePath(cuPath, idePath)
             }
         }
         if (!verified && functionName != null) {
-            verified = WasmDebugProcess.functionNameMatchesIdePath(functionName, idePath)
+            verified = functionNameMatchesIdePath(functionName, idePath)
         }
         return verified
     }
@@ -662,7 +669,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
             "_\$LT\$calculator..Component\$u20\$as\$u20\$calculator" +
                 "..bindings..exports..component..calculator..calculate" +
                 "..Guest\$GT\$::calculate::hfae709776712b47f",
-            WasmDebugProcess.parseFunctionName(lines),
+            parseLldbFunctionName(lines),
         )
     }
 
@@ -679,7 +686,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
             "_\$LT\$adder..Component\$u20\$as\$u20\$adder" +
                 "..bindings..exports..component..adder..add" +
                 "..Guest\$GT\$::add::h1c828aaccb5c9012",
-            WasmDebugProcess.parseFunctionName(lines),
+            parseLldbFunctionName(lines),
         )
     }
 
@@ -688,26 +695,26 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         val lines = listOf(
             "frame #0: 0x... JIT(0x...)`some_func at lib.rs:11:9"
         )
-        assertEquals("some_func", WasmDebugProcess.parseFunctionName(lines))
+        assertEquals("some_func", parseLldbFunctionName(lines))
     }
 
     fun testParseFunctionNameWithEmptyArgs() {
         val lines = listOf(
             "frame #0: 0x... JIT(0x...)`some_func() at lib.rs:1"
         )
-        assertEquals("some_func", WasmDebugProcess.parseFunctionName(lines))
+        assertEquals("some_func", parseLldbFunctionName(lines))
     }
 
     fun testParseFunctionNameWithOffset() {
         val lines = listOf(
             "frame #0: 0x... JIT(0x...)`some_func + 42"
         )
-        assertEquals("some_func", WasmDebugProcess.parseFunctionName(lines))
+        assertEquals("some_func", parseLldbFunctionName(lines))
     }
 
     fun testParseFunctionNameNoMatch() {
         val lines = listOf("some random output without frame info")
-        assertNull(WasmDebugProcess.parseFunctionName(lines))
+        assertNull(parseLldbFunctionName(lines))
     }
 
     // ---------------------------------------------------------------
@@ -724,7 +731,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         )
         assertEquals(
             "hello_world::add::hcfbbdf8271862188",
-            WasmDebugProcess.parseFunctionName(lines),
+            parseLldbFunctionName(lines),
         )
     }
 
@@ -736,7 +743,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         )
         assertEquals(
             "hello_world::add::hcfbbdf8271862188",
-            WasmDebugProcess.parseFunctionName(lines),
+            parseLldbFunctionName(lines),
         )
     }
 
@@ -748,7 +755,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         )
         assertEquals(
             "hello_world::add::hcfbbdf8271862188",
-            WasmDebugProcess.parseFunctionName(lines),
+            parseLldbFunctionName(lines),
         )
     }
 
@@ -756,7 +763,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // Plain Rust symbol from classic wasm module: crate::func::hash.
         assertEquals(
             "hello_world",
-            WasmDebugProcess.extractCrateName("hello_world::add::hcfbbdf8271862188"),
+            extractCrateName("hello_world::add::hcfbbdf8271862188"),
         )
     }
 
@@ -768,7 +775,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
     fun testStripCuHashSuffix() {
         assertEquals(
             "/Users/dev/project/src/lib.rs",
-            WasmDebugProcess.stripCuHashSuffix(
+            stripCuHashSuffix(
                 "/Users/dev/project/src/lib.rs/@/9le4nom1b1hdoeh9b7lbjqyuq"
             ),
         )
@@ -778,7 +785,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // Normal CU paths without hash suffix are returned unchanged.
         assertEquals(
             "/Users/dev/project/src/lib.rs",
-            WasmDebugProcess.stripCuHashSuffix("/Users/dev/project/src/lib.rs"),
+            stripCuHashSuffix("/Users/dev/project/src/lib.rs"),
         )
     }
 
@@ -786,7 +793,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // Literal '@' not followed by `/<hash>` pattern is preserved.
         assertEquals(
             "/Users/user@host/src/lib.rs",
-            WasmDebugProcess.stripCuHashSuffix("/Users/user@host/src/lib.rs"),
+            stripCuHashSuffix("/Users/user@host/src/lib.rs"),
         )
     }
 
@@ -797,9 +804,9 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testCuPathMatchesAfterHashStrip() {
         val cuRaw = "/Users/dev/project/src/lib.rs/@/9le4nom1b1hdoeh9b7lbjqyuq"
-        val stripped = WasmDebugProcess.stripCuHashSuffix(cuRaw)
+        val stripped = stripCuHashSuffix(cuRaw)
         val idePath = "/Users/dev/project/src/lib.rs"
-        assertTrue(WasmDebugProcess.cuPathMatchesIdePath(stripped, idePath))
+        assertTrue(cuPathMatchesIdePath(stripped, idePath))
     }
 
     // ---------------------------------------------------------------
@@ -810,7 +817,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testFunctionNameMatchesIdePathWithHyphenatedCrate() {
         assertTrue(
-            WasmDebugProcess.functionNameMatchesIdePath(
+            functionNameMatchesIdePath(
                 "hello_world::add::hcfbbdf8271862188",
                 "/Users/dev/hello-world/src/lib.rs",
             )
@@ -821,7 +828,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // When the directory already uses underscores, the direct
         // match should still work.
         assertTrue(
-            WasmDebugProcess.functionNameMatchesIdePath(
+            functionNameMatchesIdePath(
                 "hello_world::add::hcfbbdf8271862188",
                 "/Users/dev/hello_world/src/lib.rs",
             )
@@ -830,7 +837,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
 
     fun testFunctionNameDoesNotMatchDifferentCrateClassicWasm() {
         assertFalse(
-            WasmDebugProcess.functionNameMatchesIdePath(
+            functionNameMatchesIdePath(
                 "hello_world::add::hcfbbdf8271862188",
                 "/Users/dev/other_crate/src/lib.rs",
             )
@@ -846,7 +853,7 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         // Exact scenario from the bug report: CU path has /@/<hash>,
         // crate is "hello-world" (hyphen) but symbol uses "hello_world".
         val cuRaw = "/Users/dev/hello-world/src/lib.rs/@/9le4nom1b1hdoeh9b7lbjqyuq"
-        val cuStripped = WasmDebugProcess.stripCuHashSuffix(cuRaw)
+        val cuStripped = stripCuHashSuffix(cuRaw)
         assertTrue(
             fullVerification(
                 cuPath = cuStripped,

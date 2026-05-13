@@ -265,3 +265,52 @@ export function buildGraalWasmCommandLine(
     programArguments?: string,
     exportName?: string,
 ): CommandLineResult;
+
+// ── Debug command-line builders ─────────────────────────────────────
+
+/** Result of building a Wasmtime debug command line. */
+export interface WasmtimeDebugCommandLineResult {
+    readonly arguments: string[];
+    readonly workingDirectory: string | null;
+}
+
+/**
+ * Builds the argument list for a Wasmtime debug invocation.
+ * Adds `-D debug-info -O opt-level=0` flags for DWARF translation.
+ */
+export function buildWasmtimeDebugCommandLine(
+    wasmFilePath: string,
+    wasmBytes?: Int8Array | null,
+    programArguments?: string,
+    runtimeOptions?: string,
+    effectiveWasmPath?: string | null,
+): WasmtimeDebugCommandLineResult;
+
+/** Result of building a WAMR debug command line. */
+export interface WamrDebugCommandLineResult {
+    readonly arguments: string[];
+    readonly workingDirectory: string | null;
+    readonly debugHost: string;
+    readonly debugPort: number;
+}
+
+/**
+ * Builds the argument list for a WAMR (iwasm) debug invocation.
+ * The `-g=host:port` flag starts a GDB remote stub.
+ */
+export function buildWamrDebugCommandLine(
+    wasmFilePath: string,
+    wasmBytes?: Int8Array | null,
+    programArguments?: string,
+    runtimeOptions?: string,
+    exportName?: string,
+    host?: string,
+    port?: number,
+    stubWriter?: JsStubFileWriter | null,
+): WamrDebugCommandLineResult;
+
+/**
+ * Detects whether iwasm output indicates the `-g` debug option is
+ * not supported by the current build.
+ */
+export function isWamrDebugNotSupported(output: string): boolean;

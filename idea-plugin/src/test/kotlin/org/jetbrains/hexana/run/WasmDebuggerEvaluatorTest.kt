@@ -1,17 +1,18 @@
 package org.jetbrains.hexana.run
 
 import com.intellij.testFramework.UsefulTestCase
+import org.jetbrains.hexana.shared.parseLldbExpressionResult
 
 class WasmDebuggerEvaluatorTest : UsefulTestCase() {
 
     fun testParseSimpleInt() {
-        val result = WasmDebuggerEvaluator.parseLldbExpressionResult("(int) \$0 = 42")
+        val result = parseLldbExpressionResult("(int) \$0 = 42")
         assertEquals("int", result.typeName)
         assertEquals("42", result.displayValue)
     }
 
     fun testParsePointerWithString() {
-        val result = WasmDebuggerEvaluator.parseLldbExpressionResult(
+        val result = parseLldbExpressionResult(
             """(const char *) ${'$'}1 = 0x00007ff "hello"""",
         )
         assertEquals("const char *", result.typeName)
@@ -19,19 +20,19 @@ class WasmDebuggerEvaluatorTest : UsefulTestCase() {
     }
 
     fun testParseFloat() {
-        val result = WasmDebuggerEvaluator.parseLldbExpressionResult("(double) \$2 = 3.14")
+        val result = parseLldbExpressionResult("(double) \$2 = 3.14")
         assertEquals("double", result.typeName)
         assertEquals("3.14", result.displayValue)
     }
 
     fun testParseLong() {
-        val result = WasmDebuggerEvaluator.parseLldbExpressionResult("(long) \$3 = 9999999999")
+        val result = parseLldbExpressionResult("(long) \$3 = 9999999999")
         assertEquals("long", result.typeName)
         assertEquals("9999999999", result.displayValue)
     }
 
     fun testParseStruct() {
-        val result = WasmDebuggerEvaluator.parseLldbExpressionResult(
+        val result = parseLldbExpressionResult(
             "(MyStruct) \$4 = (x = 1, y = 2)",
         )
         assertEquals("MyStruct", result.typeName)
@@ -39,33 +40,33 @@ class WasmDebuggerEvaluatorTest : UsefulTestCase() {
     }
 
     fun testParseHighScratchVariable() {
-        val result = WasmDebuggerEvaluator.parseLldbExpressionResult("(int) \$123 = -1")
+        val result = parseLldbExpressionResult("(int) \$123 = -1")
         assertEquals("int", result.typeName)
         assertEquals("-1", result.displayValue)
     }
 
     fun testParseBool() {
-        val result = WasmDebuggerEvaluator.parseLldbExpressionResult("(bool) \$5 = true")
+        val result = parseLldbExpressionResult("(bool) \$5 = true")
         assertEquals("bool", result.typeName)
         assertEquals("true", result.displayValue)
     }
 
     fun testFallbackForUnrecognizedFormat() {
         val raw = "some unexpected output"
-        val result = WasmDebuggerEvaluator.parseLldbExpressionResult(raw)
+        val result = parseLldbExpressionResult(raw)
         assertNull(result.typeName)
         assertEquals(raw, result.displayValue)
     }
 
     fun testParseRustI32() {
-        val result = WasmDebuggerEvaluator.parseLldbExpressionResult("(i32) \$0 = 100")
+        val result = parseLldbExpressionResult("(i32) \$0 = 100")
         assertEquals("i32", result.typeName)
         assertEquals("100", result.displayValue)
     }
 
     fun testParseMultilineValue() {
         val text = "(MyStruct) \$0 = {\n  x = 1\n  y = 2\n}"
-        val result = WasmDebuggerEvaluator.parseLldbExpressionResult(text)
+        val result = parseLldbExpressionResult(text)
         assertEquals("MyStruct", result.typeName)
         assertEquals("{\n  x = 1\n  y = 2\n}", result.displayValue)
     }

@@ -5,6 +5,8 @@ import com.intellij.execution.process.ProcessAdapter
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.util.Key
+import org.jetbrains.hexana.shared.LldbStopEvent
+import org.jetbrains.hexana.shared.parseLldbStopEvent
 import java.io.BufferedWriter
 import java.io.OutputStreamWriter
 import java.util.concurrent.CountDownLatch
@@ -275,54 +277,21 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     /**
      * Parses an LLDB output line looking for a stop reason.
      *
-     * Common patterns:
-     * - `* thread #1, stop reason = breakpoint 1.1`
-     * - `* thread #1, stop reason = EXC_BREAKPOINT (code=1, subcode=0x...)`
-     * - `* thread #1, stop reason = step in`
-     * - `* thread #1, stop reason = plan complete`
-     * - `* thread #1, stop reason = signal SIGSTOP` (stop-at-entry)
-     * - `Process 12345 exited with status = 0 (0x00000000)`
-     *
-     * Wasmtime JIT on macOS/ARM may report `EXC_BREAKPOINT`
-     * (a Mach exception from a hardware trap instruction) instead
-     * of a regular `breakpoint N.M` stop reason. This happens
-     * when LLDB cannot step past the JIT breakpoint instruction
-     * and re-hits the trap. We treat `EXC_BREAKPOINT` as a
-     * breakpoint hit so the event loop can process it.
+     * Delegates to the shared [parseLldbStopEvent] parser and
+     * converts the result to the local [StopEvent] type.
      */
     private fun parseStopEvent(line: String): StopEvent? {
-        val trimmed = line.trim()
-        if (trimmed.contains("stop reason = breakpoint") ||
-            trimmed.contains("stop reason = EXC_BREAKPOINT")
-        ) {
-            val match = BREAKPOINT_STOP_PATTERN.find(trimmed)
-            isRunning = false
-            return if (match != null) {
-                StopEvent.BreakpointHit(
-                    threadId = match.groupValues[1].toIntOrNull() ?: 1,
-                    breakpointId = match.groupValues[2],
-                )
-            } else {
-                StopEvent.BreakpointHit(threadId = 1, breakpointId = "")
-            }
+        val shared = parseLldbStopEvent(line) ?: return null
+        isRunning = false
+        return when (shared) {
+            is LldbStopEvent.BreakpointHit -> StopEvent.BreakpointHit(
+                threadId = shared.threadId,
+                breakpointId = shared.breakpointId,
+            )
+            is LldbStopEvent.Stepped -> StopEvent.Stepped
+            is LldbStopEvent.StoppedAtEntry -> StopEvent.StoppedAtEntry
+            is LldbStopEvent.ProcessExited -> StopEvent.ProcessExited(shared.exitCode)
         }
-        if (trimmed.contains("stop reason = signal SIGSTOP")) {
-            isRunning = false
-            return StopEvent.StoppedAtEntry
-        }
-        if (trimmed.contains("stop reason = signal") || trimmed.contains("stop reason = trace") ||
-            trimmed.contains("stop reason = step") || trimmed.contains("stop reason = plan complete")
-        ) {
-            isRunning = false
-            return StopEvent.Stepped
-        }
-        if (trimmed.startsWith("Process") && trimmed.contains("exited")) {
-            isRunning = false
-            val exitMatch = EXIT_PATTERN.find(trimmed)
-            val exitCode = exitMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
-            return StopEvent.ProcessExited(exitCode)
-        }
-        return null
     }
 
     sealed class StopEvent {
@@ -341,11 +310,5 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
          * be filtered out of collected command responses.
          */
         private const val LLDB_PROMPT_PREFIX = "(lldb) "
-
-        private val BREAKPOINT_STOP_PATTERN =
-            """thread #(\d+).*stop reason = breakpoint (\d+\.\d+)""".toRegex()
-
-        private val EXIT_PATTERN =
-            """Process \d+ exited with status = (\d+)""".toRegex()
     }
 }

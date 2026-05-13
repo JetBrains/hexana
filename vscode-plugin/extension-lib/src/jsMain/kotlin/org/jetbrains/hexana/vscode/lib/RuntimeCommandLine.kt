@@ -5,8 +5,11 @@ package org.jetbrains.hexana.vscode.lib
 import org.jetbrains.hexana.shared.StubFileWriter
 import org.jetbrains.hexana.shared.WasmRunInput
 import org.jetbrains.hexana.shared.buildGraalWasmRunArgs
+import org.jetbrains.hexana.shared.buildWamrDebugArgs
 import org.jetbrains.hexana.shared.buildWamrRunArgs
+import org.jetbrains.hexana.shared.buildWasmtimeDebugArgs
 import org.jetbrains.hexana.shared.buildWasmtimeRunArgs
+import org.jetbrains.hexana.shared.looksLikeWamrDebugNotSupported
 
 /**
  * JS-exported result of building a Wasm runtime command line.
@@ -155,3 +158,144 @@ fun buildGraalWasmCommandLine(
         workingDirectory = result.workingDirectory,
     )
 }
+
+// ── Debug command-line builders ─────────────────────────────────────
+
+/**
+ * JS-exported result of building a Wasmtime debug command line.
+ *
+ * @property arguments the wasmtime argument list (excluding the
+ *                     `wasmtime` executable itself)
+ * @property workingDirectory the working directory, or `null`
+ */
+@JsExport
+data class WasmtimeDebugCommandLineResult(
+    val arguments: Array<String>,
+    val workingDirectory: String?,
+) {
+    override fun equals(other: Any?): Boolean =
+        other is WasmtimeDebugCommandLineResult && arguments.contentEquals(other.arguments) && workingDirectory == other.workingDirectory
+
+    override fun hashCode(): Int = arguments.contentHashCode() + (workingDirectory?.hashCode() ?: 0)
+}
+
+/**
+ * Builds the argument list for a Wasmtime debug invocation.
+ *
+ * This adds `-D debug-info -O opt-level=0` flags so that DWARF
+ * metadata embedded in the Wasm binary is translated for native
+ * debuggers (LLDB).
+ *
+ * @param wasmFilePath path to the `.wasm` file to debug
+ * @param wasmBytes raw bytes of the wasm file, or `null`
+ * @param programArguments whitespace-separated program arguments
+ * @param runtimeOptions extra wasmtime CLI options
+ * @param effectiveWasmPath path to the composed binary, or `null`
+ * @return a [WasmtimeDebugCommandLineResult] with the argument list
+ */
+@JsExport
+fun buildWasmtimeDebugCommandLine(
+    wasmFilePath: String,
+    wasmBytes: ByteArray? = null,
+    programArguments: String = "",
+    runtimeOptions: String = "",
+    effectiveWasmPath: String? = null,
+): WasmtimeDebugCommandLineResult {
+    val input = WasmRunInput(
+        wasmFilePath = wasmFilePath,
+        wasmBytes = wasmBytes,
+        programArguments = programArguments,
+        runtimeOptions = runtimeOptions,
+        effectiveWasmPath = effectiveWasmPath,
+    )
+
+    val result = buildWasmtimeDebugArgs(input)
+
+    return WasmtimeDebugCommandLineResult(
+        arguments = result.arguments.toTypedArray(),
+        workingDirectory = result.workingDirectory,
+    )
+}
+
+/**
+ * JS-exported result of building a WAMR debug command line.
+ *
+ * @property arguments the iwasm argument list (excluding the
+ *                     `iwasm` executable itself)
+ * @property workingDirectory the working directory, or `null`
+ * @property debugHost the host for the WAMR GDB remote stub
+ * @property debugPort the port for the WAMR GDB remote stub
+ */
+@JsExport
+data class WamrDebugCommandLineResult(
+    val arguments: Array<String>,
+    val workingDirectory: String?,
+    val debugHost: String,
+    val debugPort: Int,
+) {
+    override fun equals(other: Any?): Boolean =
+        other is WamrDebugCommandLineResult && arguments.contentEquals(other.arguments) &&
+            workingDirectory == other.workingDirectory && debugHost == other.debugHost && debugPort == other.debugPort
+
+    override fun hashCode(): Int = arguments.contentHashCode() + (workingDirectory?.hashCode() ?: 0) +
+        debugHost.hashCode() + debugPort
+}
+
+/**
+ * Builds the argument list for a WAMR (iwasm) debug invocation.
+ *
+ * The `-g=<host>:<port>` flag tells iwasm to start a GDB remote
+ * stub and wait for a debugger to connect.
+ *
+ * @param wasmFilePath path to the `.wasm` file to debug
+ * @param wasmBytes raw bytes of the wasm file, or `null`
+ * @param programArguments whitespace-separated program arguments
+ * @param runtimeOptions extra iwasm CLI options
+ * @param exportName function name to invoke via `-f`, blank means default
+ * @param host debug server host (default `"127.0.0.1"`)
+ * @param port debug server port (default `1234`)
+ * @param stubWriter JS callback for writing temp stub files, or `null`
+ * @return a [WamrDebugCommandLineResult] with the argument list and
+ *         debug connection address
+ */
+@JsExport
+fun buildWamrDebugCommandLine(
+    wasmFilePath: String,
+    wasmBytes: ByteArray? = null,
+    programArguments: String = "",
+    runtimeOptions: String = "",
+    exportName: String = "",
+    host: String = "127.0.0.1",
+    port: Int = 1234,
+    stubWriter: JsStubFileWriter? = null,
+): WamrDebugCommandLineResult {
+    val input = WasmRunInput(
+        wasmFilePath = wasmFilePath,
+        wasmBytes = wasmBytes,
+        programArguments = programArguments,
+        runtimeOptions = runtimeOptions,
+        exportName = exportName,
+    )
+
+    val result = buildWamrDebugArgs(
+        input = input,
+        host = host,
+        port = port,
+        stubFileWriter = stubWriter?.toStubFileWriter(),
+    )
+
+    return WamrDebugCommandLineResult(
+        arguments = result.commandLine.arguments.toTypedArray(),
+        workingDirectory = result.commandLine.workingDirectory,
+        debugHost = result.debugHost,
+        debugPort = result.debugPort,
+    )
+}
+
+/**
+ * Detects whether iwasm output indicates the `-g` debug option is
+ * not supported by the current build.
+ */
+@JsExport
+fun isWamrDebugNotSupported(output: String): Boolean =
+    looksLikeWamrDebugNotSupported(output)

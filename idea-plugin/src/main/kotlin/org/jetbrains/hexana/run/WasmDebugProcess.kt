@@ -19,6 +19,16 @@ import com.intellij.xdebugger.evaluation.EvaluationMode
 import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider
 import com.intellij.xdebugger.frame.XSuspendContext
 import com.intellij.xdebugger.impl.XDebuggerUtilImpl
+import org.jetbrains.hexana.shared.cuPathEndsWithProjectRelative
+import org.jetbrains.hexana.shared.cuPathMatchesIdePath
+import org.jetbrains.hexana.shared.extractProjectRelativePath
+import org.jetbrains.hexana.shared.functionNameMatchesIdePath
+import org.jetbrains.hexana.shared.parseLldbFrameLocation
+import org.jetbrains.hexana.shared.parseLldbFunctionName
+import org.jetbrains.hexana.shared.parseRawDwarfLine
+import org.jetbrains.hexana.shared.parseRawDwarfPath
+import org.jetbrains.hexana.shared.pathMatchesBreakpointLocation
+import org.jetbrains.hexana.shared.stripCuHashSuffix
 
 /**
  * A debug process that launches wasmtime under LLDB so that
@@ -328,7 +338,7 @@ open class WasmDebugProcess(
         val rawDwarfPath = parseRawDwarfPath(lines)
         val rawDwarfLine = parseRawDwarfLine(lines)
         var sourcePosition = parseSourcePosition(lines)
-        val functionName = parseFunctionName(lines)
+        val functionName = parseLldbFunctionName(lines)
 
         LOG.debug("handleStop: sourcePosition=$sourcePosition, rawDwarf=$rawDwarfPath, function=$functionName, lines=$lines")
 
@@ -527,26 +537,8 @@ open class WasmDebugProcess(
      */
     private fun extractProjectRelativePath(idePath: String): String? {
         val basePath = session.project.basePath ?: return null
-        val normBase = basePath.replace('\\', '/')
-        val normIde = idePath.replace('\\', '/')
-        if (normIde.startsWith("$normBase/")) {
-            return normIde.removePrefix("$normBase/")
-        }
-        return null
+        return extractProjectRelativePath(basePath, idePath)
     }
-
-    /**
-     * Checks whether the CU path (absolute build-time path from LLDB)
-     * ends with the given project-relative path at a path-separator
-     * boundary.
-     *
-     * E.g. CU `/build/calculator/src/lib.rs` ends with
-     * `calculator/src/lib.rs` → true.
-     * CU `/build/adder/src/lib.rs` does NOT end with
-     * `calculator/src/lib.rs` → false.
-     */
-    private fun cuPathEndsWithProjectRelative(cuPath: String, projectRelative: String): Boolean =
-        Companion.cuPathEndsWithProjectRelative(cuPath, projectRelative)
 
     /**
      * Checks whether the given DWARF path is ambiguous among registered
@@ -603,9 +595,6 @@ open class WasmDebugProcess(
         return stripCuHashSuffix(cuPath)
     }
 
-    private fun pathMatchesBreakpointLocation(stoppedPath: String, breakpointPath: String): Boolean =
-        Companion.pathMatchesBreakpointLocation(stoppedPath, breakpointPath)
-
     /**
      * Parses source position from LLDB output lines.
      *
@@ -621,24 +610,22 @@ open class WasmDebugProcess(
      * file paths so the IDE can navigate to the correct source.
      */
     private fun parseSourcePosition(lines: List<String>): XSourcePosition? {
-        for (line in lines.asReversed()) {
-            val match = FRAME_LOCATION_PATTERN.find(line) ?: continue
-            val filePath = match.groupValues[1]
-            val lineNum = match.groupValues[2].toIntOrNull() ?: continue
+        val location = parseLldbFrameLocation(lines) ?: return null
+        val filePath = location.filePath
+        val lineNum = location.line
 
-            // Try the exact path first (works for non-composed modules)
-            val vFile = LocalFileSystem.getInstance().findFileByPath(filePath)
-            if (vFile != null) {
-                return XDebuggerUtilImpl.getInstance().createPosition(vFile, lineNum - 1)
-            }
+        // Try the exact path first (works for non-composed modules)
+        val vFile = LocalFileSystem.getInstance().findFileByPath(filePath)
+        if (vFile != null) {
+            return XDebuggerUtilImpl.getInstance().createPosition(vFile, lineNum - 1)
+        }
 
-            // Fall back: match the DWARF filename against known breakpoint
-            // paths using suffix matching (e.g. DWARF says "src/lib.rs",
-            // IDE knows "/Users/.../calculator/src/lib.rs").
-            val resolvedFile = resolveFileByDwarfPath(filePath)
-            if (resolvedFile != null) {
-                return XDebuggerUtilImpl.getInstance().createPosition(resolvedFile, lineNum - 1)
-            }
+        // Fall back: match the DWARF filename against known breakpoint
+        // paths using suffix matching (e.g. DWARF says "src/lib.rs",
+        // IDE knows "/Users/.../calculator/src/lib.rs").
+        val resolvedFile = resolveFileByDwarfPath(filePath)
+        if (resolvedFile != null) {
+            return XDebuggerUtilImpl.getInstance().createPosition(resolvedFile, lineNum - 1)
         }
         return null
     }
@@ -690,310 +677,8 @@ open class WasmDebugProcess(
         return null
     }
 
-    /**
-     * Extracts the raw file path from LLDB frame output without
-     * attempting to resolve it to a local file. This is the path
-     * exactly as LLDB reports it in the `at <path>:<line>` portion
-     * of `frame info` (e.g. `src/lib.rs`).
-     */
-    private fun parseRawDwarfPath(lines: List<String>): String? {
-        for (line in lines.asReversed()) {
-            val match = FRAME_LOCATION_PATTERN.find(line) ?: continue
-            return match.groupValues[1]
-        }
-        return null
-    }
-
-    /**
-     * Extracts the 1-based line number from the raw LLDB frame output.
-     */
-    private fun parseRawDwarfLine(lines: List<String>): Int? {
-        for (line in lines.asReversed()) {
-            val match = FRAME_LOCATION_PATTERN.find(line) ?: continue
-            return match.groupValues[2].toIntOrNull()
-        }
-        return null
-    }
-
-    /**
-     * Parses function name from LLDB frame output.
-     * Delegates to companion [parseFunctionName] for testability.
-     */
-    private fun parseFunctionName(lines: List<String>): String? =
-        Companion.parseFunctionName(lines)
-
     companion object {
         private val LOG = Logger.getInstance(WasmDebugProcess::class.java)
-
-        /**
-         * Parses function name from LLDB frame output lines.
-         *
-         * The LLDB `frame info` output contains lines like:
-         * ```
-         * frame #0: 0x... module`func_name(args) at file.c:42
-         * ```
-         * This method extracts `func_name` (without the arguments).
-         */
-        internal fun parseFunctionName(lines: List<String>): String? {
-            for (line in lines.asReversed()) {
-                val match = FUNCTION_NAME_PATTERN.find(line) ?: continue
-                return match.groupValues[1]
-            }
-            return null
-        }
-
-        /**
-         * Checks whether [stoppedPath] (the resolved file path from
-         * the stop location) matches the [breakpointPath] (the full
-         * IDE path stored when the breakpoint was registered).
-         *
-         * An exact match is tried first. When the stopped path comes
-         * from DWARF (possibly relative), it is also accepted if the
-         * breakpoint path ends with it preceded by a path separator,
-         * so that DWARF "src/lib.rs" matches IDE
-         * "/home/user/calculator/src/lib.rs" but not
-         * "/home/user/adder/src/lib.rs".
-         */
-        internal fun pathMatchesBreakpointLocation(stoppedPath: String, breakpointPath: String): Boolean {
-            if (stoppedPath == breakpointPath) return true
-            // stoppedPath is a suffix of breakpointPath (DWARF relative resolved to IDE absolute)
-            if (breakpointPath.endsWith("/$stoppedPath")) return true
-            // breakpointPath is a suffix of stoppedPath (IDE path is a suffix of resolved path)
-            if (stoppedPath.endsWith("/$breakpointPath")) return true
-            return false
-        }
-
-        /**
-         * Heuristic check: do the CU and IDE paths likely refer to
-         * the same source file?
-         *
-         * This is a **fallback** used when the project base path is
-         * not available. The primary verification in [handleStopImpl]
-         * uses [cuPathEndsWithProjectRelative] which is always
-         * precise.
-         *
-         * The heuristic counts trailing path components that match
-         * between the CU and IDE paths. In the standard Rust/Wasm
-         * layout `<crate>/src/<file>`, a matching tail of ≥ 3
-         * components (crate + src + file) confirms same-crate
-         * identity. A shorter tail (e.g. just `src/lib.rs`) means
-         * the paths diverge at the crate directory level →
-         * inconsistent.
-         *
-         * Examples:
-         *
-         * - CU: `/build/calculator/src/lib.rs`, IDE: `/Users/dev/calculator/src/lib.rs`
-         *   → 3 matching components (`calculator/src/lib.rs`) → true ✓
-         *
-         * - CU: `/build/adder/src/lib.rs`, IDE: `/Users/dev/calculator/src/lib.rs`
-         *   → 2 matching components (`src/lib.rs`) → false ✗
-         *
-         * - CU: `src/lib.rs` (short), IDE: `/Users/dev/calculator/src/lib.rs`
-         *   → CU has ≤ 2 components → optimistic true ✓
-         */
-        internal fun cuPathMatchesIdePath(
-            cuPath: String,
-            idePath: String,
-        ): Boolean {
-            val normCu = cuPath.replace('\\', '/')
-            val normIde = idePath.replace('\\', '/')
-
-            if (normCu == normIde) return true
-            if (normIde.endsWith("/$normCu") || normCu.endsWith("/$normIde")) return true
-
-            val cuComponents = normCu.split('/').filter { it.isNotEmpty() }
-            val ideComponents = normIde.split('/').filter { it.isNotEmpty() }
-
-            // If either path has ≤ 2 components (e.g. "src/lib.rs"),
-            // there is at most one non-filename component and we
-            // cannot reliably distinguish crate directories — be
-            // optimistic.
-            if (cuComponents.size <= 2 || ideComponents.size <= 2) return true
-
-            // Count how many trailing path components match between
-            // the CU and IDE paths (walking from the filename toward
-            // the root).
-            val minLen = minOf(cuComponents.size, ideComponents.size)
-            var matchingFromEnd = 0
-            for (i in 1..minLen) {
-                if (cuComponents[cuComponents.size - i] == ideComponents[ideComponents.size - i]) {
-                    matchingFromEnd++
-                } else {
-                    break
-                }
-            }
-
-            // If the shorter path is fully consumed without a
-            // mismatch, one is a path-suffix of the other.
-            if (matchingFromEnd >= minLen) return true
-
-            // The matching tail covers the filename and possibly some
-            // shared intermediate directories. For the paths to refer
-            // to the same file the matching tail must include the
-            // crate-identifying directory. In the common Rust/Wasm
-            // layout `<crate>/src/<file>`, the crate directory is
-            // exactly 2 levels above the filename, so a matching tail
-            // of 3 components (crate + src + file) confirms same-crate
-            // identity.
-            //
-            // When the matching tail is shorter (e.g. only "src/lib.rs"
-            // or "lib.rs"), the crate directory is the FIRST component
-            // that mismatches — which means the paths come from
-            // different crates.
-            //
-            // NOTE: this heuristic handles the standard layout. When
-            // the project base path is available, handleStopImpl uses
-            // the more precise extractProjectRelativePath +
-            // cuPathEndsWithProjectRelative instead.
-            return matchingFromEnd >= 3
-        }
-
-        /**
-         * Checks whether the CU path ends with the given project-
-         * relative path at a path-separator boundary.
-         *
-         * This is the most reliable verification: the project-relative
-         * path (e.g. `calculator/src/lib.rs`) is derived from the IDE
-         * path by stripping the project base directory and always
-         * includes the crate directory. The CU path (build-time
-         * absolute) must end with this crate-identifying suffix for
-         * the paths to refer to the same file.
-         */
-        internal fun cuPathEndsWithProjectRelative(cuPath: String, projectRelative: String): Boolean {
-            val normCu = cuPath.replace('\\', '/')
-            val normRel = projectRelative.replace('\\', '/')
-            return normCu.endsWith("/$normRel") || normCu == normRel
-        }
-
-        /**
-         * Backward-compatible wrapper kept for existing tests.
-         *
-         * Delegates to [cuPathMatchesIdePath].
-         * The [rawDwarfPath] parameter is no longer used; the match is
-         * based solely on the CU and IDE full paths.
-         */
-        internal fun cuPathConsistentWithIdePath(
-            cuPath: String,
-            idePath: String,
-            @Suppress("UNUSED_PARAMETER") rawDwarfPath: String,
-        ): Boolean = cuPathMatchesIdePath(cuPath, idePath)
-
-        /**
-         * Extracts the Rust crate name from a mangled/demangled
-         * function symbol as reported by LLDB.
-         *
-         * Rust Wasm component-model symbols look like:
-         * ```
-         * _$LT$calculator..Component$u20$as$u20$...$GT$::calculate::h...
-         * ```
-         * The first `..`-delimited segment after `$LT$` is the crate
-         * name (`calculator`).  For plain Rust symbols without the
-         * component-model wrapper, the first `::` segment is the
-         * crate name.
-         *
-         * @return the extracted crate name in lowercase, or `null`
-         *         when the function name does not follow a recognised
-         *         Rust mangling pattern.
-         */
-        internal fun extractCrateName(functionName: String): String? {
-            // Component-model mangled pattern: _$LT$<crate>..
-            val componentMatch = CRATE_FROM_COMPONENT_PATTERN.find(functionName)
-            if (componentMatch != null) {
-                return componentMatch.groupValues[1].lowercase()
-            }
-            // Plain Rust symbol: <crate>::<func>::<hash>
-            val plainMatch = CRATE_FROM_PLAIN_PATTERN.find(functionName)
-            if (plainMatch != null) {
-                return plainMatch.groupValues[1].lowercase()
-            }
-            return null
-        }
-
-        /**
-         * Checks whether the crate name extracted from the LLDB
-         * function symbol appears as a path component in the IDE
-         * breakpoint file path.
-         *
-         * E.g. function `_$LT$calculator..Component...` →
-         * crate `calculator` → IDE path
-         * `/Users/dev/project/calculator/src/lib.rs` contains
-         * `/calculator/` → true.
-         *
-         * This is useful when CU path verification is inconclusive
-         * (build-time paths don't match IDE project layout) because
-         * the Rust crate name in the symbol table is always
-         * authoritative.
-         */
-        internal fun functionNameMatchesIdePath(
-            functionName: String,
-            idePath: String,
-        ): Boolean {
-            val crate = extractCrateName(functionName) ?: return false
-            val normIde = idePath.replace('\\', '/').lowercase()
-            // The crate name must appear as a directory component in
-            // the IDE path. Rust normalises crate names by replacing
-            // hyphens with underscores (e.g. crate "hello-world"
-            // becomes `hello_world` in symbol names), so we compare
-            // with both the original crate name and a hyphen variant.
-            if (normIde.contains("/$crate/")) return true
-            val hyphenated = crate.replace('_', '-')
-            if (hyphenated != crate && normIde.contains("/$hyphenated/")) return true
-            return false
-        }
-
-        /**
-         * Matches LLDB frame location: `at /path/to/file.c:42` or `at /path/to/file.c:42:5`
-         */
-        private val FRAME_LOCATION_PATTERN =
-            """\bat\s+(.+?):(\d+)(?::\d+)?""".toRegex()
-
-        /**
-         * Matches function name in LLDB frame output.
-         *
-         * Component-model (backtick delimiter):
-         * `frame #0: 0x... JIT(0x...)`func_name(args) at file.c:42`
-         *
-         * Classic wasm module (no backtick — function name follows
-         * the closing parenthesis of the JIT module identifier):
-         * `frame #0: 0x... JIT(0x...)func_name(args) at file.c:42`
-         *
-         * The `[)\x60]\x60?` prefix consumes the closing `)` or
-         * backtick (or both when a backtick follows `)`) so the
-         * captured group contains only the function name. The name
-         * may be followed by parenthesized arguments before `at` or
-         * `+`, so the pattern uses a lazy `\S+?` and an optional
-         * `(...)` group.
-         */
-        private val FUNCTION_NAME_PATTERN =
-            """[)`]`?(\S+?)(?:\(.*?\))?\s+(?:at|[+])""".toRegex()
-
-        /**
-         * Extracts crate name from Rust component-model mangled symbols.
-         * E.g. `_$LT$calculator..Component...` → `calculator`.
-         */
-        private val CRATE_FROM_COMPONENT_PATTERN =
-            "\\${'$'}LT\\${'$'}(\\w+)\\.\\.".toRegex()
-
-        /**
-         * Extracts crate name from plain Rust symbols: `<crate>::<rest>`.
-         */
-        private val CRATE_FROM_PLAIN_PATTERN =
-            """^(\w+)::""".toRegex()
-
-        /**
-         * Matches the opaque hash suffix that LLDB appends to
-         * compilation-unit paths for classic Wasm JIT frames:
-         * `/@/<alphanumeric_hash>` at the end of the path.
-         *
-         * Example:
-         * `/path/src/lib.rs/@/9le4nom1b1hdoeh9b7lbjqyuq`
-         * → stripped to `/path/src/lib.rs`
-         */
-        private val CU_HASH_SUFFIX_PATTERN =
-            """/@/[A-Za-z0-9]+$""".toRegex()
-
-        internal fun stripCuHashSuffix(cuPath: String): String =
-            cuPath.replace(CU_HASH_SUFFIX_PATTERN, "")
 
         /**
          * LLDB command that advances the program counter past the

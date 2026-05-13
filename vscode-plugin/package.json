@@ -44,6 +44,64 @@
         "label": "Hexana MCP"
       }
     ],
+    "debuggers": [
+      {
+        "type": "wasm",
+        "label": "WebAssembly Debug",
+        "languages": ["wasm"],
+        "configurationAttributes": {
+          "launch": {
+            "required": ["wasmFile"],
+            "properties": {
+              "wasmFile": {
+                "type": "string",
+                "description": "Path to the .wasm file to debug."
+              },
+              "runtime": {
+                "type": "string",
+                "enum": ["wasmtime", "wamr"],
+                "default": "wasmtime",
+                "description": "Wasm runtime to use for debugging."
+              },
+              "programArgs": {
+                "type": "string",
+                "default": "",
+                "description": "Command-line arguments passed to the Wasm program."
+              },
+              "runtimeOptions": {
+                "type": "string",
+                "default": "",
+                "description": "Extra runtime CLI options (e.g. wasmtime flags)."
+              }
+            }
+          }
+        },
+        "configurationSnippets": [
+          {
+            "label": "WebAssembly: Debug with Wasmtime",
+            "description": "Launch a Wasm module under Wasmtime with LLDB debugging.",
+            "body": {
+              "type": "wasm",
+              "request": "launch",
+              "name": "Debug Wasm (Wasmtime)",
+              "wasmFile": "${workspaceFolder}/${1:path/to/module.wasm}",
+              "runtime": "wasmtime"
+            }
+          },
+          {
+            "label": "WebAssembly: Debug with WAMR",
+            "description": "Launch a Wasm module under WAMR with LLDB remote debugging.",
+            "body": {
+              "type": "wasm",
+              "request": "launch",
+              "name": "Debug Wasm (WAMR)",
+              "wasmFile": "${workspaceFolder}/${1:path/to/module.wasm}",
+              "runtime": "wamr"
+            }
+          }
+        ]
+      }
+    ],
     "customEditors": [
       {
         "viewType": "hexana.wasmEditor",
@@ -137,6 +195,16 @@
           ],
           "default": "info",
           "description": "Human-readable stderr logging level for the Hexana MCP server."
+        },
+        "hexana.lldbDapPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the lldb-dap executable (LLDB's Debug Adapter Protocol server). When empty, the extension searches the system PATH and common LLVM installation directories."
+        },
+        "hexana.lldbPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the lldb executable, used for WAMR remote debugging. When empty, the extension searches the system PATH."
         }
       }
     },

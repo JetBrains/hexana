@@ -10,6 +10,7 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.BaseModule
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
+import org.jetbrains.hexana.shared.parseLldbExpressionResult
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 
 /**
@@ -172,7 +173,7 @@ internal class WasmDwarfVariableResolver private constructor(
         if (exprJoined.isNotEmpty() && !exprJoined.startsWith("error:") &&
             !exprJoined.contains("unavailable")
         ) {
-            val result = WasmDebuggerEvaluator.parseLldbExpressionResult(exprJoined)
+            val result = parseLldbExpressionResult(exprJoined)
             if (!result.displayValue.contains("unavailable") &&
                 !result.displayValue.contains("variable not available")
             ) {

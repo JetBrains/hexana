@@ -23,6 +23,7 @@ import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugProcessStarter
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.XDebuggerManager
+import org.jetbrains.hexana.shared.looksLikeWamrDebugNotSupported
 import java.io.File
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
@@ -310,7 +311,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             val details = buildString {
                 append("WAMR (iwasm) process terminated before debug ")
                 append("server started (exit code $exitCode).")
-                if (looksLikeDebugNotSupported(output)) {
+                if (looksLikeWamrDebugNotSupported(output)) {
                     append("\n\nThe installed iwasm does not support ")
                     append("the \"-g\" debug option. This means it ")
                     append("was built without debug interpreter ")
@@ -388,29 +389,6 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             val configured = configuration.lldbPath.trim()
             if (configured.isNotBlank()) return configured
             return WasmRuntimeSettings.getInstance().effectiveLldbPath()
-        }
-
-        /**
-         * Detects whether iwasm output indicates the `-g` debug
-         * option is not supported by the current build.
-         *
-         * When iwasm is built without `WAMR_BUILD_DEBUG_INTERP=1`,
-         * the `-g=ip:port` argument is unrecognized. iwasm then
-         * prints its help/usage text and exits. The help text from
-         * a non-debug build will contain the usage header (e.g.
-         * "Usage:" or "iwasm") but will NOT contain the `-g=`
-         * option description, because that line is conditionally
-         * compiled only when `WASM_ENABLE_DEBUG_INTERP != 0`.
-         */
-        fun looksLikeDebugNotSupported(output: String): Boolean {
-            if (output.isBlank()) return false
-            // iwasm help text contains "Usage:" and lists options.
-            // If we see help-like output but the `-g=` option is
-            // absent, the build lacks debug interpreter support.
-            val looksLikeHelp = output.contains("Usage:") ||
-                output.contains("iwasm") && output.contains("--")
-            val hasDebugOption = output.contains("-g=")
-            return looksLikeHelp && !hasDebugOption
         }
     }
 }
