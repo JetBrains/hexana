@@ -217,6 +217,20 @@ private val FUNCTION_NAME_PATTERN =
     """[)`]`?(\S+?)(?:\(.*?\))?\s+(?:at|[+])""".toRegex()
 
 /**
+ * Fallback pattern for WAMR output where there is no module
+ * identifier (no backtick, no JIT parenthesized prefix).
+ *
+ * WAMR frame output looks like:
+ * `frame #0: 0x400000000000041a add(x=...) at main.go:15:14`
+ *
+ * Here the function name follows the hex address directly
+ * after a space. The pattern anchors on the `0xHEX ` prefix
+ * to avoid false matches.
+ */
+private val WAMR_FUNCTION_NAME_PATTERN =
+    """0x[0-9a-fA-F]+\s+(\S+?)(?:\(.*?\))?\s+(?:at|[+])""".toRegex()
+
+/**
  * Parses function name from LLDB frame output lines.
  *
  * The LLDB `frame info` output contains lines like:
@@ -233,6 +247,12 @@ private val FUNCTION_NAME_PATTERN =
 fun parseLldbFunctionName(lines: List<String>): String? {
     for (line in lines.asReversed()) {
         val match = FUNCTION_NAME_PATTERN.find(line) ?: continue
+        return match.groupValues[1]
+    }
+    // Fallback for WAMR output where there is no module
+    // identifier before the function name.
+    for (line in lines.asReversed()) {
+        val match = WAMR_FUNCTION_NAME_PATTERN.find(line) ?: continue
         return match.groupValues[1]
     }
     return null

@@ -186,6 +186,21 @@ internal class WasmLocalVariable(
 
         /**
          * Creates a copy of the given variable with its display value
+         * replaced by [NO_LOCATION_MARKER], indicating that the
+         * variable is present in DWARF but the compiler did not emit
+         * a location attribute for it (common with TinyGo parameters).
+         */
+        internal fun withNoLocationMessage(
+            original: WasmLocalVariable,
+        ): WasmLocalVariable = WasmLocalVariable(
+            name = original.name,
+            typeName = original.typeName,
+            displayValue = NO_LOCATION_MARKER,
+            children = original.children,
+        )
+
+        /**
+         * Creates a copy of the given variable with its display value
          * replaced by a DWARF location hint, showing where in the Wasm
          * runtime the variable is stored according to DWARF metadata.
          * This provides more informative feedback than a plain

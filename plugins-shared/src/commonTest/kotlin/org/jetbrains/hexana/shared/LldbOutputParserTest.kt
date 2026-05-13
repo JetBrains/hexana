@@ -200,6 +200,25 @@ class LldbOutputParserTest {
         assertNull(parseLldbFunctionName(lines))
     }
 
+    @Test
+    fun wamrGoFunctionName() {
+        // WAMR frame output for Go — no backtick or JIT module identifier.
+        // The function name follows the hex address directly.
+        val lines = listOf(
+            "frame #0: 0x400000000000041a add(x=<unavailable>, y=<unavailable>) at main.go:15:14"
+        )
+        assertEquals("add", parseLldbFunctionName(lines))
+    }
+
+    @Test
+    fun wamrGoFunctionNameWithOffset() {
+        // WAMR frame output with `+ N` offset instead of `at file:line`.
+        val lines = listOf(
+            "frame #0: 0x400000000000041a add + 1"
+        )
+        assertEquals("add", parseLldbFunctionName(lines))
+    }
+
     // ── WAMR-specific stop events and frame output ────────────────
 
     @Test

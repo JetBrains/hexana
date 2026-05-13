@@ -95,27 +95,38 @@ internal class WasmStackFrame(
                             if (!dwarfResolved.isUnavailable) return@map dwarfResolved
                         }
 
-                        // All retrieval strategies failed. Check whether
-                        // DWARF location metadata is missing so we can show
-                        // a more informative message to the user.
-                        if (isDwarfLocationMissing(communicator, variable)) {
+                        // All retrieval strategies failed. Determine
+                        // what message to show the user.
+                        //
+                        // First check our own parsed DWARF metadata —
+                        // it may have location data (e.g. location
+                        // lists with DW_OP_WASM_location) that LLDB's
+                        // Wasm plugin cannot evaluate. In that case
+                        // show a storage-location hint rather than
+                        // the misleading "DWARF metadata missing".
+                        val ownLocationDesc = resolver?.describeVariableLocation(
+                            variable.name, functionName,
+                        )
+                        if (ownLocationDesc != null) {
+                            WasmLocalVariable.withDwarfLocationHint(
+                                attempted,
+                                ownLocationDesc.substringBefore(","),
+                                ownLocationDesc,
+                            )
+                        } else if (resolver != null &&
+                            resolver.isKnownInDwarf(variable.name, functionName) &&
+                            !resolver.hasLocationMetadata(variable.name, functionName)
+                        ) {
+                            // The variable exists in DWARF (e.g. as a
+                            // formal parameter) but the compiler did
+                            // not emit DW_AT_location for it. This is
+                            // a toolchain limitation (common with
+                            // TinyGo), not a missing DWARF section.
+                            WasmLocalVariable.withNoLocationMessage(attempted)
+                        } else if (isDwarfLocationMissing(communicator, variable)) {
                             WasmLocalVariable.withDwarfMissingMessage(attempted)
                         } else {
-                            // If we have DWARF location info, show a hint
-                            // about where the variable is stored even though
-                            // we couldn't read the value.
-                            val locationDesc = resolver?.describeVariableLocation(
-                                variable.name, functionName,
-                            )
-                            if (locationDesc != null) {
-                                WasmLocalVariable.withDwarfLocationHint(
-                                    attempted,
-                                    locationDesc.substringBefore(","),
-                                    locationDesc,
-                                )
-                            } else {
-                                attempted
-                            }
+                            attempted
                         }
                     }
 

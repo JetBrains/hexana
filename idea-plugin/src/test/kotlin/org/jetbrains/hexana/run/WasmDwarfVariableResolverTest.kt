@@ -125,4 +125,72 @@ class WasmDwarfVariableResolverTest : UsefulTestCase() {
             descB!!.contains("fbreg"),
         )
     }
+
+    // ── Go/TinyGo WASM tests ────────────────────────────────────────
+
+    fun testCreateResolverFromGoWasm() {
+        val bytes = loadWasmResource("go/main.wasm")
+        val resolver = WasmDwarfVariableResolver.create(bytes)
+        assertNotNull(
+            "Resolver should be created from Go main.wasm which has DWARF",
+            resolver,
+        )
+    }
+
+    fun testGoAddParamsLackLocation() {
+        // TinyGo does not emit DW_AT_location for add(x, y).
+        // The resolver should correctly report no location metadata
+        // for these parameters, but they ARE known in DWARF (as
+        // DW_TAG_formal_parameter entries). This distinction lets
+        // the UI show "no location, value may have been optimized
+        // out" rather than the misleading "DWARF metadata missing".
+        val bytes = loadWasmResource("go/main.wasm")
+        val resolver = WasmDwarfVariableResolver.create(bytes)!!
+        assertFalse(
+            "Go add() param 'x' should have no location metadata",
+            resolver.hasLocationMetadata("x", "add"),
+        )
+        assertFalse(
+            "Go add() param 'y' should have no location metadata",
+            resolver.hasLocationMetadata("y", "add"),
+        )
+        assertNull(
+            "describeVariableLocation should be null for 'x' without location",
+            resolver.describeVariableLocation("x", "add"),
+        )
+        assertTrue(
+            "Go add() param 'x' should be known in DWARF",
+            resolver.isKnownInDwarf("x", "add"),
+        )
+        assertTrue(
+            "Go add() param 'y' should be known in DWARF",
+            resolver.isKnownInDwarf("y", "add"),
+        )
+        assertFalse(
+            "A non-existent variable should not be known in DWARF",
+            resolver.isKnownInDwarf("nonexistent", "add"),
+        )
+    }
+
+    fun testGoVariablesWithLocationListsHaveMetadata() {
+        // runtime.printstring's "i" has a location list with
+        // DW_OP_WASM_location entries. The resolver should find
+        // location metadata for it, preventing "DWARF metadata
+        // missing" from being shown.
+        val bytes = loadWasmResource("go/main.wasm")
+        val resolver = WasmDwarfVariableResolver.create(bytes)!!
+        assertTrue(
+            "runtime.printstring var 'i' should have location metadata",
+            resolver.hasLocationMetadata("i", "runtime.printstring"),
+        )
+        val desc = resolver.describeVariableLocation("i", "runtime.printstring")
+        assertNotNull(
+            "Should describe location for 'i' in runtime.printstring",
+            desc,
+        )
+        assertTrue(
+            "Location for 'i' should mention WASM: $desc",
+            desc!!.contains("WASM") || desc.contains("wasm") || desc.contains("local"),
+        )
+    }
 }

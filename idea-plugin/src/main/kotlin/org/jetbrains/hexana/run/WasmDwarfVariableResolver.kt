@@ -146,6 +146,22 @@ internal class WasmDwarfVariableResolver private constructor(
         return dwarfVar.location != null || dwarfVar.locationList.isNotEmpty()
     }
 
+    /**
+     * Returns `true` when the variable is present in DWARF metadata
+     * (as a local/parameter of the given function, or as a global),
+     * regardless of whether it has location information. This
+     * distinguishes "variable exists but toolchain omitted location"
+     * from "variable not found in DWARF at all".
+     */
+    fun isKnownInDwarf(
+        variableName: String,
+        functionName: String?,
+    ): Boolean {
+        val dwarfVar = findDwarfVariable(variableName, functionName)
+            ?: globalVariables.find { it.name == variableName }
+        return dwarfVar != null
+    }
+
     private fun findDwarfVariable(
         variableName: String,
         functionName: String?,

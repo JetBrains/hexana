@@ -146,7 +146,16 @@ internal class WasmExecutionStack(
         } else {
             afterDelimiter.trim()
         }
-        return raw.ifEmpty { null }
+        if (raw.isEmpty()) return null
+
+        // Strip the parenthesized argument list (e.g.
+        // "add(x=<unavailable>, y=<unavailable>)" → "add",
+        // "calc::add(x=1, y=2)" → "calc::add").
+        // This matches the behavior of parseLldbFunctionName()
+        // which extracts only the function name without arguments.
+        val parenIdx = raw.indexOf('(')
+        val name = if (parenIdx > 0) raw.substring(0, parenIdx) else raw
+        return name.ifEmpty { null }
     }
 
     private fun parseSourceFromDescription(description: String): com.intellij.xdebugger.XSourcePosition? {
