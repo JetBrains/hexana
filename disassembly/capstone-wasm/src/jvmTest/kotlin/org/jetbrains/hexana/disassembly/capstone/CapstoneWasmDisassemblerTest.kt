@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.disassembly.capstone
 
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.hexana.disassembly.core.Arch
 import org.jetbrains.hexana.disassembly.core.AssemblySyntax
 import org.jetbrains.hexana.disassembly.core.DecodedInstruction
@@ -11,6 +12,10 @@ import kotlin.test.assertTrue
 
 class CapstoneWasmDisassemblerTest {
 
+    private fun disassembler(): CapstoneWasmDisassembler = runBlocking {
+        CapstoneWasmDisassembler.loadFromClasspath()
+    }
+
     @Test
     fun `decodes a short x86_64 sequence end to end`() {
         // nop ; ret ; mov rax, rbx
@@ -20,7 +25,7 @@ class CapstoneWasmDisassemblerTest {
             0x48.toByte(), 0x89.toByte(), 0xd8.toByte(),                // mov rax, rbx
         )
         val buffer = bytes.toCommonByteBuffer()
-        val disasm = CapstoneWasmDisassembler()
+        val disasm = disassembler()
 
         val instructions = with(disasm) {
             buffer.disassemble(baseAddress = 0x1000UL, arch = Arch.X86_64)
@@ -54,7 +59,7 @@ class CapstoneWasmDisassemblerTest {
     fun `formatter renders mnemonic and operands of mov`() {
         val bytes = byteArrayOf(0x48.toByte(), 0x89.toByte(), 0xd8.toByte()) // mov rax, rbx
         val buffer = bytes.toCommonByteBuffer()
-        val disasm = CapstoneWasmDisassembler()
+        val disasm = disassembler()
 
         val insn = with(disasm) {
             buffer.disassemble(baseAddress = 0UL, arch = Arch.X86_64)
@@ -71,7 +76,7 @@ class CapstoneWasmDisassemblerTest {
     @Test
     fun `empty buffer yields empty sequence`() {
         val buffer = ByteArray(0).toCommonByteBuffer()
-        val disasm = CapstoneWasmDisassembler()
+        val disasm = disassembler()
         val instructions = with(disasm) {
             buffer.disassemble(baseAddress = 0UL, arch = Arch.X86_64)
         }.toList()

@@ -4,15 +4,16 @@ package org.jetbrains.hexana.disassembly.capstone
  * Platform-specific binding to a loaded Capstone WASM instance.
  *
  * Each platform provides an actual:
- *  - `jvmMain` — Chicory wrapper around the bundled `capstone.wasm` blob.
- *  - `jsMain`  — direct interop with the `capstone-wasm` package via the host
- *                `WebAssembly` API (browser / Node).
- *  - `wasmJsMain` — same `capstone-wasm` blob driven from a wasmJs target via
- *                   JS interop.
+ *  - `jvmMain` — Chicory wrapper around the bundled `disassembler.wasm` blob.
+ *  - `jsMain`  — direct `WebAssembly.instantiate(...)` via Kotlin/JS dynamic.
+ *  - `wasmJsMain` — same browser-side API, accessed from a wasmJs target.
  *
- * The surface here is intentionally minimal: a generic "call an export" entry
- * point plus linear-memory I/O. Capstone-specific function binding (`cs_open`,
- * `cs_disasm`, `cs_free`, …) lives in [commonMain] on top of this.
+ * The surface is intentionally minimal: a generic "call an export" entry point
+ * plus linear-memory I/O. Capstone-specific function binding (`alloc`,
+ * `decode_*`, `free_result`, …) lives in [commonMain] on top of this.
+ *
+ * Not thread-safe: a single instance owns a single linear memory and call
+ * stack. Concurrent decoding requires separate [CapstoneWasmModule] instances.
  */
 internal expect class CapstoneWasmModule {
     /** Invokes an exported WASM function and returns its results. */
@@ -28,5 +29,15 @@ internal expect class CapstoneWasmModule {
     fun close()
 }
 
-/** Loads the Capstone WASM blob and returns an initialised module instance. */
-internal expect fun loadCapstoneWasmModule(): CapstoneWasmModule
+/**
+ * Instantiates a [CapstoneWasmModule] from the raw `disassembler.wasm` bytes.
+ *
+ * The bytes themselves are platform-loaded — JVM reads them from the classpath
+ * (see `CapstoneWasmDisassembler.loadFromClasspath`); browser callers fetch
+ * them and pass the result in. The instantiation step is async on every
+ * platform that targets WebAssembly through the host JS API (browser / Node)
+ * because `WebAssembly.instantiate` only exists as a Promise-returning entry;
+ * the JVM Chicory path is synchronous internally but presents the same
+ * suspendable signature so the API is uniform.
+ */
+internal expect suspend fun loadCapstoneWasmModule(bytes: ByteArray): CapstoneWasmModule

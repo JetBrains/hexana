@@ -20,6 +20,7 @@ kotlin {
             dependencies {
                 api(project(":disassembly:core"))
                 api(project(":encdec"))
+                implementation(libs.kotlinx.coroutines.core)
             }
         }
 

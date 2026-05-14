@@ -10,10 +10,21 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 /**
  * Capstone-shaped [Disassembler] backed by the `wasm-modules/disassembler` WASM
  * blob (yaxpeax under the hood). One instance owns a single WASM module; not
- * thread-safe. Construct one per worker.
+ * thread-safe. Construct via [load] (or `loadFromClasspath` on JVM).
  */
-class CapstoneWasmDisassembler : Disassembler {
-    private val module: CapstoneWasmModule by lazy { loadCapstoneWasmModule() }
+class CapstoneWasmDisassembler internal constructor(private val module: CapstoneWasmModule) : Disassembler {
+    companion object {
+        /**
+         * Builds a disassembler from the raw `disassembler.wasm` bytes. On
+         * browsers the caller is expected to `fetch(...)` the artifact first;
+         * on JVM use `loadFromClasspath()` for the classpath-resource shortcut.
+         */
+        suspend fun load(bytes: ByteArray): CapstoneWasmDisassembler =
+            CapstoneWasmDisassembler(loadCapstoneWasmModule(bytes))
+
+        private const val KIND_VALID = 0
+        private const val KIND_UNKNOWN = 1
+    }
 
     override fun CommonByteBuffer.disassemble(
         baseAddress: ULong,
@@ -113,10 +124,6 @@ class CapstoneWasmDisassembler : Disassembler {
         }
     }
 
-    private companion object {
-        const val KIND_VALID = 0
-        const val KIND_UNKNOWN = 1
-    }
 }
 
 private fun ByteArray.readU32LE(at: Int): Int =

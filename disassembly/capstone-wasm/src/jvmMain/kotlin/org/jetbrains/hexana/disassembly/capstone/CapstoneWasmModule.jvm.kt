@@ -6,12 +6,10 @@ import com.dylibso.chicory.runtime.Memory
 import com.dylibso.chicory.wasm.Parser
 
 /**
- * JVM actual for [CapstoneWasmModule] — wraps a Chicory-loaded `disassembler.wasm`
- * instance. Resource path: `/disassembler.wasm` on the classpath, vendored by the
- * `wasm-modules/disassembler` Rust crate.
+ * JVM actual for [CapstoneWasmModule] — wraps a Chicory-loaded WASM instance.
  *
- * Not thread-safe: a Chicory [Instance] owns a single linear memory and a single
- * call stack. Callers that need parallel decoding must create separate
+ * Not thread-safe: a Chicory [Instance] owns a single linear memory and a
+ * single call stack. Callers that need parallel decoding must create separate
  * [CapstoneWasmModule] instances.
  */
 internal actual class CapstoneWasmModule internal constructor(private val instance: Instance) {
@@ -20,12 +18,7 @@ internal actual class CapstoneWasmModule internal constructor(private val instan
 
     actual fun call(export: String, args: LongArray): LongArray {
         val fn = exports.getOrPut(export) { instance.export(export) }
-        // Chicory returns null for void WASM functions; treat as empty result array.
         return fn.apply(*args) ?: EMPTY
-    }
-
-    private companion object {
-        private val EMPTY = LongArray(0)
     }
 
     actual fun readMemory(addr: Int, length: Int): ByteArray =
@@ -38,12 +31,13 @@ internal actual class CapstoneWasmModule internal constructor(private val instan
     actual fun close() {
         exports.clear()
     }
+
+    private companion object {
+        private val EMPTY = LongArray(0)
+    }
 }
 
-internal actual fun loadCapstoneWasmModule(): CapstoneWasmModule {
-    val resourceStream = CapstoneWasmModule::class.java.getResourceAsStream("/disassembler.wasm")
-        ?: error("disassembler.wasm not found on classpath at /disassembler.wasm")
-    val bytes = resourceStream.use { it.readBytes() }
+internal actual suspend fun loadCapstoneWasmModule(bytes: ByteArray): CapstoneWasmModule {
     val module = Parser.parse(bytes)
     val instance = Instance.builder(module).build()
     return CapstoneWasmModule(instance)
