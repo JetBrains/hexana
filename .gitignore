@@ -13,4 +13,6 @@ kotlin-js-store/
 /teamcity.local.properties
 wasm-modules/wasmprinter_wrapper/target
 wasm-modules/wasmprinter_wrapper/Cargo.lock
+wasm-modules/disassembler/target
+wasm-modules/disassembler/Cargo.lock
 /plugins/hexana/

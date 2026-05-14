@@ -12,6 +12,7 @@ TARGET=wasm32-unknown-unknown
 MODULES=(
   "wasmprinter_wrapper:wasmprinter_wrapper.wasm"
   "wat2wasm:wat2wasm_full.wasm"
+  "disassembler:disassembler.wasm"
 )
 
 if [ ! -d "$SRC_DIR" ]; then

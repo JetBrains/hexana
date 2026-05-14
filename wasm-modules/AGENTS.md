@@ -6,6 +6,7 @@ This directory contains Rust sources that are compiled into `.wasm` binaries and
 
 - `wasm-modules/wasmprinter_wrapper` produces `graalwasm/wasmprinter/src/main/resources/wasmprinter_wrapper.wasm`
 - `wasm-modules/wat2wasm` produces `graalwasm/wat2wasm/src/main/resources/wat2wasm_full.wasm`
+- `wasm-modules/disassembler` produces `disassembly/capstone-wasm/src/jvmMain/resources/disassembler.wasm` (consumed by `disassembly/capstone-wasm` via Chicory on JVM and host WebAssembly on js/wasmJs; see `wasm-modules/disassembler/README.md` for the export contract)
 
 If you change the Rust source, update the embedded resource in `graalwasm/` in the same change.
 
@@ -36,8 +37,13 @@ Current expectations:
   - export `memory`
   - export `alloc_input`
   - export `wat2wasm`
+- `disassembly/capstone-wasm/.../CapstoneWasmModule.*.kt` expects:
+  - export `memory`
+  - export `alloc`, `dealloc`, `free_result`
+  - export `decode_x86_64` (more `decode_*` arches added later)
 
-Both modules also rely on host callbacks provided under `env`.
+Both wasmprinter and wat2wasm rely on host callbacks under `env`; the
+disassembler module has no host imports.
 
 ## Practical Rules
 
