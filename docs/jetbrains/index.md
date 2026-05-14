@@ -25,7 +25,7 @@ audience: [users]
 | [`settings.md`](settings.md) | Users | `Settings → Tools → Hexana` and `Settings → Build, Execution → WASM Runtime`. |
 | [`troubleshooting.md`](troubleshooting.md) | Users | Common failure modes and resolutions. |
 | [`changelog-0.9.md`](changelog-0.9.md) | All | Release notes for 0.9, pinned. |
-| [`llms.txt`](llms.txt) | LLM agents | Curated index for AI assistants reading the docs. |
+| [`llms.txt`](../llms.txt) | LLM agents | Curated index for AI assistants reading the docs. |
 
 ## Version and compatibility
 
