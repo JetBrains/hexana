@@ -25,7 +25,7 @@
 
 ## Docs — JetBrains IDE plugin (0.9)
 
-- [Overview](jetbrains/README.md): documentation landing for the JetBrains plugin.
+- [Overview](jetbrains/index.md): documentation landing for the JetBrains plugin.
 - [Getting Started](jetbrains/getting-started.md): install, open a .wasm, find the main views.
 - [Features](jetbrains/features.md): complete capability reference grouped by surface.
 - [File Types](jetbrains/file-types.md): .wasm, .wat, .wit, and generic binary.
@@ -40,7 +40,7 @@
 
 ## Docs — VS Code extension (0.0.2)
 
-- [Overview](vscode/README.md): documentation landing for the VS Code extension.
+- [Overview](vscode/index.md): documentation landing for the VS Code extension.
 - [Getting Started](vscode/getting-started.md): install, open a .wasm, find the main panels.
 - [Features](vscode/features.md): complete capability reference.
 - [Analysis Tabs](vscode/analysis-tabs.md): per-tab reference for all 11 analysis panels.

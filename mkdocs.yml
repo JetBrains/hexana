@@ -70,7 +70,7 @@ nav:
   - Home: index.md
 
   - JetBrains IDEs:
-      - Overview: jetbrains/README.md
+      - Overview: jetbrains/index.md
       - Getting Started: jetbrains/getting-started.md
       - Features: jetbrains/features.md
       - File Types: jetbrains/file-types.md
@@ -84,7 +84,7 @@ nav:
       - Changelog 0.9: jetbrains/changelog-0.9.md
 
   - VS Code:
-      - Overview: vscode/README.md
+      - Overview: vscode/index.md
       - Getting Started: vscode/getting-started.md
       - Features: vscode/features.md
       - Analysis Tabs: vscode/analysis-tabs.md
