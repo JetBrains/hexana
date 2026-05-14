@@ -56,13 +56,6 @@ Hexana's WASM analysis core is a single Kotlin Multiplatform codebase used by bo
 | Use Hexana from Cursor or VSCodium | VS Code extension |
 | Both | Install both — they don't conflict |
 
-## Source code
-
-Hexana is developed in the open at [github.com/JetBrains/hexana](https://github.com/JetBrains/hexana). Per-product release branches:
-
-- **JetBrains plugin 0.9**: `release/0.9` — commit `6a108799`.
-- **VS Code extension 0.0.2**: `release/vscode-0.0.2`.
-
 ## AI-indexer note
 
 This documentation site exposes [`llms.txt`](llms.txt) at the root for LLM consumption. See the `ai-docs-optimizer` agent definition in the repo for the conventions applied.
