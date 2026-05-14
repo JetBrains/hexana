@@ -49,6 +49,7 @@ val standaloneInstallDir = project(":mcp:server").layout.buildDirectory.dir("ins
 val plainPackagingDir = layout.buildDirectory.dir("packaging-plain")
 val obfuscatedPackagingDir = layout.buildDirectory.dir("packaging")
 val obfuscatedInstallDir = project(":mcp").layout.buildDirectory.dir("install/server-r8")
+val publicMarketplaceDir = layout.projectDirectory.dir("out/teamcity/public-marketplace")
 val r8RulesFile = layout.projectDirectory.file("packaging/r8-rules.pro")
 val r8OwnedJarNames = setOf(
     "analytics-jvm.jar",
@@ -393,6 +394,99 @@ tasks.register("assembleMcpPackaging") {
     group = "distribution"
     description = "Assemble self-contained Claude and Codex MCP wrapper layouts under mcp/build/packaging and their distributable ZIPs."
     dependsOn(assembleClaudePluginPackage, assembleCodexPluginPackage, zipClaudePlugin, zipCodexPlugin, zipObfuscatedMcpServer)
+}
+
+tasks.register<Sync>("assemblePublicMarketplaceBundle") {
+    group = "distribution"
+    description = "Assemble the public marketplace bundle consumed by TeamCity release automation."
+    dependsOn(assembleClaudePluginPackage, assembleCodexPluginPackage)
+    into(publicMarketplaceDir)
+
+    from(obfuscatedPackagingDir.map { it.dir("claude-plugin/.claude-plugin") }) {
+        into("plugins/hexana/.claude-plugin")
+    }
+    from(obfuscatedPackagingDir.map { it.dir("codex-plugin/.codex-plugin") }) {
+        into("plugins/hexana/.codex-plugin")
+    }
+    from(obfuscatedPackagingDir.map { it.file("codex-plugin/.mcp.json") }) {
+        into("plugins/hexana")
+    }
+    from(obfuscatedPackagingDir.map { it.file("codex-plugin/README.md") }) {
+        into("plugins/hexana")
+    }
+    from(obfuscatedPackagingDir.map { it.dir("codex-plugin/bin") }) {
+        into("plugins/hexana/bin")
+        filesMatching("hexana-mcp") {
+            permissions { unix("rwxr-xr-x") }
+        }
+    }
+    from(obfuscatedPackagingDir.map { it.dir("codex-plugin/skills") }) {
+        into("plugins/hexana/skills")
+    }
+
+    doFirst {
+        delete(publicMarketplaceDir)
+    }
+    doLast {
+        val outputDir = publicMarketplaceDir.asFile
+        outputDir.resolve(".claude-plugin").mkdirs()
+        outputDir.resolve(".agents/plugins").mkdirs()
+        outputDir.resolve("plugins/hexana").mkdirs()
+
+        outputDir.resolve(".claude-plugin/marketplace.json").writeText(
+            """
+            {
+              "plugins": [
+                {
+                  "name": "hexana",
+                  "path": "plugins/hexana"
+                }
+              ]
+            }
+            """.trimIndent() + "\n"
+        )
+        outputDir.resolve(".agents/plugins/marketplace.json").writeText(
+            """
+            {
+              "plugins": [
+                {
+                  "name": "hexana",
+                  "path": "plugins/hexana"
+                }
+              ]
+            }
+            """.trimIndent() + "\n"
+        )
+        outputDir.resolve("README.md").writeText(
+            """
+            # Hexana Marketplace Distribution
+
+            Public distribution metadata and wrappers for the Hexana Claude Code and Codex plugins.
+            Source code and private build configuration are intentionally not included.
+            """.trimIndent() + "\n"
+        )
+        outputDir.resolve("CHANGELOG.md").writeText(
+            """
+            # Changelog
+
+            ## $mcpServerVersion
+
+            - Publish Hexana Claude Code and Codex plugin distribution metadata.
+            """.trimIndent() + "\n"
+        )
+        outputDir.resolve("plugins/hexana/release.lock.json").writeText(
+            """
+            {
+              "version": "$mcpServerVersion",
+              "artifacts": [
+                "hexana-claude-plugin-$mcpServerVersion.zip",
+                "hexana-codex-plugin-$mcpServerVersion.zip",
+                "server-$mcpServerVersion.zip"
+              ]
+            }
+            """.trimIndent() + "\n"
+        )
+    }
 }
 
 val GENERATED_VERSION_TOKEN = "__GENERATED_BY_ASSEMBLY__"
