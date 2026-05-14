@@ -2,7 +2,7 @@ name: Publish docs
 
 on:
   push:
-    branches: [master]
+    branches: [main, doc-14.05.2026]
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
