@@ -10,13 +10,15 @@ because it provides a Capstone-shaped surface — the engine itself is
 
 ## Architectures
 
-| Status | Architecture | Engine        |
-|--------|--------------|---------------|
-| ✅      | x86_64       | `yaxpeax-x86` |
-| ⏳      | x86 (i386)   | `yaxpeax-x86` |
-| ⏳      | ARM (32-bit) | `yaxpeax-arm` |
-| ⏳      | ARM64        | tbd           |
-| ⏳      | RISC-V       | tbd           |
+| Status | Architecture | Engine                          |
+|--------|--------------|---------------------------------|
+| ✅      | x86_64       | `yaxpeax-x86` (long_mode)       |
+| ✅      | x86 (i386)   | `yaxpeax-x86` (protected_mode)  |
+| ✅      | ARM (A32)    | `yaxpeax-arm` (armv7)           |
+| ✅      | ARM64        | `yaxpeax-arm` (armv8::a64)      |
+| ✅      | RISC-V 32    | `riscv-decode`                  |
+| ✅      | RISC-V 64    | `riscv-decode`                  |
+| ⏳      | Thumb / T32  | `yaxpeax-arm` (later commit)    |
 
 ## Build
 
@@ -60,8 +62,10 @@ are freed via `free_result(ptr)` — do **not** use `dealloc` on them.
 
 ### Decode entry points
 
+All six decode entry points share the same signature:
+
 ```
-decode_x86_64(
+decode_<arch>(
   bytes_ptr: u32,         — start of an alloc()'d byte window
   bytes_len: u32,         — length of that window in bytes
   offset:    u32,         — start decoding at bytes_ptr + offset
@@ -69,11 +73,19 @@ decode_x86_64(
 ) -> u32                  — pointer to a DecodeResult record, or 0 if offset >= bytes_len
 ```
 
+Available entries:
+
+| Export           | Arch                | Instruction width                        |
+|------------------|---------------------|------------------------------------------|
+| `decode_x86`     | i386 (protected)    | 1–15 bytes (variable)                    |
+| `decode_x86_64`  | x86_64 (long mode)  | 1–15 bytes (variable)                    |
+| `decode_arm`     | ARM A32             | 4 bytes                                  |
+| `decode_arm64`   | AArch64             | 4 bytes                                  |
+| `decode_riscv32` | RV32                | 2 bytes (RVC) or 4 bytes (base)          |
+| `decode_riscv64` | RV64                | 2 bytes (RVC) or 4 bytes (base)          |
+
 Each call decodes **one** instruction. Iterate by advancing `offset` by the
 returned record's `size` field. A return value of `0` means end of buffer.
-
-Future arches will add parallel `decode_x86`, `decode_arm`, `decode_arm64`,
-`decode_riscv32`, `decode_riscv64` entry points with the same signature.
 
 ### DecodeResult layout
 
@@ -97,9 +109,10 @@ allocation:
 Trailing data, in order: `branch_targets` (u64[]), `mnemonic` (UTF-8),
 `operands` (UTF-8). All within `[record_ptr, record_ptr + total_size)`.
 
-The operand string is rendered in the engine's default syntax (currently
-Intel-ish for x86). Explicit AT&T / Intel / vendor-syntax routing arrives in
-a later commit.
+The operand string is rendered in each engine's default Display impl —
+Intel-ish for x86, GAS-ish for ARM/ARM64, debug-format for RISC-V (until a
+dedicated yaxpeax-style decoder is wired). Explicit AT&T / Intel /
+vendor-syntax routing arrives in a later commit.
 
 ## Stability
 

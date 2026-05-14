@@ -1,45 +1,32 @@
 // Hexana disassembler WASM module.
 //
-// Pure-Rust disassembler backend compiled to wasm32-unknown-unknown. Currently
-// supports x86_64 via yaxpeax-x86; more architectures (arm, arm64, riscv) will
-// be added behind their own export entry points.
-//
-// The WASM exports defined here are consumed by the Kotlin Multiplatform module
-// at disassembly/capstone-wasm via the platform-specific CapstoneWasmModule
-// actuals (Chicory on JVM, host WebAssembly on js/wasmJs).
+// Pure-Rust disassembler backend compiled to wasm32-unknown-unknown. Drives
+// x86 / x86_64 / ARM / ARM64 through yaxpeax and RISC-V through riscv-decode.
+// Consumed from Kotlin Multiplatform via disassembly/capstone-wasm.
 //
 // Export contract (see README.md for the authoritative spec):
 //   memory                                            — the linear memory
 //   alloc(size: u32) -> u32                           — caller-input buffers
 //   dealloc(ptr: u32, size: u32)                      — frees alloc()'d buffers
-//   decode_x86_64(ptr, len, offset, base_va) -> u32   — decode one instruction
-//   free_result(ptr: u32)                             — frees a decode result
+//   free_result(ptr: u32)                             — frees a decode_* result
+//   decode_x86      (ptr, len, offset, base_va) -> u32
+//   decode_x86_64   (ptr, len, offset, base_va) -> u32
+//   decode_arm      (ptr, len, offset, base_va) -> u32
+//   decode_arm64    (ptr, len, offset, base_va) -> u32
+//   decode_riscv32  (ptr, len, offset, base_va) -> u32
+//   decode_riscv64  (ptr, len, offset, base_va) -> u32
 
 use core::slice;
 
 use yaxpeax_arch::{Decoder, LengthedInstruction, U8Reader};
-use yaxpeax_x86::amd64::InstDecoder;
 
 const KIND_VALID: u32 = 0;
 const KIND_UNKNOWN: u32 = 1;
-
-// Result-record layout. All offsets are bytes from the start of the chunk
-// returned by decode_*. Multi-byte fields are little-endian (WASM convention).
-//
-//   off 0    u32 total_size           (size to pass to free_result; same chunk frees mnemonic/operands)
-//   off 4    u32 kind                 (0 = valid, 1 = unknown)
-//   off 8    u32 size                 (instruction size in bytes; for Unknown, the coalesced run length)
-//   off 12   u32 is_block_terminator  (0 / 1; meaningless for Unknown)
-//   off 16   u64 address              (virtual address)
-//   off 24   u32 branch_target_count
-//   off 28   u32 branch_targets_offset   (bytes from chunk start to u64[] of targets)
-//   off 32   u32 mnemonic_len
-//   off 36   u32 mnemonic_offset      (bytes from chunk start to UTF-8 mnemonic; 0 for Unknown)
-//   off 40   u32 operands_len
-//   off 44   u32 operands_offset      (bytes from chunk start to UTF-8 operands; 0 for Unknown)
-//   off 48   ...trailing data: branch_targets (u64[]), mnemonic UTF-8, operands UTF-8
-
 const HEADER_SIZE: usize = 48;
+
+// -----------------------------------------------------------------------------
+// Memory management exports
+// -----------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
 pub extern "C" fn alloc(size: u32) -> u32 {
@@ -73,6 +60,10 @@ pub unsafe extern "C" fn free_result(ptr: u32) {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Per-arch decode exports
+// -----------------------------------------------------------------------------
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn decode_x86_64(
     bytes_ptr: u32,
@@ -80,69 +71,190 @@ pub unsafe extern "C" fn decode_x86_64(
     offset: u32,
     base_va: u64,
 ) -> u32 {
-    if offset >= bytes_len {
+    let Some((view, address)) = (unsafe { resolve_window(bytes_ptr, bytes_len, offset, base_va) }) else {
         return 0;
-    }
-    let bytes = unsafe {
-        slice::from_raw_parts(bytes_ptr as *const u8, bytes_len as usize)
     };
-    let view = &bytes[offset as usize..];
-    let address = base_va.wrapping_add(offset as u64);
-
-    let decoder = InstDecoder::default();
+    let decoder = yaxpeax_x86::long_mode::InstDecoder::default();
     let mut reader = U8Reader::new(view);
     match decoder.decode(&mut reader) {
-        Ok(insn) => build_valid_x86_64(insn, address),
+        Ok(insn) => {
+            let size = insn.len().to_const() as u32;
+            let rendered = format!("{}", insn);
+            let is_terminator = is_terminator_x86_64(insn.opcode());
+            build_valid(address, size, is_terminator, &[], &rendered)
+        }
         Err(_) => build_unknown(address, view),
     }
 }
 
-fn build_valid_x86_64(insn: yaxpeax_x86::amd64::Instruction, address: u64) -> u32 {
-    let size = insn.len().to_const() as u32;
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn decode_x86(
+    bytes_ptr: u32,
+    bytes_len: u32,
+    offset: u32,
+    base_va: u64,
+) -> u32 {
+    let Some((view, address)) = (unsafe { resolve_window(bytes_ptr, bytes_len, offset, base_va) }) else {
+        return 0;
+    };
+    let decoder = yaxpeax_x86::protected_mode::InstDecoder::default();
+    let mut reader = U8Reader::new(view);
+    match decoder.decode(&mut reader) {
+        Ok(insn) => {
+            let size = insn.len().to_const() as u32;
+            let rendered = format!("{}", insn);
+            let is_terminator = is_terminator_x86(insn.opcode());
+            build_valid(address, size, is_terminator, &[], &rendered)
+        }
+        Err(_) => build_unknown(address, view),
+    }
+}
 
-    // yaxpeax's Display impl yields "mnemonic op0, op1, …". We split on the
-    // first whitespace to separate the textual mnemonic from operands. The
-    // syntax is yaxpeax's default rendering for now (Intel-ish); AT&T support
-    // and explicit AssemblySyntax routing arrive in a later commit.
-    let rendered = format!("{}", insn);
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn decode_arm(
+    bytes_ptr: u32,
+    bytes_len: u32,
+    offset: u32,
+    base_va: u64,
+) -> u32 {
+    let Some((view, address)) = (unsafe { resolve_window(bytes_ptr, bytes_len, offset, base_va) }) else {
+        return 0;
+    };
+    // ARM (A32) mode only; Thumb support is a follow-up commit.
+    let decoder = yaxpeax_arm::armv7::InstDecoder::armv7();
+    let mut reader = U8Reader::new(view);
+    match decoder.decode(&mut reader) {
+        Ok(insn) => {
+            let size = insn.len().to_const() as u32;
+            let rendered = format!("{}", insn);
+            let is_terminator = is_terminator_arm(&insn);
+            build_valid(address, size, is_terminator, &[], &rendered)
+        }
+        Err(_) => build_unknown(address, view),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn decode_arm64(
+    bytes_ptr: u32,
+    bytes_len: u32,
+    offset: u32,
+    base_va: u64,
+) -> u32 {
+    let Some((view, address)) = (unsafe { resolve_window(bytes_ptr, bytes_len, offset, base_va) }) else {
+        return 0;
+    };
+    let decoder = yaxpeax_arm::armv8::a64::InstDecoder::default();
+    let mut reader = U8Reader::new(view);
+    match decoder.decode(&mut reader) {
+        Ok(insn) => {
+            let size = insn.len().to_const() as u32;
+            let rendered = format!("{}", insn);
+            let is_terminator = is_terminator_arm64(&insn);
+            build_valid(address, size, is_terminator, &[], &rendered)
+        }
+        Err(_) => build_unknown(address, view),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn decode_riscv32(
+    bytes_ptr: u32,
+    bytes_len: u32,
+    offset: u32,
+    base_va: u64,
+) -> u32 {
+    unsafe { decode_riscv_inner(bytes_ptr, bytes_len, offset, base_va) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn decode_riscv64(
+    bytes_ptr: u32,
+    bytes_len: u32,
+    offset: u32,
+    base_va: u64,
+) -> u32 {
+    unsafe { decode_riscv_inner(bytes_ptr, bytes_len, offset, base_va) }
+}
+
+unsafe fn decode_riscv_inner(
+    bytes_ptr: u32,
+    bytes_len: u32,
+    offset: u32,
+    base_va: u64,
+) -> u32 {
+    let Some((view, address)) = (unsafe { resolve_window(bytes_ptr, bytes_len, offset, base_va) }) else {
+        return 0;
+    };
+    // RISC-V is variable-length: 2 bytes (RVC) when low 2 bits != 0b11, else 4 bytes.
+    if view.len() < 2 {
+        return build_unknown(address, view);
+    }
+    let low2 = view[0] & 0b11;
+    let (size, decoded) = if low2 == 0b11 {
+        if view.len() < 4 {
+            return build_unknown(address, view);
+        }
+        let word = u32::from_le_bytes([view[0], view[1], view[2], view[3]]);
+        (4u32, riscv_decode::decode(word))
+    } else {
+        let half = u16::from_le_bytes([view[0], view[1]]);
+        (2u32, riscv_decode::decode(half as u32))
+    };
+    match decoded {
+        Ok(insn) => {
+            let rendered = format!("{:?}", insn);
+            let is_terminator = is_terminator_riscv(&insn);
+            build_valid(address, size, is_terminator, &[], &rendered)
+        }
+        Err(_) => build_unknown(address, &view[..size as usize]),
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Shared helpers
+// -----------------------------------------------------------------------------
+
+unsafe fn resolve_window<'a>(
+    bytes_ptr: u32,
+    bytes_len: u32,
+    offset: u32,
+    base_va: u64,
+) -> Option<(&'a [u8], u64)> {
+    if offset >= bytes_len {
+        return None;
+    }
+    let bytes = unsafe {
+        slice::from_raw_parts(bytes_ptr as *const u8, bytes_len as usize)
+    };
+    Some((&bytes[offset as usize..], base_va.wrapping_add(offset as u64)))
+}
+
+fn build_valid(
+    address: u64,
+    size: u32,
+    is_terminator: bool,
+    branch_targets: &[u64],
+    rendered: &str,
+) -> u32 {
     let (mnemonic, operands) = match rendered.find(char::is_whitespace) {
         Some(i) => (&rendered[..i], rendered[i..].trim_start()),
-        None => (rendered.as_str(), ""),
+        None => (rendered, ""),
     };
-
-    let opcode = insn.opcode();
-    let is_terminator = matches!(
-        opcode,
-        yaxpeax_x86::amd64::Opcode::JMP
-            | yaxpeax_x86::amd64::Opcode::JMPF
-            | yaxpeax_x86::amd64::Opcode::RETURN
-            | yaxpeax_x86::amd64::Opcode::RETF
-            | yaxpeax_x86::amd64::Opcode::IRET
-            | yaxpeax_x86::amd64::Opcode::IRETD
-            | yaxpeax_x86::amd64::Opcode::IRETQ
-            | yaxpeax_x86::amd64::Opcode::UD2
-            | yaxpeax_x86::amd64::Opcode::HLT
-    );
-
-    let branch_targets: Vec<u64> = Vec::new();
-
-    let mnemonic_bytes = mnemonic.as_bytes();
-    let operands_bytes = operands.as_bytes();
     write_result(
         address,
         KIND_VALID,
         size,
         is_terminator as u32,
-        &branch_targets,
-        mnemonic_bytes,
-        operands_bytes,
+        branch_targets,
+        mnemonic.as_bytes(),
+        operands.as_bytes(),
     )
 }
 
 fn build_unknown(address: u64, view: &[u8]) -> u32 {
     let size = view.len().min(1) as u32;
-    let empty: Vec<u64> = Vec::new();
-    write_result(address, KIND_UNKNOWN, size, 0, &empty, &[], &[])
+    write_result(address, KIND_UNKNOWN, size, 0, &[], &[], &[])
 }
 
 fn write_result(
@@ -186,6 +298,56 @@ fn write_result(
     core::mem::forget(buf);
     ptr as u32
 }
+
+// -----------------------------------------------------------------------------
+// Per-arch terminator predicates
+// -----------------------------------------------------------------------------
+
+fn is_terminator_x86_64(opcode: yaxpeax_x86::long_mode::Opcode) -> bool {
+    use yaxpeax_x86::long_mode::Opcode::*;
+    matches!(
+        opcode,
+        JMP | JMPF | RETURN | RETF | IRET | IRETD | IRETQ | UD2 | HLT
+    )
+}
+
+fn is_terminator_x86(opcode: yaxpeax_x86::protected_mode::Opcode) -> bool {
+    use yaxpeax_x86::protected_mode::Opcode::*;
+    matches!(
+        opcode,
+        JMP | JMPF | RETURN | RETF | IRET | IRETD | IRETQ | UD2 | HLT
+    )
+}
+
+fn is_terminator_arm(insn: &yaxpeax_arm::armv7::Instruction) -> bool {
+    use yaxpeax_arm::armv7::Opcode::*;
+    // Only unconditional control-flow leaves; conditional B/BX still fall through.
+    let unconditional = insn.condition == yaxpeax_arm::armv7::ConditionCode::AL;
+    unconditional && matches!(insn.opcode, B | BX | BLX | BL | BXJ | ERET)
+}
+
+fn is_terminator_arm64(insn: &yaxpeax_arm::armv8::a64::Instruction) -> bool {
+    use yaxpeax_arm::armv8::a64::Opcode::*;
+    matches!(
+        insn.opcode,
+        B | BR | RET | ERET | HVC | SMC | BRK | DRPS
+    )
+}
+
+fn is_terminator_riscv(insn: &riscv_decode::Instruction) -> bool {
+    use riscv_decode::Instruction as I;
+    match insn {
+        I::Jal(j) => j.rd() == 0,    // unconditional jump (rd=zero => no link)
+        I::Jalr(j) => j.rd() == 0,   // return / jump register
+        I::Ecall => true,
+        I::Ebreak => true,
+        _ => false,
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Tiny helpers
+// -----------------------------------------------------------------------------
 
 #[inline]
 fn write_u32(buf: &mut [u8], at: usize, v: u32) {

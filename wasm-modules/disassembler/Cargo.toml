@@ -9,6 +9,8 @@ crate-type = ["cdylib"]
 [dependencies]
 yaxpeax-arch = { version = "0.3", default-features = false, features = ["std"] }
 yaxpeax-x86 = { version = "2.0", default-features = false, features = ["std", "fmt"] }
+yaxpeax-arm = { version = "0.4", default-features = false, features = ["std", "alloc", "fmt"] }
+riscv-decode = "0.2"
 
 [profile.release]
 opt-level = "z"

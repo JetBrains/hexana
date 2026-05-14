@@ -40,7 +40,7 @@ Current expectations:
 - `disassembly/capstone-wasm/.../CapstoneWasmModule.*.kt` expects:
   - export `memory`
   - export `alloc`, `dealloc`, `free_result`
-  - export `decode_x86_64` (more `decode_*` arches added later)
+  - exports `decode_x86`, `decode_x86_64`, `decode_arm`, `decode_arm64`, `decode_riscv32`, `decode_riscv64`
 
 Both wasmprinter and wat2wasm rely on host callbacks under `env`; the
 disassembler module has no host imports.
