@@ -71,6 +71,6 @@ This documentation site exposes [`llms.txt`](llms.txt) at the root for LLM consu
 
 - [GitHub repository](https://github.com/JetBrains/hexana)
 - [Issue tracker](https://github.com/JetBrains/hexana/issues)
-- [JetBrains Marketplace listing](https://plugins.jetbrains.com/plugin/org.jetbrains.hexana-hexana)
+- [JetBrains Marketplace listing](https://plugins.jetbrains.com/plugin/29090-hexana)
 - [VS Code Marketplace listing](https://marketplace.visualstudio.com/items?itemName=JetBrains.hexana-wasm)
 - [Open VSX listing](https://open-vsx.org/extension/JetBrains/hexana-wasm)

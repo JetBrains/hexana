@@ -14,7 +14,7 @@
 - **Repository**: https://github.com/JetBrains/hexana
 - **JetBrains plugin ID**: `org.jetbrains.hexana`
 - **VS Code extension ID**: `JetBrains.hexana-wasm`
-- **JetBrains Marketplace**: https://plugins.jetbrains.com/plugin/org.jetbrains.hexana-hexana
+- **JetBrains Marketplace**: https://plugins.jetbrains.com/plugin/29090-hexana
 - **VS Code Marketplace**: https://marketplace.visualstudio.com/items?itemName=JetBrains.hexana-wasm
 - **Open VSX**: https://open-vsx.org/extension/JetBrains/hexana-wasm
 - **Docs site**: https://jetbrains.github.io/hexana/
