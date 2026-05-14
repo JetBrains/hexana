@@ -1,6 +1,5 @@
 import java.net.InetAddress
 import java.util.*
-import org.gradle.jvm.toolchain.JavaLanguageVersion
 
 val serverPropertiesFile = layout.projectDirectory.file("server/gradle.properties").asFile
 require(serverPropertiesFile.isFile) {
@@ -57,6 +56,7 @@ val r8OwnedJarNames = setOf(
     "core.jar",
     "dwarf-jvm.jar",
     "encdec-jvm.jar",
+    "hexanaDocument-jvm.jar",
     "server-$mcpServerVersion.jar",
     "wasmParser-jvm.jar",
 )
