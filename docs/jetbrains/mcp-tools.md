@@ -146,5 +146,3 @@ The contract is covered by `HexanaMcpErrorContractTest` and `HexanaMcpStructured
 ## See also
 
 - [`features.md`](features.md) — full feature reference.
-- [`architecture.md`](architecture.md) — how the MCP DSL generates `HexanaToolset.kt`.
-- Tests under `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp/direct/` — one per tool, plus contract suites.

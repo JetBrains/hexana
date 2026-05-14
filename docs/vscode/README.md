@@ -2,7 +2,7 @@
 title: Hexana VS Code Extension — Documentation (0.0.2)
 description: User and contributor documentation for the Hexana VS Code extension, version 0.0.2.
 version: "0.0.2"
-audience: [users, contributors]
+audience: [users]
 source-branch: release/vscode-0.0.2
 ---
 
@@ -22,7 +22,6 @@ source-branch: release/vscode-0.0.2
 | [`run-support.md`](run-support.md) | Users | Run Core Wasm and Component Model binaries through Wasmtime, including composition with `wasm-tools` / `wac`. |
 | [`component-model.md`](component-model.md) | Users | Component Model support — dependency resolution and nested-module navigation. |
 | [`settings.md`](settings.md) | Users | The two VS Code settings Hexana contributes. |
-| [`architecture.md`](architecture.md) | Contributors | Three-layer architecture (TypeScript host + Kotlin/JS extension lib + Compose-for-Web webview). |
 | [`troubleshooting.md`](troubleshooting.md) | Users | Common failure modes and resolutions. |
 | [`changelog.md`](changelog.md) | All | Release notes. |
 
@@ -51,7 +50,6 @@ Some features that depend on VS Code's terminal or filesystem providers may beha
 - **Already opened a `.wasm`, want to run it**: [`run-support.md`](run-support.md).
 - **Working with Component Model binaries**: [`component-model.md`](component-model.md).
 - **Plugin doesn't load / file doesn't open**: [`troubleshooting.md`](troubleshooting.md).
-- **Contributing code**: [`architecture.md`](architecture.md).
 
 ## Source of truth
 

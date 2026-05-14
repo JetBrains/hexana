@@ -27,12 +27,12 @@ If a `.wasm` opens elsewhere:
 
 ## The Hexana editor opens but the analysis panel is blank
 
-This usually means the webview failed to load the Kotlin/JS bundle.
+This usually indicates a webview load failure.
 
 1. Open `Help → Toggle Developer Tools` and check the webview's console for errors.
 2. Confirm the extension installed correctly — `Extensions` view → click Hexana → check the version matches what you expect.
-3. If you built locally, confirm `webview/build/kotlin-webpack/js/productionExecutable/webview.js` exists. If not, run `build-and-run-locally.sh` again.
-4. Reload the window.
+3. Reload the window (`Cmd/Ctrl+Shift+P` → **Developer: Reload Window**).
+4. If the problem persists, file an issue with the Developer Tools console output attached.
 
 ## "Hexana editor: cannot read .wasm file"
 

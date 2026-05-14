@@ -3,7 +3,7 @@ title: Hexana IntelliJ Plugin — Documentation (0.9)
 description: User and contributor documentation for the Hexana IntelliJ Platform plugin, version 0.9 (released 2026-05-07).
 version: "0.9"
 released: 2026-05-07
-audience: [users, contributors]
+audience: [users]
 ---
 
 # Hexana — IntelliJ Plugin Documentation
@@ -23,7 +23,6 @@ audience: [users, contributors]
 | [`java-integration.md`](java-integration.md) | Java/JVM users | GraalWasm and Chicory completion and inspections. |
 | [`js-integration.md`](js-integration.md) | JS / TS users | `WebAssembly.instantiate` imports completion and `.instance.exports` type inference. |
 | [`settings.md`](settings.md) | Users | `Settings → Tools → Hexana` and `Settings → Build, Execution → WASM Runtime`. |
-| [`architecture.md`](architecture.md) | Contributors | Module layout, extension points, threading model. |
 | [`troubleshooting.md`](troubleshooting.md) | Users | Common failure modes and resolutions. |
 | [`changelog-0.9.md`](changelog-0.9.md) | All | Release notes for 0.9, pinned. |
 | [`llms.txt`](llms.txt) | LLM agents | Curated index for AI assistants reading the docs. |
@@ -47,7 +46,6 @@ A companion **VS Code extension** is published separately on `marketplace.visual
 - **Already opened a `.wasm`, want to run it**: [`run-and-debug.md`](run-and-debug.md).
 - **Driving Hexana from an AI assistant**: [`mcp-tools.md`](mcp-tools.md).
 - **Plugin doesn't load / file doesn't open**: [`troubleshooting.md`](troubleshooting.md).
-- **Contributing code**: [`architecture.md`](architecture.md).
 
 ## Source of truth
 

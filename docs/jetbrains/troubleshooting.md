@@ -20,10 +20,7 @@ If the issue persists, capture the IDE log (`Help → Show Log in Finder/Explore
 
 ## A .wat file opens but actions like Run don't work
 
-`.wat` is a text format — Hexana provides language support but does not execute WAT directly. To run, the file must be compiled to `.wasm` first. The `:graalwasm:wat2wasm` module provides this conversion at build time; from the IDE, you either:
-
-- Use `wabt`'s `wat2wasm` CLI manually and open the resulting `.wasm`, or
-- Convert via the wat2wasm-wrapper WASM module bundled with Hexana (`graalwasm/wat2wasm/src/main/resources/wat2wasm_full.wasm`). This path is used internally by Hexana for tests; a user-facing conversion action is not yet wired.
+`.wat` is a text format — Hexana provides language support but does not execute WAT directly. To run, the file must be compiled to `.wasm` first. Use `wabt`'s `wat2wasm` CLI (or any equivalent tool) and open the resulting `.wasm` in Hexana. A user-facing conversion action inside the IDE is not yet wired.
 
 ## The Run button is greyed out
 
@@ -49,10 +46,7 @@ GraalVM does not support the debugger in 0.9. Use Wasmtime or WAMR if you need t
 
 ## "Missing WASM tools" notification appears on a .wat file
 
-`MissingWasmToolsNotification` surfaces when Hexana cannot find the WASM tooling it needs to operate on a `.wat` file. Typically this means Hexana could not locate or initialise the bundled `wat2wasm` WASM module. Try:
-
-1. Re-running `./gradlew :idea-plugin:buildPlugin` to confirm the bundled resources are correctly packaged.
-2. If the issue happens with an installed marketplace build, file an issue at the Hexana issue tracker with the IDE log attached.
+This notification surfaces when Hexana cannot find the WASM tooling it needs to operate on a `.wat` file. This is a packaging issue — re-install or update Hexana from the Marketplace, and if the problem persists, file an issue at the [Hexana issue tracker](https://github.com/JetBrains/hexana/issues) with the IDE log attached.
 
 ## MCP tools don't appear in my AI assistant
 
@@ -61,7 +55,7 @@ GraalVM does not support the debugger in 0.9. Use Wasmtime or WAMR if you need t
 3. Confirm the AI assistant client is configured to connect to that endpoint.
 4. Confirm a `.wasm` file is open in the IDE — Hexana's tools are useful only when a module is loaded.
 
-If a specific tool is missing, the registered toolset name (`HexanaToolset`) and tool list are defined in `mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt`. The order list (`HEXANA_TOOL_ORDER`) is the authoritative source — if it includes a tool that does not appear, the build would have failed at code-gen time.
+The canonical tool list is in [`mcp-tools.md`](mcp-tools.md). If a specific tool is missing on a fresh install, file an issue with the IDE log attached.
 
 ## Java completion / inspections don't fire on my GraalWasm or Chicory code
 
@@ -90,7 +84,7 @@ Selection support in hex and text panels was rewritten in 0.7.1. If you are runn
 
 ## How do I file a bug?
 
-The current issue tracker is `https://github.com/JetBrains/hexana/issues` (per the URLs in `idea-plugin/CHANGELOG.md`). Include:
+Open an issue at [`https://github.com/JetBrains/hexana/issues`](https://github.com/JetBrains/hexana/issues). Include:
 
 - Hexana version (visible in **Settings → Plugins**).
 - IDE name and version.

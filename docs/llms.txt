@@ -35,7 +35,6 @@
 - [Java Integration](jetbrains/java-integration.md): GraalWasm and Chicory completion and inspections.
 - [JS and TS Integration](jetbrains/js-integration.md): WebAssembly.instantiate imports completion and .instance.exports type inference.
 - [Settings](jetbrains/settings.md): IDE settings pages.
-- [Architecture](jetbrains/architecture.md): module layout, extension points, threading.
 - [Troubleshooting](jetbrains/troubleshooting.md): common failure modes and resolutions.
 - [Changelog 0.9](jetbrains/changelog-0.9.md): pinned release notes for 0.9.
 
@@ -48,7 +47,6 @@
 - [Run Support](vscode/run-support.md): running Core Wasm and Component Model binaries through Wasmtime.
 - [Component Model](vscode/component-model.md): dependency resolution and nested-module navigation.
 - [Settings](vscode/settings.md): the two VS Code settings the extension contributes.
-- [Architecture](vscode/architecture.md): TypeScript host + Kotlin/JS extension lib + Compose-for-Web webview.
 - [Troubleshooting](vscode/troubleshooting.md): common failure modes and resolutions.
 - [Changelog](vscode/changelog.md): release notes.
 

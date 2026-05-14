@@ -80,7 +80,6 @@ nav:
       - Java Integration: jetbrains/java-integration.md
       - JavaScript & TypeScript: jetbrains/js-integration.md
       - Settings: jetbrains/settings.md
-      - Architecture: jetbrains/architecture.md
       - Troubleshooting: jetbrains/troubleshooting.md
       - Changelog 0.9: jetbrains/changelog-0.9.md
 
@@ -92,7 +91,6 @@ nav:
       - Run Support: vscode/run-support.md
       - Component Model: vscode/component-model.md
       - Settings: vscode/settings.md
-      - Architecture: vscode/architecture.md
       - Troubleshooting: vscode/troubleshooting.md
       - Changelog: vscode/changelog.md
 
