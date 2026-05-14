@@ -1,0 +1,141 @@
+site_name: Hexana
+site_description: WebAssembly and binary analysis for JetBrains IDEs and VS Code, by JetBrains.
+site_url: https://jetbrains.github.io/hexana/
+site_author: JetBrains
+
+repo_url: https://github.com/JetBrains/hexana
+repo_name: JetBrains/hexana
+edit_uri: edit/master/docs/
+
+docs_dir: docs
+
+# Internal design / planning docs that ship in-repo but should not appear
+# on the public docs site. Excluded from build entirely.
+exclude_docs: |
+  superpowers/
+  .DS_Store
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - search.suggest
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - content.action.view
+    - content.tabs.link
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/JetBrains/hexana
+    - icon: fontawesome/brands/jetbrains
+      link: https://plugins.jetbrains.com/plugin/org.jetbrains.hexana-hexana
+  generator: false
+
+nav:
+  - Home: index.md
+
+  - JetBrains IDEs:
+      - Overview: jetbrains/README.md
+      - Getting Started: jetbrains/getting-started.md
+      - Features: jetbrains/features.md
+      - File Types: jetbrains/file-types.md
+      - WIT Language: jetbrains/wit-language.md
+      - Run and Debug: jetbrains/run-and-debug.md
+      - MCP Tools: jetbrains/mcp-tools.md
+      - Java Integration: jetbrains/java-integration.md
+      - JavaScript & TypeScript: jetbrains/js-integration.md
+      - Settings: jetbrains/settings.md
+      - Architecture: jetbrains/architecture.md
+      - Troubleshooting: jetbrains/troubleshooting.md
+      - Changelog 0.9: jetbrains/changelog-0.9.md
+
+  - VS Code:
+      - Overview: vscode/README.md
+      - Getting Started: vscode/getting-started.md
+      - Features: vscode/features.md
+      - Analysis Tabs: vscode/analysis-tabs.md
+      - Run Support: vscode/run-support.md
+      - Component Model: vscode/component-model.md
+      - Settings: vscode/settings.md
+      - Architecture: vscode/architecture.md
+      - Troubleshooting: vscode/troubleshooting.md
+      - Changelog: vscode/changelog.md
+
+plugins:
+  - search:
+      lang: en
+  - tags
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - meta
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.critic
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
