@@ -28,5 +28,17 @@ kotlin {
                 implementation(libs.kotlin.test)
             }
         }
+
+        jvmMain {
+            dependencies {
+                implementation(libs.chicory.runtime)
+            }
+        }
+
+        jvmTest {
+            dependencies {
+                implementation(libs.junit4)
+            }
+        }
     }
 }

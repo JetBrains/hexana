@@ -1,5 +1,6 @@
 [versions]
 changelog = "2.4.0"
+chicory = "1.4.0"
 kotlin = "2.2.21"
 kotlinLogging = "8.0.01"
 kotlinPoet = "2.2.0"
@@ -24,6 +25,7 @@ slf4j = "2.0.17"
 r8 = "9.1.31"
 
 [libraries]
+chicory-runtime = { module = "com.dylibso.chicory:runtime", version.ref = "chicory" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 intellij-driver-client = { module = "com.jetbrains.intellij.driver:driver-client", version.ref = "intellijDriver" }
