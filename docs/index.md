@@ -20,7 +20,7 @@ hide:
 
     [Read the docs →](jetbrains/index.md)
 
--   ### :simple-visualstudiocode: For Visual Studio Code
+-   ### :custom-vscode: For Visual Studio Code
 
     VS Code extension with a Compose-for-Web custom editor, virtual-scrolling hex viewer, 11 structural-analysis tabs, Component Model dependency resolution, and Wasmtime run support.
 
