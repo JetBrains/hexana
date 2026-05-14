@@ -414,9 +414,15 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
     from(obfuscatedPackagingDir.map { it.file("codex-plugin/README.md") }) {
         into("plugins/hexana")
     }
-    from(obfuscatedPackagingDir.map { it.dir("codex-plugin/bin") }) {
+    from(obfuscatedPackagingDir.map { it.dir("claude-plugin/bin") }) {
         into("plugins/hexana/bin")
         filesMatching("hexana-mcp") {
+            permissions { unix("rwxr-xr-x") }
+        }
+    }
+    from(obfuscatedPackagingDir.map { it.dir("codex-plugin/server") }) {
+        into("plugins/hexana/server")
+        filesMatching("bin/server") {
             permissions { unix("rwxr-xr-x") }
         }
     }
@@ -433,13 +439,57 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
         outputDir.resolve(".agents/plugins").mkdirs()
         outputDir.resolve("plugins/hexana").mkdirs()
 
+        fun writeClientMcpJson(client: String) {
+            val source = obfuscatedPackagingDir.get().file("$client-plugin/.mcp.json").asFile
+            val destination = outputDir.resolve("plugins/hexana/.$client-plugin/mcp.json")
+            destination.parentFile.mkdirs()
+            destination.writeText(source.readText())
+        }
+
+        fun rewriteManifestMcpPath(client: String) {
+            val manifest = outputDir.resolve("plugins/hexana/.$client-plugin/plugin.json")
+            val original = manifest.readText()
+            val updated = original.replace(
+                "\"mcpServers\": \"./.mcp.json\"",
+                "\"mcpServers\": \"./.$client-plugin/mcp.json\""
+            )
+            check(updated != original) {
+                "Could not rewrite mcpServers path in ${manifest.absolutePath}"
+            }
+            manifest.writeText(updated)
+        }
+
+        writeClientMcpJson("claude")
+        writeClientMcpJson("codex")
+        rewriteManifestMcpPath("claude")
+        rewriteManifestMcpPath("codex")
+
+        listOf(
+            "plugins/hexana/bin/hexana-mcp.cmd",
+            "plugins/hexana/server/bin/server.bat"
+        ).forEach { relativePath ->
+            val file = outputDir.resolve(relativePath)
+            if (file.isFile) {
+                file.writeText(file.readText().replace("\r\n", "\n"))
+            }
+        }
+
         outputDir.resolve(".claude-plugin/marketplace.json").writeText(
             """
             {
+              "name": "hexana",
+              "owner": {
+                "name": "JetBrains",
+                "email": "hexana@jetbrains.com"
+              },
+              "metadata": {
+                "description": "Hexana marketplace distribution for Claude Code"
+              },
               "plugins": [
                 {
                   "name": "hexana",
-                  "path": "plugins/hexana"
+                  "source": "./plugins/hexana",
+                  "category": "Developer Tools"
                 }
               ]
             }
@@ -448,10 +498,22 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
         outputDir.resolve(".agents/plugins/marketplace.json").writeText(
             """
             {
+              "name": "hexana",
+              "interface": {
+                "displayName": "Hexana"
+              },
               "plugins": [
                 {
                   "name": "hexana",
-                  "path": "plugins/hexana"
+                  "source": {
+                    "source": "local",
+                    "path": "./plugins/hexana"
+                  },
+                  "policy": {
+                    "installation": "AVAILABLE",
+                    "authentication": "ON_INSTALL"
+                  },
+                  "category": "Developer Tools"
                 }
               ]
             }
