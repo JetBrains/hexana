@@ -16,6 +16,12 @@ kotlin {
     }
 
     sourceSets {
+        commonMain {
+            dependencies {
+                api(project(":encdec"))
+            }
+        }
+
         commonTest {
             dependencies {
                 implementation(libs.kotlin.test)
