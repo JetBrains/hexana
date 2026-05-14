@@ -11,7 +11,7 @@ hide:
 
 <div class="grid cards" markdown>
 
--   ### :material-jetbrains: For JetBrains IDEs
+-   ### :simple-jetbrains: For JetBrains IDEs
 
     Full IntelliJ Platform plugin — multi-tab `.wasm` editor, WAT and WIT language support, MCP server with 17 tools, Java-side completion for GraalWasm and Chicory, JavaScript / TypeScript type inference for `WebAssembly.instantiate`, run and debug on Wasmtime / WAMR / GraalVM.
 
@@ -20,7 +20,7 @@ hide:
 
     [Read the docs →](jetbrains/)
 
--   ### :material-microsoft-visual-studio-code: For Visual Studio Code
+-   ### :simple-visualstudiocode: For Visual Studio Code
 
     VS Code extension with a Compose-for-Web custom editor, virtual-scrolling hex viewer, 11 structural-analysis tabs, Component Model dependency resolution, and Wasmtime run support.
 
