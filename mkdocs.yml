@@ -62,8 +62,8 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/JetBrains/hexana
-    - icon: fontawesome/brands/jetbrains
-      link: https://plugins.jetbrains.com/plugin/org.jetbrains.hexana-hexana
+    - icon: simple/jetbrains
+      link: https://plugins.jetbrains.com/plugin/29090-hexana
   generator: false
 
 nav:
