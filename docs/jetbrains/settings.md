@@ -57,4 +57,4 @@ The platform MCP server lives in the bundled `com.intellij.mcpServer` plugin and
 
 ## Settings → Plugins → Marketplace → "Hexana"
 
-Not a Hexana surface — it is the Plugin Manager — but a relevant entry point. Use it to enable, disable, update, or uninstall Hexana, and to read the `<description>` and `<change-notes>` content shipped in [plugin.xml](../src/main/resources/META-INF/plugin.xml) and `idea-plugin/CHANGELOG.md`.
+Not a Hexana surface — it is the Plugin Manager — but a relevant entry point. Use it to enable, disable, update, or uninstall Hexana, and to read the listing description and "What's New" content for each release.

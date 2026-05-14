@@ -18,7 +18,7 @@ hide:
     **Current release**: 0.9 (2026-05-07)
     Supported IDEs: IntelliJ IDEA 2024.1+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm.
 
-    [Read the docs →](jetbrains/)
+    [Read the docs →](jetbrains/index.md)
 
 -   ### :simple-visualstudiocode: For Visual Studio Code
 
@@ -27,7 +27,7 @@ hide:
     **Current release**: 0.0.2 preview
     Supports: VS Code 1.85+, Cursor, VSCodium, Code OSS, and other VS Code-based editors via Open VSX.
 
-    [Read the docs →](vscode/)
+    [Read the docs →](vscode/index.md)
 
 </div>
 

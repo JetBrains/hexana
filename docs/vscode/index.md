@@ -10,7 +10,7 @@ source-branch: release/vscode-0.0.2
 
 **Hexana** is a Visual Studio Code extension by JetBrains for inspecting WebAssembly binaries. Open any `.wasm` file and Hexana replaces the default editor with a Compose-for-Web webview: a virtual-scrolling hex viewer alongside up to **11 structural-analysis tabs** (Summary, Exports, Imports, Functions, Data, Custom, Top, Monos, Garbage, Modules, WAT). Run modules directly through Wasmtime. Resolve Component Model dependencies automatically. Drill into nested modules. This documentation set describes **release 0.0.2** sourced from branch `release/vscode-0.0.2`.
 
-> Looking for the IntelliJ Platform plugin? See the [JetBrains IDEs section](../jetbrains/). The VS Code and JetBrains products share the same WASM parser core but differ in language-support depth, run integrations, and target audience.
+> Looking for the IntelliJ Platform plugin? See the [JetBrains IDEs section](../jetbrains/index.md). The VS Code and JetBrains products share the same WASM parser core but differ in language-support depth, run integrations, and target audience.
 
 ## What's in this directory
 
@@ -30,7 +30,7 @@ source-branch: release/vscode-0.0.2
 - **Extension version**: 0.0.2 (marked `preview` on the marketplace).
 - **VS Code requirement**: `^1.85.0` (December 2023 and newer).
 - **Distribution**: Visual Studio Marketplace (`marketplace.visualstudio.com/items?itemName=JetBrains.hexana-wasm`) and Open VSX (`open-vsx.org`).
-- **Companion**: a JetBrains IntelliJ plugin, documented [here](../jetbrains/).
+- **Companion**: a JetBrains IntelliJ plugin, documented [here](../jetbrains/index.md).
 
 ## Supported editors
 

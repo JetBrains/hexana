@@ -38,7 +38,7 @@ audience: [users]
 
 IntelliJ IDEA, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm, and any other IDE on IntelliJ Platform 2024.1+ that bundles or installs `com.intellij.mcpServer`. RustRover and CLion users get the natural fit for binary tooling; WebStorm and PhpStorm users get JS interop.
 
-A companion **VS Code extension** is published separately on `marketplace.visualstudio.com` and `open-vsx.org`. See the [VS Code section](../vscode/) of this site for that product's documentation.
+A companion **VS Code extension** is published separately on `marketplace.visualstudio.com` and `open-vsx.org`. See the [VS Code section](../vscode/index.md) of this site for that product's documentation.
 
 ## How to read this set
 

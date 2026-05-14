@@ -7,7 +7,7 @@ released: 2026-05-07
 
 # Hexana 0.9 Release Notes
 
-Released **2026-05-07**. Source of truth: [`idea-plugin/CHANGELOG.md`](../CHANGELOG.md) at commit `6a108799` on branch `release/0.9`.
+Released **2026-05-07**.
 
 ## What's new in 0.9
 
@@ -98,9 +98,3 @@ No breaking changes from 0.8.x.
 - Java integration covers Java sources only. Kotlin source support is not yet wired.
 - Quick-fixes are not yet wired on the WebAssembly Java inspections or the WIT inspections.
 
-## Source
-
-- Branch: `release/0.9`.
-- Tag: see `git tag | grep 0.9`.
-- Commit: `6a108799` ([release]: Release 0.9, 2026-05-07).
-- Authoritative changelog: [`idea-plugin/CHANGELOG.md`](../CHANGELOG.md).

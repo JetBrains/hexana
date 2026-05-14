@@ -125,4 +125,4 @@ These are tracked for future versions; some are JetBrains-only by design (where 
 ## See also
 
 - [`getting-started.md`](getting-started.md), [`analysis-tabs.md`](analysis-tabs.md), [`run-support.md`](run-support.md), [`component-model.md`](component-model.md), [`settings.md`](settings.md), [`troubleshooting.md`](troubleshooting.md).
-- [JetBrains plugin documentation](../jetbrains/) for the IntelliJ-side capabilities.
+- [JetBrains plugin documentation](../jetbrains/index.md) for the IntelliJ-side capabilities.
