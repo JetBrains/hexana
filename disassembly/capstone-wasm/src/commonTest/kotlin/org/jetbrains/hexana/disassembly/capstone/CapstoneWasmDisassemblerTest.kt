@@ -1,34 +1,29 @@
 package org.jetbrains.hexana.disassembly.capstone
 
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.jetbrains.hexana.disassembly.core.Arch
 import org.jetbrains.hexana.disassembly.core.AssemblySyntax
 import org.jetbrains.hexana.disassembly.core.DecodedInstruction
 import org.jetbrains.hexana.io.toCommonByteBuffer
-import org.junit.Test
+import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class CapstoneWasmDisassemblerTest {
 
-    private fun disassembler(): CapstoneWasmDisassembler = runBlocking {
-        CapstoneWasmDisassembler.loadFromClasspath()
-    }
-
     @Test
-    fun `decodes a short x86_64 sequence end to end`() {
+    fun decodesShortX86_64Sequence() = runTest {
+        val disasm = loadTestDisassembler()
+
         // nop ; ret ; mov rax, rbx
         val bytes = byteArrayOf(
-            0x90.toByte(),                                              // nop
-            0xc3.toByte(),                                              // ret
-            0x48.toByte(), 0x89.toByte(), 0xd8.toByte(),                // mov rax, rbx
+            0x90.toByte(),                                // nop
+            0xc3.toByte(),                                // ret
+            0x48.toByte(), 0x89.toByte(), 0xd8.toByte(),  // mov rax, rbx
         )
-        val buffer = bytes.toCommonByteBuffer()
-        val disasm = disassembler()
-
         val instructions = with(disasm) {
-            buffer.disassemble(baseAddress = 0x1000UL, arch = Arch.X86_64)
+            bytes.toCommonByteBuffer().disassemble(baseAddress = 0x1000UL, arch = Arch.X86_64)
         }.toList()
 
         assertEquals(3, instructions.size, "expected nop, ret, mov")
@@ -56,13 +51,12 @@ class CapstoneWasmDisassemblerTest {
     }
 
     @Test
-    fun `formatter renders mnemonic and operands of mov`() {
+    fun formatterRendersMnemonicAndOperandsOfMov() = runTest {
+        val disasm = loadTestDisassembler()
         val bytes = byteArrayOf(0x48.toByte(), 0x89.toByte(), 0xd8.toByte()) // mov rax, rbx
-        val buffer = bytes.toCommonByteBuffer()
-        val disasm = disassembler()
 
         val insn = with(disasm) {
-            buffer.disassemble(baseAddress = 0UL, arch = Arch.X86_64)
+            bytes.toCommonByteBuffer().disassemble(baseAddress = 0UL, arch = Arch.X86_64)
         }.toList().single() as DecodedInstruction.Valid
 
         val fmt = disasm.formatter(Arch.X86_64, AssemblySyntax.INTEL)
@@ -74,12 +68,29 @@ class CapstoneWasmDisassemblerTest {
     }
 
     @Test
-    fun `empty buffer yields empty sequence`() {
-        val buffer = ByteArray(0).toCommonByteBuffer()
-        val disasm = disassembler()
+    fun emptyBufferYieldsEmptySequence() = runTest {
+        val disasm = loadTestDisassembler()
         val instructions = with(disasm) {
-            buffer.disassemble(baseAddress = 0UL, arch = Arch.X86_64)
+            ByteArray(0).toCommonByteBuffer().disassemble(baseAddress = 0UL, arch = Arch.X86_64)
         }.toList()
         assertEquals(0, instructions.size)
+    }
+
+    @Test
+    fun retIsTerminatorOnAllArches() = runTest {
+        val disasm = loadTestDisassembler()
+
+        // x86_64 ret
+        val x86 = byteArrayOf(0xc3.toByte()).toCommonByteBuffer()
+        val x86Insn = with(disasm) { x86.disassemble(baseAddress = 0UL, arch = Arch.X86_64) }
+            .toList().single() as DecodedInstruction.Valid
+        assertTrue(x86Insn.isBlockTerminator, "x86_64 ret should terminate")
+
+        // ARM64 ret (D65F03C0 in little-endian: C0 03 5F D6)
+        val arm64 = byteArrayOf(0xC0.toByte(), 0x03.toByte(), 0x5F.toByte(), 0xD6.toByte()).toCommonByteBuffer()
+        val arm64Insn = with(disasm) { arm64.disassemble(baseAddress = 0UL, arch = Arch.ARM64) }
+            .toList().single() as DecodedInstruction.Valid
+        assertEquals(4, arm64Insn.size, "AArch64 instructions are 4 bytes")
+        assertTrue(arm64Insn.isBlockTerminator, "AArch64 RET should terminate")
     }
 }
