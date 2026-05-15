@@ -6,6 +6,7 @@ import org.jetbrains.hexana.dwarf.DwarfAddressSection
 import org.jetbrains.hexana.dwarf.DwarfInfoSection
 import org.jetbrains.hexana.dwarf.DwarfLineSection
 import org.jetbrains.hexana.dwarf.DwarfLineStrSection
+import org.jetbrains.hexana.dwarf.DwarfLocSection
 import org.jetbrains.hexana.dwarf.DwarfSection
 import org.jetbrains.hexana.dwarf.DwarfStrSection
 
@@ -20,6 +21,7 @@ class ElfDwarfAccessor(private val sections: List<ElfSectionHeader>) : DwarfAcce
             ".debug_str" -> DwarfStrSection(contentRange.offset, contentRange.size, this)
             ".debug_line_str" -> DwarfLineStrSection(contentRange.offset, contentRange.size, this)
             ".debug_addr" -> DwarfAddressSection(contentRange.offset, contentRange.size, this)
+            ".debug_loc" -> DwarfLocSection(contentRange.offset, contentRange.size, this)
             else -> DwarfSection(contentRange.offset, contentRange.size, this)
         }
     }
@@ -38,4 +40,7 @@ class ElfDwarfAccessor(private val sections: List<ElfSectionHeader>) : DwarfAcce
 
     override fun debugAddrSection(): DwarfAddressSection? =
         section(".debug_addr") as? DwarfAddressSection
+
+    override fun debugLocSection(): DwarfLocSection? =
+        section(".debug_loc") as? DwarfLocSection
 }

@@ -51,4 +51,5 @@ private object FixtureDwarfAccessor : DwarfAccessor {
     override fun debugAbbrevSection(): DwarfAbbrevSection? = null
     override fun debugStrSection(): DwarfStrSection? = null
     override fun debugAddrSection(): DwarfAddressSection? = null
+    override fun debugLocSection(): DwarfLocSection? = null
 }

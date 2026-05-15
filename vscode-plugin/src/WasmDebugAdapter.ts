@@ -337,16 +337,18 @@ class LldbDapProxy implements vscode.DebugAdapter {
                 paths.add(sourcePath);
                 // Track breakpoint lines for the initial-stop
                 // matching used in WAMR sessions.
+                // DAP setBreakpoints sends the complete breakpoint
+                // list for a source, so replace (not append) the
+                // line set to avoid stale entries.
                 const bpLines = msg.arguments.breakpoints as Array<{ line: number }> | undefined;
-                if (bpLines) {
-                    let lineSet = this.registeredBreakpoints.get(baseName);
-                    if (!lineSet) {
-                        lineSet = new Set();
-                        this.registeredBreakpoints.set(baseName, lineSet);
-                    }
+                if (bpLines && bpLines.length > 0) {
+                    const lineSet = new Set<number>();
                     for (const bp of bpLines) {
                         lineSet.add(bp.line);
                     }
+                    this.registeredBreakpoints.set(baseName, lineSet);
+                } else {
+                    this.registeredBreakpoints.delete(baseName);
                 }
                 source.path = baseName;
                 source.name = baseName;
@@ -790,7 +792,10 @@ class LldbDapProxy implements vscode.DebugAdapter {
             const suffix = "/" + normalised;
             const matched: string[] = [];
             for (const fullPath of candidates) {
-                if (fullPath.endsWith(suffix) || fullPath === normalised) {
+                // Normalise to forward slashes so suffix matching
+                // works on Windows where paths use backslashes.
+                const normFull = fullPath.replace(/\\/g, "/");
+                if (normFull.endsWith(suffix) || normFull === normalised) {
                     matched.push(fullPath);
                 }
             }

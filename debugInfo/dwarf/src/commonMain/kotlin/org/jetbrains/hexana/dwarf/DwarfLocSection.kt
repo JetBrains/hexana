@@ -51,12 +51,16 @@ fun CommonByteBuffer.readLocationList(
     val sectionStart = locSection.contentOffset
     val sectionEnd = sectionStart + locSection.contentSize
 
-    position(sectionStart + locListOffset)
+    val seekTarget = sectionStart + locListOffset
+    if (seekTarget < sectionStart || seekTarget >= sectionEnd) return entries
+    position(seekTarget)
 
     var baseAddress = 0L
     val maxAddress = if (addressSize == 4) 0xFFFFFFFFL else -1L // all-ones sentinel
 
     while (position() < sectionEnd) {
+        // Need at least 2 × addressSize bytes for the address pair
+        if (position() + 2 * addressSize > sectionEnd) break
         val start = when (addressSize) {
             4 -> readUInt().toLong() and 0xFFFFFFFFL
             8 -> readULong().toLong()
@@ -78,8 +82,10 @@ fun CommonByteBuffer.readLocationList(
         }
 
         // Normal entry: read the location expression
+        if (position() + 2 > sectionEnd) break
         val exprLength = readUShort().toInt()
         if (exprLength == 0) continue
+        if (exprLength > sectionEnd - position()) return entries
 
         val exprBytes = ByteArray(exprLength)
         get(exprBytes, 0, exprLength)

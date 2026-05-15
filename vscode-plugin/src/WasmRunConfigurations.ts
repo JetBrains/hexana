@@ -473,8 +473,9 @@ export async function runExport(
     // When the webview dialog already collected a runtime and action,
     // use them directly and skip the native VS Code picker.
     if (message.runtime && message.action) {
-        runtime = message.runtime as "wasmtime" | "wamr";
-        action = message.action as "run" | "debug";
+        const rawRuntime = message.runtime as string;
+        runtime = (rawRuntime === "wasmtime" || rawRuntime === "wamr") ? rawRuntime : "wasmtime";
+        action = message.action === "debug" ? "debug" : "run";
     } else {
         const configured = getSelectedRuntime();
         if (configured === "ask") {

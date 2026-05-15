@@ -144,7 +144,7 @@ class WamrDebugProcess(
 
                 // Try to resolve the source position from LLDB's
                 // frame output (exact path, then DWARF suffix match).
-                val sourcePosition = if (frameLocation != null) {
+                val sourcePosition = if (frameLocation != null && frameLocation.line > 0) {
                     val vFile = LocalFileSystem.getInstance()
                         .findFileByPath(frameLocation.filePath)
                         ?: resolveFileByDwarfPath(frameLocation.filePath)

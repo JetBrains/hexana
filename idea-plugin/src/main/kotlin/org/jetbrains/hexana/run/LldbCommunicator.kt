@@ -127,8 +127,12 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
             writer.newLine()
             writer.flush()
         } catch (e: java.io.IOException) {
-            // Expected during shutdown — the process stream is closed.
-            LOG.debug("LLDB stream closed while sending command: $command")
+            if (destroyed) {
+                // Expected during shutdown — the process stream is closed.
+                LOG.debug("LLDB stream closed while sending command: $command")
+            } else {
+                LOG.warn("LLDB stream closed unexpectedly while sending command: $command", e)
+            }
         } catch (e: Exception) {
             LOG.warn("Failed to send LLDB command: $command", e)
         }
@@ -284,7 +288,6 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     }
 
     fun destroy() {
-        destroyed = true
         try {
             writer.write("process kill")
             writer.newLine()
@@ -294,6 +297,7 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         } catch (_: Exception) {
             // Ignore — process may already be dead
         }
+        destroyed = true
     }
 
     /**

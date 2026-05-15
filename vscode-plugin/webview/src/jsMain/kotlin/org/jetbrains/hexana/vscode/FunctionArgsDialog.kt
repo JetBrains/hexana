@@ -86,6 +86,10 @@ fun FunctionArgsDialog(
 ) {
     val allRuntimeOptions = if (isComponent) componentRuntimeOptions else coreRuntimeOptions
     val runtimeOptions = if (forcedAction == "debug") allRuntimeOptions.filter { it.supportsDebug } else allRuntimeOptions
+    if (runtimeOptions.isEmpty()) {
+        onCancel()
+        return
+    }
     val values = remember(args) { mutableStateListOf(*args.map { it.defaultValue }.toTypedArray()) }
     val errors = remember(args) { mutableStateListOf(*Array(args.size) { null as String? }) }
     var selectedRuntime by remember {
@@ -262,6 +266,10 @@ fun ProgramArgsDialog(
 ) {
     val allRuntimeOptions = if (isComponent) componentRuntimeOptions else coreRuntimeOptions
     val runtimeOptions = if (forcedAction == "debug") allRuntimeOptions.filter { it.supportsDebug } else allRuntimeOptions
+    if (runtimeOptions.isEmpty()) {
+        onCancel()
+        return
+    }
     var text by remember { mutableStateOf("") }
     var selectedRuntime by remember {
         val defaultId = configuredRuntimeId

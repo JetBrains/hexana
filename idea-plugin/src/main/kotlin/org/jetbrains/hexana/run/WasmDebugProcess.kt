@@ -790,6 +790,10 @@ open class WasmDebugProcess(
         val filePath = location.filePath
         val lineNum = location.line
 
+        // LLDB may report line 0 when no line info is available;
+        // guard against negative values in createPosition.
+        if (lineNum <= 0) return null
+
         // Try the exact path first (works for non-composed modules)
         val vFile = LocalFileSystem.getInstance().findFileByPath(filePath)
         if (vFile != null) {
