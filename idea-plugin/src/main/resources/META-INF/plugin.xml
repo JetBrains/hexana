@@ -188,6 +188,14 @@
         <programRunner implementation="org.jetbrains.hexana.run.WasmDebugRunner"/>
         <xdebugger.breakpointType implementation="org.jetbrains.hexana.run.WasmLineBreakpointType"/>
 
+        <!--
+            Optional "JIT Viewer" tab on every Java-based run configuration.
+            When enabled, appends -agentpath:<libjitview> so the agent
+            records JIT-compiled methods into mem.userDump in the run's
+            working directory.
+        -->
+        <runConfigurationExtension implementation="org.jetbrains.hexana.jit.JitviewRunConfigurationExtension"/>
+
     </extensions>
 
     <actions>
