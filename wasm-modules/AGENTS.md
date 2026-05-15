@@ -6,7 +6,7 @@ This directory contains Rust sources that are compiled into `.wasm` binaries and
 
 - `wasm-modules/wasmprinter_wrapper` produces `graalwasm/wasmprinter/src/main/resources/wasmprinter_wrapper.wasm`
 - `wasm-modules/wat2wasm` produces `graalwasm/wat2wasm/src/main/resources/wat2wasm_full.wasm`
-- `wasm-modules/disassembler` produces `disassembly/capstone-wasm/src/jvmMain/resources/disassembler.wasm` (consumed by `disassembly/capstone-wasm` via Chicory on JVM and host WebAssembly on js/wasmJs; see `wasm-modules/disassembler/README.md` for the export contract)
+- `wasm-modules/disassembler` produces `disassembly/capstone-wasm/src/commonMain/resources/disassembler.wasm` (KMP-shared resource; consumed by `disassembly/capstone-wasm` via Chicory on JVM and host WebAssembly on js/wasmJs; see `wasm-modules/disassembler/README.md` for the export contract)
 
 If you change the Rust source, update the embedded resource in `graalwasm/` in the same change.
 
