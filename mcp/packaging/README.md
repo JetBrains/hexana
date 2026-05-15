@@ -147,7 +147,6 @@ Optional environment variables:
   `plugins/<plugin-name>/server/lib/`.
 - `VALIDATE_CLAUDE_CMD`: optional command run from the cloned public repo root.
 - `VALIDATE_CODEX_CMD`: optional command run from the cloned public repo root.
-- `SMOKE_TEST_SUMMARY`: optional text included in the PR body, for example `Claude and Codex plugin smoke tests passed`.
 - `SKIP_RELEASE_BUILD_AND_SMOKE`: defaults to `false`. TeamCity sets this to `true` only after it has already run the
   visible pre-R8 and R8-obfuscated Gradle smoke steps in the same checkout.
 
@@ -233,7 +232,6 @@ Recommended TeamCity environment:
 - `env.RELEASE_TAG`: `v<version>` when there is a release tag.
 - `env.AUTO_MERGE`: `false` initially.
 - `env.DRY_RUN`: `true` for the first TeamCity wiring test, then `false`.
-- `env.SMOKE_TEST_SUMMARY`: short summary of the upstream and release-package smoke gates.
 
 Do not hardcode GitHub tokens in Kotlin DSL, shell scripts, XML, or committed config. Enable `AUTO_MERGE=true` only
 after branch protection and required checks are configured in the public GitHub repository and the manual PR flow has

@@ -127,6 +127,17 @@ check_public_github_text_file() {
   fi
 }
 
+check_public_github_text() {
+  local context="$1"
+  local text="$2"
+  local text_file
+
+  text_file="$(mktemp "${TMPDIR:-/tmp}/hexana-public-github-text.XXXXXX")"
+  register_cleanup_dir "$text_file"
+  printf '%s\n' "$text" > "$text_file"
+  check_public_github_text_file "$context" "$text_file"
+}
+
 publish_github_release() {
   check_public_github_text_file "GitHub release notes" "$release_notes"
 
@@ -653,10 +664,6 @@ write_pr_body() {
     printf -- '- Plugin: `%s`\n' "$PLUGIN_NAME"
     printf -- '- Version: `%s`\n' "$PLUGIN_VERSION"
     printf -- '- Release tag: `%s`\n' "$RELEASE_TAG"
-    if [ -n "$BUILD_URL_VALUE" ]; then
-      printf -- '- TeamCity build: %s\n' "$BUILD_URL_VALUE"
-    fi
-    printf -- '- Branch: `%s`\n' "$BRANCH"
     printf '\n'
     printf 'Updated public files:\n'
     join_lines_for_pr
@@ -668,13 +675,18 @@ write_pr_body() {
     done
     printf '\n'
     printf 'Smoke tests:\n'
-    printf -- '- %s\n' "$SMOKE_TEST_SUMMARY"
+    printf -- '- Release tests and plugin smoke tests passed before publication.\n'
     printf '\n'
     printf 'Release lock/checksum:\n'
     printf -- '- %s\n' "$(release_lock_summary)"
     printf '\n'
-    printf 'This PR is intended to contain only public distribution metadata, manifests, wrapper scripts, skills, MCP config, and approved public bundled files. It must not contain private source code, TeamCity internals, secrets, or private build artifacts.\n'
+    printf 'This PR is intended to contain only public distribution metadata, manifests, wrapper scripts, skills, MCP config, and approved public bundled files. It must not contain private source code, CI internals, secrets, or private build artifacts.\n'
   } > "$PR_BODY_FILE"
+  check_public_github_text_file "GitHub PR body" "$PR_BODY_FILE"
+}
+
+public_pr_update_comment() {
+  printf 'Updated by release automation for Hexana %s.' "$PLUGIN_VERSION"
 }
 
 apply_pr_metadata() {
@@ -706,6 +718,7 @@ create_or_update_pr() {
   local existing_json
   local pr_number
   local pr_url
+  local pr_update_comment
 
   write_pr_body
   existing_json="$(gh pr list \
@@ -721,7 +734,9 @@ create_or_update_pr() {
     pr_url="$(printf '%s' "$existing_json" | jq -r '.url')"
     log "Updating existing PR #$pr_number"
     gh pr edit "$pr_number" --repo "$PUBLIC_REPO_SLUG" --title "$title" --body-file "$PR_BODY_FILE"
-    gh pr comment "$pr_number" --repo "$PUBLIC_REPO_SLUG" --body "Updated from TeamCity build ${BUILD_URL_VALUE:-unknown build}."
+    pr_update_comment="$(public_pr_update_comment)"
+    check_public_github_text "GitHub PR update comment" "$pr_update_comment"
+    gh pr comment "$pr_number" --repo "$PUBLIC_REPO_SLUG" --body "$pr_update_comment"
   else
     log "Creating pull request"
     pr_url="$(gh pr create \
@@ -825,6 +840,8 @@ publish_public_marketplace_pr() {
   if [ "$DRY_RUN" = "true" ]; then
     log "Dry run requested; not committing, pushing, or updating PR"
     git -C "$CLONE_DIR" diff --cached --stat
+    write_pr_body
+    check_public_github_text "GitHub PR update comment" "$(public_pr_update_comment)"
     return
   fi
 
@@ -877,10 +894,6 @@ main() {
   VALIDATE_CLAUDE_CMD="${VALIDATE_CLAUDE_CMD:-}"
   VALIDATE_CODEX_CMD="${VALIDATE_CODEX_CMD:-}"
   SKIP_RELEASE_BUILD_AND_SMOKE="$(to_bool "${SKIP_RELEASE_BUILD_AND_SMOKE:-false}" "SKIP_RELEASE_BUILD_AND_SMOKE")"
-  export SMOKE_TEST_SUMMARY="${SMOKE_TEST_SUMMARY:-TeamCity Tests, Claude Plugin Smoke, Codex Plugin Smoke, pre-R8 MCP package smoke, and R8-obfuscated MCP package smoke passed.}"
-  BUILD_URL_VALUE="${BUILD_URL:-${TEAMCITY_BUILD_URL:-}}"
-  TEAMCITY_BUILD_BRANCH_VALUE="${TEAMCITY_BUILD_BRANCH:-}"
-
   if [ "$SKIP_RELEASE_BUILD_AND_SMOKE" = "true" ]; then
     log "Skipping Gradle package build and smoke gates because SKIP_RELEASE_BUILD_AND_SMOKE=true"
   else
