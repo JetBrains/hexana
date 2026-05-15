@@ -3,8 +3,7 @@ package org.jetbrains.hexana.disassembly.llvmobjdump
 import java.nio.file.Path
 import kotlin.io.path.isRegularFile
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.hexana.disassembly.core.NativeDisassemblyConfidence
-import org.junit.Assert.assertEquals
+import org.jetbrains.hexana.disassembly.core.Arch
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -43,10 +42,9 @@ class LlvmObjdumpRealBinarySmokeTest {
         assertTrue(parsed.functions.any { it.name == "main" })
         assertTrue(parsed.instructions.any { it.bytes.isNotEmpty() })
 
-        val native = LlvmObjdumpNativeDisassemblyBuilder.fromLlvmObjdump(parsed)
-        assertEquals(NativeDisassemblyConfidence.BackendProvided, native.confidence)
-        assertTrue(native.instructions.isNotEmpty())
-        assertTrue(native.functions.any { it.name == "main" })
+        val result = LlvmObjdumpNativeDisassemblyBuilder.fromLlvmObjdump(parsed, arch = Arch.X86_64)
+        assertTrue(result.instructions.isNotEmpty())
+        assertTrue(result.functions.any { it.name == "main" })
     }
 }
 

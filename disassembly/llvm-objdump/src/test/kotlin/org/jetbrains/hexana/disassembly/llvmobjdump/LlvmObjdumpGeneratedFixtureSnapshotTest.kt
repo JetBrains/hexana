@@ -2,8 +2,7 @@ package org.jetbrains.hexana.disassembly.llvmobjdump
 
 import java.nio.file.Path
 import kotlin.io.path.readText
-import org.jetbrains.hexana.disassembly.core.NativeDisassemblyConfidence
-import org.junit.Assert.assertEquals
+import org.jetbrains.hexana.disassembly.core.Arch
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -18,10 +17,9 @@ class LlvmObjdumpGeneratedFixtureSnapshotTest {
         assertTrue(parsed.instructions.size > 50)
         assertTrue(parsed.instructions.any { it.sectionName == ".text" && it.bytes.isNotEmpty() })
 
-        val native = LlvmObjdumpNativeDisassemblyBuilder.fromLlvmObjdump(parsed)
-        assertEquals(NativeDisassemblyConfidence.BackendProvided, native.confidence)
-        assertTrue(native.functions.first { it.name == "hexana_dispatch" }.basicBlocks.size > 1)
-        assertTrue(native.instructions.any { instruction -> instruction.xrefs.isNotEmpty() })
+        val result = LlvmObjdumpNativeDisassemblyBuilder.fromLlvmObjdump(parsed, arch = Arch.X86_64)
+        assertTrue(result.functions.first { it.name == "hexana_dispatch" }.basicBlocks.size > 1)
+        assertTrue(result.instructions.any { it.branchTargets.isNotEmpty() || it.callTargets.isNotEmpty() })
     }
 
     @Test

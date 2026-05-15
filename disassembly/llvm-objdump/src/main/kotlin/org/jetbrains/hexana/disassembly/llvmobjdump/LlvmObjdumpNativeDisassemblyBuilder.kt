@@ -1,150 +1,86 @@
 package org.jetbrains.hexana.disassembly.llvmobjdump
 
-import org.jetbrains.hexana.disassembly.core.DisassemblySourceLocation
-import org.jetbrains.hexana.disassembly.core.NativeAddress
-import org.jetbrains.hexana.disassembly.core.NativeBasicBlockCandidateBuilder
-import org.jetbrains.hexana.disassembly.core.NativeDisassemblyConfidence
-import org.jetbrains.hexana.disassembly.core.NativeDisassemblyUnit
-import org.jetbrains.hexana.disassembly.core.NativeFunction
-import org.jetbrains.hexana.disassembly.core.NativeInstruction
-import org.jetbrains.hexana.disassembly.core.NativeRelocationAnnotation
-import org.jetbrains.hexana.disassembly.core.NativeXref
-import org.jetbrains.hexana.disassembly.core.NativeXrefKind
+import org.jetbrains.hexana.disassembly.core.Arch
+import org.jetbrains.hexana.disassembly.core.BasicBlockCandidateBuilder
 
 object LlvmObjdumpNativeDisassemblyBuilder {
+    /**
+     * Promotes a parsed [LlvmObjdumpDisassembly] into the typed
+     * [LlvmObjdumpDisassemblyResult] consumed by downstream code:
+     *
+     *  - rendered text → mnemonic, operandsText, assemblyText, raw bytes
+     *  - control-flow → isBlockTerminator (mnemonic-based predicate),
+     *    branchTargets (jump-only VA targets parsed out of operands), and
+     *    callTargets (call-only VA targets), all populated from the same
+     *    operand-text scan
+     *  - per-function blocking → [BasicBlockCandidateBuilder] runs over the
+     *    decoded instructions
+     *
+     * Sections / symbols / file offsets / relocations / source lines are not
+     * applied here — see [LlvmObjdumpValidInstruction] KDoc for why.
+     */
     fun fromLlvmObjdump(
         disassembly: LlvmObjdumpDisassembly,
-        mapVirtualAddressToFileOffset: (ULong) -> Long? = { null },
-        mapSectionAddressToFileOffset: (address: ULong, sectionName: String?) -> Long? = { address, _ ->
-            mapVirtualAddressToFileOffset(address)
-        },
-        findSectionName: (ULong) -> String? = { null },
-        findRelocation: (instructionAddress: ULong, instructionSize: Int, sectionName: String?) -> NativeRelocationAnnotation? = { _, _, _ ->
-            null
-        },
-        findSourceLocation: (ULong) -> DisassemblySourceLocation? = { null },
-    ): NativeDisassemblyUnit {
+        arch: Arch,
+    ): LlvmObjdumpDisassemblyResult {
         val functions = disassembly.functions.map { function ->
-            val instructions = function.instructions.map { instruction ->
-                val sectionName = instruction.sectionName ?: findSectionName(instruction.address)
-                val relocation = findRelocation(instruction.address, instruction.bytes.size, sectionName)
-                NativeInstruction(
-                    address = instruction.address.toNativeAddress { address ->
-                        mapSectionAddressToFileOffset(address, sectionName)
-                    },
-                    sectionName = sectionName,
-                    bytes = instruction.bytes,
-                    mnemonic = instruction.mnemonic,
-                    operandsText = instruction.operands,
-                    assemblyText = instruction.assembly,
-                    symbol = instruction.functionName,
-                    sourceLocation = findSourceLocation(instruction.address),
-                    relocation = relocation,
-                    xrefs = instruction.extractXrefs(relocation) { targetAddress ->
-                        val targetSectionName = findSectionName(targetAddress) ?: sectionName
-                        mapSectionAddressToFileOffset(targetAddress, targetSectionName)
-                    },
-                    confidence = NativeDisassemblyConfidence.BackendProvided,
-                )
-            }
-            val entrySectionName = function.sectionName ?: instructions.firstOrNull()?.sectionName
-            NativeFunction(
+            val instructions = function.instructions.map { it.decode(arch) }
+            LlvmObjdumpDecodedFunction(
                 name = function.name,
-                entry = function.address.toNativeAddress { address ->
-                    mapSectionAddressToFileOffset(address, entrySectionName)
-                },
+                entry = function.address,
                 instructions = instructions,
-                basicBlocks = NativeBasicBlockCandidateBuilder.fromInstructions(instructions),
-                confidence = NativeDisassemblyConfidence.BackendProvided,
+                basicBlocks = BasicBlockCandidateBuilder.fromInstructions(instructions),
             )
         }
-
-        return NativeDisassemblyUnit(
-            functions = functions,
-            confidence = if (functions.isEmpty()) {
-                NativeDisassemblyConfidence.Unknown
-            } else {
-                NativeDisassemblyConfidence.BackendProvided
-            },
-        )
+        return LlvmObjdumpDisassemblyResult(functions = functions)
     }
 }
 
-private fun ULong.toNativeAddress(mapVirtualAddressToFileOffset: (ULong) -> Long?): NativeAddress =
-    NativeAddress(
-        virtualAddress = this,
-        fileOffset = mapVirtualAddressToFileOffset(this),
+private fun LlvmObjdumpInstruction.decode(arch: Arch): LlvmObjdumpValidInstruction {
+    val controlFlow = controlFlowKind()
+    val target = extractDirectTarget()
+    val branchTargets = if (controlFlow == ControlFlowKind.Jump && target != null) listOf(target) else emptyList()
+    val callTargets = if (controlFlow == ControlFlowKind.Call && target != null) listOf(target) else emptyList()
+    val isTerminator = controlFlow == ControlFlowKind.Jump ||
+        mnemonic.normalizedMnemonic() in NON_JUMP_TERMINATOR_MNEMONICS
+
+    return LlvmObjdumpValidInstruction(
+        address = address,
+        byteRange = 0..(bytes.size - 1).coerceAtLeast(-1),
+        arch = arch,
+        isBlockTerminator = isTerminator,
+        branchTargets = branchTargets,
+        mnemonic = mnemonic,
+        operandsText = operands,
+        assemblyText = assembly,
+        bytes = bytes,
+        callTargets = callTargets,
     )
-
-private val TARGET_OPERAND = Regex("""(?:^|[\s,])\$?0x([0-9a-fA-F]+)(?:\s+<([^>]+)>)?""")
-
-private data class ParsedControlFlowTarget(
-    val target: NativeAddress?,
-    val symbolName: String?,
-)
-
-private fun LlvmObjdumpInstruction.extractXrefs(
-    relocation: NativeRelocationAnnotation?,
-    mapVirtualAddressToFileOffset: (ULong) -> Long?,
-): List<NativeXref> {
-    val kind = controlFlowKind() ?: return emptyList()
-    val parsedTarget = extractDirectTarget(mapVirtualAddressToFileOffset)
-
-    if (relocation != null) {
-        return listOf(
-            NativeXref(
-                kind = kind,
-                target = if (parsedTarget != null && !parsedTarget.isRelocationPlaceholderFor(functionName)) {
-                    parsedTarget.target
-                } else {
-                    null
-                },
-                symbolName = relocation.symbolName ?: parsedTarget?.symbolName,
-            )
-        )
-    }
-
-    return parsedTarget?.let {
-        listOf(
-            NativeXref(
-                kind = kind,
-                target = it.target,
-                symbolName = it.symbolName,
-            )
-        )
-    } ?: emptyList()
 }
 
-private fun LlvmObjdumpInstruction.controlFlowKind(): NativeXrefKind? {
-    val normalizedMnemonic = mnemonic.lowercase()
+private enum class ControlFlowKind { Call, Jump }
+
+private fun LlvmObjdumpInstruction.controlFlowKind(): ControlFlowKind? {
+    val normalized = mnemonic.normalizedMnemonic()
     return when {
-        normalizedMnemonic == "jal" || normalizedMnemonic == "jalr" -> {
-            if (operands.hasRiscVZeroDestination()) NativeXrefKind.Jump else NativeXrefKind.Call
-        }
-        normalizedMnemonic in CALL_MNEMONICS -> NativeXrefKind.Call
-        normalizedMnemonic in JUMP_MNEMONICS || normalizedMnemonic.startsWith("b.") -> NativeXrefKind.Jump
+        normalized == "jal" || normalized == "jalr" ->
+            if (operands.hasRiscVZeroDestination()) ControlFlowKind.Jump else ControlFlowKind.Call
+        normalized in CALL_MNEMONICS -> ControlFlowKind.Call
+        normalized in JUMP_MNEMONICS || normalized.startsWith("b.") -> ControlFlowKind.Jump
         else -> null
     }
 }
 
-private fun LlvmObjdumpInstruction.extractDirectTarget(
-    mapVirtualAddressToFileOffset: (ULong) -> Long?,
-): ParsedControlFlowTarget? {
+private fun LlvmObjdumpInstruction.extractDirectTarget(): ULong? {
     if (operands.isIndirectControlFlowOperand()) return null
-
     val match = TARGET_OPERAND.find(operands) ?: return null
-    val targetAddress = match.groupValues[1].toULongOrNull(16)
-        ?.toNativeAddress(mapVirtualAddressToFileOffset)
-    val symbolName = match.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }
-
-    return ParsedControlFlowTarget(
-        target = targetAddress,
-        symbolName = symbolName,
-    )
+    return match.groupValues[1].toULongOrNull(16)
 }
 
-private fun ParsedControlFlowTarget.isRelocationPlaceholderFor(functionName: String?): Boolean =
-    symbolName == null || (functionName != null && symbolName.startsWith("$functionName+"))
+private val TARGET_OPERAND = Regex("""(?:^|[\s,])\$?0x([0-9a-fA-F]+)(?:\s+<([^>]+)>)?""")
+
+private fun String.normalizedMnemonic(): String =
+    lowercase().substringBefore('\t').substringBefore(' ')
 
 private fun String.hasRiscVZeroDestination(): Boolean {
     val destination = substringBefore(',').trim()
@@ -154,89 +90,35 @@ private fun String.hasRiscVZeroDestination(): Boolean {
 private fun String.isIndirectControlFlowOperand(): Boolean {
     val operand = substringBefore('<').trim()
     return operand.startsWith("*") ||
-            '[' in operand ||
-            ']' in operand ||
-            '(' in operand ||
-            ')' in operand
+        '[' in operand ||
+        ']' in operand ||
+        '(' in operand ||
+        ')' in operand
 }
 
 private val CALL_MNEMONICS = setOf(
-    "call",
-    "callq",
-    "calll",
-    "bl",
-    "blx",
-    "blr",
+    "call", "callq", "calll",
+    "bl", "blx", "blr",
 )
 
 private val JUMP_MNEMONICS = setOf(
-    "ja",
-    "jae",
-    "jb",
-    "jbe",
-    "jc",
-    "jcxz",
-    "je",
-    "jecxz",
-    "jg",
-    "jge",
-    "jl",
-    "jle",
-    "jmp",
-    "jmpq",
-    "jna",
-    "jnae",
-    "jnb",
-    "jnbe",
-    "jnc",
-    "jne",
-    "jng",
-    "jnge",
-    "jnl",
-    "jnle",
-    "jno",
-    "jnp",
-    "jns",
-    "jnz",
-    "jo",
-    "jp",
-    "jpe",
-    "jpo",
-    "jrcxz",
-    "js",
-    "jz",
-    "j",
-    "jr",
-    "loop",
-    "loope",
-    "loopne",
-    "loopnz",
-    "loopz",
-    "b",
-    "bal",
-    "bcc",
-    "bcs",
-    "beq",
-    "bge",
-    "bgt",
-    "bhi",
-    "bhs",
-    "ble",
-    "blo",
-    "bls",
-    "blt",
-    "bltu",
-    "bgeu",
-    "bmi",
-    "bne",
-    "bpl",
-    "br",
-    "bx",
-    "bxj",
-    "bvc",
-    "bvs",
-    "cbnz",
-    "cbz",
-    "tbz",
-    "tbnz",
+    "ja", "jae", "jb", "jbe", "jc", "jcxz",
+    "je", "jecxz", "jg", "jge", "jl", "jle",
+    "jmp", "jmpq", "jna", "jnae", "jnb", "jnbe",
+    "jnc", "jne", "jng", "jnge", "jnl", "jnle",
+    "jno", "jnp", "jns", "jnz", "jo", "jp",
+    "jpe", "jpo", "jrcxz", "js", "jz", "j", "jr",
+    "loop", "loope", "loopne", "loopnz", "loopz",
+    "b", "bal", "bcc", "bcs", "beq", "bge", "bgt",
+    "bhi", "bhs", "ble", "blo", "bls", "blt",
+    "bltu", "bgeu", "bmi", "bne", "bpl", "br",
+    "bx", "bxj", "bvc", "bvs", "cbnz", "cbz",
+    "tbz", "tbnz",
+)
+
+/** Terminators that are NOT jumps (no branch target) — ret, ud2, hlt etc. */
+private val NON_JUMP_TERMINATOR_MNEMONICS = setOf(
+    "ret", "retq", "retn", "retl", "retab",
+    "iret", "iretd", "iretq",
+    "ud2", "hlt",
 )
