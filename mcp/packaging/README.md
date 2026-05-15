@@ -143,7 +143,8 @@ Optional environment variables:
 - `COMMIT_AUTHOR_NAME`: required git commit author name for marketplace PR commits.
 - `COMMIT_AUTHOR_EMAIL`: required git commit author email for marketplace PR commits. Use an approved bot, GitHub App,
   or noreply automation identity; do not use a personal email.
-- `ALLOW_BUNDLED_JAR`: defaults to `false`. When `true`, jars are allowed only under `plugins/<plugin-name>/lib/`.
+- `ALLOW_BUNDLED_JAR`: defaults to `false`. When `true`, jars are allowed only under
+  `plugins/<plugin-name>/server/lib/`.
 - `VALIDATE_CLAUDE_CMD`: optional command run from the cloned public repo root.
 - `VALIDATE_CODEX_CMD`: optional command run from the cloned public repo root.
 - `SMOKE_TEST_SUMMARY`: optional text included in the PR body, for example `Claude and Codex plugin smoke tests passed`.
@@ -162,7 +163,8 @@ Public files allowlist:
 - `plugins/<plugin-name>/skills/**`
 - `plugins/<plugin-name>/mcp/**`
 - `plugins/<plugin-name>/bin/**`
-- `plugins/<plugin-name>/lib/**`, only with `ALLOW_BUNDLED_JAR=true`
+- `plugins/<plugin-name>/server/**`; jars inside this tree are allowed only under
+  `plugins/<plugin-name>/server/lib/**` with `ALLOW_BUNDLED_JAR=true`
 
 Safety checks fail the build if the staged diff contains source/build/private paths such as `src/`, `build/`,
 `target/`, `out/`, `.gradle/`, `.idea/`, `.teamcity/`, `.env`, `private/`, `secret/`, `secrets/`, source-like or

@@ -428,10 +428,6 @@ sync_public_bundle() {
   sync_dir_if_present "plugins/$PLUGIN_NAME/bin"
   sync_dir_if_present "plugins/$PLUGIN_NAME/server"
 
-  if [ "$ALLOW_BUNDLED_JAR" = "true" ]; then
-    sync_dir_if_present "plugins/$PLUGIN_NAME/lib"
-  fi
-
   if [ "${#SYNCED_PATHS[@]}" -eq 0 ]; then
     die "No allowlisted public files were found in GENERATED_PUBLIC_DIR"
   fi
@@ -451,10 +447,6 @@ is_allowed_public_path() {
       ;;
     "plugins/$PLUGIN_NAME/skills/"*|"plugins/$PLUGIN_NAME/mcp/"*|"plugins/$PLUGIN_NAME/bin/"*|"plugins/$PLUGIN_NAME/server/"*)
       return 0
-      ;;
-    "plugins/$PLUGIN_NAME/lib/"*)
-      [ "$ALLOW_BUNDLED_JAR" = "true" ] && return 0
-      return 1
       ;;
     *)
       return 1
@@ -550,8 +542,8 @@ check_suspicious_paths() {
           die "Refusing to publish jar while ALLOW_BUNDLED_JAR=false: $file"
         fi
         case "$file" in
-          "plugins/$PLUGIN_NAME/lib/"*|"plugins/$PLUGIN_NAME/server/lib/"*) ;;
-          *) die "Jar files are allowed only under plugins/$PLUGIN_NAME/lib/ or plugins/$PLUGIN_NAME/server/lib/: $file" ;;
+          "plugins/$PLUGIN_NAME/server/lib/"*) ;;
+          *) die "Jar files are allowed only under plugins/$PLUGIN_NAME/server/lib/: $file" ;;
         esac
         ;;
     esac
