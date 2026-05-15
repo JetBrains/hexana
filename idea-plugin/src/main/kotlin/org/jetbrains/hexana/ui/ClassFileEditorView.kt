@@ -1,11 +1,16 @@
 package org.jetbrains.hexana.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
@@ -15,12 +20,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.javabytecode.JavaBytecodeInstruction
 import org.jetbrains.hexana.javabytecode.JavaBytecodeOperands
@@ -32,7 +40,6 @@ import org.jetbrains.hexana.javabytecode.JavaConstantPool
 import org.jetbrains.hexana.javabytecode.JavaConstantPoolEntry
 import org.jetbrains.hexana.javabytecode.JavaFieldAccess
 import org.jetbrains.hexana.javabytecode.JavaMethodAccess
-import org.jetbrains.hexana.javabytecode.MethodInfo
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.Orientation
@@ -46,8 +53,9 @@ import org.jetbrains.jewel.ui.theme.defaultTabStyle
  * Editor view for a parsed JVM `.class` file. Vertically split: a [HexViewer]
  * over the raw class bytes on top, three structured tabs underneath:
  *  1. Header — class name + access flags + super class + interfaces.
- *  2. Methods — list of methods with their decoded bytecode listing;
- *     every row is prefixed by its file offset.
+ *  2. Methods — list of foldable per-method sections styled to match
+ *     WAT (virtualized): gray header row with a file offset + ▶/▼ +
+ *     signature; monospace body rows underneath when expanded.
  *  3. Constant pool — all `cp_info` entries by index.
  */
 @Composable
@@ -137,25 +145,89 @@ private fun ClassHeaderTab(cf: JavaClassFile) {
     }
 }
 
-/**
- * Methods tab — flattened to a single offset-prefixed row stream so every
- * row is the same shape: `0x0000  <text>`. Method-description rows (header,
- * flags, exception-table entries) use the method_info / handler file offset;
- * instruction rows use `codeBaseFileOffset + bytecodeOffset`.
- */
+// -----------------------------------------------------------------------------
+// Methods tab — WAT (virtualized) style: each method is a foldable section
+// -----------------------------------------------------------------------------
+
 @Composable
 private fun ClassMethodsTab(cf: JavaClassFile) {
-    val rows = remember(cf) { buildMethodRows(cf) }
+    val sections = remember(cf) { buildMethodSections(cf) }
+    var folded by remember(cf) { mutableStateOf(emptySet<Int>()) }
     val listState = rememberLazyListState()
-    LazyColumn(state = listState) {
-        if (rows.isEmpty()) {
-            item { Text("(no methods)") }
+
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+        if (sections.isEmpty()) {
+            item { Text("(no methods)", style = RowTextStyle) }
             return@LazyColumn
         }
-        items(rows.size) { idx ->
-            val row = rows[idx]
-            Text("${formatFileOffset(row.fileOffset)}  ${row.text}", style = MonoStyle)
+        for (section in sections) {
+            val isFolded = section.methodOffset in folded
+            item(key = "header-${section.methodOffset}") {
+                MethodHeaderRow(
+                    section = section,
+                    folded = isFolded,
+                    onToggle = {
+                        folded = if (isFolded) folded - section.methodOffset
+                        else folded + section.methodOffset
+                    },
+                )
+            }
+            if (!isFolded) {
+                items(
+                    count = section.bodyRows.size,
+                    key = { idx -> "body-${section.methodOffset}-$idx" },
+                ) { idx ->
+                    MethodBodyRow(section.bodyRows[idx])
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun MethodHeaderRow(
+    section: MethodSection,
+    folded: Boolean,
+    onToggle: () -> Unit,
+) {
+    val bg = if (JewelTheme.isDark) Color(0xFF2B2D30) else Color(0xFFEBECF0)
+    val headerStyle = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = HexanaTheme.textColor,
+    )
+    val gutterStyle = headerStyle.copy(color = HexanaTheme.hexTextColor)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bg)
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(formatFileOffset(section.methodOffset), style = gutterStyle)
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(if (folded) "▶" else "▼", style = gutterStyle)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(section.signature, style = headerStyle)
+    }
+}
+
+@Composable
+private fun MethodBodyRow(row: MethodRow) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            formatFileOffset(row.fileOffset),
+            style = RowTextStyle.copy(color = HexanaTheme.hexTextColor),
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(row.text, style = RowTextStyle)
     }
 }
 
@@ -168,61 +240,77 @@ private fun ClassConstantPoolTab(cf: JavaClassFile) {
             val (index, entry) = rows[idx]
             Text(
                 "#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}",
-                style = MonoStyle,
+                style = RowTextStyle,
             )
         }
     }
 }
 
 // -----------------------------------------------------------------------------
-// Methods-tab row builder
+// Methods-tab section builder
 // -----------------------------------------------------------------------------
 
 private data class MethodRow(val fileOffset: Int, val text: String)
 
-private fun buildMethodRows(cf: JavaClassFile): List<MethodRow> {
-    val out = ArrayList<MethodRow>()
+private data class MethodSection(
+    val methodOffset: Int,
+    val signature: String,
+    val bodyRows: List<MethodRow>,
+)
+
+private fun buildMethodSections(cf: JavaClassFile): List<MethodSection> {
+    val sections = ArrayList<MethodSection>()
     for (method in cf.methods) {
         val name = runCatching { cf.constantPool.utf8(method.nameIndex) }
             .getOrDefault("<#${method.nameIndex}>")
         val descriptor = runCatching { cf.constantPool.utf8(method.descriptorIndex) }
             .getOrDefault("<#${method.descriptorIndex}>")
-        val flags = renderMethodAccessFlags(method.accessFlags.raw)
-        val flagBits = "0x${method.accessFlags.raw.toString(16).padStart(4, '0')}"
+        val flagsText = renderMethodAccessFlags(method.accessFlags.raw)
+        val signature = buildString {
+            if (flagsText.isNotEmpty()) {
+                append(flagsText); append(' ')
+            }
+            append(name); append(' '); append(descriptor)
+        }
 
-        out += MethodRow(method.byteOffset, "method $name $descriptor")
-        out += MethodRow(method.byteOffset, "  flags: $flagBits $flags")
+        val body = ArrayList<MethodRow>()
+        body += MethodRow(
+            method.byteOffset,
+            "flags: 0x${method.accessFlags.raw.toString(16).padStart(4, '0')}",
+        )
 
         val code = runCatching { JavaCodeAttributeParser.parse(method, cf.constantPool) }.getOrNull()
         if (code == null) {
-            out += MethodRow(method.byteOffset, "  (no Code attribute — abstract or native)")
-            continue
-        }
-        out += MethodRow(
-            code.codeBaseFileOffset,
-            "  max_stack=${code.maxStack} max_locals=${code.maxLocals} " +
-                "code_length=${code.code.size} handlers=${code.exceptionTable.size}",
-        )
-        appendInstructionRows(out, code, cf.constantPool)
-        if (code.exceptionTable.isNotEmpty()) {
-            out += MethodRow(code.codeBaseFileOffset, "  exception_table:")
-            for (handler in code.exceptionTable) {
-                val catchName = if (handler.catchTypeCpIndex == 0) {
-                    "any"
-                } else {
-                    val ref = cf.constantPool[handler.catchTypeCpIndex] as? JavaConstantPoolEntry.ClassRef
-                    ref?.let { runCatching { cf.constantPool.utf8(it.nameIndex) }.getOrNull() }
-                        ?: "<#${handler.catchTypeCpIndex} ???>"
+            body += MethodRow(method.byteOffset, "(no Code attribute — abstract or native)")
+        } else {
+            body += MethodRow(
+                code.codeBaseFileOffset,
+                "max_stack=${code.maxStack} max_locals=${code.maxLocals} " +
+                    "code_length=${code.code.size} handlers=${code.exceptionTable.size}",
+            )
+            appendInstructionRows(body, code, cf.constantPool)
+            if (code.exceptionTable.isNotEmpty()) {
+                body += MethodRow(code.codeBaseFileOffset, "exception_table:")
+                for (handler in code.exceptionTable) {
+                    val catchName = if (handler.catchTypeCpIndex == 0) {
+                        "any"
+                    } else {
+                        val ref = cf.constantPool[handler.catchTypeCpIndex] as? JavaConstantPoolEntry.ClassRef
+                        ref?.let { runCatching { cf.constantPool.utf8(it.nameIndex) }.getOrNull() }
+                            ?: "<#${handler.catchTypeCpIndex} ???>"
+                    }
+                    body += MethodRow(
+                        code.codeBaseFileOffset + handler.handlerPc,
+                        "[${formatBytecodeOffset(handler.startPc)}-${formatBytecodeOffset(handler.endPc)}) " +
+                            "-> ${formatBytecodeOffset(handler.handlerPc)}  catch $catchName",
+                    )
                 }
-                out += MethodRow(
-                    code.codeBaseFileOffset + handler.handlerPc,
-                    "    [${formatBytecodeOffset(handler.startPc)}-${formatBytecodeOffset(handler.endPc)}) " +
-                        "-> ${formatBytecodeOffset(handler.handlerPc)}  catch $catchName",
-                )
             }
         }
+
+        sections += MethodSection(method.byteOffset, signature, body)
     }
-    return out
+    return sections
 }
 
 private fun appendInstructionRows(
@@ -234,7 +322,7 @@ private fun appendInstructionRows(
         val fileOffset = code.codeBaseFileOffset + insn.bytecodeOffset
         out += MethodRow(
             fileOffset,
-            "  ${formatBytecodeOffset(insn.bytecodeOffset)}: ${formatInstruction(insn, cp)}",
+            "${formatBytecodeOffset(insn.bytecodeOffset)}: ${formatInstruction(insn, cp)}",
         )
     }
 }
@@ -244,6 +332,7 @@ private fun appendInstructionRows(
 // -----------------------------------------------------------------------------
 
 private val MonoStyle = TextStyle(fontFamily = FontFamily.Monospace)
+private val RowTextStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
 
 private fun formatFileOffset(offset: Int): String =
     "0x" + offset.toString(16).padStart(6, '0')
