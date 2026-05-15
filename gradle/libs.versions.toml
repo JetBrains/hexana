@@ -26,6 +26,7 @@ r8 = "9.1.31"
 
 [libraries]
 chicory-runtime = { module = "com.dylibso.chicory:runtime", version.ref = "chicory" }
+chicory-compiler = { module = "com.dylibso.chicory:compiler", version.ref = "chicory" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 intellij-driver-client = { module = "com.jetbrains.intellij.driver:driver-client", version.ref = "intellijDriver" }

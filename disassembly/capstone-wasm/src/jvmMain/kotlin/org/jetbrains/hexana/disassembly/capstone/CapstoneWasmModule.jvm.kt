@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.disassembly.capstone
 
+import com.dylibso.chicory.compiler.MachineFactoryCompiler
 import com.dylibso.chicory.runtime.ExportFunction
 import com.dylibso.chicory.runtime.Instance
 import com.dylibso.chicory.runtime.Memory
@@ -7,6 +8,11 @@ import com.dylibso.chicory.wasm.Parser
 
 /**
  * JVM actual for [CapstoneWasmModule] — wraps a Chicory-loaded WASM instance.
+ * The instance is built with Chicory's AOT machine: WASM is compiled to JVM
+ * bytecode at load time, so every subsequent decode call runs as native JVM
+ * code instead of going through the interpreter. The compile pass is paid once
+ * per [loadCapstoneWasmModule] call (a fraction of a second for our ~590 KB
+ * blob); pool the [CapstoneWasmModule] instance across decodes if you care.
  *
  * Not thread-safe: a Chicory [Instance] owns a single linear memory and a
  * single call stack. Callers that need parallel decoding must create separate
@@ -39,6 +45,9 @@ internal actual class CapstoneWasmModule internal constructor(private val instan
 
 internal actual suspend fun loadCapstoneWasmModule(bytes: ByteArray): CapstoneWasmModule {
     val module = Parser.parse(bytes)
-    val instance = Instance.builder(module).build()
+    val machineFactory = MachineFactoryCompiler.compile(module)
+    val instance = Instance.builder(module)
+        .withMachineFactory(machineFactory)
+        .build()
     return CapstoneWasmModule(instance)
 }

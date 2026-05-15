@@ -73,6 +73,7 @@ kotlin {
         jvmMain {
             dependencies {
                 implementation(libs.chicory.runtime)
+                implementation(libs.chicory.compiler)
             }
         }
     }
