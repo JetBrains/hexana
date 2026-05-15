@@ -81,6 +81,7 @@ dependencies {
     implementation(project(":wasmParser"))
     implementation(project(":parsing:javaBytecode"))
     implementation(project(":parsing:zip"))
+    implementation(project(":jvm-jit"))
     implementation(project(":hexanaDocument"))
     implementation(project(":binaryProvider"))
     implementation(project(":plugins-shared"))
