@@ -57,6 +57,10 @@ runtime is shipped as `server/lib/hexana-runtime-obfuscated.jar`; third-party ru
 library jars. R8 itself and `mcp/build/r8/mapping.txt` are build outputs only and must not be shipped in plugin or
 server ZIPs.
 
+The public runtime layout intentionally remains a Gradle `installDist` style directory instead of a fat JAR for the
+first marketplace release path. A fat JAR would need separate validation for merged service descriptors, license and
+notice handling, native/JNA resources, Kotlin serialization metadata, classpath-sensitive libraries, and R8 behavior.
+
 The `.mcp.json` files checked into `mcp/packaging/*` are the source templates for distributable wrappers. Repo-local
 Codex install is the exception: `./gradlew :mcp:installRepoLocalCodexPlugin` rewrites the installed `plugins/hexana/.mcp.json`
 to an absolute launcher path for local testing.
