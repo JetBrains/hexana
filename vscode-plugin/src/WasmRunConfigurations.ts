@@ -136,10 +136,10 @@ const nodeToolResolver: ExtensionLib.JsToolResolver = {
  * Returns the currently selected Wasm runtime from settings.
  * Returns `"ask"` when the user wants to see a picker every time.
  */
-export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "ask" {
+export function getSelectedRuntime(): "wasmtime" | "wamr" | "ask" {
     const config = vscode.workspace.getConfiguration("hexana");
     const runtime = config.get<string>("wasmRuntime", "ask").trim();
-    if (runtime === "wamr" || runtime === "graalwasm" || runtime === "ask") {
+    if (runtime === "wamr" || runtime === "ask") {
         return runtime;
     }
     return "wasmtime";
@@ -150,7 +150,7 @@ export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "ask" 
  * whether the user selected a run or debug action.
  */
 export interface RuntimePickerResult {
-    runtime: "wasmtime" | "wamr" | "graalwasm";
+    runtime: "wasmtime" | "wamr";
     action: "run" | "debug";
 }
 
@@ -170,7 +170,7 @@ export async function showRuntimePicker(
     isComponent: boolean = false,
 ): Promise<RuntimePickerResult | undefined> {
     interface RuntimeItem extends vscode.QuickPickItem {
-        runtime?: "wasmtime" | "wamr" | "graalwasm";
+        runtime?: "wasmtime" | "wamr";
         action?: "run" | "debug";
         isConfigure?: boolean;
     }
@@ -186,11 +186,6 @@ export async function showRuntimePicker(
         items.push({
             label: "$(play) Run with WAMR",
             runtime: "wamr",
-            action: "run",
-        });
-        items.push({
-            label: "$(play) Run with GraalWasm",
-            runtime: "graalwasm",
             action: "run",
         });
     }
@@ -472,13 +467,13 @@ export async function runExport(
 
     const isComponent = message.isComponent && message.componentImports && message.componentImports.length > 0;
 
-    let runtime: "wasmtime" | "wamr" | "graalwasm";
+    let runtime: "wasmtime" | "wamr";
     let action: "run" | "debug";
 
     // When the webview dialog already collected a runtime and action,
     // use them directly and skip the native VS Code picker.
     if (message.runtime && message.action) {
-        runtime = message.runtime as "wasmtime" | "wamr" | "graalwasm";
+        runtime = message.runtime as "wasmtime" | "wamr";
         action = message.action as "run" | "debug";
     } else {
         const configured = getSelectedRuntime();
