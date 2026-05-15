@@ -12,6 +12,13 @@ data class JavaCodeAttribute(
     val instructions: List<JavaBytecodeInstruction>,
     val exceptionTable: List<JavaExceptionHandler>,
     val attributes: List<AttributeRecord>,
+    /**
+     * File offset (in the class file's byte stream) where `code[]` begins.
+     * Zero when the parser was invoked on a raw `info` blob without context.
+     * Useful for rendering instruction file offsets as `codeBaseFileOffset +
+     * insn.bytecodeOffset`.
+     */
+    val codeBaseFileOffset: Int = 0,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -21,7 +28,8 @@ data class JavaCodeAttribute(
             code.contentEquals(other.code) &&
             instructions == other.instructions &&
             exceptionTable == other.exceptionTable &&
-            attributes == other.attributes
+            attributes == other.attributes &&
+            codeBaseFileOffset == other.codeBaseFileOffset
     }
 
     override fun hashCode(): Int {
@@ -31,6 +39,7 @@ data class JavaCodeAttribute(
         result = 31 * result + instructions.hashCode()
         result = 31 * result + exceptionTable.hashCode()
         result = 31 * result + attributes.hashCode()
+        result = 31 * result + codeBaseFileOffset
         return result
     }
 }

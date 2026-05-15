@@ -16,11 +16,21 @@ object JavaCodeAttributeParser {
     fun parse(methodInfo: MethodInfo, constantPool: JavaConstantPool): JavaCodeAttribute? {
         val codeAttr = methodInfo.attributes.firstOrNull { isCodeAttribute(it, constantPool) }
             ?: return null
-        return parse(codeAttr.info)
+        // Code attribute body starts at attr.byteOffset + 6 (skip
+        // attribute_name_index u2 + attribute_length u4). Within the body,
+        // code[] starts at +8 (max_stack u2 + max_locals u2 + code_length u4).
+        val codeBaseFileOffset = if (codeAttr.byteOffset == 0) 0 else codeAttr.byteOffset + 6 + 8
+        return parse(codeAttr.info, codeBaseFileOffset)
     }
 
-    /** Decodes a raw `Code` attribute body (the bytes BETWEEN the attribute header and the next attribute). */
-    fun parse(info: ByteArray): JavaCodeAttribute {
+    /**
+     * Decodes a raw `Code` attribute body (the bytes BETWEEN the attribute
+     * header and the next attribute). [codeBaseFileOffset] threads the
+     * absolute file offset where `code[]` begins so callers that want to
+     * render file-level positions can do so without re-walking the parent
+     * class file.
+     */
+    fun parse(info: ByteArray, codeBaseFileOffset: Int = 0): JavaCodeAttribute {
         val buf = info.toCommonByteBuffer()
         val maxStack = buf.readU2()
         val maxLocals = buf.readU2()
@@ -49,7 +59,15 @@ object JavaCodeAttributeParser {
             AttributeRecord(nameIndex, nestedInfo)
         }
 
-        return JavaCodeAttribute(maxStack, maxLocals, code, instructions, exceptionTable, attributes)
+        return JavaCodeAttribute(
+            maxStack = maxStack,
+            maxLocals = maxLocals,
+            code = code,
+            instructions = instructions,
+            exceptionTable = exceptionTable,
+            attributes = attributes,
+            codeBaseFileOffset = codeBaseFileOffset,
+        )
     }
 
     private fun isCodeAttribute(attr: AttributeRecord, cp: JavaConstantPool): Boolean {

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -15,21 +16,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.jetbrains.hexana.javabytecode.AttributeRecord
+import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.javabytecode.JavaBytecodeInstruction
 import org.jetbrains.hexana.javabytecode.JavaBytecodeOperands
 import org.jetbrains.hexana.javabytecode.JavaClassAccess
 import org.jetbrains.hexana.javabytecode.JavaClassFile
+import org.jetbrains.hexana.javabytecode.JavaCodeAttribute
 import org.jetbrains.hexana.javabytecode.JavaCodeAttributeParser
 import org.jetbrains.hexana.javabytecode.JavaConstantPool
 import org.jetbrains.hexana.javabytecode.JavaConstantPoolEntry
 import org.jetbrains.hexana.javabytecode.JavaFieldAccess
 import org.jetbrains.hexana.javabytecode.JavaMethodAccess
 import org.jetbrains.hexana.javabytecode.MethodInfo
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.Orientation
 import org.jetbrains.jewel.ui.component.Divider
@@ -39,13 +43,39 @@ import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.theme.defaultTabStyle
 
 /**
- * Three-tab editor view for a parsed JVM `.class` file:
- *   1. Header — class name + access flags + super class + interfaces.
- *   2. Methods — list of methods with their decoded bytecode listing.
- *   3. Constant pool — all `cp_info` entries by index.
+ * Editor view for a parsed JVM `.class` file. Vertically split: a [HexViewer]
+ * over the raw class bytes on top, three structured tabs underneath:
+ *  1. Header — class name + access flags + super class + interfaces.
+ *  2. Methods — list of methods with their decoded bytecode listing;
+ *     every row is prefixed by its file offset.
+ *  3. Constant pool — all `cp_info` entries by index.
  */
 @Composable
-internal fun ClassFileEditorView(classFile: JavaClassFile) {
+internal fun ClassFileEditorView(
+    classFile: JavaClassFile,
+    binaryProvider: BinaryProvider,
+    state: HexViewStateHolder,
+    hexFocusRequester: FocusRequester,
+) {
+    VerticalSplitPanel(
+        state = state,
+        northPanel = {
+            Box(modifier = Modifier.fillMaxSize()) {
+                HexViewer(
+                    binaryProvider = binaryProvider,
+                    state = state,
+                    focusRequester = hexFocusRequester,
+                )
+            }
+        },
+        southPanel = {
+            ClassFileTabs(classFile)
+        },
+    )
+}
+
+@Composable
+private fun ClassFileTabs(classFile: JavaClassFile) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
     val labels = listOf("Header", "Methods", "Constant pool")
     val tabs by remember(selectedTab) {
@@ -63,7 +93,7 @@ internal fun ClassFileEditorView(classFile: JavaClassFile) {
 
     Column(modifier = Modifier.fillMaxSize()) {
         TabStrip(tabs = tabs, style = JewelTheme.defaultTabStyle)
-        Divider(orientation = Orientation.Horizontal)
+        Divider(orientation = Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
         Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
             when (selectedTab) {
                 0 -> ClassHeaderTab(classFile)
@@ -107,72 +137,24 @@ private fun ClassHeaderTab(cf: JavaClassFile) {
     }
 }
 
+/**
+ * Methods tab — flattened to a single offset-prefixed row stream so every
+ * row is the same shape: `0x0000  <text>`. Method-description rows (header,
+ * flags, exception-table entries) use the method_info / handler file offset;
+ * instruction rows use `codeBaseFileOffset + bytecodeOffset`.
+ */
 @Composable
 private fun ClassMethodsTab(cf: JavaClassFile) {
+    val rows = remember(cf) { buildMethodRows(cf) }
     val listState = rememberLazyListState()
-    LazyColumn(
-        state = listState,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        if (cf.methods.isEmpty()) {
+    LazyColumn(state = listState) {
+        if (rows.isEmpty()) {
             item { Text("(no methods)") }
             return@LazyColumn
         }
-        for (method in cf.methods) {
-            item {
-                MethodBlock(cf, method)
-            }
-        }
-    }
-}
-
-@Composable
-private fun MethodBlock(cf: JavaClassFile, method: MethodInfo) {
-    val name = runCatching { cf.constantPool.utf8(method.nameIndex) }.getOrDefault("<#${method.nameIndex}>")
-    val descriptor = runCatching { cf.constantPool.utf8(method.descriptorIndex) }.getOrDefault("<#${method.descriptorIndex}>")
-    val code = runCatching { JavaCodeAttributeParser.parse(method, cf.constantPool) }.getOrNull()
-
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(
-            text = "$name $descriptor",
-            style = TextStyle(fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
-        )
-        Text(
-            "  flags: 0x${method.accessFlags.raw.toString(16).padStart(4, '0')} " +
-                renderMethodAccessFlags(method.accessFlags.raw),
-            style = MonoStyle,
-        )
-        if (code == null) {
-            Text("  (no Code attribute — abstract or native)", style = MonoStyle)
-            return@Column
-        }
-        Text(
-            "  max_stack=${code.maxStack} max_locals=${code.maxLocals} " +
-                "code_length=${code.code.size} handlers=${code.exceptionTable.size}",
-            style = MonoStyle,
-        )
-        for (insn in code.instructions) {
-            Text(
-                "  ${formatOffset(insn.bytecodeOffset)}: ${formatInstruction(insn, cf.constantPool)}",
-                style = MonoStyle,
-            )
-        }
-        if (code.exceptionTable.isNotEmpty()) {
-            Text("  exception_table:", style = MonoStyle)
-            for (handler in code.exceptionTable) {
-                val catchName = if (handler.catchTypeCpIndex == 0) {
-                    "any"
-                } else {
-                    val ref = cf.constantPool[handler.catchTypeCpIndex] as? JavaConstantPoolEntry.ClassRef
-                    ref?.let { runCatching { cf.constantPool.utf8(it.nameIndex) }.getOrNull() }
-                        ?: "<#${handler.catchTypeCpIndex} ???>"
-                }
-                Text(
-                    "    [${formatOffset(handler.startPc)}-${formatOffset(handler.endPc)}) " +
-                        "-> ${formatOffset(handler.handlerPc)}  catch $catchName",
-                    style = MonoStyle,
-                )
-            }
+        items(rows.size) { idx ->
+            val row = rows[idx]
+            Text("${formatFileOffset(row.fileOffset)}  ${row.text}", style = MonoStyle)
         }
     }
 }
@@ -184,8 +166,76 @@ private fun ClassConstantPoolTab(cf: JavaClassFile) {
     LazyColumn(state = listState) {
         items(rows.size) { idx ->
             val (index, entry) = rows[idx]
-            Text("#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}", style = MonoStyle)
+            Text(
+                "#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}",
+                style = MonoStyle,
+            )
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Methods-tab row builder
+// -----------------------------------------------------------------------------
+
+private data class MethodRow(val fileOffset: Int, val text: String)
+
+private fun buildMethodRows(cf: JavaClassFile): List<MethodRow> {
+    val out = ArrayList<MethodRow>()
+    for (method in cf.methods) {
+        val name = runCatching { cf.constantPool.utf8(method.nameIndex) }
+            .getOrDefault("<#${method.nameIndex}>")
+        val descriptor = runCatching { cf.constantPool.utf8(method.descriptorIndex) }
+            .getOrDefault("<#${method.descriptorIndex}>")
+        val flags = renderMethodAccessFlags(method.accessFlags.raw)
+        val flagBits = "0x${method.accessFlags.raw.toString(16).padStart(4, '0')}"
+
+        out += MethodRow(method.byteOffset, "method $name $descriptor")
+        out += MethodRow(method.byteOffset, "  flags: $flagBits $flags")
+
+        val code = runCatching { JavaCodeAttributeParser.parse(method, cf.constantPool) }.getOrNull()
+        if (code == null) {
+            out += MethodRow(method.byteOffset, "  (no Code attribute — abstract or native)")
+            continue
+        }
+        out += MethodRow(
+            code.codeBaseFileOffset,
+            "  max_stack=${code.maxStack} max_locals=${code.maxLocals} " +
+                "code_length=${code.code.size} handlers=${code.exceptionTable.size}",
+        )
+        appendInstructionRows(out, code, cf.constantPool)
+        if (code.exceptionTable.isNotEmpty()) {
+            out += MethodRow(code.codeBaseFileOffset, "  exception_table:")
+            for (handler in code.exceptionTable) {
+                val catchName = if (handler.catchTypeCpIndex == 0) {
+                    "any"
+                } else {
+                    val ref = cf.constantPool[handler.catchTypeCpIndex] as? JavaConstantPoolEntry.ClassRef
+                    ref?.let { runCatching { cf.constantPool.utf8(it.nameIndex) }.getOrNull() }
+                        ?: "<#${handler.catchTypeCpIndex} ???>"
+                }
+                out += MethodRow(
+                    code.codeBaseFileOffset + handler.handlerPc,
+                    "    [${formatBytecodeOffset(handler.startPc)}-${formatBytecodeOffset(handler.endPc)}) " +
+                        "-> ${formatBytecodeOffset(handler.handlerPc)}  catch $catchName",
+                )
+            }
+        }
+    }
+    return out
+}
+
+private fun appendInstructionRows(
+    out: MutableList<MethodRow>,
+    code: JavaCodeAttribute,
+    cp: JavaConstantPool,
+) {
+    for (insn in code.instructions) {
+        val fileOffset = code.codeBaseFileOffset + insn.bytecodeOffset
+        out += MethodRow(
+            fileOffset,
+            "  ${formatBytecodeOffset(insn.bytecodeOffset)}: ${formatInstruction(insn, cp)}",
+        )
     }
 }
 
@@ -195,7 +245,10 @@ private fun ClassConstantPoolTab(cf: JavaClassFile) {
 
 private val MonoStyle = TextStyle(fontFamily = FontFamily.Monospace)
 
-private fun formatOffset(offset: Int): String = offset.toString().padStart(4, ' ')
+private fun formatFileOffset(offset: Int): String =
+    "0x" + offset.toString(16).padStart(6, '0')
+
+private fun formatBytecodeOffset(offset: Int): String = offset.toString().padStart(4, ' ')
 
 private fun formatInstruction(insn: JavaBytecodeInstruction, cp: JavaConstantPool): String {
     val mnemonic = insn.opcode.mnemonic
@@ -203,17 +256,17 @@ private fun formatInstruction(insn: JavaBytecodeInstruction, cp: JavaConstantPoo
         JavaBytecodeOperands.None -> mnemonic
         is JavaBytecodeOperands.Byte1 -> "$mnemonic ${ops.value}"
         is JavaBytecodeOperands.Short1 -> {
-            val resolved = resolveCpReference(ops.value, cp, insn.opcode.mnemonic)
+            val resolved = resolveCpReference(ops.value, cp)
             if (resolved != null) "$mnemonic #${ops.value}  // $resolved" else "$mnemonic ${ops.value}"
         }
         is JavaBytecodeOperands.Wide1 -> "$mnemonic ${ops.value}"
         is JavaBytecodeOperands.IInc -> "$mnemonic ${ops.varIndex}, ${ops.delta}"
         is JavaBytecodeOperands.InvokeInterface ->
-            "$mnemonic #${ops.cpIndex}, ${ops.count}  // ${resolveCpReference(ops.cpIndex, cp, mnemonic) ?: "?"}"
+            "$mnemonic #${ops.cpIndex}, ${ops.count}  // ${resolveCpReference(ops.cpIndex, cp) ?: "?"}"
         is JavaBytecodeOperands.InvokeDynamic ->
-            "$mnemonic #${ops.cpIndex}  // ${resolveCpReference(ops.cpIndex, cp, mnemonic) ?: "?"}"
+            "$mnemonic #${ops.cpIndex}  // ${resolveCpReference(ops.cpIndex, cp) ?: "?"}"
         is JavaBytecodeOperands.MultiANewArray ->
-            "$mnemonic #${ops.cpIndex}, ${ops.dimensions}  // ${resolveCpReference(ops.cpIndex, cp, mnemonic) ?: "?"}"
+            "$mnemonic #${ops.cpIndex}, ${ops.dimensions}  // ${resolveCpReference(ops.cpIndex, cp) ?: "?"}"
         is JavaBytecodeOperands.TableSwitch ->
             "$mnemonic default=${ops.defaultOffset} ${ops.low}..${ops.high} -> ${ops.jumpOffsets}"
         is JavaBytecodeOperands.LookupSwitch ->
@@ -225,7 +278,7 @@ private fun formatInstruction(insn: JavaBytecodeInstruction, cp: JavaConstantPoo
     }
 }
 
-private fun resolveCpReference(index: Int, cp: JavaConstantPool, mnemonic: String): String? {
+private fun resolveCpReference(index: Int, cp: JavaConstantPool): String? {
     if (index <= 0) return null
     val entry = runCatching { cp[index] }.getOrNull() ?: return null
     return when (entry) {
@@ -307,7 +360,7 @@ private fun renderMethodAccessFlags(raw: Int): String = buildString {
     if (raw and JavaMethodAccess.SYNTHETIC != 0) append("synthetic ")
 }.trim()
 
-/** Unused for now — kept for symmetry; field rendering follows in a later commit. */
+/** Kept for symmetry; field rendering follows in a later commit. */
 @Suppress("unused")
 private fun renderFieldAccessFlags(raw: Int): String = buildString {
     if (raw and JavaFieldAccess.PUBLIC != 0) append("public ")
@@ -320,7 +373,3 @@ private fun renderFieldAccessFlags(raw: Int): String = buildString {
     if (raw and JavaFieldAccess.SYNTHETIC != 0) append("synthetic ")
     if (raw and JavaFieldAccess.ENUM != 0) append("enum ")
 }.trim()
-
-/** Unused for now — kept for compile-side import warnings. */
-@Suppress("unused")
-private fun unusedAttribute(): AttributeRecord = AttributeRecord(0, ByteArray(0))

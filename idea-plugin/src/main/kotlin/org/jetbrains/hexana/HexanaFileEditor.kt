@@ -22,6 +22,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
+import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.sourcemap.parseSourceMap
 import org.jetbrains.hexana.ui.BinaryEditorView
@@ -269,20 +271,30 @@ class HexanaFileEditor(
         myClosedTextEditors.clear()
     }
 
-    private fun initClassFilePanel(commonBuffer: org.jetbrains.hexana.io.CommonByteBuffer) {
+    private fun initClassFilePanel(commonBuffer: CommonByteBuffer) {
+        // Parse once. The buffer's cursor is advanced by parse(); duplicate
+        // so the HexViewer's provider sees a fresh cursor at position 0.
         val parsed = try {
-            org.jetbrains.hexana.javabytecode.JavaClassFileParser.parse(commonBuffer)
+            JavaClassFileParser.parse(commonBuffer.duplicate().position(0))
         } catch (t: Throwable) {
             HexanaLog.LOG.warn("Failed to parse .class file ${myFile.name}", t)
             null
         }
-        val view = org.jetbrains.hexana.ui.createComposePanel {
+        binaryProvider = GenericBinaryProvider(commonBuffer.duplicate().position(0))
+        val provider = binaryProvider!!
+        val view = createComposePanel {
+            val hexFocusRequester = remember { FocusRequester() }
             if (parsed == null) {
                 org.jetbrains.jewel.ui.component.Text(
                     "Failed to parse ${myFile.name} as a JVM class file — see idea.log for details.",
                 )
             } else {
-                org.jetbrains.hexana.ui.ClassFileEditorView(parsed)
+                org.jetbrains.hexana.ui.ClassFileEditorView(
+                    classFile = parsed,
+                    binaryProvider = provider,
+                    state = stateHolder,
+                    hexFocusRequester = hexFocusRequester,
+                )
             }
         }
         panel.add(view)

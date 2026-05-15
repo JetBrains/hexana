@@ -40,6 +40,8 @@ data class FieldInfo(
     val nameIndex: Int,
     val descriptorIndex: Int,
     val attributes: List<AttributeRecord>,
+    /** File offset (in the class file's byte stream) where this `field_info` structure begins. */
+    val byteOffset: Int = 0,
 )
 
 data class MethodInfo(
@@ -47,6 +49,8 @@ data class MethodInfo(
     val nameIndex: Int,
     val descriptorIndex: Int,
     val attributes: List<AttributeRecord>,
+    /** File offset (in the class file's byte stream) where this `method_info` structure begins. */
+    val byteOffset: Int = 0,
 )
 
 /**
@@ -54,16 +58,22 @@ data class MethodInfo(
  * the attribute's Utf8 name (`"Code"`, `"LineNumberTable"`, …); `info` is the
  * raw bytes between the length header and the next attribute. Specific
  * attribute decoders consume these in later commits.
+ *
+ * `byteOffset` is the file offset of the **attribute header** (the 2-byte
+ * `attribute_name_index`), so the body starts at `byteOffset + 6`.
  */
 data class AttributeRecord(
     val nameIndex: Int,
     val info: ByteArray,
+    val byteOffset: Int = 0,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is AttributeRecord) return false
-        return nameIndex == other.nameIndex && info.contentEquals(other.info)
+        return nameIndex == other.nameIndex &&
+            byteOffset == other.byteOffset &&
+            info.contentEquals(other.info)
     }
 
-    override fun hashCode(): Int = 31 * nameIndex + info.contentHashCode()
+    override fun hashCode(): Int = 31 * (31 * nameIndex + byteOffset) + info.contentHashCode()
 }

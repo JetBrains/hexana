@@ -110,22 +110,24 @@ object JavaClassFileParser {
 
     private fun <T> parseFieldOrMethod(
         buffer: CommonByteBuffer,
-        ctor: (JavaAccessFlags, Int, Int, List<AttributeRecord>) -> T,
+        ctor: (JavaAccessFlags, Int, Int, List<AttributeRecord>, Int) -> T,
     ): T {
+        val byteOffset = buffer.position()
         val accessFlags = JavaAccessFlags(buffer.readU2())
         val nameIndex = buffer.readU2()
         val descriptorIndex = buffer.readU2()
         val attributes = parseAttributes(buffer)
-        return ctor(accessFlags, nameIndex, descriptorIndex, attributes)
+        return ctor(accessFlags, nameIndex, descriptorIndex, attributes, byteOffset)
     }
 
     private fun parseAttributes(buffer: CommonByteBuffer): List<AttributeRecord> {
         val count = buffer.readU2()
         return List(count) {
+            val byteOffset = buffer.position()
             val nameIndex = buffer.readU2()
             val length = buffer.readU4()
             val info = buffer.readBytes(length)
-            AttributeRecord(nameIndex, info)
+            AttributeRecord(nameIndex, info, byteOffset)
         }
     }
 }
