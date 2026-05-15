@@ -283,6 +283,10 @@ configurations.matching { it.name.endsWith("RuntimeClasspath") }.configureEach {
     exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
     exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-swing")
     exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-jdk8")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-serialization-core")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-serialization-core-jvm")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-serialization-json")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-serialization-json-jvm")
 }
 
 sourceSets {

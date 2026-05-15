@@ -107,7 +107,7 @@
 
         <!-- actionConfigurationCustomizer implementation="org.jetbrains.hexana.mcp.McpServerCustomizer"/-->
         <actionConfigurationCustomizer implementation="org.jetbrains.hexana.graalvm.GraalInstallationCustomizer"/>
-        <mcpServer.mcpToolset implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
+        <mcpServer.mcpToolsProvider implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
         <notificationGroup id="hexana" displayType="BALLOON" bundle="messages.HexanaBundle" key="notifications.groupKey"/>
 
         <lang.parserDefinition language="wit" implementationClass="org.jetbrains.hexana.wit.psi.WitParserDefinition" />

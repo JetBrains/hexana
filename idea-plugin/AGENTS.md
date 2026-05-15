@@ -104,7 +104,7 @@ This module compiles sources from three locations:
 
 ### MCP Tooling
 
-- `HexanaToolset.kt` is the registration surface for all plugin MCP tools. It is generated from the DSL in
+- `HexanaToolset.kt` is the `McpToolsProvider` registration surface for all plugin MCP tools. It is generated from the DSL in
   `mcp/tools-generator/` — do not hand-edit it; regenerate with `./gradlew :idea-plugin:generateHexanaToolset`.
 - `ToolsetHelpers.kt` is hand-written and holds the IntelliJ-side helpers the generated toolset calls
   (`requireWasmFile`, `requireCoreWasmBinaryProvider`, range helpers).
@@ -124,9 +124,9 @@ When adding or changing an MCP tool:
 - Put the real decode/query logic in the extracted `mcp/core` module, not in the descriptor body.
 - Add or update a result model under the extracted `mcp/core` model package when the response shape is non-trivial.
 - Prefer typed structured content over hand-built strings.
-- Keep `@McpDescription` concise and token-aware. Do not embed example payloads, CLI walkthroughs, or field-by-field
-  schema dumps in runtime tool descriptions; rely on generated schemas, model types, tests, and code comments for
-  detailed structure.
+- Keep tool descriptions concise and token-aware. Do not embed example payloads, CLI walkthroughs, or field-by-field
+  schema dumps in runtime descriptions; rely on generated schemas, model types, tests, and code comments for detailed
+  structure.
 - After DSL changes, run both `./gradlew :idea-plugin:generateHexanaToolset` and `:mcp:server:generateHexanaToolDispatcher`,
   and commit the regenerated `src/main/gen/` output together with the DSL change.
 - Use the existing direct MCP test base to create `.wat` fixtures and call tools through the real MCP layer.

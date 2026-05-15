@@ -2,7 +2,6 @@ package org.jetbrains.hexana.mcp.direct
 
 import com.intellij.mcpserver.McpToolDescriptor
 import com.intellij.mcpserver.McpToolSchema
-import com.intellij.mcpserver.impl.util.asTools
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -88,7 +87,7 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
     // Leaving this as a tracked gap rather than a red test.
 
     private fun descriptors(): List<McpToolDescriptor> {
-        return HexanaToolset().asTools().map { it.descriptor }
+        return HexanaToolset().getTools().map { it.descriptor }
     }
 
     private fun descriptor(name: String): McpToolDescriptor {

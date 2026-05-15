@@ -3,8 +3,8 @@
 This module is the single source of truth for Hexana MCP tool definitions. Two KotlinPoet generators consume the same
 DSL and emit checked-in Kotlin files into the two consumers:
 
-- `idea-plugin/src/main/gen/org/jetbrains/hexana/mcp/HexanaToolset.kt` — `McpToolset` with the generated Hexana
-  `@McpTool` methods, consumed
+- `idea-plugin/src/main/gen/org/jetbrains/hexana/mcp/HexanaToolset.kt` — `McpToolsProvider` with generated Hexana
+  `McpTool` descriptors and call bodies, consumed
   by `plugin.xml`.
 - `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` — `Server.registerHexanaTools(handlers)`
   extension for the standalone MCP runtime.
@@ -27,7 +27,7 @@ DSL and emit checked-in Kotlin files into the two consumers:
   idea-plugin generator must not carry a separate result-class package map.
 - Standalone server input and output JSON schemas are generated from `ClassSpec`/`FieldSpec`; add defaults and bounds
   such as `minimum`, `maxItems`, and `maxLength` to the DSL instead of adding per-tool schema helpers in `mcp/server`.
-- Idea-plugin method parameter defaults also come from `FieldSpec.default`; do not repeat numeric or boolean defaults in
+- Idea-plugin argument defaults also come from `FieldSpec.default`; do not repeat numeric, boolean, or string defaults in
   `IdeaToolsetMain.kt`.
 - Generators must consume the full `handlerFqn`; do not hard-code `org.jetbrains.hexana.mcp.query` in generator code.
 - `ToolInputPattern` validation must fail fast on field type, nullability, default, and description mismatches that would
@@ -61,8 +61,8 @@ reviewed with the DSL change.
 1. Add the output data class to `mcp/core/src/main/kotlin/org/jetbrains/hexana/mcp/model/**` and the handler function to
    `mcp/core/src/main/kotlin/org/jetbrains/hexana/mcp/query/**` (hand-written, not generated).
 2. Mirror the output class shape with `class_(..., kotlinPackage = "...")` in the feature file that owns the tool, so
-   the generator can emit an MCP output schema and the idea-plugin generator can import the real `mcp/core` return
-   type. Add cross-feature reusable input pieces to `CommonInputs.kt`.
+   the generators can emit MCP output schemas and structured-content encoding. Add cross-feature reusable input pieces
+   to `CommonInputs.kt`.
 3. Set `inputPattern` beside `input`. If the input needs a new IDE method parameter pattern, add it to
    `ToolInputPattern` and update the pattern handling in `IdeaToolsetMain.kt`. The standalone dispatcher derives its
    input schema from `input`; update `StandaloneToolsetMain.kt` only when the DSL needs a new schema feature or field
