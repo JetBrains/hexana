@@ -11,6 +11,7 @@ import java.net.InetSocketAddress
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import java.util.zip.GZIPInputStream
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.fail
@@ -81,13 +82,25 @@ class FakePostHogServer private constructor(
         } while (System.nanoTime() < deadline)
     }
 
+    fun assertNoRequests(timeout: Duration = Duration.ofMillis(250)) {
+        val deadline = System.nanoTime() + timeout.toNanos()
+        do {
+            val currentRequests = requests
+            if (currentRequests.isNotEmpty()) {
+                fail("Expected no PostHog requests, but recorded: $currentRequests")
+            }
+            Thread.sleep(POLL_INTERVAL.toMillis())
+        } while (System.nanoTime() < deadline)
+    }
+
     override fun close() {
         server.stop(0)
         executor.shutdownNow()
     }
 
     private fun HttpExchange.recordAndRespond() {
-        val requestBody = requestBody.use { it.readBytes().toString(Charsets.UTF_8) }
+        val requestBodyBytes = requestBody.use { it.readBytes() }
+        val requestBody = decodeBody(requestBodyBytes, requestHeaders["Content-Encoding"].orEmpty())
         recordedRequests += RecordedRequest(
             method = requestMethod,
             path = requestURI.rawPath,
@@ -100,6 +113,15 @@ class FakePostHogServer private constructor(
         responseHeaders.add("Content-Type", "application/json")
         sendResponseHeaders(200, response.size.toLong())
         responseBody.use { it.write(response) }
+    }
+
+    private fun decodeBody(bytes: ByteArray, contentEncodings: List<String>): String {
+        val decodedBytes = if (bytes.isGzipEncoded(contentEncodings)) {
+            GZIPInputStream(bytes.inputStream()).use { it.readBytes() }
+        } else {
+            bytes
+        }
+        return decodedBytes.toString(Charsets.UTF_8)
     }
 
     private fun JsonElement.toRecordedEvents(request: RecordedRequest): List<RecordedEvent> {
@@ -131,6 +153,11 @@ class FakePostHogServer private constructor(
             return FakePostHogServer(server)
         }
     }
+}
+
+private fun ByteArray.isGzipEncoded(contentEncodings: List<String>): Boolean {
+    return contentEncodings.any { it.equals("gzip", ignoreCase = true) } ||
+        size >= 2 && this[0] == 0x1f.toByte() && this[1] == 0x8b.toByte()
 }
 
 data class RecordedRequest(
