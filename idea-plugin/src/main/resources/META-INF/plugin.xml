@@ -202,6 +202,22 @@
 
         <action id="hexana.showStructurePopup" class="org.jetbrains.hexana.actions.ShowStructurePopupAction"
                 use-shortcut-of="FileStructurePopup"/>
+
+        <!--
+            "Open in... | Hexana" for archives (.jar / .zip / .war / .apk).
+            The submenu is only visible when the selected project-view file
+            is a Hexana-known archive; the action inside opens it through
+            FileEditorManager so HexanaFileEditorProvider claims the file
+            via PLACE_BEFORE_DEFAULT_EDITOR.
+        -->
+        <group id="hexana.openInGroup"
+               class="org.jetbrains.hexana.actions.HexanaOpenInGroup">
+            <action id="hexana.openArchiveInHexana"
+                    class="org.jetbrains.hexana.actions.OpenArchiveInHexanaAction"
+                    text="Hexana"
+                    description="Open this archive in Hexana's Java library viewer"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="first"/>
+        </group>
     </actions>
 
 </idea-plugin>
