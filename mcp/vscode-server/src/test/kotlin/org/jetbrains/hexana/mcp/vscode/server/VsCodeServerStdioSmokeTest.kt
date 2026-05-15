@@ -16,6 +16,7 @@ import kotlinx.io.asSource
 import kotlinx.io.buffered
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
@@ -55,19 +56,29 @@ class VsCodeServerStdioSmokeTest {
                 client.connect(transport)
 
                 val tools = client.listTools(ListToolsRequest()).tools
-                val summarizeModule = tools.single { it.name == "summarize_module" }
-                assertTrue(summarizeModule.annotations?.readOnlyHint == true)
-                assertFalse(summarizeModule.annotations?.destructiveHint == true)
-                assertTrue(summarizeModule.annotations?.idempotentHint == true)
+                val queryArtifacts = tools.single { it.name == "query_artifacts" }
+                assertTrue(queryArtifacts.annotations?.readOnlyHint == true)
+                assertFalse(queryArtifacts.annotations?.destructiveHint == true)
+                assertTrue(queryArtifacts.annotations?.idempotentHint == true)
 
                 val summary = client.callTool(
-                    name = "summarize_module",
-                    arguments = mapOf("bytes" to MinimalWasmModuleBytes),
+                    name = "query_artifacts",
+                    arguments = mapOf("bytes" to MinimalWasmModuleBytes, "operation" to "overview"),
                     meta = emptyMap<String, Any?>()
                 )
                 assertFalse(summary.isError == true)
                 assertJsonTextMatchesStructured(summary)
-                assertEquals(0, summary.structuredContent?.get("functions")?.jsonPrimitive?.int)
+                assertEquals(
+                    0,
+                    summary.structuredContent
+                        ?.get("modules")
+                        ?.jsonArray
+                        ?.first()
+                        ?.jsonObject
+                        ?.get("functions")
+                        ?.jsonPrimitive
+                        ?.int
+                )
             }
         } finally {
             runCatching {
