@@ -179,6 +179,11 @@ internal repository hostnames, TeamCity/GitHub token variable names, private-key
 source files, credential files, private/build path names, R8 mapping output, or pre-obfuscation Hexana runtime jars.
 PostHog/analytics dependencies are allowed and are included in the obfuscated runtime jar.
 
+GitHub-facing text is scanned separately before public mutation calls. Release notes, PR title, PR body, and PR update
+comments fail on internal CI wording, internal hostnames, local paths, token names or prefixes, and direct URLs. The
+guard can be checked without network access by running
+`PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh`.
+
 The secret scan is intentionally conservative. If it reports a false positive, either change the public file content so
 the marker is not present verbatim, or adjust the script in the same review with a narrowly scoped exception. Do not
 disable the scan in TeamCity.

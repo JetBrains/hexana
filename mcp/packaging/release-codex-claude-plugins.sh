@@ -113,18 +113,33 @@ check_public_github_text_file() {
 
   [ -f "$file" ] || die "$context file is missing: $file"
 
-  set +e
-  matches="$(grep -I -n -E -- "$forbidden_content" "$file" 2>/dev/null)"
-  grep_status=$?
-  set -e
-
-  if [ "$grep_status" -eq 0 ]; then
+  if matches="$(grep -I -n -E -- "$forbidden_content" "$file" 2>/dev/null)"; then
     printf '%s\n' "$matches" | sed "s#^#$context:#" >&2
-    die "$context contains forbidden private/internal text"
+    return 1
+  else
+    grep_status=$?
   fi
   if [ "$grep_status" -ne 1 ]; then
-    die "$context scan failed"
+    return 2
   fi
+  return 0
+}
+
+require_public_github_text_file() {
+  local context="$1"
+  local file="$2"
+  local scan_status
+
+  set +e
+  check_public_github_text_file "$context" "$file"
+  scan_status=$?
+  set -e
+
+  case "$scan_status" in
+    0) ;;
+    1) die "$context contains forbidden private/internal text" ;;
+    *) die "$context scan failed" ;;
+  esac
 }
 
 check_public_github_text() {
@@ -135,11 +150,35 @@ check_public_github_text() {
   text_file="$(mktemp "${TMPDIR:-/tmp}/hexana-public-github-text.XXXXXX")"
   register_cleanup_dir "$text_file"
   printf '%s\n' "$text" > "$text_file"
-  check_public_github_text_file "$context" "$text_file"
+  require_public_github_text_file "$context" "$text_file"
+}
+
+self_test_public_github_text_guard() {
+  local safe_file
+  local unsafe_file
+  local scan_status
+
+  safe_file="$(mktemp "${TMPDIR:-/tmp}/hexana-public-github-text-safe.XXXXXX")"
+  unsafe_file="$(mktemp "${TMPDIR:-/tmp}/hexana-public-github-text-unsafe.XXXXXX")"
+  register_cleanup_dir "$safe_file"
+  register_cleanup_dir "$unsafe_file"
+
+  printf 'Hexana MCP plugin distribution 0.7.0\n\n- Public marketplace metadata is updated through the companion pull request.\n' > "$safe_file"
+  printf 'Updated from TeamCity build https://buildserver.internal.example/build/123\n' > "$unsafe_file"
+
+  require_public_github_text_file "Public GitHub text guard self-test safe fixture" "$safe_file"
+
+  set +e
+  check_public_github_text_file "Public GitHub text guard self-test unsafe fixture" "$unsafe_file" >/dev/null 2>&1
+  scan_status=$?
+  set -e
+
+  [ "$scan_status" -eq 1 ] || die "Public GitHub text guard self-test did not reject the unsafe fixture"
+  log "Public GitHub text guard self-test passed"
 }
 
 publish_github_release() {
-  check_public_github_text_file "GitHub release notes" "$release_notes"
+  require_public_github_text_file "GitHub release notes" "$release_notes"
 
   if [ "$DRY_RUN" = "true" ]; then
     log "Dry run requested; not creating or updating GitHub release $RELEASE_TAG"
@@ -682,7 +721,7 @@ write_pr_body() {
     printf '\n'
     printf 'This PR is intended to contain only public distribution metadata, manifests, wrapper scripts, skills, MCP config, and approved public bundled files. It must not contain private source code, CI internals, secrets, or private build artifacts.\n'
   } > "$PR_BODY_FILE"
-  check_public_github_text_file "GitHub PR body" "$PR_BODY_FILE"
+  require_public_github_text_file "GitHub PR body" "$PR_BODY_FILE"
 }
 
 public_pr_update_comment() {
@@ -720,6 +759,7 @@ create_or_update_pr() {
   local pr_url
   local pr_update_comment
 
+  check_public_github_text "GitHub PR title" "$title"
   write_pr_body
   existing_json="$(gh pr list \
     --repo "$PUBLIC_REPO_SLUG" \
@@ -852,6 +892,11 @@ publish_public_marketplace_pr() {
 }
 
 main() {
+  if [ "$(to_bool "${PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST:-false}" "PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST")" = "true" ]; then
+    self_test_public_github_text_guard
+    return
+  fi
+
   require_tool "./gradlew"
   require_tool "gh"
   require_tool "jq"
