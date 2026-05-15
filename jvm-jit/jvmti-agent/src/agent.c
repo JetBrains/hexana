@@ -148,7 +148,12 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
     callback.VMInit = vm_init;
     error = (*jvmti)->SetEventCallbacks(jvmti, &callback, sizeof(callback));
     check_jvmti_errors(jvmti, error, "Unable to set callbacks");
-    dump_fd = open("mem.userDump", O_CREAT|O_RDWR|O_TRUNC, (mode_t)0600);
+    // -agentpath:<lib>=<dump_path>
+    // The `options` argument is whatever follows the first `=` in the
+    // -agentpath spec. When empty / NULL we fall back to the historical
+    // filename so existing scripts keep working.
+    const char *dump_path = (options && options[0] != '\0') ? options : "mem.userDump";
+    dump_fd = open(dump_path, O_CREAT|O_RDWR|O_TRUNC, (mode_t)0600);
     if (dump_fd == -1) {
         return JNI_ERR;
     }

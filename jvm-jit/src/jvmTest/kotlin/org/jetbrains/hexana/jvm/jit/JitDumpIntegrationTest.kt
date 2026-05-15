@@ -26,6 +26,22 @@ class JitDumpIntegrationTest {
 
     @Test
     fun `roundtrips a JIT dump produced by the jitview agent on a sample app`() {
+        runRoundtrip(agentOptions = null, expectedDumpName = "mem.userDump")
+    }
+
+    /**
+     * Locks in the agent's `options` parameter parsing — when the user
+     * passes `-agentpath:<lib>=<path>`, the agent must honour that path
+     * rather than fall back to the default. This is what the IDE-side
+     * `JitviewRunConfigurationExtension` relies on to put the dump in the
+     * run's working directory under a user-chosen filename.
+     */
+    @Test
+    fun `agent honours a custom dump filename passed via the options string`() {
+        runRoundtrip(agentOptions = "custom-name.jit", expectedDumpName = "custom-name.jit")
+    }
+
+    private fun runRoundtrip(agentOptions: String?, expectedDumpName: String) {
         val agent = locateAgentLibrary()
         assumeTrue(
             "JVMTI agent binary not built — skipping. See :jvm-jit:buildJitviewAgent.",
@@ -34,14 +50,14 @@ class JitDumpIntegrationTest {
         agent!!
 
         val workdir = tempFolder.newFolder("jit-dump-run")
-        val (exitCode, stdout, stderr) = runSampleAppWithAgent(agent, workdir)
+        val (exitCode, stdout, stderr) = runSampleAppWithAgent(agent, workdir, agentOptions)
 
         assertTrue(
             "Child JVM failed (exit=$exitCode).\nstdout:\n$stdout\nstderr:\n$stderr",
             exitCode == 0,
         )
 
-        val dump = File(workdir, "mem.userDump")
+        val dump = File(workdir, expectedDumpName)
         assertTrue(
             "Agent did not produce $dump (size=${if (dump.exists()) dump.length() else -1}). stderr:\n$stderr",
             dump.exists() && dump.length() > 0,
@@ -101,14 +117,22 @@ class JitDumpIntegrationTest {
 
     private data class ChildRun(val exitCode: Int, val stdout: String, val stderr: String)
 
-    private fun runSampleAppWithAgent(agent: File, workdir: File): ChildRun {
+    private fun runSampleAppWithAgent(agent: File, workdir: File, agentOptions: String?): ChildRun {
         val javaHome = System.getProperty("java.home")
         val javaBin = File(javaHome, "bin/java").let { if (it.exists()) it else File(javaHome, "bin/java.exe") }
         val classpath = System.getProperty("java.class.path")
 
+        val agentArg = buildString {
+            append("-agentpath:")
+            append(agent.absolutePath)
+            if (!agentOptions.isNullOrEmpty()) {
+                append('=')
+                append(agentOptions)
+            }
+        }
         val cmd = listOf(
             javaBin.absolutePath,
-            "-agentpath:${agent.absolutePath}",
+            agentArg,
             "-cp", classpath,
             JitSampleApp::class.java.name,
         )
