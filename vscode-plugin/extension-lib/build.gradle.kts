@@ -4,6 +4,7 @@ plugins {
 
 kotlin {
     js(IR) {
+        nodejs()
         browser {
             commonWebpackConfig {
                 outputFileName = "extension-lib.js"
@@ -31,7 +32,15 @@ kotlin {
         jsTest {
             dependencies {
                 implementation(libs.kotlin.test)
+                implementation(libs.kotlinx.coroutines.core)
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
     }
+}
+
+tasks.named("jsBrowserTest") {
+    // extension-lib is bundled through the browser webpack task, but it runs in the
+    // VS Code extension host and depends on Node-only modules such as posthog-node.
+    enabled = false
 }
