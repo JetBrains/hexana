@@ -1,0 +1,272 @@
+package org.jetbrains.hexana.javabytecode
+
+/**
+ * Operand layout family — controls how [JavaBytecodeDecoder] reads bytes
+ * after the opcode byte and builds the matching [JavaBytecodeOperands].
+ */
+enum class JavaOperandKind {
+    /** No operands. Total instruction size = 1. */
+    None,
+
+    /** 1 unsigned byte (local-variable index, type code, ldc cp index). Size = 2. */
+    ByteUnsigned,
+
+    /** 1 signed byte (bipush immediate). Size = 2. */
+    ByteSigned,
+
+    /** 2 unsigned bytes (cp index for ldc_w / ldc2_w / get*field / put*field / invoke* / new / anewarray / checkcast / instanceof). Size = 3. */
+    ShortUnsigned,
+
+    /** 2 signed bytes (sipush immediate, branch offsets for if_* / goto / jsr / ifnull / ifnonnull). Size = 3. */
+    ShortSigned,
+
+    /** 4 signed bytes (goto_w / jsr_w). Size = 5. */
+    IntSigned,
+
+    /** `iinc`: 1 unsigned byte (var index) + 1 signed byte (delta). Size = 3. */
+    IInc,
+
+    /** `invokeinterface`: u2 cp index + u1 count + u1 zero. Size = 5. */
+    InvokeInterface,
+
+    /** `invokedynamic`: u2 cp index + u2 zero. Size = 5. */
+    InvokeDynamic,
+
+    /** `multianewarray`: u2 cp index + u1 dimensions. Size = 4. */
+    MultiANewArray,
+
+    /** `tableswitch`: padding + default(4) + low(4) + high(4) + (high - low + 1) jump offsets (4 each). Variable size. */
+    TableSwitch,
+
+    /** `lookupswitch`: padding + default(4) + npairs(4) + npairs × (match, offset). Variable size. */
+    LookupSwitch,
+
+    /** `wide`-prefix: 1 byte opcode + 2 bytes index (or +4 for iinc). Size 4 or 6. */
+    Wide,
+
+    /** Reserved / impdep — single-byte placeholder. Size = 1. */
+    Reserved,
+}
+
+/**
+ * JVM opcodes from JVMS §6.5. The 1-byte [code] is the on-wire byte;
+ * [mnemonic] is the canonical lowercase name (`iconst_0`, `invokevirtual`);
+ * [operandKind] drives the decoder.
+ */
+@Suppress("EnumEntryName")
+enum class JavaOpcode(val code: Int, val mnemonic: String, val operandKind: JavaOperandKind) {
+    NOP(0x00, "nop", JavaOperandKind.None),
+    ACONST_NULL(0x01, "aconst_null", JavaOperandKind.None),
+    ICONST_M1(0x02, "iconst_m1", JavaOperandKind.None),
+    ICONST_0(0x03, "iconst_0", JavaOperandKind.None),
+    ICONST_1(0x04, "iconst_1", JavaOperandKind.None),
+    ICONST_2(0x05, "iconst_2", JavaOperandKind.None),
+    ICONST_3(0x06, "iconst_3", JavaOperandKind.None),
+    ICONST_4(0x07, "iconst_4", JavaOperandKind.None),
+    ICONST_5(0x08, "iconst_5", JavaOperandKind.None),
+    LCONST_0(0x09, "lconst_0", JavaOperandKind.None),
+    LCONST_1(0x0a, "lconst_1", JavaOperandKind.None),
+    FCONST_0(0x0b, "fconst_0", JavaOperandKind.None),
+    FCONST_1(0x0c, "fconst_1", JavaOperandKind.None),
+    FCONST_2(0x0d, "fconst_2", JavaOperandKind.None),
+    DCONST_0(0x0e, "dconst_0", JavaOperandKind.None),
+    DCONST_1(0x0f, "dconst_1", JavaOperandKind.None),
+    BIPUSH(0x10, "bipush", JavaOperandKind.ByteSigned),
+    SIPUSH(0x11, "sipush", JavaOperandKind.ShortSigned),
+    LDC(0x12, "ldc", JavaOperandKind.ByteUnsigned),
+    LDC_W(0x13, "ldc_w", JavaOperandKind.ShortUnsigned),
+    LDC2_W(0x14, "ldc2_w", JavaOperandKind.ShortUnsigned),
+    ILOAD(0x15, "iload", JavaOperandKind.ByteUnsigned),
+    LLOAD(0x16, "lload", JavaOperandKind.ByteUnsigned),
+    FLOAD(0x17, "fload", JavaOperandKind.ByteUnsigned),
+    DLOAD(0x18, "dload", JavaOperandKind.ByteUnsigned),
+    ALOAD(0x19, "aload", JavaOperandKind.ByteUnsigned),
+    ILOAD_0(0x1a, "iload_0", JavaOperandKind.None),
+    ILOAD_1(0x1b, "iload_1", JavaOperandKind.None),
+    ILOAD_2(0x1c, "iload_2", JavaOperandKind.None),
+    ILOAD_3(0x1d, "iload_3", JavaOperandKind.None),
+    LLOAD_0(0x1e, "lload_0", JavaOperandKind.None),
+    LLOAD_1(0x1f, "lload_1", JavaOperandKind.None),
+    LLOAD_2(0x20, "lload_2", JavaOperandKind.None),
+    LLOAD_3(0x21, "lload_3", JavaOperandKind.None),
+    FLOAD_0(0x22, "fload_0", JavaOperandKind.None),
+    FLOAD_1(0x23, "fload_1", JavaOperandKind.None),
+    FLOAD_2(0x24, "fload_2", JavaOperandKind.None),
+    FLOAD_3(0x25, "fload_3", JavaOperandKind.None),
+    DLOAD_0(0x26, "dload_0", JavaOperandKind.None),
+    DLOAD_1(0x27, "dload_1", JavaOperandKind.None),
+    DLOAD_2(0x28, "dload_2", JavaOperandKind.None),
+    DLOAD_3(0x29, "dload_3", JavaOperandKind.None),
+    ALOAD_0(0x2a, "aload_0", JavaOperandKind.None),
+    ALOAD_1(0x2b, "aload_1", JavaOperandKind.None),
+    ALOAD_2(0x2c, "aload_2", JavaOperandKind.None),
+    ALOAD_3(0x2d, "aload_3", JavaOperandKind.None),
+    IALOAD(0x2e, "iaload", JavaOperandKind.None),
+    LALOAD(0x2f, "laload", JavaOperandKind.None),
+    FALOAD(0x30, "faload", JavaOperandKind.None),
+    DALOAD(0x31, "daload", JavaOperandKind.None),
+    AALOAD(0x32, "aaload", JavaOperandKind.None),
+    BALOAD(0x33, "baload", JavaOperandKind.None),
+    CALOAD(0x34, "caload", JavaOperandKind.None),
+    SALOAD(0x35, "saload", JavaOperandKind.None),
+    ISTORE(0x36, "istore", JavaOperandKind.ByteUnsigned),
+    LSTORE(0x37, "lstore", JavaOperandKind.ByteUnsigned),
+    FSTORE(0x38, "fstore", JavaOperandKind.ByteUnsigned),
+    DSTORE(0x39, "dstore", JavaOperandKind.ByteUnsigned),
+    ASTORE(0x3a, "astore", JavaOperandKind.ByteUnsigned),
+    ISTORE_0(0x3b, "istore_0", JavaOperandKind.None),
+    ISTORE_1(0x3c, "istore_1", JavaOperandKind.None),
+    ISTORE_2(0x3d, "istore_2", JavaOperandKind.None),
+    ISTORE_3(0x3e, "istore_3", JavaOperandKind.None),
+    LSTORE_0(0x3f, "lstore_0", JavaOperandKind.None),
+    LSTORE_1(0x40, "lstore_1", JavaOperandKind.None),
+    LSTORE_2(0x41, "lstore_2", JavaOperandKind.None),
+    LSTORE_3(0x42, "lstore_3", JavaOperandKind.None),
+    FSTORE_0(0x43, "fstore_0", JavaOperandKind.None),
+    FSTORE_1(0x44, "fstore_1", JavaOperandKind.None),
+    FSTORE_2(0x45, "fstore_2", JavaOperandKind.None),
+    FSTORE_3(0x46, "fstore_3", JavaOperandKind.None),
+    DSTORE_0(0x47, "dstore_0", JavaOperandKind.None),
+    DSTORE_1(0x48, "dstore_1", JavaOperandKind.None),
+    DSTORE_2(0x49, "dstore_2", JavaOperandKind.None),
+    DSTORE_3(0x4a, "dstore_3", JavaOperandKind.None),
+    ASTORE_0(0x4b, "astore_0", JavaOperandKind.None),
+    ASTORE_1(0x4c, "astore_1", JavaOperandKind.None),
+    ASTORE_2(0x4d, "astore_2", JavaOperandKind.None),
+    ASTORE_3(0x4e, "astore_3", JavaOperandKind.None),
+    IASTORE(0x4f, "iastore", JavaOperandKind.None),
+    LASTORE(0x50, "lastore", JavaOperandKind.None),
+    FASTORE(0x51, "fastore", JavaOperandKind.None),
+    DASTORE(0x52, "dastore", JavaOperandKind.None),
+    AASTORE(0x53, "aastore", JavaOperandKind.None),
+    BASTORE(0x54, "bastore", JavaOperandKind.None),
+    CASTORE(0x55, "castore", JavaOperandKind.None),
+    SASTORE(0x56, "sastore", JavaOperandKind.None),
+    POP(0x57, "pop", JavaOperandKind.None),
+    POP2(0x58, "pop2", JavaOperandKind.None),
+    DUP(0x59, "dup", JavaOperandKind.None),
+    DUP_X1(0x5a, "dup_x1", JavaOperandKind.None),
+    DUP_X2(0x5b, "dup_x2", JavaOperandKind.None),
+    DUP2(0x5c, "dup2", JavaOperandKind.None),
+    DUP2_X1(0x5d, "dup2_x1", JavaOperandKind.None),
+    DUP2_X2(0x5e, "dup2_x2", JavaOperandKind.None),
+    SWAP(0x5f, "swap", JavaOperandKind.None),
+    IADD(0x60, "iadd", JavaOperandKind.None),
+    LADD(0x61, "ladd", JavaOperandKind.None),
+    FADD(0x62, "fadd", JavaOperandKind.None),
+    DADD(0x63, "dadd", JavaOperandKind.None),
+    ISUB(0x64, "isub", JavaOperandKind.None),
+    LSUB(0x65, "lsub", JavaOperandKind.None),
+    FSUB(0x66, "fsub", JavaOperandKind.None),
+    DSUB(0x67, "dsub", JavaOperandKind.None),
+    IMUL(0x68, "imul", JavaOperandKind.None),
+    LMUL(0x69, "lmul", JavaOperandKind.None),
+    FMUL(0x6a, "fmul", JavaOperandKind.None),
+    DMUL(0x6b, "dmul", JavaOperandKind.None),
+    IDIV(0x6c, "idiv", JavaOperandKind.None),
+    LDIV(0x6d, "ldiv", JavaOperandKind.None),
+    FDIV(0x6e, "fdiv", JavaOperandKind.None),
+    DDIV(0x6f, "ddiv", JavaOperandKind.None),
+    IREM(0x70, "irem", JavaOperandKind.None),
+    LREM(0x71, "lrem", JavaOperandKind.None),
+    FREM(0x72, "frem", JavaOperandKind.None),
+    DREM(0x73, "drem", JavaOperandKind.None),
+    INEG(0x74, "ineg", JavaOperandKind.None),
+    LNEG(0x75, "lneg", JavaOperandKind.None),
+    FNEG(0x76, "fneg", JavaOperandKind.None),
+    DNEG(0x77, "dneg", JavaOperandKind.None),
+    ISHL(0x78, "ishl", JavaOperandKind.None),
+    LSHL(0x79, "lshl", JavaOperandKind.None),
+    ISHR(0x7a, "ishr", JavaOperandKind.None),
+    LSHR(0x7b, "lshr", JavaOperandKind.None),
+    IUSHR(0x7c, "iushr", JavaOperandKind.None),
+    LUSHR(0x7d, "lushr", JavaOperandKind.None),
+    IAND(0x7e, "iand", JavaOperandKind.None),
+    LAND(0x7f, "land", JavaOperandKind.None),
+    IOR(0x80, "ior", JavaOperandKind.None),
+    LOR(0x81, "lor", JavaOperandKind.None),
+    IXOR(0x82, "ixor", JavaOperandKind.None),
+    LXOR(0x83, "lxor", JavaOperandKind.None),
+    IINC(0x84, "iinc", JavaOperandKind.IInc),
+    I2L(0x85, "i2l", JavaOperandKind.None),
+    I2F(0x86, "i2f", JavaOperandKind.None),
+    I2D(0x87, "i2d", JavaOperandKind.None),
+    L2I(0x88, "l2i", JavaOperandKind.None),
+    L2F(0x89, "l2f", JavaOperandKind.None),
+    L2D(0x8a, "l2d", JavaOperandKind.None),
+    F2I(0x8b, "f2i", JavaOperandKind.None),
+    F2L(0x8c, "f2l", JavaOperandKind.None),
+    F2D(0x8d, "f2d", JavaOperandKind.None),
+    D2I(0x8e, "d2i", JavaOperandKind.None),
+    D2L(0x8f, "d2l", JavaOperandKind.None),
+    D2F(0x90, "d2f", JavaOperandKind.None),
+    I2B(0x91, "i2b", JavaOperandKind.None),
+    I2C(0x92, "i2c", JavaOperandKind.None),
+    I2S(0x93, "i2s", JavaOperandKind.None),
+    LCMP(0x94, "lcmp", JavaOperandKind.None),
+    FCMPL(0x95, "fcmpl", JavaOperandKind.None),
+    FCMPG(0x96, "fcmpg", JavaOperandKind.None),
+    DCMPL(0x97, "dcmpl", JavaOperandKind.None),
+    DCMPG(0x98, "dcmpg", JavaOperandKind.None),
+    IFEQ(0x99, "ifeq", JavaOperandKind.ShortSigned),
+    IFNE(0x9a, "ifne", JavaOperandKind.ShortSigned),
+    IFLT(0x9b, "iflt", JavaOperandKind.ShortSigned),
+    IFGE(0x9c, "ifge", JavaOperandKind.ShortSigned),
+    IFGT(0x9d, "ifgt", JavaOperandKind.ShortSigned),
+    IFLE(0x9e, "ifle", JavaOperandKind.ShortSigned),
+    IF_ICMPEQ(0x9f, "if_icmpeq", JavaOperandKind.ShortSigned),
+    IF_ICMPNE(0xa0, "if_icmpne", JavaOperandKind.ShortSigned),
+    IF_ICMPLT(0xa1, "if_icmplt", JavaOperandKind.ShortSigned),
+    IF_ICMPGE(0xa2, "if_icmpge", JavaOperandKind.ShortSigned),
+    IF_ICMPGT(0xa3, "if_icmpgt", JavaOperandKind.ShortSigned),
+    IF_ICMPLE(0xa4, "if_icmple", JavaOperandKind.ShortSigned),
+    IF_ACMPEQ(0xa5, "if_acmpeq", JavaOperandKind.ShortSigned),
+    IF_ACMPNE(0xa6, "if_acmpne", JavaOperandKind.ShortSigned),
+    GOTO(0xa7, "goto", JavaOperandKind.ShortSigned),
+    JSR(0xa8, "jsr", JavaOperandKind.ShortSigned),
+    RET(0xa9, "ret", JavaOperandKind.ByteUnsigned),
+    TABLESWITCH(0xaa, "tableswitch", JavaOperandKind.TableSwitch),
+    LOOKUPSWITCH(0xab, "lookupswitch", JavaOperandKind.LookupSwitch),
+    IRETURN(0xac, "ireturn", JavaOperandKind.None),
+    LRETURN(0xad, "lreturn", JavaOperandKind.None),
+    FRETURN(0xae, "freturn", JavaOperandKind.None),
+    DRETURN(0xaf, "dreturn", JavaOperandKind.None),
+    ARETURN(0xb0, "areturn", JavaOperandKind.None),
+    RETURN(0xb1, "return", JavaOperandKind.None),
+    GETSTATIC(0xb2, "getstatic", JavaOperandKind.ShortUnsigned),
+    PUTSTATIC(0xb3, "putstatic", JavaOperandKind.ShortUnsigned),
+    GETFIELD(0xb4, "getfield", JavaOperandKind.ShortUnsigned),
+    PUTFIELD(0xb5, "putfield", JavaOperandKind.ShortUnsigned),
+    INVOKEVIRTUAL(0xb6, "invokevirtual", JavaOperandKind.ShortUnsigned),
+    INVOKESPECIAL(0xb7, "invokespecial", JavaOperandKind.ShortUnsigned),
+    INVOKESTATIC(0xb8, "invokestatic", JavaOperandKind.ShortUnsigned),
+    INVOKEINTERFACE(0xb9, "invokeinterface", JavaOperandKind.InvokeInterface),
+    INVOKEDYNAMIC(0xba, "invokedynamic", JavaOperandKind.InvokeDynamic),
+    NEW(0xbb, "new", JavaOperandKind.ShortUnsigned),
+    NEWARRAY(0xbc, "newarray", JavaOperandKind.ByteUnsigned),
+    ANEWARRAY(0xbd, "anewarray", JavaOperandKind.ShortUnsigned),
+    ARRAYLENGTH(0xbe, "arraylength", JavaOperandKind.None),
+    ATHROW(0xbf, "athrow", JavaOperandKind.None),
+    CHECKCAST(0xc0, "checkcast", JavaOperandKind.ShortUnsigned),
+    INSTANCEOF(0xc1, "instanceof", JavaOperandKind.ShortUnsigned),
+    MONITORENTER(0xc2, "monitorenter", JavaOperandKind.None),
+    MONITOREXIT(0xc3, "monitorexit", JavaOperandKind.None),
+    WIDE(0xc4, "wide", JavaOperandKind.Wide),
+    MULTIANEWARRAY(0xc5, "multianewarray", JavaOperandKind.MultiANewArray),
+    IFNULL(0xc6, "ifnull", JavaOperandKind.ShortSigned),
+    IFNONNULL(0xc7, "ifnonnull", JavaOperandKind.ShortSigned),
+    GOTO_W(0xc8, "goto_w", JavaOperandKind.IntSigned),
+    JSR_W(0xc9, "jsr_w", JavaOperandKind.IntSigned),
+    BREAKPOINT(0xca, "breakpoint", JavaOperandKind.Reserved),
+    IMPDEP1(0xfe, "impdep1", JavaOperandKind.Reserved),
+    IMPDEP2(0xff, "impdep2", JavaOperandKind.Reserved),
+    ;
+
+    companion object {
+        private val byCode: Array<JavaOpcode?> = arrayOfNulls<JavaOpcode>(256).also { table ->
+            for (op in entries) table[op.code] = op
+        }
+
+        fun forCode(code: Int): JavaOpcode? = byCode[code and 0xFF]
+    }
+}
