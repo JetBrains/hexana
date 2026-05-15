@@ -14,7 +14,8 @@ external object PostHogModule {
 internal class PostHogJsClient(
     config: AnalyticsConfig,
     private val consentProvider: ConsentProvider,
-    private val distinctIdProvider: DistinctIdProvider
+    private val distinctIdProvider: DistinctIdProvider,
+    private val globalProperties: Map<String, Any>
 ) : AnalyticsClient {
 
     // Build the options object imperatively instead of using a js("({…})") literal
@@ -34,8 +35,8 @@ internal class PostHogJsClient(
         params.distinctId = distinctIdProvider.distinctId()
         params.event = event.name
         val props = js("{}")
-        for ((key, value) in event.properties) {
-            props[key] = value
+        for ((key, value) in globalProperties + event.properties) {
+            props[key] = value.toPostHogJsValue()
         }
         params.properties = props
         client.capture(params)
@@ -55,7 +56,7 @@ internal actual fun createPlatformClient(
     consentProvider: ConsentProvider,
     distinctIdProvider: DistinctIdProvider,
     globalProperties: Map<String, Any>
-): AnalyticsClient = PostHogJsClient(config, consentProvider, distinctIdProvider)
+): AnalyticsClient = PostHogJsClient(config, consentProvider, distinctIdProvider, globalProperties)
 
 private fun AnalyticsConfig.resolvedHost(): String {
     if (host != AnalyticsConfig.DEFAULT_HOST) {
@@ -85,4 +86,10 @@ private fun processEnv(name: String): String? {
     if (env == null) return null
     val value = env[name]
     return (value as? String)?.trim()?.takeIf { it.isNotEmpty() }
+}
+
+private fun Any.toPostHogJsValue(): Any = when (this) {
+    is Long -> toDouble()
+    is Int -> toDouble()
+    else -> this
 }
