@@ -476,8 +476,7 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
             {
               "name": "hexana",
               "owner": {
-                "name": "JetBrains",
-                "email": "hexana@jetbrains.com"
+                "name": "JetBrains"
               },
               "metadata": {
                 "description": "Hexana marketplace distribution for Claude Code"
