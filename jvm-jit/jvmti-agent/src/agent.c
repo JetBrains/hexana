@@ -4,8 +4,17 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <pthread.h>
 #include "jvmti.h"
 #include "jvmticmlr.h"
+
+// JVMTI dispatches COMPILED_METHOD_LOAD on the JIT compiler threads, which
+// run in parallel for C1/C2. This mutex serialises every callback that
+// touches the agent's global state — the `offset` cursor, the string and
+// sym linked lists, and the dump_fd write ordering. Without it the lists
+// race and free() ends up tripping over corrupted heap metadata
+// (manifests as SIGABRT inside libc).
+static pthread_mutex_t event_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static int dump_fd;
 static void *memory;
@@ -46,6 +55,12 @@ typedef struct __attribute__((packed)){
     uint32_t inline_count;
     uint8_t version;
     uint64_t magic0;
+    // v2 additions (header.version >= 2). Together they pin the JVM
+    // bytecode bytes captured via GetBytecodes for this compiled method;
+    // bytecode_offset is relative to the start of the sym_entry_t record,
+    // bytecode_length is the count of bytes.
+    uint32_t bytecode_offset;
+    uint32_t bytecode_length;
 } sym_entry_t;
 
 typedef struct {
@@ -77,6 +92,11 @@ typedef struct sym {
     string_t *string;
     string_t *file_name_string;
     inline_record_t *inline_records;
+    // JVM bytecode bytes captured via JVMTI GetBytecodes() at method_load
+    // time. Owned by this struct; freed in Agent_OnUnload after being
+    // written to the dump.
+    unsigned char *bytecode_bytes;
+    jint bytecode_size;
     LIST_ENTRY(sym) syms;
 } syms_t;
 LIST_HEAD(head_syms, sym);
@@ -115,6 +135,10 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
     check_jvmti_errors(jvmti, error, "Unable to get capabilities");
     if (error == JVMTI_ERROR_NONE) {
         capa.can_generate_compiled_method_load_events = 1;
+        // Required for GetBytecodes() in method_load — we ship the captured
+        // JVM bytecode bytes alongside the native code so the Hexana editor
+        // can render a bytecode view without re-reading .class files.
+        capa.can_get_bytecodes = 1;
         error = (*jvmti)->AddCapabilities(jvmti, &capa);
         check_jvmti_errors(jvmti, error, "Unable to set capapbilities");
     }
@@ -163,6 +187,9 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
     header.magic[0] = 'M';
     header.magic[1] = 'I';
     header.magic[2] = 'N';
+    // Format version 2: sym_entry_t carries bytecode_offset / bytecode_length
+    // pointing at GetBytecodes() bytes appended after the inline records.
+    header.version = 2;
     header.offset = sizeof(header_t);
     offset = write(dump_fd, &header, sizeof(header));
     return JNI_OK;
@@ -170,6 +197,10 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
 
 JNIEXPORT void JNICALL
 Agent_OnUnload(JavaVM *vm) {
+    // Take the same event lock that method_load uses: a callback can still
+    // be in flight on a JIT thread when the VM begins shutdown, and reading
+    // the lists here while another thread mutates them is undefined.
+    pthread_mutex_lock(&event_mutex);
     header_t header;
     lseek(dump_fd, 0, SEEK_SET);
     read(dump_fd, &header, sizeof(header_t));
@@ -213,8 +244,14 @@ Agent_OnUnload(JavaVM *vm) {
                         offset += write(dump_fd, &info->info, sizeof(address_info_t));
                         for (int k = 0; k < info->info.frame_count; ++k) {
                             frame_t *frame = &info->frames[k];
-                            offset += write(dump_fd, &frame->method_name->offset, sizeof(uint32_t));
-                            offset += write(dump_fd, &frame->source_path->offset, sizeof(uint32_t));
+                            // method_name / source_path may be NULL when
+                            // resolution failed at method_load time —
+                            // emit offset 0 (the empty-string sentinel).
+                            uint32_t zero = 0;
+                            uint32_t mn_off = frame->method_name ? frame->method_name->offset : zero;
+                            uint32_t sp_off = frame->source_path ? frame->source_path->offset : zero;
+                            offset += write(dump_fd, &mn_off, sizeof(uint32_t));
+                            offset += write(dump_fd, &sp_off, sizeof(uint32_t));
                             offset += write(dump_fd, &frame->bci, sizeof(uint32_t));
                         }
                     }
@@ -222,6 +259,15 @@ Agent_OnUnload(JavaVM *vm) {
             }
             s->entry.inline_offset = (uint32_t)(inline_record_offset - sym_offset);
             s->entry.address_location_map_offset = (uint32_t)(map_offset - sym_offset);
+            // v2: bytecode bytes captured at method_load() get appended here,
+            // after the inline records and before `next` is finalised so the
+            // record-walker accounts for them.
+            uint64_t bytecode_offset_in_file = offset;
+            if (s->bytecode_size > 0 && s->bytecode_bytes != NULL) {
+                offset += write(dump_fd, s->bytecode_bytes, s->bytecode_size);
+            }
+            s->entry.bytecode_offset = (uint32_t)(bytecode_offset_in_file - sym_offset);
+            s->entry.bytecode_length = (uint32_t)s->bytecode_size;
             s->entry.next = offset - sym_offset;
             lseek(dump_fd, sym_offset, SEEK_SET);
             write(dump_fd, &s->entry, sizeof(sym_entry_t));
@@ -241,6 +287,9 @@ Agent_OnUnload(JavaVM *vm) {
                }
                free(s->inline_records);
             }
+            if (s->bytecode_bytes) {
+                free(s->bytecode_bytes);
+            }
             free(s);
             s = sn;
         }
@@ -257,6 +306,7 @@ Agent_OnUnload(JavaVM *vm) {
     lseek(dump_fd, 0, SEEK_SET);
     write(dump_fd, &header, sizeof(header_t));
     close(dump_fd);
+    pthread_mutex_unlock(&event_mutex);
 }
 
 static void JNICALL
@@ -267,11 +317,19 @@ method_load(jvmtiEnv *jvmti_env,
             jint map_length,
             const jvmtiAddrLocationMap* map,
             const void* compile_info) {
-    string_t* needle;
-    string_t* path_string;
+    string_t* needle = NULL;
+    string_t* path_string = NULL;
     uint8_t version = 0;
 
-    method_string_representation(jvmti_env, method, &needle, &version, &path_string);
+    pthread_mutex_lock(&event_mutex);
+
+    // Late events that land outside the LIVE phase (rare; observed at VM
+    // shutdown) make JVMTI calls return WRONG_PHASE — skip them rather
+    // than serialise a half-populated symbol.
+    if (method_string_representation(jvmti_env, method, &needle, &version, &path_string) != 0) {
+        pthread_mutex_unlock(&event_mutex);
+        return;
+    }
 
     uint64_t old_offset = offset;
     offset += write(dump_fd, code_addr, code_size);
@@ -322,6 +380,12 @@ method_load(jvmtiEnv *jvmti_env,
                         info->info.frame_count = stack_info.numstackframes;
                         frame_t *frames = malloc(stack_info.numstackframes * sizeof(frame_t));
                         for (int j = 0; j < stack_info.numstackframes; ++j) {
+                            frames[j].method_name = NULL;
+                            frames[j].source_path = NULL;
+                            // If resolution fails (rare; late-phase events)
+                            // method_name / source_path stay NULL. The
+                            // Agent_OnUnload writer treats NULL as
+                            // "anonymous" so it doesn't deref a bad pointer.
                             method_string_representation(jvmti_env,
                                                          stack_info.methods[j],
                                                          &frames[j].method_name,
@@ -362,12 +426,32 @@ method_load(jvmtiEnv *jvmti_env,
         s->entry.line_number_entry_count = entry_number_count;
 
     }
+
+    // Capture the method's JVM bytecode bytes — written to the dump later
+    // in Agent_OnUnload. Native methods have no bytecode; GetBytecodes
+    // returns JVMTI_ERROR_NATIVE_METHOD and we record a zero-length blob.
+    s->bytecode_bytes = NULL;
+    s->bytecode_size = 0;
+    {
+        jint bc_count = 0;
+        unsigned char *bc_bytes = NULL;
+        jvmtiError bc_err = (*jvmti_env)->GetBytecodes(jvmti_env, method, &bc_count, &bc_bytes);
+        if (bc_err == JVMTI_ERROR_NONE && bc_bytes != NULL && bc_count > 0) {
+            s->bytecode_bytes = malloc((size_t)bc_count);
+            memcpy(s->bytecode_bytes, bc_bytes, (size_t)bc_count);
+            s->bytecode_size = bc_count;
+        }
+        if (bc_bytes) {
+            (*jvmti_env)->Deallocate(jvmti_env, bc_bytes);
+        }
+    }
     fprintf(stderr, "%p:%d @%llx %s:%d\n",
         code_addr,
         code_size,
         old_offset,
         needle->name,
         version);
+    pthread_mutex_unlock(&event_mutex);
 }
 
 static void JNICALL
@@ -414,17 +498,36 @@ static int method_string_representation(jvmtiEnv *jvmti_env,
                                         string_t** ptr_representation,
                                         uint8_t* ptr_version,
                                         string_t **ptr_path) {
-    char *name, *signature, *generic;
+    // JVMTI leaves out-pointers UNDEFINED on error (spec is explicit about
+    // this). We initialize to NULL and treat any non-success error as a
+    // bail-out so a late event that lands in a non-LIVE phase doesn't
+    // crash the agent by reading garbage stack memory through `name` etc.
+    char *name = NULL, *signature = NULL, *generic = NULL;
     jvmtiError error = (*jvmti_env)->GetMethodName(jvmti_env, method, &name, &signature, &generic);
     check_jvmti_errors(jvmti_env, error, "Unable to get method");
+    if (error != JVMTI_ERROR_NONE) {
+        return -1;
+    }
 
-    jclass clazz;
+    jclass clazz = NULL;
     error = (*jvmti_env)->GetMethodDeclaringClass(jvmti_env, method, &clazz);
     check_jvmti_errors(jvmti_env, error, "Unable to get class");
+    if (error != JVMTI_ERROR_NONE || clazz == NULL) {
+        if (name) (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)name);
+        if (signature) (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)signature);
+        if (generic) (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)generic);
+        return -1;
+    }
 
-    char *class_signature, *class_generic;
+    char *class_signature = NULL, *class_generic = NULL;
     error = (*jvmti_env)->GetClassSignature(jvmti_env, clazz, &class_signature, &class_generic);
     check_jvmti_errors(jvmti_env, error, "Unable to get class signature");
+    if (error != JVMTI_ERROR_NONE) {
+        if (name) (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)name);
+        if (signature) (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)signature);
+        if (generic) (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)generic);
+        return -1;
+    }
 
     size_t buffer_length = class_signature ? strlen(class_signature) : 0;
     buffer_length += class_generic ? strlen(class_generic) : 0;
@@ -446,19 +549,28 @@ static int method_string_representation(jvmtiEnv *jvmti_env,
             *ptr_version = 1;
     }
     free(buffer);
-    char *path;
+    char *path = NULL;
     error = (*jvmti_env)->GetSourceFileName(jvmti_env, clazz, &path);
     check_jvmti_errors(jvmti_env, error, "Unable to get class source path");
-    find_or_create_string(path, ptr_path);
+    // Some classes (e.g. anonymous lambdas, JDK internals) genuinely have
+    // no SourceFile attribute; treat that the same as an empty path so
+    // downstream callers can rely on `*ptr_path` being a valid string.
+    find_or_create_string(error == JVMTI_ERROR_NONE && path ? path : "", ptr_path);
     if (path)
         (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)path);
 
     if (ptr_version) {
+        // Find the highest existing version for this signature and emit
+        // version+1. The list is LIFO so a `break` on first hit would have
+        // worked too, but taking the explicit max is robust to future
+        // changes in insertion order.
         syms_t *iterator;
         uint8_t latest_version = 0;
         LIST_FOREACH(iterator, &head_syms, syms) {
-            if (iterator->string == *ptr_representation)
+            if (iterator->string == *ptr_representation &&
+                iterator->entry.version > latest_version) {
                 latest_version = iterator->entry.version;
+            }
         }
         *ptr_version = latest_version + 1;
     }

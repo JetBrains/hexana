@@ -97,6 +97,15 @@ class HexanaFileEditor(
             return
         }
 
+        // .jit files are the JVMTI agent's dump format — a three-pane view:
+        // searchable list of compiled methods on the left, hex of the
+        // selected method's native code top-right, structured JVM-bytecode
+        // / inlines / line-table tabs bottom-right.
+        if (ext == "jit") {
+            initJitFilePanel(commonBuffer)
+            return
+        }
+
         binaryProvider = when (myFile.extension) {
             "wasm" -> {
                 if (inMemoryBuffer != null) {
@@ -333,6 +342,38 @@ class HexanaFileEditor(
                     state = stateHolder,
                     hexFocusRequester = hexFocusRequester,
                     onOpenEntry = { entry -> openZipEntry(entry, parentBuffer) },
+                )
+            }
+        }
+        panel.add(view)
+    }
+
+    private fun initJitFilePanel(commonBuffer: CommonByteBuffer) {
+        val jit = try {
+            org.jetbrains.hexana.jvm.jit.JitFile.parse(commonBuffer.duplicate().position(0))
+        } catch (t: Throwable) {
+            HexanaLog.LOG.warn("Failed to parse ${myFile.name} as a JIT dump", t)
+            null
+        }
+        // Global hex view: one provider for the entire `.jit` file. The
+        // editor scrolls it to the selected sym's fileOffset and adds a
+        // sym-range highlight; the sym's native bytes are then visible
+        // alongside the rest of the dump's structure.
+        binaryProvider = GenericBinaryProvider(commonBuffer.duplicate().position(0))
+        val provider = binaryProvider!!
+        val view = createComposePanel {
+            val hexFocusRequester = remember { FocusRequester() }
+            if (jit == null) {
+                org.jetbrains.jewel.ui.component.Text(
+                    "Failed to parse ${myFile.name} as a JIT dump — see idea.log for details.",
+                )
+            } else {
+                org.jetbrains.hexana.jit.JitFileEditorView(
+                    project = myProject,
+                    jit = jit,
+                    binaryProvider = provider,
+                    state = stateHolder,
+                    hexFocusRequester = hexFocusRequester,
                 )
             }
         }

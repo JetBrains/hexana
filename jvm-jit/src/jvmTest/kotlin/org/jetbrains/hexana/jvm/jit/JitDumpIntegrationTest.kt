@@ -89,6 +89,13 @@ class JitDumpIntegrationTest {
 
         assertTrue("JIT-compiled method should have non-empty code", sampleHit.codeBlock.isNotEmpty())
         assertTrue("code size should match the sym entry", sampleHit.codeBlock.size.toULong() == sampleHit.codeSize)
+
+        // v2 format: the agent must dump the method's JVM bytecode bytes
+        // captured via GetBytecodes alongside the native code.
+        assertTrue(
+            "expected JVM bytecode to be captured for jitTarget; got ${sampleHit.bytecode.size} bytes",
+            sampleHit.bytecode.isNotEmpty(),
+        )
     }
 
     // ------------------------------------------------------------------------

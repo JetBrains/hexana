@@ -105,6 +105,21 @@ val aotCompileDisassemblerWasm by tasks.registering {
     }
 }
 
+/**
+ * Packages the AOT-generated `.class` files into a jar so IntelliJ-platform
+ * plugin classloaders pick them up. The plugin classloader scans `lib/` for
+ * jars but ignores loose class trees, so shipping the AOT bundle as a plain
+ * `files(aotClassesDir)` dependency leaves the classes in
+ * `plugins/<id>/lib/org/...` where `ClassLoader.findClass` can't see them.
+ */
+val aotClassesJar by tasks.registering(Jar::class) {
+    description = "Wraps the AOT-compiled disassembler classes in a jar so plugin classloaders find them."
+    dependsOn(aotCompileDisassemblerWasm)
+    archiveBaseName.set("capstone-wasm-aot")
+    destinationDirectory.set(layout.buildDirectory.dir("generated/chicory-aot/jar"))
+    from(aotClassesDir)
+}
+
 kotlin {
     jvmToolchain(21)
 
@@ -146,11 +161,13 @@ kotlin {
     }
 }
 
-// Precompiled .class files: added to compile + runtime classpath via a file
-// dependency. They're produced by Chicory's AOT compiler, not by kotlinc or
-// javac, so they go in via raw files() rather than as a source directory.
+// Precompiled .class files: ship them as a real jar (see [aotClassesJar])
+// rather than a loose-class directory, so IntelliJ plugin classloaders —
+// which scan `lib/*.jar` only — can resolve `DisassemblerWasmMachine` at
+// runtime. Direct JVM consumers (tests, other Gradle modules) pick the jar
+// up off the runtime classpath the same way they would a loose tree.
 dependencies {
-    "jvmMainImplementation"(files(aotClassesDir).builtBy(aotCompileDisassemblerWasm))
+    "jvmMainImplementation"(files(aotClassesJar))
 }
 
 // Provider<Directory> from layout.buildDirectory.dir(...) doesn't auto-track

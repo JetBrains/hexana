@@ -90,6 +90,16 @@ class JitFile internal constructor(internal val buffer: CommonByteBuffer) {
             val inlineCount = buffer.u4At(absStart + SYM_OFFSET_INLINE_COUNT)
             val version = buffer.u1At(absStart + SYM_OFFSET_VERSION)
 
+            // v2 (header.version >= 2): sym_entry_t carries the JVM bytecode
+            // blob captured via GetBytecodes() at JIT-compile time. v0/v1
+            // dumps have neither the fields nor the bytes — fall back to an
+            // empty blob.
+            val hasBytecode = header.version >= 2.toUByte()
+            val bytecodeOffset =
+                if (hasBytecode) buffer.u4At(absStart + SYM_OFFSET_BYTECODE_OFFSET) else 0u
+            val bytecodeLength =
+                if (hasBytecode) buffer.u4At(absStart + SYM_OFFSET_BYTECODE_LENGTH) else 0u
+
             symbols += JitSym(
                 file = this,
                 symbolOffset = symStart,
@@ -105,6 +115,8 @@ class JitFile internal constructor(internal val buffer: CommonByteBuffer) {
                 mapLength = mapLength,
                 inlineOffset = inlineOffset,
                 inlineCount = inlineCount,
+                bytecodeOffset = bytecodeOffset,
+                bytecodeLength = bytecodeLength,
             )
 
             if (next == 0uL) break
@@ -140,7 +152,11 @@ class JitFile internal constructor(internal val buffer: CommonByteBuffer) {
         internal const val SYM_OFFSET_INLINE_COUNT = 68
         internal const val SYM_OFFSET_VERSION = 72
         internal const val SYM_OFFSET_MAGIC1 = 73
-        internal const val SYM_ENTRY_SIZE = 81
+        // v2 additions — only read when header.version >= 2.
+        internal const val SYM_OFFSET_BYTECODE_OFFSET = 81
+        internal const val SYM_OFFSET_BYTECODE_LENGTH = 85
+        internal const val SYM_ENTRY_SIZE_V1 = 81
+        internal const val SYM_ENTRY_SIZE = 89
 
         // jvmtiLineNumberEntry { jlocation(8); jint(4); } — struct alignment
         // requires sizeof = 16 for an array stride. The agent uses sizeof in
@@ -185,7 +201,12 @@ class JitSym internal constructor(
     private val symbolOffset: ULong,
     val address: ULong,
     val codeSize: ULong,
-    private val fileOffset: ULong,
+    /**
+     * Byte offset within the parent [JitFile.buffer] where this sym's
+     * JIT-compiled native code starts. Exposed so editors can position a
+     * global hex view at the right spot when this sym is selected.
+     */
+    val fileOffset: ULong,
     val version: UByte,
     private val signatureOffset: UInt,
     private val fileNameOffset: UInt,
@@ -195,6 +216,8 @@ class JitSym internal constructor(
     private val mapLength: UInt,
     private val inlineOffset: UInt,
     private val inlineCount: UInt,
+    private val bytecodeOffset: UInt = 0u,
+    private val bytecodeLength: UInt = 0u,
 ) {
     /** Resolved source file name via the string table. */
     val sourceFileName: String by lazy { file.string(fileNameOffset) }
@@ -234,6 +257,22 @@ class JitSym internal constructor(
         val n = codeSize.toInt()
         val start = fileOffset.toInt()
         ByteArray(n) { i -> file.buffer[start + i] }
+    }
+
+    /**
+     * The method's JVM bytecode bytes captured via `GetBytecodes()` at
+     * JIT-compile time. Empty for v0 / v1 dumps that pre-date the agent
+     * v2 format extension; also empty for native methods (the JVM
+     * reports no bytecode for those).
+     */
+    val bytecode: ByteArray by lazy {
+        val n = bytecodeLength.toInt()
+        if (n <= 0) {
+            ByteArray(0)
+        } else {
+            val start = (symbolOffset + bytecodeOffset.toULong()).toInt()
+            ByteArray(n) { i -> file.buffer[start + i] }
+        }
     }
 
     /** Inline records (`compiled_method_load_inline_info_t` family). */
