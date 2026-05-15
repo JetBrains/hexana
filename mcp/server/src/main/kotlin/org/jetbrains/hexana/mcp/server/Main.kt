@@ -63,23 +63,28 @@ fun main(args: Array<String>) {
     }
 }
 
-private data class CommandAnalytics(
+internal data class CommandAnalytics(
     val analyticsKey: String?,
     val analyticsEnabled: Boolean,
     val transport: HexanaEvent.McpTransport,
+    val analyticsHost: String? = null,
 )
 
-private inline fun withCommandAnalytics(command: HexanaCommand, block: () -> Unit) {
+internal inline fun withCommandAnalytics(command: HexanaCommand, block: () -> Unit) {
     val analytics = command.analytics() ?: run {
         block()
         return
     }
+    withMcpAnalytics(analytics, block)
+}
+
+internal inline fun withMcpAnalytics(analytics: CommandAnalytics, block: () -> Unit) {
     if (!analytics.analyticsEnabled) {
         block()
         return
     }
 
-    initializeAnalytics(analytics)
+    initializeMcpAnalytics(analytics)
     try {
         block()
     } finally {
@@ -87,7 +92,7 @@ private inline fun withCommandAnalytics(command: HexanaCommand, block: () -> Uni
     }
 }
 
-private fun HexanaCommand.analytics(): CommandAnalytics? = when (this) {
+internal fun HexanaCommand.analytics(): CommandAnalytics? = when (this) {
     is HexanaCommand.Stdio -> CommandAnalytics(
         analyticsKey = analyticsKey,
         analyticsEnabled = analyticsEnabled,
@@ -120,9 +125,12 @@ internal fun developmentVersionWarning(command: HexanaCommand, version: String):
     }
 }
 
-private fun initializeAnalytics(analytics: CommandAnalytics) {
+internal fun initializeMcpAnalytics(analytics: CommandAnalytics) {
     HexanaAnalytics.initialize(
-        config = AnalyticsConfig(apiKey = analytics.analyticsKey ?: AnalyticsConfig.DEFAULT_API_KEY),
+        config = AnalyticsConfig(
+            apiKey = analytics.analyticsKey ?: AnalyticsConfig.DEFAULT_API_KEY,
+            host = analytics.analyticsHost ?: AnalyticsConfig.DEFAULT_HOST
+        ),
         consentProvider = ConsentProvider { true },
         distinctIdProvider = UuidDistinctIdProvider()
     )
@@ -138,7 +146,7 @@ private fun initializeAnalytics(analytics: CommandAnalytics) {
 
 private suspend fun runStdio(command: HexanaCommand.Stdio) {
     configureLogging(command.logLevel)
-    val server = createHexanaMcpServer()
+    val server = createHexanaMcpServer(transport = HexanaEvent.McpTransport.STDIO)
     val finished = CompletableDeferred<Unit>()
     val transport = StdioServerTransport(
         inputStream = System.`in`.asSource().buffered(),
@@ -182,7 +190,7 @@ private suspend fun runHttp(command: HexanaCommand.Http) {
             allowedOrigins = null,
             eventStore = null
         ) {
-            createHexanaMcpServer()
+            createHexanaMcpServer(transport = HexanaEvent.McpTransport.HTTP)
         }
     }.start(wait = true)
 }

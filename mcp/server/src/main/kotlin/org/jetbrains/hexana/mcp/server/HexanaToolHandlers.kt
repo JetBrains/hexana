@@ -19,6 +19,7 @@ private const val LEGACY_LIST_DATA_SEGMENTS_INCLUDE_GLOBALS = true
 class HexanaToolHandlers(
     private val analysisService: HexanaAnalysisService = HexanaAnalysisServices.default,
     private val maxInlineInputBytes: Int = HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES,
+    private val transport: HexanaEvent.McpTransport = HexanaEvent.McpTransport.STDIO,
     private val logger: Logger = LoggerFactory.getLogger(HexanaToolHandlers::class.java)
 ) {
     fun queryArtifacts(arguments: JsonObject?): CallToolResult {
@@ -295,7 +296,7 @@ class HexanaToolHandlers(
         HexanaAnalytics.client.capture(
             HexanaEvent.McpToolInvoked(
                 toolName = toolName,
-                transport = HexanaEvent.McpTransport.STDIO,
+                transport = transport,
                 durationMs = System.currentTimeMillis() - startTime,
                 success = success
             )

@@ -115,6 +115,7 @@ dependencies {
     implementation(libs.slf4j.api)
 
     testImplementation(project(":graalwasm:wat2wasm"))
+    testImplementation(libs.gson)
     testImplementation(libs.junit4)
     testImplementation(libs.kotlin.test)
 
