@@ -1,18 +1,24 @@
 package org.jetbrains.hexana.disassembly.capstone
 
-import com.dylibso.chicory.compiler.MachineFactoryCompiler
 import com.dylibso.chicory.runtime.ExportFunction
 import com.dylibso.chicory.runtime.Instance
 import com.dylibso.chicory.runtime.Memory
 import com.dylibso.chicory.wasm.Parser
+import org.jetbrains.hexana.disassembly.capstone.aot.DisassemblerWasmMachine
 
 /**
- * JVM actual for [CapstoneWasmModule] — wraps a Chicory-loaded WASM instance.
- * The instance is built with Chicory's AOT machine: WASM is compiled to JVM
- * bytecode at load time, so every subsequent decode call runs as native JVM
- * code instead of going through the interpreter. The compile pass is paid once
- * per [loadCapstoneWasmModule] call (a fraction of a second for our ~590 KB
- * blob); pool the [CapstoneWasmModule] instance across decodes if you care.
+ * JVM actual for [CapstoneWasmModule]. The disassembler WASM is **build-time
+ * AOT-compiled** (see `aotCompileDisassemblerWasm` in `build.gradle.kts`): the
+ * Chicory build-time-compiler lowers each WASM function to JVM bytecode and
+ * emits a `DisassemblerWasmMachine` class plus a slim "meta" .wasm containing
+ * only the functions that exceeded the JVM 64 KB method limit and fall back
+ * to the interpreter at runtime. At load time we just parse the meta and bind
+ * the generated machine — no in-process bytecode generation.
+ *
+ * The `bytes` parameter from the [loadCapstoneWasmModule] expect contract is
+ * unused on JVM: we serve from the pre-compiled bundle regardless. Other
+ * platforms (js / wasmJs) still consume the full .wasm bytes the caller
+ * provides.
  *
  * Not thread-safe: a Chicory [Instance] owns a single linear memory and a
  * single call stack. Callers that need parallel decoding must create separate
@@ -43,11 +49,19 @@ internal actual class CapstoneWasmModule internal constructor(private val instan
     }
 }
 
+@Suppress("UNUSED_PARAMETER") // see KDoc above — JVM serves the AOT-compiled bundle
 internal actual suspend fun loadCapstoneWasmModule(bytes: ByteArray): CapstoneWasmModule {
-    val module = Parser.parse(bytes)
-    val machineFactory = MachineFactoryCompiler.compile(module)
+    // The meta .wasm sits in resources next to the generated machine class — both
+    // are emitted by the aotCompileDisassemblerWasm gradle task in the
+    // `org.jetbrains.hexana.disassembly.capstone.aot` package.
+    val metaStream = CapstoneWasmModule::class.java.getResourceAsStream(META_RESOURCE)
+        ?: error("AOT meta wasm not found on classpath at $META_RESOURCE")
+    val module = metaStream.use { Parser.parse(it) }
     val instance = Instance.builder(module)
-        .withMachineFactory(machineFactory)
+        .withMachineFactory { instance -> DisassemblerWasmMachine(instance) }
         .build()
     return CapstoneWasmModule(instance)
 }
+
+private const val META_RESOURCE =
+    "/org/jetbrains/hexana/disassembly/capstone/aot/DisassemblerWasm.meta"
