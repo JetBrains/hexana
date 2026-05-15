@@ -4,6 +4,7 @@ package org.jetbrains.hexana.mcp.server
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
+import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlin.Int
 import kotlin.String
@@ -378,6 +379,11 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
     },
     required = listOf("operation", "detail", "modules", "records", "warnings")
   ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
   ))  {
     request: CallToolRequest -> handlers.queryArtifacts(request.arguments)
   }
