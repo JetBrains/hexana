@@ -1,7 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { getWebviewContent } from "./webviewContent";
-import { extensionLib, runExport } from "./WasmRunConfigurations";
+import { extensionLib, getSelectedRuntime, runExport } from "./WasmRunConfigurations";
 
 /**
  * In-memory store for nested module byte arrays.
@@ -171,6 +171,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     type: "load-wasm",
                     fileName: document.displayName ?? document.uri.fsPath,
                     data: Array.from(document.data),
+                    wasmRuntime: getSelectedRuntime(),
                 });
             } else if (message.type === "open-module") {
                 this.openNestedModule(document, message);
@@ -182,6 +183,15 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.showWatEditor(document, message);
             } else if (message.type === "tab-selected") {
                 extensionLib?.captureHexTabSelected(message.tabName);
+            } else if (message.type === "update-runtime-setting") {
+                const runtime = message.runtime as string;
+                if (runtime) {
+                    vscode.workspace.getConfiguration("hexana").update(
+                        "wasmRuntime",
+                        runtime,
+                        vscode.ConfigurationTarget.Global,
+                    );
+                }
             }
         });
     }

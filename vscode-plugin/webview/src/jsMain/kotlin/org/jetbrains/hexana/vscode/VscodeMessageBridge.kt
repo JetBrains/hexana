@@ -16,6 +16,7 @@ data class VscodeMessage(
     val type: String,
     val fileName: String = "",
     val data: ByteArray? = null,
+    val wasmRuntime: String? = null,
 )
 
 /**
@@ -44,6 +45,10 @@ fun postMessageToHost(type: String) {
  * [wasmBytes] when provided, is used to generate import stubs and detect
  * component imports so the extension host can resolve dependencies and
  * compose components before running.
+ * [runtime] when provided, overrides the configured runtime so the
+ * extension host can skip the native picker dialog.
+ * [action] when provided (`"run"` or `"debug"`), tells the extension host
+ * which action the user chose in the webview dialog.
  */
 fun postRunExportToHost(
     exportName: String,
@@ -51,6 +56,8 @@ fun postRunExportToHost(
     programArgs: String = "",
     isComponent: Boolean = false,
     wasmBytes: ByteArray? = null,
+    runtime: String? = null,
+    action: String? = null,
 ) {
     val msg = js("{}")
     msg.type = "run-export"
@@ -58,6 +65,12 @@ fun postRunExportToHost(
     msg.invokeArgs = invokeArgs
     msg.programArgs = programArgs
     msg.isComponent = isComponent
+    if (runtime != null) {
+        msg.runtime = runtime
+    }
+    if (action != null) {
+        msg.action = action
+    }
 
     if (wasmBytes != null) {
         if (!isComponent) {
@@ -127,6 +140,17 @@ fun postShowWatToHost(watText: String, warning: String? = null) {
 }
 
 /**
+ * Tells the extension host to update the `hexana.wasmRuntime` VS Code
+ * setting to [runtime], so the user's choice persists across sessions.
+ */
+fun postUpdateRuntimeSettingToHost(runtime: String) {
+    val msg = js("{}")
+    msg.type = "update-runtime-setting"
+    msg.runtime = runtime
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to navigate back to the parent component that
  * contains this submodule.
  */
@@ -182,6 +206,7 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                             type = type,
                             fileName = (data.fileName as? String) ?: "",
                             data = byteArray,
+                            wasmRuntime = (data.wasmRuntime as? String),
                         )
                     }
                     else -> VscodeMessage(type = type)

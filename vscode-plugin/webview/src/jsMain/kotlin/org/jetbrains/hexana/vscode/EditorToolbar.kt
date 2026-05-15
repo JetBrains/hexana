@@ -62,21 +62,26 @@ fun EditorToolbar(
     val isRunnable = runnableExportName != null
     val isComponent = providerType is BinaryProviderType.WasmComponent
 
-    var showArgsDialog by remember { mutableStateOf(false) }
+    // Which action the toolbar button triggered: null = hidden, "run" / "debug" = show only that button
+    var toolbarAction by remember { mutableStateOf<String?>(null) }
 
-    if (showArgsDialog && runnableExportName != null) {
+    if (toolbarAction != null && runnableExportName != null) {
         ProgramArgsDialog(
             exportName = runnableExportName,
-            onConfirm = { programArgs ->
+            isComponent = isComponent,
+            forcedAction = toolbarAction,
+            onConfirm = { result ->
                 postRunExportToHost(
                     exportName = "",
                     isComponent = isComponent,
-                    programArgs = programArgs,
+                    programArgs = result.programArgs,
                     wasmBytes = wasmBytes,
+                    runtime = result.runtime,
+                    action = result.action,
                 )
-                showArgsDialog = false
+                toolbarAction = null
             },
-            onCancel = { showArgsDialog = false },
+            onCancel = { toolbarAction = null },
         )
     }
 
@@ -204,7 +209,11 @@ fun EditorToolbar(
         if (isRunnable) {
             ToolbarRunButton(
                 tooltip = "Run Wasm module",
-                onClick = { showArgsDialog = true }
+                onClick = { toolbarAction = "run" }
+            )
+            ToolbarDebugButton(
+                tooltip = "Debug Wasm module",
+                onClick = { toolbarAction = "debug" }
             )
         }
 
@@ -261,6 +270,28 @@ private fun ToolbarRunButton(tooltip: String = "Run", onClick: () -> Unit) {
         }
         Span {
             Text("Run")
+        }
+    }
+}
+
+/**
+ * Button-styled debug control for the editor toolbar.
+ * Displays a bug icon followed by a "Debug" label, styled with the
+ * same orange colour used in the dialog debug button.
+ */
+@Composable
+private fun ToolbarDebugButton(tooltip: String = "Debug", onClick: () -> Unit) {
+    Span({
+        attr("title", tooltip)
+        classes("hexana-toolbar-debug-btn")
+        onClick { event ->
+            event.stopPropagation()
+            onClick()
+        }
+    }) {
+        Span({ classes("hexana-toolbar-debug-icon") })
+        Span {
+            Text("Debug")
         }
     }
 }

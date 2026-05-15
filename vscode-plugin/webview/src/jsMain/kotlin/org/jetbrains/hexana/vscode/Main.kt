@@ -26,6 +26,7 @@ fun WasmEditorApp() {
             "load-wasm" -> {
                 fileName = message.fileName
                 wasmBytes = message.data
+                configuredRuntimeId = message.wasmRuntime
             }
         }
     }

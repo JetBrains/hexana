@@ -59,13 +59,16 @@ private fun CoreWasmExports(buffer: CommonByteBuffer, selection: HexSelectionSta
         FunctionArgsDialog(
             exportName = pending.name,
             args = wasmArgDescriptors(pendingParams),
-            onConfirm = { argValues ->
-                val programArgs = argValues.joinToString(" ")
+            isComponent = false,
+            onConfirm = { result ->
+                val programArgs = result.args.joinToString(" ")
                 postRunExportToHost(
                     exportName = pending.name,
                     invokeArgs = "--invoke ${pending.name}",
                     programArgs = programArgs,
                     wasmBytes = wasmBytes,
+                    runtime = result.runtime,
+                    action = result.action,
                 )
                 pendingExport = null
                 pendingParams = emptyList()
@@ -172,12 +175,15 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
     if (programArgsPending != null) {
         ProgramArgsDialog(
             exportName = programArgsPending.exportName,
-            onConfirm = { programArgs ->
+            isComponent = true,
+            onConfirm = { result ->
                 postRunExportToHost(
                     exportName = programArgsPending.exportName,
                     isComponent = true,
-                    programArgs = programArgs,
+                    programArgs = result.programArgs,
                     wasmBytes = wasmBytes,
+                    runtime = result.runtime,
+                    action = result.action,
                 )
                 pendingProgramArgsExport = null
             },
@@ -191,13 +197,16 @@ private fun ComponentExports(buffer: CommonByteBuffer, selection: HexSelectionSt
         FunctionArgsDialog(
             exportName = pendingFuncInvokeName,
             args = pendingFuncArgs,
-            onConfirm = { argValues ->
-                val argsString = argValues.joinToString(", ")
+            isComponent = true,
+            onConfirm = { result ->
+                val argsString = result.args.joinToString(", ")
                 postRunExportToHost(
                     exportName = funcPending.exportName,
                     isComponent = true,
                     invokeArgs = "--invoke \"${pendingFuncInvokeName}($argsString)\"",
                     wasmBytes = wasmBytes,
+                    runtime = result.runtime,
+                    action = result.action,
                 )
                 pendingFuncExport = null
                 pendingFuncInvokeName = ""

@@ -104,6 +104,40 @@ html, body {
     background: rgba(255, 255, 255, 0.1);
 }
 
+/* Toolbar debug button */
+.hexana-toolbar-debug-btn {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px 3px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--vscode-button-border, var(--vscode-contrastBorder, transparent));
+    background: #C77020;
+    color: var(--vscode-button-foreground, #fff);
+    font-size: 12px;
+    line-height: 1;
+    user-select: none;
+}
+
+.hexana-toolbar-debug-btn:hover {
+    background: #D4832E;
+}
+
+.hexana-toolbar-debug-icon {
+    display: inline-flex;
+    align-items: center;
+    width: 12px;
+    height: 12px;
+    background: currentColor;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M10.94 2.706a2.5 2.5 0 0 0-3.88 0L5.53 4.694l1.06.72L8.12 3.42a1.5 1.5 0 0 1 2.328 0l-.707.707a3.003 3.003 0 0 0-3.482 0L5.552 3.42 4.5 4.886l1.06.72.647-.647A3 3 0 0 1 11 8v.5h1.5v1H11v.5a4.98 4.98 0 0 1-.594 2.369l1.5 1.5-.707.707-1.293-1.293A5.002 5.002 0 0 1 8 14a5.002 5.002 0 0 1-1.906-1.717l-1.293 1.293-.707-.707 1.5-1.5A4.98 4.98 0 0 1 5 9v-.5H3.5v-1H5V8a3 3 0 0 1 4.793-2.413l.647.647 1.06-.72L10.94 2.706zM6 8v1.5h4V8a2 2 0 1 0-4 0zm0 2.5V12a4 4 0 0 0 4 0v-1.5H6z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M10.94 2.706a2.5 2.5 0 0 0-3.88 0L5.53 4.694l1.06.72L8.12 3.42a1.5 1.5 0 0 1 2.328 0l-.707.707a3.003 3.003 0 0 0-3.482 0L5.552 3.42 4.5 4.886l1.06.72.647-.647A3 3 0 0 1 11 8v.5h1.5v1H11v.5a4.98 4.98 0 0 1-.594 2.369l1.5 1.5-.707.707-1.293-1.293A5.002 5.002 0 0 1 8 14a5.002 5.002 0 0 1-1.906-1.717l-1.293 1.293-.707-.707 1.5-1.5A4.98 4.98 0 0 1 5 9v-.5H3.5v-1H5V8a3 3 0 0 1 4.793-2.413l.647.647 1.06-.72L10.94 2.706zM6 8v1.5h4V8a2 2 0 1 0-4 0zm0 2.5V12a4 4 0 0 0 4 0v-1.5H6z'/%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+}
+
 /* Resize divider between hex viewer and panel */
 .hexana-resize-divider:hover .hexana-resize-divider-line,
 .hexana-resize-divider:active .hexana-resize-divider-line {
@@ -275,6 +309,66 @@ html, body {
 .hexana-dialog-btn-ok[disabled] {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.hexana-dialog-btn-debug {
+    background: #C77020;
+    color: var(--vscode-button-foreground, #fff);
+}
+
+.hexana-dialog-btn-debug:hover {
+    background: #D4832E;
+}
+
+.hexana-dialog-btn-debug[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.hexana-dialog-btn-icon {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    vertical-align: text-bottom;
+    background: currentColor;
+}
+
+.hexana-dialog-icon-debug {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M10.94 2.706a2.5 2.5 0 0 0-3.88 0L5.53 4.694l1.06.72L8.12 3.42a1.5 1.5 0 0 1 2.328 0l-.707.707a3.003 3.003 0 0 0-3.482 0L5.552 3.42 4.5 4.886l1.06.72.647-.647A3 3 0 0 1 11 8v.5h1.5v1H11v.5a4.98 4.98 0 0 1-.594 2.369l1.5 1.5-.707.707-1.293-1.293A5.002 5.002 0 0 1 8 14a5.002 5.002 0 0 1-1.906-1.717l-1.293 1.293-.707-.707 1.5-1.5A4.98 4.98 0 0 1 5 9v-.5H3.5v-1H5V8a3 3 0 0 1 4.793-2.413l.647.647 1.06-.72L10.94 2.706zM6 8v1.5h4V8a2 2 0 1 0-4 0zm0 2.5V12a4 4 0 0 0 4 0v-1.5H6z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M10.94 2.706a2.5 2.5 0 0 0-3.88 0L5.53 4.694l1.06.72L8.12 3.42a1.5 1.5 0 0 1 2.328 0l-.707.707a3.003 3.003 0 0 0-3.482 0L5.552 3.42 4.5 4.886l1.06.72.647-.647A3 3 0 0 1 11 8v.5h1.5v1H11v.5a4.98 4.98 0 0 1-.594 2.369l1.5 1.5-.707.707-1.293-1.293A5.002 5.002 0 0 1 8 14a5.002 5.002 0 0 1-1.906-1.717l-1.293 1.293-.707-.707 1.5-1.5A4.98 4.98 0 0 1 5 9v-.5H3.5v-1H5V8a3 3 0 0 1 4.793-2.413l.647.647 1.06-.72L10.94 2.706zM6 8v1.5h4V8a2 2 0 1 0-4 0zm0 2.5V12a4 4 0 0 0 4 0v-1.5H6z'/%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+}
+
+.hexana-dialog-runtime-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.hexana-dialog-runtime-row label {
+    font-size: 12px;
+    opacity: 0.85;
+    white-space: nowrap;
+}
+
+.hexana-dialog-runtime-select {
+    flex: 1;
+    padding: 4px 8px;
+    font-size: 13px;
+    font-family: var(--hexana-font);
+    background: var(--vscode-input-background, #3c3c3c);
+    color: var(--vscode-input-foreground, #ccc);
+    border: 1px solid var(--vscode-input-border, #3c3c3c);
+    border-radius: 3px;
+    outline: none;
+}
+
+.hexana-dialog-runtime-select:focus {
+    border-color: var(--vscode-focusBorder, #007FD4);
 }
 
 /* Inline search bar for searchable tables */

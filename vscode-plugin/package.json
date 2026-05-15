@@ -2,7 +2,7 @@
   "name": "hexana-wasm",
   "displayName": "Hexana WebAssembly and Hex Viewer",
   "description": "Binary hex viewer and analyzer with a focus on WebAssembly",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "buildDate": "",
   "preview": true,
   "author": "JetBrains",

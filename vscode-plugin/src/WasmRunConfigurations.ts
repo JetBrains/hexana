@@ -455,6 +455,8 @@ export async function runExport(
         hasImports?: boolean;
         stubs?: Array<{ moduleName: string; wasmBytes: number[] }>;
         componentImports?: string[];
+        runtime?: string;
+        action?: string;
     },
 ): Promise<void> {
     if (!extensionLib) {
@@ -470,15 +472,27 @@ export async function runExport(
 
     const isComponent = message.isComponent && message.componentImports && message.componentImports.length > 0;
 
-    let runtime = getSelectedRuntime();
-    let action: "run" | "debug" = "run";
-    if (runtime === "ask") {
-        const picked = await showRuntimePicker(!!isComponent);
-        if (!picked) {
-            return; // user dismissed the picker
+    let runtime: "wasmtime" | "wamr" | "graalwasm";
+    let action: "run" | "debug";
+
+    // When the webview dialog already collected a runtime and action,
+    // use them directly and skip the native VS Code picker.
+    if (message.runtime && message.action) {
+        runtime = message.runtime as "wasmtime" | "wamr" | "graalwasm";
+        action = message.action as "run" | "debug";
+    } else {
+        const configured = getSelectedRuntime();
+        if (configured === "ask") {
+            const picked = await showRuntimePicker(!!isComponent);
+            if (!picked) {
+                return; // user dismissed the picker
+            }
+            runtime = picked.runtime;
+            action = picked.action;
+        } else {
+            runtime = configured;
+            action = "run";
         }
-        runtime = picked.runtime;
-        action = picked.action;
     }
 
     // Component-model binaries require Wasmtime
