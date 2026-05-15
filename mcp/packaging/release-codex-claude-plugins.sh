@@ -97,18 +97,39 @@ write_release_notes() {
   release_notes="$release_dir/release-notes.md"
   {
     printf 'Hexana MCP plugin distribution %s\n\n' "$PLUGIN_VERSION"
-    if [ -n "$BUILD_URL_VALUE" ]; then
-      printf -- '- TeamCity build: %s\n' "$BUILD_URL_VALUE"
-    fi
-    if [ -n "$TEAMCITY_BUILD_BRANCH_VALUE" ]; then
-      printf -- '- Branch: %s\n' "$TEAMCITY_BUILD_BRANCH_VALUE"
-    fi
-    printf -- '- Claude and Codex plugin smoke tests passed in the TeamCity build chain.\n'
-    printf -- '- Public marketplace repository update is published through a pull request.\n'
+    printf -- '- Claude Code plugin archive is attached.\n'
+    printf -- '- Codex plugin archive is attached.\n'
+    printf -- '- Standalone MCP server archive is attached.\n'
+    printf -- '- Public marketplace metadata is updated through the companion pull request.\n'
   } > "$release_notes"
 }
 
+check_public_github_text_file() {
+  local context="$1"
+  local file="$2"
+  local forbidden_content='TeamCity|buildserver|git\.jetbrains\.team|/Users/|/private/|PUBLISH_GITHUB_TOKEN_PARAM|TEST_GITHUB_TOKEN_PARAM|GH_TOKEN|GITHUB_TOKEN|TEAMCITY_BUILD|%hexana\.|BEGIN PRIVATE KEY|github_pat_|ghp_|gho_|ghu_|ghs_|sk-|AKIA|password=|secret=|token=|https?://|release/|automation/update-'
+  local matches
+  local grep_status
+
+  [ -f "$file" ] || die "$context file is missing: $file"
+
+  set +e
+  matches="$(grep -I -n -E -- "$forbidden_content" "$file" 2>/dev/null)"
+  grep_status=$?
+  set -e
+
+  if [ "$grep_status" -eq 0 ]; then
+    printf '%s\n' "$matches" | sed "s#^#$context:#" >&2
+    die "$context contains forbidden private/internal text"
+  fi
+  if [ "$grep_status" -ne 1 ]; then
+    die "$context scan failed"
+  fi
+}
+
 publish_github_release() {
+  check_public_github_text_file "GitHub release notes" "$release_notes"
+
   if [ "$DRY_RUN" = "true" ]; then
     log "Dry run requested; not creating or updating GitHub release $RELEASE_TAG"
     return
