@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
+import { mcpServerArgs, mcpServerEnv, mcpTelemetryEnabledValue } from "./mcpServerTelemetry";
 
 const MCP_PROVIDER_ID = "hexana.vscode.mcp";
 const MCP_SERVER_LABEL = "Hexana MCP";
@@ -26,19 +27,12 @@ export function registerMcpServerDefinitionProvider(
                     return [];
                 }
 
-                const telemetryEnabled = mcpTelemetryEnabledValue(options);
+                const telemetryEnabled = mcpTelemetryEnabledValue(() => options.isTelemetryEnabled());
                 const server = new vscode.McpStdioServerDefinition(
                     MCP_SERVER_LABEL,
                     mcpServerLauncherPath(context, config),
-                    [
-                        "--transport",
-                        "stdio",
-                        "--log-level",
-                        mcpLogLevel(config),
-                        "--telemetry-enabled",
-                        telemetryEnabled,
-                    ],
-                    mcpServerEnv(config, telemetryEnabled),
+                    mcpServerArgs(mcpLogLevel(config), telemetryEnabled),
+                    mcpServerEnv(mcpJavaHome(config), telemetryEnabled),
                     String(context.extension.packageJSON.version ?? "dev"),
                 );
                 server.cwd = vscode.Uri.file(context.extensionPath);
@@ -95,25 +89,9 @@ function mcpServerLauncherPath(
     return context.asAbsolutePath(path.join("server", "bin", executableName));
 }
 
-function mcpServerEnv(config: vscode.WorkspaceConfiguration, telemetryEnabled: string): Record<string, string> {
-    const env: Record<string, string> = {
-        HEXANA_MCP_HOST: "vscode",
-        HEXANA_MCP_TELEMETRY_ENABLED: telemetryEnabled,
-    };
-    const javaHome = mcpJavaHome(config);
-    if (javaHome) {
-        env.JAVA_HOME = javaHome;
-    }
-    return env;
-}
-
 function mcpLogLevel(config: vscode.WorkspaceConfiguration): string {
     const value = config.get<string>("logLevel", "info");
     return value === "quiet" || value === "debug" ? value : "info";
-}
-
-function mcpTelemetryEnabledValue(options: HexanaMcpServerProviderOptions): string {
-    return options.isTelemetryEnabled() ? "true" : "false";
 }
 
 async function validateMcpLauncherPath(context: vscode.ExtensionContext, launcherPath: string): Promise<void> {

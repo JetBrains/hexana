@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2020",
+    "lib": ["ES2020"],
+    "outDir": "out-unit",
+    "rootDir": "..",
+    "sourceMap": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "src/unit/**/*.ts",
+    "../src/mcpServerTelemetry.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "out",
+    "out-unit",
+    ".test-extensions",
+    "test-resources"
+  ]
+}
