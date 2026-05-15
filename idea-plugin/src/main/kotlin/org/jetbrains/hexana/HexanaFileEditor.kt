@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.sourcemap.parseSourceMap
@@ -84,6 +85,15 @@ class HexanaFileEditor(
         // known and the structured view is more useful than a raw hex dump.
         if (myFile.extension.equals("class", ignoreCase = true)) {
             initClassFilePanel(commonBuffer)
+            return
+        }
+
+        // .jar / .zip / .war / .apk get a hex view on top + a searchable
+        // class list on the bottom; clicking a class opens its decompressed
+        // bytes in a child editor via HexanaBinaryVirtualFile.
+        val ext = myFile.extension?.lowercase()
+        if (ext == "jar" || ext == "zip" || ext == "war" || ext == "apk") {
+            initJarFilePanel(commonBuffer)
             return
         }
 
@@ -298,6 +308,97 @@ class HexanaFileEditor(
             }
         }
         panel.add(view)
+    }
+
+    private fun initJarFilePanel(commonBuffer: CommonByteBuffer) {
+        val entries = try {
+            org.jetbrains.hexana.zip.ZipParser.parse(commonBuffer.duplicate().position(0))
+        } catch (t: Throwable) {
+            HexanaLog.LOG.warn("Failed to parse ${myFile.name} as a ZIP / JAR archive", t)
+            null
+        }
+        binaryProvider = GenericBinaryProvider(commonBuffer.duplicate().position(0))
+        val provider = binaryProvider!!
+        val parentBuffer = commonBuffer
+        val view = createComposePanel {
+            val hexFocusRequester = remember { FocusRequester() }
+            if (entries == null) {
+                org.jetbrains.jewel.ui.component.Text(
+                    "Failed to parse ${myFile.name} as a ZIP / JAR archive — see idea.log for details.",
+                )
+            } else {
+                org.jetbrains.hexana.ui.JarEditorView(
+                    entries = entries,
+                    binaryProvider = provider,
+                    state = stateHolder,
+                    hexFocusRequester = hexFocusRequester,
+                    onOpenEntry = { entry -> openZipEntry(entry, parentBuffer) },
+                )
+            }
+        }
+        panel.add(view)
+    }
+
+    private fun openZipEntry(
+        entry: org.jetbrains.hexana.zip.ZipEntry,
+        parentBuffer: CommonByteBuffer,
+    ) {
+        val bytes = decompressZipEntry(entry, parentBuffer)
+        if (bytes == null) {
+            HexanaLog.LOG.warn(
+                "Cannot open ${entry.name}: unsupported compression method ${entry.compressionMethod} or decode failure",
+            )
+            return
+        }
+        val childName = entry.name.substringAfterLast('/').ifEmpty { entry.name }
+        val childFile = HexanaBinaryVirtualFile(
+            name = childName,
+            buffer = bytes.toCommonByteBuffer(),
+            baseOffset = entry.dataOffset.toInt(),
+            parentFile = myFile,
+        )
+        FileEditorManager.getInstance(myProject).openFile(childFile, true)
+    }
+}
+
+/**
+ * Decompresses a ZIP entry's data into a fresh ByteArray. Returns `null` for
+ * unsupported compression methods (anything other than `stored` / `deflate`)
+ * or on inflate failure.
+ */
+private fun decompressZipEntry(
+    entry: org.jetbrains.hexana.zip.ZipEntry,
+    parentBuffer: CommonByteBuffer,
+): ByteArray? {
+    val dataStart = entry.dataOffset.toInt()
+    return when (entry.compressionMethod) {
+        0 -> {
+            // Stored: direct slice of the parent buffer.
+            val length = entry.uncompressedSize.toInt()
+            ByteArray(length).also { for (i in 0 until length) it[i] = parentBuffer[dataStart + i] }
+        }
+        8 -> {
+            try {
+                val compressed = ByteArray(entry.compressedSize.toInt()).also {
+                    for (i in 0 until it.size) it[i] = parentBuffer[dataStart + i]
+                }
+                val inflater = java.util.zip.Inflater(/* nowrap = */ true)
+                inflater.setInput(compressed)
+                val out = ByteArray(entry.uncompressedSize.toInt())
+                var written = 0
+                while (written < out.size && !inflater.finished()) {
+                    val n = inflater.inflate(out, written, out.size - written)
+                    if (n == 0 && (inflater.needsInput() || inflater.needsDictionary())) break
+                    written += n
+                }
+                inflater.end()
+                if (written == out.size) out else null
+            } catch (t: Throwable) {
+                HexanaLog.LOG.warn("Inflate failed for ${entry.name}", t)
+                null
+            }
+        }
+        else -> null
     }
 }
 

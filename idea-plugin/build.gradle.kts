@@ -80,6 +80,7 @@ dependencies {
     implementation(project(":encdec"))
     implementation(project(":wasmParser"))
     implementation(project(":parsing:javaBytecode"))
+    implementation(project(":parsing:zip"))
     implementation(project(":hexanaDocument"))
     implementation(project(":binaryProvider"))
     implementation(project(":plugins-shared"))
