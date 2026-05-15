@@ -249,6 +249,9 @@ val zipObfuscatedMcpServer = tasks.register<Zip>("zipObfuscatedMcpServer") {
     dependsOn(installObfuscatedMcpServerRuntime)
     from(obfuscatedInstallDir) {
         into("server")
+        filesMatching("bin/server") {
+            permissions { unix("rwxr-xr-x") }
+        }
     }
     archiveBaseName.set("server")
     archiveVersion.set(mcpServerVersion)
