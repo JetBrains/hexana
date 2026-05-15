@@ -519,23 +519,6 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
             }
             """.trimIndent() + "\n"
         )
-        outputDir.resolve("README.md").writeText(
-            """
-            # Hexana Marketplace Distribution
-
-            Public distribution metadata and wrappers for the Hexana Claude Code and Codex plugins.
-            Source code and private build configuration are intentionally not included.
-            """.trimIndent() + "\n"
-        )
-        outputDir.resolve("CHANGELOG.md").writeText(
-            """
-            # Changelog
-
-            ## $mcpServerVersion
-
-            - Publish Hexana Claude Code and Codex plugin distribution metadata.
-            """.trimIndent() + "\n"
-        )
         outputDir.resolve("plugins/hexana/release.lock.json").writeText(
             """
             {

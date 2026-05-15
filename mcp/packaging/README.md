@@ -147,8 +147,6 @@ Optional environment variables:
 
 Public files allowlist:
 
-- `README.md`
-- `CHANGELOG.md`
 - `.claude-plugin/marketplace.json`
 - `.agents/plugins/marketplace.json`
 - `plugins/<plugin-name>/.claude-plugin/**`

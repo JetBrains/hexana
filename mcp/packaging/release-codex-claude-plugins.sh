@@ -415,8 +415,6 @@ sync_dir_if_present() {
 sync_public_bundle() {
   log "Syncing public marketplace files from $GENERATED_PUBLIC_DIR_ABS"
 
-  sync_file_if_present "README.md"
-  sync_file_if_present "CHANGELOG.md"
   sync_file_if_present ".claude-plugin/marketplace.json"
   sync_file_if_present ".agents/plugins/marketplace.json"
 
@@ -442,9 +440,6 @@ sync_public_bundle() {
 is_allowed_public_path() {
   local path="$1"
   case "$path" in
-    README.md|CHANGELOG.md)
-      return 0
-      ;;
     .claude-plugin/marketplace.json|.agents/plugins/marketplace.json)
       return 0
       ;;
