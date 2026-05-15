@@ -43,7 +43,8 @@ object WasmRuntimeResolver {
                 val home = graalVmHome.trim()
                 if (home.isEmpty()) return null
                 val exeName = if (isWindows) "wasm.exe" else "wasm"
-                "$home/bin/$exeName"
+                val sep = if (isWindows) "\\" else "/"
+                "${home}${sep}bin${sep}${exeName}"
             }
             else -> if (isWindows) "wasmtime.exe" else "wasmtime"
         }
