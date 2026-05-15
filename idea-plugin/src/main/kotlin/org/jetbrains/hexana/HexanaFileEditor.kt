@@ -77,6 +77,14 @@ class HexanaFileEditor(
             file.toCommonByteBuffer() ?: return
         }
 
+        // .class files use a dedicated 3-tab view (header / methods / constant
+        // pool) instead of the binary editor — the file's structure is well
+        // known and the structured view is more useful than a raw hex dump.
+        if (myFile.extension.equals("class", ignoreCase = true)) {
+            initClassFilePanel(commonBuffer)
+            return
+        }
+
         binaryProvider = when (myFile.extension) {
             "wasm" -> {
                 if (inMemoryBuffer != null) {
@@ -259,6 +267,25 @@ class HexanaFileEditor(
             Disposer.dispose(it)
         }
         myClosedTextEditors.clear()
+    }
+
+    private fun initClassFilePanel(commonBuffer: org.jetbrains.hexana.io.CommonByteBuffer) {
+        val parsed = try {
+            org.jetbrains.hexana.javabytecode.JavaClassFileParser.parse(commonBuffer)
+        } catch (t: Throwable) {
+            HexanaLog.LOG.warn("Failed to parse .class file ${myFile.name}", t)
+            null
+        }
+        val view = org.jetbrains.hexana.ui.createComposePanel {
+            if (parsed == null) {
+                org.jetbrains.jewel.ui.component.Text(
+                    "Failed to parse ${myFile.name} as a JVM class file — see idea.log for details.",
+                )
+            } else {
+                org.jetbrains.hexana.ui.ClassFileEditorView(parsed)
+            }
+        }
+        panel.add(view)
     }
 }
 
