@@ -136,8 +136,9 @@ Optional environment variables:
 - `PR_LABELS`: comma-separated labels to add to the PR.
 - `PR_REVIEWERS`: comma-separated reviewers to request.
 - `PUBLIC_REPO_CLONE_DIR`: reuse this local clone instead of a temporary clone.
-- `COMMIT_AUTHOR_NAME`: defaults to `Hexana Release Automation`.
-- `COMMIT_AUTHOR_EMAIL`: defaults to `hexana-release-automation@users.noreply.github.com`.
+- `COMMIT_AUTHOR_NAME`: required git commit author name for marketplace PR commits.
+- `COMMIT_AUTHOR_EMAIL`: required git commit author email for marketplace PR commits. Use an approved bot, GitHub App,
+  or noreply automation identity; do not use a personal email.
 - `ALLOW_BUNDLED_JAR`: defaults to `false`. When `true`, jars are allowed only under `plugins/<plugin-name>/lib/`.
 - `VALIDATE_CLAUDE_CMD`: optional command run from the cloned public repo root.
 - `VALIDATE_CODEX_CMD`: optional command run from the cloned public repo root.

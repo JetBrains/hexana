@@ -848,8 +848,17 @@ main() {
   export DRY_RUN="$(to_bool "${DRY_RUN:-false}" "DRY_RUN")"
   export ALLOW_BUNDLED_JAR="$(to_bool "${ALLOW_BUNDLED_JAR:-false}" "ALLOW_BUNDLED_JAR")"
   PUBLIC_REPO_CLONE_DIR="${PUBLIC_REPO_CLONE_DIR:-}"
-  COMMIT_AUTHOR_NAME="${COMMIT_AUTHOR_NAME:-Hexana Release Automation}"
-  COMMIT_AUTHOR_EMAIL="${COMMIT_AUTHOR_EMAIL:-hexana-release-automation@users.noreply.github.com}"
+  COMMIT_AUTHOR_NAME="${COMMIT_AUTHOR_NAME:-}"
+  COMMIT_AUTHOR_EMAIL="${COMMIT_AUTHOR_EMAIL:-}"
+  require_env "COMMIT_AUTHOR_NAME"
+  require_env "COMMIT_AUTHOR_EMAIL"
+  case "$COMMIT_AUTHOR_EMAIL" in
+    *[[:space:]]*|*"<"*|*">"*|*".."*|*","*|*"("*|*")"*|*";"*|*":"*)
+      die "COMMIT_AUTHOR_EMAIL contains characters that are unsafe for git author metadata"
+      ;;
+    *@*) ;;
+    *) die "COMMIT_AUTHOR_EMAIL must look like an email address" ;;
+  esac
   PR_LABELS="${PR_LABELS:-}"
   PR_REVIEWERS="${PR_REVIEWERS:-}"
   VALIDATE_CLAUDE_CMD="${VALIDATE_CLAUDE_CMD:-}"
