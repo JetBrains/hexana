@@ -13,16 +13,22 @@ import kotlin.js.Promise
  * for correctness; perf-sensitive workloads should switch to bulk transfer
  * helpers (typed-array view sharing) once we need them.
  *
- * `Long` arguments are forwarded as `BigInt` over the bridge — passing
- * `Number` for `i64` params throws `TypeError` in the JS WebAssembly API, and
- * `BigInt` is silently truncated to `i32` for `i32` params (via ToInt32). So
- * one uniform BigInt path covers both cases.
+ * The WebAssembly JS-API is strict about argument types: `i32` params accept
+ * only `Number` (ToInt32 throws on `BigInt`) and `i64` params accept only
+ * `BigInt` (ToBigInt throws on `Number`). The only `i64` parameter across our
+ * export contract is `base_va` (arg index 3 of every `decode_*`); everything
+ * else is `i32`, so we route accordingly through two small helper bridges.
  */
 internal actual class CapstoneWasmModule internal constructor(private val instance: JsAny) {
     actual fun call(export: String, args: LongArray): LongArray {
         val jsArgs = jsNewArray(args.size)
+        val baseVaIndex = if (export.startsWith("decode_")) 3 else -1
         for (i in args.indices) {
-            jsSetBigIntAt(jsArgs, i, args[i].toString())
+            if (i == baseVaIndex) {
+                jsSetBigIntAt(jsArgs, i, args[i].toString())
+            } else {
+                jsSetI32At(jsArgs, i, args[i].toInt())
+            }
         }
         val resultStr = jsCallExport(instance, export, jsArgs) ?: return EMPTY
         if (resultStr.length < 2) return EMPTY
@@ -72,6 +78,9 @@ private external fun jsNewArray(n: Int): JsAny
 
 @JsFun("(arr, i, s) => { arr[i] = BigInt(s); }")
 private external fun jsSetBigIntAt(arr: JsAny, i: Int, s: String)
+
+@JsFun("(arr, i, v) => { arr[i] = v; }")
+private external fun jsSetI32At(arr: JsAny, i: Int, v: Int)
 
 @JsFun(
     "(instance, name, args) => {" +

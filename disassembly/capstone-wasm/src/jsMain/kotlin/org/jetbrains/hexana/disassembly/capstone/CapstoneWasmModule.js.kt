@@ -10,17 +10,19 @@ import kotlin.js.Promise
  * directly through the host `WebAssembly` global. Suitable for browser, Node,
  * Deno, Bun.
  *
- * `Long` arguments cross the WASM-JS boundary as `BigInt` (passing `BigInt`
- * for `i32` params is converted via `ToInt32`; passing `Number` for `i64`
- * throws `TypeError`). For uniformity, every argument is forwarded as
- * `BigInt`.
+ * The WebAssembly JS-API is strict about argument types: `i32` params accept
+ * only `Number` (ToInt32 throws on `BigInt`) and `i64` params accept only
+ * `BigInt` (ToBigInt throws on `Number`). The only `i64` parameter across our
+ * export contract is `base_va` (arg index 3 of every `decode_*`); everything
+ * else is `i32`.
  */
 internal actual class CapstoneWasmModule internal constructor(private val instance: dynamic) {
     actual fun call(export: String, args: LongArray): LongArray {
         val fn = instance.exports[export] ?: error("export not found: $export")
         val jsArgs = arrayOfNulls<Any?>(args.size)
+        val baseVaIndex = if (export.startsWith("decode_")) 3 else -1
         for (i in args.indices) {
-            jsArgs[i] = longToBigInt(args[i])
+            jsArgs[i] = if (i == baseVaIndex) longToBigInt(args[i]) else args[i].toInt()
         }
         val result: dynamic = fn.apply(null, jsArgs)
         return convertResult(result)
