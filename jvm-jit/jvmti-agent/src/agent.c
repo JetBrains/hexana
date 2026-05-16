@@ -415,15 +415,25 @@ method_load(jvmtiEnv *jvmti_env,
         s->address_location_map = map_copy;
         s->entry.map_length = map_length;
 
-        jint entry_number_count;
-        jvmtiLineNumberEntry *table;
+        // JVMTI leaves entry_number_count / table UNDEFINED on error
+        // (spec is explicit). Native/synthetic/MethodHandle/intrinsic
+        // methods routinely return JVMTI_ERROR_ABSENT_INFORMATION here,
+        // so we must initialize and gate the memcpy or we read stack
+        // garbage and SEGV inside _platform_memmove.
+        jint entry_number_count = 0;
+        jvmtiLineNumberEntry *table = NULL;
         error = (*jvmti_env)->GetLineNumberTable(jvmti_env, method, &entry_number_count, &table);
-        jvmtiLineNumberEntry *table_copy = malloc(entry_number_count * sizeof(jvmtiLineNumberEntry));
-        memcpy(table_copy, table, entry_number_count * sizeof(jvmtiLineNumberEntry));
+        if (error == JVMTI_ERROR_NONE && table != NULL && entry_number_count > 0) {
+            jvmtiLineNumberEntry *table_copy = malloc(entry_number_count * sizeof(jvmtiLineNumberEntry));
+            memcpy(table_copy, table, entry_number_count * sizeof(jvmtiLineNumberEntry));
+            s->line_number_entry_table = table_copy;
+            s->entry.line_number_entry_count = entry_number_count;
+        } else {
+            s->line_number_entry_table = NULL;
+            s->entry.line_number_entry_count = 0;
+        }
         if (table)
             (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)table);
-        s->line_number_entry_table = table_copy;
-        s->entry.line_number_entry_count = entry_number_count;
 
     }
 
