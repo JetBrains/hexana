@@ -12,8 +12,8 @@ import org.junit.rules.TemporaryFolder
 /**
  * Integration smoke: build the JVMTI agent (via the `buildJitviewAgent`
  * Gradle task), run [JitSampleApp] in a child JVM with the agent
- * attached, and verify the resulting `mem.userDump` parses back via
- * [JitFile] and contains a record for the JIT-warmed [JitSampleApp.jitTarget].
+ * attached, and verify the resulting dump parses back via [JitFile] and
+ * contains a record for the JIT-warmed [JitSampleApp.jitTarget].
  *
  * The test gracefully `assumeTrue`'s away on hosts where the agent
  * couldn't be built (no cmake / no JAVA_HOME with JVMTI headers) — the
@@ -26,7 +26,9 @@ class JitDumpIntegrationTest {
 
     @Test
     fun `roundtrips a JIT dump produced by the jitview agent on a sample app`() {
-        runRoundtrip(agentOptions = null, expectedDumpName = "mem.userDump")
+        // No `options` to the agent — fall through to its built-in default
+        // filename (`default.jit`, see Agent_OnLoad in agent.c).
+        runRoundtrip(agentOptions = null, expectedDumpName = "default.jit")
     }
 
     /**

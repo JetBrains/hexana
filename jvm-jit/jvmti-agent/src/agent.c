@@ -1,11 +1,73 @@
-#include <sys/mman.h>
-#include <sys/queue.h>
+// MSVC marks the POSIX-style names we rely on (open, write, strdup, sprintf)
+// as deprecated and gates their availability behind a "no warnings" macro.
+// Define these before including any system header so the alias macros apply.
+#ifdef _WIN32
+#define _CRT_NONSTDC_NO_DEPRECATE
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+#ifdef _WIN32
+// Win32 stdlib: <io.h> provides _open/_write/_read/_close/_lseeki64 and
+// macros aliasing the unprefixed POSIX names to them; <windows.h> provides
+// CRITICAL_SECTION for the event mutex. No pthread / <sys/queue.h> exists,
+// so the LIST_* macros below are vendored from BSD <sys/queue.h>.
+#include <io.h>
+#include <windows.h>
+
+// `lseek` on Windows is 32-bit and would truncate JIT dumps larger than
+// 2 GiB; alias to the 64-bit variant.
+#define lseek _lseeki64
+// File-mode bits use _S_IREAD / _S_IWRITE on Windows.
+#define DUMP_FILE_MODE (_S_IREAD | _S_IWRITE)
+// O_BINARY disables the CRT's CR/LF translation on text-mode files; POSIX
+// has no such concept (always binary).
+#define DUMP_BINARY_FLAG _O_BINARY
+
+typedef CRITICAL_SECTION event_mutex_t;
+#define EVENT_MUTEX_INIT()   InitializeCriticalSection(&event_mutex)
+#define EVENT_MUTEX_LOCK()   EnterCriticalSection(&event_mutex)
+#define EVENT_MUTEX_UNLOCK() LeaveCriticalSection(&event_mutex)
+
+// Minimal BSD-style singly-linked list macros — sufficient subset of
+// FreeBSD's <sys/queue.h> to keep call sites unchanged on Windows.
+#define LIST_HEAD(name, type) \
+    struct name { struct type *lh_first; }
+#define LIST_ENTRY(type) \
+    struct { struct type *le_next; struct type **le_prev; }
+#define LIST_INIT(head) do { (head)->lh_first = NULL; } while (0)
+#define LIST_INSERT_HEAD(head, elm, field) do { \
+    if (((elm)->field.le_next = (head)->lh_first) != NULL) \
+        (head)->lh_first->field.le_prev = &(elm)->field.le_next; \
+    (head)->lh_first = (elm); \
+    (elm)->field.le_prev = &(head)->lh_first; \
+} while (0)
+#define LIST_FOREACH(var, head, field) \
+    for ((var) = (head)->lh_first; (var); (var) = (var)->field.le_next)
+#define LIST_FIRST(head)        ((head)->lh_first)
+#define LIST_NEXT(elm, field)   ((elm)->field.le_next)
+
+#else // !_WIN32
+#include <sys/queue.h>
 #include <unistd.h>
 #include <pthread.h>
+
+#define DUMP_FILE_MODE       0600
+#define DUMP_BINARY_FLAG     0
+
+typedef pthread_mutex_t event_mutex_t;
+#define EVENT_MUTEX_INIT()   pthread_mutex_init(&event_mutex, NULL)
+#define EVENT_MUTEX_LOCK()   pthread_mutex_lock(&event_mutex)
+#define EVENT_MUTEX_UNLOCK() pthread_mutex_unlock(&event_mutex)
+
+#endif // _WIN32
+
 #include "jvmti.h"
 #include "jvmticmlr.h"
 
@@ -24,8 +86,10 @@ static int log_level = LOG_OFF;
 // touches the agent's global state — the `offset` cursor, the string and
 // sym linked lists, and the dump_fd write ordering. Without it the lists
 // race and free() ends up tripping over corrupted heap metadata
-// (manifests as SIGABRT inside libc).
-static pthread_mutex_t event_mutex = PTHREAD_MUTEX_INITIALIZER;
+// (manifests as SIGABRT inside libc). EVENT_MUTEX_INIT() runs in
+// Agent_OnLoad — required for the Win32 CRITICAL_SECTION variant, no-op
+// equivalent for POSIX (still safe to call).
+static event_mutex_t event_mutex;
 
 static int dump_fd;
 static void *memory;
@@ -195,6 +259,13 @@ static int method_string_representation(jvmtiEnv *, jmethodID, string_t**, uint8
 JNIEXPORT jint JNICALL
 Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
 
+    // Initialise the event mutex up-front so the first CompiledMethodLoad
+    // callback (which can fire while Agent_OnLoad is still returning, via
+    // GenerateEvents replay below) finds a live lock. On Win32 this is
+    // mandatory — InitializeCriticalSection has no static-init equivalent;
+    // on POSIX it's redundant with PTHREAD_MUTEX_INITIALIZER but harmless.
+    EVENT_MUTEX_INIT();
+
     jvmtiEnv *jvmti;
     jint result = (*jvm)->GetEnv(jvm, (void **)&jvmti, JVMTI_VERSION_1_2);
     if (result != JNI_OK) {
@@ -252,7 +323,7 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
     parse_options(options, &parsed_path, &parsed_log);
     log_level = parsed_log;
     const char *dump_path = parsed_path != NULL ? parsed_path : "default.jit";
-    dump_fd = open(dump_path, O_CREAT|O_RDWR|O_TRUNC, (mode_t)0600);
+    dump_fd = open(dump_path, O_CREAT|O_RDWR|O_TRUNC|DUMP_BINARY_FLAG, DUMP_FILE_MODE);
     if (dump_fd == -1) {
         free(parsed_path);
         return JNI_ERR;
@@ -282,7 +353,7 @@ Agent_OnUnload(JavaVM *vm) {
     // Take the same event lock that method_load uses: a callback can still
     // be in flight on a JIT thread when the VM begins shutdown, and reading
     // the lists here while another thread mutates them is undefined.
-    pthread_mutex_lock(&event_mutex);
+    EVENT_MUTEX_LOCK();
     header_t header;
     lseek(dump_fd, 0, SEEK_SET);
     read(dump_fd, &header, sizeof(header_t));
@@ -395,7 +466,7 @@ Agent_OnUnload(JavaVM *vm) {
             sym_count,
             (unsigned long long)offset);
     }
-    pthread_mutex_unlock(&event_mutex);
+    EVENT_MUTEX_UNLOCK();
 }
 
 static void JNICALL
@@ -410,13 +481,13 @@ method_load(jvmtiEnv *jvmti_env,
     string_t* path_string = NULL;
     uint8_t version = 0;
 
-    pthread_mutex_lock(&event_mutex);
+    EVENT_MUTEX_LOCK();
 
     // Late events that land outside the LIVE phase (rare; observed at VM
     // shutdown) make JVMTI calls return WRONG_PHASE — skip them rather
     // than serialise a half-populated symbol.
     if (method_string_representation(jvmti_env, method, &needle, &version, &path_string) != 0) {
-        pthread_mutex_unlock(&event_mutex);
+        EVENT_MUTEX_UNLOCK();
         return;
     }
 
@@ -552,7 +623,7 @@ method_load(jvmtiEnv *jvmti_env,
             needle->name,
             version);
     }
-    pthread_mutex_unlock(&event_mutex);
+    EVENT_MUTEX_UNLOCK();
 }
 
 static void JNICALL
