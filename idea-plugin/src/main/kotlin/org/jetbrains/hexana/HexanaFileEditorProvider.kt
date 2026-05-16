@@ -8,7 +8,6 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.annotations.NonNls
-import org.jetbrains.hexana.analytics.HexanaAnalytics
 import org.jetbrains.hexana.analytics.HexanaEvent
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.statistics.HexanaCounterUsagesCollector
@@ -37,9 +36,10 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
         project: Project,
         file: VirtualFile
     ): FileEditor {
+        val service = HexanaService.getInstance()
         if (file.fileType is WasmFileType) {
             HexanaCounterUsagesCollector.logWasmFileOpened(project)
-            HexanaAnalytics.client.capture(
+            service.captureAnalytics(
                 HexanaEvent.WasmFileOpened(file.length, HexanaEvent.Surface.IDE_PLUGIN)
             )
         }
@@ -67,7 +67,7 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
                 record.opCodes.any { it is UnparsedOpCode }
             }
             if (unparsedCount > 0) {
-                HexanaAnalytics.client.capture(
+                HexanaService.getInstance().captureAnalytics(
                     HexanaEvent.WasmUnparsedOpcodes(
                         unparsedCount = unparsedCount,
                         totalFunctions = totalFunctions

@@ -2,13 +2,17 @@ package org.jetbrains.hexana
 
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.util.ExecUtil
+import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import com.intellij.openapi.application.ApplicationInfo
 import org.jetbrains.hexana.analytics.*
 import org.jetbrains.hexana.graalwasm.wasmprinter.printWat
 import java.io.File
@@ -18,19 +22,34 @@ import java.io.FileInputStream
 class HexanaService(
     val coroutineScope : CoroutineScope,
 ) {
+    private val analyticsInitialization = MutableStateFlow<AnalyticsInitializationState>(
+        AnalyticsInitializationState.Pending
+    )
 
     init {
         coroutineScope.launch(Dispatchers.IO) {
-            val appInfo = ApplicationInfo.getInstance()
-            HexanaAnalytics.initialize(
-                config = AnalyticsConfig(),
-                consentProvider = IntellijConsentProvider(),
-                distinctIdProvider = UuidDistinctIdProvider(),
-                globalProperties = mapOf(
-                    "ide_type" to appInfo.versionName,
-                    "ide_build" to appInfo.build.asString()
+            try {
+                val appInfo = ApplicationInfo.getInstance()
+                HexanaAnalytics.initialize(
+                    config = AnalyticsConfig(),
+                    consentProvider = IntellijConsentProvider(),
+                    distinctIdProvider = UuidDistinctIdProvider(),
+                    globalProperties = mapOf(
+                        "ide_type" to appInfo.versionName,
+                        "ide_build" to appInfo.build.asString()
+                    )
                 )
-            )
+                analyticsInitialization.value = AnalyticsInitializationState.Ready
+            } catch (error: Throwable) {
+                analyticsInitialization.value = AnalyticsInitializationState.Failed
+                if (error is CancellationException) {
+                    throw error
+                }
+                if (error is VirtualMachineError || error is LinkageError) {
+                    throw error
+                }
+                HexanaLog.LOG.warn("Failed to initialize Hexana analytics", error)
+            }
         }
     }
 
@@ -46,6 +65,18 @@ class HexanaService(
     sealed interface WatConversionResult {
         class Success(val wat: String, val warning: String? = null) : WatConversionResult
         class Error(val error: String) : WatConversionResult
+    }
+
+    fun captureAnalytics(event: HexanaEvent): Job = coroutineScope.launch(Dispatchers.IO) {
+        when (analyticsInitialization.first { it != AnalyticsInitializationState.Pending }) {
+            AnalyticsInitializationState.Ready -> HexanaAnalytics.client.capture(event)
+            AnalyticsInitializationState.Pending,
+            AnalyticsInitializationState.Failed -> Unit
+        }
+    }
+
+    suspend fun awaitAnalyticsInitialization() {
+        analyticsInitialization.first { it != AnalyticsInitializationState.Pending }
     }
 
     @RequiresBackgroundThread
@@ -107,4 +138,10 @@ class HexanaService(
 
     private fun normalizeHttpPath(file: File): String = (if (file.path.startsWith("http:")) "http://" else "https://") +
             file.path.removePrefix("http://").removePrefix("https://").removePrefix("http:/").removePrefix("https:/")
+
+    private enum class AnalyticsInitializationState {
+        Pending,
+        Ready,
+        Failed,
+    }
 }

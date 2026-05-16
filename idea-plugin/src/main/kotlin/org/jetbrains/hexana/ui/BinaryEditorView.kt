@@ -15,9 +15,9 @@ import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.actionSystem.IdeActions
+import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
-import org.jetbrains.hexana.analytics.HexanaAnalytics
 import org.jetbrains.hexana.analytics.HexanaEvent
 import org.jetbrains.hexana.document.*
 import org.jetbrains.hexana.document.format.ChunkId
@@ -266,8 +266,12 @@ internal fun BinaryEditorView(
             }, onTabSelect = { index: Int ->
                 state.setSelectedTab(index)
                 panels.getOrNull(index)?.let { panel ->
-                    HexanaAnalytics.client.capture(HexanaEvent.HexTabSelected(panel.description,
-                        surface = HexanaEvent.Surface.IDE_PLUGIN))
+                    HexanaService.getInstance().captureAnalytics(
+                        HexanaEvent.HexTabSelected(
+                            panel.description,
+                            surface = HexanaEvent.Surface.IDE_PLUGIN,
+                        )
+                    )
                 }
             })
         })

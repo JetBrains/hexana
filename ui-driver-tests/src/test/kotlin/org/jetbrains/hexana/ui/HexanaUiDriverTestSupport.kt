@@ -41,6 +41,9 @@ internal object HexanaUiDriverTestSupport {
     private const val pluginBuildNumberEnv = "HEXANA_PLUGIN_BUILD_NUMBER"
     private const val ideVersionEnv = "HEXANA_IDE_VERSION"
     private const val ideBuildNumberEnv = "HEXANA_IDE_BUILD_NUMBER"
+    private const val postHogHostSystemProperty = "hexana.posthog.host"
+    private const val postHogFlushAtSystemProperty = "hexana.posthog.flushAt"
+    private const val postHogFlushIntervalMsSystemProperty = "hexana.posthog.flushIntervalMs"
 
     private val ideVersion = System.getenv(ideVersionEnv)?.trim()?.ifBlank { null }
     private val ideBuildNumber = System.getenv(ideBuildNumberEnv)?.trim()?.ifBlank { null }
@@ -64,6 +67,27 @@ internal object HexanaUiDriverTestSupport {
         <component name="McpServerSettings">
           <option name="enableMcpServer" value="true" />
           <option name="mcpServerPort" value="$port" />
+        </component>
+      </application>
+      """.trimIndent()
+        )
+        return context
+    }
+
+    fun configurePostHog(context: IDETestContext, server: FakePostHogServer): IDETestContext =
+        context.applyVMOptionsPatch {
+            addSystemProperty(postHogHostSystemProperty, server.url)
+            addSystemProperty(postHogFlushAtSystemProperty, 1)
+            addSystemProperty(postHogFlushIntervalMsSystemProperty, 1_000)
+        }
+
+    fun configureSendAnalytics(context: IDETestContext, enabled: Boolean): IDETestContext {
+        val optionsDir = context.paths.configDir.resolve("options").createDirectories()
+        optionsDir.resolve("hexana.xml").writeText(
+            """
+      <application>
+        <component name="Hexana">
+          <option name="sendAnalytics" value="$enabled" />
         </component>
       </application>
       """.trimIndent()

@@ -6,7 +6,9 @@ import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.hexana.HexanaFileEditorProvider
+import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.HexanaSettings
 import org.jetbrains.hexana.WasmFileType
 import java.nio.file.Files
@@ -34,6 +36,7 @@ class HexanaPluginAnalyticsTest : BasePlatformTestCase() {
     fun testWasmOpenSendsAnalyticsWhenEnabled() {
         FakePostHogServer.start().use { server ->
             settings.sendAnalytics = true
+            waitForServiceAnalyticsInitialization()
             initializeAnalytics(server)
 
             createEditor(createMinimalWasmFile("fixtures/analytics/enabled.wasm")).use {
@@ -51,6 +54,7 @@ class HexanaPluginAnalyticsTest : BasePlatformTestCase() {
     fun testWasmOpenSendsNoAnalyticsWhenDisabled() {
         FakePostHogServer.start().use { server ->
             settings.sendAnalytics = false
+            waitForServiceAnalyticsInitialization()
             initializeAnalytics(server)
 
             createEditor(createMinimalWasmFile("fixtures/analytics/disabled.wasm")).use {
@@ -75,6 +79,12 @@ class HexanaPluginAnalyticsTest : BasePlatformTestCase() {
                 "ide_build" to "TEST",
             )
         )
+    }
+
+    private fun waitForServiceAnalyticsInitialization() {
+        runBlocking {
+            HexanaService.getInstance().awaitAnalyticsInitialization()
+        }
     }
 
     private fun createEditor(file: VirtualFile): FileEditor {
