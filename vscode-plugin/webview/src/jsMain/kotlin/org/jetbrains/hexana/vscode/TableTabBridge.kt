@@ -108,13 +108,17 @@ private fun TableTabContent(
     // The descriptor uses ID_COLUMN (-1) for the implicit ID column; the rendered
     // headers always prepend the action column placeholder and then "ID", so we
     // resolve the actual header index here.
+    // When the descriptor does not specify a default sort column (null), fall back
+    // to the ID column so the sorting arrow is always visible — matching the old
+    // per-tab behaviour where SearchableTable auto-detected the "ID" header.
+    val idHeaderIndex = headers.indexOf("ID").takeIf { it >= 0 }
     val resolvedSortColumn = descriptor.defaultSortColumn?.let { col ->
         if (col == TableTabDescriptor.ID_COLUMN) {
-            headers.indexOf("ID").takeIf { it >= 0 }
+            idHeaderIndex
         } else {
             col + 2 // action placeholder + ID
         }
-    } ?: -1
+    } ?: idHeaderIndex ?: -1
     val resolvedSortDirection = if (resolvedSortColumn >= 0) {
         if (descriptor.defaultSortAscending) SortDirection.ASC else SortDirection.DESC
     } else SortDirection.NONE
