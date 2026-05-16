@@ -49,6 +49,7 @@ private fun componentExportsTab(provider: WasmComponentBinaryProvider): TableTab
             },
         ),
         rowCount = exports.size,
+        defaultSortColumn = TableTabDescriptor.ID_COLUMN,
         rowSelectionProvider = { index ->
             val record = exports.getOrNull(index)
             record?.let { RowSelectionData(it.offset, it.size) }
@@ -77,6 +78,7 @@ private fun componentImportsTab(provider: WasmComponentBinaryProvider): TableTab
             },
         ),
         rowCount = imports.size,
+        defaultSortColumn = TableTabDescriptor.ID_COLUMN,
         rowSelectionProvider = { index ->
             val record = imports.getOrNull(index)
             record?.let { RowSelectionData(it.offset, it.size) }
@@ -99,6 +101,7 @@ private fun componentModulesTab(provider: WasmComponentBinaryProvider): TableTab
             },
         ),
         rowCount = modules.size,
+        defaultSortColumn = TableTabDescriptor.ID_COLUMN,
     )
 }
 

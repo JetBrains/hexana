@@ -84,6 +84,10 @@ class RowContextMenuItemDescriptor(
  * @param name the tab title shown in the tab strip
  * @param columns the column descriptors for this table
  * @param rowCount the number of rows in this table
+ * @param defaultSortColumn initial sort column index, where [ID_COLUMN] means the
+ *   implicit ID column and `0..columns.size-1` addresses a data column;
+ *   `null` disables default sorting
+ * @param defaultSortAscending initial sort direction; `true` for ascending
  * @param rowSelectionProvider returns the binary offset/size for a given row index,
  *   or `null` if the row click should be ignored
  * @param rowAction optional per-row action button descriptor (e.g. "Run" icon)
@@ -95,11 +99,18 @@ class TableTabDescriptor(
     val name: String,
     val columns: List<ColumnDescriptor>,
     val rowCount: Int,
+    val defaultSortColumn: Int? = null,
+    val defaultSortAscending: Boolean = true,
     val rowSelectionProvider: (index: Int) -> RowSelectionData? = { null },
     val rowAction: RowActionDescriptor? = null,
     val contextMenuItems: List<RowContextMenuItemDescriptor> = emptyList(),
     val rowClickAction: ((index: Int) -> Unit)? = null,
-)
+) {
+    companion object {
+        /** Sentinel value for [defaultSortColumn] that targets the implicit ID column. */
+        const val ID_COLUMN: Int = -1
+    }
+}
 
 /**
  * Produces [TableTabDescriptor]s for a given [BinaryProvider].

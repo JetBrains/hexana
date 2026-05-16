@@ -281,6 +281,48 @@ class TableTabsProviderTest {
         assertNull(tabs.find { it.name == "Modules" }, "Core Wasm should not have Modules tab")
     }
 
+    @Test
+    fun wasmExportsTabDefaultSortByIdAsc() {
+        val provider = WasmBinaryProvider(buildWasmWithExport().toCommonByteBuffer())
+        val tab = WasmTableTabsProvider().tableTabs(provider).find { it.name == "Exports" }
+        assertNotNull(tab)
+        assertEquals(TableTabDescriptor.ID_COLUMN, tab.defaultSortColumn)
+        assertTrue(tab.defaultSortAscending)
+    }
+
+    @Test
+    fun wasmImportsTabDefaultSortByIdAsc() {
+        val provider = WasmBinaryProvider(buildWasmWithImport().toCommonByteBuffer())
+        val tab = WasmTableTabsProvider().tableTabs(provider).find { it.name == "Imports" }
+        assertNotNull(tab)
+        assertEquals(TableTabDescriptor.ID_COLUMN, tab.defaultSortColumn)
+        assertTrue(tab.defaultSortAscending)
+    }
+
+    @Test
+    fun wasmDataTabHasNoDefaultSort() {
+        val provider = WasmBinaryProvider(buildWasmWithData().toCommonByteBuffer())
+        val tab = WasmTableTabsProvider().tableTabs(provider).find { it.name == "Data" }
+        assertNotNull(tab)
+        assertNull(tab.defaultSortColumn)
+    }
+
+    @Test
+    fun wasmFunctionsTabHasNoDefaultSort() {
+        val provider = WasmBinaryProvider(buildWasmWithFunctions().toCommonByteBuffer())
+        val tab = WasmTableTabsProvider().tableTabs(provider).find { it.name == "Functions" }
+        assertNotNull(tab)
+        assertNull(tab.defaultSortColumn)
+    }
+
+    @Test
+    fun wasmCustomTabHasNoDefaultSort() {
+        val provider = WasmBinaryProvider(buildWasmWithCustom().toCommonByteBuffer())
+        val tab = WasmTableTabsProvider().tableTabs(provider).find { it.name == "Custom" }
+        assertNotNull(tab)
+        assertNull(tab.defaultSortColumn)
+    }
+
     // -----------------------------------------------------------------------
     // WasmComponentTableTabsProvider tests
     // -----------------------------------------------------------------------
@@ -350,6 +392,35 @@ class TableTabsProviderTest {
             rowCount = 0,
         )
         assertNull(tab.rowSelectionProvider(0))
+    }
+
+    @Test
+    fun tableTabDescriptorDefaultSortIsNull() {
+        val tab = TableTabDescriptor(
+            name = "test",
+            columns = emptyList(),
+            rowCount = 0,
+        )
+        assertNull(tab.defaultSortColumn)
+        assertTrue(tab.defaultSortAscending)
+    }
+
+    @Test
+    fun tableTabDescriptorWithExplicitDefaultSort() {
+        val tab = TableTabDescriptor(
+            name = "test",
+            columns = emptyList(),
+            rowCount = 0,
+            defaultSortColumn = TableTabDescriptor.ID_COLUMN,
+            defaultSortAscending = false,
+        )
+        assertEquals(TableTabDescriptor.ID_COLUMN, tab.defaultSortColumn)
+        assertEquals(false, tab.defaultSortAscending)
+    }
+
+    @Test
+    fun idColumnSentinelIsMinusOne() {
+        assertEquals(-1, TableTabDescriptor.ID_COLUMN)
     }
 
     // -----------------------------------------------------------------------

@@ -117,6 +117,8 @@ private fun TableTabContent(descriptor: TableTabDescriptor, state: HexViewStateH
             }
         } },
         actionColumnWidth = actionColumnWidth,
+        defaultSortColumn = descriptor.defaultSortColumn ?: -1,
+        defaultSortAscending = descriptor.defaultSortAscending,
         onRow = { rowIndex ->
             val clickAction = descriptor.rowClickAction
             if (clickAction != null) {

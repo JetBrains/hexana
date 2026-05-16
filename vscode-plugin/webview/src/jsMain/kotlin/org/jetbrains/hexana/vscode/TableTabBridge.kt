@@ -104,7 +104,28 @@ private fun TableTabContent(
         }
     }
 
-    SearchableTable(headers = headers, columnAligns = aligns) {
+    // Map descriptor's defaultSortColumn to the header index in the rendered table.
+    // The descriptor uses ID_COLUMN (-1) for the implicit ID column; the rendered
+    // headers prepend an optional action column and then "ID", so we resolve the
+    // actual header index here.
+    val resolvedSortColumn = descriptor.defaultSortColumn?.let { col ->
+        if (col == TableTabDescriptor.ID_COLUMN) {
+            headers.indexOf("ID").takeIf { it >= 0 }
+        } else {
+            val offset = if (descriptor.rowAction != null) 2 else 1 // action + ID or just ID
+            col + offset
+        }
+    } ?: -1
+    val resolvedSortDirection = if (resolvedSortColumn >= 0) {
+        if (descriptor.defaultSortAscending) SortDirection.ASC else SortDirection.DESC
+    } else SortDirection.NONE
+
+    SearchableTable(
+        headers = headers,
+        columnAligns = aligns,
+        defaultSortColumn = resolvedSortColumn,
+        defaultSortDirection = resolvedSortDirection,
+    ) {
         for (index in 0 until descriptor.rowCount) {
             val selData = descriptor.rowSelectionProvider(index)
             val isHighlighted = selData != null && selection.hasSelection &&

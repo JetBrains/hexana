@@ -50,6 +50,8 @@ fun Table(
     onRowContextMenu: (id: Int) -> List<ContextMenuItem> = { emptyList() },
     actionColumn: (@Composable (id: Int) -> Unit)? = null,
     actionColumnWidth: Dp = 0.dp,
+    defaultSortColumn: Int = -1,
+    defaultSortAscending: Boolean = true,
     onRow: (id: Int) -> Unit = {},
 ) {
     val tableData = remember(columns, dataCount) {
@@ -58,8 +60,8 @@ fun Table(
         }
     }
 
-    var sortAsc: Boolean by remember { mutableStateOf(true) }
-    var sortIndex: Int by remember { mutableStateOf(-1) }
+    var sortAsc: Boolean by remember { mutableStateOf(defaultSortAscending) }
+    var sortIndex: Int by remember { mutableStateOf(defaultSortColumn) }
 
     var selectedOriginalIndex: Int? by remember { mutableStateOf(null) }
     var hoveredOriginalIndex: Int? by remember { mutableStateOf(null) }

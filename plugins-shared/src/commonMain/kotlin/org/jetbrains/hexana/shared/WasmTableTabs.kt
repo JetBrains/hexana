@@ -86,6 +86,7 @@ private fun exportsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
             },
         ),
         rowCount = exports.size,
+        defaultSortColumn = TableTabDescriptor.ID_COLUMN,
         rowSelectionProvider = { index ->
             val record = exports.getOrNull(index)
             record?.let { RowSelectionData(it.offset, it.size) }
@@ -108,6 +109,7 @@ private fun importsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
             },
         ),
         rowCount = imports.size,
+        defaultSortColumn = TableTabDescriptor.ID_COLUMN,
         rowSelectionProvider = { index ->
             val record = imports.getOrNull(index)
             record?.let { RowSelectionData(it.offset, it.size) }
