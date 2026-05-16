@@ -68,6 +68,22 @@ typedef pthread_mutex_t event_mutex_t;
 
 #endif // _WIN32
 
+// Packed-struct attribute portability. GCC / clang accept the
+// `__attribute__((packed))` trailing attribute on a struct declaration;
+// MSVC ignores it and instead requires `#pragma pack(push, 1)` / `pop`
+// wrapping the declaration. PACKED_BEGIN / PACKED_END expand to the pragma
+// on MSVC and to nothing elsewhere; PACKED_ATTR carries the attribute on
+// compilers that recognise it.
+#ifdef _MSC_VER
+#define PACKED_BEGIN __pragma(pack(push, 1))
+#define PACKED_END   __pragma(pack(pop))
+#define PACKED_ATTR
+#else
+#define PACKED_BEGIN
+#define PACKED_END
+#define PACKED_ATTR  __attribute__((packed))
+#endif
+
 #include "jvmti.h"
 #include "jvmticmlr.h"
 
@@ -94,7 +110,8 @@ static event_mutex_t event_mutex;
 static int dump_fd;
 static void *memory;
 
-typedef struct __attribute__((packed)) {
+PACKED_BEGIN
+typedef struct PACKED_ATTR {
     char magic[3];
     uint8_t version;
     uint64_t offset;
@@ -102,6 +119,7 @@ typedef struct __attribute__((packed)) {
     uint64_t string_offset;
     size_t size;
 } header_t;
+PACKED_END
 
 typedef struct string {
     char *name;
@@ -114,7 +132,8 @@ static struct head_strings head_strings;
 
 #define SYMS_MAGIC0 0xdeadbeef00000001
 #define SYMS_MAGIC1 0xdeadbeef00000002
-typedef struct __attribute__((packed)){
+PACKED_BEGIN
+typedef struct PACKED_ATTR {
     uint64_t magic;
     uint64_t offset;
     uint64_t size;
@@ -137,6 +156,7 @@ typedef struct __attribute__((packed)){
     uint32_t bytecode_offset;
     uint32_t bytecode_length;
 } sym_entry_t;
+PACKED_END
 
 typedef struct {
     string_t *method_name;
@@ -145,10 +165,12 @@ typedef struct {
 } frame_t;
 
 
-typedef struct __attribute__((packed)) {
+PACKED_BEGIN
+typedef struct PACKED_ATTR {
     uint64_t address;
     uint32_t frame_count;
 } address_info_t;
+PACKED_END
 
 typedef struct {
     address_info_t info;
