@@ -35,11 +35,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.pom.Navigatable
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.util.concurrency.AppExecutorUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexHighlightRange
@@ -1039,11 +1042,34 @@ private fun disassembleByBci(
  * Resolve the inlined method through the project's JavaPsiFacade and
  * navigate to it (preferring source if attached, otherwise the .class).
  * Silently no-ops if the class isn't on any project scope's classpath.
+ *
+ * The PSI / stub-index lookup must NOT run on the EDT — `findClass`
+ * eventually calls `FileBasedIndexImpl.ensureUpToDate`, which the
+ * platform's SlowOperations guard rejects from the UI thread. We run
+ * the resolution in a non-blocking read action on a background pooled
+ * thread and hop back to the EDT only for the final `navigate()` call,
+ * which needs to open the editor and move the caret.
  */
 private fun navigateToInline(project: Project, sym: Sym) {
+    ReadAction
+        .nonBlocking<Navigatable?> { resolveInlineNavigatable(project, sym) }
+        .inSmartMode(project)
+        .expireWith(project)
+        .finishOnUiThread(ModalityState.defaultModalityState()) { target ->
+            target?.navigate(true)
+        }
+        .submit(AppExecutorUtil.getAppExecutorService())
+}
+
+/**
+ * Off-EDT half of [navigateToInline] — does all the index-touching work
+ * under the read action and returns a navigatable that can be opened on
+ * the UI thread without blocking.
+ */
+private fun resolveInlineNavigatable(project: Project, sym: Sym): Navigatable? {
     val fqn = javaFqn(sym.classSignature)
     val scope = GlobalSearchScope.allScope(project)
-    val cls = JavaPsiFacade.getInstance(project).findClass(fqn, scope) ?: return
+    val cls = JavaPsiFacade.getInstance(project).findClass(fqn, scope) ?: return null
     // Try matching by name + JVM descriptor; fall back to first method by
     // name; fall back to the class itself.
     val matched = cls.findMethodsByName(sym.methodName, true).firstOrNull { method ->
@@ -1051,8 +1077,7 @@ private fun navigateToInline(project: Project, sym: Sym) {
             com.intellij.psi.util.ClassUtil.getAsmMethodSignature(method) == sym.methodSignature
         }.getOrDefault(false)
     } ?: cls.findMethodsByName(sym.methodName, true).firstOrNull()
-    val target: Navigatable = (matched as? Navigatable) ?: cls
-    target.navigate(true)
+    return (matched as? Navigatable) ?: cls
 }
 
 // -----------------------------------------------------------------------------
