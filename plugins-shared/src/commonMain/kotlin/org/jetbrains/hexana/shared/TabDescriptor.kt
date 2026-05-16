@@ -123,3 +123,12 @@ class TableTabDescriptor(
 interface TableTabsProvider {
     fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor>
 }
+
+object TableTabsProviderRegistry {
+    val providers: List<TableTabsProvider> by lazy {
+        listOf(
+            WasmComponentTableTabsProvider(),
+            WasmTableTabsProvider(),
+        )
+    }
+}

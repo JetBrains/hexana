@@ -2,6 +2,8 @@ package org.jetbrains.hexana.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -9,50 +11,23 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.TextStyle
-import com.intellij.openapi.actionSystem.IdeActions
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
+import com.intellij.openapi.actionSystem.IdeActions
 import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.analytics.HexanaAnalytics
 import org.jetbrains.hexana.analytics.HexanaEvent
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
-import org.jetbrains.hexana.document.DocumentListener
-import org.jetbrains.hexana.document.EditableBinaryDocument
-import org.jetbrains.hexana.document.IdeaJournalPersister
-import org.jetbrains.hexana.document.editableBinaryDocumentOf
+import org.jetbrains.hexana.document.*
 import org.jetbrains.hexana.document.format.ChunkId
 import org.jetbrains.hexana.document.journal.JournalLoadResult
 import org.jetbrains.hexana.document.journal.JournalPersister
-import org.jetbrains.hexana.document.loadSidecarIfPresent
-import org.jetbrains.hexana.document.notifyJournalMismatch
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.io.toCommonByteBuffer
-import org.jetbrains.hexana.providers.BinaryProvider
-import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
-import org.jetbrains.hexana.providers.GenericBinaryProvider
-import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
-import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
-import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
-import org.jetbrains.hexana.ui.panel.Panel
-import org.jetbrains.hexana.ui.panel.PathsNavigationState
-import org.jetbrains.hexana.ui.panel.WasmPanelDominators
-import org.jetbrains.hexana.ui.panel.WasmPanelSize
-import org.jetbrains.hexana.ui.panel.WasmPanelMonos
-import org.jetbrains.hexana.ui.panel.WasmPanelGarbage
-import org.jetbrains.hexana.ui.panel.KeymapShortcuts
-import org.jetbrains.hexana.ui.panel.WasmPanelWat
-import org.jetbrains.hexana.ui.panel.toPanels
-import org.jetbrains.hexana.ui.panel.enrichWasmTabs
-import org.jetbrains.hexana.ui.panel.enrichComponentTabs
-import org.jetbrains.hexana.ui.panel.WasmPanelWatVirtualized
-import org.jetbrains.hexana.shared.WasmTableTabsProvider
-import org.jetbrains.hexana.shared.WasmComponentTableTabsProvider
+import org.jetbrains.hexana.providers.*
+import org.jetbrains.hexana.shared.TableTabsProviderRegistry
+import org.jetbrains.hexana.ui.panel.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -510,26 +485,15 @@ private fun BinaryProvider.resolvePanels(
     watVirtualizedFolded: MutableState<Set<ChunkId>>? = null,
     liveProviderProvider: (() -> BinaryProvider)? = null,
 ): Array<Panel> {
-    val panels = when (this) {
-        is GenericBinaryProvider -> emptyArray()
+    val enricher = getTabEnricher()
+    val tabPanels = TableTabsProviderRegistry.providers.flatMap {
+        enricher(it.tableTabs(this), state, pathsNav).map { it.toPanel(state) }
+    }
+    val extraPanels = when (this) {
+        is GenericBinaryProvider -> emptyList()
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
-                val tableTabs = WasmTableTabsProvider().toPanels(this, state) {
-                    it.enrichWasmTabs(
-                        provider = this,
-                        file = file,
-                        project = state.project,
-                        onShowPaths = { fIdx ->
-                            pathsNav.targetFuncIndex = fIdx
-                            state.requestSelectTabByDescription("Dominators")
-                        },
-                        unreachableFuncIndicesProvider = {
-                            this.garbageAnalysis?.entries
-                                ?.map { it.funcIndex }?.toSet() ?: emptySet()
-                        },
-                    )
-                }
-                (tableTabs + listOf(
+                listOf(
                     Panel("Top") { WasmPanelSize(this, state) },
                     Panel("Monos") { WasmPanelMonos(this, state) },
                     Panel("Garbage") { WasmPanelGarbage(this, state) },
@@ -549,28 +513,24 @@ private fun BinaryProvider.resolvePanels(
                             foldedSectionsExternal = watVirtualizedFolded,
                         )
                     },
-                ) + dwarfPanels(this, state)).toTypedArray()
+                ) + dwarfPanels(this, state)
             } else {
                 errorPanel(state)
             }
         }
         is WasmComponentBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
-                val tableTabs = WasmComponentTableTabsProvider().toPanels(this, state) {
-                    it.enrichComponentTabs(this, file, state.project)
-                }
-                (tableTabs + listOf(
+                listOf(
                     Panel("Top") { WasmPanelSize(this, state) },
                     Panel("Wat") { WasmPanelWat(this, state) },
-                )).toTypedArray()
+                )
             } else {
                 errorPanel(state)
             }
         }
         is WasmBinaryProvider -> {
             if (canProvideWasmModule()) {
-                val tableTabs = WasmTableTabsProvider().toPanels(this, state)
-                (tableTabs + listOf(
+                listOf(
                     Panel("Top") { WasmPanelSize(this, state) },
                     Panel("Monos") { WasmPanelMonos(this, state) },
                     Panel("Garbage") { WasmPanelGarbage(this, state) },
@@ -585,20 +545,19 @@ private fun BinaryProvider.resolvePanels(
                             foldedSectionsExternal = watVirtualizedFolded,
                         )
                     },
-                ) + dwarfPanels(this, state)).toTypedArray()
-            } else emptyArray()
+                ) + dwarfPanels(this, state)
+            } else emptyList()
         }
         is WasmComponentBinaryProvider -> {
             if (canProvideWasmModule()) {
-                val tableTabs = WasmComponentTableTabsProvider().toPanels(this, state)
-                (tableTabs + listOf(
+                listOf(
                     Panel("Top") { WasmPanelSize(this, state) },
-                )).toTypedArray()
-            } else emptyArray()
+                )
+            } else emptyList()
         }
-
-        else -> emptyArray()
+        else -> emptyList()
     }
+    val panels = (tabPanels + extraPanels).toMutableList()
     // Wire Garbage → Dominators cross-panel navigation
     val domIndex = panels.indexOfFirst { it.description == "Dominators" }
     val garbageIndex = panels.indexOfFirst { it.description == "Garbage" }
@@ -618,10 +577,10 @@ private fun BinaryProvider.resolvePanels(
             )
         }
     }
-    return panels
+    return panels.toTypedArray()
 }
 
-private fun BinaryVirtualFileProvider.errorPanel(state: HexViewStateHolder): Array<Panel> = arrayOf(
+private fun BinaryVirtualFileProvider.errorPanel(state: HexViewStateHolder): List<Panel> = listOf(
     Panel("Something is wrong :(") {
         Box {
             Row {

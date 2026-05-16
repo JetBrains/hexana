@@ -18,8 +18,6 @@ import com.intellij.icons.AllIcons
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.shared.ColumnWidth
 import org.jetbrains.hexana.shared.TableTabDescriptor
-import org.jetbrains.hexana.shared.TableTabsProvider
-import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
@@ -39,25 +37,6 @@ internal fun TableTabDescriptor.toPanel(state: HexViewStateHolder): Panel {
         TableTabContent(descriptor, state)
     }
 }
-
-/**
- * Converts all table tabs from a [TableTabsProvider] into [Panel]s.
- */
-internal fun TableTabsProvider.toPanels(
-    provider: BinaryProvider,
-    state: HexViewStateHolder,
-): List<Panel> = tableTabs(provider).map { it.toPanel(state) }
-
-/**
- * Converts table tab descriptors into [Panel]s, applying an optional enrichment
- * step that can attach IDE-specific actions (run buttons, context menus, click
- * handlers) before the Compose bridge renders them.
- */
-internal fun TableTabsProvider.toPanels(
-    provider: BinaryProvider,
-    state: HexViewStateHolder,
-    enrich: (List<TableTabDescriptor>) -> List<TableTabDescriptor>,
-): List<Panel> = enrich(tableTabs(provider)).map { it.toPanel(state) }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

@@ -37,7 +37,23 @@ import org.jetbrains.hexana.wasm.sections.WasmF32Type
 import org.jetbrains.hexana.wasm.sections.WasmF64Type
 import org.jetbrains.hexana.wasm.sections.WasmValueType
 import com.intellij.openapi.ui.ValidationInfo
+import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
+import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
 import org.jetbrains.hexana.wasm.components.ComponentPrimitiveCharType
+
+
+fun BinaryProvider.getTabEnricher(): List<TableTabDescriptor>.(
+    hexViewState: HexViewStateHolder,
+    pathsNavigationState: PathsNavigationState
+  ) -> List<TableTabDescriptor> {
+    return when (val provider = this) {
+        is WasmBinaryVirtualFileProvider -> { hexViewState, pathsNavigationState -> enrichWasmTabs(provider, hexViewState, pathsNavigationState) }
+        is WasmComponentBinaryVirtualFileProvider -> { hexViewState, _ -> enrichComponentTabs(provider, provider.file, hexViewState.project) }
+        else -> { _, _ -> this }
+    }
+}
 
 /**
  * Enriches [TableTabDescriptor]s produced by [WasmTableTabsProvider] with
@@ -46,19 +62,21 @@ import org.jetbrains.hexana.wasm.components.ComponentPrimitiveCharType
  *
  * @param onShowPaths callback invoked when the user selects "Show Paths
  *   from Roots" on a function row; receives the function index
- * @param unreachableFuncIndicesProvider returns the set of function indices
- *   that are unreachable (garbage); evaluated lazily at cell render time
  */
 internal fun List<TableTabDescriptor>.enrichWasmTabs(
-    provider: WasmBinaryProvider,
-    file: VirtualFile,
-    project: Project,
-    onShowPaths: ((funcIndex: Int) -> Unit)? = null,
-    unreachableFuncIndicesProvider: () -> Set<Int> = { emptySet() },
+    provider: WasmBinaryVirtualFileProvider,
+    hexViewState: HexViewStateHolder,
+    pathsNavigationState: PathsNavigationState,
 ): List<TableTabDescriptor> = map { tab ->
     when (tab.name) {
-        "Exports" -> enrichWasmExportsTab(tab, provider, file, project)
-        "Functions" -> enrichWasmFunctionsTab(tab, provider, onShowPaths, unreachableFuncIndicesProvider)
+        "Exports" -> enrichWasmExportsTab(tab, provider, provider.file, hexViewState.project)
+        "Functions" -> enrichWasmFunctionsTab(tab, provider, { fIdx ->
+            pathsNavigationState.targetFuncIndex = fIdx
+            hexViewState.requestSelectTabByDescription("Dominators")
+        }, {
+            provider.garbageAnalysis?.entries
+                ?.map { it.funcIndex }?.toSet() ?: emptySet()
+        })
         else -> tab
     }
 }
