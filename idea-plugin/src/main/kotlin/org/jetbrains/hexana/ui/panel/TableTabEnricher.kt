@@ -41,15 +41,24 @@ import org.jetbrains.hexana.wasm.components.ComponentPrimitiveCharType
 
 /**
  * Enriches [TableTabDescriptor]s produced by [WasmTableTabsProvider] with
- * IDE-specific actions: run buttons on exported functions.
+ * IDE-specific actions: run buttons on exported functions, unreachable
+ * function badges and cross-panel navigation on the Functions tab.
+ *
+ * @param onShowPaths callback invoked when the user selects "Show Paths
+ *   from Roots" on a function row; receives the function index
+ * @param unreachableFuncIndicesProvider returns the set of function indices
+ *   that are unreachable (garbage); evaluated lazily at cell render time
  */
 internal fun List<TableTabDescriptor>.enrichWasmTabs(
     provider: WasmBinaryProvider,
     file: VirtualFile,
     project: Project,
+    onShowPaths: ((funcIndex: Int) -> Unit)? = null,
+    unreachableFuncIndicesProvider: () -> Set<Int> = { emptySet() },
 ): List<TableTabDescriptor> = map { tab ->
     when (tab.name) {
         "Exports" -> enrichWasmExportsTab(tab, provider, file, project)
+        "Functions" -> enrichWasmFunctionsTab(tab, provider, onShowPaths, unreachableFuncIndicesProvider)
         else -> tab
     }
 }
@@ -148,6 +157,61 @@ private fun validateWasmArg(text: String, type: WasmValueType<*>): ValidationInf
         is WasmF64Type -> if (text.toDoubleOrNull() == null) ValidationInfo("Expected an f64 number") else null
         else -> null
     }
+}
+
+// ---------------------------------------------------------------------------
+// Wasm Functions enrichment
+// ---------------------------------------------------------------------------
+
+private fun enrichWasmFunctionsTab(
+    tab: TableTabDescriptor,
+    provider: WasmBinaryProvider,
+    onShowPaths: ((funcIndex: Int) -> Unit)?,
+    unreachableFuncIndicesProvider: () -> Set<Int>,
+): TableTabDescriptor {
+    val nameSection = provider.nameSection
+    val functionNamesMap = nameSection?.functionSubsection?.namemap
+
+    // Wrap the Name column's cell provider to prefix "●" for unreachable functions.
+    val enrichedColumns = if (functionNamesMap != null) {
+        tab.columns.map { col ->
+            if (col.name == "Name") {
+                ColumnDescriptor(
+                    name = col.name,
+                    widthBehavior = col.widthBehavior,
+                ) { index ->
+                    val original = col.cellProvider(index)
+                    val unreachable = index in unreachableFuncIndicesProvider()
+                    if (unreachable) {
+                        val displayName = "\u25CF ${original.representation}"
+                        CellValue(
+                            displayName,
+                            tooltip = original.tooltip,
+                        )
+                    } else {
+                        original
+                    }
+                }
+            } else col
+        }
+    } else tab.columns
+
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = enrichedColumns,
+        rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
+        rowSelectionProvider = tab.rowSelectionProvider,
+        contextMenuItems = if (onShowPaths != null) {
+            listOf(
+                RowContextMenuItemDescriptor(
+                    labelProvider = { "Show Paths from Roots" },
+                    action = { index -> onShowPaths(index) },
+                ),
+            )
+        } else emptyList(),
+    )
 }
 
 // ---------------------------------------------------------------------------

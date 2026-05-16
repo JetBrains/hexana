@@ -40,7 +40,6 @@ import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.panel.Panel
-import org.jetbrains.hexana.ui.panel.WasmPanelFunctions
 import org.jetbrains.hexana.ui.panel.PathsNavigationState
 import org.jetbrains.hexana.ui.panel.WasmPanelDominators
 import org.jetbrains.hexana.ui.panel.WasmPanelSize
@@ -51,8 +50,6 @@ import org.jetbrains.hexana.ui.panel.WasmPanelWat
 import org.jetbrains.hexana.ui.panel.toPanels
 import org.jetbrains.hexana.ui.panel.enrichWasmTabs
 import org.jetbrains.hexana.ui.panel.enrichComponentTabs
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.ui.panel.WasmPanelWatVirtualized
 import org.jetbrains.hexana.shared.WasmTableTabsProvider
 import org.jetbrains.hexana.shared.WasmComponentTableTabsProvider
@@ -518,7 +515,19 @@ private fun BinaryProvider.resolvePanels(
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
                 val tableTabs = WasmTableTabsProvider().toPanels(this, state) {
-                    it.enrichWasmTabs(this, file, state.project)
+                    it.enrichWasmTabs(
+                        provider = this,
+                        file = file,
+                        project = state.project,
+                        onShowPaths = { fIdx ->
+                            pathsNav.targetFuncIndex = fIdx
+                            state.requestSelectTabByDescription("Dominators")
+                        },
+                        unreachableFuncIndicesProvider = {
+                            this.garbageAnalysis?.entries
+                                ?.map { it.funcIndex }?.toSet() ?: emptySet()
+                        },
+                    )
                 }
                 (tableTabs + listOf(
                     Panel("Top") { WasmPanelSize(this, state) },
@@ -590,30 +599,8 @@ private fun BinaryProvider.resolvePanels(
 
         else -> emptyArray()
     }
-    // Wire Functions → Dominators cross-panel navigation + garbage badges
-    val domIndex = panels.indexOfFirst { it.description == "Dominators" }
-    val funcIndex = panels.indexOfFirst { it.description == "Functions" }
-    if (funcIndex >= 0 && this is WasmBinaryProvider) {
-        val provider = this
-        panels[funcIndex] = Panel("Functions") {
-            var unreachableIndices by remember { mutableStateOf(emptySet<Int>()) }
-            LaunchedEffect(provider) {
-                unreachableIndices = withContext(Dispatchers.IO) {
-                    provider.garbageAnalysis?.entries
-                        ?.map { it.funcIndex }?.toSet() ?: emptySet()
-                }
-            }
-            WasmPanelFunctions(
-                provider, state,
-                onShowPaths = if (domIndex >= 0) { fIdx ->
-                    pathsNav.targetFuncIndex = fIdx
-                    state.setSelectedTab(domIndex)
-                } else null,
-                unreachableFuncIndices = unreachableIndices,
-            )
-        }
-    }
     // Wire Garbage → Dominators cross-panel navigation
+    val domIndex = panels.indexOfFirst { it.description == "Dominators" }
     val garbageIndex = panels.indexOfFirst { it.description == "Garbage" }
     if (garbageIndex >= 0 && domIndex >= 0 && this is WasmBinaryProvider) {
         val provider = this
