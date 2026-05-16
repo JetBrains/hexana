@@ -41,23 +41,20 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.panel.Panel
 import org.jetbrains.hexana.ui.panel.WasmPanelFunctions
-import org.jetbrains.hexana.ui.panel.WasmPanelCustom
 import org.jetbrains.hexana.ui.panel.PathsNavigationState
 import org.jetbrains.hexana.ui.panel.WasmPanelDominators
 import org.jetbrains.hexana.ui.panel.WasmPanelSize
 import org.jetbrains.hexana.ui.panel.WasmPanelMonos
 import org.jetbrains.hexana.ui.panel.WasmPanelGarbage
-import org.jetbrains.hexana.ui.panel.WasmPanelData
-import org.jetbrains.hexana.ui.panel.WasmPanelExports
-import org.jetbrains.hexana.ui.panel.WasmPanelImports
 import org.jetbrains.hexana.ui.panel.KeymapShortcuts
 import org.jetbrains.hexana.ui.panel.WasmPanelWat
+import org.jetbrains.hexana.ui.panel.toPanels
 import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelExports
-import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelImports
-import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelModules
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.ui.panel.WasmPanelWatVirtualized
+import org.jetbrains.hexana.shared.WasmTableTabsProvider
+import org.jetbrains.hexana.shared.WasmComponentTableTabsProvider
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -518,78 +515,72 @@ private fun BinaryProvider.resolvePanels(
     val panels = when (this) {
         is GenericBinaryProvider -> emptyArray()
         is WasmBinaryVirtualFileProvider -> {
-            if (canProvideWasmModule()) arrayOf(
-                Panel("Data") { WasmPanelData(this, state) },
-                Panel("Exports") { WasmPanelExports(this, state) },
-                Panel("Imports") { WasmPanelImports(this, state) },
-                Panel("Functions") { WasmPanelFunctions(this, state) },
-                Panel("Custom") { WasmPanelCustom(this, state) },
-                Panel("Top") { WasmPanelSize(this, state) },
-                Panel("Monos") { WasmPanelMonos(this, state) },
-                Panel("Garbage") { WasmPanelGarbage(this, state) },
-                Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
-                Panel("Wat") { WasmPanelWat(this, state) },
-                Panel("WAT (virtualized)") {
-                    // Read the live provider INSIDE the lambda so Compose
-                    // re-renders this panel (and only this panel) on each
-                    // post-commit rebuild. Falls back to `this` (original)
-                    // when no live provider is wired.
-                    val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
-                    WasmPanelWatVirtualized(
-                        provider = live,
-                        state = state,
-                        editableDoc = editableDoc,
-                        listState = watVirtualizedListState,
-                        foldedSectionsExternal = watVirtualizedFolded,
-                    )
-                },
-                *dwarfPanels(this, state).toTypedArray()
-            ) else {
+            if (canProvideWasmModule()) {
+                val tableTabs = WasmTableTabsProvider().toPanels(this, state)
+                (tableTabs + listOf(
+                    Panel("Top") { WasmPanelSize(this, state) },
+                    Panel("Monos") { WasmPanelMonos(this, state) },
+                    Panel("Garbage") { WasmPanelGarbage(this, state) },
+                    Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
+                    Panel("Wat") { WasmPanelWat(this, state) },
+                    Panel("WAT (virtualized)") {
+                        // Read the live provider INSIDE the lambda so Compose
+                        // re-renders this panel (and only this panel) on each
+                        // post-commit rebuild. Falls back to `this` (original)
+                        // when no live provider is wired.
+                        val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
+                        WasmPanelWatVirtualized(
+                            provider = live,
+                            state = state,
+                            editableDoc = editableDoc,
+                            listState = watVirtualizedListState,
+                            foldedSectionsExternal = watVirtualizedFolded,
+                        )
+                    },
+                ) + dwarfPanels(this, state)).toTypedArray()
+            } else {
                 errorPanel(state)
             }
         }
         is WasmComponentBinaryVirtualFileProvider -> {
-            if (canProvideWasmModule()) arrayOf(
-                Panel("Exports") { WasmComponentPanelExports(this, state) },
-                Panel("Imports") { WasmComponentPanelImports(this, state) },
-                Panel("Modules") { WasmComponentPanelModules(this, state) },
-                Panel("Top") { WasmPanelSize(this, state) },
-                Panel("Wat") { WasmPanelWat(this, state) },
-            ) else {
+            if (canProvideWasmModule()) {
+                val tableTabs = WasmComponentTableTabsProvider().toPanels(this, state)
+                (tableTabs + listOf(
+                    Panel("Top") { WasmPanelSize(this, state) },
+                    Panel("Wat") { WasmPanelWat(this, state) },
+                )).toTypedArray()
+            } else {
                 errorPanel(state)
             }
         }
         is WasmBinaryProvider -> {
-            if (canProvideWasmModule()) arrayOf(
-                Panel("Data") { WasmPanelData(this, state) },
-                Panel("Exports") { WasmPanelExports(this, state) },
-                Panel("Imports") { WasmPanelImports(this, state) },
-                Panel("Functions") { WasmPanelFunctions(this, state) },
-                Panel("Custom") { WasmPanelCustom(this, state) },
-                Panel("Top") { WasmPanelSize(this, state) },
-                Panel("Monos") { WasmPanelMonos(this, state) },
-                Panel("Garbage") { WasmPanelGarbage(this, state) },
-                Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
-                Panel("WAT (virtualized)") {
-                    val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
-                    WasmPanelWatVirtualized(
-                        provider = live,
-                        state = state,
-                        editableDoc = editableDoc,
-                        listState = watVirtualizedListState,
-                        foldedSectionsExternal = watVirtualizedFolded,
-                    )
-                },
-                *dwarfPanels(this, state).toTypedArray()
-            ) else emptyArray()
+            if (canProvideWasmModule()) {
+                val tableTabs = WasmTableTabsProvider().toPanels(this, state)
+                (tableTabs + listOf(
+                    Panel("Top") { WasmPanelSize(this, state) },
+                    Panel("Monos") { WasmPanelMonos(this, state) },
+                    Panel("Garbage") { WasmPanelGarbage(this, state) },
+                    Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
+                    Panel("WAT (virtualized)") {
+                        val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
+                        WasmPanelWatVirtualized(
+                            provider = live,
+                            state = state,
+                            editableDoc = editableDoc,
+                            listState = watVirtualizedListState,
+                            foldedSectionsExternal = watVirtualizedFolded,
+                        )
+                    },
+                ) + dwarfPanels(this, state)).toTypedArray()
+            } else emptyArray()
         }
         is WasmComponentBinaryProvider -> {
-            if (canProvideWasmModule()) arrayOf(
-                Panel("Exports") { WasmComponentPanelExports(this, state) },
-                Panel("Imports") { WasmComponentPanelImports(this, state) },
-                Panel("Modules") { WasmComponentPanelModules(this, state) },
-                Panel("Top") { WasmPanelSize(this, state) },
-            ) else emptyArray()
+            if (canProvideWasmModule()) {
+                val tableTabs = WasmComponentTableTabsProvider().toPanels(this, state)
+                (tableTabs + listOf(
+                    Panel("Top") { WasmPanelSize(this, state) },
+                )).toTypedArray()
+            } else emptyArray()
         }
 
         else -> emptyArray()
@@ -633,6 +624,40 @@ private fun BinaryProvider.resolvePanels(
                     state.setSelectedTab(domIndex)
                 },
             )
+        }
+    }
+    // Override Exports with IDE-specific versions that include run actions and navigation
+    val exportsIndex = panels.indexOfFirst { it.description == "Exports" }
+    if (exportsIndex >= 0 && this is BinaryVirtualFileProvider) {
+        when (this) {
+            is WasmBinaryVirtualFileProvider -> {
+                val provider = this
+                panels[exportsIndex] = Panel("Exports") {
+                    org.jetbrains.hexana.ui.panel.WasmPanelExports(provider, state)
+                }
+            }
+            is WasmComponentBinaryVirtualFileProvider -> {
+                val provider = this
+                panels[exportsIndex] = Panel("Exports") {
+                    WasmComponentPanelExports(provider, state)
+                }
+            }
+        }
+    }
+    // Override Imports with IDE-specific versions that include navigation context menus
+    val importsIndex = panels.indexOfFirst { it.description == "Imports" }
+    if (importsIndex >= 0 && this is WasmComponentBinaryVirtualFileProvider) {
+        val provider = this
+        panels[importsIndex] = Panel("Imports") {
+            org.jetbrains.hexana.ui.panel.components.WasmComponentPanelImports(provider, state)
+        }
+    }
+    // Override Modules with IDE-specific version that opens nested modules in editor
+    val modulesIndex = panels.indexOfFirst { it.description == "Modules" }
+    if (modulesIndex >= 0 && this is WasmComponentBinaryVirtualFileProvider) {
+        val provider = this
+        panels[modulesIndex] = Panel("Modules") {
+            org.jetbrains.hexana.ui.panel.components.WasmComponentPanelModules(provider, state)
         }
     }
     return panels

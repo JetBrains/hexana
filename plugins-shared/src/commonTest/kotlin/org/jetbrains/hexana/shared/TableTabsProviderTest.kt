@@ -1,0 +1,354 @@
+package org.jetbrains.hexana.shared
+
+import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.GenericBinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class TableTabsProviderTest {
+
+    // -----------------------------------------------------------------------
+    // Helpers: minimal wasm binary builders
+    // -----------------------------------------------------------------------
+
+    private fun wasmHeader(): WasmBinaryWriter {
+        val w = WasmBinaryWriter()
+        w.writeBytes(byteArrayOf(0x00, 0x61, 0x73, 0x6D)) // magic
+        w.writeBytes(byteArrayOf(0x01, 0x00, 0x00, 0x00)) // version 1
+        return w
+    }
+
+    /** Minimal valid wasm module (just header, no sections). */
+    private fun buildEmptyWasm(): ByteArray = wasmHeader().toByteArray()
+
+    /**
+     * Builds a minimal wasm module with one exported function.
+     * Type section: 1 func type () -> ()
+     * Function section: 1 function referencing type 0
+     * Export section: 1 export "hello" -> function 0
+     * Code section: 1 minimal body
+     */
+    private fun buildWasmWithExport(): ByteArray {
+        val w = wasmHeader()
+
+        // Section 1: Type section
+        val types = WasmBinaryWriter()
+        types.writeULEB128(1)     // count = 1
+        types.writeByte(0x60)     // func type
+        types.writeULEB128(0)     // 0 params
+        types.writeULEB128(0)     // 0 results
+        w.writeSection(1, types.toByteArray())
+
+        // Section 3: Function section
+        val funcs = WasmBinaryWriter()
+        funcs.writeULEB128(1)     // count = 1
+        funcs.writeULEB128(0)     // type index 0
+        w.writeSection(3, funcs.toByteArray())
+
+        // Section 7: Export section
+        val exports = WasmBinaryWriter()
+        exports.writeULEB128(1)   // count = 1
+        exports.writeName("hello")
+        exports.writeByte(0x00)   // export kind: function
+        exports.writeULEB128(0)   // function index 0
+        w.writeSection(7, exports.toByteArray())
+
+        // Section 10: Code section
+        val code = WasmBinaryWriter()
+        code.writeULEB128(1)      // count = 1
+        val body = WasmBinaryWriter()
+        body.writeULEB128(0)      // local decl count = 0
+        body.writeByte(0x0B)      // end
+        code.writeULEB128(body.size())
+        code.writeBytes(body.toByteArray())
+        w.writeSection(10, code.toByteArray())
+
+        return w.toByteArray()
+    }
+
+    /**
+     * Builds a minimal wasm module with one import.
+     * Import section: 1 import "env" . "log" -> type 0
+     */
+    private fun buildWasmWithImport(): ByteArray {
+        val w = wasmHeader()
+
+        // Section 1: Type section
+        val types = WasmBinaryWriter()
+        types.writeULEB128(1)     // count = 1
+        types.writeByte(0x60)     // func type
+        types.writeULEB128(0)     // 0 params
+        types.writeULEB128(0)     // 0 results
+        w.writeSection(1, types.toByteArray())
+
+        // Section 2: Import section
+        val imports = WasmBinaryWriter()
+        imports.writeULEB128(1)   // count = 1
+        imports.writeName("env")
+        imports.writeName("log")
+        imports.writeByte(0x00)   // import kind: function
+        imports.writeULEB128(0)   // type index 0
+        w.writeSection(2, imports.toByteArray())
+
+        return w.toByteArray()
+    }
+
+    /**
+     * Builds a minimal wasm module with a data section.
+     */
+    private fun buildWasmWithData(): ByteArray {
+        val w = wasmHeader()
+
+        // Section 11: Data section (passive data segment)
+        val data = WasmBinaryWriter()
+        data.writeULEB128(1)      // count = 1
+        data.writeULEB128(1)      // data segment type: 1 (passive)
+        data.writeULEB128(5)      // byte length = 5
+        data.writeBytes(byteArrayOf(0x48, 0x65, 0x6C, 0x6C, 0x6F)) // "Hello"
+        w.writeSection(11, data.toByteArray())
+
+        // Data count section (section 12) required by some parsers
+        val dataCount = WasmBinaryWriter()
+        dataCount.writeULEB128(1)
+        w.writeSection(12, dataCount.toByteArray())
+
+        return w.toByteArray()
+    }
+
+    /**
+     * Builds a minimal wasm module with a custom section.
+     */
+    private fun buildWasmWithCustom(): ByteArray {
+        val w = wasmHeader()
+
+        // Section 0: Custom section
+        val custom = WasmBinaryWriter()
+        custom.writeName("test-section")
+        custom.writeBytes(byteArrayOf(0x01, 0x02, 0x03))
+        w.writeSection(0, custom.toByteArray())
+
+        return w.toByteArray()
+    }
+
+    /**
+     * Builds a wasm module with function + type sections (for functions tab).
+     */
+    private fun buildWasmWithFunctions(): ByteArray {
+        val w = wasmHeader()
+
+        // Section 1: Type section
+        val types = WasmBinaryWriter()
+        types.writeULEB128(1)     // count = 1
+        types.writeByte(0x60)     // func type
+        types.writeULEB128(1)     // 1 param
+        types.writeByte(0x7F)     // i32
+        types.writeULEB128(1)     // 1 result
+        types.writeByte(0x7F)     // i32
+        w.writeSection(1, types.toByteArray())
+
+        // Section 3: Function section
+        val funcs = WasmBinaryWriter()
+        funcs.writeULEB128(1)     // count = 1
+        funcs.writeULEB128(0)     // type index 0
+        w.writeSection(3, funcs.toByteArray())
+
+        // Section 10: Code section
+        val code = WasmBinaryWriter()
+        code.writeULEB128(1)      // count = 1
+        val body = WasmBinaryWriter()
+        body.writeULEB128(0)      // local decl count = 0
+        body.writeByte(0x20)      // local.get
+        body.writeULEB128(0)      // index 0
+        body.writeByte(0x0B)      // end
+        code.writeULEB128(body.size())
+        code.writeBytes(body.toByteArray())
+        w.writeSection(10, code.toByteArray())
+
+        return w.toByteArray()
+    }
+
+    // -----------------------------------------------------------------------
+    // WasmTableTabsProvider tests
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun wasmProviderReturnsEmptyForGenericBinary() {
+        val provider = GenericBinaryProvider(byteArrayOf(0, 1, 2, 3).toCommonByteBuffer())
+        val tabs = WasmTableTabsProvider().tableTabs(provider)
+        assertTrue(tabs.isEmpty())
+    }
+
+    @Test
+    fun wasmProviderReturnsEmptyForEmptyModule() {
+        val provider = WasmBinaryProvider(buildEmptyWasm().toCommonByteBuffer())
+        val tabs = WasmTableTabsProvider().tableTabs(provider)
+        assertTrue(tabs.isEmpty(), "Empty module should produce no table tabs")
+    }
+
+    @Test
+    fun wasmProviderReturnsExportsTab() {
+        val provider = WasmBinaryProvider(buildWasmWithExport().toCommonByteBuffer())
+        val tabs = WasmTableTabsProvider().tableTabs(provider)
+        val exportsTab = tabs.find { it.name == "Exports" }
+        assertNotNull(exportsTab, "Should produce an Exports tab")
+        assertEquals(1, exportsTab.rowCount)
+        assertEquals(3, exportsTab.columns.size)
+        assertEquals("Kind", exportsTab.columns[0].name)
+        assertEquals("Name", exportsTab.columns[1].name)
+        assertEquals("Signature", exportsTab.columns[2].name)
+
+        val kindCell = exportsTab.columns[0].cellProvider(0)
+        assertEquals("function", kindCell.representation)
+
+        val nameCell = exportsTab.columns[1].cellProvider(0)
+        assertEquals("hello", nameCell.representation)
+    }
+
+    @Test
+    fun wasmProviderReturnsImportsTab() {
+        val provider = WasmBinaryProvider(buildWasmWithImport().toCommonByteBuffer())
+        val tabs = WasmTableTabsProvider().tableTabs(provider)
+        val importsTab = tabs.find { it.name == "Imports" }
+        assertNotNull(importsTab, "Should produce an Imports tab")
+        assertEquals(1, importsTab.rowCount)
+        assertEquals(1, importsTab.columns.size)
+        assertEquals("Data", importsTab.columns[0].name)
+    }
+
+    @Test
+    fun wasmProviderReturnsFunctionsTab() {
+        val provider = WasmBinaryProvider(buildWasmWithFunctions().toCommonByteBuffer())
+        val tabs = WasmTableTabsProvider().tableTabs(provider)
+        val functionsTab = tabs.find { it.name == "Functions" }
+        assertNotNull(functionsTab, "Should produce a Functions tab")
+        assertEquals(1, functionsTab.rowCount)
+
+        val sigColumn = functionsTab.columns.find { it.name == "Signature" }
+        assertNotNull(sigColumn, "Functions tab should have a Signature column")
+
+        val sigCell = sigColumn.cellProvider(0)
+        assertTrue(sigCell.representation.contains("i32"), "Signature should mention i32")
+    }
+
+    @Test
+    fun wasmProviderReturnsCustomTab() {
+        val provider = WasmBinaryProvider(buildWasmWithCustom().toCommonByteBuffer())
+        val tabs = WasmTableTabsProvider().tableTabs(provider)
+        val customTab = tabs.find { it.name == "Custom" }
+        assertNotNull(customTab, "Should produce a Custom tab")
+        assertEquals(1, customTab.rowCount)
+        assertEquals(2, customTab.columns.size)
+        assertEquals("Name", customTab.columns[0].name)
+        assertEquals("Payload", customTab.columns[1].name)
+
+        val nameCell = customTab.columns[0].cellProvider(0)
+        assertEquals("test-section", nameCell.representation)
+    }
+
+    @Test
+    fun wasmProviderExportsTabRowSelectionReturnsData() {
+        val provider = WasmBinaryProvider(buildWasmWithExport().toCommonByteBuffer())
+        val tabs = WasmTableTabsProvider().tableTabs(provider)
+        val exportsTab = tabs.find { it.name == "Exports" }
+        assertNotNull(exportsTab)
+        val selection = exportsTab.rowSelectionProvider(0)
+        assertNotNull(selection, "Row selection should return offset/size data")
+        assertTrue(selection.offset >= 0)
+        assertTrue(selection.size > 0)
+    }
+
+    @Test
+    fun wasmProviderExportsTabSignatureResolution() {
+        val provider = WasmBinaryProvider(buildWasmWithExport().toCommonByteBuffer())
+        val tabs = WasmTableTabsProvider().tableTabs(provider)
+        val exportsTab = tabs.find { it.name == "Exports" }
+        assertNotNull(exportsTab)
+        val sigColumn = exportsTab.columns.find { it.name == "Signature" }
+        assertNotNull(sigColumn)
+        val sigCell = sigColumn.cellProvider(0)
+        assertEquals("() -> void", sigCell.representation)
+    }
+
+    @Test
+    fun wasmProviderDoesNotReturnComponentTabs() {
+        val provider = WasmBinaryProvider(buildWasmWithExport().toCommonByteBuffer())
+        val tabs = WasmTableTabsProvider().tableTabs(provider)
+        assertNull(tabs.find { it.name == "Modules" }, "Core Wasm should not have Modules tab")
+    }
+
+    // -----------------------------------------------------------------------
+    // WasmComponentTableTabsProvider tests
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun componentProviderReturnsEmptyForGenericBinary() {
+        val provider = GenericBinaryProvider(byteArrayOf(0, 1, 2, 3).toCommonByteBuffer())
+        val tabs = WasmComponentTableTabsProvider().tableTabs(provider)
+        assertTrue(tabs.isEmpty())
+    }
+
+    @Test
+    fun componentProviderReturnsEmptyForCoreWasm() {
+        val provider = WasmBinaryProvider(buildWasmWithExport().toCommonByteBuffer())
+        val tabs = WasmComponentTableTabsProvider().tableTabs(provider)
+        assertTrue(tabs.isEmpty(), "Component provider should ignore core Wasm modules")
+    }
+
+    // -----------------------------------------------------------------------
+    // TabDescriptor structure tests
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun columnWidthTypesAreDistinct() {
+        val fill = ColumnWidth.Fill()
+        val fillFraction = ColumnWidth.Fill(0.5f)
+        val measured = ColumnWidth.Measured("hello")
+        val measuredMin = ColumnWidth.MeasuredMin("world")
+
+        assertTrue(fill is ColumnWidth.Fill)
+        assertEquals(1f, (fill as ColumnWidth.Fill).fraction)
+        assertEquals(0.5f, (fillFraction as ColumnWidth.Fill).fraction)
+        assertTrue(measured is ColumnWidth.Measured)
+        assertEquals("hello", (measured as ColumnWidth.Measured).sample)
+        assertTrue(measuredMin is ColumnWidth.MeasuredMin)
+        assertEquals("world", (measuredMin as ColumnWidth.MeasuredMin).sample)
+    }
+
+    @Test
+    fun cellValueDefaults() {
+        val cell = CellValue(42)
+        assertEquals(42, cell.value)
+        assertEquals("42", cell.representation)
+        assertNull(cell.tooltip)
+    }
+
+    @Test
+    fun cellValueCustomRepresentation() {
+        val cell = CellValue(42, "forty-two", "the answer minus one")
+        assertEquals(42, cell.value)
+        assertEquals("forty-two", cell.representation)
+        assertEquals("the answer minus one", cell.tooltip)
+    }
+
+    @Test
+    fun rowSelectionDataHoldsValues() {
+        val data = RowSelectionData(100, 50)
+        assertEquals(100, data.offset)
+        assertEquals(50, data.size)
+    }
+
+    @Test
+    fun tableTabDescriptorDefaultRowSelectionReturnsNull() {
+        val tab = TableTabDescriptor(
+            name = "test",
+            columns = emptyList(),
+            rowCount = 0,
+        )
+        assertNull(tab.rowSelectionProvider(0))
+    }
+}
