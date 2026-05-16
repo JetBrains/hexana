@@ -77,6 +77,38 @@ async function main(): Promise<void> {
         } finally {
             fs.rmSync(noJavaPathDir, { recursive: true, force: true });
         }
+
+        const disabledSettingsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hexana-vscode-telemetry-disabled-'));
+        try {
+            console.log('Running Hexana telemetry-disabled smoke test...');
+            const disabledSettingsPath = writeSettingsOverride(disabledSettingsDir, settingsPath, {
+                'hexana.enableStatistics': false,
+            });
+            fakePostHog.reset();
+            await runExtest([
+                'run-tests',
+                './out/ui-test-disabled/*.test.js',
+                '--code_version',
+                codeVersion,
+                '--code_settings',
+                disabledSettingsPath,
+                '--extensions_dir',
+                extensionsDir,
+                '--offline',
+                '-r',
+                wasmWorkspace,
+                wasmFixture,
+            ], {
+                ...fakePostHog.env,
+                HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests (telemetry disabled)',
+                VSIX_PATH: vsixPath,
+                WASM_FIXTURE: wasmFixture,
+                WASM_WORKSPACE: wasmWorkspace,
+                VSCODE_EXTENSIONS_DIR: extensionsDir,
+            });
+        } finally {
+            fs.rmSync(disabledSettingsDir, { recursive: true, force: true });
+        }
     } finally {
         await fakePostHog.close();
     }
@@ -105,4 +137,32 @@ function runExtest(args: string[], env: NodeJS.ProcessEnv = {}, unsetEnv: string
             }
         });
     });
+}
+
+function writeSettingsOverride(
+    directory: string,
+    baseSettingsPath: string,
+    override: Record<string, unknown>,
+): string {
+    const baseSettings = JSON.parse(fs.readFileSync(baseSettingsPath, 'utf8')) as Record<string, unknown>;
+    const settingsPath = path.join(directory, 'settings.json');
+    fs.writeFileSync(settingsPath, JSON.stringify(deepMerge(baseSettings, override), null, 2));
+    return settingsPath;
+}
+
+function deepMerge(base: Record<string, unknown>, override: Record<string, unknown>): Record<string, unknown> {
+    const result = { ...base };
+    for (const [key, value] of Object.entries(override)) {
+        const baseValue = result[key];
+        if (isRecord(baseValue) && isRecord(value)) {
+            result[key] = deepMerge(baseValue, value);
+        } else {
+            result[key] = value;
+        }
+    }
+    return result;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

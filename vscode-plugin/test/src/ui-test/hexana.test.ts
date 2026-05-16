@@ -1,8 +1,8 @@
 import * as path from 'path';
-import * as http from 'http';
 import { Workbench, EditorView, WebView, By, VSBrowser, WebDriver, Key } from 'vscode-extension-tester';
 import { expect } from 'chai';
 import * as fs from "fs";
+import { waitForFakePostHogEvent } from '../fakePostHogAssertions';
 
 /**
  * Basic acceptance integration tests for the Hexana VS Code extension.
@@ -246,41 +246,3 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
         });
     });
 });
-
-interface FakePostHogEvent {
-    name: string;
-    distinctId?: string;
-    properties: Record<string, unknown>;
-}
-
-async function waitForFakePostHogEvent(assertUrl: string, eventName: string): Promise<FakePostHogEvent> {
-    const url = new URL('/__wait', assertUrl);
-    url.searchParams.set('event', eventName);
-    url.searchParams.set('timeoutMs', '60000');
-
-    const response = await getJson<{ event?: FakePostHogEvent; error?: string; events?: FakePostHogEvent[] }>(url);
-    if (!response.event) {
-        const recorded = response.events?.map(event => event.name).join(', ') || '<none>';
-        throw new Error(response.error || `Expected ${eventName}, recorded events: ${recorded}`);
-    }
-    return response.event;
-}
-
-function getJson<T>(url: URL): Promise<T> {
-    return new Promise((resolve, reject) => {
-        const request = http.get(url, response => {
-            const chunks: Buffer[] = [];
-            response.on('data', chunk => chunks.push(Buffer.from(chunk)));
-            response.on('end', () => {
-                const body = Buffer.concat(chunks).toString('utf8');
-                const payload = body ? JSON.parse(body) : {};
-                if ((response.statusCode ?? 500) >= 400) {
-                    reject(new Error(body));
-                } else {
-                    resolve(payload as T);
-                }
-            });
-        });
-        request.on('error', reject);
-    });
-}
