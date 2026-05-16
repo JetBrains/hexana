@@ -22,6 +22,8 @@ import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.awt.Insets
 import java.io.File
+import javax.swing.DefaultComboBoxModel
+import javax.swing.JComboBox
 import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JPanel
@@ -78,7 +80,17 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
             if (req.isAbsolute) req else File(params.workingDirectory ?: "", req.path)
         }.absoluteFile
 
-        params.vmParametersList.add("-agentpath:${agentPath.toAbsolutePath()}=${resolvedDump.path}")
+        val agentOptions = buildString {
+            append(resolvedDump.path)
+            // Only emit `log=` when it diverges from the agent's default so
+            // the agentpath stays clean in the launched-process command line.
+            if (settings.logLevel != JitviewLogLevel.Off) {
+                append(',')
+                append("log=")
+                append(settings.logLevel.cliValue)
+            }
+        }
+        params.vmParametersList.add("-agentpath:${agentPath.toAbsolutePath()}=$agentOptions")
         configuration.putCopyableUserData(RESOLVED_DUMP_KEY, resolvedDump.path)
     }
 
@@ -114,18 +126,29 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
         val enabled = child.getAttributeValue(ATTR_ENABLED)?.toBoolean() ?: false
         val dumpPath = child.getAttributeValue(ATTR_DUMP_PATH).orEmpty()
             .ifBlank { JitviewSettings.DEFAULT_DUMP_PATH }
-        runConfiguration.putCopyableUserData(SETTINGS_KEY, JitviewSettings(enabled, dumpPath))
+        val logLevel = child.getAttributeValue(ATTR_LOG_LEVEL)
+            ?.let { stored -> JitviewLogLevel.entries.firstOrNull { it.cliValue == stored } }
+            ?: JitviewLogLevel.Off
+        runConfiguration.putCopyableUserData(SETTINGS_KEY, JitviewSettings(enabled, dumpPath, logLevel))
     }
 
     override fun writeExternal(runConfiguration: RunConfigurationBase<*>, element: Element) {
         val settings = runConfiguration.getCopyableUserData(SETTINGS_KEY) ?: return
         // Only persist when at least one field diverges from defaults so the
         // run-config XML stays lean for users who never touch the tab.
-        if (!settings.enabled && settings.dumpPath == JitviewSettings.DEFAULT_DUMP_PATH) return
+        if (!settings.enabled &&
+            settings.dumpPath == JitviewSettings.DEFAULT_DUMP_PATH &&
+            settings.logLevel == JitviewLogLevel.Off
+        ) {
+            return
+        }
         element.addContent(
             Element(SETTINGS_ELEMENT).apply {
                 setAttribute(ATTR_ENABLED, settings.enabled.toString())
                 setAttribute(ATTR_DUMP_PATH, settings.dumpPath)
+                if (settings.logLevel != JitviewLogLevel.Off) {
+                    setAttribute(ATTR_LOG_LEVEL, settings.logLevel.cliValue)
+                }
             },
         )
     }
@@ -134,6 +157,7 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
         const val SETTINGS_ELEMENT: String = "hexana-jitview"
         const val ATTR_ENABLED: String = "enabled"
         const val ATTR_DUMP_PATH: String = "dump-path"
+        const val ATTR_LOG_LEVEL: String = "log-level"
         val SETTINGS_KEY: Key<JitviewSettings> = Key.create("hexana.jitview.settings")
         val RESOLVED_DUMP_KEY: Key<String> = Key.create("hexana.jitview.resolvedDumpPath")
     }
@@ -143,10 +167,23 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
 data class JitviewSettings(
     val enabled: Boolean = false,
     val dumpPath: String = DEFAULT_DUMP_PATH,
+    val logLevel: JitviewLogLevel = JitviewLogLevel.Off,
 ) {
     companion object {
         const val DEFAULT_DUMP_PATH: String = "default.jit"
     }
+}
+
+/**
+ * Logging verbosity passed to the agent via the `log=` option. Values map
+ * 1:1 to the agent's [LOG_OFF | LOG_INFO | LOG_DEBUG] levels in `agent.c`.
+ */
+enum class JitviewLogLevel(val cliValue: String, val label: String) {
+    Off("off", "Off"),
+    Info("info", "Info (load/unload summary)"),
+    Debug("debug", "Debug (one line per JIT event)"),
+    ;
+    override fun toString(): String = label
 }
 
 /**
@@ -156,6 +193,8 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
     private val checkbox = JBCheckBox("Attach Hexana JIT Viewer agent")
     private val dumpPathField = JBTextField(JitviewSettings.DEFAULT_DUMP_PATH)
     private val dumpPathLabel = JLabel("Dump file:")
+    private val logLevelLabel = JLabel("Log level:")
+    private val logLevelCombo = JComboBox(DefaultComboBoxModel(JitviewLogLevel.entries.toTypedArray()))
     private val statusLabel = JBLabel(buildAvailabilityHint())
 
     override fun resetEditorFrom(configuration: P) {
@@ -163,10 +202,13 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
         checkbox.isSelected = settings?.enabled ?: false
         dumpPathField.text = settings?.dumpPath?.takeIf { it.isNotBlank() }
             ?: JitviewSettings.DEFAULT_DUMP_PATH
+        logLevelCombo.selectedItem = settings?.logLevel ?: JitviewLogLevel.Off
         val available = JitviewAgentLocator.locate() != null
         checkbox.isEnabled = available
         dumpPathField.isEnabled = available
         dumpPathLabel.isEnabled = available
+        logLevelCombo.isEnabled = available
+        logLevelLabel.isEnabled = available
         statusLabel.text = buildAvailabilityHint()
     }
 
@@ -176,6 +218,7 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
             JitviewSettings(
                 enabled = checkbox.isSelected,
                 dumpPath = dumpPathField.text.ifBlank { JitviewSettings.DEFAULT_DUMP_PATH },
+                logLevel = (logLevelCombo.selectedItem as? JitviewLogLevel) ?: JitviewLogLevel.Off,
             ),
         )
     }
@@ -199,7 +242,17 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
         c.weightx = 1.0
         panel.add(dumpPathField, c)
 
-        c.gridx = 0; c.gridy = 2; c.gridwidth = 2
+        c.gridx = 0; c.gridy = 2; c.gridwidth = 1
+        c.weightx = 0.0; c.fill = GridBagConstraints.NONE
+        c.insets = Insets(0, 0, 4, 6)
+        panel.add(logLevelLabel, c)
+
+        c.gridx = 1
+        c.fill = GridBagConstraints.HORIZONTAL
+        c.weightx = 1.0
+        panel.add(logLevelCombo, c)
+
+        c.gridx = 0; c.gridy = 3; c.gridwidth = 2
         c.weightx = 0.0; c.fill = GridBagConstraints.NONE
         c.insets = Insets(8, 0, 0, 0)
         panel.add(statusLabel, c)
@@ -210,6 +263,9 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
         dumpPathField.toolTipText =
             "Path passed to the agent as its dump-file argument. Relative paths resolve against " +
                 "the run's working directory."
+        logLevelCombo.toolTipText =
+            "Verbosity of the agent's stderr output. \"Off\" is fully silent; \"Info\" emits a " +
+                "load/unload summary; \"Debug\" prints one line per JIT-compiled method."
         return panel
     }
 

@@ -214,6 +214,64 @@ private fun groupSyms(syms: List<JitSym>): List<SymGroup> {
 private fun javaFqn(jvmSignature: String): String =
     jvmSignature.removePrefix("L").removeSuffix(";").replace('/', '.')
 
+/**
+ * Converts a JVM method descriptor like `([BIB)V` into a Java-style argument
+ * list like `(byte[], int, byte)`. Return type is dropped — inline frames
+ * read more naturally without it, the way stack traces are usually printed.
+ *
+ * Unparseable / truncated descriptors degrade to `(…)`.
+ */
+private fun prettyJvmArgList(descriptor: String): String {
+    val open = descriptor.indexOf('(')
+    val close = descriptor.indexOf(')')
+    if (open < 0 || close < 0 || close < open) return "(…)"
+    if (close == open + 1) return "()"
+    val args = ArrayList<String>(4)
+    var i = open + 1
+    while (i < close) {
+        var dims = 0
+        while (i < close && descriptor[i] == '[') { dims++; i++ }
+        if (i >= close) return "(…)"
+        val base = when (descriptor[i]) {
+            'B' -> "byte"
+            'C' -> "char"
+            'D' -> "double"
+            'F' -> "float"
+            'I' -> "int"
+            'J' -> "long"
+            'S' -> "short"
+            'Z' -> "boolean"
+            'L' -> {
+                val semi = descriptor.indexOf(';', i)
+                if (semi < 0 || semi > close) return "(…)"
+                val cls = descriptor.substring(i + 1, semi).substringAfterLast('/')
+                i = semi
+                cls
+            }
+            else -> return "(…)"
+        }
+        i++
+        args += if (dims == 0) base else base + "[]".repeat(dims)
+    }
+    return args.joinToString(prefix = "(", postfix = ")")
+}
+
+/**
+ * Build the human-readable label for an inlined frame. Renders constructors
+ * as `new Class(args)` and otherwise as `Class.method(args)`, matching how
+ * Java tooling (stack traces, IDEs) refer to call sites.
+ */
+private fun prettyInlineLabel(frame: Inlined): String {
+    val sym = frame.sym ?: return "<unresolved>"
+    val fqn = javaFqn(sym.classSignature)
+    val args = prettyJvmArgList(sym.methodSignature)
+    return when (sym.methodName) {
+        "<init>" -> "new $fqn$args"
+        "<clinit>" -> "$fqn.<clinit>()"
+        else -> "$fqn.${sym.methodName}$args"
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Left column — sym tree
 // -----------------------------------------------------------------------------
@@ -483,6 +541,11 @@ private fun JitBytecodeTab(
     val listState = rememberLazyListState()
 
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+        // bciIndex flips the row background between adjacent BCIs so a
+        // multi-row native fan-out reads as one cohesive block — every row
+        // of the same BCI shares the same tint, every transition between
+        // BCIs is a visible color change.
+        var bciIndex = 0
         for (insn in instructions) {
             val bci = insn.bytecodeOffset
             val inlines = inlinesByBci[bci]
@@ -491,26 +554,32 @@ private fun JitBytecodeTab(
             val opcodeText = formatInstruction(insn)
             val hasInlines = !inlines.isNullOrEmpty()
             val selected = selectedBci == bci
+            val stripe = (bciIndex and 1) == 1
+            bciIndex++
 
             if (nativeRows.isEmpty()) {
                 // BCI with no JIT-emitted bytes (or disassembler not ready).
-                // The asm column carries the state so the user knows whether
-                // we're waiting, failed, or genuinely have nothing to show.
+                // For the Ready case this is a real "folded by JIT" — call
+                // it out so the empty asm column doesn't read as a renderer
+                // bug. Loading / Failed keep their existing state text.
                 val (hexCol, asmCol) = when (disasmState) {
                     DisasmState.Loading -> "…" to "loading disassembler…"
                     is DisasmState.Failed -> "" to "disassembler failed: ${disasmState.reason}"
-                    is DisasmState.Ready -> "" to ""
+                    is DisasmState.Ready -> "" to "(folded — no native code emitted)"
                 }
                 item(key = "bc-$bci-only") {
                     PairedRow(
                         bci = bci,
                         opcodeText = opcodeText,
+                        nativeAddress = null,
                         hexText = hexCol,
                         asmText = asmCol,
                         showBcOpcode = true,
                         hasInlines = hasInlines,
                         inlineOpen = open,
                         selected = selected,
+                        stripe = stripe,
+                        asmMuted = disasmState is DisasmState.Ready,
                         onRowClick = { onSelectBci(bci) },
                         onToggleInline = {
                             expandedInlines = if (open) expandedInlines - bci
@@ -525,6 +594,7 @@ private fun JitBytecodeTab(
                         PairedRow(
                             bci = bci,
                             opcodeText = opcodeText,
+                            nativeAddress = row.address,
                             hexText = row.hex,
                             asmText = row.asm,
                             // bci + opcode column populated only on the
@@ -534,6 +604,8 @@ private fun JitBytecodeTab(
                             hasInlines = hasInlines && isFirst,
                             inlineOpen = open,
                             selected = selected,
+                            stripe = stripe,
+                            asmMuted = false,
                             onRowClick = { onSelectBci(bci) },
                             onToggleInline = {
                                 expandedInlines = if (open) expandedInlines - bci
@@ -564,18 +636,23 @@ private fun JitBytecodeTab(
 private fun PairedRow(
     bci: Int,
     opcodeText: String,
+    nativeAddress: ULong?,
     hexText: String,
     asmText: String,
     showBcOpcode: Boolean,
     hasInlines: Boolean,
     inlineOpen: Boolean,
     selected: Boolean,
+    stripe: Boolean,
+    asmMuted: Boolean,
     onRowClick: () -> Unit,
     onToggleInline: () -> Unit,
 ) {
     val bg = when {
         selected && JewelTheme.isDark -> Color(0xFF2E436E)
         selected -> Color(0xFFD4E2FC)
+        stripe && JewelTheme.isDark -> Color(0x10FFFFFF)
+        stripe -> Color(0x08000000)
         else -> Color.Transparent
     }
     Row(
@@ -612,6 +689,16 @@ private fun PairedRow(
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
+            // Absolute runtime memory address of the native instruction.
+            // `null` on folded / loading / failed rows so the column stays
+            // aligned with the rest of the table but doesn't print a
+            // misleading 0x00…00.
+            if (nativeAddress != null) formatNativeAddress(nativeAddress) else "",
+            style = RowStyle.copy(color = HexanaMuted),
+            modifier = Modifier.width(NativeAddressColumnWidth),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
             hexText,
             style = RowStyle.copy(color = HexanaMcHexColor),
             modifier = Modifier.width(HexColumnWidth),
@@ -619,11 +706,15 @@ private fun PairedRow(
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             asmText,
-            style = RowStyle,
+            style = if (asmMuted) RowStyle.copy(color = HexanaMuted) else RowStyle,
             modifier = Modifier.weight(1f),
         )
     }
 }
+
+/** Renders an absolute runtime address like `0x0000000114a36f40` (16 hex digits, zero-padded). */
+private fun formatNativeAddress(address: ULong): String =
+    "0x" + address.toString(16).padStart(16, '0')
 
 @Composable
 private fun InlineFrameRow(
@@ -632,11 +723,7 @@ private fun InlineFrameRow(
     depth: Int,
 ) {
     val symInfo: Sym? = frame.sym
-    val label = if (symInfo == null) {
-        "<unresolved>:${frame.bci}"
-    } else {
-        "${javaFqn(symInfo.classSignature)}::${symInfo.methodName}:${frame.bci}"
-    }
+    val label = prettyInlineLabel(frame)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -647,10 +734,19 @@ private fun InlineFrameRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            "↳ $label",
+            "↳ ",
+            style = RowStyle.copy(color = HexanaMuted),
+        )
+        Text(
+            label,
             style = RowStyle.copy(
                 color = if (symInfo == null) HexanaMuted else HexanaLinkColor,
             ),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            "@bci ${frame.bci}",
+            style = RowStyle.copy(color = HexanaMuted, fontSize = 11.sp),
         )
     }
 }
@@ -779,6 +875,7 @@ private fun formatHexBytes(bytes: ByteArray, maxBytes: Int): String {
 
 /** One decoded native instruction in a JIT-compiled method, ready for display. */
 private data class NativeRow(
+    /** Absolute runtime memory address of the instruction (JIT code-cache address). */
     val address: ULong,
     val hex: String,
     val asm: String,
@@ -969,6 +1066,9 @@ private val RowStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 1
 // lines visually align under the first row of a BCI run.
 private val BciColumnWidth = 44.dp
 private val OpcodeColumnWidth = 220.dp
+// 16 hex digits + `0x` prefix = 18 chars in a 12sp monospace font ≈ 130dp;
+// 140dp gives a touch of breathing room before the hex bytes column.
+private val NativeAddressColumnWidth = 140.dp
 // Wide enough for ~15 bytes of x86 hex; ARM64 ends well under this.
 private val HexColumnWidth = 280.dp
 private val HexanaMuted = Color(0xFF7F8186)

@@ -1,5 +1,6 @@
 #include <sys/mman.h>
 #include <sys/queue.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
@@ -7,6 +8,16 @@
 #include <pthread.h>
 #include "jvmti.h"
 #include "jvmticmlr.h"
+
+// Log levels — set from the agentpath option string at Agent_OnLoad time
+// (`-agentpath:<lib>=<dump_path>,log=<off|info|debug>`).
+//   LOG_OFF   — silent except for fatal initialization failures.
+//   LOG_INFO  — banner at OnLoad, summary at OnUnload, plus JVMTI errors.
+//   LOG_DEBUG — additionally one line per CompiledMethodLoad event.
+#define LOG_OFF   0
+#define LOG_INFO  1
+#define LOG_DEBUG 2
+static int log_level = LOG_OFF;
 
 // JVMTI dispatches COMPILED_METHOD_LOAD on the JIT compiler threads, which
 // run in parallel for C1/C2. This mutex serialises every callback that
@@ -110,8 +121,68 @@ static void check_jvmti_errors(jvmtiEnv *jvmti, jvmtiError errnum, const char *s
        char *errnum_str;
         errnum_str = NULL;
         (void) (*jvmti)->GetErrorName(jvmti, errnum, &errnum_str);
-        printf("ERROR: JVMTI: [%d] %s - %s", errnum, (errnum_str == NULL ? "Unknown": errnum_str), (str == NULL? "" : str));
+        // Errors are gated by log_level too — at LOG_OFF the agent is fully
+        // silent so it doesn't leak diagnostic noise into the host app's
+        // stdout (e.g. a CLI tool's JSON output).
+        if (log_level >= LOG_INFO) {
+            fprintf(stderr, "[hexana-jitview] JVMTI error [%d] %s - %s\n",
+                errnum,
+                errnum_str == NULL ? "Unknown" : errnum_str,
+                str == NULL ? "" : str);
+        }
     }
+}
+
+// Parse the agentpath options string. Format (all parts optional):
+//
+//   [<path>][,key=value][,key=value]...
+//
+// The first comma-separated token is taken as the dump-file path when it
+// does NOT contain '='; otherwise everything is treated as key=value. Known
+// keys: `path` (dump file), `log` (off|info|debug). Unknown keys are
+// silently ignored so future agent versions can add options without
+// breaking older IDE plugins.
+//
+// `path_out` is filled with a pointer into a heap-allocated buffer that the
+// caller must free(). `log_out` is set when the option string mentions one.
+static void parse_options(const char *options, char **path_out, int *log_out) {
+    *path_out = NULL;
+    // `log_out` is left untouched when no `log=` is present — caller seeds
+    // it with the default (LOG_OFF) so an empty option string keeps it.
+    if (options == NULL || options[0] == '\0') {
+        return;
+    }
+    char *buf = strdup(options);
+    int first = 1;
+    for (char *tok = strtok(buf, ","); tok != NULL; tok = strtok(NULL, ",")) {
+        char *eq = strchr(tok, '=');
+        if (eq == NULL) {
+            // Positional: only honored as the path on the first token.
+            if (first && *path_out == NULL) {
+                *path_out = strdup(tok);
+            }
+        } else {
+            *eq = '\0';
+            const char *key = tok;
+            const char *val = eq + 1;
+            if (strcmp(key, "path") == 0) {
+                free(*path_out);
+                *path_out = strdup(val);
+            } else if (strcmp(key, "log") == 0) {
+                if (strcmp(val, "off") == 0) {
+                    *log_out = LOG_OFF;
+                } else if (strcmp(val, "info") == 0) {
+                    *log_out = LOG_INFO;
+                } else if (strcmp(val, "debug") == 0) {
+                    *log_out = LOG_DEBUG;
+                }
+                // Unknown level — leave previous (default) value.
+            }
+            // Other keys: silently ignored for forward compatibility.
+        }
+        first = 0;
+    }
+    free(buf);
 }
 
 static int find_or_create_string(char *, string_t**);
@@ -172,15 +243,26 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
     callback.VMInit = vm_init;
     error = (*jvmti)->SetEventCallbacks(jvmti, &callback, sizeof(callback));
     check_jvmti_errors(jvmti, error, "Unable to set callbacks");
-    // -agentpath:<lib>=<dump_path>
+    // -agentpath:<lib>=<dump_path>[,log=<off|info|debug>]
     // The `options` argument is whatever follows the first `=` in the
     // -agentpath spec. When empty / NULL we fall back to the historical
     // filename so existing scripts keep working.
-    const char *dump_path = (options && options[0] != '\0') ? options : "mem.userDump";
+    char *parsed_path = NULL;
+    int parsed_log = LOG_OFF;
+    parse_options(options, &parsed_path, &parsed_log);
+    log_level = parsed_log;
+    const char *dump_path = parsed_path != NULL ? parsed_path : "default.jit";
     dump_fd = open(dump_path, O_CREAT|O_RDWR|O_TRUNC, (mode_t)0600);
     if (dump_fd == -1) {
+        free(parsed_path);
         return JNI_ERR;
     }
+    if (log_level >= LOG_INFO) {
+        fprintf(stderr, "[hexana-jitview] loaded; dump=%s, log=%s\n",
+            dump_path,
+            log_level == LOG_DEBUG ? "debug" : "info");
+    }
+    free(parsed_path);
     LIST_INIT(&head_syms);
     LIST_INIT(&head_strings);
     //header = (header_t *)memory;
@@ -218,9 +300,11 @@ Agent_OnUnload(JavaVM *vm) {
         }
     }
     header.syms_offset = offset;
+    uint32_t sym_count = 0;
     {
         syms_t *s;
         LIST_FOREACH(s, &head_syms, syms) {
+            sym_count++;
             s->entry.string_offset = s->string->offset;
             s->entry.file_name_offset = s->file_name_string->offset;
             uint64_t sym_offset = offset;
@@ -306,6 +390,11 @@ Agent_OnUnload(JavaVM *vm) {
     lseek(dump_fd, 0, SEEK_SET);
     write(dump_fd, &header, sizeof(header_t));
     close(dump_fd);
+    if (log_level >= LOG_INFO) {
+        fprintf(stderr, "[hexana-jitview] wrote %u compiled-method records (%llu bytes)\n",
+            sym_count,
+            (unsigned long long)offset);
+    }
     pthread_mutex_unlock(&event_mutex);
 }
 
@@ -455,12 +544,14 @@ method_load(jvmtiEnv *jvmti_env,
             (*jvmti_env)->Deallocate(jvmti_env, bc_bytes);
         }
     }
-    fprintf(stderr, "%p:%d @%llx %s:%d\n",
-        code_addr,
-        code_size,
-        old_offset,
-        needle->name,
-        version);
+    if (log_level >= LOG_DEBUG) {
+        fprintf(stderr, "[hexana-jitview] %p:%d @%llx %s:%d\n",
+            code_addr,
+            code_size,
+            old_offset,
+            needle->name,
+            version);
+    }
     pthread_mutex_unlock(&event_mutex);
 }
 
