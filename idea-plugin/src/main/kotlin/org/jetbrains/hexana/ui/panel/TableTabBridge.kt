@@ -82,11 +82,7 @@ private fun TableTabContent(descriptor: TableTabDescriptor, state: HexViewStateH
         }
     }
 
-    val actionColumnWidth = if (descriptor.rowAction != null) {
-        textMeasurer.measureWidthMonospace("__")
-    } else {
-        0.dp
-    }
+    val actionColumnWidth = textMeasurer.measureWidthMonospace("__")
 
     Table(
         columns = columns,

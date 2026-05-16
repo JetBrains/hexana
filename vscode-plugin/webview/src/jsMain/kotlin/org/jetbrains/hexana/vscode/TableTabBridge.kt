@@ -87,13 +87,13 @@ private fun TableTabContent(
     }
 
     val headers = buildList {
-        if (descriptor.rowAction != null) add("")
+        add("")
         add("ID")
         descriptor.columns.forEach { add(it.name) }
     }
 
     val aligns = buildList {
-        if (descriptor.rowAction != null) add("center")
+        add("center")
         add("right")
         descriptor.columns.forEach { col ->
             when (col.widthBehavior) {
@@ -106,14 +106,13 @@ private fun TableTabContent(
 
     // Map descriptor's defaultSortColumn to the header index in the rendered table.
     // The descriptor uses ID_COLUMN (-1) for the implicit ID column; the rendered
-    // headers prepend an optional action column and then "ID", so we resolve the
-    // actual header index here.
+    // headers always prepend the action column placeholder and then "ID", so we
+    // resolve the actual header index here.
     val resolvedSortColumn = descriptor.defaultSortColumn?.let { col ->
         if (col == TableTabDescriptor.ID_COLUMN) {
             headers.indexOf("ID").takeIf { it >= 0 }
         } else {
-            val offset = if (descriptor.rowAction != null) 2 else 1 // action + ID or just ID
-            col + offset
+            col + 2 // action placeholder + ID
         }
     } ?: -1
     val resolvedSortDirection = if (resolvedSortColumn >= 0) {
@@ -146,10 +145,10 @@ private fun TableTabContent(
                     }
                 },
             ) {
-                // Action column (run button)
-                if (descriptor.rowAction != null) {
-                    val tooltip = descriptor.rowAction!!.tooltipProvider(index)
-                    Td({ classes("cell-id"); style { property("width", "12px") } }) {
+                // Action column (run button or empty placeholder for consistent layout)
+                Td({ classes("cell-id"); style { property("width", "12px") } }) {
+                    if (descriptor.rowAction != null) {
+                        val tooltip = descriptor.rowAction!!.tooltipProvider(index)
                         if (tooltip != null) {
                             RunArrowButton(
                                 tooltip = tooltip,

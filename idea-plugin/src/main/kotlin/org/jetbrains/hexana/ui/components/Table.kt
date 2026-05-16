@@ -271,7 +271,7 @@ fun Table(
             modifier = Modifier
                 .fillMaxWidth()
         ) {
-            if (actionColumn != null) {
+            if (actionColumnWidth > 0.dp) {
                 Spacer(modifier = Modifier.width(actionColumnWidth + 8.dp))
             }
 
@@ -411,14 +411,14 @@ fun Table(
                             },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (actionColumn != null) {
+                        if (actionColumnWidth > 0.dp) {
                             Box(
                                 modifier = Modifier
                                     .width(actionColumnWidth)
                                     .padding(horizontal = 4.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                actionColumn(id)
+                                if (actionColumn != null) actionColumn(id)
                             }
                         }
 
