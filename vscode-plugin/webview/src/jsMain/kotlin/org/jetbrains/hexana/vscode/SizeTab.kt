@@ -5,8 +5,7 @@ import androidx.compose.runtime.remember
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Td
 import org.jetbrains.compose.web.dom.Text
-import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.formatSize
@@ -14,24 +13,18 @@ import org.jetbrains.hexana.wasm.analysis.SizeNode
 
 @Composable
 fun SizeTabContent(
-    buffer: CommonByteBuffer,
-    providerType: BinaryProviderType,
+    provider: BinaryProvider,
     selection: HexSelectionState,
 ) {
-    when (providerType) {
-        is BinaryProviderType.Wasm -> CoreWasmSize(buffer, selection)
-        is BinaryProviderType.WasmComponent -> ComponentSize(buffer, selection)
-        is BinaryProviderType.Generic -> Div { Text("Not a recognized WebAssembly binary.") }
+    when (provider) {
+        is WasmBinaryProvider -> CoreWasmSize(provider, selection)
+        is WasmComponentBinaryProvider -> ComponentSize(provider, selection)
+        else -> Div { Text("Not a recognized WebAssembly binary.") }
     }
 }
 
 @Composable
-private fun CoreWasmSize(buffer: CommonByteBuffer, selection: HexSelectionState) {
-    val provider = remember(buffer) {
-        buffer.position(0)
-        WasmBinaryProvider(buffer)
-    }
-
+private fun CoreWasmSize(provider: WasmBinaryProvider, selection: HexSelectionState) {
     if (!provider.canProvideWasmModule()) {
         Div { Text("Failed to parse core Wasm module.") }
         return
@@ -50,12 +43,7 @@ private fun CoreWasmSize(buffer: CommonByteBuffer, selection: HexSelectionState)
 }
 
 @Composable
-private fun ComponentSize(buffer: CommonByteBuffer, selection: HexSelectionState) {
-    val provider = remember(buffer) {
-        buffer.position(0)
-        WasmComponentBinaryProvider(buffer)
-    }
-
+private fun ComponentSize(provider: WasmComponentBinaryProvider, selection: HexSelectionState) {
     if (!provider.canProvideWasmModule()) {
         Div { Text("Failed to parse component-model binary.") }
         return

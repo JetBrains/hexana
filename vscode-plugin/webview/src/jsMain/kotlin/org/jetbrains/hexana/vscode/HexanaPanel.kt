@@ -4,10 +4,10 @@ import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Text
-import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.shared.WasmComponentTableTabsProvider
 import org.jetbrains.hexana.shared.WasmTableTabsProvider
 import org.jetbrains.hexana.wasm.components.WasmComponentExport
@@ -37,9 +37,7 @@ private class PanelTab(
 
 @Composable
 fun HexanaPanel(
-    bytes: ByteArray,
-    buffer: CommonByteBuffer,
-    providerType: BinaryProviderType,
+    provider: BinaryProvider,
     selection: HexSelectionState,
     fileName: String,
     heightPx: Double = 250.0,
@@ -63,27 +61,26 @@ fun HexanaPanel(
     // -----------------------------------------------------------------------
     // Build the tab list: provider-generated table tabs + fixed tabs
     // -----------------------------------------------------------------------
-    val tabs = remember(providerType, buffer, bytes, fileName) {
+    val tabs = remember(provider, fileName) {
         buildList {
             // Summary is always first
             add(PanelTab(FixedTab.Summary.label) { sel ->
-                SummaryTabContent(buffer, providerType, sel)
+                SummaryTabContent(provider, sel)
             })
 
+            /*val commonTabs = TableTabsProviderRegistry.providers.flatMap { p ->
+                p.tableTabs(provider)
+            }*/
+
             // Provider-generated table tabs
-            when (providerType) {
-                is BinaryProviderType.Wasm -> {
-                    val provider = WasmBinaryProvider(buffer.also { it.position(0) })
+            when (provider) {
+                is WasmBinaryProvider -> {
                     if (provider.canProvideWasmModule()) {
                         val tableTabs = WasmTableTabsProvider().toTableTabs(
                             provider = provider,
-                            buffer = buffer,
-                            wasmBytes = bytes,
-                            fileName = fileName,
                         ) { descriptors ->
                             descriptors.enrichWasmTabs(
                                 provider = provider,
-                                wasmBytes = bytes,
                                 fileName = fileName,
                                 onPendingWasmArgs = { export, params ->
                                     pendingWasmExport = export
@@ -94,19 +91,13 @@ fun HexanaPanel(
                         addAll(tableTabs.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
                     }
                 }
-                is BinaryProviderType.WasmComponent -> {
-                    val provider = WasmComponentBinaryProvider(buffer.also { it.position(0) })
+                is WasmComponentBinaryProvider -> {
                     if (provider.canProvideWasmModule()) {
                         val tableTabs = WasmComponentTableTabsProvider().toTableTabs(
                             provider = provider,
-                            buffer = buffer,
-                            wasmBytes = bytes,
-                            fileName = fileName,
                         ) { descriptors ->
                             descriptors.enrichComponentTabs(
                                 provider = provider,
-                                buffer = buffer,
-                                wasmBytes = bytes,
                                 fileName = fileName,
                                 onPendingProgramArgs = { export ->
                                     pendingProgramArgsExport = export
@@ -121,30 +112,30 @@ fun HexanaPanel(
                         addAll(tableTabs.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
                     }
                 }
-                is BinaryProviderType.Generic -> {}
+                else -> {}
             }
 
             // Size tab (always present for Wasm and component)
-            if (providerType is BinaryProviderType.Wasm || providerType is BinaryProviderType.WasmComponent) {
+            if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
                 add(PanelTab(FixedTab.Size.label) { sel ->
-                    SizeTabContent(buffer, providerType, sel)
+                    SizeTabContent(provider, sel)
                 })
             }
 
             // Monos and Garbage (core Wasm only)
-            if (providerType is BinaryProviderType.Wasm) {
+            if (provider is WasmBinaryProvider) {
                 add(PanelTab(FixedTab.Monos.label) { sel ->
-                    MonosTabContent(buffer, providerType, sel)
+                    MonosTabContent(provider, sel)
                 })
                 add(PanelTab(FixedTab.Garbage.label) { sel ->
-                    GarbageTabContent(buffer, providerType, sel)
+                    GarbageTabContent(provider, sel)
                 })
             }
 
             // WAT tab (always present for Wasm and component)
-            if (providerType is BinaryProviderType.Wasm || providerType is BinaryProviderType.WasmComponent) {
+            if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
                 add(PanelTab(FixedTab.Wat.label) { _ ->
-                    WatTabContent(bytes, providerType)
+                    WatTabContent(provider)
                 })
             }
         }
@@ -170,7 +161,7 @@ fun HexanaPanel(
                     exportName = wasmPending.name,
                     invokeArgs = "--invoke ${wasmPending.name}",
                     programArgs = programArgs,
-                    wasmBytes = bytes,
+                    wasmBytes = provider.bytes.toByteArray(),
                     runtime = result.runtime,
                     action = result.action,
                 )
@@ -197,7 +188,7 @@ fun HexanaPanel(
                     exportName = programArgsPending.exportName,
                     isComponent = true,
                     programArgs = result.programArgs,
-                    wasmBytes = bytes,
+                    wasmBytes = provider.bytes.toByteArray(),
                     runtime = result.runtime,
                     action = result.action,
                 )
@@ -222,7 +213,7 @@ fun HexanaPanel(
                     exportName = funcPending.exportName,
                     isComponent = true,
                     invokeArgs = "--invoke \"${pendingFuncInvokeName}($argsString)\"",
-                    wasmBytes = bytes,
+                    wasmBytes = provider.bytes.toByteArray(),
                     runtime = result.runtime,
                     action = result.action,
                 )

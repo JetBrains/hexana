@@ -5,31 +5,25 @@ import androidx.compose.runtime.remember
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Td
 import org.jetbrains.compose.web.dom.Text
-import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.formatSize
 
 @Composable
 fun MonosTabContent(
-    buffer: CommonByteBuffer,
-    providerType: BinaryProviderType,
+    provider: BinaryProvider,
     selection: HexSelectionState,
 ) {
-    when (providerType) {
-        is BinaryProviderType.Wasm -> CoreWasmMonos(buffer, selection)
-        is BinaryProviderType.WasmComponent -> Div { Text("Monos tab is only available for core Wasm modules.") }
-        is BinaryProviderType.Generic -> Div { Text("Not a recognized WebAssembly binary.") }
+    when (provider) {
+        is WasmBinaryProvider -> CoreWasmMonos(provider, selection)
+        is WasmComponentBinaryProvider-> Div { Text("Monos tab is only available for core Wasm modules.") }
+        else -> Div { Text("Not a recognized WebAssembly binary.") }
     }
 }
 
 @Composable
-private fun CoreWasmMonos(buffer: CommonByteBuffer, selection: HexSelectionState) {
-    val provider = remember(buffer) {
-        buffer.position(0)
-        WasmBinaryProvider(buffer)
-    }
-
+private fun CoreWasmMonos(provider: WasmBinaryProvider, selection: HexSelectionState) {
     if (!provider.canProvideWasmModule()) {
         Div { Text("Failed to parse core Wasm module.") }
         return

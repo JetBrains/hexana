@@ -1,6 +1,5 @@
 package org.jetbrains.hexana.vscode
 
-import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.*
@@ -20,14 +19,13 @@ import org.jetbrains.hexana.wasm.sections.WasmValueType
  */
 internal fun List<TableTabDescriptor>.enrichWasmTabs(
     provider: WasmBinaryProvider,
-    wasmBytes: ByteArray,
     fileName: String,
     onPendingWasmArgs: (WasmFunctionExportRecordEntry, List<WasmValueType<*>>) -> Unit,
 ): List<TableTabDescriptor> {
     val showRunButtons = !isSubmoduleFileName(fileName)
     return map { tab ->
         when (tab.name) {
-            "Exports" -> enrichWasmExportsTab(tab, provider, wasmBytes, showRunButtons, onPendingWasmArgs)
+            "Exports" -> enrichWasmExportsTab(tab, provider, showRunButtons, onPendingWasmArgs)
             else -> tab
         }
     }
@@ -44,8 +42,6 @@ internal fun List<TableTabDescriptor>.enrichWasmTabs(
  */
 internal fun List<TableTabDescriptor>.enrichComponentTabs(
     provider: WasmComponentBinaryProvider,
-    buffer: CommonByteBuffer,
-    wasmBytes: ByteArray,
     fileName: String,
     onPendingProgramArgs: (org.jetbrains.hexana.wasm.components.WasmComponentExport) -> Unit,
     onPendingComponentArgs: (String, List<FunctionArgDescriptor>, org.jetbrains.hexana.wasm.components.WasmComponentExport) -> Unit,
@@ -53,8 +49,8 @@ internal fun List<TableTabDescriptor>.enrichComponentTabs(
     val showRunButtons = !isSubmoduleFileName(fileName)
     return map { tab ->
         when (tab.name) {
-            "Exports" -> enrichComponentExportsTab(tab, provider, wasmBytes, showRunButtons, onPendingProgramArgs, onPendingComponentArgs)
-            "Modules" -> enrichComponentModulesTab(tab, provider, buffer, fileName)
+            "Exports" -> enrichComponentExportsTab(tab, provider, showRunButtons, onPendingProgramArgs, onPendingComponentArgs)
+            "Modules" -> enrichComponentModulesTab(tab, provider, fileName)
             else -> tab
         }
     }
@@ -67,15 +63,12 @@ internal fun List<TableTabDescriptor>.enrichComponentTabs(
 private fun enrichWasmExportsTab(
     tab: TableTabDescriptor,
     provider: WasmBinaryProvider,
-    wasmBytes: ByteArray,
     showRunButtons: Boolean,
     onPendingWasmArgs: (WasmFunctionExportRecordEntry, List<WasmValueType<*>>) -> Unit,
 ): TableTabDescriptor {
     if (!showRunButtons) return tab
 
     val exports = provider.exports
-    val functions = provider.functions
-    val importFuncCount = provider.importFuncCount
 
     return TableTabDescriptor(
         name = tab.name,
@@ -102,7 +95,7 @@ private fun enrichWasmExportsTab(
                         postRunExportToHost(
                             exportName = export.name,
                             invokeArgs = "--invoke ${export.name}",
-                            wasmBytes = wasmBytes,
+                            wasmBytes = provider.bytes.toByteArray(),
                         )
                     }
                 }
@@ -118,7 +111,6 @@ private fun enrichWasmExportsTab(
 private fun enrichComponentExportsTab(
     tab: TableTabDescriptor,
     provider: WasmComponentBinaryProvider,
-    wasmBytes: ByteArray,
     showRunButtons: Boolean,
     onPendingProgramArgs: (org.jetbrains.hexana.wasm.components.WasmComponentExport) -> Unit,
     onPendingComponentArgs: (String, List<FunctionArgDescriptor>, org.jetbrains.hexana.wasm.components.WasmComponentExport) -> Unit,
@@ -159,7 +151,7 @@ private fun enrichComponentExportsTab(
                             exportName = export.exportName,
                             isComponent = true,
                             invokeArgs = "--invoke \"$invokeName\"",
-                            wasmBytes = wasmBytes,
+                            wasmBytes = provider.bytes.toByteArray(),
                         )
                     }
                 }
@@ -252,7 +244,6 @@ private fun validateComponentArg(
 private fun enrichComponentModulesTab(
     tab: TableTabDescriptor,
     provider: WasmComponentBinaryProvider,
-    buffer: CommonByteBuffer,
     fileName: String,
 ): TableTabDescriptor {
     val modules = provider.modules
@@ -277,8 +268,10 @@ private fun enrichComponentModulesTab(
             val hexOffset = moduleRecord.contentOffset.toString(16)
             val moduleFileName = "${baseName}_${rowIndex}@${hexOffset}.$extension"
             val moduleBytes = ByteArray(moduleRecord.contentSize)
+            val buffer = provider.bytes
             buffer.position(moduleRecord.contentOffset)
             buffer.get(moduleBytes, 0, moduleRecord.contentSize)
+            buffer.position(0)
             postOpenModuleToHost(rowIndex, moduleFileName, moduleBytes)
         },
     )

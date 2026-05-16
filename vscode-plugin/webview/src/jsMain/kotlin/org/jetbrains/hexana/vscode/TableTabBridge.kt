@@ -7,7 +7,6 @@ import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Td
 import org.jetbrains.compose.web.dom.Text
-import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.ColumnWidth
 import org.jetbrains.hexana.shared.TableTabDescriptor
@@ -59,13 +58,10 @@ internal class TableTab(
  */
 internal fun TableTabsProvider.toTableTabs(
     provider: BinaryProvider,
-    buffer: CommonByteBuffer,
-    wasmBytes: ByteArray,
-    fileName: String,
     enrich: (List<TableTabDescriptor>) -> List<TableTabDescriptor> = { it },
 ): List<TableTab> = enrich(tableTabs(provider)).map { descriptor ->
     TableTab(name = descriptor.name) { selection ->
-        TableTabContent(descriptor, selection, buffer)
+        TableTabContent(descriptor, selection)
     }
 }
 
@@ -77,7 +73,6 @@ internal fun TableTabsProvider.toTableTabs(
 private fun TableTabContent(
     descriptor: TableTabDescriptor,
     selection: HexSelectionState,
-    buffer: CommonByteBuffer,
 ) {
     if (descriptor.rowCount == 0) {
         Div({ classes("empty-hint") }) {

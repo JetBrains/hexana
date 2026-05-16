@@ -5,10 +5,13 @@ import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.renderComposable
-import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.GenericBinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 
 fun main() {
     renderComposable(rootElementId = "root") {
@@ -38,13 +41,16 @@ fun WasmEditorApp() {
     } else {
         val bytes = wasmBytes!!
         val buffer = bytes.toCommonByteBuffer()
-        val providerType = WasmBinaryProviderSelector.select(buffer)
         buffer.position(0)
+        val provider = when (WasmBinaryProviderSelector.select(buffer)) {
+            BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
+            BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
+            BinaryProviderType.Generic -> GenericBinaryProvider(buffer)
+        }
 
         WasmEditorContent(
             fileName = fileName,
-            bytes = bytes,
-            providerType = providerType,
+            provider = provider,
         )
     }
 }
@@ -55,16 +61,15 @@ private const val DEFAULT_PANEL_HEIGHT = 250.0
 @Composable
 fun WasmEditorContent(
     fileName: String,
-    bytes: ByteArray,
-    providerType: BinaryProviderType,
+    provider: BinaryProvider,
 ) {
     val selection = remember { HexSelectionState() }
-    val buffer = remember(bytes) { bytes.toCommonByteBuffer() }
+    val buffer = remember(provider) { provider.bytes }
     var panelHeight by remember { mutableStateOf(DEFAULT_PANEL_HEIGHT) }
     var activeTab by remember { mutableStateOf("Sections") }
 
-    val hasTopTab = remember(providerType) {
-        providerType is BinaryProviderType.Wasm || providerType is BinaryProviderType.WasmComponent
+    val hasTopTab = remember(provider) {
+        provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider
     }
 
     Div({
@@ -79,22 +84,18 @@ fun WasmEditorContent(
     }) {
         EditorToolbar(
             fileName = fileName,
-            size = bytes.size,
-            providerType = providerType,
-            buffer = buffer,
-            wasmBytes = bytes,
+            size = buffer.size,
+            provider = provider,
             onSizeClick = if (hasTopTab) {{ activeTab = "Top" }} else null,
         )
-        HexViewerPanel(bytes = bytes, selection = selection)
-        SelectionStatusBar(selection = selection, totalBytes = bytes.size)
+        HexViewerPanel(bytes = buffer, selection = selection)
+        SelectionStatusBar(selection = selection, totalBytes = buffer.size)
         ResizeDivider { deltaY ->
             // Dragging down → shrink the panel (panel is below the divider)
             panelHeight = (panelHeight - deltaY).coerceAtLeast(MIN_PANEL_HEIGHT)
         }
         HexanaPanel(
-            bytes = bytes,
-            buffer = buffer,
-            providerType = providerType,
+            provider = provider,
             selection = selection,
             fileName = fileName,
             heightPx = panelHeight,

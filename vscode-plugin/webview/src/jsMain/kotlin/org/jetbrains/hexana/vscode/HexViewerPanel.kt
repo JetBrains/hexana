@@ -6,6 +6,7 @@ import kotlinx.browser.window
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.events.Event
@@ -63,7 +64,7 @@ class HexSearchState {
  * Finds all occurrences of [pattern] in [bytes] and updates [state] with
  * the matching byte indices and match start positions.
  */
-private fun computeSearchMatches(bytes: ByteArray, pattern: ByteArray, state: HexSearchState) {
+private fun computeSearchMatches(bytes: CommonByteBuffer, pattern: ByteArray, state: HexSearchState) {
     if (pattern.isEmpty()) {
         state.clear()
         return
@@ -187,7 +188,7 @@ private class DragState {
  * Selection is supported via click, shift-click, drag, and keyboard navigation.
  */
 @Composable
-fun HexViewerPanel(bytes: ByteArray, selection: HexSelectionState = remember { HexSelectionState() }) {
+fun HexViewerPanel(bytes: CommonByteBuffer, selection: HexSelectionState = remember { HexSelectionState() }) {
     val totalRows = (bytes.size + BYTES_PER_ROW - 1) / BYTES_PER_ROW
     val totalHeight = totalRows * ROW_HEIGHT_PX
 
@@ -713,7 +714,7 @@ private fun HexSearchBar(
 
 @Composable
 private fun HexRow(
-    bytes: ByteArray,
+    bytes: CommonByteBuffer,
     row: Int,
     selection: HexSelectionState,
     searchState: HexSearchState,

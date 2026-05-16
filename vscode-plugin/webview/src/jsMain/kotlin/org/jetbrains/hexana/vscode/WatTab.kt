@@ -1,10 +1,12 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.*
-import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 
 /**
  * WAT tab content — converts the raw wasm bytes to WAT text using the
@@ -15,13 +17,12 @@ import org.jetbrains.hexana.providers.BinaryProviderType
  */
 @Composable
 fun WatTabContent(
-    bytes: ByteArray,
-    providerType: BinaryProviderType,
+    provider: BinaryProvider,
 ) {
-    when (providerType) {
-        is BinaryProviderType.Wasm,
-        is BinaryProviderType.WasmComponent -> WasmPrinterWat(bytes)
-        is BinaryProviderType.Generic -> Div { Text("Not a recognized WebAssembly binary.") }
+    when (provider) {
+        is WasmBinaryProvider,
+        is WasmComponentBinaryProvider -> WasmPrinterWat(provider.bytes.toByteArray())
+        else -> Div { Text("Not a recognized WebAssembly binary.") }
     }
 }
 

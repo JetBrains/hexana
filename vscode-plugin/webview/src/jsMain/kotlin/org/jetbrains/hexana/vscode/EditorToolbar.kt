@@ -1,15 +1,12 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.*
-import org.jetbrains.compose.web.css.*
-import org.jetbrains.compose.web.dom.Div
-import org.jetbrains.compose.web.dom.Span
-import org.jetbrains.compose.web.dom.Table
-import org.jetbrains.compose.web.dom.Td
-import org.jetbrains.compose.web.dom.Text
-import org.jetbrains.compose.web.dom.Tr
-import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.compose.web.css.Color
+import org.jetbrains.compose.web.css.DisplayStyle
+import org.jetbrains.compose.web.css.color
+import org.jetbrains.compose.web.css.display
+import org.jetbrains.compose.web.dom.*
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
@@ -25,23 +22,19 @@ import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 fun EditorToolbar(
     fileName: String,
     size: Int,
-    providerType: BinaryProviderType,
-    buffer: CommonByteBuffer? = null,
-    wasmBytes: ByteArray? = null,
+    provider: BinaryProvider,
     onSizeClick: (() -> Unit)? = null,
 ) {
     val isSubmodule = isSubmoduleFileName(fileName)
 
-    val sizeTooltip = remember(buffer, providerType) {
-        buildSizeTooltip(buffer, providerType)
+    val sizeTooltip = remember(provider) {
+        buildSizeTooltip(provider)
     }
 
-    val runnableExportName = remember(buffer, providerType, isSubmodule) {
-        if (buffer == null || isSubmodule) return@remember null
-        when (providerType) {
-            is BinaryProviderType.Wasm -> {
-                buffer.position(0)
-                val provider = WasmBinaryProvider(buffer)
+    val runnableExportName = remember(provider, isSubmodule) {
+        if (isSubmodule) return@remember null
+        when (provider) {
+            is WasmBinaryProvider -> {
                 if (!provider.canProvideWasmModule()) return@remember null
                 val startExport = provider.exports.firstOrNull { export ->
                     export is WasmFunctionExportRecordEntry &&
@@ -49,9 +42,7 @@ fun EditorToolbar(
                 }
                 startExport?.name
             }
-            is BinaryProviderType.WasmComponent -> {
-                buffer.position(0)
-                val provider = WasmComponentBinaryProvider(buffer)
+            is WasmComponentBinaryProvider -> {
                 if (!provider.canProvideWasmModule() || !hasWasiCliRunExport(provider)) return@remember null
                 "wasi:cli/run"
             }
@@ -60,7 +51,7 @@ fun EditorToolbar(
     }
 
     val isRunnable = runnableExportName != null
-    val isComponent = providerType is BinaryProviderType.WasmComponent
+    val isComponent = provider is WasmComponentBinaryProvider
 
     // Which action the toolbar button triggered: null = hidden, "run" / "debug" = show only that button
     var toolbarAction by remember { mutableStateOf<String?>(null) }
@@ -75,7 +66,7 @@ fun EditorToolbar(
                     exportName = "",
                     isComponent = isComponent,
                     programArgs = result.programArgs,
-                    wasmBytes = wasmBytes,
+                    wasmBytes = provider.bytes.toByteArray(),
                     runtime = result.runtime,
                     action = result.action,
                 )
@@ -184,10 +175,10 @@ fun EditorToolbar(
             }
         }) {
             Text(
-                when (providerType) {
-                    is BinaryProviderType.Wasm -> "Core Wasm"
-                    is BinaryProviderType.WasmComponent -> "Component Model"
-                    is BinaryProviderType.Generic -> "Binary"
+                when (provider) {
+                    is WasmBinaryProvider -> "Core Wasm"
+                    is WasmComponentBinaryProvider -> "Component Model"
+                    else -> "Binary"
                 }
             )
         }
@@ -217,10 +208,8 @@ fun EditorToolbar(
             )
         }
 
-        val proposals = remember(buffer, providerType) {
-            if (buffer == null || providerType !is BinaryProviderType.Wasm) return@remember emptyList()
-            buffer.position(0)
-            val provider = WasmBinaryProvider(buffer)
+        val proposals = remember(provider) {
+            if (provider !is WasmBinaryProvider) return@remember emptyList()
             if (!provider.canProvideWasmModule()) return@remember emptyList()
             provider.usedProposals.sorted()
         }
@@ -334,16 +323,13 @@ private fun ProposalBadges(proposals: List<WasmProposal>) {
     }
 }
 
-private fun buildSizeTooltip(buffer: CommonByteBuffer?, providerType: BinaryProviderType): List<Pair<String, String>>? {
-    if (buffer == null) return null
-    val sizeAnalysis: SizeNode.Module? = when (providerType) {
-        is BinaryProviderType.Wasm -> {
-            buffer.position(0)
-            WasmBinaryProvider(buffer).sizeAnalysis
+private fun buildSizeTooltip(provider: BinaryProvider): List<Pair<String, String>>? {
+    val sizeAnalysis: SizeNode.Module? = when (provider) {
+        is WasmBinaryProvider -> {
+            provider.sizeAnalysis
         }
-        is BinaryProviderType.WasmComponent -> {
-            buffer.position(0)
-            WasmComponentBinaryProvider(buffer).sizeAnalysis
+        is WasmComponentBinaryProvider -> {
+            provider.sizeAnalysis
         }
         else -> null
     }
