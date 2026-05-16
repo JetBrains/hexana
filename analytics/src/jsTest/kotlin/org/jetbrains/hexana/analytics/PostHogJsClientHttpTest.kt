@@ -121,6 +121,34 @@ class PostHogJsClientHttpTest {
         }
 
     @Test
+    fun defaultFlushSettingsCanBeOverriddenWithEnvironmentVariables() = runTest {
+        val server = FakePostHogNodeServer.start()
+        withProcessEnv(
+            mapOf(
+                AnalyticsConfig.HOST_ENV_VAR to server.url,
+                AnalyticsConfig.FLUSH_AT_ENV_VAR to "1",
+                AnalyticsConfig.FLUSH_INTERVAL_MS_ENV_VAR to "1000",
+            )
+        ) {
+            val client = PostHogJsClient(
+                config = AnalyticsConfig(apiKey = "test-key"),
+                consentProvider = ConsentProvider { true },
+                distinctIdProvider = DistinctIdProvider { TEST_DISTINCT_ID },
+                globalProperties = emptyMap()
+            )
+            try {
+                client.capture(HexanaEvent.HexViewActivated(HexanaEvent.Surface.VSCODE_EXTENSION))
+
+                server.awaitEvent("hex_view_activated")
+                    .requireDistinctId(TEST_DISTINCT_ID)
+                    .assertProperty("surface", "vscode_extension")
+            } finally {
+                shutdown(client, server)
+            }
+        }
+    }
+
+    @Test
     fun nodeDistinctIdProviderPersistsIdAcrossClients() = runTest {
         val server = FakePostHogNodeServer.start()
         val storagePath = temporaryStoragePath()
@@ -178,16 +206,25 @@ class PostHogJsClientHttpTest {
     }
 
     private suspend fun withProcessEnv(key: String, value: String, block: suspend () -> Unit) {
+        withProcessEnv(mapOf(key to value), block)
+    }
+
+    private suspend fun withProcessEnv(values: Map<String, String>, block: suspend () -> Unit) {
         val process = js("process")
-        val previous = process.env[key]
-        process.env[key] = value
+        val previousValues = mutableMapOf<String, dynamic>()
+        values.forEach { (key, value) ->
+            previousValues[key] = process.env[key]
+            process.env[key] = value
+        }
         try {
             block()
         } finally {
-            if (previous == null) {
-                js("delete process.env[key]")
-            } else {
-                process.env[key] = previous
+            previousValues.forEach { (key, previous) ->
+                if (previous == null) {
+                    deleteDynamicProperty(process.env, key)
+                } else {
+                    process.env[key] = previous
+                }
             }
         }
     }
@@ -196,6 +233,10 @@ class PostHogJsClientHttpTest {
         client.shutdown()
         delay(100)
         server.close()
+    }
+
+    private fun deleteDynamicProperty(target: dynamic, key: String) {
+        js("Reflect").deleteProperty(target, key)
     }
 
     private fun temporaryStoragePath(): String {

@@ -125,6 +125,35 @@ class PostHogJvmClientHttpTest {
         }
     }
 
+    @Test
+    fun defaultFlushSettingsCanBeOverriddenWithSystemProperties() {
+        FakePostHogServer.start().use { server ->
+            withSystemProperties(
+                mapOf(
+                    AnalyticsConfig.HOST_SYSTEM_PROPERTY to server.url,
+                    AnalyticsConfig.FLUSH_AT_SYSTEM_PROPERTY to "1",
+                    AnalyticsConfig.FLUSH_INTERVAL_MS_SYSTEM_PROPERTY to "1000",
+                )
+            ) {
+                val client = PostHogJvmClient(
+                    config = AnalyticsConfig(apiKey = "test-key"),
+                    consentProvider = ConsentProvider { true },
+                    distinctIdProvider = DistinctIdProvider { TEST_DISTINCT_ID },
+                    globalProperties = emptyMap()
+                )
+                try {
+                    client.capture(HexanaEvent.HexViewActivated(HexanaEvent.Surface.IDE_PLUGIN))
+
+                    server.awaitEvent("hex_view_activated")
+                        .requireDistinctId(TEST_DISTINCT_ID)
+                        .assertProperty("surface", "ide_plugin")
+                } finally {
+                    client.shutdown()
+                }
+            }
+        }
+    }
+
     private fun newClient(
         server: FakePostHogServer,
         consentAllowed: Boolean,
@@ -161,15 +190,21 @@ class PostHogJvmClientHttpTest {
     }
 
     private fun withSystemProperty(key: String, value: String, block: () -> Unit) {
-        val previous = System.getProperty(key)
-        System.setProperty(key, value)
+        withSystemProperties(mapOf(key to value), block)
+    }
+
+    private fun withSystemProperties(values: Map<String, String>, block: () -> Unit) {
+        val previousValues = values.keys.associateWith { System.getProperty(it) }
+        values.forEach { (key, value) -> System.setProperty(key, value) }
         try {
             block()
         } finally {
-            if (previous == null) {
-                System.clearProperty(key)
-            } else {
-                System.setProperty(key, previous)
+            previousValues.forEach { (key, previous) ->
+                if (previous == null) {
+                    System.clearProperty(key)
+                } else {
+                    System.setProperty(key, previous)
+                }
             }
         }
     }
