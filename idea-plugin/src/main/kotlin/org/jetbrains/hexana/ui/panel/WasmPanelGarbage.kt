@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -71,7 +72,15 @@ fun WasmPanelGarbage(
         return
     }
 
-    var viewMode by remember { mutableStateOf(GarbageViewMode.Functions) }
+    var viewMode by remember(garbage) {
+        val initial = when {
+            garbage.entries.isNotEmpty() -> GarbageViewMode.Functions
+            garbage.typeEntries.isNotEmpty() -> GarbageViewMode.Types
+            garbage.dataSegmentEntries.isNotEmpty() -> GarbageViewMode.Data
+            else -> GarbageViewMode.Functions
+        }
+        mutableStateOf(initial)
+    }
 
     // Hex overlay toggle
     var overlayEnabled by remember { mutableStateOf(false) }
@@ -171,7 +180,7 @@ private fun GarbageFunctionsTable(
 
     val textMeasurer = rememberTextMeasurer()
     val nameColumnWidth = textMeasurer.measureWidthMonospace(universalNameMeasure)
-    val indexColumnWidth = textMeasurer.measureWidthMonospace("Index")
+    val indexColumnWidth = textMeasurer.measureWidthMonospace("x Index")
     val sizeColumnWidth = textMeasurer.measureWidthMonospace("00000.0 KB")
     val moduleColumnWidth = textMeasurer.measureWidthMonospace("component:env")
 
@@ -253,8 +262,8 @@ private fun GarbageTypesTable(garbage: GarbageResult, provider: WasmBinaryProvid
     val typeNames = remember(provider) { provider.nameSection?.typesSection?.namemap }
 
     val textMeasurer = rememberTextMeasurer()
-    val indexColumnWidth = textMeasurer.measureWidthMonospace("Index")
-    val sizeColumnWidth = textMeasurer.measureWidthMonospace("00000 B")
+    val indexColumnWidth = textMeasurer.measureWidthMonospace("x Index")
+    val sizeColumnWidth = textMeasurer.measureWidthMonospace("x 00000 B")
 
     Column {
         Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -265,10 +274,10 @@ private fun GarbageTypesTable(garbage: GarbageResult, provider: WasmBinaryProvid
         }
 
         val columns = listOf(
-            TableColumn("Index", modifier = Modifier.width(indexColumnWidth)) { index ->
+            TableColumn("Index", modifier = Modifier.widthIn(min = indexColumnWidth)) { index ->
                 TableCellValue(entries[index].typeIndex)
             },
-            TableColumn("Size", modifier = Modifier.width(sizeColumnWidth)) { index ->
+            TableColumn("Size", modifier = Modifier.widthIn(min = sizeColumnWidth)) { index ->
                 TableCellValue(entries[index].size, "${entries[index].size} B")
             },
             TableColumn("Signature", modifier = Modifier.fillMaxWidth()) { index ->
@@ -293,8 +302,9 @@ private fun GarbageDataTable(garbage: GarbageResult) {
     }
 
     val textMeasurer = rememberTextMeasurer()
-    val indexColumnWidth = textMeasurer.measureWidthMonospace("Index")
-    val sizeColumnWidth = textMeasurer.measureWidthMonospace("00000.0 KB")
+    val indexColumnWidth = textMeasurer.measureWidthMonospace("x Index")
+    val dataSizeColumnWidth = textMeasurer.measureWidthMonospace("x Data Size")
+    val recordSizeColumnWidth = textMeasurer.measureWidthMonospace("x Record Size")
 
     Column {
         Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -305,13 +315,13 @@ private fun GarbageDataTable(garbage: GarbageResult) {
         }
 
         val columns = listOf(
-            TableColumn("Index", modifier = Modifier.width(indexColumnWidth)) { index ->
+            TableColumn("Index", modifier = Modifier.widthIn(min = indexColumnWidth)) { index ->
                 TableCellValue(entries[index].index)
             },
-            TableColumn("Data Size", modifier = Modifier.width(sizeColumnWidth)) { index ->
+            TableColumn("Data Size", modifier = Modifier.widthIn(min = dataSizeColumnWidth)) { index ->
                 TableCellValue(entries[index].dataSize, formatSize(entries[index].dataSize))
             },
-            TableColumn("Record Size", modifier = Modifier.fillMaxWidth()) { index ->
+            TableColumn("Record Size", modifier = Modifier.widthIn(min = recordSizeColumnWidth)) { index ->
                 TableCellValue(entries[index].recordSize, formatSize(entries[index].recordSize))
             },
         )
