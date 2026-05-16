@@ -61,7 +61,7 @@ fun WasmEditorContent(
     val selection = remember { HexSelectionState() }
     val buffer = remember(bytes) { bytes.toCommonByteBuffer() }
     var panelHeight by remember { mutableStateOf(DEFAULT_PANEL_HEIGHT) }
-    var activeTab by remember { mutableStateOf(HexanaTab.Summary) }
+    var activeTab by remember { mutableStateOf("Sections") }
 
     val hasTopTab = remember(providerType) {
         providerType is BinaryProviderType.Wasm || providerType is BinaryProviderType.WasmComponent
@@ -83,7 +83,7 @@ fun WasmEditorContent(
             providerType = providerType,
             buffer = buffer,
             wasmBytes = bytes,
-            onSizeClick = if (hasTopTab) {{ activeTab = HexanaTab.Size }} else null,
+            onSizeClick = if (hasTopTab) {{ activeTab = "Top" }} else null,
         )
         HexViewerPanel(bytes = bytes, selection = selection)
         SelectionStatusBar(selection = selection, totalBytes = bytes.size)

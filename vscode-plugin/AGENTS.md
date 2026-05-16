@@ -44,6 +44,26 @@ All three layers reuse the existing KMP modules:
 - Publish to VS Code Marketplace and Open VSX: `cd vscode-plugin && ./publish.sh` (or `.bat` on Windows)
   - Requires `VSCE_PAT` and `OVSX_PAT` environment variables. Set `PUBLISH_TARGET` to `vscode`, `openvsx`, or `all` (default).
 
+## Table Tab Architecture
+
+Table-based tabs (Data, Exports, Imports, Functions, Custom, Modules) use the shared `TableTabsProvider`
+abstraction from `plugins-shared`. The webview-specific wiring lives in three files:
+
+- `TableTabBridge.kt` — Converts `TableTabDescriptor` into Compose-for-Web HTML tables using
+  `SearchableTable`/`PanelTableRow`. Also hosts `RunArrowButton`.
+- `TableTabEnricher.kt` — Attaches VS Code-specific behaviour (run buttons, module-open actions) to
+  table tab descriptors before the bridge renders them. Since VS Code dialogs are async composables
+  (not blocking like Swing), the enricher uses callbacks (`onPendingWasmArgs`, `onPendingProgramArgs`,
+  `onPendingComponentArgs`) so `HexanaPanel` can manage dialog state in the composable layer.
+- `HexanaPanel.kt` — Builds the tab list by mixing provider-generated table tabs with fixed
+  (non-table) tabs, and manages dialog composable state for run actions triggered by the enricher.
+
+Non-table tabs (Sections, Top, Monos, Garbage, WAT) remain hardcoded in `HexanaPanel.kt`.
+
+When adding a new table-based tab, add it to the relevant `TableTabsProvider` in `plugins-shared`;
+it will appear automatically in both IntelliJ and VS Code. To attach VS Code-specific actions,
+update `TableTabEnricher.kt`.
+
 ## Working Rules
 
 - Keep the TypeScript host as thin as possible; all Wasm logic belongs in Kotlin.

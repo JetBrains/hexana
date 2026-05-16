@@ -6,20 +6,34 @@ import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.shared.WasmComponentTableTabsProvider
+import org.jetbrains.hexana.shared.WasmTableTabsProvider
+import org.jetbrains.hexana.wasm.components.WasmComponentExport
+import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmValueType
 
-enum class HexanaTab(val label: String) {
+/**
+ * Identifiers for non-table tabs that remain hardcoded outside the
+ * [org.jetbrains.hexana.shared.TableTabsProvider] abstraction.
+ */
+private enum class FixedTab(val label: String) {
     Summary("Sections"),
-    Exports("Exports"),
-    Imports("Imports"),
-    Functions("Functions"),
-    Data("Data"),
-    Custom("Custom"),
     Size("Top"),
     Monos("Monos"),
     Garbage("Garbage"),
-    Modules("Modules"),
     Wat("WAT"),
 }
+
+/**
+ * A unified tab entry that can be either a provider-generated table tab or a
+ * fixed (hardcoded) tab.
+ */
+private class PanelTab(
+    val label: String,
+    val content: @Composable (HexSelectionState) -> Unit,
+)
 
 @Composable
 fun HexanaPanel(
@@ -29,36 +43,204 @@ fun HexanaPanel(
     selection: HexSelectionState,
     fileName: String,
     heightPx: Double = 250.0,
-    activeTab: HexanaTab = HexanaTab.Summary,
-    onActiveTabChange: (HexanaTab) -> Unit = {},
+    activeTab: String = FixedTab.Summary.label,
+    onActiveTabChange: (String) -> Unit = {},
 ) {
-    val visibleTabs = remember(providerType) {
+    // -----------------------------------------------------------------------
+    // Dialog state for run actions (core Wasm)
+    // -----------------------------------------------------------------------
+    var pendingWasmExport by remember { mutableStateOf<WasmFunctionExportRecordEntry?>(null) }
+    var pendingWasmParams by remember { mutableStateOf<List<WasmValueType<*>>>(emptyList()) }
+
+    // -----------------------------------------------------------------------
+    // Dialog state for run actions (component model)
+    // -----------------------------------------------------------------------
+    var pendingProgramArgsExport by remember { mutableStateOf<WasmComponentExport?>(null) }
+    var pendingFuncExport by remember { mutableStateOf<WasmComponentExport?>(null) }
+    var pendingFuncInvokeName by remember { mutableStateOf("") }
+    var pendingFuncArgs by remember { mutableStateOf<List<FunctionArgDescriptor>>(emptyList()) }
+
+    // -----------------------------------------------------------------------
+    // Build the tab list: provider-generated table tabs + fixed tabs
+    // -----------------------------------------------------------------------
+    val tabs = remember(providerType, buffer, bytes, fileName) {
         buildList {
-            add(HexanaTab.Summary)
-            add(HexanaTab.Exports)
-            add(HexanaTab.Imports)
+            // Summary is always first
+            add(PanelTab(FixedTab.Summary.label) { sel ->
+                SummaryTabContent(buffer, providerType, sel)
+            })
+
+            // Provider-generated table tabs
+            when (providerType) {
+                is BinaryProviderType.Wasm -> {
+                    val provider = WasmBinaryProvider(buffer.also { it.position(0) })
+                    if (provider.canProvideWasmModule()) {
+                        val tableTabs = WasmTableTabsProvider().toTableTabs(
+                            provider = provider,
+                            buffer = buffer,
+                            wasmBytes = bytes,
+                            fileName = fileName,
+                        ) { descriptors ->
+                            descriptors.enrichWasmTabs(
+                                provider = provider,
+                                wasmBytes = bytes,
+                                fileName = fileName,
+                                onPendingWasmArgs = { export, params ->
+                                    pendingWasmExport = export
+                                    pendingWasmParams = params
+                                },
+                            )
+                        }
+                        addAll(tableTabs.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
+                    }
+                }
+                is BinaryProviderType.WasmComponent -> {
+                    val provider = WasmComponentBinaryProvider(buffer.also { it.position(0) })
+                    if (provider.canProvideWasmModule()) {
+                        val tableTabs = WasmComponentTableTabsProvider().toTableTabs(
+                            provider = provider,
+                            buffer = buffer,
+                            wasmBytes = bytes,
+                            fileName = fileName,
+                        ) { descriptors ->
+                            descriptors.enrichComponentTabs(
+                                provider = provider,
+                                buffer = buffer,
+                                wasmBytes = bytes,
+                                fileName = fileName,
+                                onPendingProgramArgs = { export ->
+                                    pendingProgramArgsExport = export
+                                },
+                                onPendingComponentArgs = { invokeName, args, export ->
+                                    pendingFuncExport = export
+                                    pendingFuncInvokeName = invokeName
+                                    pendingFuncArgs = args
+                                },
+                            )
+                        }
+                        addAll(tableTabs.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
+                    }
+                }
+                is BinaryProviderType.Generic -> {}
+            }
+
+            // Size tab (always present for Wasm and component)
+            if (providerType is BinaryProviderType.Wasm || providerType is BinaryProviderType.WasmComponent) {
+                add(PanelTab(FixedTab.Size.label) { sel ->
+                    SizeTabContent(buffer, providerType, sel)
+                })
+            }
+
+            // Monos and Garbage (core Wasm only)
             if (providerType is BinaryProviderType.Wasm) {
-                add(HexanaTab.Functions)
-                add(HexanaTab.Data)
-                add(HexanaTab.Custom)
+                add(PanelTab(FixedTab.Monos.label) { sel ->
+                    MonosTabContent(buffer, providerType, sel)
+                })
+                add(PanelTab(FixedTab.Garbage.label) { sel ->
+                    GarbageTabContent(buffer, providerType, sel)
+                })
             }
-            add(HexanaTab.Size)
-            if (providerType is BinaryProviderType.Wasm) {
-                add(HexanaTab.Monos)
-                add(HexanaTab.Garbage)
+
+            // WAT tab (always present for Wasm and component)
+            if (providerType is BinaryProviderType.Wasm || providerType is BinaryProviderType.WasmComponent) {
+                add(PanelTab(FixedTab.Wat.label) { _ ->
+                    WatTabContent(bytes, providerType)
+                })
             }
-            if (providerType is BinaryProviderType.WasmComponent) {
-                add(HexanaTab.Modules)
-            }
-            add(HexanaTab.Wat)
         }
     }
 
     // If the active tab was removed (e.g. switching from component to core), reset
-    if (activeTab !in visibleTabs) {
-        onActiveTabChange(HexanaTab.Summary)
+    if (tabs.none { it.label == activeTab }) {
+        onActiveTabChange(FixedTab.Summary.label)
     }
 
+    // -----------------------------------------------------------------------
+    // Core Wasm function args dialog
+    // -----------------------------------------------------------------------
+    val wasmPending = pendingWasmExport
+    if (wasmPending != null && pendingWasmParams.isNotEmpty()) {
+        FunctionArgsDialog(
+            exportName = wasmPending.name,
+            args = wasmArgDescriptors(pendingWasmParams),
+            isComponent = false,
+            onConfirm = { result ->
+                val programArgs = result.args.joinToString(" ")
+                postRunExportToHost(
+                    exportName = wasmPending.name,
+                    invokeArgs = "--invoke ${wasmPending.name}",
+                    programArgs = programArgs,
+                    wasmBytes = bytes,
+                    runtime = result.runtime,
+                    action = result.action,
+                )
+                pendingWasmExport = null
+                pendingWasmParams = emptyList()
+            },
+            onCancel = {
+                pendingWasmExport = null
+                pendingWasmParams = emptyList()
+            },
+        )
+    }
+
+    // -----------------------------------------------------------------------
+    // Component program args dialog (wasi:cli/run)
+    // -----------------------------------------------------------------------
+    val programArgsPending = pendingProgramArgsExport
+    if (programArgsPending != null) {
+        ProgramArgsDialog(
+            exportName = programArgsPending.exportName,
+            isComponent = true,
+            onConfirm = { result ->
+                postRunExportToHost(
+                    exportName = programArgsPending.exportName,
+                    isComponent = true,
+                    programArgs = result.programArgs,
+                    wasmBytes = bytes,
+                    runtime = result.runtime,
+                    action = result.action,
+                )
+                pendingProgramArgsExport = null
+            },
+            onCancel = { pendingProgramArgsExport = null },
+        )
+    }
+
+    // -----------------------------------------------------------------------
+    // Component function args dialog
+    // -----------------------------------------------------------------------
+    val funcPending = pendingFuncExport
+    if (funcPending != null && pendingFuncArgs.isNotEmpty()) {
+        FunctionArgsDialog(
+            exportName = pendingFuncInvokeName,
+            args = pendingFuncArgs,
+            isComponent = true,
+            onConfirm = { result ->
+                val argsString = result.args.joinToString(", ")
+                postRunExportToHost(
+                    exportName = funcPending.exportName,
+                    isComponent = true,
+                    invokeArgs = "--invoke \"${pendingFuncInvokeName}($argsString)\"",
+                    wasmBytes = bytes,
+                    runtime = result.runtime,
+                    action = result.action,
+                )
+                pendingFuncExport = null
+                pendingFuncInvokeName = ""
+                pendingFuncArgs = emptyList()
+            },
+            onCancel = {
+                pendingFuncExport = null
+                pendingFuncInvokeName = ""
+                pendingFuncArgs = emptyList()
+            },
+        )
+    }
+
+    // -----------------------------------------------------------------------
+    // Panel layout
+    // -----------------------------------------------------------------------
     Div({
         classes("hexana-panel")
         style {
@@ -83,8 +265,8 @@ fun HexanaPanel(
                 property("background", "var(--hexana-tab-bg, rgba(255,255,255,0.03))")
             }
         }) {
-            for (tab in visibleTabs) {
-                val isActive = tab == activeTab
+            for (tab in tabs) {
+                val isActive = tab.label == activeTab
                 Div({
                     classes("hexana-tab")
                     if (isActive) classes("hexana-tab-active")
@@ -98,7 +280,7 @@ fun HexanaPanel(
                         property("background", if (isActive) "var(--hexana-tab-active-bg, transparent)" else "transparent")
                     }
                     onClick {
-                        onActiveTabChange(tab)
+                        onActiveTabChange(tab.label)
                         postTabSelectedToHost(tab.label)
                     }
                 }) {
@@ -117,19 +299,8 @@ fun HexanaPanel(
                 property("min-height", "0")
             }
         }) {
-            when (activeTab) {
-                HexanaTab.Summary -> SummaryTabContent(buffer, providerType, selection)
-                HexanaTab.Exports -> ExportsTabContent(buffer, providerType, selection, wasmBytes = bytes, fileName = fileName)
-                HexanaTab.Imports -> ImportsTabContent(buffer, providerType, selection)
-                HexanaTab.Functions -> FunctionsTabContent(buffer, providerType, selection)
-                HexanaTab.Data -> DataTabContent(buffer, providerType, selection)
-                HexanaTab.Custom -> CustomSectionsTabContent(buffer, providerType, selection)
-                HexanaTab.Size -> SizeTabContent(buffer, providerType, selection)
-                HexanaTab.Monos -> MonosTabContent(buffer, providerType, selection)
-                HexanaTab.Garbage -> GarbageTabContent(buffer, providerType, selection)
-                HexanaTab.Modules -> ModulesTabContent(buffer, providerType, selection, fileName)
-                HexanaTab.Wat -> WatTabContent(bytes, providerType)
-            }
+            val currentTab = tabs.firstOrNull { it.label == activeTab }
+            currentTab?.content?.invoke(selection)
         }
     }
 }
