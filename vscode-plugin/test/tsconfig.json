@@ -12,5 +12,5 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "out", ".test-extensions", "test-resources"]
+  "exclude": ["node_modules", "out", ".test-extensions", "test-resources", "src/unit/**/*.ts"]
 }

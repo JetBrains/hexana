@@ -2,6 +2,7 @@ import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { FakePostHogServer } from './fakePostHogServer';
 
 const testRoot = process.cwd();
 const codeVersion = process.env.VSCODE_TEST_VERSION || 'max';
@@ -11,76 +12,97 @@ const vsixPath = path.resolve(process.env.VSIX_PATH || path.join(testRoot, '..',
 const wasmFixture = path.resolve(process.env.WASM_FIXTURE || path.join(testRoot, 'fixtures', 'test-exports.wasm'));
 const wasmWorkspace = path.resolve(process.env.WASM_WORKSPACE || path.dirname(wasmFixture));
 
-runExtest(['get-vscode', '--code_version', codeVersion]);
-runExtest(['get-chromedriver', '--code_version', codeVersion]);
-runExtest(['install-vsix', '--extensions_dir', extensionsDir, '-f', vsixPath]);
-runExtest([
-    'run-tests',
-    './out/ui-test/*.test.js',
-    '--code_version',
-    codeVersion,
-    '--code_settings',
-    settingsPath,
-    '--extensions_dir',
-    extensionsDir,
-    '-r',
-    wasmWorkspace,
-    wasmFixture,
-], {
-    HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests',
-    VSIX_PATH: vsixPath,
-    WASM_FIXTURE: wasmFixture,
-    WASM_WORKSPACE: wasmWorkspace,
-    VSCODE_EXTENSIONS_DIR: extensionsDir,
+main().catch(error => {
+    console.error(error);
+    process.exit(1);
 });
 
-const noJavaPathDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hexana-vscode-no-java-path-'));
-try {
-    console.log('Running Hexana editor smoke test with Java hidden from VS Code...');
-    runExtest([
-        'run-tests',
-        './out/ui-test/hexana.test.js',
-        '--code_version',
-        codeVersion,
-        '--code_settings',
-        settingsPath,
-        '--extensions_dir',
-        extensionsDir,
-        '--offline',
-        '-r',
-        wasmWorkspace,
-        wasmFixture,
-    ], {
-        HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests (Java hidden)',
-        PATH: noJavaPathDir,
-        Path: noJavaPathDir,
-        VSIX_PATH: vsixPath,
-        WASM_FIXTURE: wasmFixture,
-        WASM_WORKSPACE: wasmWorkspace,
-        VSCODE_EXTENSIONS_DIR: extensionsDir,
-    }, ['JAVA_HOME']);
-} finally {
-    fs.rmSync(noJavaPathDir, { recursive: true, force: true });
+async function main(): Promise<void> {
+    const fakePostHog = await FakePostHogServer.start();
+    console.log(`Fake PostHog server listening at ${fakePostHog.url}`);
+    try {
+        await runExtest(['get-vscode', '--code_version', codeVersion]);
+        await runExtest(['get-chromedriver', '--code_version', codeVersion]);
+        await runExtest(['install-vsix', '--extensions_dir', extensionsDir, '-f', vsixPath]);
+
+        fakePostHog.reset();
+        await runExtest([
+            'run-tests',
+            './out/ui-test/*.test.js',
+            '--code_version',
+            codeVersion,
+            '--code_settings',
+            settingsPath,
+            '--extensions_dir',
+            extensionsDir,
+            '-r',
+            wasmWorkspace,
+            wasmFixture,
+        ], {
+            ...fakePostHog.env,
+            HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests',
+            VSIX_PATH: vsixPath,
+            WASM_FIXTURE: wasmFixture,
+            WASM_WORKSPACE: wasmWorkspace,
+            VSCODE_EXTENSIONS_DIR: extensionsDir,
+        });
+
+        const noJavaPathDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hexana-vscode-no-java-path-'));
+        try {
+            console.log('Running Hexana editor smoke test with Java hidden from VS Code...');
+            fakePostHog.reset();
+            await runExtest([
+                'run-tests',
+                './out/ui-test/hexana.test.js',
+                '--code_version',
+                codeVersion,
+                '--code_settings',
+                settingsPath,
+                '--extensions_dir',
+                extensionsDir,
+                '--offline',
+                '-r',
+                wasmWorkspace,
+                wasmFixture,
+            ], {
+                ...fakePostHog.env,
+                HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests (Java hidden)',
+                PATH: noJavaPathDir,
+                Path: noJavaPathDir,
+                VSIX_PATH: vsixPath,
+                WASM_FIXTURE: wasmFixture,
+                WASM_WORKSPACE: wasmWorkspace,
+                VSCODE_EXTENSIONS_DIR: extensionsDir,
+            }, ['JAVA_HOME']);
+        } finally {
+            fs.rmSync(noJavaPathDir, { recursive: true, force: true });
+        }
+    } finally {
+        await fakePostHog.close();
+    }
 }
 
-function runExtest(args: string[], env: NodeJS.ProcessEnv = {}, unsetEnv: string[] = []): void {
+function runExtest(args: string[], env: NodeJS.ProcessEnv = {}, unsetEnv: string[] = []): Promise<void> {
     const childEnv = { ...process.env, ...env };
     for (const key of unsetEnv) {
         delete childEnv[key];
     }
 
     const extestCli = path.join(testRoot, 'node_modules', 'vscode-extension-tester', 'out', 'cli.js');
-    const result = childProcess.spawnSync(process.execPath, [extestCli, ...args], {
-        cwd: testRoot,
-        env: childEnv,
-        shell: false,
-        stdio: 'inherit',
+    return new Promise((resolve, reject) => {
+        const child = childProcess.spawn(process.execPath, [extestCli, ...args], {
+            cwd: testRoot,
+            env: childEnv,
+            shell: false,
+            stdio: 'inherit',
+        });
+        child.on('error', reject);
+        child.on('exit', (code, signal) => {
+            if (code === 0) {
+                resolve();
+            } else {
+                reject(new Error(`extest failed with ${signal ? `signal ${signal}` : `exit code ${code ?? 1}`}`));
+            }
+        });
     });
-
-    if (result.error) {
-        throw result.error;
-    }
-    if (result.status !== 0) {
-        process.exit(result.status ?? 1);
-    }
 }

@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as http from 'http';
 import { Workbench, EditorView, WebView, By, VSBrowser, WebDriver, Key } from 'vscode-extension-tester';
 import { expect } from 'chai';
 import * as fs from "fs";
@@ -124,6 +125,21 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
             expect(firstByte.trim()).to.equal('00', 'First byte of .wasm should be 00');
         });
 
+        it('should send wasm_file_opened analytics event', async function () {
+            const assertUrl = process.env.HEXANA_FAKE_POSTHOG_ASSERT_URL;
+            if (!assertUrl) {
+                this.skip();
+                return;
+            }
+
+            const event = await waitForFakePostHogEvent(assertUrl, 'wasm_file_opened');
+            expect(event.distinctId, 'Expected analytics event to include distinct ID').to.be.a('string').and.not.empty;
+            expect(event.properties.surface).to.equal('vscode_extension');
+            expect(Number(event.properties.file_size_bytes)).to.be.greaterThan(0);
+            expect(event.properties.ide_type).to.be.a('string').and.not.empty;
+            expect(event.properties.ide_build).to.be.a('string').and.not.empty;
+        });
+
         it('should show the tab bar with expected tabs', async function () {
             const tabs = await driver.findElements(By.css('.hexana-tab'));
             expect(tabs.length).to.be.greaterThan(0, 'Expected at least one tab');
@@ -134,11 +150,11 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
                 tabLabels.push(await tab.getText());
             }
 
-            // Verify essential tabs are present (tab labels may include sort indicators)
+            // Verify essential tabs for this fixture are present (tab labels may include sort indicators).
+            // Table tabs for empty sections are not rendered.
             const hasTab = (name: string) => tabLabels.some(l => l.startsWith(name));
             expect(hasTab('Sections'), 'Sections tab missing').to.be.true;
             expect(hasTab('Exports'), 'Exports tab missing').to.be.true;
-            expect(hasTab('Imports'), 'Imports tab missing').to.be.true;
         });
 
         it('should display the selection status bar', async function () {
@@ -230,3 +246,41 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
         });
     });
 });
+
+interface FakePostHogEvent {
+    name: string;
+    distinctId?: string;
+    properties: Record<string, unknown>;
+}
+
+async function waitForFakePostHogEvent(assertUrl: string, eventName: string): Promise<FakePostHogEvent> {
+    const url = new URL('/__wait', assertUrl);
+    url.searchParams.set('event', eventName);
+    url.searchParams.set('timeoutMs', '60000');
+
+    const response = await getJson<{ event?: FakePostHogEvent; error?: string; events?: FakePostHogEvent[] }>(url);
+    if (!response.event) {
+        const recorded = response.events?.map(event => event.name).join(', ') || '<none>';
+        throw new Error(response.error || `Expected ${eventName}, recorded events: ${recorded}`);
+    }
+    return response.event;
+}
+
+function getJson<T>(url: URL): Promise<T> {
+    return new Promise((resolve, reject) => {
+        const request = http.get(url, response => {
+            const chunks: Buffer[] = [];
+            response.on('data', chunk => chunks.push(Buffer.from(chunk)));
+            response.on('end', () => {
+                const body = Buffer.concat(chunks).toString('utf8');
+                const payload = body ? JSON.parse(body) : {};
+                if ((response.statusCode ?? 500) >= 400) {
+                    reject(new Error(body));
+                } else {
+                    resolve(payload as T);
+                }
+            });
+        });
+        request.on('error', reject);
+    });
+}

@@ -4,6 +4,7 @@
     "*.wasm": "hexana.wasmEditor"
   },
   "window.dialogStyle": "custom",
+  "telemetry.telemetryLevel": "all",
   "security.workspace.trust.enabled": false,
   "extensions.ignoreRecommendations": true,
   "update.mode": "none"

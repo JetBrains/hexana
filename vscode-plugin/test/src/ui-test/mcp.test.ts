@@ -50,27 +50,28 @@ describe('Hexana VS Code MCP - Packaged Server Smoke', function () {
 
             const tools = await client.request<{ tools: Array<{ name: string; annotations?: Record<string, unknown> }> }>('tools/list', {});
             const toolNames = tools.tools.map(tool => tool.name);
-            expect(toolNames).to.include('summarize_module');
-            expect(toolNames).to.include('list_exported_functions');
+            expect(toolNames).to.include('query_artifacts');
 
-            const summarizeModule = tools.tools.find(tool => tool.name === 'summarize_module');
-            expect(summarizeModule?.annotations?.readOnlyHint).to.equal(true);
-            expect(summarizeModule?.annotations?.destructiveHint).to.equal(false);
+            const queryArtifacts = tools.tools.find(tool => tool.name === 'query_artifacts');
+            expect(queryArtifacts?.annotations?.readOnlyHint).to.equal(true);
+            expect(queryArtifacts?.annotations?.destructiveHint).to.equal(false);
 
             const result = await client.request<{
                 content: Array<{ type: string; text?: string }>;
-                structuredContent: { moduleSize: number; functions: number };
+                structuredContent: { modules: Array<{ moduleSize: number; functions: number }> };
                 isError?: boolean;
             }>('tools/call', {
-                name: 'summarize_module',
+                name: 'query_artifacts',
                 arguments: {
                     path: fixturePath,
+                    operation: 'overview',
                 },
             });
 
             expect(result.isError).to.not.equal(true);
-            expect(result.structuredContent.moduleSize).to.be.greaterThan(0);
-            expect(result.structuredContent.functions).to.be.greaterThan(0);
+            const module = result.structuredContent.modules[0];
+            expect(module.moduleSize).to.be.greaterThan(0);
+            expect(module.functions).to.be.greaterThan(0);
             expect(result.content).to.have.length(1);
             expect(result.content[0].type).to.equal('text');
             expect(JSON.parse(result.content[0].text || '{}')).to.deep.equal(result.structuredContent);
