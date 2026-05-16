@@ -351,4 +351,116 @@ class TableTabsProviderTest {
         )
         assertNull(tab.rowSelectionProvider(0))
     }
+
+    // -----------------------------------------------------------------------
+    // RowActionDescriptor tests
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun rowActionDescriptorHoldsValues() {
+        var invokedIndex = -1
+        val action = RowActionDescriptor(
+            label = "Run",
+            tooltipProvider = { index -> if (index == 0) "Run 'hello'" else null },
+            action = { index -> invokedIndex = index },
+        )
+        assertEquals("Run", action.label)
+        assertEquals("Run 'hello'", action.tooltipProvider(0))
+        assertNull(action.tooltipProvider(1))
+        action.action(42)
+        assertEquals(42, invokedIndex)
+    }
+
+    // -----------------------------------------------------------------------
+    // RowContextMenuItemDescriptor tests
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun rowContextMenuItemDescriptorHoldsValues() {
+        var invokedIndex = -1
+        val item = RowContextMenuItemDescriptor(
+            labelProvider = { index -> "Navigate #$index" },
+            action = { index -> invokedIndex = index },
+        )
+        assertEquals("Navigate #3", item.labelProvider(3))
+        item.action(7)
+        assertEquals(7, invokedIndex)
+    }
+
+    // -----------------------------------------------------------------------
+    // TableTabDescriptor action properties tests
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun tableTabDescriptorDefaultActionsAreEmpty() {
+        val tab = TableTabDescriptor(
+            name = "test",
+            columns = emptyList(),
+            rowCount = 0,
+        )
+        assertNull(tab.rowAction)
+        assertTrue(tab.contextMenuItems.isEmpty())
+        assertNull(tab.rowClickAction)
+    }
+
+    @Test
+    fun tableTabDescriptorWithRowAction() {
+        val action = RowActionDescriptor("Run", { "tooltip" }, { })
+        val tab = TableTabDescriptor(
+            name = "test",
+            columns = emptyList(),
+            rowCount = 1,
+            rowAction = action,
+        )
+        assertNotNull(tab.rowAction)
+        assertEquals("Run", tab.rowAction!!.label)
+    }
+
+    @Test
+    fun tableTabDescriptorWithContextMenuItems() {
+        val items = listOf(
+            RowContextMenuItemDescriptor({ "Item 1" }, { }),
+            RowContextMenuItemDescriptor({ "Item 2" }, { }),
+        )
+        val tab = TableTabDescriptor(
+            name = "test",
+            columns = emptyList(),
+            rowCount = 1,
+            contextMenuItems = items,
+        )
+        assertEquals(2, tab.contextMenuItems.size)
+        assertEquals("Item 1", tab.contextMenuItems[0].labelProvider(0))
+        assertEquals("Item 2", tab.contextMenuItems[1].labelProvider(0))
+    }
+
+    @Test
+    fun tableTabDescriptorWithRowClickAction() {
+        var clicked = -1
+        val tab = TableTabDescriptor(
+            name = "test",
+            columns = emptyList(),
+            rowCount = 1,
+            rowClickAction = { index -> clicked = index },
+        )
+        assertNotNull(tab.rowClickAction)
+        tab.rowClickAction!!(5)
+        assertEquals(5, clicked)
+    }
+
+    @Test
+    fun tableTabDescriptorRowClickActionOverridesSelection() {
+        var clicked = -1
+        val tab = TableTabDescriptor(
+            name = "test",
+            columns = emptyList(),
+            rowCount = 1,
+            rowSelectionProvider = { RowSelectionData(100, 50) },
+            rowClickAction = { index -> clicked = index },
+        )
+        // Both are set; the UI layer should prefer rowClickAction when present
+        assertNotNull(tab.rowSelectionProvider(0))
+        assertNotNull(tab.rowClickAction)
+        tab.rowClickAction!!(0)
+        assertEquals(0, clicked)
+    }
 }

@@ -49,7 +49,8 @@ import org.jetbrains.hexana.ui.panel.WasmPanelGarbage
 import org.jetbrains.hexana.ui.panel.KeymapShortcuts
 import org.jetbrains.hexana.ui.panel.WasmPanelWat
 import org.jetbrains.hexana.ui.panel.toPanels
-import org.jetbrains.hexana.ui.panel.components.WasmComponentPanelExports
+import org.jetbrains.hexana.ui.panel.enrichWasmTabs
+import org.jetbrains.hexana.ui.panel.enrichComponentTabs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.ui.panel.WasmPanelWatVirtualized
@@ -516,7 +517,9 @@ private fun BinaryProvider.resolvePanels(
         is GenericBinaryProvider -> emptyArray()
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
-                val tableTabs = WasmTableTabsProvider().toPanels(this, state)
+                val tableTabs = WasmTableTabsProvider().toPanels(this, state) {
+                    it.enrichWasmTabs(this, file, state.project)
+                }
                 (tableTabs + listOf(
                     Panel("Top") { WasmPanelSize(this, state) },
                     Panel("Monos") { WasmPanelMonos(this, state) },
@@ -544,7 +547,9 @@ private fun BinaryProvider.resolvePanels(
         }
         is WasmComponentBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
-                val tableTabs = WasmComponentTableTabsProvider().toPanels(this, state)
+                val tableTabs = WasmComponentTableTabsProvider().toPanels(this, state) {
+                    it.enrichComponentTabs(this, file, state.project)
+                }
                 (tableTabs + listOf(
                     Panel("Top") { WasmPanelSize(this, state) },
                     Panel("Wat") { WasmPanelWat(this, state) },
@@ -624,40 +629,6 @@ private fun BinaryProvider.resolvePanels(
                     state.setSelectedTab(domIndex)
                 },
             )
-        }
-    }
-    // Override Exports with IDE-specific versions that include run actions and navigation
-    val exportsIndex = panels.indexOfFirst { it.description == "Exports" }
-    if (exportsIndex >= 0 && this is BinaryVirtualFileProvider) {
-        when (this) {
-            is WasmBinaryVirtualFileProvider -> {
-                val provider = this
-                panels[exportsIndex] = Panel("Exports") {
-                    org.jetbrains.hexana.ui.panel.WasmPanelExports(provider, state)
-                }
-            }
-            is WasmComponentBinaryVirtualFileProvider -> {
-                val provider = this
-                panels[exportsIndex] = Panel("Exports") {
-                    WasmComponentPanelExports(provider, state)
-                }
-            }
-        }
-    }
-    // Override Imports with IDE-specific versions that include navigation context menus
-    val importsIndex = panels.indexOfFirst { it.description == "Imports" }
-    if (importsIndex >= 0 && this is WasmComponentBinaryVirtualFileProvider) {
-        val provider = this
-        panels[importsIndex] = Panel("Imports") {
-            org.jetbrains.hexana.ui.panel.components.WasmComponentPanelImports(provider, state)
-        }
-    }
-    // Override Modules with IDE-specific version that opens nested modules in editor
-    val modulesIndex = panels.indexOfFirst { it.description == "Modules" }
-    if (modulesIndex >= 0 && this is WasmComponentBinaryVirtualFileProvider) {
-        val provider = this
-        panels[modulesIndex] = Panel("Modules") {
-            org.jetbrains.hexana.ui.panel.components.WasmComponentPanelModules(provider, state)
         }
     }
     return panels

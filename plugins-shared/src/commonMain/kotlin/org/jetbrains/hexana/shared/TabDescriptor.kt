@@ -53,6 +53,32 @@ sealed class ColumnWidth {
 class RowSelectionData(val offset: Int, val size: Int)
 
 /**
+ * A UI-free description of a per-row action button (e.g. "Run" icon).
+ *
+ * The UI layer renders this as a small clickable icon in an action column.
+ *
+ * @param label short identifier for the action (e.g. "Run")
+ * @param tooltipProvider returns tooltip text for the given row, or `null` to hide the action for that row
+ * @param action callback invoked when the action button is clicked for the given row index
+ */
+class RowActionDescriptor(
+    val label: String,
+    val tooltipProvider: (index: Int) -> String?,
+    val action: (index: Int) -> Unit,
+)
+
+/**
+ * A UI-free description of a single context menu item available on table rows.
+ *
+ * @param labelProvider returns the menu item label for the given row index
+ * @param action callback invoked when the menu item is selected for the given row index
+ */
+class RowContextMenuItemDescriptor(
+    val labelProvider: (index: Int) -> String,
+    val action: (index: Int) -> Unit,
+)
+
+/**
  * A UI-free description of a table-based tab.
  *
  * @param name the tab title shown in the tab strip
@@ -60,12 +86,19 @@ class RowSelectionData(val offset: Int, val size: Int)
  * @param rowCount the number of rows in this table
  * @param rowSelectionProvider returns the binary offset/size for a given row index,
  *   or `null` if the row click should be ignored
+ * @param rowAction optional per-row action button descriptor (e.g. "Run" icon)
+ * @param contextMenuItems per-row context menu items; empty list means no context menu
+ * @param rowClickAction optional alternative row-click handler; when set, the UI layer
+ *   calls this instead of scrolling to [rowSelectionProvider] data
  */
 class TableTabDescriptor(
     val name: String,
     val columns: List<ColumnDescriptor>,
     val rowCount: Int,
     val rowSelectionProvider: (index: Int) -> RowSelectionData? = { null },
+    val rowAction: RowActionDescriptor? = null,
+    val contextMenuItems: List<RowContextMenuItemDescriptor> = emptyList(),
+    val rowClickAction: ((index: Int) -> Unit)? = null,
 )
 
 /**

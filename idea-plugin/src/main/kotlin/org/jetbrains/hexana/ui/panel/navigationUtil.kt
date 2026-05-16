@@ -1,4 +1,4 @@
-package org.jetbrains.hexana.ui.panel.components
+package org.jetbrains.hexana.ui.panel
 
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
@@ -8,7 +8,6 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.parentOfType
 import org.jetbrains.hexana.HexanaFileEditor
 import org.jetbrains.hexana.WasmIndexId
-import org.jetbrains.hexana.ui.panel.scrollHexViewTo
 import org.jetbrains.hexana.wit.WitIndexId
 import org.jetbrains.hexana.wit.processIndexEntries
 import org.jetbrains.hexana.wit.psi.WitResolver

@@ -1,7 +1,11 @@
 package org.jetbrains.hexana.ui.panel
 
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
@@ -9,6 +13,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.dp
+import com.intellij.icons.AllIcons
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.shared.ColumnWidth
 import org.jetbrains.hexana.shared.TableTabDescriptor
@@ -18,6 +24,10 @@ import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
+import org.jetbrains.jewel.ui.component.Icon
+import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.Tooltip
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
 
 /**
  * Converts a [TableTabDescriptor] into a [Panel] by bridging the UI-free
@@ -37,6 +47,17 @@ internal fun TableTabsProvider.toPanels(
     provider: BinaryProvider,
     state: HexViewStateHolder,
 ): List<Panel> = tableTabs(provider).map { it.toPanel(state) }
+
+/**
+ * Converts table tab descriptors into [Panel]s, applying an optional enrichment
+ * step that can attach IDE-specific actions (run buttons, context menus, click
+ * handlers) before the Compose bridge renders them.
+ */
+internal fun TableTabsProvider.toPanels(
+    provider: BinaryProvider,
+    state: HexViewStateHolder,
+    enrich: (List<TableTabDescriptor>) -> List<TableTabDescriptor>,
+): List<Panel> = enrich(tableTabs(provider)).map { it.toPanel(state) }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -61,12 +82,49 @@ private fun TableTabContent(descriptor: TableTabDescriptor, state: HexViewStateH
         }
     }
 
+    val actionColumnWidth = if (descriptor.rowAction != null) {
+        textMeasurer.measureWidthMonospace("__")
+    } else {
+        0.dp
+    }
+
     Table(
         columns = columns,
         dataCount = descriptor.rowCount,
+        onRowContextMenu = { rowIndex ->
+            descriptor.contextMenuItems.map { item ->
+                ContextMenuItem(item.labelProvider(rowIndex)) {
+                    item.action(rowIndex)
+                }
+            }
+        },
+        actionColumn = descriptor.rowAction?.let { rowAction -> { index ->
+            val tooltip = rowAction.tooltipProvider(index)
+            if (tooltip != null) {
+                Tooltip(tooltip = { Text(tooltip) }) {
+                    Icon(
+                        AllIconsKeys.Actions.Execute,
+                        contentDescription = rowAction.label,
+                        iconClass = AllIcons::class.java,
+                        modifier = Modifier.size(16.dp).clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) {
+                            rowAction.action(index)
+                        },
+                    )
+                }
+            }
+        } },
+        actionColumnWidth = actionColumnWidth,
         onRow = { rowIndex ->
-            val selection = descriptor.rowSelectionProvider(rowIndex) ?: return@Table
-            state.scrollHexViewTo(selection.offset, selection.size)
+            val clickAction = descriptor.rowClickAction
+            if (clickAction != null) {
+                clickAction(rowIndex)
+            } else {
+                val selection = descriptor.rowSelectionProvider(rowIndex) ?: return@Table
+                state.scrollHexViewTo(selection.offset, selection.size)
+            }
         },
     )
 }
