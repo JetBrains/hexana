@@ -22,7 +22,9 @@ internal class PostHogJsClient(
     // minification.  The resulting plain JS object is equivalent to `{ host: "…" }`.
     private val client: PostHogModule.PostHog = run {
         val options = js("{}")
-        options.host = config.host
+        options.host = config.resolvedHost()
+        options.flushAt = config.resolvedFlushAt()
+        options.flushInterval = config.resolvedFlushIntervalMs().toDouble()
         PostHogModule.PostHog(config.apiKey, options)
     }
 
@@ -54,3 +56,33 @@ internal actual fun createPlatformClient(
     distinctIdProvider: DistinctIdProvider,
     globalProperties: Map<String, Any>
 ): AnalyticsClient = PostHogJsClient(config, consentProvider, distinctIdProvider)
+
+private fun AnalyticsConfig.resolvedHost(): String {
+    if (host != AnalyticsConfig.DEFAULT_HOST) {
+        return host
+    }
+    return processEnv(AnalyticsConfig.HOST_ENV_VAR) ?: host
+}
+
+private fun AnalyticsConfig.resolvedFlushAt(): Int {
+    if (flushAt != AnalyticsConfig.DEFAULT_FLUSH_AT) {
+        return flushAt.coerceAtLeast(1)
+    }
+    return processEnv(AnalyticsConfig.FLUSH_AT_ENV_VAR)?.toIntOrNull()?.takeIf { it > 0 }
+        ?: flushAt.coerceAtLeast(1)
+}
+
+private fun AnalyticsConfig.resolvedFlushIntervalMs(): Long {
+    if (flushIntervalMs != AnalyticsConfig.DEFAULT_FLUSH_INTERVAL_MS) {
+        return flushIntervalMs.coerceAtLeast(1L)
+    }
+    return processEnv(AnalyticsConfig.FLUSH_INTERVAL_MS_ENV_VAR)?.toLongOrNull()?.takeIf { it > 0L }
+        ?: flushIntervalMs.coerceAtLeast(1L)
+}
+
+private fun processEnv(name: String): String? {
+    val env = js("typeof process !== 'undefined' && process.env ? process.env : null")
+    if (env == null) return null
+    val value = env[name]
+    return (value as? String)?.trim()?.takeIf { it.isNotEmpty() }
+}
