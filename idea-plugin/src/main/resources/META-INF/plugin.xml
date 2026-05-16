@@ -70,7 +70,7 @@
         <fileType name="binary"
                   implementationClass="org.jetbrains.hexana.BinaryFileType"
                   fieldName="INSTANCE"
-                  extensions="bin;elf;exe"/>
+                  extensions="bin;elf;exe;so;o;a;dll;dylib"/>
 
         <fileType name="wat"
                   implementationClass="org.jetbrains.hexana.wat.WatFileType"
@@ -83,6 +83,11 @@
                   fieldName="INSTANCE"
                   language="wit"
                   extensions="wit" />
+
+        <fileType name="jit"
+                  implementationClass="org.jetbrains.hexana.JitFileType"
+                  fieldName="INSTANCE"
+                  extensions="jit"/>
 
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
         <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>
