@@ -4,7 +4,7 @@ VS Code extension for WebAssembly binary analysis with a Compose for Web custom 
 
 ## What This Module Contains
 
-- `src/`: TypeScript source for the VS Code extension host (activation, custom editor provider, webview lifecycle, MCP JAR preparation and commands).
+- `src/`: TypeScript source for the VS Code extension host (activation, custom editor provider, webview lifecycle, MCP server download preparation and commands).
 - `test/`: VS Code Extension Tester acceptance tests. The runner installs the VSIX from `VSIX_PATH`, opens the
   fixture directory as the workspace, and opens `WASM_FIXTURE`.
 - `extension-lib/`: Kotlin/JS submodule that compiles shared extension-host logic (dependency resolution, binary analysis, shell utilities) into a single JS bundle consumed by the TypeScript host.
@@ -17,7 +17,7 @@ VS Code extension for WebAssembly binary analysis with a Compose for Web custom 
 
 The extension uses VS Code's Custom Editor API (`CustomReadonlyEditorProvider`) to open `.wasm` files.
 
-1. **Extension host** (TypeScript): Registers the custom editor, prepares the downloadable MCP JAR in VS Code global storage, reads the binary file, posts the raw bytes into a webview, and handles run/compose commands. VS Code-specific logic (terminals, filesystem provider, tool execution) stays in TypeScript.
+1. **Extension host** (TypeScript): Registers the custom editor, prepares the downloadable MCP server distribution in VS Code global storage, reads the binary file, posts the raw bytes into a webview, and handles run/compose commands. VS Code-specific logic (terminals, filesystem provider, tool execution) stays in TypeScript.
 2. **Extension library** (Kotlin/JS): Provides binary analysis (`wasmParser`-backed), component dependency resolution, workspace root detection, and shell argument utilities. The TypeScript host imports the webpack-bundled JS output and calls `@JsExport` functions. Filesystem access is injected via a `FileSystemAccess` callback interface implemented in TypeScript.
 3. **Webview** (Kotlin/JS + Compose for Web): Receives the binary via `postMessage`, wraps it in a `CommonByteBuffer`, constructs a `BinaryProvider`, and renders the hex viewer and analysis panels using Compose for Web.
 

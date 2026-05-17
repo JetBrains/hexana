@@ -207,6 +207,9 @@
     "publish:openvsx": "ovsx publish",
     "obfuscate": "javascript-obfuscator out/ --output out/ --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false && javascript-obfuscator extension-lib/build/kotlin-webpack/js/productionExecutable/extension-lib.js --output extension-lib/build/kotlin-webpack/js/productionExecutable/extension-lib.js --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false && javascript-obfuscator webview/build/kotlin-webpack/js/productionExecutable/webview.js --output webview/build/kotlin-webpack/js/productionExecutable/webview.js --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false"
   },
+  "dependencies": {
+    "adm-zip": "^0.5.17"
+  },
   "devDependencies": {
     "@types/node": "^25.6.0",
     "@types/vscode": "^1.102.0",

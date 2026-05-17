@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 import { registerWasmDebugAdapter } from "./WasmDebugAdapter";
 import { WasmEditorProvider } from "./WasmEditorProvider";
 import type * as ExtensionLib from "./extension-lib";
-import { prepareHexanaMcpJar, registerHexanaMcpJarCommands } from "./mcpJarDownloader";
+import { prepareHexanaMcpServer, registerHexanaMcpServerCommands } from "./mcpServerDownloader";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const extensionLib: typeof ExtensionLib | null = (() => {
@@ -53,8 +53,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     context.subscriptions.push(WasmEditorProvider.register(context));
     registerWasmDebugAdapter(context);
-    registerHexanaMcpJarCommands(context);
-    void prepareHexanaMcpJar(context);
+    registerHexanaMcpServerCommands(context);
+    void prepareHexanaMcpServer(context);
 
     // Ensure .wasm files are associated with the Hexana custom editor so that
     // VS Code does not show the "binary file not displayed" warning.  The
