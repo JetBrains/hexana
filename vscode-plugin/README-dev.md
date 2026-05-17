@@ -212,6 +212,32 @@ On Windows, use `publish.bat` and set environment variables with `set` before ru
 - Re-run the Gradle webpack tasks after changing Kotlin sources in either `extension-lib/` or `webview/`.
 - Press F5 in VS Code (with this folder open) to launch an Extension Development Host.
 
+### Mock MCP Release
+
+Build the same VS Code MCP server distribution that used to be bundled into the VSIX:
+
+```bash
+./gradlew :mcp:vscode-server:distZip
+```
+
+Then run the mock GitHub Releases API. With no archive argument, it serves
+`mcp/vscode-server/build/distributions/hexana-vscode-mcp-server-<version>.zip`:
+
+```bash
+cd vscode-plugin
+npm run mock:mcp-release
+```
+
+Then launch VS Code with the mock endpoint in the extension host environment:
+
+```bash
+HEXANA_MCP_GITHUB_RELEASE_API_URL=http://127.0.0.1:18765/repos/example/hexana-mcp/releases/latest \
+HEXANA_MCP_RELEASES_PAGE_URL=http://127.0.0.1:18765/releases \
+code .
+```
+
+Run `Hexana MCP: Update Server` from the Command Palette to download and extract the served server ZIP.
+
 ### Runtime Dependencies (optional)
 
 - [wasmtime](https://wasmtime.dev/) — required for the **Run** button to execute Wasm modules.

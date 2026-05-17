@@ -202,6 +202,7 @@
   "scripts": {
     "compile": "tsc -p ./tsconfig.json",
     "watch": "tsc -watch -p ./tsconfig.json",
+    "mock:mcp-release": "node scripts/mock-github-release-server.js",
     "package": "npx @vscode/vsce package",
     "publish:vscode": "vsce publish --packagePath",
     "publish:openvsx": "ovsx publish",

@@ -35,6 +35,7 @@ All three layers reuse the existing KMP modules:
 - Compile the TypeScript extension: `cd vscode-plugin && npm run compile`
 - Package the extension: `cd vscode-plugin && npx @vscode/vsce package`
 - Build and run locally (no obfuscation): `cd vscode-plugin && ./build-and-run-locally.sh` (or `.bat` on Windows)
+- Run a mock GitHub Releases API for MCP update testing: `./gradlew :mcp:vscode-server:distZip && cd vscode-plugin && npm run mock:mcp-release`
 - Build VSIX ready for distribution: `cd vscode-plugin && ./build-release-package.sh` (or `.bat` on Windows)
 - Publish to VS Code Marketplace and Open VSX: `cd vscode-plugin && ./publish.sh` (or `.bat` on Windows)
   - Requires `VSCE_PAT` and `OVSX_PAT` environment variables. Set `PUBLISH_TARGET` to `vscode`, `openvsx`, or `all` (default).

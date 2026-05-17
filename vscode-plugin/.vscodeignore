@@ -7,6 +7,7 @@ README-dev.md
 .gitignore
 
 # Build and publish scripts (not needed at runtime)
+scripts/**
 build-and-run-locally.sh
 build-and-run-locally.bat
 build-release-package.sh
