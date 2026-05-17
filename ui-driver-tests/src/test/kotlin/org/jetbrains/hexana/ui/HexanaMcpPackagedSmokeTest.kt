@@ -32,20 +32,17 @@ class HexanaMcpPackagedSmokeTest {
                 HexanaUiDriverTestSupport.withGlobalMcpClient(context.resolvedProjectHome, serverUrl) { client ->
                     val toolNames = client.listTools(ListToolsRequest()).tools.map { it.name }.toSet()
                     assertTrue(
-                        toolNames.contains("summarize_module"),
-                        "Expected summarize_module in packaged MCP tools, got $toolNames"
-                    )
-                    assertTrue(
-                        toolNames.contains("list_exported_functions"),
-                        "Expected list_exported_functions in packaged MCP tools, got $toolNames"
+                        toolNames.contains("query_artifacts"),
+                        "Expected query_artifacts in packaged MCP tools, got $toolNames"
                     )
 
                     val result = client.callTool(
                         CallToolRequest(
                             CallToolRequestParams(
-                                name = "summarize_module",
+                                name = "query_artifacts",
                                 arguments = buildJsonObject {
                                     put("path", JsonPrimitive(HexanaUiDriverTestSupport.wasmFileName))
+                                    put("operation", JsonPrimitive("overview"))
                                 }
                             )
                         )
@@ -53,16 +50,25 @@ class HexanaMcpPackagedSmokeTest {
 
                     assertFalse(
                         result.isError == true,
-                        "summarize_module returned MCP error in packaged smoke: $result"
+                        "query_artifacts returned MCP error in packaged smoke: $result"
                     )
                     val textJson = json.parseToJsonElement(result.requireSingleText()).jsonObject
                     val structuredContent = result.structuredContent
                         ?: error("Expected structuredContent in packaged smoke result: $result")
+                    val module = structuredContent
+                        .getValue("modules")
+                        .jsonArray
+                        .single()
+                        .jsonObject
 
                     assertEquals(textJson, structuredContent)
                     assertTrue(
-                        structuredContent.fieldAsInt("moduleSize") > 0,
+                        module.fieldAsInt("moduleSize") > 0,
                         "Expected moduleSize > 0, got $structuredContent"
+                    )
+                    assertTrue(
+                        module.fieldAsInt("functions") > 0,
+                        "Expected functions > 0, got $structuredContent"
                     )
                 }
             }
