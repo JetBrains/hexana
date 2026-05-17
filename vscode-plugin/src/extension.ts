@@ -1,10 +1,10 @@
 import * as https from "https";
 import * as path from "path";
 import * as vscode from "vscode";
-import { registerMcpServerDefinitionProvider } from "./mcpServerProvider";
 import { registerWasmDebugAdapter } from "./WasmDebugAdapter";
 import { WasmEditorProvider } from "./WasmEditorProvider";
 import type * as ExtensionLib from "./extension-lib";
+import { prepareHexanaMcpJar } from "./mcpJarDownloader";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const extensionLib: typeof ExtensionLib | null = (() => {
@@ -53,14 +53,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     context.subscriptions.push(WasmEditorProvider.register(context));
     registerWasmDebugAdapter(context);
-    try {
-        registerMcpServerDefinitionProvider(context, {
-            isTelemetryEnabled: isHexanaTelemetryEnabled,
-        });
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn(`[Hexana] MCP integration disabled: ${message}`);
-    }
+    void prepareHexanaMcpJar(context);
 
     // Ensure .wasm files are associated with the Hexana custom editor so that
     // VS Code does not show the "binary file not displayed" warning.  The

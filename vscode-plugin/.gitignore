@@ -1,5 +1,4 @@
 node_modules/
 out/
-server/
 graalvm-runner/
 *.vsix

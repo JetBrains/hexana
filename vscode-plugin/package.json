@@ -38,12 +38,6 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "mcpServerDefinitionProviders": [
-      {
-        "id": "hexana.vscode.mcp",
-        "label": "Hexana MCP"
-      }
-    ],
     "breakpoints": [
       { "language": "c" },
       { "language": "cpp" },
@@ -176,33 +170,6 @@
           "type": "string",
           "default": "",
           "description": "Path to a GraalVM installation directory. The extension compiles and runs a thin Java wrapper using 'bin/java' from this directory. The JDK must be a GraalVM distribution (it includes the WebAssembly engine on its module path). When empty, falls back to GRAALVM_HOME, then JAVA_HOME (if it is a GraalVM JDK), and finally scans common JVM installation directories automatically."
-        },
-        "hexana.mcp.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Register the bundled Hexana MCP server in VS Code."
-        },
-        "hexana.mcp.serverPath": {
-          "type": "string",
-          "default": "",
-          "scope": "application",
-          "description": "Path to a Hexana VS Code MCP server launcher inside the installed extension directory. Leave empty to use the bundled server."
-        },
-        "hexana.mcp.javaHome": {
-          "type": "string",
-          "default": "",
-          "scope": "application",
-          "description": "Path to a Java 21 or later home used by the bundled Hexana MCP server. Leave empty to use JAVA_HOME or java on PATH."
-        },
-        "hexana.mcp.logLevel": {
-          "type": "string",
-          "enum": [
-            "quiet",
-            "info",
-            "debug"
-          ],
-          "default": "info",
-          "description": "Human-readable stderr logging level for the Hexana MCP server."
         },
         "hexana.lldbDapPath": {
           "type": "string",

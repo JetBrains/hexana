@@ -2,25 +2,6 @@ plugins {
     base
 }
 
-val vscodeMcpServerInstallDir = project(":mcp:vscode-server")
-    .layout
-    .buildDirectory
-    .dir("install/hexana-vscode-mcp-server")
-
-val syncMcpServer = tasks.register<Sync>("syncMcpServer") {
-    group = "distribution"
-    description = "Copies the VS Code MCP server distribution into vscode-plugin/server for VSIX packaging."
-
-    dependsOn(":mcp:vscode-server:installDist")
-    from(vscodeMcpServerInstallDir)
-    into(layout.projectDirectory.dir("server"))
-    filesMatching("bin/*") {
-        if (!name.endsWith(".bat") && !name.endsWith(".cmd")) {
-            permissions { unix("rwxr-xr-x") }
-        }
-    }
-}
-
 // --- GraalVM runner resources ------------------------------------------------
 // Copies the thin HexanaGraalWasmRunner.java source into
 // `vscode-plugin/graalvm-runner/` so it is bundled in the VSIX.
@@ -45,7 +26,6 @@ tasks.register("assembleExtensionAssets") {
     dependsOn(
         ":vscode-plugin:extension-lib:jsBrowserProductionWebpack",
         ":vscode-plugin:webview:jsBrowserProductionWebpack",
-        syncMcpServer,
         syncGraalvmRunner,
     )
 }
