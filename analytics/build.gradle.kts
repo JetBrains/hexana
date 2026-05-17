@@ -25,6 +25,12 @@ kotlin {
             }
         }
 
+        jvmTest {
+            dependencies {
+                implementation(libs.gson)
+            }
+        }
+
         jsMain {
             dependencies {
                 implementation(npm("posthog-node", "5.29.2"))
