@@ -88,7 +88,10 @@ private class ExternalGraalWasmCommandLineState(
         val polyglotJars = resolvePolyglotJars(graalVmHome)
         val classesDir = compileRunnerIfNeeded(graalVmHome, polyglotJars)
 
-        val classpath = (listOf(classesDir) + polyglotJars).joinToString(File.pathSeparator)
+        // Use a wildcard for the JAR directory to keep the command line short.
+        // All Polyglot JARs reside in the same cache directory.
+        val jarDir = File(polyglotJars.first()).parent + File.separator + "*"
+        val classpath = listOf(classesDir, jarDir).joinToString(File.pathSeparator)
 
         val wasmFile = File(configuration.wasmFilePath)
         val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
@@ -103,10 +106,25 @@ private class ExternalGraalWasmCommandLineState(
 
         val cmdLine = buildGraalWasmRunArgs(input)
 
+        // Generate import stub modules and write them to temp files
+        val stubArgs = mutableListOf<String>()
+        if (wasmBytes != null) {
+            val stubs = org.jetbrains.hexana.shared.WasmImportStubGenerator.generateStubs(wasmBytes)
+            val stubDir = Path.of(System.getProperty("java.io.tmpdir"), "hexana-graalwasm-runner", "stubs")
+            Files.createDirectories(stubDir)
+            for (stub in stubs) {
+                val stubFile = stubDir.resolve("${stub.moduleName.replace('/', '_')}.wasm")
+                Files.write(stubFile, stub.wasmBytes)
+                stubArgs.add("--stub")
+                stubArgs.add("${stub.moduleName}=${stubFile}")
+            }
+        }
+
         val commandLine = GeneralCommandLine().apply {
             exePath = javaExe
             addParameters("-cp", classpath)
             addParameter(RUNNER_CLASS)
+            addParameters(stubArgs)
             addParameters(cmdLine.arguments)
 
             if (cmdLine.workingDirectory != null) {
@@ -232,17 +250,20 @@ private fun compileRunnerIfNeeded(jdkHome: String, polyglotJars: List<String>): 
     val cacheDir = Path.of(System.getProperty("java.io.tmpdir"), "hexana-graalwasm-runner")
     val classFile = cacheDir.resolve("org/jetbrains/hexana/runner/HexanaGraalWasmRunner.class")
 
-    if (Files.exists(classFile)) {
-        return cacheDir.toString()
-    }
-
-    Files.createDirectories(cacheDir)
-
     // Extract the runner source from plugin resources
     val sourceText = ExternalGraalWasmCommandLineState::class.java
         .getResourceAsStream("/runner/HexanaGraalWasmRunner.java")
         ?.bufferedReader()?.readText()
         ?: error("Runner source not found in plugin resources")
+
+    // Use a hash of the source to invalidate the cache when the runner changes
+    val sourceHash = sourceText.hashCode().toString()
+    val hashFile = cacheDir.resolve("source.hash")
+    if (Files.exists(classFile) && Files.exists(hashFile) && Files.readString(hashFile) == sourceHash) {
+        return cacheDir.toString()
+    }
+
+    Files.createDirectories(cacheDir)
 
     val sourceDir = cacheDir.resolve("src/org/jetbrains/hexana/runner")
     Files.createDirectories(sourceDir)
@@ -266,6 +287,8 @@ private fun compileRunnerIfNeeded(jdkHome: String, polyglotJars: List<String>): 
     if (exitCode != 0) {
         error("Failed to compile HexanaGraalWasmRunner (exit code $exitCode):\n$output")
     }
+
+    Files.writeString(hashFile, sourceHash)
 
     return cacheDir.toString()
 }

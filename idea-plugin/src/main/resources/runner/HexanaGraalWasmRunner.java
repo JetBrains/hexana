@@ -3,9 +3,12 @@ package org.jetbrains.hexana.runner;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
+import org.graalvm.polyglot.io.ByteSequence;
+import org.graalvm.polyglot.proxy.ProxyObject;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +28,7 @@ import java.util.Map;
  *   <li>{@code --entry-point <name>} — export function to invoke</li>
  *   <li>{@code --experimental-options} — allow experimental engine options</li>
  *   <li>{@code --wasm.<Key>=<Value>} — GraalWasm context option</li>
+ *   <li>{@code --stub <moduleName>=<path>} — precompiled import stub module</li>
  * </ul>
  * <p>
  * When no {@code --entry-point} is specified the module's {@code _start}
@@ -40,6 +44,7 @@ public final class HexanaGraalWasmRunner {
         String entryPoint = null;
         boolean experimentalOptions = false;
         Map<String, String> wasmOptions = new LinkedHashMap<>();
+        Map<String, String> stubPaths = new LinkedHashMap<>();
         String wasmFilePath = null;
         List<String> programArgs = new ArrayList<>();
 
@@ -53,6 +58,18 @@ public final class HexanaGraalWasmRunner {
                 entryPoint = arg.substring("--entry-point=".length());
             } else if ("--experimental-options".equals(arg)) {
                 experimentalOptions = true;
+            } else if ("--stub".equals(arg) && i + 1 < args.length) {
+                String stubArg = args[++i];
+                int eq = stubArg.indexOf('=');
+                if (eq > 0) {
+                    stubPaths.put(stubArg.substring(0, eq), stubArg.substring(eq + 1));
+                }
+            } else if (arg.startsWith("--stub=")) {
+                String stubArg = arg.substring("--stub=".length());
+                int eq = stubArg.indexOf('=');
+                if (eq > 0) {
+                    stubPaths.put(stubArg.substring(0, eq), stubArg.substring(eq + 1));
+                }
             } else if (arg.startsWith("--wasm.")) {
                 int eq = arg.indexOf('=');
                 if (eq > 0) {
@@ -111,8 +128,24 @@ public final class HexanaGraalWasmRunner {
                     .name(wasmFile.getName().replaceFirst("\\.wasm$", ""))
                     .build();
 
+            // ── Load import stubs ──────────────────────────────────
+            Map<String, Object> moduleMap = new LinkedHashMap<>();
+            for (Map.Entry<String, String> stub : stubPaths.entrySet()) {
+                byte[] stubBytes = Files.readAllBytes(new File(stub.getValue()).toPath());
+                Source stubSource = Source.newBuilder("wasm", ByteSequence.create(stubBytes), stub.getKey())
+                        .build();
+                Value stubModule = context.eval(stubSource);
+                Value stubInstance = stubModule.newInstance();
+                moduleMap.put(stub.getKey(), stubInstance.getMember("exports"));
+            }
+
             Value module = context.eval(source);
-            Value instance = module.newInstance();
+            Value instance;
+            if (moduleMap.isEmpty()) {
+                instance = module.newInstance();
+            } else {
+                instance = module.newInstance(ProxyObject.fromMap(moduleMap));
+            }
             Value exports = instance.getMember("exports");
 
             if (entryPoint != null) {

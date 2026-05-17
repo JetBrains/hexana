@@ -57,6 +57,15 @@ export function parseComponentExportNames(bytes: Int8Array): string[];
 /** Parses component import names from a Wasm component binary. */
 export function parseComponentImportNames(bytes: Int8Array): string[];
 
+/** A generated import stub module. */
+export interface JsImportModuleStub {
+    readonly moduleName: string;
+    readonly wasmBytes: Int8Array;
+}
+
+/** Generates stub Wasm modules for all imports of the given core Wasm binary. */
+export function generateImportStubs(wasmBytes: Int8Array): JsImportModuleStub[];
+
 // ── ShellUtils ──────────────────────────────────────────────────────
 
 /**

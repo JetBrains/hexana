@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
-import { execFileSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
 import type * as ExtensionLib from "./extension-lib";
 
 /**
@@ -421,26 +421,163 @@ function resolveGraalRunnerDir(): string {
 }
 
 /**
+ * Runs `java -version` from the given `java` executable and extracts
+ * the GraalVM / JDK version string.
+ */
+function detectGraalVmVersion(javaExe: string): string {
+    // java -version traditionally writes to stderr, so we use spawnSync
+    // to reliably capture both stdout and stderr.
+    const result = spawnSync(javaExe, ["-version"], {
+        timeout: 15000,
+        encoding: "utf-8",
+    });
+    const output = ((result.stdout as string) || "") + "\n" + ((result.stderr as string) || "");
+
+    // Look for a GraalVM-specific line first
+    const graalLine = output.split("\n").find(l => l.includes("GraalVM"));
+    if (graalLine) {
+        const m = graalLine.match(/(\d+\.\d+\.\d+)/);
+        if (m) { return m[1]; }
+    }
+
+    // Fall back to the JDK version from the first line
+    const versionMatch = output.match(/"(\d+[\d.]*)"/);
+    if (versionMatch) { return versionMatch[1]; }
+
+    throw new Error(`Cannot detect GraalVM/JDK version from:\n${output}`);
+}
+
+/**
+ * Downloads a file from the given URL synchronously by spawning a
+ * child `node` process that performs the async download.
+ */
+function downloadFileSync(url: string, destPath: string): void {
+    // Use curl/wget if available, otherwise fall back to node
+    const isWindows = os.platform() === "win32";
+    try {
+        if (!isWindows) {
+            execFileSync("curl", ["-fsSL", "-o", destPath, url], {
+                timeout: 120000,
+                stdio: ["pipe", "pipe", "pipe"],
+            });
+            return;
+        }
+    } catch {
+        // curl not available, fall through
+    }
+
+    // Fallback: use node inline script
+    const script = `
+        const https = require("https");
+        const http = require("http");
+        const fs = require("fs");
+        function download(url, dest) {
+            return new Promise((resolve, reject) => {
+                const get = url.startsWith("https") ? https.get : http.get;
+                get(url, (res) => {
+                    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                        download(res.headers.location, dest).then(resolve, reject);
+                        return;
+                    }
+                    if (res.statusCode !== 200) { reject(new Error("HTTP " + res.statusCode)); return; }
+                    const file = fs.createWriteStream(dest);
+                    res.pipe(file);
+                    file.on("finish", () => { file.close(); resolve(); });
+                    file.on("error", reject);
+                }).on("error", reject);
+            });
+        }
+        download(process.argv[1], process.argv[2]).catch(e => { console.error(e); process.exit(1); });
+    `;
+    execFileSync(process.execPath, ["-e", script, url, destPath], {
+        timeout: 120000,
+        stdio: ["pipe", "pipe", "pipe"],
+    });
+}
+
+/**
+ * Detects the GraalVM version from `java -version` output and downloads
+ * the required Polyglot JARs from Maven Central if not already cached.
+ *
+ * @param javaExe  absolute path to the `java` executable
+ * @returns list of absolute paths to the downloaded JAR files
+ */
+function resolvePolyglotJars(javaExe: string): string[] {
+    const version = detectGraalVmVersion(javaExe);
+    const cacheDir = path.join(os.tmpdir(), "hexana-graalwasm-runner", "libs", version);
+    fs.mkdirSync(cacheDir, { recursive: true });
+
+    const artifacts = [
+        `org.graalvm.polyglot:polyglot:${version}`,
+        `org.graalvm.wasm:wasm-language:${version}`,
+        `org.graalvm.sdk:collections:${version}`,
+        `org.graalvm.sdk:nativeimage:${version}`,
+        `org.graalvm.sdk:word:${version}`,
+        `org.graalvm.truffle:truffle-api:${version}`,
+        `org.graalvm.truffle:truffle-compiler:${version}`,
+        `org.graalvm.truffle:truffle-runtime:${version}`,
+    ];
+
+    return artifacts.map(coords => {
+        const parts = coords.split(":");
+        const groupPath = parts[0].replace(/\./g, "/");
+        const artifactId = parts[1];
+        const ver = parts[2];
+        const fileName = `${artifactId}-${ver}.jar`;
+        const jarPath = path.join(cacheDir, fileName);
+
+        if (!fs.existsSync(jarPath)) {
+            const url = `https://repo1.maven.org/maven2/${groupPath}/${artifactId}/${ver}/${fileName}`;
+            try {
+                downloadFileSync(url, jarPath);
+            } catch (e: any) {
+                throw new Error(
+                    `Failed to download ${url}: ${e.message}\n` +
+                    `Make sure you have internet access or pre-cache the GraalVM Polyglot JARs.`,
+                );
+            }
+        }
+
+        return jarPath;
+    });
+}
+
+/**
  * Compiles the bundled `HexanaGraalWasmRunner.java` source using
  * `javac` from the given `java` executable path.  The compiled
  * `.class` file is cached under the OS temp directory and reused
  * across runs.
  *
- * The runner source only uses `org.graalvm.polyglot.*` which is
- * available on the module path of any GraalVM JDK — no extra
- * classpath JARs are needed.
- *
- * @param javaExe  absolute path to the `java` executable (used to
- *                 derive `javac` in the same `bin/` directory)
+ * @param javaExe      absolute path to the `java` executable (used to
+ *                     derive `javac` in the same `bin/` directory)
+ * @param polyglotJars paths to the Polyglot JARs needed on the compile classpath
  * @returns the classes output directory, or `null` on failure
  */
-function compileRunnerIfNeeded(javaExe: string): string | null {
+function compileRunnerIfNeeded(javaExe: string, polyglotJars: string[]): string | null {
     const cacheDir = path.join(os.tmpdir(), "hexana-graalwasm-runner");
     const classFile = path.join(
         cacheDir, "org", "jetbrains", "hexana", "runner", "HexanaGraalWasmRunner.class",
     );
 
-    if (fs.existsSync(classFile)) {
+    // Locate the runner source bundled with the extension
+    const sourceFile = path.join(resolveGraalRunnerDir(), "src", "HexanaGraalWasmRunner.java");
+    if (!fs.existsSync(sourceFile)) {
+        vscode.window.showErrorMessage(
+            "HexanaGraalWasmRunner.java not found in extension resources. " +
+            "The extension may not have been packaged correctly.",
+        );
+        return null;
+    }
+
+    // Use a hash of the source to invalidate the cache when the runner changes
+    const sourceText = fs.readFileSync(sourceFile, "utf-8");
+    let sourceHash = 0;
+    for (let i = 0; i < sourceText.length; i++) {
+        sourceHash = ((sourceHash << 5) - sourceHash + sourceText.charCodeAt(i)) | 0;
+    }
+    const hashStr = sourceHash.toString();
+    const hashFile = path.join(cacheDir, "source.hash");
+    if (fs.existsSync(classFile) && fs.existsSync(hashFile) && fs.readFileSync(hashFile, "utf-8") === hashStr) {
         return cacheDir;
     }
 
@@ -455,32 +592,28 @@ function compileRunnerIfNeeded(javaExe: string): string | null {
         return null;
     }
 
-    // Locate the runner source bundled with the extension
-    const sourceFile = path.join(resolveGraalRunnerDir(), "src", "HexanaGraalWasmRunner.java");
-    if (!fs.existsSync(sourceFile)) {
-        vscode.window.showErrorMessage(
-            "HexanaGraalWasmRunner.java not found in extension resources. " +
-            "The extension may not have been packaged correctly.",
-        );
-        return null;
-    }
-
     fs.mkdirSync(cacheDir, { recursive: true });
 
+    const javacArgs: string[] = [];
+    if (polyglotJars.length > 0) {
+        javacArgs.push("-cp", polyglotJars.join(path.delimiter));
+    }
+    javacArgs.push("-d", cacheDir, sourceFile);
+
     try {
-        execFileSync(javacExe, ["-d", cacheDir, sourceFile], {
+        execFileSync(javacExe, javacArgs, {
             timeout: 30000,
             stdio: ["pipe", "pipe", "pipe"],
         });
     } catch (e: any) {
         const stderr = e.stderr ? e.stderr.toString().trim() : "";
         vscode.window.showErrorMessage(
-            `Failed to compile HexanaGraalWasmRunner. ` +
-            `Make sure the configured JDK is a GraalVM distribution ` +
-            `(the Polyglot API must be on the module path).\n${stderr || e.message}`,
+            `Failed to compile HexanaGraalWasmRunner.\n${stderr || e.message}`,
         );
         return null;
     }
+
+    fs.writeFileSync(hashFile, hashStr);
 
     return cacheDir;
 }
@@ -490,19 +623,32 @@ function compileRunnerIfNeeded(javaExe: string): string | null {
  * `java` executable and the GraalWasm runner arguments to set up
  * the classpath and runner class.
  *
- * The runner is compiled and executed using only the GraalVM JDK's
- * built-in module path — no bundled Polyglot JARs are needed.
+ * Downloads the required GraalVM Polyglot JARs from Maven Central
+ * (cached under the OS temp directory) and builds the full classpath.
  *
- * Returns `["-cp", "<classesDir>", "org.jetbrains.hexana.runner.HexanaGraalWasmRunner"]`,
+ * Returns `["-cp", "<classpath>", "org.jetbrains.hexana.runner.HexanaGraalWasmRunner"]`,
  * or `undefined` on failure.
  */
 function prepareGraalRunnerArgs(javaExe: string): string[] | undefined {
-    const classesDir = compileRunnerIfNeeded(javaExe);
+    let polyglotJars: string[];
+    try {
+        polyglotJars = resolvePolyglotJars(javaExe);
+    } catch (e: any) {
+        vscode.window.showErrorMessage(e.message);
+        return undefined;
+    }
+
+    const classesDir = compileRunnerIfNeeded(javaExe, polyglotJars);
     if (!classesDir) {
         return undefined; // error already shown
     }
 
-    return ["-cp", classesDir, GRAAL_RUNNER_CLASS];
+    // Use the JAR directory with a wildcard to keep the command line short.
+    // All Polyglot JARs reside in the same cache directory, so `dir/*`
+    // tells the JVM to load every JAR in that folder.
+    const jarDir = path.dirname(polyglotJars[0]);
+    const classpath = [classesDir, path.join(jarDir, "*")].join(path.delimiter);
+    return ["-cp", classpath, GRAAL_RUNNER_CLASS];
 }
 
 /**
@@ -671,14 +817,35 @@ export async function runExport(
 
     // For GraalWasm, prepend the classpath and runner class to the
     // argument list so the terminal command becomes:
-    //   java -cp <compiled-runner> HexanaGraalWasmRunner <args>
+    //   java -cp <classpath> HexanaGraalWasmRunner --stub <mod>=<path> <args>
     let allArgs: string[];
     if (runtime === "graalwasm") {
         const graalRunnerArgs = prepareGraalRunnerArgs(runtimeCmd);
         if (!graalRunnerArgs) {
             return; // error already shown
         }
-        allArgs = [...graalRunnerArgs, ...cmdLine.arguments];
+
+        // Generate import stub modules and pass them as --stub arguments
+        const stubArgs: string[] = [];
+        if (wasmBytes && extensionLib) {
+            try {
+                const stubs = extensionLib.generateImportStubs(wasmBytes);
+                if (stubs && stubs.length > 0) {
+                    const stubDir = path.join(os.tmpdir(), "hexana-graalwasm-runner", "stubs");
+                    fs.mkdirSync(stubDir, { recursive: true });
+                    for (const stub of stubs) {
+                        const safeName = stub.moduleName.replace(/\//g, "_") + ".wasm";
+                        const stubFile = path.join(stubDir, safeName);
+                        fs.writeFileSync(stubFile, Buffer.from(stub.wasmBytes));
+                        stubArgs.push("--stub", `${stub.moduleName}=${stubFile}`);
+                    }
+                }
+            } catch {
+                // Stub generation is best-effort; proceed without stubs
+            }
+        }
+
+        allArgs = [...graalRunnerArgs, ...stubArgs, ...cmdLine.arguments];
     } else {
         allArgs = [...cmdLine.arguments];
     }

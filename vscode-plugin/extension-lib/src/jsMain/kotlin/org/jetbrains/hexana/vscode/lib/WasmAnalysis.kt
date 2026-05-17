@@ -3,6 +3,7 @@
 package org.jetbrains.hexana.vscode.lib
 
 import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.shared.WasmImportStubGenerator
 import org.jetbrains.hexana.shared.componentExportNames
 import org.jetbrains.hexana.shared.componentImportNames
 import org.jetbrains.hexana.shared.detectBinaryType
@@ -45,3 +46,22 @@ fun parseComponentExportNames(bytes: ByteArray): Array<String> =
 @JsExport
 fun parseComponentImportNames(bytes: ByteArray): Array<String> =
     componentImportNames(bytes).toTypedArray()
+
+/**
+ * JS-visible representation of a generated import stub module.
+ */
+@JsExport
+data class JsImportModuleStub(
+    val moduleName: String,
+    val wasmBytes: ByteArray,
+)
+
+/**
+ * Generates stub Wasm modules for all imports of the given core Wasm binary.
+ * Returns one stub per distinct import module name.
+ */
+@JsExport
+fun generateImportStubs(wasmBytes: ByteArray): Array<JsImportModuleStub> =
+    WasmImportStubGenerator.generateStubs(wasmBytes).map {
+        JsImportModuleStub(it.moduleName, it.wasmBytes)
+    }.toTypedArray()
