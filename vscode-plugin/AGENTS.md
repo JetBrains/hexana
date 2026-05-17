@@ -4,7 +4,7 @@ VS Code extension for WebAssembly binary analysis with a Compose for Web custom 
 
 ## What This Module Contains
 
-- `src/`: TypeScript source for the VS Code extension host (activation, custom editor provider, webview lifecycle, MCP JAR preparation).
+- `src/`: TypeScript source for the VS Code extension host (activation, custom editor provider, webview lifecycle, MCP JAR preparation and commands).
 - `test/`: VS Code Extension Tester acceptance tests. The runner installs the VSIX from `VSIX_PATH`, opens the
   fixture directory as the workspace, and opens `WASM_FIXTURE`.
 - `extension-lib/`: Kotlin/JS submodule that compiles shared extension-host logic (dependency resolution, binary analysis, shell utilities) into a single JS bundle consumed by the TypeScript host.

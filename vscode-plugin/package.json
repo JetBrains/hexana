@@ -38,6 +38,16 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "hexana.mcp.updateServer",
+        "title": "Hexana MCP: Update Server"
+      },
+      {
+        "command": "hexana.mcp.showServerStatus",
+        "title": "Hexana MCP: Show Server Status"
+      }
+    ],
     "breakpoints": [
       { "language": "c" },
       { "language": "cpp" },
