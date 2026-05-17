@@ -30,6 +30,9 @@ import java.io.File
 import java.io.OutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
+import java.net.URI
+import java.nio.file.Files
+import java.nio.file.Path
 
 class GraalWasmCommandLineState(
     private val configuration: WasmRunConfiguration,
@@ -57,9 +60,17 @@ class GraalWasmCommandLineState(
 }
 
 /**
- * Launches the `wasm` launcher from a custom GraalVM installation
- * as an external process, similar to how [WasmtimeCommandLineState]
- * launches the Wasmtime CLI.
+ * Launches a Wasm module via `java` from a custom GraalVM (or any JDK)
+ * installation as an external process.
+ *
+ * The deprecated GraalVM `wasm` launcher is no longer shipped with
+ * modern GraalVM JDK distributions. This state uses a thin Java
+ * wrapper (`HexanaGraalWasmRunner.java`) that is bundled as a plugin
+ * resource, compiled on first use with `javac` from the configured
+ * JDK, and executed with the GraalVM Polyglot JARs on the classpath.
+ *
+ * The compiled runner class is cached under the system temp directory
+ * and reused across runs.
  */
 private class ExternalGraalWasmCommandLineState(
     private val configuration: WasmRunConfiguration,
@@ -67,9 +78,17 @@ private class ExternalGraalWasmCommandLineState(
     private val graalVmHome: String,
 ) : CommandLineState(environment) {
 
+    companion object {
+        private const val RUNNER_CLASS = "org.jetbrains.hexana.runner.HexanaGraalWasmRunner"
+    }
+
     override fun startProcess(): ProcessHandler {
-        val exeName = if (SystemInfo.isWindows) "wasm.exe" else "wasm"
-        val wasmLauncher = File(graalVmHome, "bin" + File.separator + exeName).absolutePath
+        val javaExe = resolveJavaExecutable(graalVmHome)
+
+        val polyglotJars = resolvePolyglotJars(graalVmHome)
+        val classesDir = compileRunnerIfNeeded(graalVmHome, polyglotJars)
+
+        val classpath = (listOf(classesDir) + polyglotJars).joinToString(File.pathSeparator)
 
         val wasmFile = File(configuration.wasmFilePath)
         val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
@@ -83,8 +102,172 @@ private class ExternalGraalWasmCommandLineState(
         )
 
         val cmdLine = buildGraalWasmRunArgs(input)
-        return runCommandLine(wasmLauncher, cmdLine)
+
+        val commandLine = GeneralCommandLine().apply {
+            exePath = javaExe
+            addParameters("-cp", classpath)
+            addParameter(RUNNER_CLASS)
+            addParameters(cmdLine.arguments)
+
+            if (cmdLine.workingDirectory != null) {
+                withWorkDirectory(cmdLine.workingDirectory)
+            }
+            withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+        }
+
+        val handler = OSProcessHandler(commandLine)
+        ProcessTerminatedListener.attach(handler)
+        return handler
     }
+}
+
+// ---------------------------------------------------------------------------
+// External GraalVM runner helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves the `java` (or `java.exe`) executable inside a JDK home.
+ */
+private fun resolveJavaExecutable(jdkHome: String): String {
+    val exeName = if (SystemInfo.isWindows) "java.exe" else "java"
+    val javaFile = File(jdkHome, "bin" + File.separator + exeName)
+    require(javaFile.isFile) {
+        "Cannot find '$exeName' in ${javaFile.parent}. " +
+                "Make sure the GraalVM path points to a valid JDK home directory."
+    }
+    return javaFile.absolutePath
+}
+
+/**
+ * Detects the GraalVM version from `java -version` output and downloads
+ * the required Polyglot JARs from Maven Central if not already cached.
+ *
+ * @return list of absolute paths to the downloaded JAR files
+ */
+private fun resolvePolyglotJars(jdkHome: String): List<String> {
+    val version = detectGraalVmVersion(jdkHome)
+    val cacheDir = Path.of(System.getProperty("java.io.tmpdir"), "hexana-graalwasm-runner", "libs", version)
+    Files.createDirectories(cacheDir)
+
+    val artifacts = listOf(
+        "org.graalvm.polyglot:polyglot:$version",
+        "org.graalvm.wasm:wasm-language:$version",
+        "org.graalvm.sdk:collections:$version",
+        "org.graalvm.sdk:nativeimage:$version",
+        "org.graalvm.sdk:word:$version",
+        "org.graalvm.truffle:truffle-api:$version",
+        "org.graalvm.truffle:truffle-compiler:$version",
+        "org.graalvm.truffle:truffle-runtime:$version",
+    )
+
+    return artifacts.map { coords ->
+        val parts = coords.split(":")
+        val groupPath = parts[0].replace('.', '/')
+        val artifactId = parts[1]
+        val ver = parts[2]
+        val fileName = "$artifactId-$ver.jar"
+        val jarPath = cacheDir.resolve(fileName)
+
+        if (!Files.exists(jarPath)) {
+            val url = "https://repo1.maven.org/maven2/$groupPath/$artifactId/$ver/$fileName"
+            try {
+                URI(url).toURL().openStream().use { input ->
+                    Files.copy(input, jarPath)
+                }
+            } catch (e: Exception) {
+                throw IllegalStateException(
+                    "Failed to download $url: ${e.message}\n" +
+                            "Make sure you have internet access or pre-cache the GraalVM Polyglot JARs.", e
+                )
+            }
+        }
+
+        jarPath.toString()
+    }
+}
+
+/**
+ * Runs `java -version` from the given JDK home and extracts the version string.
+ * GraalVM JDKs report a version like `24.1.1` or `23.0.1` in the first line.
+ */
+private fun detectGraalVmVersion(jdkHome: String): String {
+    val javaExe = resolveJavaExecutable(jdkHome)
+    val process = ProcessBuilder(javaExe, "-version")
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().readText()
+    process.waitFor()
+
+    // GraalVM CE/EE prints lines like:
+    //   openjdk version "21.0.2" 2024-01-16
+    //   ...
+    //   GraalVM CE 24.1.1 ...
+    // Or for newer distributions:
+    //   java version "24.0.1" ...
+    // We look for a GraalVM-specific line first, then fall back to the JDK version.
+    val graalLine = output.lineSequence().firstOrNull { it.contains("GraalVM") }
+    if (graalLine != null) {
+        val match = Regex("""(\d+\.\d+\.\d+)""").find(graalLine)
+        if (match != null) return match.groupValues[1]
+    }
+
+    // Fall back: extract the JDK version from the first line
+    val versionMatch = Regex(""""(\d+[\d.]*)"""").find(output)
+    if (versionMatch != null) return versionMatch.groupValues[1]
+
+    error("Cannot detect GraalVM/JDK version from:\n$output")
+}
+
+/**
+ * Compiles the bundled `HexanaGraalWasmRunner.java` runner source
+ * to a cached temp directory using `javac` from the given JDK.
+ *
+ * The compilation result is cached: if the output `.class` file
+ * already exists it is reused.
+ *
+ * @param polyglotJars paths to the Polyglot JARs needed on the compile classpath
+ * @return the classes output directory (to be added to `-cp`)
+ */
+private fun compileRunnerIfNeeded(jdkHome: String, polyglotJars: List<String>): String {
+    val cacheDir = Path.of(System.getProperty("java.io.tmpdir"), "hexana-graalwasm-runner")
+    val classFile = cacheDir.resolve("org/jetbrains/hexana/runner/HexanaGraalWasmRunner.class")
+
+    if (Files.exists(classFile)) {
+        return cacheDir.toString()
+    }
+
+    Files.createDirectories(cacheDir)
+
+    // Extract the runner source from plugin resources
+    val sourceText = ExternalGraalWasmCommandLineState::class.java
+        .getResourceAsStream("/runner/HexanaGraalWasmRunner.java")
+        ?.bufferedReader()?.readText()
+        ?: error("Runner source not found in plugin resources")
+
+    val sourceDir = cacheDir.resolve("src/org/jetbrains/hexana/runner")
+    Files.createDirectories(sourceDir)
+    val sourceFile = sourceDir.resolve("HexanaGraalWasmRunner.java")
+    Files.writeString(sourceFile, sourceText)
+
+    val javacExe = if (SystemInfo.isWindows) "javac.exe" else "javac"
+    val javac = File(jdkHome, "bin" + File.separator + javacExe).absolutePath
+
+    val javacArgs = mutableListOf(javac)
+    if (polyglotJars.isNotEmpty()) {
+        javacArgs += listOf("-cp", polyglotJars.joinToString(File.pathSeparator))
+    }
+    javacArgs += listOf("-d", cacheDir.toString(), sourceFile.toString())
+
+    val process = ProcessBuilder(javacArgs)
+        .redirectErrorStream(true).start()
+
+    val output = process.inputStream.bufferedReader().readText()
+    val exitCode = process.waitFor()
+    if (exitCode != 0) {
+        error("Failed to compile HexanaGraalWasmRunner (exit code $exitCode):\n$output")
+    }
+
+    return cacheDir.toString()
 }
 
 class GraalWasmProcessHandler(

@@ -13,6 +13,12 @@ object WasmRuntimeResolver {
     /**
      * Resolves the executable command for a given Wasm runtime.
      *
+     * For `graalwasm`, the returned path points to the `java` executable
+     * inside the configured JDK home. The deprecated GraalVM `wasm`
+     * launcher is no longer shipped with modern GraalVM distributions;
+     * instead, the thin `HexanaGraalWasmRunner` wrapper is compiled on
+     * first use and executed via `java`.
+     *
      * @param runtime      runtime identifier: `"wasmtime"`, `"wamr"`, or `"graalwasm"`
      * @param isWindows    `true` on Windows (appends `.exe` to bare names)
      * @param wasmtimePath custom Wasmtime executable path (empty = use default)
@@ -42,7 +48,7 @@ object WasmRuntimeResolver {
             "graalwasm" -> {
                 val home = graalVmHome.trim()
                 if (home.isEmpty()) return null
-                val exeName = if (isWindows) "wasm.exe" else "wasm"
+                val exeName = if (isWindows) "java.exe" else "java"
                 val sep = if (isWindows) "\\" else "/"
                 "${home}${sep}bin${sep}${exeName}"
             }

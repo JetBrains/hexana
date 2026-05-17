@@ -586,7 +586,11 @@ fun generateWamrStubFiles(
 // ---------------------------------------------------------------------------
 
 /**
- * Builds the argument list for an external GraalVM `wasm` launcher.
+ * Builds the argument list for running a Wasm module via GraalVM.
+ *
+ * The returned arguments follow the same CLI convention as the
+ * deprecated GraalVM `wasm` launcher and are consumed by the thin
+ * `HexanaGraalWasmRunner` wrapper bundled with the plugin.
  */
 fun buildGraalWasmRunArgs(input: WasmRunInput): WasmCommandLine {
     val args = mutableListOf<String>()

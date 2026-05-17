@@ -136,10 +136,10 @@ const nodeToolResolver: ExtensionLib.JsToolResolver = {
  * Returns the currently selected Wasm runtime from settings.
  * Returns `"ask"` when the user wants to see a picker every time.
  */
-export function getSelectedRuntime(): "wasmtime" | "wamr" | "ask" {
+export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "ask" {
     const config = vscode.workspace.getConfiguration("hexana");
     const runtime = config.get<string>("wasmRuntime", "ask").trim();
-    if (runtime === "wamr" || runtime === "ask") {
+    if (runtime === "wamr" || runtime === "graalwasm" || runtime === "ask") {
         return runtime;
     }
     return "wasmtime";
@@ -150,7 +150,7 @@ export function getSelectedRuntime(): "wasmtime" | "wamr" | "ask" {
  * whether the user selected a run or debug action.
  */
 export interface RuntimePickerResult {
-    runtime: "wasmtime" | "wamr";
+    runtime: "wasmtime" | "wamr" | "graalwasm";
     action: "run" | "debug";
 }
 
@@ -170,7 +170,7 @@ export async function showRuntimePicker(
     isComponent: boolean = false,
 ): Promise<RuntimePickerResult | undefined> {
     interface RuntimeItem extends vscode.QuickPickItem {
-        runtime?: "wasmtime" | "wamr";
+        runtime?: "wasmtime" | "wamr" | "graalwasm";
         action?: "run" | "debug";
         isConfigure?: boolean;
     }
@@ -186,6 +186,11 @@ export async function showRuntimePicker(
         items.push({
             label: "$(play) Run with WAMR",
             runtime: "wamr",
+            action: "run",
+        });
+        items.push({
+            label: "$(play) Run with GraalWasm",
+            runtime: "graalwasm",
             action: "run",
         });
     }
@@ -255,10 +260,11 @@ export function getRuntimeCommand(runtime: string, isWindows: boolean): string |
 
     if (result === null) {
         vscode.window.showErrorMessage(
-            "Cannot run: no GraalVM with GraalWasm found. " +
-            "Install a GraalVM JDK that includes the 'wasm' launcher, then either " +
-            "set 'hexana.graalVmHome' in settings, set the GRAALVM_HOME environment variable, " +
-            "or place it in a standard JVM directory so the extension can detect it automatically.",
+            "Cannot run: no GraalVM JDK found for GraalWasm. " +
+            "Install a GraalVM JDK, then either " +
+            "set 'hexana.graalVmHome' in settings, set the GRAALVM_HOME or JAVA_HOME " +
+            "environment variable, or place it in a standard JVM directory so the " +
+            "extension can detect it automatically.",
         );
         return undefined;
     }
@@ -266,15 +272,21 @@ export function getRuntimeCommand(runtime: string, isWindows: boolean): string |
 }
 
 /**
- * Resolves the GraalVM home directory from settings, environment
- * variables, or by scanning common JVM installation directories.
+ * Resolves the GraalVM JDK home directory for GraalWasm from settings,
+ * environment variables, or by scanning common JVM installation
+ * directories.
+ *
+ * The extension uses a thin Java wrapper (`HexanaGraalWasmRunner`)
+ * that is compiled on first use and executed via `java`. The JDK
+ * must be a GraalVM distribution (the Polyglot/WebAssembly engine
+ * is on its module path).
  *
  * Resolution order:
  * 1. `hexana.graalVmHome` VS Code setting
  * 2. `GRAALVM_HOME` environment variable
- * 3. `JAVA_HOME` environment variable (only if it contains `bin/wasm`)
- * 4. Scan well-known JVM installation directories for a JVM that
- *    ships the GraalWasm `wasm` launcher (`bin/wasm` or `bin/wasm.exe`)
+ * 3. `JAVA_HOME` environment variable (if it contains `bin/java`)
+ * 4. Scan well-known JVM installation directories for a JDK that
+ *    contains `bin/java` (or `bin/java.exe` on Windows)
  *
  * Returns an empty string when no valid path is found.
  */
@@ -291,26 +303,26 @@ function resolveGraalVmHome(): string {
     }
 
     const javaHome = process.env.JAVA_HOME?.trim() || "";
-    if (javaHome && hasGraalWasmLauncher(javaHome)) {
+    if (javaHome && hasJavaExecutable(javaHome)) {
         return javaHome;
     }
 
-    return discoverGraalVmHome() || "";
+    return discoverJdkHome() || "";
 }
 
 /**
- * Checks whether the given JVM home directory contains the GraalWasm
- * `wasm` launcher under `bin/`.
+ * Checks whether the given JVM home directory contains a `java`
+ * executable under `bin/`.
  */
-function hasGraalWasmLauncher(jvmHome: string): boolean {
+function hasJavaExecutable(jvmHome: string): boolean {
     const isWindows = os.platform() === "win32";
-    const exeName = isWindows ? "wasm.exe" : "wasm";
+    const exeName = isWindows ? "java.exe" : "java";
     return fs.existsSync(path.join(jvmHome, "bin", exeName));
 }
 
 /**
- * Scans well-known JVM installation directories for a JVM that ships
- * the GraalWasm `wasm` launcher.
+ * Scans well-known JVM installation directories for a JDK that
+ * contains a `java` executable.
  *
  * Checked locations by platform:
  * - **macOS**: `/Library/Java/JavaVirtualMachines`, `~/Library/Java/JavaVirtualMachines`,
@@ -323,10 +335,10 @@ function hasGraalWasmLauncher(jvmHome: string): boolean {
  * On macOS the effective JVM home is `<dir>/Contents/Home` (the standard
  * JDK bundle layout); on other platforms it is the directory itself.
  *
- * Returns the first JVM home that contains `bin/wasm`, or `null` when
+ * Returns the first JVM home that contains `bin/java`, or `null` when
  * none is found.
  */
-function discoverGraalVmHome(): string | null {
+function discoverJdkHome(): string | null {
     const platform = os.platform();
     const home = os.homedir();
     const isWindows = platform === "win32";
@@ -383,12 +395,114 @@ function discoverGraalVmHome(): string | null {
             const jvmHome = isMacOS
                 ? path.join(parentDir, entry.name, "Contents", "Home")
                 : path.join(parentDir, entry.name);
-            if (hasGraalWasmLauncher(jvmHome)) {
+            if (hasJavaExecutable(jvmHome)) {
                 return jvmHome;
             }
         }
     }
     return null;
+}
+
+// ---------------------------------------------------------------------------
+// GraalVM runner helpers
+// ---------------------------------------------------------------------------
+
+/** Fully qualified class name of the thin GraalWasm wrapper. */
+const GRAAL_RUNNER_CLASS = "org.jetbrains.hexana.runner.HexanaGraalWasmRunner";
+
+/**
+ * Returns the path to the `graalvm-runner/` directory bundled with
+ * the extension.  The directory contains `src/HexanaGraalWasmRunner.java`.
+ */
+function resolveGraalRunnerDir(): string {
+    // __dirname points to `out/` after TypeScript compilation;
+    // `graalvm-runner/` is a sibling directory at the extension root.
+    return path.join(__dirname, "..", "graalvm-runner");
+}
+
+/**
+ * Compiles the bundled `HexanaGraalWasmRunner.java` source using
+ * `javac` from the given `java` executable path.  The compiled
+ * `.class` file is cached under the OS temp directory and reused
+ * across runs.
+ *
+ * The runner source only uses `org.graalvm.polyglot.*` which is
+ * available on the module path of any GraalVM JDK — no extra
+ * classpath JARs are needed.
+ *
+ * @param javaExe  absolute path to the `java` executable (used to
+ *                 derive `javac` in the same `bin/` directory)
+ * @returns the classes output directory, or `null` on failure
+ */
+function compileRunnerIfNeeded(javaExe: string): string | null {
+    const cacheDir = path.join(os.tmpdir(), "hexana-graalwasm-runner");
+    const classFile = path.join(
+        cacheDir, "org", "jetbrains", "hexana", "runner", "HexanaGraalWasmRunner.class",
+    );
+
+    if (fs.existsSync(classFile)) {
+        return cacheDir;
+    }
+
+    // Derive javac from the same bin/ directory as java
+    const binDir = path.dirname(javaExe);
+    const isWindows = os.platform() === "win32";
+    const javacExe = path.join(binDir, isWindows ? "javac.exe" : "javac");
+    if (!fs.existsSync(javacExe)) {
+        vscode.window.showErrorMessage(
+            `Cannot find javac in ${binDir}. Make sure the configured JDK path is a full JDK (not a JRE).`,
+        );
+        return null;
+    }
+
+    // Locate the runner source bundled with the extension
+    const sourceFile = path.join(resolveGraalRunnerDir(), "src", "HexanaGraalWasmRunner.java");
+    if (!fs.existsSync(sourceFile)) {
+        vscode.window.showErrorMessage(
+            "HexanaGraalWasmRunner.java not found in extension resources. " +
+            "The extension may not have been packaged correctly.",
+        );
+        return null;
+    }
+
+    fs.mkdirSync(cacheDir, { recursive: true });
+
+    try {
+        execFileSync(javacExe, ["-d", cacheDir, sourceFile], {
+            timeout: 30000,
+            stdio: ["pipe", "pipe", "pipe"],
+        });
+    } catch (e: any) {
+        const stderr = e.stderr ? e.stderr.toString().trim() : "";
+        vscode.window.showErrorMessage(
+            `Failed to compile HexanaGraalWasmRunner. ` +
+            `Make sure the configured JDK is a GraalVM distribution ` +
+            `(the Polyglot API must be on the module path).\n${stderr || e.message}`,
+        );
+        return null;
+    }
+
+    return cacheDir;
+}
+
+/**
+ * Prepares the extra arguments that must be inserted between the
+ * `java` executable and the GraalWasm runner arguments to set up
+ * the classpath and runner class.
+ *
+ * The runner is compiled and executed using only the GraalVM JDK's
+ * built-in module path — no bundled Polyglot JARs are needed.
+ *
+ * Returns `["-cp", "<classesDir>", "org.jetbrains.hexana.runner.HexanaGraalWasmRunner"]`,
+ * or `undefined` on failure.
+ */
+function prepareGraalRunnerArgs(javaExe: string): string[] | undefined {
+    const classesDir = compileRunnerIfNeeded(javaExe);
+    if (!classesDir) {
+        return undefined; // error already shown
+    }
+
+    return ["-cp", classesDir, GRAAL_RUNNER_CLASS];
 }
 
 /**
@@ -467,14 +581,14 @@ export async function runExport(
 
     const isComponent = message.isComponent && message.componentImports && message.componentImports.length > 0;
 
-    let runtime: "wasmtime" | "wamr";
+    let runtime: "wasmtime" | "wamr" | "graalwasm";
     let action: "run" | "debug";
 
     // When the webview dialog already collected a runtime and action,
     // use them directly and skip the native VS Code picker.
     if (message.runtime && message.action) {
         const rawRuntime = message.runtime as string;
-        runtime = (rawRuntime === "wasmtime" || rawRuntime === "wamr") ? rawRuntime : "wasmtime";
+        runtime = (rawRuntime === "wasmtime" || rawRuntime === "wamr" || rawRuntime === "graalwasm") ? rawRuntime : "wasmtime";
         action = message.action === "debug" ? "debug" : "run";
     } else {
         const configured = getSelectedRuntime();
@@ -555,7 +669,20 @@ export async function runExport(
     const exportName = message.exportName || path.basename(filePath, ".wasm");
     const terminalName = `Wasm: ${exportName}`;
 
-    const allArgs = [...cmdLine.arguments];
+    // For GraalWasm, prepend the classpath and runner class to the
+    // argument list so the terminal command becomes:
+    //   java -cp <compiled-runner> HexanaGraalWasmRunner <args>
+    let allArgs: string[];
+    if (runtime === "graalwasm") {
+        const graalRunnerArgs = prepareGraalRunnerArgs(runtimeCmd);
+        if (!graalRunnerArgs) {
+            return; // error already shown
+        }
+        allArgs = [...graalRunnerArgs, ...cmdLine.arguments];
+    } else {
+        allArgs = [...cmdLine.arguments];
+    }
+
     const terminal = vscode.window.createTerminal({
         name: terminalName,
         cwd: cmdLine.workingDirectory ?? undefined,

@@ -153,10 +153,11 @@
         "hexana.wasmRuntime": {
           "type": "string",
           "default": "ask",
-          "enum": ["wasmtime", "wamr", "ask"],
+          "enum": ["wasmtime", "wamr", "graalwasm", "ask"],
           "enumDescriptions": [
             "Wasmtime — full-featured runtime with Component Model support",
             "WAMR (iwasm) — lightweight runtime for core modules",
+            "GraalWasm — GraalVM WebAssembly launcher for core modules",
             "Show all runtimes every time — display a picker before each run"
           ],
           "description": "WebAssembly runtime to use when running exports from the hex viewer."
@@ -174,7 +175,7 @@
         "hexana.graalVmHome": {
           "type": "string",
           "default": "",
-          "markdownDescription": "_(Currently unused — GraalWasm runtime is temporarily unavailable.)_ Path to a GraalVM installation directory."
+          "description": "Path to a GraalVM installation directory. The extension compiles and runs a thin Java wrapper using 'bin/java' from this directory. The JDK must be a GraalVM distribution (it includes the WebAssembly engine on its module path). When empty, falls back to GRAALVM_HOME, then JAVA_HOME (if it is a GraalVM JDK), and finally scans common JVM installation directories automatically."
         },
         "hexana.mcp.enabled": {
           "type": "boolean",
