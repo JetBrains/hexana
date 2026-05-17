@@ -1,10 +1,23 @@
 package org.jetbrains.hexana.vscode
 
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.*
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmValueType
+
+
+fun BinaryProvider.getTabsEnricher(): List<TableTabDescriptor>.(
+        fileName: String,
+        pendingRun: PendingRunState,
+    ) -> List<TableTabDescriptor> {
+    return when (val provider = this) {
+        is WasmBinaryProvider -> {name, run -> enrichWasmTabs(provider, name, run::requestWasmArgs)}
+        is WasmComponentBinaryProvider -> {name, run -> enrichComponentTabs(provider, name, run::requestProgramArgs, run::requestComponentArgs)}
+        else -> {_, _ -> this}
+    }
+}
 
 /**
  * Enriches [TableTabDescriptor]s produced by [WasmTableTabsProvider] with

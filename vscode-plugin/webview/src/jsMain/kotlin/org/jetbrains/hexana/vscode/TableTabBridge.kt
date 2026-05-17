@@ -70,7 +70,7 @@ internal fun TableTabsProvider.toTableTabs(
  * existing [SearchableTable] / [PanelTableRow] components.
  */
 @Composable
-private fun TableTabContent(
+fun TableTabContent(
     descriptor: TableTabDescriptor,
     selection: HexSelectionState,
 ) {

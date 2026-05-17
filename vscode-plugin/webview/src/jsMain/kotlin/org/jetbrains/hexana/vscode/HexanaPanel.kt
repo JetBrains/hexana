@@ -10,9 +10,6 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.shared.WasmComponentTableTabsProvider
 import org.jetbrains.hexana.shared.WasmTableTabsProvider
-import org.jetbrains.hexana.wasm.components.WasmComponentExport
-import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
-import org.jetbrains.hexana.wasm.sections.WasmValueType
 
 /**
  * Identifiers for non-table tabs that remain hardcoded outside the
@@ -44,19 +41,7 @@ fun HexanaPanel(
     activeTab: String = FixedTab.Summary.label,
     onActiveTabChange: (String) -> Unit = {},
 ) {
-    // -----------------------------------------------------------------------
-    // Dialog state for run actions (core Wasm)
-    // -----------------------------------------------------------------------
-    var pendingWasmExport by remember { mutableStateOf<WasmFunctionExportRecordEntry?>(null) }
-    var pendingWasmParams by remember { mutableStateOf<List<WasmValueType<*>>>(emptyList()) }
-
-    // -----------------------------------------------------------------------
-    // Dialog state for run actions (component model)
-    // -----------------------------------------------------------------------
-    var pendingProgramArgsExport by remember { mutableStateOf<WasmComponentExport?>(null) }
-    var pendingFuncExport by remember { mutableStateOf<WasmComponentExport?>(null) }
-    var pendingFuncInvokeName by remember { mutableStateOf("") }
-    var pendingFuncArgs by remember { mutableStateOf<List<FunctionArgDescriptor>>(emptyList()) }
+    val pendingRun = rememberPendingRunState()
 
     // -----------------------------------------------------------------------
     // Build the tab list: provider-generated table tabs + fixed tabs
@@ -68,52 +53,13 @@ fun HexanaPanel(
                 SummaryTabContent(provider, sel)
             })
 
-            /*val commonTabs = TableTabsProviderRegistry.providers.flatMap { p ->
-                p.tableTabs(provider)
-            }*/
-
-            // Provider-generated table tabs
-            when (provider) {
-                is WasmBinaryProvider -> {
-                    if (provider.canProvideWasmModule()) {
-                        val tableTabs = WasmTableTabsProvider().toTableTabs(
-                            provider = provider,
-                        ) { descriptors ->
-                            descriptors.enrichWasmTabs(
-                                provider = provider,
-                                fileName = fileName,
-                                onPendingWasmArgs = { export, params ->
-                                    pendingWasmExport = export
-                                    pendingWasmParams = params
-                                },
-                            )
-                        }
-                        addAll(tableTabs.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
-                    }
-                }
-                is WasmComponentBinaryProvider -> {
-                    if (provider.canProvideWasmModule()) {
-                        val tableTabs = WasmComponentTableTabsProvider().toTableTabs(
-                            provider = provider,
-                        ) { descriptors ->
-                            descriptors.enrichComponentTabs(
-                                provider = provider,
-                                fileName = fileName,
-                                onPendingProgramArgs = { export ->
-                                    pendingProgramArgsExport = export
-                                },
-                                onPendingComponentArgs = { invokeName, args, export ->
-                                    pendingFuncExport = export
-                                    pendingFuncInvokeName = invokeName
-                                    pendingFuncArgs = args
-                                },
-                            )
-                        }
-                        addAll(tableTabs.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
-                    }
-                }
-                else -> {}
-            }
+            val enricher = provider.getTabsEnricher()
+            val commonTabs = TableTabsProviderRegistry.providers.flatMap { p ->
+                enricher(p.tableTabs(provider), fileName, pendingRun)
+            }.map { d-> TableTab(name = d.name) { selection ->
+                TableTabContent(d, selection)
+            } }
+            addAll(commonTabs.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
 
             // Size tab (always present for Wasm and component)
             if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
@@ -149,11 +95,11 @@ fun HexanaPanel(
     // -----------------------------------------------------------------------
     // Core Wasm function args dialog
     // -----------------------------------------------------------------------
-    val wasmPending = pendingWasmExport
-    if (wasmPending != null && pendingWasmParams.isNotEmpty()) {
+    val wasmPending = pendingRun.wasmExport
+    if (wasmPending != null && pendingRun.wasmParams.isNotEmpty()) {
         FunctionArgsDialog(
             exportName = wasmPending.name,
-            args = wasmArgDescriptors(pendingWasmParams),
+            args = wasmArgDescriptors(pendingRun.wasmParams),
             isComponent = false,
             onConfirm = { result ->
                 val programArgs = result.args.joinToString(" ")
@@ -165,12 +111,10 @@ fun HexanaPanel(
                     runtime = result.runtime,
                     action = result.action,
                 )
-                pendingWasmExport = null
-                pendingWasmParams = emptyList()
+                pendingRun.clearWasm()
             },
             onCancel = {
-                pendingWasmExport = null
-                pendingWasmParams = emptyList()
+                pendingRun.clearWasm()
             },
         )
     }
@@ -178,7 +122,7 @@ fun HexanaPanel(
     // -----------------------------------------------------------------------
     // Component program args dialog (wasi:cli/run)
     // -----------------------------------------------------------------------
-    val programArgsPending = pendingProgramArgsExport
+    val programArgsPending = pendingRun.programArgsExport
     if (programArgsPending != null) {
         ProgramArgsDialog(
             exportName = programArgsPending.exportName,
@@ -192,39 +136,35 @@ fun HexanaPanel(
                     runtime = result.runtime,
                     action = result.action,
                 )
-                pendingProgramArgsExport = null
+                pendingRun.clearProgramArgs()
             },
-            onCancel = { pendingProgramArgsExport = null },
+            onCancel = { pendingRun.clearProgramArgs() },
         )
     }
 
     // -----------------------------------------------------------------------
     // Component function args dialog
     // -----------------------------------------------------------------------
-    val funcPending = pendingFuncExport
-    if (funcPending != null && pendingFuncArgs.isNotEmpty()) {
+    val funcPending = pendingRun.funcExport
+    if (funcPending != null && pendingRun.funcArgs.isNotEmpty()) {
         FunctionArgsDialog(
-            exportName = pendingFuncInvokeName,
-            args = pendingFuncArgs,
+            exportName = pendingRun.funcInvokeName,
+            args = pendingRun.funcArgs,
             isComponent = true,
             onConfirm = { result ->
                 val argsString = result.args.joinToString(", ")
                 postRunExportToHost(
                     exportName = funcPending.exportName,
                     isComponent = true,
-                    invokeArgs = "--invoke \"${pendingFuncInvokeName}($argsString)\"",
+                    invokeArgs = "--invoke \"${pendingRun.funcInvokeName}($argsString)\"",
                     wasmBytes = provider.bytes.toByteArray(),
                     runtime = result.runtime,
                     action = result.action,
                 )
-                pendingFuncExport = null
-                pendingFuncInvokeName = ""
-                pendingFuncArgs = emptyList()
+                pendingRun.clearComponent()
             },
             onCancel = {
-                pendingFuncExport = null
-                pendingFuncInvokeName = ""
-                pendingFuncArgs = emptyList()
+                pendingRun.clearComponent()
             },
         )
     }
