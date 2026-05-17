@@ -11,6 +11,9 @@ powered by [vscode-extension-tester](https://github.com/redhat-developer/vscode-
 - Clicking a hex byte updates the selection status bar with offset info.
 - Switching to the Exports tab displays export rows for the `.wasm` module.
 - Clicking an export row highlights the corresponding bytes in the hex view.
+- Updating the Hexana MCP server from a mocked GitHub Release downloads,
+  extracts, and launches the VS Code MCP server distribution when the MCP ZIP
+  has been built.
 
 ## Prerequisites
 
@@ -33,7 +36,7 @@ powered by [vscode-extension-tester](https://github.com/redhat-developer/vscode-
 ```bash
 cd vscode-plugin/test
 npm install
-npm run ui-test
+npm test
 ```
 
 This will:
@@ -41,6 +44,14 @@ This will:
 2. Download a compatible VS Code version and ChromeDriver.
 3. Install the Hexana `.vsix` into the test VS Code instance.
 4. Open a `.wasm` fixture file and run the Mocha test suite.
+
+The MCP update test runs only when
+`../../mcp/vscode-server/build/distributions/hexana-vscode-mcp-server-<version>.zip`
+exists. Build it first with:
+
+```bash
+./gradlew :mcp:vscode-server:distZip
+```
 
 On TeamCity, the Mocha run uses the checked-in TeamCity reporter from
 `src/teamcity-reporter.ts`. It emits `testSuiteStarted`, `testStarted`,
@@ -67,7 +78,8 @@ test/
 │   └── test-exports.wasm  # Wasm fixture with exports
 └── src/
     └── ui-test/
-        └── hexana.test.ts # Main acceptance test suite
+        ├── hexana.test.ts # Main editor acceptance test suite
+        └── mcp.test.ts    # MCP update/download acceptance test
 ```
 
 ## Notes

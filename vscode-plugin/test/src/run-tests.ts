@@ -17,6 +17,16 @@ const settingsPath = path.resolve(process.env.VSCODE_CODE_SETTINGS || path.join(
 const vsixPath = path.resolve(process.env.VSIX_PATH || path.join(testRoot, '..', defaultVsixName()));
 const wasmFixture = path.resolve(process.env.WASM_FIXTURE || path.join(testRoot, 'fixtures', 'test-exports.wasm'));
 const wasmWorkspace = path.resolve(process.env.WASM_WORKSPACE || path.dirname(wasmFixture));
+const repoRoot = path.resolve(testRoot, '..', '..');
+const mcpVersion = readMcpServerVersion();
+const mcpServerZip = path.resolve(
+    process.env.MCP_VSCODE_SERVER_ZIP ||
+        path.join(repoRoot, 'mcp', 'vscode-server', 'build', 'distributions', `hexana-vscode-mcp-server-${mcpVersion}.zip`),
+);
+const mcpMockPort = Number(process.env.HEXANA_MCP_MOCK_PORT || '18765');
+const mcpStorageDir = path.resolve(
+    process.env.HEXANA_MCP_STORAGE_DIR || path.join(os.tmpdir(), `hexana-vscode-mcp-test-${process.pid}`),
+);
 
 main().catch(error => {
     console.error(error);
@@ -31,27 +41,34 @@ async function main(): Promise<void> {
         await runExtest(['get-chromedriver', '--code_version', codeVersion]);
         await runExtest(['install-vsix', '--extensions_dir', extensionsDir, '-f', vsixPath]);
 
-        fakePostHog.reset();
-        await runExtest([
-            'run-tests',
-            './out/ui-test/*.test.js',
-            '--code_version',
-            codeVersion,
-            '--code_settings',
-            settingsPath,
-            '--extensions_dir',
-            extensionsDir,
-            '-r',
-            wasmWorkspace,
-            wasmFixture,
-        ], {
-            ...fakePostHog.env,
-            HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests',
-            VSIX_PATH: vsixPath,
-            WASM_FIXTURE: wasmFixture,
-            WASM_WORKSPACE: wasmWorkspace,
-            VSCODE_EXTENSIONS_DIR: extensionsDir,
-        });
+        const mockServer = startMcpMockServerIfAvailable();
+        try {
+            fakePostHog.reset();
+            await runExtest([
+                'run-tests',
+                './out/ui-test/*.test.js',
+                '--code_version',
+                codeVersion,
+                '--code_settings',
+                settingsPath,
+                '--extensions_dir',
+                extensionsDir,
+                '-r',
+                wasmWorkspace,
+                wasmFixture,
+            ], {
+                ...fakePostHog.env,
+                ...mcpTestEnv(mockServer !== undefined),
+                HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests',
+                VSIX_PATH: vsixPath,
+                WASM_FIXTURE: wasmFixture,
+                WASM_WORKSPACE: wasmWorkspace,
+                VSCODE_EXTENSIONS_DIR: extensionsDir,
+            });
+        } finally {
+            mockServer?.kill();
+            fs.rmSync(mcpStorageDir, { recursive: true, force: true });
+        }
 
         const noJavaPathDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hexana-vscode-no-java-path-'));
         try {
@@ -171,4 +188,79 @@ function deepMerge(base: Record<string, unknown>, override: Record<string, unkno
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function startMcpMockServerIfAvailable(): childProcess.ChildProcess | undefined {
+    if (!fs.existsSync(mcpServerZip)) {
+        console.warn(
+            `Skipping Hexana MCP UI test setup because MCP server ZIP was not found: ${mcpServerZip}\n` +
+                'Build it with: ./gradlew :mcp:vscode-server:distZip',
+        );
+        return undefined;
+    }
+
+    fs.rmSync(mcpStorageDir, { recursive: true, force: true });
+    fs.mkdirSync(mcpStorageDir, { recursive: true });
+
+    const scriptPath = path.resolve(testRoot, '..', 'scripts', 'mock-github-release-server.js');
+    const child = childProcess.spawn(process.execPath, [scriptPath, mcpServerZip, mcpVersion], {
+        cwd: path.dirname(scriptPath),
+        env: {
+            ...process.env,
+            PORT: String(mcpMockPort),
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stdout?.on('data', (chunk) => process.stdout.write(chunk));
+    child.stderr?.on('data', (chunk) => process.stderr.write(chunk));
+
+    waitForMockServer();
+    return child;
+}
+
+function mcpTestEnv(enabled: boolean): NodeJS.ProcessEnv {
+    if (!enabled) {
+        return {};
+    }
+
+    return {
+        HEXANA_VSCODE_MCP_TEST: '1',
+        HEXANA_MCP_TEST_VERSION: mcpVersion,
+        HEXANA_MCP_STORAGE_DIR: mcpStorageDir,
+        HEXANA_MCP_GITHUB_RELEASE_API_URL: `http://127.0.0.1:${mcpMockPort}/repos/example/hexana-mcp/releases/latest`,
+        HEXANA_MCP_RELEASES_PAGE_URL: `http://127.0.0.1:${mcpMockPort}/releases`,
+    };
+}
+
+function waitForMockServer(): void {
+    const deadline = Date.now() + 10_000;
+    const url = `http://127.0.0.1:${mcpMockPort}/repos/example/hexana-mcp/releases/latest`;
+
+    while (Date.now() < deadline) {
+        const result = childProcess.spawnSync(process.execPath, [
+            '-e',
+            "require('http').get(process.argv[1], r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+            url,
+        ], { stdio: 'ignore' });
+        if (result.status === 0) {
+            return;
+        }
+        sleep(250);
+    }
+
+    throw new Error(`Mock MCP release server did not start at ${url}`);
+}
+
+function sleep(milliseconds: number): void {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function readMcpServerVersion(): string {
+    const propertiesPath = path.join(repoRoot, 'mcp', 'server', 'gradle.properties');
+    const properties = fs.readFileSync(propertiesPath, 'utf8');
+    const match = /^mcpServerVersion=(.+)$/m.exec(properties);
+    if (!match) {
+        throw new Error(`Could not read mcpServerVersion from ${propertiesPath}`);
+    }
+    return match[1].trim();
 }
