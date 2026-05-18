@@ -56,6 +56,7 @@ subprojects {
     val ignoreTestFailuresOnTeamCity = providers.gradleProperty("teamcityIgnoreTestFailures")
         .map(String::toBoolean)
         .getOrElse(false)
+    val sharedWebKarmaConfigDir = rootProject.layout.projectDirectory.dir("karma.config.d/web").asFile
 
     // We will enable this for tests on teamcity, because we are already fetching test failure there
     tasks.withType<AbstractTestTask>().configureEach {
@@ -67,6 +68,23 @@ subprojects {
     tasks.withType<KotlinJsTest>().configureEach {
         ignoreFailures = ignoreTestFailuresOnTeamCity
         ignoreRunFailures = ignoreTestFailuresOnTeamCity
+
+        listOf(
+            "hx.tests.web.enableChromeOrChromium",
+            "hx.tests.web.enableFirefox",
+            "hx.tests.web.enableSafari",
+        ).filter {
+            project.findProperty(it)?.toString() == "1"
+        }.forEach { propertyName ->
+            environment(propertyName, "1")
+        }
+
+        if (!project.projectDir.resolve("karma.config.d/web").isDirectory) {
+            useKarma {
+                useChrome()
+                useConfigDirectory(sharedWebKarmaConfigDir)
+            }
+        }
     }
 
     tasks.withType<KotlinTestReport>().configureEach {
