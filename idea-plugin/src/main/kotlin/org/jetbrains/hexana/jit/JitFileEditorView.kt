@@ -64,7 +64,6 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.javabytecode.JavaBytecodeDecoder
 import org.jetbrains.hexana.javabytecode.JavaBytecodeInstruction
 import org.jetbrains.hexana.javabytecode.JavaBytecodeOperands
-import org.jetbrains.hexana.jvm.jit.InlinedAt
 import org.jetbrains.hexana.jvm.jit.Inlined
 import org.jetbrains.hexana.jvm.jit.JitFile
 import org.jetbrains.hexana.jvm.jit.JitSym
@@ -223,64 +222,6 @@ private fun groupSyms(syms: List<JitSym>): List<SymGroup> {
 /** Strips `L`/`;`, converts `/` to `.`, returns the bare Java-style FQN. */
 private fun javaFqn(jvmSignature: String): String =
     jvmSignature.removePrefix("L").removeSuffix(";").replace('/', '.')
-
-/**
- * Converts a JVM method descriptor like `([BIB)V` into a Java-style argument
- * list like `(byte[], int, byte)`. Return type is dropped — inline frames
- * read more naturally without it, the way stack traces are usually printed.
- *
- * Unparseable / truncated descriptors degrade to `(…)`.
- */
-private fun prettyJvmArgList(descriptor: String): String {
-    val open = descriptor.indexOf('(')
-    val close = descriptor.indexOf(')')
-    if (open < 0 || close < 0 || close < open) return "(…)"
-    if (close == open + 1) return "()"
-    val args = ArrayList<String>(4)
-    var i = open + 1
-    while (i < close) {
-        var dims = 0
-        while (i < close && descriptor[i] == '[') { dims++; i++ }
-        if (i >= close) return "(…)"
-        val base = when (descriptor[i]) {
-            'B' -> "byte"
-            'C' -> "char"
-            'D' -> "double"
-            'F' -> "float"
-            'I' -> "int"
-            'J' -> "long"
-            'S' -> "short"
-            'Z' -> "boolean"
-            'L' -> {
-                val semi = descriptor.indexOf(';', i)
-                if (semi < 0 || semi > close) return "(…)"
-                val cls = descriptor.substring(i + 1, semi).substringAfterLast('/')
-                i = semi
-                cls
-            }
-            else -> return "(…)"
-        }
-        i++
-        args += if (dims == 0) base else base + "[]".repeat(dims)
-    }
-    return args.joinToString(prefix = "(", postfix = ")")
-}
-
-/**
- * Build the human-readable label for an inlined frame. Renders constructors
- * as `new Class(args)` and otherwise as `Class.method(args)`, matching how
- * Java tooling (stack traces, IDEs) refer to call sites.
- */
-private fun prettyInlineLabel(frame: Inlined): String {
-    val sym = frame.sym ?: return "<unresolved>"
-    val fqn = javaFqn(sym.classSignature)
-    val args = prettyJvmArgList(sym.methodSignature)
-    return when (sym.methodName) {
-        "<init>" -> "new $fqn$args"
-        "<clinit>" -> "$fqn.<clinit>()"
-        else -> "$fqn.${sym.methodName}$args"
-    }
-}
 
 // -----------------------------------------------------------------------------
 // Left column — sym tree
@@ -469,9 +410,6 @@ private fun JitSymDetail(
     val instructions = remember(sym) {
         runCatching { JavaBytecodeDecoder.decode(sym.bytecode) }.getOrDefault(emptyList())
     }
-    // Pre-compute the per-BCI inline groups so the Bytecode row doesn't
-    // re-scan inlineRecords on every recomposition.
-    val inlinesByBci = remember(sym) { buildInlinesByBci(sym) }
 
     // Load the Capstone-WASM disassembler once (process-wide singleton),
     // then decode this sym's native bytes and group decoded instructions
@@ -503,7 +441,6 @@ private fun JitSymDetail(
                 project = project,
                 sym = sym,
                 instructions = instructions,
-                inlinesByBci = inlinesByBci,
                 nativeRowsByBci = nativeRowsByBci,
                 disasmState = disasmState,
                 selectedBci = selectedBci,
@@ -526,7 +463,6 @@ private fun JitBytecodeTab(
     project: Project,
     sym: JitSym,
     instructions: List<JavaBytecodeInstruction>,
-    inlinesByBci: Map<Int, List<InlinedAt>>,
     nativeRowsByBci: Map<Int, List<NativeRow>>,
     disasmState: DisasmState,
     selectedBci: Int?,
@@ -547,7 +483,12 @@ private fun JitBytecodeTab(
         return
     }
 
-    var expandedInlines by rememberSaveable(sym) { mutableStateOf(setOf<Int>()) }
+    // Per-PC inline-stack lookup: map each `InlinedAt.address` (an absolute
+    // runtime PC) to the matching list of `Inlined` frames. Used to decorate
+    // a native row in-place — one clickable line per inline frame, right
+    // side of the row, no fold toggle.
+    val inlinesByPc = remember(sym) { buildInlinesByPc(sym) }
+
     val listState = rememberLazyListState()
 
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
@@ -558,11 +499,8 @@ private fun JitBytecodeTab(
         var bciIndex = 0
         for (insn in instructions) {
             val bci = insn.bytecodeOffset
-            val inlines = inlinesByBci[bci]
             val nativeRows = nativeRowsByBci[bci].orEmpty()
-            val open = bci in expandedInlines
             val opcodeText = formatInstruction(insn)
-            val hasInlines = !inlines.isNullOrEmpty()
             val selected = selectedBci == bci
             val stripe = (bciIndex and 1) == 1
             bciIndex++
@@ -579,62 +517,42 @@ private fun JitBytecodeTab(
                 }
                 item(key = "bc-$bci-only") {
                     PairedRow(
+                        project = project,
                         bci = bci,
                         opcodeText = opcodeText,
                         nativeAddress = null,
                         hexText = hexCol,
                         asmText = asmCol,
+                        inlineStack = emptyList(),
                         showBcOpcode = true,
-                        hasInlines = hasInlines,
-                        inlineOpen = open,
                         selected = selected,
                         stripe = stripe,
                         asmMuted = disasmState is DisasmState.Ready,
                         onRowClick = { onSelectBci(bci) },
-                        onToggleInline = {
-                            expandedInlines = if (open) expandedInlines - bci
-                            else expandedInlines + bci
-                        },
                     )
                 }
             } else {
                 for ((nIdx, row) in nativeRows.withIndex()) {
                     val isFirst = nIdx == 0
+                    val stack = inlinesByPc[row.address].orEmpty()
                     item(key = "bc-$bci-$nIdx") {
                         PairedRow(
+                            project = project,
                             bci = bci,
                             opcodeText = opcodeText,
                             nativeAddress = row.address,
                             hexText = row.hex,
                             asmText = row.asm,
+                            inlineStack = stack,
                             // bci + opcode column populated only on the
                             // first native row of a BCI run — keeps the
                             // bytecode-to-native fan-out visually paired.
                             showBcOpcode = isFirst,
-                            hasInlines = hasInlines && isFirst,
-                            inlineOpen = open,
                             selected = selected,
                             stripe = stripe,
                             asmMuted = false,
                             onRowClick = { onSelectBci(bci) },
-                            onToggleInline = {
-                                expandedInlines = if (open) expandedInlines - bci
-                                else expandedInlines + bci
-                            },
                         )
-                    }
-                }
-            }
-            if (open && inlines != null) {
-                for ((groupIdx, inlinedAt) in inlines.withIndex()) {
-                    for ((frameIdx, frame) in inlinedAt.inlined.withIndex()) {
-                        item(key = "in-$bci-$groupIdx-$frameIdx") {
-                            InlineFrameRow(
-                                project = project,
-                                frame = frame,
-                                depth = frameIdx,
-                            )
-                        }
                     }
                 }
             }
@@ -644,19 +562,18 @@ private fun JitBytecodeTab(
 
 @Composable
 private fun PairedRow(
+    project: Project,
     bci: Int,
     opcodeText: String,
     nativeAddress: ULong?,
     hexText: String,
     asmText: String,
+    inlineStack: List<Inlined>,
     showBcOpcode: Boolean,
-    hasInlines: Boolean,
-    inlineOpen: Boolean,
     selected: Boolean,
     stripe: Boolean,
     asmMuted: Boolean,
     onRowClick: () -> Unit,
-    onToggleInline: () -> Unit,
 ) {
     val bg = when {
         selected && JewelTheme.isDark -> Color(0xFF2E436E)
@@ -671,19 +588,10 @@ private fun PairedRow(
             .background(bg)
             .clickable(onClick = onRowClick)
             .padding(horizontal = 6.dp, vertical = 1.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        // Top-aligned so a tall inline-stack column doesn't drag the
+        // bci/opcode/hex columns toward the row's vertical center.
+        verticalAlignment = Alignment.Top,
     ) {
-        // Fold toggle — only on first row of a BCI that has inline records.
-        Box(modifier = Modifier.width(14.dp)) {
-            if (hasInlines) {
-                Text(
-                    if (inlineOpen) "▼" else "▶",
-                    style = RowStyle.copy(color = HexanaMuted),
-                    modifier = Modifier.clickable(onClick = onToggleInline),
-                )
-            }
-        }
-        Spacer(modifier = Modifier.width(2.dp))
         Text(
             if (showBcOpcode) bci.toString().padStart(5, ' ') else "",
             style = RowStyle.copy(color = HexanaMuted),
@@ -714,6 +622,14 @@ private fun PairedRow(
             modifier = Modifier.width(HexColumnWidth),
         )
         Spacer(modifier = Modifier.width(8.dp))
+        // Inline-stack column. Empty placeholder for rows without an inline
+        // stack so the asm column stays aligned across the table.
+        Box(modifier = Modifier.width(InlineColumnWidth)) {
+            if (inlineStack.isNotEmpty() && nativeAddress != null) {
+                InlineStackColumn(project = project, stack = inlineStack)
+            }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
             asmText,
             style = if (asmMuted) RowStyle.copy(color = HexanaMuted) else RowStyle,
@@ -722,44 +638,41 @@ private fun PairedRow(
     }
 }
 
+/**
+ * Multi-line inlay on the right of a native row. Each line is a clickable
+ * hyperlink to the corresponding bytecode location, rendered as
+ * `<fqn>::<methodName><jvmDescriptor>:<bci>`. Frames are listed deepest-
+ * inlinee first (index 0) so the column reads top-down like a stack trace
+ * from the innermost call out.
+ */
+@Composable
+private fun InlineStackColumn(project: Project, stack: List<Inlined>) {
+    Column {
+        for (frame in stack) {
+            val frameSym = frame.sym
+            if (frameSym == null) {
+                Text(
+                    "(unresolved frame)",
+                    style = InlineLineStyle.copy(color = HexanaMuted),
+                )
+            } else {
+                val label = "${javaFqn(frameSym.classSignature)}::${frameSym.methodName}" +
+                    "${frameSym.methodSignature}:${frame.bci}"
+                Text(
+                    label,
+                    style = InlineLineStyle.copy(color = HexanaLinkColor),
+                    modifier = Modifier.clickable {
+                        navigateToInline(project, frameSym, frame.bci)
+                    },
+                )
+            }
+        }
+    }
+}
+
 /** Renders an absolute runtime address like `0x0000000114a36f40` (16 hex digits, zero-padded). */
 private fun formatNativeAddress(address: ULong): String =
     "0x" + address.toString(16).padStart(16, '0')
-
-@Composable
-private fun InlineFrameRow(
-    project: Project,
-    frame: Inlined,
-    depth: Int,
-) {
-    val symInfo: Sym? = frame.sym
-    val label = prettyInlineLabel(frame)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = symInfo != null) {
-                navigateToInline(project, symInfo!!, frame.bci)
-            }
-            .padding(start = (28 + depth * 14).dp, end = 8.dp, top = 1.dp, bottom = 1.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            "↳ ",
-            style = RowStyle.copy(color = HexanaMuted),
-        )
-        Text(
-            label,
-            style = RowStyle.copy(
-                color = if (symInfo == null) HexanaMuted else HexanaLinkColor,
-            ),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            "@bci ${frame.bci}",
-            style = RowStyle.copy(color = HexanaMuted, fontSize = 11.sp),
-        )
-    }
-}
 
 private fun formatInstruction(insn: JavaBytecodeInstruction): String {
     val m = insn.opcode.mnemonic
@@ -791,32 +704,18 @@ private fun formatInstruction(insn: JavaBytecodeInstruction): String {
 // -----------------------------------------------------------------------------
 
 /**
- * Map each BCI seen in the address-location map to its list of `InlinedAt`
- * groups — i.e. the inline stacks JVMTI reported for native PCs that fall
- * inside the BCI's native byte range.
+ * Map each JVMTI-reported native PC ([InlinedAt.address]) to its list of
+ * `Inlined` frames. Looked up by exact PC against each native row's
+ * `address` field — every native instruction whose PC matches an inline
+ * record gets a multi-line inlay on the row.
  */
-private fun buildInlinesByBci(sym: JitSym): Map<Int, List<InlinedAt>> {
-    val map = sym.addressLocationMap
-    if (map.isEmpty() || sym.inlineRecords.isEmpty()) return emptyMap()
-
-    // Build flat list of (bci, startNative, endNative) intervals.
-    data class Span(val bci: Int, val start: Long, val end: Long)
-    val limit = sym.codeSize.toLong()
-    val spans = ArrayList<Span>(map.size)
-    for (i in map.indices) {
-        val (start, location) = map[i]
-        val end = if (i + 1 < map.size) map[i + 1].first.toLong() else limit
-        spans += Span(location.toInt(), start.toLong(), end)
-    }
-
-    val out = HashMap<Int, MutableList<InlinedAt>>()
-    val allInlines = sym.inlineRecords.flatMap { it.inlines }
-    for (inl in allInlines) {
-        // inlineRecord.address is the JIT-runtime address; reduce to a
-        // native-byte offset relative to the codeBlock.
-        val relative = (inl.address - sym.address).toLong()
-        val matching = spans.firstOrNull { relative in it.start until it.end } ?: continue
-        out.getOrPut(matching.bci) { ArrayList() }.add(inl)
+private fun buildInlinesByPc(sym: JitSym): Map<ULong, List<Inlined>> {
+    if (sym.inlineRecords.isEmpty()) return emptyMap()
+    val out = HashMap<ULong, List<Inlined>>()
+    for (record in sym.inlineRecords) {
+        for (at in record.inlines) {
+            out[at.address] = at.inlined
+        }
     }
     return out
 }
@@ -1140,6 +1039,9 @@ private sealed interface InlineTarget {
 
 private val MonoStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
 private val RowStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+// 11sp inline-stack lines — one notch smaller than the row text so the
+// inlay reads as secondary information without overpowering the row.
+private val InlineLineStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp)
 
 // Fixed column widths for the paired bytecode/native rows so continuation
 // lines visually align under the first row of a BCI run.
@@ -1150,6 +1052,8 @@ private val OpcodeColumnWidth = 220.dp
 private val NativeAddressColumnWidth = 140.dp
 // Wide enough for ~15 bytes of x86 hex; ARM64 ends well under this.
 private val HexColumnWidth = 280.dp
+// Inline-stack column — one line of `Class.method(Sig):bci` fits comfortably.
+private val InlineColumnWidth = 360.dp
 private val HexanaMuted = Color(0xFF7F8186)
 private val HexanaLinkColor = Color(0xFF3574F0)
 private val HexanaMcHexColor = Color(0xFF6F8294)
