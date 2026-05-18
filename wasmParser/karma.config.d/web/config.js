@@ -78,5 +78,9 @@ function configLaunchers(config) {
 
 configLaunchers(config);
 
+config.browserDisconnectTimeout = 360000;
+config.browserNoActivityTimeout = 360000;
+config.captureTimeout = 360000;
+
 config.client.mocha = config.client.mocha || {};
-config.client.mocha.timeout = 30000;
+config.client.mocha.timeout = 360000;

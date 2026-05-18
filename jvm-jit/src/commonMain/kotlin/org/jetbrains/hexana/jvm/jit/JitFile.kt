@@ -321,7 +321,7 @@ class JitSym internal constructor(
         // Format produced by agent.c's method_string_representation:
         //   [<class_signature>:<class_generic>::<method_name>:<method_signature>:<method_generic>]
         private val SIGNATURE_REGEX: Regex =
-            Regex("""^\[([^:.]+):([^:.]+)::([^:.]+):([^:.]+):(.)+]$""")
+            Regex("""^\[([^:.]+):([^:.]+)::([^:.]+):([^:.]+):([^\]]+)\]$""")
     }
 }
 

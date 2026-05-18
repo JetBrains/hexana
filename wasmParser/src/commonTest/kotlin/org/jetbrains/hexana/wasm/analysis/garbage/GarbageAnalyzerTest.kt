@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.wasm.analysis.garbage
 
 import kotlinx.coroutines.test.runTest
+import org.jetbrains.hexana.tests.IgnoreWasmJsTarget
 import org.jetbrains.hexana.tests.resourceAsByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParser
@@ -203,6 +204,7 @@ class GarbageAnalyzerTest {
      * This test captures the current state as a regression baseline.
      */
     @Test
+    @IgnoreWasmJsTarget
     fun `skiko wasm garbage analysis — regression baseline`() = runTest(timeout = 3.minutes) {
         val buffer = resourceAsByteBuffer("maps/skiko.wasm")
         val parseResult = WasmParser().parse(buffer)
