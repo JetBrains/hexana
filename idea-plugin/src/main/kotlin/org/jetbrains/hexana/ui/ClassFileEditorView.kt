@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +31,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intellij.openapi.util.Key
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.javabytecode.JavaBytecodeInstruction
 import org.jetbrains.hexana.javabytecode.JavaBytecodeOperands
@@ -50,6 +54,26 @@ import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.theme.defaultTabStyle
 
 /**
+ * Navigation target handed to [ClassFileEditorView] when another view (today: the
+ * JIT inline-frame click in `JitFileEditorView`) wants the bytecode editor to
+ * scroll to a specific method and optionally a specific BCI inside it.
+ *
+ * Producers stash an instance in [CLASS_FILE_NAV_TARGET_KEY] on the
+ * [com.intellij.openapi.vfs.VirtualFile] before opening, or push it into the
+ * editor's `MutableStateFlow` if the editor is already open.
+ */
+data class ClassFileNavTarget(
+    /** Method name as written in the class file's constant pool, e.g. `decode`, `<init>`. */
+    val methodName: String,
+    /** JVM method descriptor, e.g. `(Lfoo/Bar;I)V`. Matched byte-for-byte against `Code` rows. */
+    val methodDescriptor: String,
+    /** Optional bytecode index to scroll to within the matched method. */
+    val bci: Int? = null,
+)
+
+val CLASS_FILE_NAV_TARGET_KEY: Key<ClassFileNavTarget> = Key.create("hexana.classFile.navTarget")
+
+/**
  * Editor view for a parsed JVM `.class` file. Vertically split: a [HexViewer]
  * over the raw class bytes on top, three structured tabs underneath:
  *  1. Header — class name + access flags + super class + interfaces.
@@ -57,6 +81,10 @@ import org.jetbrains.jewel.ui.theme.defaultTabStyle
  *     WAT (virtualized): gray header row with a file offset + ▶/▼ +
  *     signature; monospace body rows underneath when expanded.
  *  3. Constant pool — all `cp_info` entries by index.
+ *
+ * [navTargetFlow] lets external callers drive the Methods tab to a specific
+ * method (and optionally BCI). The flow's value is consumed (set to null)
+ * after each successful navigation so subsequent equal requests still fire.
  */
 @Composable
 internal fun ClassFileEditorView(
@@ -64,6 +92,7 @@ internal fun ClassFileEditorView(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
     hexFocusRequester: FocusRequester,
+    navTargetFlow: MutableStateFlow<ClassFileNavTarget?> = remember { MutableStateFlow(null) },
 ) {
     VerticalSplitPanel(
         state = state,
@@ -77,14 +106,26 @@ internal fun ClassFileEditorView(
             }
         },
         southPanel = {
-            ClassFileTabs(classFile)
+            ClassFileTabs(classFile, navTargetFlow)
         },
     )
 }
 
 @Composable
-private fun ClassFileTabs(classFile: JavaClassFile) {
+private fun ClassFileTabs(
+    classFile: JavaClassFile,
+    navTargetFlow: MutableStateFlow<ClassFileNavTarget?>,
+) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
+    val navTarget by navTargetFlow.collectAsState()
+
+    // External nav requests always target the Methods tab — switch as soon as
+    // a non-null target arrives. The actual unfold + scroll happens inside
+    // [ClassMethodsTab] once it composes.
+    LaunchedEffect(navTarget) {
+        if (navTarget != null) selectedTab = 1
+    }
+
     val labels = listOf("Header", "Methods", "Constant pool")
     val tabs by remember(selectedTab) {
         derivedStateOf {
@@ -105,7 +146,7 @@ private fun ClassFileTabs(classFile: JavaClassFile) {
         Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
             when (selectedTab) {
                 0 -> ClassHeaderTab(classFile)
-                1 -> ClassMethodsTab(classFile)
+                1 -> ClassMethodsTab(classFile, navTargetFlow)
                 else -> ClassConstantPoolTab(classFile)
             }
         }
@@ -150,10 +191,34 @@ private fun ClassHeaderTab(cf: JavaClassFile) {
 // -----------------------------------------------------------------------------
 
 @Composable
-private fun ClassMethodsTab(cf: JavaClassFile) {
+private fun ClassMethodsTab(
+    cf: JavaClassFile,
+    navTargetFlow: MutableStateFlow<ClassFileNavTarget?>,
+) {
     val sections = remember(cf) { buildMethodSections(cf) }
     var folded by remember(cf) { mutableStateOf(emptySet<Int>()) }
     val listState = rememberLazyListState()
+    val navTarget by navTargetFlow.collectAsState()
+
+    LaunchedEffect(navTarget, sections) {
+        val target = navTarget ?: return@LaunchedEffect
+        val sectionIdx = sections.indexOfFirst {
+            it.name == target.methodName && it.descriptor == target.methodDescriptor
+        }
+        if (sectionIdx < 0) {
+            // Method not found in this class — leave the view alone and clear
+            // the request so a later identical click can retry.
+            navTargetFlow.value = null
+            return@LaunchedEffect
+        }
+        // Ensure the target method is unfolded so its body rows participate
+        // in the LazyColumn index computation below.
+        val targetOffset = sections[sectionIdx].methodOffset
+        folded = folded - targetOffset
+        val globalIdx = globalRowIndex(sections, folded, sectionIdx, target.bci)
+        listState.scrollToItem(globalIdx)
+        navTargetFlow.value = null
+    }
 
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         if (sections.isEmpty()) {
@@ -250,13 +315,47 @@ private fun ClassConstantPoolTab(cf: JavaClassFile) {
 // Methods-tab section builder
 // -----------------------------------------------------------------------------
 
-private data class MethodRow(val fileOffset: Int, val text: String)
+private data class MethodRow(
+    val fileOffset: Int,
+    val text: String,
+    /** BCI for instruction rows; null for flags / max_stack / exception_table rows. */
+    val bci: Int? = null,
+)
 
 private data class MethodSection(
     val methodOffset: Int,
+    /** Method name as stored in the constant pool, used to match [ClassFileNavTarget]. */
+    val name: String,
+    /** JVM method descriptor as stored in the constant pool, used to match [ClassFileNavTarget]. */
+    val descriptor: String,
     val signature: String,
     val bodyRows: List<MethodRow>,
 )
+
+/**
+ * Compute the LazyColumn item index that [ClassMethodsTab] should scroll to
+ * for [navBci] inside the section at [targetSectionIdx], assuming that
+ * section is currently unfolded. Walks preceding sections, counting one
+ * item per header plus body rows when the section isn't in [folded].
+ */
+private fun globalRowIndex(
+    sections: List<MethodSection>,
+    folded: Set<Int>,
+    targetSectionIdx: Int,
+    navBci: Int?,
+): Int {
+    var idx = 0
+    for (i in 0 until targetSectionIdx) {
+        val s = sections[i]
+        idx += 1 // header row
+        if (s.methodOffset !in folded) idx += s.bodyRows.size
+    }
+    // idx now points at the target section's header.
+    if (navBci == null) return idx
+    val target = sections[targetSectionIdx]
+    val rowIdx = target.bodyRows.indexOfFirst { it.bci == navBci }
+    return if (rowIdx >= 0) idx + 1 + rowIdx else idx
+}
 
 private fun buildMethodSections(cf: JavaClassFile): List<MethodSection> {
     val sections = ArrayList<MethodSection>()
@@ -308,7 +407,13 @@ private fun buildMethodSections(cf: JavaClassFile): List<MethodSection> {
             }
         }
 
-        sections += MethodSection(method.byteOffset, signature, body)
+        sections += MethodSection(
+            methodOffset = method.byteOffset,
+            name = name,
+            descriptor = descriptor,
+            signature = signature,
+            bodyRows = body,
+        )
     }
     return sections
 }
@@ -321,8 +426,9 @@ private fun appendInstructionRows(
     for (insn in code.instructions) {
         val fileOffset = code.codeBaseFileOffset + insn.bytecodeOffset
         out += MethodRow(
-            fileOffset,
-            "${formatBytecodeOffset(insn.bytecodeOffset)}: ${formatInstruction(insn, cp)}",
+            fileOffset = fileOffset,
+            text = "${formatBytecodeOffset(insn.bytecodeOffset)}: ${formatInstruction(insn, cp)}",
+            bci = insn.bytecodeOffset,
         )
     }
 }

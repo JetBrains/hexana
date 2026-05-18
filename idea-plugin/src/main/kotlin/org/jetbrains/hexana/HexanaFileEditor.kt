@@ -19,6 +19,7 @@ import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.toNioPathOrNull
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
@@ -28,6 +29,8 @@ import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.sourcemap.parseSourceMap
 import org.jetbrains.hexana.ui.BinaryEditorView
+import org.jetbrains.hexana.ui.CLASS_FILE_NAV_TARGET_KEY
+import org.jetbrains.hexana.ui.ClassFileNavTarget
 import org.jetbrains.hexana.ui.HexSearchField
 import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.setupSearchActions
@@ -59,6 +62,24 @@ class HexanaFileEditor(
     private var myTextEditor: TextEditor? = null
 
     private val myClosedTextEditors = CopyOnWriteArrayList<TextEditor>()
+
+    /**
+     * Pending bytecode-view nav request. Initialised from the file's UserData
+     * (which is how callers communicate with a not-yet-open editor); subsequent
+     * requests for an already-open editor are pushed in via [requestClassFileNav].
+     */
+    private val classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?> =
+        MutableStateFlow(myFile.getUserData(CLASS_FILE_NAV_TARGET_KEY)).also {
+            myFile.putUserData(CLASS_FILE_NAV_TARGET_KEY, null)
+        }
+
+    /**
+     * Drive the embedded bytecode view to a specific method + BCI. Safe to call
+     * from any thread; the flow is consumed inside the Compose tree.
+     */
+    fun requestClassFileNav(target: ClassFileNavTarget) {
+        classFileNavTargetFlow.value = target
+    }
 
     init {
         panel = UiDataProvider.wrapComponent(JPanel(BorderLayout())) { sink ->
@@ -313,6 +334,7 @@ class HexanaFileEditor(
                     binaryProvider = provider,
                     state = stateHolder,
                     hexFocusRequester = hexFocusRequester,
+                    navTargetFlow = classFileNavTargetFlow,
                 )
             }
         }

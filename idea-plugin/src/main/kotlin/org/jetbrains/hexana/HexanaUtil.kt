@@ -125,7 +125,14 @@ fun VirtualFile.toCommonByteBuffer(): CommonByteBuffer? {
     if (this.url.startsWith("temp:///")) { // tests
         return this.readBytes().toCommonByteBuffer()
     }
-    return toMappedBuffer()?.toCommonByteBuffer()
+    return try {
+        toMappedBuffer()?.toCommonByteBuffer()
+    } catch (_: UnsupportedOperationException) {
+        // jrt:// (JDK modular runtime image) and other VFS that don't back
+        // onto a regular nio Path can't be memory-mapped. Class files and
+        // similar small artefacts are cheap to read whole via the VFS layer.
+        this.readBytes().toCommonByteBuffer()
+    }
 }
 
 fun String.isHttpUrl(): Boolean {
