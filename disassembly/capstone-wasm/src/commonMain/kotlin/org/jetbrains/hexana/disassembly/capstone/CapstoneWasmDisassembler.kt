@@ -18,6 +18,10 @@ class CapstoneWasmDisassembler internal constructor(private val module: Capstone
          * Builds a disassembler from the raw `disassembler.wasm` bytes. On
          * browsers the caller is expected to `fetch(...)` the artifact first;
          * on JVM use `loadFromClasspath()` for the classpath-resource shortcut.
+         *
+         * Platform note: the JVM target ignores [bytes] by design and serves a
+         * pre-compiled Chicory AOT bundle shipped with the module. The JS and
+         * wasmJs targets do consume [bytes] as the disassembler module source.
          */
         suspend fun load(bytes: ByteArray): CapstoneWasmDisassembler =
             CapstoneWasmDisassembler(loadCapstoneWasmModule(bytes))
@@ -34,33 +38,39 @@ class CapstoneWasmDisassembler internal constructor(private val module: Capstone
         if (byteCount == 0) return emptySequence()
         val snapshot = ByteArray(byteCount).also { dst -> for (i in 0 until byteCount) dst[i] = this[i] }
         val decodeExport = decodeExportFor(arch)
-        return sequence {
-            val bufPtr = module.call("alloc", longArrayOf(byteCount.toLong()))[0].toInt()
-            module.writeMemory(bufPtr, snapshot)
-            try {
-                var offset = 0
-                while (offset < byteCount) {
-                    val resultPtr = module.call(
-                        decodeExport,
-                        longArrayOf(
-                            bufPtr.toLong(),
-                            byteCount.toLong(),
-                            offset.toLong(),
-                            baseAddress.toLong(),
-                        ),
-                    )[0].toInt()
-                    if (resultPtr == 0) break
-                    val item = readResult(resultPtr, offset, arch)
-                    module.call("free_result", longArrayOf(resultPtr.toLong()))
-                    yield(item)
-                    val advance = item.size
-                    if (advance <= 0) break
-                    offset += advance
-                }
-            } finally {
-                module.call("dealloc", longArrayOf(bufPtr.toLong(), byteCount.toLong()))
+        // Decode eagerly into a list so that `alloc`/loop/`dealloc` run synchronously inside a
+        // plain try/finally. Wrapping the loop in a `sequence { … }` builder would defer
+        // execution into a restricted-suspend coroutine — early termination by the caller
+        // (`.first()`, `.take(n)`, `break`, ...) abandons the iterator without resuming the
+        // continuation, so the `finally` never fires and the WASM heap allocation leaks
+        // (KT-25819-class footgun). The returned `Sequence` wraps the already-decoded list.
+        val decoded = ArrayList<DecodedInstruction>()
+        val bufPtr = module.call("alloc", longArrayOf(byteCount.toLong()))[0].toInt()
+        module.writeMemory(bufPtr, snapshot)
+        try {
+            var offset = 0
+            while (offset < byteCount) {
+                val resultPtr = module.call(
+                    decodeExport,
+                    longArrayOf(
+                        bufPtr.toLong(),
+                        byteCount.toLong(),
+                        offset.toLong(),
+                        baseAddress.toLong(),
+                    ),
+                )[0].toInt()
+                if (resultPtr == 0) break
+                val item = readResult(resultPtr, offset, arch)
+                module.call("free_result", longArrayOf(resultPtr.toLong()))
+                decoded.add(item)
+                val advance = item.size
+                if (advance <= 0) break
+                offset += advance
             }
+        } finally {
+            module.call("dealloc", longArrayOf(bufPtr.toLong(), byteCount.toLong()))
         }
+        return decoded.asSequence()
     }
 
     override fun formatter(arch: Arch, syntax: AssemblySyntax): AssemblyFormatter =

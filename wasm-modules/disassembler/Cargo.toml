@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-crate-type = ["cdylib"]
+# "rlib" is required alongside "cdylib" so that `cargo test` can build a native
+# test binary; "cdylib" alone produces no rlib metadata and the test harness
+# cannot link against it.
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 yaxpeax-arch = { version = "0.3", default-features = false, features = ["std"] }
