@@ -214,14 +214,14 @@ On Windows, use `publish.bat` and set environment variables with `set` before ru
 
 ### Mock MCP Release
 
-Build the same VS Code MCP server distribution that used to be bundled into the VSIX:
+Build the standalone MCP server distribution:
 
 ```bash
-./gradlew :mcp:vscode-server:distZip
+./gradlew :mcp:server:distZip
 ```
 
 Then run the mock GitHub Releases API. With no archive argument, it serves
-`mcp/vscode-server/build/distributions/hexana-vscode-mcp-server-<version>.zip`:
+`mcp/server/build/distributions/server-<version>.zip`:
 
 ```bash
 cd vscode-plugin

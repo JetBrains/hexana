@@ -12,8 +12,8 @@ powered by [vscode-extension-tester](https://github.com/redhat-developer/vscode-
 - Switching to the Exports tab displays export rows for the `.wasm` module.
 - Clicking an export row highlights the corresponding bytes in the hex view.
 - Updating the Hexana MCP server from a mocked GitHub Release downloads,
-  extracts, and launches the VS Code MCP server distribution when the MCP ZIP
-  has been built.
+  extracts, and launches the standalone MCP server distribution when the MCP
+  ZIP has been built.
 
 ## Prerequisites
 
@@ -46,11 +46,11 @@ This will:
 4. Open a `.wasm` fixture file and run the Mocha test suite.
 
 The MCP update test runs only when
-`../../mcp/vscode-server/build/distributions/hexana-vscode-mcp-server-<version>.zip`
+`../../mcp/server/build/distributions/server-<version>.zip`
 exists. Build it first with:
 
 ```bash
-./gradlew :mcp:vscode-server:distZip
+./gradlew :mcp:server:distZip
 ```
 
 On TeamCity, the Mocha run uses the checked-in TeamCity reporter from

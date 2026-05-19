@@ -20,8 +20,8 @@ const wasmWorkspace = path.resolve(process.env.WASM_WORKSPACE || path.dirname(wa
 const repoRoot = path.resolve(testRoot, '..', '..');
 const mcpVersion = readMcpServerVersion();
 const mcpServerZip = path.resolve(
-    process.env.MCP_VSCODE_SERVER_ZIP ||
-        path.join(repoRoot, 'mcp', 'vscode-server', 'build', 'distributions', `hexana-vscode-mcp-server-${mcpVersion}.zip`),
+    process.env.MCP_SERVER_ZIP ||
+        path.join(repoRoot, 'mcp', 'server', 'build', 'distributions', `server-${mcpVersion}.zip`),
 );
 const mcpMockPort = Number(process.env.HEXANA_MCP_MOCK_PORT || '18765');
 const mcpStorageDir = path.resolve(
@@ -194,7 +194,7 @@ function startMcpMockServerIfAvailable(): childProcess.ChildProcess | undefined 
     if (!fs.existsSync(mcpServerZip)) {
         console.warn(
             `Skipping Hexana MCP UI test setup because MCP server ZIP was not found: ${mcpServerZip}\n` +
-                'Build it with: ./gradlew :mcp:vscode-server:distZip',
+                'Build it with: ./gradlew :mcp:server:distZip',
         );
         return undefined;
     }

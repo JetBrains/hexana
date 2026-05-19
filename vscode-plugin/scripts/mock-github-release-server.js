@@ -78,6 +78,6 @@ function readMcpServerVersion() {
 function defaultMcpServerArchivePath(version) {
     return path.resolve(
         __dirname,
-        `../../mcp/vscode-server/build/distributions/hexana-vscode-mcp-server-${version}.zip`,
+        `../../mcp/server/build/distributions/server-${version}.zip`,
     );
 }

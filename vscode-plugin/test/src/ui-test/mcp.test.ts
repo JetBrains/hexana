@@ -48,7 +48,7 @@ describe('Hexana MCP Server Update - Acceptance Tests', function () {
         const launcherPath = path.join(
             serverDir,
             'bin',
-            process.platform === 'win32' ? 'hexana-vscode-mcp-server.bat' : 'hexana-vscode-mcp-server',
+            process.platform === 'win32' ? 'server.bat' : 'server',
         );
         const versionMarkerPath = path.join(storageDir!, 'server.version');
         const lockPath = path.join(storageDir!, '.download.lock');
