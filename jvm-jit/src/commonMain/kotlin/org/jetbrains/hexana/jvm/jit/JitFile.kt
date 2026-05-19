@@ -100,6 +100,16 @@ class JitFile internal constructor(internal val buffer: CommonByteBuffer) {
             val bytecodeLength =
                 if (hasBytecode) buffer.u4At(absStart + SYM_OFFSET_BYTECODE_LENGTH) else 0u
 
+            // v3 (header.version >= 3): sym_entry_t carries the file offset
+            // and size of a post-patch native-code snapshot written inside
+            // CompiledMethodUnload. Both are zero when no snapshot was taken
+            // (flag off, or method never unloaded before JVM exit).
+            val hasUnloadSnapshot = header.version >= 3.toUByte()
+            val unloadSnapshotFdOffset =
+                if (hasUnloadSnapshot) buffer.u8At(absStart + SYM_OFFSET_UNLOAD_SNAPSHOT_FD_OFFSET) else 0uL
+            val unloadSnapshotSize =
+                if (hasUnloadSnapshot) buffer.u4At(absStart + SYM_OFFSET_UNLOAD_SNAPSHOT_SIZE) else 0u
+
             symbols += JitSym(
                 file = this,
                 symbolOffset = symStart,
@@ -117,6 +127,8 @@ class JitFile internal constructor(internal val buffer: CommonByteBuffer) {
                 inlineCount = inlineCount,
                 bytecodeOffset = bytecodeOffset,
                 bytecodeLength = bytecodeLength,
+                unloadSnapshotFdOffset = unloadSnapshotFdOffset,
+                unloadSnapshotSize = unloadSnapshotSize,
             )
 
             if (next == 0uL) break
@@ -155,8 +167,12 @@ class JitFile internal constructor(internal val buffer: CommonByteBuffer) {
         // v2 additions — only read when header.version >= 2.
         internal const val SYM_OFFSET_BYTECODE_OFFSET = 81
         internal const val SYM_OFFSET_BYTECODE_LENGTH = 85
+        // v3 additions — only read when header.version >= 3.
+        internal const val SYM_OFFSET_UNLOAD_SNAPSHOT_FD_OFFSET = 89
+        internal const val SYM_OFFSET_UNLOAD_SNAPSHOT_SIZE = 97
         internal const val SYM_ENTRY_SIZE_V1 = 81
-        internal const val SYM_ENTRY_SIZE = 89
+        internal const val SYM_ENTRY_SIZE_V2 = 89
+        internal const val SYM_ENTRY_SIZE = 101
 
         // jvmtiLineNumberEntry { jlocation(8); jint(4); } — struct alignment
         // requires sizeof = 16 for an array stride. The agent uses sizeof in
@@ -218,6 +234,21 @@ class JitSym internal constructor(
     private val inlineCount: UInt,
     private val bytecodeOffset: UInt = 0u,
     private val bytecodeLength: UInt = 0u,
+    /**
+     * Absolute byte offset within [JitFile.buffer] where a post-patch
+     * snapshot of this method's native code starts. Written synchronously
+     * inside the JVMTI `CompiledMethodUnload` callback when the agent was
+     * started with `snapshot_on_unload`. Zero means "no snapshot" (flag was
+     * off, or the method was never unloaded before JVM exit).
+     *
+     * Only present in v3+ dumps; defaults to zero for earlier formats.
+     */
+    val unloadSnapshotFdOffset: ULong = 0uL,
+    /**
+     * Byte count of the unload snapshot. Zero when [unloadSnapshotFdOffset]
+     * is zero (no snapshot captured).
+     */
+    val unloadSnapshotSize: UInt = 0u,
 ) {
     /** Resolved source file name via the string table. */
     val sourceFileName: String by lazy { file.string(fileNameOffset) }
@@ -271,6 +302,28 @@ class JitSym internal constructor(
             ByteArray(0)
         } else {
             val start = (symbolOffset + bytecodeOffset.toULong()).toInt()
+            ByteArray(n) { i -> file.buffer[start + i] }
+        }
+    }
+
+    /**
+     * A post-patch snapshot of the method's native code bytes, written
+     * by the agent inside `CompiledMethodUnload` when started with the
+     * `snapshot_on_unload` flag. HotSpot guarantees the nmethod region is
+     * still readable at that point (before memory is reused for a new
+     * compiled method), so this reflects the bytes as they were in their
+     * final patched state — after code-patching by safepoint handlers,
+     * deopt stubs, etc.
+     *
+     * Returns an empty array when no snapshot is available (v0–v2 dumps,
+     * flag was off, or the method was never unloaded before JVM exit).
+     */
+    val unloadSnapshot: ByteArray by lazy {
+        val n = unloadSnapshotSize.toInt()
+        if (n <= 0 || unloadSnapshotFdOffset == 0uL) {
+            ByteArray(0)
+        } else {
+            val start = unloadSnapshotFdOffset.toInt()
             ByteArray(n) { i -> file.buffer[start + i] }
         }
     }

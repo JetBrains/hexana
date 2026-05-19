@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -97,6 +98,17 @@ typedef pthread_mutex_t event_mutex_t;
 #define LOG_DEBUG 2
 static int log_level = LOG_OFF;
 
+// Agent options parsed from the agentpath argument string.
+typedef struct {
+    // When non-zero, method_unload writes a post-patch snapshot of the
+    // method's native bytes to the dump and stashes the file offset in
+    // sym_entry_t.unload_snapshot_fd_offset. HotSpot guarantees the memory
+    // is still readable inside the CompiledMethodUnload callback (the spec
+    // says the event fires before the region is reused for a new method).
+    int snapshot_on_unload;
+} agent_opts_t;
+static agent_opts_t opts;
+
 // JVMTI dispatches COMPILED_METHOD_LOAD on the JIT compiler threads, which
 // run in parallel for C1/C2. This mutex serialises every callback that
 // touches the agent's global state — the `offset` cursor, the string and
@@ -155,6 +167,13 @@ typedef struct PACKED_ATTR {
     // bytecode_length is the count of bytes.
     uint32_t bytecode_offset;
     uint32_t bytecode_length;
+    // v3 additions (header.version >= 3). Absolute file offset into the
+    // dump of a post-patch snapshot of the method's native bytes, written
+    // synchronously inside CompiledMethodUnload (when snapshot_on_unload
+    // is set). Zero means "no snapshot captured" — either the flag was off
+    // or the method was never unloaded before JVM exit.
+    uint64_t unload_snapshot_fd_offset;
+    uint32_t unload_snapshot_size;
 } sym_entry_t;
 PACKED_END
 
@@ -199,6 +218,78 @@ typedef struct sym {
 LIST_HEAD(head_syms, sym);
 static struct head_syms head_syms;
 
+// ---------------------------------------------------------------------------
+// code_addr → syms_t* hash map for O(1) CompiledMethodUnload lookup.
+//
+// Open-addressing with linear probing; capacity is always a power of two so
+// the modulo reduces to a bitwise AND. Load factor is kept below 0.75:
+// the table starts at ADDR_MAP_INIT_CAP slots and doubles when the
+// occupancy reaches (capacity * 3 / 4). The table is never shrunk.
+//
+// Keys are the `code_addr` pointer value (cast to uintptr_t); values are
+// non-owning pointers into the head_syms list. The map is always accessed
+// under event_mutex.
+// ---------------------------------------------------------------------------
+#define ADDR_MAP_INIT_CAP 256
+
+typedef struct {
+    uintptr_t key;   // code_addr; 0 means "empty slot"
+    syms_t   *value;
+} addr_map_entry_t;
+
+static addr_map_entry_t *addr_map_table = NULL;
+static size_t            addr_map_cap   = 0;
+static size_t            addr_map_count = 0;
+
+// Insert without checking the load factor — only called from addr_map_put
+// after the table has been grown if needed.
+static void addr_map_raw_insert(addr_map_entry_t *tbl, size_t cap,
+                                uintptr_t key, syms_t *value) {
+    size_t idx = (size_t)(key ^ (key >> 16)) & (cap - 1);
+    while (tbl[idx].key != 0) {
+        idx = (idx + 1) & (cap - 1);
+    }
+    tbl[idx].key   = key;
+    tbl[idx].value = value;
+}
+
+static void addr_map_put(uintptr_t key, syms_t *value) {
+    // Lazy initialisation on first insert.
+    if (addr_map_table == NULL) {
+        addr_map_table = calloc(ADDR_MAP_INIT_CAP, sizeof(addr_map_entry_t));
+        addr_map_cap   = ADDR_MAP_INIT_CAP;
+        addr_map_count = 0;
+    }
+    // Grow if load factor >= 0.75.
+    if (addr_map_count >= (addr_map_cap * 3 / 4)) {
+        size_t new_cap = addr_map_cap * 2;
+        addr_map_entry_t *new_tbl = calloc(new_cap, sizeof(addr_map_entry_t));
+        for (size_t i = 0; i < addr_map_cap; ++i) {
+            if (addr_map_table[i].key != 0) {
+                addr_map_raw_insert(new_tbl, new_cap,
+                                    addr_map_table[i].key,
+                                    addr_map_table[i].value);
+            }
+        }
+        free(addr_map_table);
+        addr_map_table = new_tbl;
+        addr_map_cap   = new_cap;
+    }
+    addr_map_raw_insert(addr_map_table, addr_map_cap, key, value);
+    addr_map_count++;
+}
+
+static syms_t *addr_map_get(uintptr_t key) {
+    if (addr_map_table == NULL || addr_map_cap == 0) return NULL;
+    size_t idx = (size_t)(key ^ (key >> 16)) & (addr_map_cap - 1);
+    while (addr_map_table[idx].key != 0) {
+        if (addr_map_table[idx].key == key)
+            return addr_map_table[idx].value;
+        idx = (idx + 1) & (addr_map_cap - 1);
+    }
+    return NULL;
+}
+
 static header_t header;
 static uint64_t offset = 0;
 
@@ -221,17 +312,20 @@ static void check_jvmti_errors(jvmtiEnv *jvmti, jvmtiError errnum, const char *s
 
 // Parse the agentpath options string. Format (all parts optional):
 //
-//   [<path>][,key=value][,key=value]...
+//   [<path>][,key=value][,bare-flag][,key=value]...
 //
 // The first comma-separated token is taken as the dump-file path when it
-// does NOT contain '='; otherwise everything is treated as key=value. Known
-// keys: `path` (dump file), `log` (off|info|debug). Unknown keys are
-// silently ignored so future agent versions can add options without
-// breaking older IDE plugins.
+// does NOT contain '='; otherwise everything is treated as key=value or a
+// bare flag. Known keys: `path` (dump file), `log` (off|info|debug).
+// Known bare flags: `snapshot_on_unload`. Unknown tokens are silently
+// ignored so future agent versions can add options without breaking older
+// IDE plugins.
 //
 // `path_out` is filled with a pointer into a heap-allocated buffer that the
 // caller must free(). `log_out` is set when the option string mentions one.
-static void parse_options(const char *options, char **path_out, int *log_out) {
+// `opts_out` is updated for any recognised boolean flags.
+static void parse_options(const char *options, char **path_out, int *log_out,
+                          agent_opts_t *opts_out) {
     *path_out = NULL;
     // `log_out` is left untouched when no `log=` is present — caller seeds
     // it with the default (LOG_OFF) so an empty option string keeps it.
@@ -243,10 +337,14 @@ static void parse_options(const char *options, char **path_out, int *log_out) {
     for (char *tok = strtok(buf, ","); tok != NULL; tok = strtok(NULL, ",")) {
         char *eq = strchr(tok, '=');
         if (eq == NULL) {
-            // Positional: only honored as the path on the first token.
+            // Bare token: treat as the dump path on the first token, or as a
+            // bare flag on subsequent tokens.
             if (first && *path_out == NULL) {
                 *path_out = strdup(tok);
+            } else if (strcmp(tok, "snapshot_on_unload") == 0) {
+                opts_out->snapshot_on_unload = 1;
             }
+            // Other bare tokens: silently ignored.
         } else {
             *eq = '\0';
             const char *key = tok;
@@ -336,13 +434,14 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
     callback.VMInit = vm_init;
     error = (*jvmti)->SetEventCallbacks(jvmti, &callback, sizeof(callback));
     check_jvmti_errors(jvmti, error, "Unable to set callbacks");
-    // -agentpath:<lib>=<dump_path>[,log=<off|info|debug>]
+    // -agentpath:<lib>=<dump_path>[,log=<off|info|debug>][,snapshot_on_unload]
     // The `options` argument is whatever follows the first `=` in the
     // -agentpath spec. When empty / NULL we fall back to the historical
     // filename so existing scripts keep working.
     char *parsed_path = NULL;
     int parsed_log = LOG_OFF;
-    parse_options(options, &parsed_path, &parsed_log);
+    memset(&opts, 0, sizeof(opts));
+    parse_options(options, &parsed_path, &parsed_log, &opts);
     log_level = parsed_log;
     const char *dump_path = parsed_path != NULL ? parsed_path : "default.jit";
     dump_fd = open(dump_path, O_CREAT|O_RDWR|O_TRUNC|DUMP_BINARY_FLAG, DUMP_FILE_MODE);
@@ -362,9 +461,12 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
     header.magic[0] = 'M';
     header.magic[1] = 'I';
     header.magic[2] = 'N';
-    // Format version 2: sym_entry_t carries bytecode_offset / bytecode_length
-    // pointing at GetBytecodes() bytes appended after the inline records.
-    header.version = 2;
+    // Format version 3: sym_entry_t additionally carries
+    // unload_snapshot_fd_offset / unload_snapshot_size pointing at a
+    // post-patch native-code snapshot written inside CompiledMethodUnload
+    // (only when the snapshot_on_unload option is active). Both fields are
+    // zero when no snapshot was captured.
+    header.version = 3;
     header.offset = sizeof(header_t);
     offset = write(dump_fd, &header, sizeof(header));
     return JNI_OK;
@@ -480,6 +582,10 @@ Agent_OnUnload(JavaVM *vm) {
             s = sn;
         }
     }
+    if (addr_map_table != NULL) {
+        free(addr_map_table);
+        addr_map_table = NULL;
+    }
     lseek(dump_fd, 0, SEEK_SET);
     write(dump_fd, &header, sizeof(header_t));
     close(dump_fd);
@@ -528,6 +634,10 @@ method_load(jvmtiEnv *jvmti_env,
     s->file_name_string = path_string;
 
     LIST_INSERT_HEAD(&head_syms, s, syms);
+    // Register in the address map so method_unload can find this sym in O(1).
+    if (opts.snapshot_on_unload) {
+        addr_map_put((uintptr_t)code_addr, s);
+    }
     uint32_t inline_count = 0;
     jvmtiCompiledMethodLoadRecordHeader* pcs = (jvmtiCompiledMethodLoadRecordHeader *)compile_info;
     while(pcs != NULL) {
@@ -660,6 +770,50 @@ static void JNICALL
 method_unload(jvmtiEnv *jvmti_env,
             jmethodID method,
             const void* code_addr) {
+    // Guard: feature is off by default; bail immediately when the flag was
+    // not set so this callback is free for unmeasured runs.
+    if (!opts.snapshot_on_unload) return;
+
+    // Look up the sym whose load-time address matches this unload event.
+    // The map is only populated when snapshot_on_unload is active, so the
+    // lookup is O(1) for that case.
+    EVENT_MUTEX_LOCK();
+    syms_t *s = addr_map_get((uintptr_t)code_addr);
+    if (s == NULL || s->entry.size == 0) {
+        EVENT_MUTEX_UNLOCK();
+        return;
+    }
+    // HotSpot guarantees the memory at code_addr is still readable inside
+    // the CompiledMethodUnload callback — "the event will be sent before the
+    // memory is reused by a newly generated compiled method" (JVMTI spec,
+    // §EventCompiledMethodUnload). We write synchronously here; the bytes
+    // land in the kernel buffer before write() returns, well within the
+    // spec's "before reuse" window.
+    //
+    // We seek to `offset` (not SEEK_END) so the write lands contiguously
+    // after any previously written code bytes, and then advance `offset` by
+    // the number of bytes written. This is the same pattern method_load uses
+    // for its code-byte write. Not using SEEK_END avoids a race if a
+    // concurrent method_load is happening (both paths are under the mutex, so
+    // in practice there is no race, but the seek-to-offset pattern keeps the
+    // dump layout deterministic and doesn't depend on the kernel's idea of the
+    // file end).
+    lseek(dump_fd, (off_t)offset, SEEK_SET);
+    uint64_t snap_off = offset;
+    uint64_t expected = s->entry.size;
+    uint64_t written = (uint64_t)write(dump_fd, code_addr, (size_t)expected);
+    offset += written;
+    if (written == expected) {
+        s->entry.unload_snapshot_fd_offset = snap_off;
+        s->entry.unload_snapshot_size      = (uint32_t)expected;
+        if (log_level >= LOG_DEBUG) {
+            fprintf(stderr, "[hexana-jitview] unload snapshot %p:%llu @%llu\n",
+                code_addr,
+                (unsigned long long)s->entry.size,
+                (unsigned long long)snap_off);
+        }
+    }
+    EVENT_MUTEX_UNLOCK();
 }
 
 static void JNICALL

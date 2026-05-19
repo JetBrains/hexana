@@ -89,6 +89,10 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
                 append("log=")
                 append(settings.logLevel.cliValue)
             }
+            if (settings.snapshotOnUnload) {
+                append(',')
+                append("snapshot_on_unload")
+            }
         }
         params.vmParametersList.add("-agentpath:${agentPath.toAbsolutePath()}=$agentOptions")
         configuration.putCopyableUserData(RESOLVED_DUMP_KEY, resolvedDump.path)
@@ -129,7 +133,8 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
         val logLevel = child.getAttributeValue(ATTR_LOG_LEVEL)
             ?.let { stored -> JitviewLogLevel.entries.firstOrNull { it.cliValue == stored } }
             ?: JitviewLogLevel.Off
-        runConfiguration.putCopyableUserData(SETTINGS_KEY, JitviewSettings(enabled, dumpPath, logLevel))
+        val snapshotOnUnload = child.getAttributeValue(ATTR_SNAPSHOT_ON_UNLOAD)?.toBoolean() ?: false
+        runConfiguration.putCopyableUserData(SETTINGS_KEY, JitviewSettings(enabled, dumpPath, logLevel, snapshotOnUnload))
     }
 
     override fun writeExternal(runConfiguration: RunConfigurationBase<*>, element: Element) {
@@ -138,7 +143,8 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
         // run-config XML stays lean for users who never touch the tab.
         if (!settings.enabled &&
             settings.dumpPath == JitviewSettings.DEFAULT_DUMP_PATH &&
-            settings.logLevel == JitviewLogLevel.Off
+            settings.logLevel == JitviewLogLevel.Off &&
+            !settings.snapshotOnUnload
         ) {
             return
         }
@@ -149,6 +155,9 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
                 if (settings.logLevel != JitviewLogLevel.Off) {
                     setAttribute(ATTR_LOG_LEVEL, settings.logLevel.cliValue)
                 }
+                if (settings.snapshotOnUnload) {
+                    setAttribute(ATTR_SNAPSHOT_ON_UNLOAD, "true")
+                }
             },
         )
     }
@@ -158,6 +167,7 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
         const val ATTR_ENABLED: String = "enabled"
         const val ATTR_DUMP_PATH: String = "dump-path"
         const val ATTR_LOG_LEVEL: String = "log-level"
+        const val ATTR_SNAPSHOT_ON_UNLOAD: String = "snapshot-on-unload"
         val SETTINGS_KEY: Key<JitviewSettings> = Key.create("hexana.jitview.settings")
         val RESOLVED_DUMP_KEY: Key<String> = Key.create("hexana.jitview.resolvedDumpPath")
     }
@@ -168,6 +178,13 @@ data class JitviewSettings(
     val enabled: Boolean = false,
     val dumpPath: String = DEFAULT_DUMP_PATH,
     val logLevel: JitviewLogLevel = JitviewLogLevel.Off,
+    /**
+     * When true, passes `snapshot_on_unload` to the agent, causing it to
+     * write a post-patch snapshot of each method's native bytes inside the
+     * `CompiledMethodUnload` callback. Adds one synchronous `write()` per
+     * unloaded JIT-compiled method; HotSpot-only tested.
+     */
+    val snapshotOnUnload: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_DUMP_PATH: String = "default.jit"
@@ -195,6 +212,7 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
     private val dumpPathLabel = JLabel("Dump file:")
     private val logLevelLabel = JLabel("Log level:")
     private val logLevelCombo = JComboBox(DefaultComboBoxModel(JitviewLogLevel.entries.toTypedArray()))
+    private val snapshotCheckbox = JBCheckBox("Capture post-patch snapshot on method unload")
     private val statusLabel = JBLabel(buildAvailabilityHint())
 
     override fun resetEditorFrom(configuration: P) {
@@ -203,12 +221,14 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
         dumpPathField.text = settings?.dumpPath?.takeIf { it.isNotBlank() }
             ?: JitviewSettings.DEFAULT_DUMP_PATH
         logLevelCombo.selectedItem = settings?.logLevel ?: JitviewLogLevel.Off
+        snapshotCheckbox.isSelected = settings?.snapshotOnUnload ?: false
         val available = JitviewAgentLocator.locate() != null
         checkbox.isEnabled = available
         dumpPathField.isEnabled = available
         dumpPathLabel.isEnabled = available
         logLevelCombo.isEnabled = available
         logLevelLabel.isEnabled = available
+        snapshotCheckbox.isEnabled = available
         statusLabel.text = buildAvailabilityHint()
     }
 
@@ -219,6 +239,7 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
                 enabled = checkbox.isSelected,
                 dumpPath = dumpPathField.text.ifBlank { JitviewSettings.DEFAULT_DUMP_PATH },
                 logLevel = (logLevelCombo.selectedItem as? JitviewLogLevel) ?: JitviewLogLevel.Off,
+                snapshotOnUnload = snapshotCheckbox.isSelected,
             ),
         )
     }
@@ -254,6 +275,10 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
 
         c.gridx = 0; c.gridy = 3; c.gridwidth = 2
         c.weightx = 0.0; c.fill = GridBagConstraints.NONE
+        c.insets = Insets(0, 0, 4, 0)
+        panel.add(snapshotCheckbox, c)
+
+        c.gridy = 4
         c.insets = Insets(8, 0, 0, 0)
         panel.add(statusLabel, c)
 
@@ -266,6 +291,10 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
         logLevelCombo.toolTipText =
             "Verbosity of the agent's stderr output. \"Off\" is fully silent; \"Info\" emits a " +
                 "load/unload summary; \"Debug\" prints one line per JIT-compiled method."
+        snapshotCheckbox.toolTipText =
+            "Passes snapshot_on_unload to the agent. Inside each CompiledMethodUnload callback the " +
+                "agent performs a synchronous write() of the method's native bytes in their final " +
+                "post-patch state. Adds one I/O per JIT-compiled method unload; HotSpot-only tested."
         return panel
     }
 
