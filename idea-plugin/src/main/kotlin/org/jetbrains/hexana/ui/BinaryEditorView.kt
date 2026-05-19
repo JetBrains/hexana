@@ -233,6 +233,22 @@ internal fun BinaryEditorView(
             }
         }
 
+        // When an external caller (e.g. the JIT view's chicory-AOT badge) pushes
+        // a WasmFunctionNavTarget, the inner `LaunchedEffect(navTarget)` inside
+        // WasmPanelWatVirtualized only fires while that panel is currently
+        // composed. Force the tab to "WAT (virtualized)" here so the panel
+        // mounts and its nav effect runs.
+        LaunchedEffect(wasmNavFlow, panels) {
+            wasmNavFlow.collect { target ->
+                if (target == null) return@collect
+                val idx = panels.indexOfFirst { it.description == "WAT (virtualized)" }
+                org.jetbrains.hexana.HexanaLog.LOG.warn(
+                    "[chicory-debug] BinaryEditorView: wasmNavFlow target=$target panelsCount=${panels.size} watVirtualizedIdx=$idx currentTab=${state.currentState.value.tabIndex}",
+                )
+                if (idx >= 0) state.setSelectedTab(idx)
+            }
+        }
+
         VerticalSplitPanel(state, northPanel = {
             Column(modifier = Modifier.fillMaxSize()) {
                 FileDescriptionBar(

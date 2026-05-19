@@ -33,6 +33,8 @@
 
     <depends optional="true" config-file="org.jetbrains.hexana.javascript.xml">JavaScript</depends>
     <depends optional="true" config-file="org.jetbrains.hexana.java.xml">com.intellij.modules.java</depends>
+    <depends optional="true" config-file="org.jetbrains.hexana.maven.xml">org.jetbrains.idea.maven</depends>
+    <depends optional="true" config-file="org.jetbrains.hexana.gradle.xml">com.intellij.gradle</depends>
 
     <dependencies>
         <plugin id="com.intellij.mcpServer"/>

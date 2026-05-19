@@ -1,6 +1,8 @@
 <idea-plugin>
     <extensions defaultExtensionNs="com.intellij">
         <fileBasedIndex implementation="org.jetbrains.hexana.javaLang.JavaWasmReferenceIndex"/>
+        <projectService serviceImplementation="org.jetbrains.hexana.javaLang.ChicoryAotRegistryImpl"
+                        serviceInterface="org.jetbrains.hexana.javaLang.ChicoryAotRegistry"/>
         <completion.contributor language="JAVA"
                                 implementationClass="org.jetbrains.hexana.javaLang.GraalWasmJavaCompletionContributor"
                                 order="first"/>

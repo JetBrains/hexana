@@ -1,0 +1,10 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="org.jetbrains.idea.maven">
+        <importing.afterImportConfigurator implementation="org.jetbrains.hexana.maven.ChicoryMavenConfigurator"/>
+    </extensions>
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Repopulate ChicoryAotRegistry from cached Maven state on project open
+             so registry isn't empty until the user manually re-syncs Maven. -->
+        <postStartupActivity implementation="org.jetbrains.hexana.maven.ChicoryMavenStartupActivity"/>
+    </extensions>
+</idea-plugin>
