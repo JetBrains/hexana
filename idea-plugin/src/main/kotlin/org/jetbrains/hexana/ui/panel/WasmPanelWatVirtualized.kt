@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -31,6 +32,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.MutableStateFlow
+import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -120,6 +123,16 @@ internal fun WasmPanelWatVirtualized(
      * collapsed pattern intact across edit commits.
      */
     foldedSectionsExternal: MutableState<Set<ChunkId>>? = null,
+    /**
+     * External navigation request. Non-null value drives the panel to scroll
+     * to the specified function's body in the WAT virtualized view. After
+     * consumption the flow is reset to null so equal re-clicks fire again.
+     *
+     * Seeded from [WASM_FUNCTION_NAV_TARGET_KEY] user-data on construction;
+     * subsequent requests for an already-open editor are pushed via
+     * [org.jetbrains.hexana.HexanaFileEditor.requestWasmFunctionNav].
+     */
+    navTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
 ) {
     val panelState = remember(provider) { buildPanelState(provider) }
     val chunkTree = panelState.chunkTree
@@ -267,6 +280,17 @@ internal fun WasmPanelWatVirtualized(
                 navigator.gotoFunc(provider.importFuncCount + lastCodeIdx, recordHistory = false)
             }
         }
+    }
+
+    // External "jump to function N" requests wired from HexanaFileEditor.
+    // The flow is seeded from VirtualFile UserData on first open (one-shot)
+    // and kept alive for already-open-editor pushes via requestWasmFunctionNav.
+    // Resetting to null after each consumption lets equal re-clicks re-fire.
+    val navTarget by navTargetFlow.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(navTarget) {
+        val target = navTarget ?: return@LaunchedEffect
+        navigator.gotoFunc(target.funcIdx)
+        navTargetFlow.value = null
     }
 
     // Lowercase function name → global funcidx, built from the chunk tree's

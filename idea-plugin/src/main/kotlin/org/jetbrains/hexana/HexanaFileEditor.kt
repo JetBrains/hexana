@@ -32,6 +32,8 @@ import org.jetbrains.hexana.ui.BinaryEditorView
 import org.jetbrains.hexana.ui.CLASS_FILE_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.ClassFileNavTarget
 import org.jetbrains.hexana.ui.HexSearchField
+import org.jetbrains.hexana.ui.WASM_FUNCTION_NAV_TARGET_KEY
+import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.setupSearchActions
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
@@ -79,6 +81,30 @@ class HexanaFileEditor(
      */
     fun requestClassFileNav(target: ClassFileNavTarget) {
         classFileNavTargetFlow.value = target
+    }
+
+    /**
+     * Pending WASM function navigation request. Seeded from the file's
+     * [WASM_FUNCTION_NAV_TARGET_KEY] user-data on construction (one-shot
+     * consume); subsequent requests for an already-open editor are pushed via
+     * [requestWasmFunctionNav]. The flow is consumed inside [WasmPanelWatVirtualized]
+     * and reset to null after each navigation so equal re-clicks still fire.
+     */
+    private val wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> =
+        MutableStateFlow(myFile.getUserData(WASM_FUNCTION_NAV_TARGET_KEY)).also {
+            myFile.putUserData(WASM_FUNCTION_NAV_TARGET_KEY, null)
+        }
+
+    /**
+     * Drive the embedded WAT virtualized view to the body of function [target].
+     * Safe to call from any thread; the flow is consumed inside the Compose tree.
+     *
+     * If the WAT (virtualized) panel is not currently visible the navigation is
+     * deferred — the [LaunchedEffect] inside [WasmPanelWatVirtualized] fires
+     * the moment the panel composes.
+     */
+    fun requestWasmFunctionNav(target: WasmFunctionNavTarget) {
+        wasmFunctionNavTargetFlow.value = target
     }
 
     init {
@@ -213,6 +239,7 @@ class HexanaFileEditor(
                     onNavigateToParent = parentFile?.let { pf ->
                         { FileEditorManager.getInstance(myProject).openFile(pf, true) }
                     },
+                    wasmFunctionNavTargetFlow = wasmFunctionNavTargetFlow,
                 )
             }
         }

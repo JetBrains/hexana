@@ -26,6 +26,7 @@ import org.jetbrains.hexana.document.journal.JournalPersister
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.ui.panel.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -41,6 +42,7 @@ internal fun BinaryEditorView(
     fileName: String = "",
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
+    wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
 ) {
     // Phase F: every opened file gets one editable BinaryDocument shared by
     // the editor's lifecycle. Edits land in this doc, but ONLY the WAT
@@ -157,6 +159,11 @@ internal fun BinaryEditorView(
     // and folded-section MutableState references, preserving state.
     val watVirtualizedListState = rememberLazyListState()
     val watVirtualizedFolded = remember { mutableStateOf<Set<ChunkId>>(emptySet()) }
+    // The WASM function nav-target flow. Lifted here (above the panels
+    // remember boundary) so the same flow instance persists across provider
+    // rebuilds triggered by edit commits. The default is the flow passed in
+    // from HexanaFileEditor; panels capture it by reference.
+    val wasmNavFlow: MutableStateFlow<WasmFunctionNavTarget?> = wasmFunctionNavTargetFlow
 
     // IDE-keymap-routed Undo / Redo for the editable document. Attached at
     // the BinaryEditorView root so the shortcut fires from anywhere inside
@@ -203,6 +210,7 @@ internal fun BinaryEditorView(
                     watVirtualizedListState = watVirtualizedListState,
                     watVirtualizedFolded = watVirtualizedFolded,
                     liveProviderProvider = { liveProvider },
+                    wasmFunctionNavTargetFlow = wasmNavFlow,
                 )
             }
             mutableStateListOf(*p)
@@ -488,6 +496,7 @@ private fun BinaryProvider.resolvePanels(
     watVirtualizedListState: LazyListState? = null,
     watVirtualizedFolded: MutableState<Set<ChunkId>>? = null,
     liveProviderProvider: (() -> BinaryProvider)? = null,
+    wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>? = null,
 ): Array<Panel> {
     val enricher = getTabEnricher()
     val tabPanels = TableTabsProviderRegistry.providers.flatMap {
@@ -515,6 +524,8 @@ private fun BinaryProvider.resolvePanels(
                             editableDoc = editableDoc,
                             listState = watVirtualizedListState,
                             foldedSectionsExternal = watVirtualizedFolded,
+                            navTargetFlow = wasmFunctionNavTargetFlow
+                                ?: remember { MutableStateFlow(null) },
                         )
                     },
                 ) + dwarfPanels(this, state)
@@ -547,6 +558,8 @@ private fun BinaryProvider.resolvePanels(
                             editableDoc = editableDoc,
                             listState = watVirtualizedListState,
                             foldedSectionsExternal = watVirtualizedFolded,
+                            navTargetFlow = wasmFunctionNavTargetFlow
+                                ?: remember { MutableStateFlow(null) },
                         )
                     },
                 ) + dwarfPanels(this, state)
