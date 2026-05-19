@@ -27,6 +27,12 @@ const mcpMockPort = Number(process.env.HEXANA_MCP_MOCK_PORT || '18765');
 const mcpStorageDir = path.resolve(
     process.env.HEXANA_MCP_STORAGE_DIR || path.join(os.tmpdir(), `hexana-vscode-mcp-test-${process.pid}`),
 );
+const mcpFailureMockPort = Number(process.env.HEXANA_MCP_FAILURE_MOCK_PORT || '18766');
+const mcpFailureStorageDir = path.resolve(
+    process.env.HEXANA_MCP_FAILURE_STORAGE_DIR ||
+        path.join(os.tmpdir(), `hexana-vscode-mcp-failure-test-${process.pid}`),
+);
+const mcpFailureRequestLog = path.join(mcpFailureStorageDir, 'mock-requests.log');
 
 main().catch(error => {
     console.error(error);
@@ -46,7 +52,9 @@ async function main(): Promise<void> {
             fakePostHog.reset();
             await runExtest([
                 'run-tests',
-                './out/ui-test/*.test.js',
+                './out/ui-test/hexana.test.js',
+                './out/ui-test/run-configurations.test.js',
+                './out/ui-test/mcp.test.js',
                 '--code_version',
                 codeVersion,
                 '--code_settings',
@@ -68,6 +76,49 @@ async function main(): Promise<void> {
         } finally {
             mockServer?.kill();
             fs.rmSync(mcpStorageDir, { recursive: true, force: true });
+        }
+
+        const failureMockServer = startMcpMockServerIfAvailable({
+            port: mcpFailureMockPort,
+            storageDir: mcpFailureStorageDir,
+            failArchive: true,
+            requestLog: mcpFailureRequestLog,
+            version: `${mcpVersion}-failure`,
+        });
+        try {
+            if (failureMockServer) {
+                fakePostHog.reset();
+                await runExtest([
+                    'run-tests',
+                    './out/ui-test/mcpFailure.test.js',
+                    '--code_version',
+                    codeVersion,
+                    '--code_settings',
+                    settingsPath,
+                    '--extensions_dir',
+                    extensionsDir,
+                    '-r',
+                    wasmWorkspace,
+                    wasmFixture,
+                ], {
+                    ...fakePostHog.env,
+                    ...mcpTestEnv({
+                        enabled: true,
+                        port: mcpFailureMockPort,
+                        storageDir: mcpFailureStorageDir,
+                        failure: true,
+                        requestLog: mcpFailureRequestLog,
+                    }),
+                    HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests (MCP download failure)',
+                    VSIX_PATH: vsixPath,
+                    WASM_FIXTURE: wasmFixture,
+                    WASM_WORKSPACE: wasmWorkspace,
+                    VSCODE_EXTENSIONS_DIR: extensionsDir,
+                });
+            }
+        } finally {
+            failureMockServer?.kill();
+            fs.rmSync(mcpFailureStorageDir, { recursive: true, force: true });
         }
 
         const noJavaPathDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hexana-vscode-no-java-path-'));
@@ -190,7 +241,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function startMcpMockServerIfAvailable(): childProcess.ChildProcess | undefined {
+interface McpMockServerOptions {
+    port: number;
+    storageDir: string;
+    failArchive?: boolean;
+    requestLog?: string;
+    version?: string;
+}
+
+function startMcpMockServerIfAvailable(options: McpMockServerOptions = {
+    port: mcpMockPort,
+    storageDir: mcpStorageDir,
+}): childProcess.ChildProcess | undefined {
     if (!fs.existsSync(mcpServerZip)) {
         console.warn(
             `Skipping Hexana MCP UI test setup because MCP server ZIP was not found: ${mcpServerZip}\n` +
@@ -199,42 +261,62 @@ function startMcpMockServerIfAvailable(): childProcess.ChildProcess | undefined 
         return undefined;
     }
 
-    fs.rmSync(mcpStorageDir, { recursive: true, force: true });
-    fs.mkdirSync(mcpStorageDir, { recursive: true });
+    fs.rmSync(options.storageDir, { recursive: true, force: true });
+    fs.mkdirSync(options.storageDir, { recursive: true });
 
     const scriptPath = path.resolve(testRoot, '..', 'scripts', 'mock-github-release-server.js');
-    const child = childProcess.spawn(process.execPath, [scriptPath, mcpServerZip, mcpVersion], {
+    const child = childProcess.spawn(process.execPath, [scriptPath, mcpServerZip, options.version ?? mcpVersion], {
         cwd: path.dirname(scriptPath),
         env: {
             ...process.env,
-            PORT: String(mcpMockPort),
+            PORT: String(options.port),
+            HEXANA_MCP_MOCK_FAIL_ARCHIVE: options.failArchive ? '1' : '0',
+            HEXANA_MCP_MOCK_REQUEST_LOG: options.requestLog ?? '',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
     child.stdout?.on('data', (chunk) => process.stdout.write(chunk));
     child.stderr?.on('data', (chunk) => process.stderr.write(chunk));
 
-    waitForMockServer();
+    waitForMockServer(options.port);
     return child;
 }
 
-function mcpTestEnv(enabled: boolean): NodeJS.ProcessEnv {
-    if (!enabled) {
+interface McpTestEnvOptions {
+    enabled: boolean;
+    port: number;
+    storageDir: string;
+    failure?: boolean;
+    requestLog?: string;
+}
+
+function mcpTestEnv(options: boolean | McpTestEnvOptions): NodeJS.ProcessEnv {
+    const resolved = typeof options === 'boolean'
+        ? {
+            enabled: options,
+            port: mcpMockPort,
+            storageDir: mcpStorageDir,
+        }
+        : options;
+
+    if (!resolved.enabled) {
         return {};
     }
 
     return {
         HEXANA_VSCODE_MCP_TEST: '1',
+        HEXANA_VSCODE_MCP_FAILURE_TEST: resolved.failure ? '1' : '0',
         HEXANA_MCP_TEST_VERSION: mcpVersion,
-        HEXANA_MCP_STORAGE_DIR: mcpStorageDir,
-        HEXANA_MCP_GITHUB_RELEASE_API_URL: `http://127.0.0.1:${mcpMockPort}/repos/example/hexana-mcp/releases/latest`,
-        HEXANA_MCP_RELEASES_PAGE_URL: `http://127.0.0.1:${mcpMockPort}/releases`,
+        HEXANA_MCP_STORAGE_DIR: resolved.storageDir,
+        HEXANA_MCP_GITHUB_RELEASE_API_URL: `http://127.0.0.1:${resolved.port}/repos/example/hexana-mcp/releases/latest`,
+        HEXANA_MCP_RELEASES_PAGE_URL: `http://127.0.0.1:${resolved.port}/releases`,
+        HEXANA_MCP_MOCK_REQUEST_LOG: resolved.requestLog ?? '',
     };
 }
 
-function waitForMockServer(): void {
+function waitForMockServer(port: number): void {
     const deadline = Date.now() + 10_000;
-    const url = `http://127.0.0.1:${mcpMockPort}/repos/example/hexana-mcp/releases/latest`;
+    const url = `http://127.0.0.1:${port}/repos/example/hexana-mcp/releases/latest`;
 
     while (Date.now() < deadline) {
         const result = childProcess.spawnSync(process.execPath, [

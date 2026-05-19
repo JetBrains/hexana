@@ -14,6 +14,8 @@ powered by [vscode-extension-tester](https://github.com/redhat-developer/vscode-
 - Updating the Hexana MCP server from a mocked GitHub Release downloads,
   extracts, and launches the standalone MCP server distribution when the MCP
   ZIP has been built.
+- A failed MCP archive download leaves no partial server directory, no version
+  marker, and no stale download lock.
 - Unit coverage for the MCP downloader/provider verifies release metadata
   handling, checksum failures, quiet background failures, cache reuse, disabled
   MCP registration, and resolved stdio server definitions.
@@ -89,7 +91,8 @@ test/
 └── src/
     ├── ui-test/
     │   ├── hexana.test.ts # Main editor acceptance test suite
-    │   └── mcp.test.ts    # MCP update/download acceptance test
+    │   ├── mcp.test.ts    # MCP update/download acceptance test
+    │   └── mcpFailure.test.ts # MCP failed-download acceptance test
     └── unit/
         ├── mcpServerDownloader.test.ts # Downloader edge cases
         ├── mcpServerProvider.test.ts   # VS Code MCP provider edge cases
