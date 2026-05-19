@@ -492,10 +492,12 @@ sync_public_bundle() {
 
   sync_file_if_present ".claude-plugin/marketplace.json"
   sync_file_if_present ".agents/plugins/marketplace.json"
+  sync_file_if_present "LICENSE.txt"
 
   sync_file_if_present "plugins/$PLUGIN_NAME/.mcp.json"
   sync_file_if_present "plugins/$PLUGIN_NAME/release.lock.json"
   sync_file_if_present "plugins/$PLUGIN_NAME/README.md"
+  sync_file_if_present "plugins/$PLUGIN_NAME/LICENSE.txt"
   sync_dir_if_present "plugins/$PLUGIN_NAME/.claude-plugin"
   sync_dir_if_present "plugins/$PLUGIN_NAME/.codex-plugin"
   sync_dir_if_present "plugins/$PLUGIN_NAME/skills"
@@ -511,10 +513,10 @@ sync_public_bundle() {
 is_allowed_public_path() {
   local path="$1"
   case "$path" in
-    .claude-plugin/marketplace.json|.agents/plugins/marketplace.json)
+    .claude-plugin/marketplace.json|.agents/plugins/marketplace.json|LICENSE.txt)
       return 0
       ;;
-    "plugins/$PLUGIN_NAME/.mcp.json"|"plugins/$PLUGIN_NAME/release.lock.json"|"plugins/$PLUGIN_NAME/README.md")
+    "plugins/$PLUGIN_NAME/.mcp.json"|"plugins/$PLUGIN_NAME/release.lock.json"|"plugins/$PLUGIN_NAME/README.md"|"plugins/$PLUGIN_NAME/LICENSE.txt")
       return 0
       ;;
     "plugins/$PLUGIN_NAME/.claude-plugin/"*|"plugins/$PLUGIN_NAME/.codex-plugin/"*)

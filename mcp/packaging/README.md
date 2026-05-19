@@ -152,6 +152,7 @@ Optional environment variables:
 
 Public files allowlist:
 
+- `LICENSE.txt`
 - `.claude-plugin/marketplace.json`
 - `.agents/plugins/marketplace.json`
 - `plugins/<plugin-name>/.claude-plugin/**`
@@ -159,6 +160,7 @@ Public files allowlist:
 - `plugins/<plugin-name>/.mcp.json`
 - `plugins/<plugin-name>/release.lock.json`
 - `plugins/<plugin-name>/README.md`
+- `plugins/<plugin-name>/LICENSE.txt`
 - `plugins/<plugin-name>/skills/**`
 - `plugins/<plugin-name>/mcp/**`
 - `plugins/<plugin-name>/bin/**`

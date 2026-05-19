@@ -50,6 +50,7 @@ val plainPackagingDir = layout.buildDirectory.dir("packaging-plain")
 val obfuscatedPackagingDir = layout.buildDirectory.dir("packaging")
 val obfuscatedInstallDir = project(":mcp").layout.buildDirectory.dir("install/server-r8")
 val publicMarketplaceDir = layout.projectDirectory.dir("out/teamcity/public-marketplace")
+val pluginLicenseFile = layout.projectDirectory.file("packaging/LICENSE.txt")
 val r8RulesFile = layout.projectDirectory.file("packaging/r8-rules.pro")
 val r8OwnedJarNames = setOf(
     "analytics-jvm.jar",
@@ -126,7 +127,11 @@ fun registerPackagingSync(
             filter { line -> line.replace(GENERATED_VERSION_TOKEN, mcpServerVersion) }
         }
     }
+    from(pluginLicenseFile)
     from(runtimeInstallDir) {
+        into("server")
+    }
+    from(pluginLicenseFile) {
         into("server")
     }
     into(outputRootDir.map { it.dir(packagingDirName) })
@@ -258,6 +263,9 @@ val zipObfuscatedMcpServer = tasks.register<Zip>("zipObfuscatedMcpServer") {
             permissions { unix("rwxr-xr-x") }
         }
     }
+    from(pluginLicenseFile) {
+        into("server")
+    }
     archiveBaseName.set("server")
     archiveVersion.set(mcpServerVersion)
     destinationDirectory.set(layout.buildDirectory.dir("distributions"))
@@ -310,7 +318,11 @@ tasks.register<Sync>("installRepoLocalClaudePlugin") {
             filter { line -> line.replace(GENERATED_VERSION_TOKEN, mcpServerVersion) }
         }
     }
+    from(pluginLicenseFile)
     from(standaloneInstallDir) {
+        into("server")
+    }
+    from(pluginLicenseFile) {
         into("server")
     }
     into(rootProject.layout.projectDirectory.dir("plugins/hexana"))
@@ -325,7 +337,11 @@ tasks.register<Sync>("installRepoLocalCodexPlugin") {
             filter { line -> line.replace(GENERATED_VERSION_TOKEN, mcpServerVersion) }
         }
     }
+    from(pluginLicenseFile)
     from(standaloneInstallDir) {
+        into("server")
+    }
+    from(pluginLicenseFile) {
         into("server")
     }
     into(rootProject.layout.projectDirectory.dir("plugins/hexana"))
@@ -434,6 +450,10 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
     from(obfuscatedPackagingDir.map { it.dir("codex-plugin/skills") }) {
         into("plugins/hexana/skills")
     }
+    from(pluginLicenseFile)
+    from(pluginLicenseFile) {
+        into("plugins/hexana")
+    }
 
     doFirst {
         delete(publicMarketplaceDir)
@@ -540,6 +560,7 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
             - `.codex-plugin/plugin.json`: Codex plugin manifest.
             - `.claude-plugin/mcp.json` and `.codex-plugin/mcp.json`: client-specific MCP server configuration.
             - `bin/hexana-mcp`: launcher used by the client plugin.
+            - `LICENSE.txt`: JetBrains plugin license agreement.
             - `server/`: bundled standalone Hexana MCP runtime.
             - `skills/wasm-inspector/`: Codex skill metadata and instructions.
 

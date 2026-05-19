@@ -8,6 +8,7 @@ This package is the Claude Code wrapper for the standalone Hexana MCP runtime in
 - `.mcp.json`: MCP server configuration using `${CLAUDE_PLUGIN_ROOT}` for portable path resolution
 - `bin/hexana-mcp`: POSIX launcher that delegates to the bundled standalone server
 - `bin/hexana-mcp.cmd`: Windows launcher equivalent
+- `LICENSE.txt`: JetBrains plugin license agreement
 - `skills/wasm-inspector/`: bundled skill for WebAssembly inspection workflows
 
 ## Install flows

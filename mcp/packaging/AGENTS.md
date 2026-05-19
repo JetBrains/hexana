@@ -4,7 +4,8 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
 
 ## Ownership Boundary
 
-- Keep this folder packaging-only: manifests, `.mcp.json`, launcher scripts, and README files.
+- Keep this folder packaging-only: manifests, `.mcp.json`, launcher scripts, README files, and distribution license
+  files.
 - Do not duplicate MCP runtime logic here. The executable source of truth stays in `mcp/server`.
 - Wrapper scripts should prefer a bundled `server/bin/server` runtime inside the assembled package.
 - `HEXANA_SERVER_BIN` may override the bundled runtime for local testing.

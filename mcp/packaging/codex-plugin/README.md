@@ -7,6 +7,7 @@ This package is the Codex-facing wrapper for the standalone Hexana MCP runtime i
 - `.codex-plugin/plugin.json`: required Codex plugin manifest
 - `.mcp.json`: distributable MCP config that launches `./bin/hexana-mcp` with `cwd` set to the plugin root
 - `bin/hexana-mcp`: thin launcher that delegates to the bundled standalone server
+- `LICENSE.txt`: JetBrains plugin license agreement
 - `skills/wasm-inspector/`: bundled Codex skill plus `agents/openai.yaml` metadata
 
 ## Repo-local install flow
