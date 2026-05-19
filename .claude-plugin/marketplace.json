@@ -1,0 +1,16 @@
+{
+  "name": "hexana",
+  "owner": {
+    "name": "JetBrains"
+  },
+  "metadata": {
+    "description": "Hexana marketplace distribution for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "hexana",
+      "source": "./plugins/hexana",
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PLUGIN_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+SERVER_BIN=${HEXANA_SERVER_BIN:-"$PLUGIN_ROOT/server/bin/server"}
+
+if [ ! -f "$SERVER_BIN" ]; then
+  echo "Hexana standalone launcher not found: $SERVER_BIN" >&2
+  echo "Bundle the standalone runtime under \"$PLUGIN_ROOT/server\" or set HEXANA_SERVER_BIN to the launcher path." >&2
+  exit 1
+fi
+
+if [ ! -x "$SERVER_BIN" ]; then
+  echo "Hexana standalone launcher is not executable: $SERVER_BIN" >&2
+  exit 1
+fi
+
+exec "$SERVER_BIN" "$@"
