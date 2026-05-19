@@ -96,7 +96,7 @@ fun HexanaPanel(
     // Core Wasm function args dialog
     // -----------------------------------------------------------------------
     val wasmPending = pendingRun.wasmExport
-    if (wasmPending != null && pendingRun.wasmParams.isNotEmpty()) {
+    if (wasmPending != null) {
         FunctionArgsDialog(
             exportName = wasmPending.name,
             args = wasmArgDescriptors(pendingRun.wasmParams),
@@ -146,7 +146,7 @@ fun HexanaPanel(
     // Component function args dialog
     // -----------------------------------------------------------------------
     val funcPending = pendingRun.funcExport
-    if (funcPending != null && pendingRun.funcArgs.isNotEmpty()) {
+    if (funcPending != null) {
         FunctionArgsDialog(
             exportName = pendingRun.funcInvokeName,
             args = pendingRun.funcArgs,

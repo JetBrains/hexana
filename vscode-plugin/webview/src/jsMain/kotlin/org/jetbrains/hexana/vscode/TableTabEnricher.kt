@@ -102,7 +102,7 @@ private fun enrichWasmExportsTab(
                     val signature = resolveFunctionSignature(provider, export)
                     val params = signature?.params ?: emptyList()
 
-                    if (params.isNotEmpty() && params.all { isTrivialType(it) }) {
+                    if (params.isEmpty() || params.all { isTrivialType(it) }) {
                         onPendingWasmArgs(export, params)
                     } else {
                         postRunExportToHost(
@@ -156,7 +156,7 @@ private fun enrichComponentExportsTab(
                     val funcType = resolveComponentFunctionType(export, provider)
                     val params = funcType?.params ?: emptyList()
 
-                    if (params.isNotEmpty() && params.all { isTrivialComponentType(it.value, types) }) {
+                    if (params.isEmpty() || params.all { isTrivialComponentType(it.value, types) }) {
                         val argDescriptors = componentArgDescriptors(params, types)
                         onPendingComponentArgs(invokeName, argDescriptors, export)
                     } else {
