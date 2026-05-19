@@ -4,11 +4,17 @@ import * as os from 'os';
 import * as path from 'path';
 import { FakePostHogServer } from './fakePostHogServer';
 
+function defaultVsixName(): string {
+    const packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as { name: string; version: string };
+    return `${pkg.name}-${pkg.version}.vsix`;
+}
+
 const testRoot = process.cwd();
 const codeVersion = process.env.VSCODE_TEST_VERSION || 'max';
 const extensionsDir = path.resolve(process.env.VSCODE_EXTENSIONS_DIR || path.join(testRoot, '.test-extensions'));
 const settingsPath = path.resolve(process.env.VSCODE_CODE_SETTINGS || path.join(testRoot, 'settings.json'));
-const vsixPath = path.resolve(process.env.VSIX_PATH || path.join(testRoot, '..', 'hexana-wasm-0.0.1.vsix'));
+const vsixPath = path.resolve(process.env.VSIX_PATH || path.join(testRoot, '..', defaultVsixName()));
 const wasmFixture = path.resolve(process.env.WASM_FIXTURE || path.join(testRoot, 'fixtures', 'test-exports.wasm'));
 const wasmWorkspace = path.resolve(process.env.WASM_WORKSPACE || path.dirname(wasmFixture));
 
