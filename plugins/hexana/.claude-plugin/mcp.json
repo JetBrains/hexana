@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "hexana": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/hexana-mcp",
+      "args": [
+        "stdio"
+      ]
+    }
+  }
+}

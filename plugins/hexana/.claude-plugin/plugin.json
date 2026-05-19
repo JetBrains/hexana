@@ -1,0 +1,20 @@
+{
+  "name": "hexana",
+  "version": "0.1.0",
+  "description": "Inspect and analyze WebAssembly modules through MCP tools backed by the Hexana runtime.",
+  "author": {
+    "name": "JetBrains",
+    "url": "https://www.jetbrains.com/"
+  },
+  "homepage": "https://github.com/JetBrains/hexana",
+  "repository": "https://github.com/JetBrains/hexana",
+  "license": "Apache-2.0",
+  "keywords": [
+    "webassembly",
+    "wasm",
+    "mcp",
+    "developer-tools"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.claude-plugin/mcp.json"
+}

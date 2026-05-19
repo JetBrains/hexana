@@ -1,0 +1,37 @@
+{
+  "name": "hexana",
+  "version": "0.1.0",
+  "description": "WebAssembly inspection tools for Codex backed by the Hexana MCP server.",
+  "author": {
+    "name": "JetBrains",
+    "url": "https://www.jetbrains.com/"
+  },
+  "homepage": "https://github.com/JetBrains/hexana",
+  "repository": "https://github.com/JetBrains/hexana",
+  "keywords": [
+    "webassembly",
+    "wasm",
+    "mcp",
+    "developer-tools",
+    "intellij"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.codex-plugin/mcp.json",
+  "interface": {
+    "displayName": "Hexana",
+    "shortDescription": "Inspect WebAssembly modules through MCP.",
+    "longDescription": "Bundle the standalone Hexana MCP runtime with a Codex skill for WebAssembly inspection workflows.",
+    "developerName": "JetBrains",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read"
+    ],
+    "websiteURL": "https://github.com/JetBrains/hexana",
+    "privacyPolicyURL": "https://www.jetbrains.com/legal/docs/privacy/privacy/",
+    "termsOfServiceURL": "https://www.jetbrains.com/legal/docs/company/useterms/",
+    "defaultPrompt": [
+      "Use Hexana to summarize the imports, exports, and memories in this WebAssembly module.",
+      "Use Hexana to explain the structure of the selected .wasm file."
+    ]
+  }
+}
