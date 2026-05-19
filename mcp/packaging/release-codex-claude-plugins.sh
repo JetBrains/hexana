@@ -711,12 +711,6 @@ write_pr_body() {
     printf 'Updated public files:\n'
     join_lines_for_pr
     printf '\n'
-    printf 'Validation:\n'
-    local result
-    for result in "${VALIDATION_RESULTS[@]}"; do
-      printf -- '- %s\n' "$result"
-    done
-    printf '\n'
     printf 'Smoke tests:\n'
     printf -- '- Release tests and plugin smoke tests passed before publication.\n'
     printf '\n'
