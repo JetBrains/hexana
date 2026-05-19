@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/JetBrains/hexana",
   "repository": "https://github.com/JetBrains/hexana",
-  "license": "Apache-2.0",
+  "license": "SEE LICENSE IN LICENSE.txt",
   "keywords": [
     "webassembly",
     "wasm",

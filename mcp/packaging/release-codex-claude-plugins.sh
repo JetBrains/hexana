@@ -230,6 +230,34 @@ check_artifact_file_content() {
   fi
 }
 
+require_nonempty_file() {
+  local context="$1"
+  local file="$2"
+  [ -f "$file" ] || die "$context is missing required file: $file"
+  [ -s "$file" ] || die "$context has empty required file: $file"
+}
+
+check_release_artifact_legal_files() {
+  local zip_name="$1"
+  local root="$2"
+
+  case "$zip_name" in
+    hexana-claude-plugin-*.zip|hexana-codex-plugin-*.zip)
+      require_nonempty_file "Release artifact $zip_name" "$root/LICENSE.txt"
+      require_nonempty_file "Release artifact $zip_name" "$root/THIRD-PARTY-NOTICES.md"
+      require_nonempty_file "Release artifact $zip_name" "$root/server/LICENSE.txt"
+      require_nonempty_file "Release artifact $zip_name" "$root/server/THIRD-PARTY-NOTICES.md"
+      ;;
+    server-*.zip)
+      require_nonempty_file "Release artifact $zip_name" "$root/server/LICENSE.txt"
+      require_nonempty_file "Release artifact $zip_name" "$root/server/THIRD-PARTY-NOTICES.md"
+      ;;
+    *)
+      die "Unexpected release artifact name: $zip_name"
+      ;;
+  esac
+}
+
 is_absolute_command_path() {
   local command_path="$1"
   case "$command_path" in
@@ -265,6 +293,26 @@ check_mcp_json_command_paths() {
 
   if jq -e '.. | objects | select(.command? == "./bin/hexana-mcp" and .cwd? != ".")' "$file" >/dev/null; then
     die "$context contains Codex .mcp.json command ./bin/hexana-mcp without cwd=. in $rel"
+  fi
+}
+
+check_plugin_manifest_license() {
+  local context="$1"
+  local rel="$2"
+  local file="$3"
+  local license
+
+  case "$rel" in
+    .claude-plugin/plugin.json|*/.claude-plugin/plugin.json)
+      ;;
+    *)
+      return
+      ;;
+  esac
+
+  license="$(jq -r '.license // empty' "$file")"
+  if [ "$license" != "SEE LICENSE IN LICENSE.txt" ]; then
+    die "$context contains unsupported Claude plugin license in $rel: ${license:-<missing>}"
   fi
 }
 
@@ -377,17 +425,36 @@ security_check_release_artifacts() {
       check_artifact_file_name "$zip_name" "$rel"
       check_artifact_file_content "$zip_name" "$rel" "$file"
       check_mcp_json_command_paths "Release artifact $zip_name" "$rel" "$file"
+      check_plugin_manifest_license "Release artifact $zip_name" "$rel" "$file"
     done < <(find "$extract_dir" -type f -print)
 
     check_embedded_jar_entries "$zip_name" "$extract_dir"
     check_obfuscated_runtime_layout "$zip_name" "$extract_dir"
     check_obfuscated_runtime_hardening "$zip_name" "$extract_dir"
+    check_release_artifact_legal_files "$zip_name" "$extract_dir"
   done
   rm -rf "$security_dir"
 }
 
+check_public_bundle_legal_files() {
+  [ ! -e "$GENERATED_PUBLIC_DIR/LICENSE.txt" ] || die "Public marketplace bundle must not contain repository-root LICENSE.txt"
+  [ ! -e "$GENERATED_PUBLIC_DIR/THIRD-PARTY-NOTICES.md" ] || die "Public marketplace bundle must not contain repository-root THIRD-PARTY-NOTICES.md"
+  require_nonempty_file "Public marketplace bundle" "$GENERATED_PUBLIC_DIR/plugins/$PLUGIN_NAME/LICENSE.txt"
+  require_nonempty_file "Public marketplace bundle" "$GENERATED_PUBLIC_DIR/plugins/$PLUGIN_NAME/THIRD-PARTY-NOTICES.md"
+  require_nonempty_file "Public marketplace bundle" "$GENERATED_PUBLIC_DIR/plugins/$PLUGIN_NAME/server/LICENSE.txt"
+  require_nonempty_file "Public marketplace bundle" "$GENERATED_PUBLIC_DIR/plugins/$PLUGIN_NAME/server/THIRD-PARTY-NOTICES.md"
+}
+
+check_public_bundle_plugin_manifest_licenses() {
+  local manifest="$GENERATED_PUBLIC_DIR/plugins/$PLUGIN_NAME/.claude-plugin/plugin.json"
+  require_nonempty_file "Public marketplace bundle" "$manifest"
+  check_plugin_manifest_license "Public marketplace bundle" "plugins/$PLUGIN_NAME/.claude-plugin/plugin.json" "$manifest"
+}
+
 validate_public_bundle() {
   [ -d "$GENERATED_PUBLIC_DIR" ] || die "Generated public marketplace bundle is missing: $GENERATED_PUBLIC_DIR"
+  check_public_bundle_legal_files
+  check_public_bundle_plugin_manifest_licenses
 
   find "$GENERATED_PUBLIC_DIR" -type f -name '*.json' -print0 |
     while IFS= read -r -d '' file; do
@@ -492,12 +559,12 @@ sync_public_bundle() {
 
   sync_file_if_present ".claude-plugin/marketplace.json"
   sync_file_if_present ".agents/plugins/marketplace.json"
-  sync_file_if_present "LICENSE.txt"
 
   sync_file_if_present "plugins/$PLUGIN_NAME/.mcp.json"
   sync_file_if_present "plugins/$PLUGIN_NAME/release.lock.json"
   sync_file_if_present "plugins/$PLUGIN_NAME/README.md"
   sync_file_if_present "plugins/$PLUGIN_NAME/LICENSE.txt"
+  sync_file_if_present "plugins/$PLUGIN_NAME/THIRD-PARTY-NOTICES.md"
   sync_dir_if_present "plugins/$PLUGIN_NAME/.claude-plugin"
   sync_dir_if_present "plugins/$PLUGIN_NAME/.codex-plugin"
   sync_dir_if_present "plugins/$PLUGIN_NAME/skills"
@@ -513,10 +580,10 @@ sync_public_bundle() {
 is_allowed_public_path() {
   local path="$1"
   case "$path" in
-    .claude-plugin/marketplace.json|.agents/plugins/marketplace.json|LICENSE.txt)
+    .claude-plugin/marketplace.json|.agents/plugins/marketplace.json)
       return 0
       ;;
-    "plugins/$PLUGIN_NAME/.mcp.json"|"plugins/$PLUGIN_NAME/release.lock.json"|"plugins/$PLUGIN_NAME/README.md"|"plugins/$PLUGIN_NAME/LICENSE.txt")
+    "plugins/$PLUGIN_NAME/.mcp.json"|"plugins/$PLUGIN_NAME/release.lock.json"|"plugins/$PLUGIN_NAME/README.md"|"plugins/$PLUGIN_NAME/LICENSE.txt"|"plugins/$PLUGIN_NAME/THIRD-PARTY-NOTICES.md")
       return 0
       ;;
     "plugins/$PLUGIN_NAME/.claude-plugin/"*|"plugins/$PLUGIN_NAME/.codex-plugin/"*)
@@ -669,6 +736,14 @@ check_staged_mcp_json_command_paths() {
   done
 }
 
+check_staged_plugin_manifest_licenses() {
+  local file
+  for file in "${STAGED_CONTENT_FILES[@]}"; do
+    [ -f "$CLONE_DIR/$file" ] || continue
+    check_plugin_manifest_license "Public marketplace diff" "$file" "$CLONE_DIR/$file"
+  done
+}
+
 run_safety_checks() {
   log "Running staged diff safety checks"
   check_allowed_paths
@@ -676,6 +751,7 @@ run_safety_checks() {
   check_staged_symlinks
   check_secret_patterns
   check_staged_mcp_json_command_paths
+  check_staged_plugin_manifest_licenses
   git -C "$CLONE_DIR" diff --cached --check
 }
 
