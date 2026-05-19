@@ -648,7 +648,7 @@ function prepareGraalRunnerArgs(javaExe: string): string[] | undefined {
     // tells the JVM to load every JAR in that folder.
     const jarDir = path.dirname(polyglotJars[0]);
     const classpath = [classesDir, path.join(jarDir, "*")].join(path.delimiter);
-    return ["-cp", classpath, GRAAL_RUNNER_CLASS];
+    return ["--enable-native-access=ALL-UNNAMED", "--sun-misc-unsafe-memory-access=allow", "-cp", classpath, GRAAL_RUNNER_CLASS];
 }
 
 /**

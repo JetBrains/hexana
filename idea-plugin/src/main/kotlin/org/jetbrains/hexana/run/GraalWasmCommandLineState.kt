@@ -122,6 +122,8 @@ private class ExternalGraalWasmCommandLineState(
 
         val commandLine = GeneralCommandLine().apply {
             exePath = javaExe
+            addParameter("--enable-native-access=ALL-UNNAMED")
+            addParameter("--sun-misc-unsafe-memory-access=allow")
             addParameters("-cp", classpath)
             addParameter(RUNNER_CLASS)
             addParameters(stubArgs)
