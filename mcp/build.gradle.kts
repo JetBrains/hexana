@@ -186,7 +186,7 @@ fun renderThirdPartyNotices(components: List<ThirdPartyComponentNotice>): String
         }
         appendLine()
     }
-}
+}.trimEnd() + "\n"
 
 jib {
     from {
