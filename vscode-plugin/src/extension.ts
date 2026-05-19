@@ -122,7 +122,7 @@ function isHexanaTelemetryEnabled(): boolean {
  * the user has already configured for `*.wasm`.
  */
 function ensureWasmEditorAssociation(): void {
-    const config = vscode.workspace.getConfiguration("workbench.editor");
+    const config = vscode.workspace.getConfiguration("workbench");
     const inspected = config.inspect<Record<string, string>>("editorAssociations");
 
     // Check whether the user (or workspace) has already set an association for *.wasm.
