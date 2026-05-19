@@ -38,6 +38,12 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "hexana.vscode.mcp",
+        "label": "Hexana MCP"
+      }
+    ],
     "commands": [
       {
         "command": "hexana.mcp.updateServer",
@@ -190,6 +196,27 @@
           "type": "string",
           "default": "",
           "description": "Custom path to the lldb executable, used for WAMR remote debugging. When empty, the extension searches the system PATH."
+        },
+        "hexana.mcp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Register the downloaded Hexana MCP server in VS Code."
+        },
+        "hexana.mcp.javaHome": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Path to a Java 21 or later home used by the Hexana MCP server. Leave empty to use JAVA_HOME or java on PATH."
+        },
+        "hexana.mcp.logLevel": {
+          "type": "string",
+          "enum": [
+            "quiet",
+            "info",
+            "debug"
+          ],
+          "default": "quiet",
+          "description": "Human-readable stderr logging level for the Hexana MCP server."
         }
       }
     },
