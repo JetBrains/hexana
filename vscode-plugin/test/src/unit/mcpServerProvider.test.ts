@@ -32,7 +32,7 @@ describe('Hexana MCP server provider', function () {
         process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = 'http://127.0.0.1:1/unreachable';
         vscode.settings['hexana.mcp.enabled'] = false;
 
-        const providerModule = require('../../../out/mcpServerProvider');
+        const providerModule = requireExtensionModule('mcpServerProvider');
         providerModule.registerMcpServerDefinitionProvider(extensionContext(tempRoot), {
             isTelemetryEnabled: () => true,
         });
@@ -50,7 +50,7 @@ describe('Hexana MCP server provider', function () {
         process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
 
         try {
-            const providerModule = require('../../../out/mcpServerProvider');
+            const providerModule = requireExtensionModule('mcpServerProvider');
             const context = extensionContext(tempRoot);
             providerModule.registerMcpServerDefinitionProvider(context, {
                 isTelemetryEnabled: () => false,
@@ -94,7 +94,7 @@ describe('Hexana MCP server provider', function () {
         process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
 
         try {
-            const providerModule = require('../../../out/mcpServerProvider');
+            const providerModule = requireExtensionModule('mcpServerProvider');
             providerModule.registerMcpServerDefinitionProvider(extensionContext(tempRoot), {
                 isTelemetryEnabled: () => true,
             });
@@ -212,6 +212,10 @@ function clearExtensionModuleCache(): void {
             delete require.cache[key];
         }
     }
+}
+
+function requireExtensionModule(moduleName: string): any {
+    return require(path.join(__dirname, '..', '..', '..', '..', '..', 'out', moduleName));
 }
 
 async function waitForFile(filePath: string): Promise<void> {

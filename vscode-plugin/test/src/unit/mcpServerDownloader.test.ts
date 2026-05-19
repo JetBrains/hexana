@@ -43,7 +43,7 @@ describe('Hexana MCP server downloader', function () {
         process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
 
         try {
-            const downloader = require('../../../out/mcpServerDownloader');
+            const downloader = requireExtensionModule('mcpServerDownloader');
             const context = extensionContext(tempRoot);
 
             const firstUri = await downloader.prepareHexanaMcpServer(context);
@@ -69,7 +69,7 @@ describe('Hexana MCP server downloader', function () {
     });
 
     it('ignores stale version markers when the launcher is missing', async function () {
-        const downloader = require('../../../out/mcpServerDownloader');
+        const downloader = requireExtensionModule('mcpServerDownloader');
         const context = extensionContext(tempRoot);
         fs.mkdirSync(process.env.HEXANA_MCP_STORAGE_DIR!, { recursive: true });
         fs.writeFileSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server.version'), '0.7.0');
@@ -82,7 +82,7 @@ describe('Hexana MCP server downloader', function () {
         process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
 
         try {
-            const downloader = require('../../../out/mcpServerDownloader');
+            const downloader = requireExtensionModule('mcpServerDownloader');
             const result = await downloader.prepareHexanaMcpServer(extensionContext(tempRoot), {
                 showErrorNotification: false,
             });
@@ -119,7 +119,7 @@ describe('Hexana MCP server downloader', function () {
         process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
 
         try {
-            const downloader = require('../../../out/mcpServerDownloader');
+            const downloader = requireExtensionModule('mcpServerDownloader');
             const result = await downloader.prepareHexanaMcpServer(extensionContext(tempRoot));
 
             expect(result).to.equal(undefined);
@@ -135,7 +135,7 @@ describe('Hexana MCP server downloader', function () {
         process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
 
         try {
-            const downloader = require('../../../out/mcpServerDownloader');
+            const downloader = requireExtensionModule('mcpServerDownloader');
             const result = await downloader.prepareHexanaMcpServer(extensionContext(tempRoot), {
                 showErrorNotification: false,
             });
@@ -161,7 +161,7 @@ describe('Hexana MCP server downloader', function () {
             const staleTimestamp = new Date(Date.now() - 180_000);
             fs.utimesSync(lockPath, staleTimestamp, staleTimestamp);
 
-            const downloader = require('../../../out/mcpServerDownloader');
+            const downloader = requireExtensionModule('mcpServerDownloader');
             const result = await downloader.prepareHexanaMcpServer(extensionContext(tempRoot), {
                 showErrorNotification: false,
             });
@@ -180,7 +180,7 @@ describe('Hexana MCP server downloader', function () {
         process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
 
         try {
-            const downloader = require('../../../out/mcpServerDownloader');
+            const downloader = requireExtensionModule('mcpServerDownloader');
             const context = extensionContext(tempRoot);
             await downloader.prepareHexanaMcpServer(context);
             downloader.registerHexanaMcpServerCommands(context);
@@ -373,4 +373,8 @@ function clearExtensionModuleCache(): void {
             delete require.cache[key];
         }
     }
+}
+
+function requireExtensionModule(moduleName: string): any {
+    return require(path.join(__dirname, '..', '..', '..', '..', '..', 'out', moduleName));
 }
