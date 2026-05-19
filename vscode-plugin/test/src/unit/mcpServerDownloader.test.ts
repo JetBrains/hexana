@@ -1,0 +1,350 @@
+import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as http from 'http';
+import * as os from 'os';
+import * as path from 'path';
+import { expect } from 'chai';
+import { installVscodeMock, VscodeMock } from './vscode-mock';
+
+interface TestReleaseServer {
+    apiUrl: string;
+    close(): Promise<void>;
+    requestCounts: {
+        metadata: number;
+        archive: number;
+    };
+}
+
+describe('Hexana MCP server downloader', function () {
+    this.timeout(30_000);
+
+    let vscode: VscodeMock;
+    let tempRoot: string;
+    let previousEnv: NodeJS.ProcessEnv;
+
+    beforeEach(function () {
+        previousEnv = { ...process.env };
+        tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hexana-mcp-downloader-test-'));
+        process.env.HEXANA_MCP_STORAGE_DIR = path.join(tempRoot, 'storage');
+        vscode = installVscodeMock();
+        clearExtensionModuleCache();
+    });
+
+    afterEach(function () {
+        vscode.restore();
+        process.env = previousEnv;
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+        clearExtensionModuleCache();
+    });
+
+    it('downloads, verifies, extracts, marks version, and reuses an already prepared latest server', async function () {
+        const archivePath = createServerArchive(tempRoot, '0.7.0');
+        const server = await startReleaseServer(archivePath, '0.7.0');
+        process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
+
+        try {
+            const downloader = require('../../../out/mcpServerDownloader');
+            const context = extensionContext(tempRoot);
+
+            const firstUri = await downloader.prepareHexanaMcpServer(context);
+            expect(firstUri?.fsPath).to.equal(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server'));
+            expect(server.requestCounts.archive).to.equal(1);
+            expect(fs.readFileSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server.version'), 'utf8').trim())
+                .to.equal('0.7.0');
+            expect(fs.existsSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, '.download.lock'))).to.equal(false);
+
+            const launcherPath = downloader.getHexanaMcpServerLauncherPath(context);
+            expect(fs.existsSync(launcherPath)).to.equal(true);
+            if (process.platform !== 'win32') {
+                fs.accessSync(launcherPath, fs.constants.X_OK);
+            }
+
+            const secondUri = await downloader.prepareHexanaMcpServer(context);
+            expect(secondUri?.fsPath).to.equal(firstUri?.fsPath);
+            expect(server.requestCounts.archive).to.equal(1);
+            expect(await downloader.getDownloadedHexanaMcpServerVersion(context)).to.equal('0.7.0');
+        } finally {
+            await server.close();
+        }
+    });
+
+    it('ignores stale version markers when the launcher is missing', async function () {
+        const downloader = require('../../../out/mcpServerDownloader');
+        const context = extensionContext(tempRoot);
+        fs.mkdirSync(process.env.HEXANA_MCP_STORAGE_DIR!, { recursive: true });
+        fs.writeFileSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server.version'), '0.7.0');
+
+        expect(await downloader.getDownloadedHexanaMcpServerVersion(context)).to.equal(undefined);
+    });
+
+    it('returns undefined without user notification when background download fails quietly', async function () {
+        const server = await startBrokenDownloadReleaseServer('0.7.0');
+        process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
+
+        try {
+            const downloader = require('../../../out/mcpServerDownloader');
+            const result = await downloader.prepareHexanaMcpServer(extensionContext(tempRoot), {
+                showErrorNotification: false,
+            });
+
+            expect(result).to.equal(undefined);
+            expect(vscode.messages).to.deep.equal([]);
+        } finally {
+            await server.close();
+        }
+    });
+
+    it('keeps an installed server when latest release metadata is unavailable', async function () {
+        const server = await startUnavailableMetadataReleaseServer();
+        process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
+        createInstalledServer(process.env.HEXANA_MCP_STORAGE_DIR!, '0.7.0');
+
+        try {
+            const downloader = requireExtensionModule('mcpServerDownloader');
+            const result = await downloader.prepareHexanaMcpServer(extensionContext(tempRoot), {
+                showErrorNotification: false,
+            });
+
+            expect(result?.fsPath).to.equal(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server'));
+            expect(fs.readFileSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server.version'), 'utf8').trim())
+                .to.equal('0.7.0');
+            expect(server.requestCounts.archive).to.equal(0);
+        } finally {
+            await server.close();
+        }
+    });
+
+    it('shows retry/download notification on foreground failure', async function () {
+        const server = await startBrokenDownloadReleaseServer('0.7.0');
+        process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
+
+        try {
+            const downloader = require('../../../out/mcpServerDownloader');
+            const result = await downloader.prepareHexanaMcpServer(extensionContext(tempRoot));
+
+            expect(result).to.equal(undefined);
+            expect(vscode.messages).to.deep.equal(['Hexana MCP server could not be downloaded automatically.']);
+        } finally {
+            await server.close();
+        }
+    });
+
+    it('does not install a server and removes the lock after checksum mismatch', async function () {
+        const archivePath = createServerArchive(tempRoot, '0.7.0');
+        const server = await startReleaseServer(archivePath, '0.7.0', '0'.repeat(64));
+        process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
+
+        try {
+            const downloader = require('../../../out/mcpServerDownloader');
+            const result = await downloader.prepareHexanaMcpServer(extensionContext(tempRoot), {
+                showErrorNotification: false,
+            });
+
+            expect(result).to.equal(undefined);
+            expect(fs.existsSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server'))).to.equal(false);
+            expect(fs.existsSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, '.download.lock'))).to.equal(false);
+        } finally {
+            await server.close();
+        }
+    });
+
+    it('Update Server command reports already up to date without redownloading the same version', async function () {
+        const archivePath = createServerArchive(tempRoot, '0.7.0');
+        const server = await startReleaseServer(archivePath, '0.7.0');
+        process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
+
+        try {
+            const downloader = require('../../../out/mcpServerDownloader');
+            const context = extensionContext(tempRoot);
+            await downloader.prepareHexanaMcpServer(context);
+            downloader.registerHexanaMcpServerCommands(context);
+
+            await vscode.commands.get('hexana.mcp.updateServer')?.();
+
+            expect(server.requestCounts.archive).to.equal(1);
+            expect(vscode.messages).to.contain('Hexana MCP server is already up to date (0.7.0).');
+        } finally {
+            await server.close();
+        }
+    });
+});
+
+function extensionContext(tempRoot: string): any {
+    return {
+        extensionPath: tempRoot,
+        extension: {
+            packageJSON: {
+                version: '0.1.0',
+            },
+        },
+        globalStorageUri: {
+            fsPath: path.join(tempRoot, 'global-storage'),
+        },
+        subscriptions: [],
+    };
+}
+
+function createServerArchive(tempRoot: string, version: string): string {
+    const sourceRoot = path.join(tempRoot, `server-${version}-source`);
+    createInstalledServer(sourceRoot, version);
+
+    const archivePath = path.join(tempRoot, `server-${version}.zip`);
+    createZipArchive(path.join(sourceRoot, 'server'), archivePath);
+    return archivePath;
+}
+
+function createInstalledServer(storageDir: string, version: string): void {
+    const serverBin = path.join(storageDir, 'server', 'bin');
+    fs.mkdirSync(serverBin, { recursive: true });
+    const posixLauncherPath = path.join(serverBin, 'server');
+    const windowsLauncherPath = path.join(serverBin, 'server.bat');
+    fs.writeFileSync(
+        posixLauncherPath,
+        `#!/usr/bin/env sh\necho hexana-mcp ${version}\n`,
+    );
+    fs.writeFileSync(windowsLauncherPath, `@echo off\r\necho hexana-mcp ${version}\r\n`);
+    if (process.platform !== 'win32') {
+        fs.chmodSync(posixLauncherPath, 0o755);
+    }
+    fs.writeFileSync(path.join(storageDir, 'server.version'), `${version}\n`, 'utf8');
+}
+
+function createZipArchive(sourceDir: string, archivePath: string): void {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const AdmZip = require('adm-zip') as new () => {
+        addLocalFolder(localPath: string, zipPath?: string): void;
+        writeZip(targetPath: string): void;
+    };
+    const zip = new AdmZip();
+    zip.addLocalFolder(sourceDir, 'server');
+    zip.writeZip(archivePath);
+}
+
+async function startReleaseServer(
+    archivePath: string,
+    version: string,
+    digest = sha256(archivePath),
+): Promise<TestReleaseServer> {
+    const requestCounts = { metadata: 0, archive: 0 };
+    const server = http.createServer((request, response) => {
+        if (request.url === '/repos/example/hexana/releases/latest') {
+            requestCounts.metadata++;
+            response.setHeader('Content-Type', 'application/json');
+            response.end(JSON.stringify({
+                tag_name: version,
+                assets: [
+                    {
+                        name: `server-${version}.zip`,
+                        browser_download_url: baseUrl(server) + `/download/server-${version}.zip`,
+                        digest: `sha256:${digest}`,
+                    },
+                ],
+            }));
+            return;
+        }
+
+        if (request.url === `/download/server-${version}.zip`) {
+            requestCounts.archive++;
+            response.setHeader('Content-Type', 'application/zip');
+            fs.createReadStream(archivePath).pipe(response);
+            return;
+        }
+
+        response.statusCode = 404;
+        response.end('not found');
+    });
+
+    await listen(server);
+    return {
+        apiUrl: baseUrl(server) + '/repos/example/hexana/releases/latest',
+        close: () => close(server),
+        requestCounts,
+    };
+}
+
+async function startBrokenDownloadReleaseServer(version: string): Promise<TestReleaseServer> {
+    const requestCounts = { metadata: 0, archive: 0 };
+    const server = http.createServer((request, response) => {
+        if (request.url === '/repos/example/hexana/releases/latest') {
+            requestCounts.metadata++;
+            response.setHeader('Content-Type', 'application/json');
+            response.end(JSON.stringify({
+                tag_name: version,
+                assets: [
+                    {
+                        name: `server-${version}.zip`,
+                        browser_download_url: baseUrl(server) + `/download/server-${version}.zip`,
+                        digest: `sha256:${'0'.repeat(64)}`,
+                    },
+                ],
+            }));
+            return;
+        }
+
+        if (request.url === `/download/server-${version}.zip`) {
+            requestCounts.archive++;
+            response.statusCode = 500;
+            response.end('download failure');
+            return;
+        }
+
+        response.statusCode = 404;
+        response.end('not found');
+    });
+    await listen(server);
+    return {
+        apiUrl: baseUrl(server) + '/repos/example/hexana/releases/latest',
+        close: () => close(server),
+        requestCounts,
+    };
+}
+
+async function startUnavailableMetadataReleaseServer(): Promise<TestReleaseServer> {
+    const requestCounts = { metadata: 0, archive: 0 };
+    const server = http.createServer((request, response) => {
+        if (request.url === '/repos/example/hexana/releases/latest') {
+            requestCounts.metadata++;
+            response.statusCode = 503;
+            response.end('unavailable');
+            return;
+        }
+
+        requestCounts.archive++;
+        response.statusCode = 500;
+        response.end('unexpected archive request');
+    });
+    await listen(server);
+    return {
+        apiUrl: baseUrl(server) + '/repos/example/hexana/releases/latest',
+        close: () => close(server),
+        requestCounts,
+    };
+}
+
+function listen(server: http.Server): Promise<void> {
+    return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+}
+
+function close(server: http.Server): Promise<void> {
+    return new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+}
+
+function baseUrl(server: http.Server): string {
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+        throw new Error('Test server did not bind to a TCP port');
+    }
+    return `http://127.0.0.1:${address.port}`;
+}
+
+function sha256(filePath: string): string {
+    return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function clearExtensionModuleCache(): void {
+    for (const key of Object.keys(require.cache)) {
+        if (key.includes(`${path.sep}vscode-plugin${path.sep}out${path.sep}mcpServer`)) {
+            delete require.cache[key];
+        }
+    }
+}

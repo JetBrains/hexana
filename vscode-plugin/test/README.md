@@ -14,6 +14,9 @@ powered by [vscode-extension-tester](https://github.com/redhat-developer/vscode-
 - Updating the Hexana MCP server from a mocked GitHub Release downloads,
   extracts, and launches the standalone MCP server distribution when the MCP
   ZIP has been built.
+- Unit coverage for the MCP downloader/provider verifies release metadata
+  handling, checksum failures, quiet background failures, cache reuse, disabled
+  MCP registration, and resolved stdio server definitions.
 
 ## Prerequisites
 
@@ -44,6 +47,13 @@ This will:
 2. Download a compatible VS Code version and ChromeDriver.
 3. Install the Hexana `.vsix` into the test VS Code instance.
 4. Open a `.wasm` fixture file and run the Mocha test suite.
+
+For the faster MCP downloader/provider unit tests:
+
+```bash
+cd vscode-plugin
+npm run test:unit
+```
 
 The MCP update test runs only when
 `../../mcp/server/build/distributions/server-<version>.zip`
@@ -77,9 +87,13 @@ test/
 ├── fixtures/
 │   └── test-exports.wasm  # Wasm fixture with exports
 └── src/
-    └── ui-test/
-        ├── hexana.test.ts # Main editor acceptance test suite
-        └── mcp.test.ts    # MCP update/download acceptance test
+    ├── ui-test/
+    │   ├── hexana.test.ts # Main editor acceptance test suite
+    │   └── mcp.test.ts    # MCP update/download acceptance test
+    └── unit/
+        ├── mcpServerDownloader.test.ts # Downloader edge cases
+        ├── mcpServerProvider.test.ts   # VS Code MCP provider edge cases
+        └── vscode-mock.ts              # Minimal VS Code API test double
 ```
 
 ## Notes

@@ -6,6 +6,7 @@
     "compile": "tsc -p ./tsconfig.json",
     "compile:unit": "tsc -p ./tsconfig.unit.json",
     "unit-test": "npm run compile:unit && mocha ./out-unit/test/src/unit/*.test.js",
+    "unit": "npm run unit-test",
     "test": "npm run compile && node ./out/run-tests.js"
   },
   "devDependencies": {
