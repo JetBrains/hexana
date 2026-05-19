@@ -1,8 +1,9 @@
 import * as path from 'path';
-import { Workbench, EditorView, WebView, By, VSBrowser, WebDriver, Key } from 'vscode-extension-tester';
+import { Workbench, EditorView, WebView, By, VSBrowser, WebDriver } from 'vscode-extension-tester';
 import { expect } from 'chai';
 import * as fs from "fs";
 import { waitForFakePostHogEvent } from '../fakePostHogAssertions';
+import { submitQuickInputPath } from './test-utils';
 
 /**
  * Basic acceptance integration tests for the Hexana VS Code extension.
@@ -64,11 +65,7 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
                 await workbench.executeCommand('File: Open File...');
                 await driver.sleep(1000);
 
-                const input = await driver.findElement(By.css('.quick-input-widget input.input'));
-                await input.clear();
-                await input.sendKeys(WASM_FIXTURE);
-                await driver.sleep(500);
-                await input.sendKeys(Key.ENTER);
+                await submitQuickInputPath(driver, WASM_FIXTURE);
 
                 // Wait for the custom editor to appear
                 await driver.sleep(8000);

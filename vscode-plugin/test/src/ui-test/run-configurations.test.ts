@@ -6,13 +6,13 @@ import {
     By,
     VSBrowser,
     WebDriver,
-    Key,
     TerminalView,
     BottomBarPanel,
     DebugToolbar,
 } from 'vscode-extension-tester';
 import { expect } from 'chai';
 import * as fs from 'fs';
+import { submitQuickInputPath } from './test-utils';
 
 /**
  * UI tests for running Wasm functions from the Exports panel via the
@@ -80,11 +80,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
         await workbench.executeCommand('File: Open File...');
         await driver.sleep(1000);
 
-        const input = await driver.findElement(By.css('.quick-input-widget input.input'));
-        await input.clear();
-        await input.sendKeys(filePath);
-        await driver.sleep(500);
-        await input.sendKeys(Key.ENTER);
+        await submitQuickInputPath(driver, filePath);
 
         // Wait for the custom editor to appear
         await driver.sleep(8000);
