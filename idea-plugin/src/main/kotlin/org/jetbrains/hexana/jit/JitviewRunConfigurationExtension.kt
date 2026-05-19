@@ -93,6 +93,10 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
                 append(',')
                 append("snapshot_on_unload")
             }
+            if (settings.dumpLibraries) {
+                append(',')
+                append("dump_libraries")
+            }
         }
         params.vmParametersList.add("-agentpath:${agentPath.toAbsolutePath()}=$agentOptions")
         configuration.putCopyableUserData(RESOLVED_DUMP_KEY, resolvedDump.path)
@@ -134,7 +138,8 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
             ?.let { stored -> JitviewLogLevel.entries.firstOrNull { it.cliValue == stored } }
             ?: JitviewLogLevel.Off
         val snapshotOnUnload = child.getAttributeValue(ATTR_SNAPSHOT_ON_UNLOAD)?.toBoolean() ?: false
-        runConfiguration.putCopyableUserData(SETTINGS_KEY, JitviewSettings(enabled, dumpPath, logLevel, snapshotOnUnload))
+        val dumpLibraries = child.getAttributeValue(ATTR_DUMP_LIBRARIES)?.toBoolean() ?: false
+        runConfiguration.putCopyableUserData(SETTINGS_KEY, JitviewSettings(enabled, dumpPath, logLevel, snapshotOnUnload, dumpLibraries))
     }
 
     override fun writeExternal(runConfiguration: RunConfigurationBase<*>, element: Element) {
@@ -144,7 +149,8 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
         if (!settings.enabled &&
             settings.dumpPath == JitviewSettings.DEFAULT_DUMP_PATH &&
             settings.logLevel == JitviewLogLevel.Off &&
-            !settings.snapshotOnUnload
+            !settings.snapshotOnUnload &&
+            !settings.dumpLibraries
         ) {
             return
         }
@@ -158,6 +164,9 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
                 if (settings.snapshotOnUnload) {
                     setAttribute(ATTR_SNAPSHOT_ON_UNLOAD, "true")
                 }
+                if (settings.dumpLibraries) {
+                    setAttribute(ATTR_DUMP_LIBRARIES, "true")
+                }
             },
         )
     }
@@ -168,6 +177,7 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
         const val ATTR_DUMP_PATH: String = "dump-path"
         const val ATTR_LOG_LEVEL: String = "log-level"
         const val ATTR_SNAPSHOT_ON_UNLOAD: String = "snapshot-on-unload"
+        const val ATTR_DUMP_LIBRARIES: String = "dump-libraries"
         val SETTINGS_KEY: Key<JitviewSettings> = Key.create("hexana.jitview.settings")
         val RESOLVED_DUMP_KEY: Key<String> = Key.create("hexana.jitview.resolvedDumpPath")
     }
@@ -185,6 +195,15 @@ data class JitviewSettings(
      * unloaded JIT-compiled method; HotSpot-only tested.
      */
     val snapshotOnUnload: Boolean = false,
+    /**
+     * When true, passes `dump_libraries` to the agent, causing it to record
+     * every native library loaded into the JVM process (path, base address,
+     * size) in a new section of the dump at `Agent_OnUnload` time. The scan
+     * runs once, single-threaded, after JVMTI events have stopped firing —
+     * negligible cost even for large library sets (~200 entries typical, ~4 KB
+     * of dump space). Pre-v4 dumps do not carry this section.
+     */
+    val dumpLibraries: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_DUMP_PATH: String = "default.jit"
@@ -213,6 +232,7 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
     private val logLevelLabel = JLabel("Log level:")
     private val logLevelCombo = JComboBox(DefaultComboBoxModel(JitviewLogLevel.entries.toTypedArray()))
     private val snapshotCheckbox = JBCheckBox("Capture post-patch snapshot on method unload")
+    private val dumpLibrariesCheckbox = JBCheckBox("Dump loaded native libraries")
     private val statusLabel = JBLabel(buildAvailabilityHint())
 
     override fun resetEditorFrom(configuration: P) {
@@ -222,6 +242,7 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
             ?: JitviewSettings.DEFAULT_DUMP_PATH
         logLevelCombo.selectedItem = settings?.logLevel ?: JitviewLogLevel.Off
         snapshotCheckbox.isSelected = settings?.snapshotOnUnload ?: false
+        dumpLibrariesCheckbox.isSelected = settings?.dumpLibraries ?: false
         val available = JitviewAgentLocator.locate() != null
         checkbox.isEnabled = available
         dumpPathField.isEnabled = available
@@ -229,6 +250,7 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
         logLevelCombo.isEnabled = available
         logLevelLabel.isEnabled = available
         snapshotCheckbox.isEnabled = available
+        dumpLibrariesCheckbox.isEnabled = available
         statusLabel.text = buildAvailabilityHint()
     }
 
@@ -240,6 +262,7 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
                 dumpPath = dumpPathField.text.ifBlank { JitviewSettings.DEFAULT_DUMP_PATH },
                 logLevel = (logLevelCombo.selectedItem as? JitviewLogLevel) ?: JitviewLogLevel.Off,
                 snapshotOnUnload = snapshotCheckbox.isSelected,
+                dumpLibraries = dumpLibrariesCheckbox.isSelected,
             ),
         )
     }
@@ -279,6 +302,10 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
         panel.add(snapshotCheckbox, c)
 
         c.gridy = 4
+        c.insets = Insets(0, 0, 4, 0)
+        panel.add(dumpLibrariesCheckbox, c)
+
+        c.gridy = 5
         c.insets = Insets(8, 0, 0, 0)
         panel.add(statusLabel, c)
 
@@ -295,6 +322,11 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
             "Passes snapshot_on_unload to the agent. Inside each CompiledMethodUnload callback the " +
                 "agent performs a synchronous write() of the method's native bytes in their final " +
                 "post-patch state. Adds one I/O per JIT-compiled method unload; HotSpot-only tested."
+        dumpLibrariesCheckbox.toolTipText =
+            "Passes dump_libraries to the agent. At JVM shutdown, the agent scans all native " +
+                "libraries loaded into the process (path, base address, size) and records them in " +
+                "the dump. One scan at shutdown — no per-event overhead. Enables the Hexana viewer " +
+                "to resolve raw native addresses (e.g. call targets) to a library + offset."
         return panel
     }
 

@@ -19,8 +19,11 @@
 // macros aliasing the unprefixed POSIX names to them; <windows.h> provides
 // CRITICAL_SECTION for the event mutex. No pthread / <sys/queue.h> exists,
 // so the LIST_* macros below are vendored from BSD <sys/queue.h>.
+// <psapi.h> provides EnumProcessModules / GetModuleInformation for library
+// enumeration when dump_libraries is active.
 #include <io.h>
 #include <windows.h>
+#include <psapi.h>
 
 // `lseek` on Windows is 32-bit and would truncate JIT dumps larger than
 // 2 GiB; alias to the 64-bit variant.
@@ -58,6 +61,17 @@ typedef CRITICAL_SECTION event_mutex_t;
 #include <sys/queue.h>
 #include <unistd.h>
 #include <pthread.h>
+// <link.h> provides dl_iterate_phdr for library enumeration on Linux /
+// FreeBSD when dump_libraries is active.
+#if defined(__linux__) || defined(__FreeBSD__)
+#include <link.h>
+#endif
+// <mach-o/dyld.h> and <mach-o/loader.h> provide the dyld iteration APIs on
+// macOS (_dyld_image_count, _dyld_get_image_name, etc.).
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+#endif
 
 #define DUMP_FILE_MODE       0600
 #define DUMP_BINARY_FLAG     0
@@ -106,6 +120,13 @@ typedef struct {
     // is still readable inside the CompiledMethodUnload callback (the spec
     // says the event fires before the region is reused for a new method).
     int snapshot_on_unload;
+    // When non-zero, Agent_OnUnload records every native library loaded into
+    // the JVM process (path, base address, size) into a new section of the
+    // dump. Captured once at shutdown; JVMs rarely unload native libraries
+    // mid-run so a single late capture covers the full lifetime. Only one
+    // write() per library, done single-threaded under event_mutex, so the
+    // cost is negligible even for large library sets (~200 entries typical).
+    int dump_libraries;
 } agent_opts_t;
 static agent_opts_t opts;
 
@@ -130,7 +151,25 @@ typedef struct PACKED_ATTR {
     uint64_t syms_offset;
     uint64_t string_offset;
     size_t size;
+    // v4 additions: native library table written once at Agent_OnUnload when
+    // dump_libraries is active. library_table_offset is the absolute byte
+    // offset in the dump where the table starts; library_count is the number
+    // of lib_entry_t records. Both are zero when dump_libraries is off or on
+    // a pre-v4 agent build.
+    uint64_t library_table_offset;
+    uint32_t library_count;
 } header_t;
+PACKED_END
+
+// One record in the library table. Packed, 20 bytes.
+// path_string_id is an offset into the string table (same interner used by
+// sym_entry_t); base_addr and size describe the library's loaded range.
+PACKED_BEGIN
+typedef struct PACKED_ATTR {
+    uint32_t path_string_id;
+    uint64_t base_addr;
+    uint64_t size;
+} lib_entry_t;
 PACKED_END
 
 typedef struct string {
@@ -293,6 +332,152 @@ static syms_t *addr_map_get(uintptr_t key) {
 static header_t header;
 static uint64_t offset = 0;
 
+// ---------------------------------------------------------------------------
+// Cross-platform library enumeration for the dump_libraries option.
+//
+// enumerate_libraries() calls `callback(path, base_addr, size, ctx)` once per
+// loaded native library. The callback receives:
+//   path      — absolute filesystem path (may be empty/null for anonymous
+//               mappings, e.g. JIT stubs on Linux)
+//   base_addr — runtime load address (ASLR-adjusted on macOS)
+//   size      — total mapped size (sum of PT_LOAD segments on Linux/FreeBSD;
+//               LC_SEGMENT(|_64) total on macOS; SizeOfImage on Windows)
+//   ctx       — opaque pointer forwarded from the enumerate_libraries() call
+//
+// The callback signature is designed so it works identically across all three
+// platform backends despite the very different OS APIs.
+// ---------------------------------------------------------------------------
+
+typedef void (*lib_callback_t)(const char *path, uint64_t base_addr,
+                               uint64_t size, void *ctx);
+
+#if defined(_WIN32)
+
+// Windows: EnumProcessModules + GetModuleFileNameExA + GetModuleInformation.
+// Psapi.lib is linked via CMakeLists.txt; the MinGW toolchain accepts -lpsapi.
+static void enumerate_libraries(lib_callback_t callback, void *ctx) {
+    HANDLE proc = GetCurrentProcess();
+    HMODULE mods[4096];
+    DWORD bytes_needed = 0;
+    if (!EnumProcessModules(proc, mods, sizeof(mods), &bytes_needed)) {
+        return;
+    }
+    DWORD count = bytes_needed / (DWORD)sizeof(HMODULE);
+    for (DWORD i = 0; i < count; ++i) {
+        char path[MAX_PATH];
+        path[0] = '\0';
+        GetModuleFileNameExA(proc, mods[i], path, (DWORD)sizeof(path));
+        MODULEINFO mi;
+        memset(&mi, 0, sizeof(mi));
+        if (GetModuleInformation(proc, mods[i], &mi, sizeof(mi))) {
+            callback(path, (uint64_t)(uintptr_t)mi.lpBaseOfDll,
+                     (uint64_t)mi.SizeOfImage, ctx);
+        }
+    }
+}
+
+#elif defined(__APPLE__)
+
+// macOS: _dyld_image_count / _dyld_get_image_* APIs from <mach-o/dyld.h>.
+// Walk LC_SEGMENT_64 (or LC_SEGMENT on ILP32) load commands to compute the
+// total mapped size as max(vmaddr + vmsize) across all segments.
+static void enumerate_libraries(lib_callback_t callback, void *ctx) {
+    uint32_t n = _dyld_image_count();
+    for (uint32_t i = 0; i < n; ++i) {
+        const char *name = _dyld_get_image_name(i);
+        const struct mach_header *hdr = _dyld_get_image_header(i);
+        intptr_t slide = _dyld_get_image_vmaddr_slide(i);
+        if (hdr == NULL) continue;
+
+        uint64_t max_end = 0;
+        uint64_t base = 0;
+        int first_seg = 1;
+
+#if defined(__LP64__)
+        // 64-bit Mach-O
+        if (hdr->magic == MH_MAGIC_64) {
+            const struct mach_header_64 *hdr64 = (const struct mach_header_64 *)hdr;
+            const uint8_t *p = (const uint8_t *)(hdr64 + 1);
+            for (uint32_t cmd_i = 0; cmd_i < hdr64->ncmds; ++cmd_i) {
+                const struct load_command *lc = (const struct load_command *)p;
+                if (lc->cmd == LC_SEGMENT_64) {
+                    const struct segment_command_64 *seg =
+                        (const struct segment_command_64 *)p;
+                    uint64_t seg_base = seg->vmaddr + (uint64_t)slide;
+                    uint64_t seg_end  = seg_base + seg->vmsize;
+                    if (first_seg || seg_base < base) base = seg_base;
+                    if (seg_end > max_end) max_end = seg_end;
+                    first_seg = 0;
+                }
+                p += lc->cmdsize;
+            }
+        }
+#else
+        // 32-bit Mach-O (rare; kept for completeness)
+        if (hdr->magic == MH_MAGIC) {
+            const uint8_t *p = (const uint8_t *)(hdr + 1);
+            for (uint32_t cmd_i = 0; cmd_i < hdr->ncmds; ++cmd_i) {
+                const struct load_command *lc = (const struct load_command *)p;
+                if (lc->cmd == LC_SEGMENT) {
+                    const struct segment_command *seg =
+                        (const struct segment_command *)p;
+                    uint64_t seg_base = (uint64_t)seg->vmaddr + (uint64_t)slide;
+                    uint64_t seg_end  = seg_base + (uint64_t)seg->vmsize;
+                    if (first_seg || seg_base < base) base = seg_base;
+                    if (seg_end > max_end) max_end = seg_end;
+                    first_seg = 0;
+                }
+                p += lc->cmdsize;
+            }
+        }
+#endif
+        uint64_t size = (max_end > base) ? (max_end - base) : 0;
+        callback(name ? name : "", base, size, ctx);
+    }
+}
+
+#elif defined(__linux__) || defined(__FreeBSD__)
+
+// Linux / FreeBSD: dl_iterate_phdr from <link.h>. For each shared object
+// (and the main executable, whose dlpi_name is ""), compute the loaded size
+// as max(p_vaddr + p_memsz) across PT_LOAD segments.
+typedef struct {
+    lib_callback_t callback;
+    void          *ctx;
+} dl_iter_ctx_t;
+
+static int dl_iter_cb(struct dl_phdr_info *info, size_t sz, void *data) {
+    (void)sz;
+    dl_iter_ctx_t *dc = (dl_iter_ctx_t *)data;
+    uint64_t base = (uint64_t)info->dlpi_addr;
+    uint64_t max_end = 0;
+    for (int i = 0; i < info->dlpi_phnum; ++i) {
+        if (info->dlpi_phdr[i].p_type == PT_LOAD) {
+            uint64_t end = (uint64_t)info->dlpi_phdr[i].p_vaddr
+                         + (uint64_t)info->dlpi_phdr[i].p_memsz;
+            if (end > max_end) max_end = end;
+        }
+    }
+    uint64_t size = max_end; // vaddr-relative; base is already added by the OS
+    dc->callback(info->dlpi_name ? info->dlpi_name : "", base, size, dc->ctx);
+    return 0; // non-zero stops iteration
+}
+
+static void enumerate_libraries(lib_callback_t callback, void *ctx) {
+    dl_iter_ctx_t dc;
+    dc.callback = callback;
+    dc.ctx = ctx;
+    dl_iterate_phdr(dl_iter_cb, &dc);
+}
+
+#else
+// Unsupported platform: enumerate_libraries is a no-op so the compilation
+// succeeds but no library records are written.
+static void enumerate_libraries(lib_callback_t callback, void *ctx) {
+    (void)callback; (void)ctx;
+}
+#endif
+
 static void check_jvmti_errors(jvmtiEnv *jvmti, jvmtiError errnum, const char *str) {
    if (errnum != JVMTI_ERROR_NONE) {
        char *errnum_str;
@@ -317,9 +502,9 @@ static void check_jvmti_errors(jvmtiEnv *jvmti, jvmtiError errnum, const char *s
 // The first comma-separated token is taken as the dump-file path when it
 // does NOT contain '='; otherwise everything is treated as key=value or a
 // bare flag. Known keys: `path` (dump file), `log` (off|info|debug).
-// Known bare flags: `snapshot_on_unload`. Unknown tokens are silently
-// ignored so future agent versions can add options without breaking older
-// IDE plugins.
+// Known bare flags: `snapshot_on_unload`, `dump_libraries`. Unknown tokens
+// are silently ignored so future agent versions can add options without
+// breaking older IDE plugins.
 //
 // `path_out` is filled with a pointer into a heap-allocated buffer that the
 // caller must free(). `log_out` is set when the option string mentions one.
@@ -343,6 +528,8 @@ static void parse_options(const char *options, char **path_out, int *log_out,
                 *path_out = strdup(tok);
             } else if (strcmp(tok, "snapshot_on_unload") == 0) {
                 opts_out->snapshot_on_unload = 1;
+            } else if (strcmp(tok, "dump_libraries") == 0) {
+                opts_out->dump_libraries = 1;
             }
             // Other bare tokens: silently ignored.
         } else {
@@ -434,7 +621,7 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
     callback.VMInit = vm_init;
     error = (*jvmti)->SetEventCallbacks(jvmti, &callback, sizeof(callback));
     check_jvmti_errors(jvmti, error, "Unable to set callbacks");
-    // -agentpath:<lib>=<dump_path>[,log=<off|info|debug>][,snapshot_on_unload]
+    // -agentpath:<lib>=<dump_path>[,log=<off|info|debug>][,snapshot_on_unload][,dump_libraries]
     // The `options` argument is whatever follows the first `=` in the
     // -agentpath spec. When empty / NULL we fall back to the historical
     // filename so existing scripts keep working.
@@ -461,15 +648,50 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
     header.magic[0] = 'M';
     header.magic[1] = 'I';
     header.magic[2] = 'N';
-    // Format version 3: sym_entry_t additionally carries
-    // unload_snapshot_fd_offset / unload_snapshot_size pointing at a
-    // post-patch native-code snapshot written inside CompiledMethodUnload
-    // (only when the snapshot_on_unload option is active). Both fields are
-    // zero when no snapshot was captured.
-    header.version = 3;
+    // Format version 4: header_t additionally carries library_table_offset
+    // and library_count pointing at a table of loaded native libraries
+    // captured once at Agent_OnUnload (when dump_libraries is active). Both
+    // fields are zero when the flag is off. Supersedes v3 which added
+    // sym_entry_t.unload_snapshot_fd_offset / unload_snapshot_size.
+    header.version = 4;
     header.offset = sizeof(header_t);
     offset = write(dump_fd, &header, sizeof(header));
     return JNI_OK;
+}
+
+// Context passed to enumerate_libraries when dump_libraries is active.
+// Accumulates per-library info so it can be written to the dump after the
+// string table is finalised (lib_entry_t.path_string_id requires resolved
+// string-table offsets, which are only available after the string-table write
+// loop runs).
+typedef struct lib_record {
+    string_t *path_string;  // pointer into head_strings; offset filled later
+    uint64_t  base_addr;
+    uint64_t  size;
+} lib_record_t;
+
+static void lib_enum_callback(const char *path, uint64_t base_addr,
+                              uint64_t size, void *ctx) {
+    // `ctx` is a pointer to a { lib_record_t*, uint32_t*, uint32_t* } bundle.
+    void **bundle = (void **)ctx;
+    lib_record_t **records_ptr = (lib_record_t **)bundle[0];
+    uint32_t *count_ptr  = (uint32_t *)bundle[1];
+    uint32_t *cap_ptr    = (uint32_t *)bundle[2];
+
+    if (*count_ptr >= *cap_ptr) {
+        uint32_t new_cap = (*cap_ptr == 0) ? 64 : (*cap_ptr * 2);
+        *records_ptr = realloc(*records_ptr, new_cap * sizeof(lib_record_t));
+        *cap_ptr = new_cap;
+    }
+    lib_record_t *rec = &(*records_ptr)[*count_ptr];
+    // Register the path in the string table — find_or_create_string requires
+    // a mutable buffer; path is const so copy via strdup.
+    char *path_copy = strdup(path ? path : "");
+    find_or_create_string(path_copy, &rec->path_string);
+    free(path_copy);
+    rec->base_addr = base_addr;
+    rec->size = size;
+    (*count_ptr)++;
 }
 
 JNIEXPORT void JNICALL
@@ -478,6 +700,20 @@ Agent_OnUnload(JavaVM *vm) {
     // be in flight on a JIT thread when the VM begins shutdown, and reading
     // the lists here while another thread mutates them is undefined.
     EVENT_MUTEX_LOCK();
+
+    // --- Library enumeration (phase 1: collect, pre-string-table write) ---
+    // Enumerate native libraries first so their paths are registered in the
+    // string interner before the string-table write loop runs. The actual
+    // lib_entry_t records are written after the string table, once all
+    // string offsets are resolved.
+    lib_record_t *lib_records = NULL;
+    uint32_t lib_count = 0;
+    uint32_t lib_cap = 0;
+    if (opts.dump_libraries) {
+        void *bundle[3] = { &lib_records, &lib_count, &lib_cap };
+        enumerate_libraries(lib_enum_callback, bundle);
+    }
+
     header_t header;
     lseek(dump_fd, 0, SEEK_SET);
     read(dump_fd, &header, sizeof(header_t));
@@ -494,6 +730,33 @@ Agent_OnUnload(JavaVM *vm) {
             offset += write(dump_fd, &null_string, sizeof(char));
         }
     }
+
+    // --- Library table (phase 2: write, post-string-table) ---
+    // String offsets are now resolved; emit lib_entry_t records. The table
+    // lives between the string section and the sym chain so that a reader can
+    // seek directly to header.library_table_offset without parsing syms.
+    header.library_table_offset = 0;
+    header.library_count = 0;
+    if (opts.dump_libraries && lib_count > 0) {
+        header.library_table_offset = offset;
+        header.library_count = lib_count;
+        for (uint32_t i = 0; i < lib_count; ++i) {
+            lib_entry_t entry;
+            entry.path_string_id = lib_records[i].path_string->offset;
+            entry.base_addr      = lib_records[i].base_addr;
+            entry.size           = lib_records[i].size;
+            offset += write(dump_fd, &entry, sizeof(lib_entry_t));
+        }
+        if (log_level >= LOG_INFO) {
+            fprintf(stderr, "[hexana-jitview] wrote %u library records\n",
+                lib_count);
+        }
+    }
+    if (lib_records) {
+        free(lib_records);
+        lib_records = NULL;
+    }
+
     header.syms_offset = offset;
     uint32_t sym_count = 0;
     {

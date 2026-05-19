@@ -21,7 +21,10 @@ target_include_directories(jitview PRIVATE ${CMAKE_JAVA_HOME}/include)
 
 if(WIN32)
   target_include_directories(jitview PRIVATE ${CMAKE_JAVA_HOME}/include/win32)
-  target_link_libraries(jitview Ws2_32)
+  # Ws2_32: sockets (pulled in transitively by the JVM on Windows).
+  # Psapi: EnumProcessModules / GetModuleInformation used by enumerate_libraries
+  #        when dump_libraries is active. Both MSVC and MinGW accept these names.
+  target_link_libraries(jitview Ws2_32 Psapi)
 else()
   if(LINUX)
     add_definitions(-D_DEFAULT_SOURCE)
