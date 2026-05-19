@@ -148,6 +148,32 @@ describe('Hexana MCP server downloader', function () {
         }
     });
 
+    it('removes a stale download lock and retries the download', async function () {
+        const archivePath = createServerArchive(tempRoot, '0.7.0');
+        const server = await startReleaseServer(archivePath, '0.7.0');
+        process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
+
+        try {
+            const storageDir = process.env.HEXANA_MCP_STORAGE_DIR!;
+            fs.mkdirSync(storageDir, { recursive: true });
+            const lockPath = path.join(storageDir, '.download.lock');
+            fs.writeFileSync(lockPath, '');
+            const staleTimestamp = new Date(Date.now() - 180_000);
+            fs.utimesSync(lockPath, staleTimestamp, staleTimestamp);
+
+            const downloader = require('../../../out/mcpServerDownloader');
+            const result = await downloader.prepareHexanaMcpServer(extensionContext(tempRoot), {
+                showErrorNotification: false,
+            });
+
+            expect(result?.fsPath).to.equal(path.join(storageDir, 'server'));
+            expect(server.requestCounts.archive).to.equal(1);
+            expect(fs.existsSync(lockPath)).to.equal(false);
+        } finally {
+            await server.close();
+        }
+    });
+
     it('Update Server command reports already up to date without redownloading the same version', async function () {
         const archivePath = createServerArchive(tempRoot, '0.7.0');
         const server = await startReleaseServer(archivePath, '0.7.0');
