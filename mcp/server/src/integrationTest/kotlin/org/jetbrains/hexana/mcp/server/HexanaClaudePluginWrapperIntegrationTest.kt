@@ -4,6 +4,7 @@ import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
 import io.modelcontextprotocol.kotlin.sdk.types.ListToolsRequest
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -14,6 +15,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -32,6 +34,19 @@ class HexanaClaudePluginWrapperIntegrationTest {
     @Test
     fun assembledCodexPluginVersionCommandExitsPromptly() = runBlocking {
         assertVersionCommandExitsPromptly(StdioLauncher.CodexPluginWrapper)
+    }
+
+    @Test
+    fun assembledCodexPluginMcpConfigPinsPluginRootWorkingDirectory() {
+        val installDir = Path.of(
+            System.getProperty(StdioLauncher.CodexPluginWrapper.installDirSystemProperty)
+                ?: error("Missing `${StdioLauncher.CodexPluginWrapper.installDirSystemProperty}` system property")
+        )
+        val config = Json.parseToJsonElement(Files.readString(installDir.resolve(".mcp.json"))).jsonObject
+        val hexanaServer = config.getValue("mcpServers").jsonObject.getValue("hexana").jsonObject
+
+        assertEquals("./bin/hexana-mcp", hexanaServer.getValue("command").jsonPrimitive.content)
+        assertEquals(".", hexanaServer.getValue("cwd").jsonPrimitive.content)
     }
 
     @Test

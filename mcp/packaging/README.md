@@ -50,7 +50,7 @@ plugins/hexana/
 
 Each assembled wrapper includes its own bundled standalone runtime under `server/` and exposes `bin/hexana-mcp`.
 Release ZIPs must not contain build-machine absolute paths. The Claude package uses Claude's plugin-root variable, and
-the Codex package keeps its `.mcp.json` launcher path relative to the plugin root.
+the Codex package keeps its `.mcp.json` launcher path and working directory relative to the plugin root.
 
 Public Claude/Codex release packages use R8 at build time to obfuscate Hexana-owned runtime bytecode. The obfuscated
 runtime is shipped as `server/lib/hexana-runtime-obfuscated.jar`; third-party runtime dependencies remain as normal

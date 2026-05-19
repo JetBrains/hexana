@@ -262,6 +262,10 @@ check_mcp_json_command_paths() {
       die "$context contains absolute .mcp.json command path in $rel: $command_path"
     fi
   done < <(jq -r '.. | objects | .command? // empty | strings' "$file")
+
+  if jq -e '.. | objects | select(.command? == "./bin/hexana-mcp" and .cwd? != ".")' "$file" >/dev/null; then
+    die "$context contains Codex .mcp.json command ./bin/hexana-mcp without cwd=. in $rel"
+  fi
 }
 
 check_embedded_jar_entries() {
