@@ -44,3 +44,7 @@ tasks.named("jsBrowserTest") {
     // VS Code extension host and depends on Node-only modules such as posthog-node.
     enabled = false
 }
+
+tasks.named<org.jetbrains.kotlin.gradle.targets.js.testing.KotlinJsTest>("jsNodeTest") {
+    useMocha()
+}
