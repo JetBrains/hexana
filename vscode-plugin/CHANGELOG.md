@@ -1,0 +1,17 @@
+# 0.1.0
+
+- supported WAMR and GraalVM for running wasm modules (in addition to wasmtime)
+- experimental debugging support using wasmtime or WAMR (requires llvm 22.1 or newer; works only for targets debuggable with lldb)
+
+# 0.0.2 - 07.05.2026
+
+- fixed minor vsix packaging issues
+- supported publication to OpenVSIX
+
+# 0.0.1 - 06.05.2026
+
+- hex viewer
+- information about WASM files (core modules and components)
+  - imports / exports / modules / functions / top usage
+  - ability to open submodules in a new tab
+- running wasm modules and individual exported functions using wasmtime
