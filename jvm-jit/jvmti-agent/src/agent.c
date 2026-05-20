@@ -127,6 +127,14 @@ typedef struct {
     // write() per library, done single-threaded under event_mutex, so the
     // cost is negligible even for large library sets (~200 entries typical).
     int dump_libraries;
+    // When non-zero, Agent_OnUnload captures a fixed set of JVM system
+    // properties (java.version, os.name, etc.) via JVMTI GetSystemProperty
+    // and writes them as an info_entry_t table between the library table and
+    // the sym chain. Properties unavailable on the current runtime are
+    // silently skipped. Adds ~12 GetSystemProperty calls and a few hundred
+    // bytes to the dump. Only written when the flag is set; absent by default
+    // (system_info_table_offset == 0 in the header).
+    int system_info;
 } agent_opts_t;
 static agent_opts_t opts;
 
@@ -158,6 +166,13 @@ typedef struct PACKED_ATTR {
     // a pre-v4 agent build.
     uint64_t library_table_offset;
     uint32_t library_count;
+    // v5 additions: system-info table written once at Agent_OnUnload when
+    // system_info is active. system_info_table_offset is the absolute byte
+    // offset in the dump where the table starts; system_info_count is the
+    // number of info_entry_t records. Both are zero when system_info is off
+    // or on a pre-v5 agent build.
+    uint64_t system_info_table_offset;
+    uint32_t system_info_count;
 } header_t;
 PACKED_END
 
@@ -170,6 +185,17 @@ typedef struct PACKED_ATTR {
     uint64_t base_addr;
     uint64_t size;
 } lib_entry_t;
+PACKED_END
+
+// One record in the system-info table. Packed, 8 bytes.
+// key_string_id and value_string_id are offsets into the string table (same
+// interner used by sym_entry_t and lib_entry_t). Written in the fixed
+// agent-defined order (java.version first, os.version last).
+PACKED_BEGIN
+typedef struct PACKED_ATTR {
+    uint32_t key_string_id;
+    uint32_t value_string_id;
+} info_entry_t;
 PACKED_END
 
 typedef struct string {
@@ -502,9 +528,9 @@ static void check_jvmti_errors(jvmtiEnv *jvmti, jvmtiError errnum, const char *s
 // The first comma-separated token is taken as the dump-file path when it
 // does NOT contain '='; otherwise everything is treated as key=value or a
 // bare flag. Known keys: `path` (dump file), `log` (off|info|debug).
-// Known bare flags: `snapshot_on_unload`, `dump_libraries`. Unknown tokens
-// are silently ignored so future agent versions can add options without
-// breaking older IDE plugins.
+// Known bare flags: `snapshot_on_unload`, `dump_libraries`, `system_info`.
+// Unknown tokens are silently ignored so future agent versions can add
+// options without breaking older IDE plugins.
 //
 // `path_out` is filled with a pointer into a heap-allocated buffer that the
 // caller must free(). `log_out` is set when the option string mentions one.
@@ -530,6 +556,8 @@ static void parse_options(const char *options, char **path_out, int *log_out,
                 opts_out->snapshot_on_unload = 1;
             } else if (strcmp(tok, "dump_libraries") == 0) {
                 opts_out->dump_libraries = 1;
+            } else if (strcmp(tok, "system_info") == 0) {
+                opts_out->system_info = 1;
             }
             // Other bare tokens: silently ignored.
         } else {
@@ -621,7 +649,7 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
     callback.VMInit = vm_init;
     error = (*jvmti)->SetEventCallbacks(jvmti, &callback, sizeof(callback));
     check_jvmti_errors(jvmti, error, "Unable to set callbacks");
-    // -agentpath:<lib>=<dump_path>[,log=<off|info|debug>][,snapshot_on_unload][,dump_libraries]
+    // -agentpath:<lib>=<dump_path>[,log=<off|info|debug>][,snapshot_on_unload][,dump_libraries][,system_info]
     // The `options` argument is whatever follows the first `=` in the
     // -agentpath spec. When empty / NULL we fall back to the historical
     // filename so existing scripts keep working.
@@ -648,12 +676,12 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
     header.magic[0] = 'M';
     header.magic[1] = 'I';
     header.magic[2] = 'N';
-    // Format version 4: header_t additionally carries library_table_offset
-    // and library_count pointing at a table of loaded native libraries
-    // captured once at Agent_OnUnload (when dump_libraries is active). Both
-    // fields are zero when the flag is off. Supersedes v3 which added
-    // sym_entry_t.unload_snapshot_fd_offset / unload_snapshot_size.
-    header.version = 4;
+    // Format version 5: header_t additionally carries system_info_table_offset
+    // and system_info_count pointing at a table of JVM system properties
+    // captured once at Agent_OnUnload (when system_info is active). Both
+    // fields are zero when the flag is off. Supersedes v4 which added
+    // library_table_offset / library_count.
+    header.version = 5;
     header.offset = sizeof(header_t);
     offset = write(dump_fd, &header, sizeof(header));
     return JNI_OK;
@@ -696,6 +724,17 @@ static void lib_enum_callback(const char *path, uint64_t base_addr,
 
 JNIEXPORT void JNICALL
 Agent_OnUnload(JavaVM *vm) {
+    // Obtain a jvmtiEnv* for GetSystemProperty calls (system_info path).
+    // This must be done before EVENT_MUTEX_LOCK so that any JVMTI error here
+    // doesn't leave the mutex permanently locked. A NULL env means system-info
+    // capture will be skipped even if the flag was set.
+    jvmtiEnv *vm_jvmti = NULL;
+    if (opts.system_info) {
+        (*vm)->GetEnv(vm, (void **)&vm_jvmti, JVMTI_VERSION_1_2);
+        // vm_jvmti may be NULL if the JVMTI version is unavailable; the
+        // collection loop below gates on vm_jvmti != NULL.
+    }
+
     // Take the same event lock that method_load uses: a callback can still
     // be in flight on a JIT thread when the VM begins shutdown, and reading
     // the lists here while another thread mutates them is undefined.
@@ -712,6 +751,59 @@ Agent_OnUnload(JavaVM *vm) {
     if (opts.dump_libraries) {
         void *bundle[3] = { &lib_records, &lib_count, &lib_cap };
         enumerate_libraries(lib_enum_callback, bundle);
+    }
+
+    // --- System-info collection (phase 1b: collect, pre-string-table write) ---
+    // The fixed list of JVMTI system-property keys to capture. Any key that
+    // returns an error (e.g. JVMTI_ERROR_NOT_AVAILABLE on stripped runtimes)
+    // is silently skipped — its string_t* entry stays NULL and is omitted from
+    // the written table. Keys are interned into the string table here so their
+    // offsets are resolved by the time we write info_entry_t records.
+    static const char * const SYS_PROP_KEYS[] = {
+        "java.version",
+        "java.vm.name",
+        "java.vm.vendor",
+        "java.vm.version",
+        "java.runtime.version",
+        "java.home",
+        "java.class.version",
+        "os.name",
+        "os.arch",
+        "os.version",
+        "sun.arch.data.model",
+    };
+    static const int SYS_PROP_COUNT = (int)(sizeof(SYS_PROP_KEYS) / sizeof(SYS_PROP_KEYS[0]));
+
+    // Parallel arrays: key_strings[i] / value_strings[i] are interned
+    // string_t* pointers. value_strings[i] is NULL when the property was
+    // unavailable (GetSystemProperty returned a non-NONE error) — those
+    // entries are excluded from the final written count.
+    string_t *sys_key_strings[11];
+    string_t *sys_value_strings[11];
+    uint32_t sys_written_count = 0;
+    if (opts.system_info && vm_jvmti != NULL) {
+        for (int i = 0; i < SYS_PROP_COUNT; ++i) {
+            sys_key_strings[i] = NULL;
+            sys_value_strings[i] = NULL;
+            char *value = NULL;
+            jvmtiError si_err = (*vm_jvmti)->GetSystemProperty(
+                vm_jvmti, SYS_PROP_KEYS[i], &value);
+            if (si_err != JVMTI_ERROR_NONE || value == NULL) {
+                // Property not available on this runtime — skip silently.
+                if (value) (*vm_jvmti)->Deallocate(vm_jvmti, (unsigned char *)value);
+                continue;
+            }
+            // Intern both the key (a compile-time constant) and the value
+            // (allocated by JVMTI) into the shared string table.
+            char *key_copy = strdup(SYS_PROP_KEYS[i]);
+            find_or_create_string(key_copy, &sys_key_strings[i]);
+            free(key_copy);
+            char *value_copy = strdup(value);
+            (*vm_jvmti)->Deallocate(vm_jvmti, (unsigned char *)value);
+            find_or_create_string(value_copy, &sys_value_strings[i]);
+            free(value_copy);
+            sys_written_count++;
+        }
     }
 
     header_t header;
@@ -755,6 +847,30 @@ Agent_OnUnload(JavaVM *vm) {
     if (lib_records) {
         free(lib_records);
         lib_records = NULL;
+    }
+
+    // --- System-info table (phase 2b: write, post-string-table) ---
+    // String offsets are now resolved; emit info_entry_t records for every
+    // key/value pair that was successfully retrieved. Entries where
+    // sys_value_strings[i] is NULL (property unavailable) are skipped.
+    header.system_info_table_offset = 0;
+    header.system_info_count = 0;
+    if (opts.system_info && sys_written_count > 0) {
+        header.system_info_table_offset = offset;
+        for (int i = 0; i < SYS_PROP_COUNT; ++i) {
+            if (sys_key_strings[i] == NULL || sys_value_strings[i] == NULL) {
+                continue;
+            }
+            info_entry_t entry;
+            entry.key_string_id   = sys_key_strings[i]->offset;
+            entry.value_string_id = sys_value_strings[i]->offset;
+            offset += write(dump_fd, &entry, sizeof(info_entry_t));
+            header.system_info_count++;
+        }
+        if (log_level >= LOG_INFO) {
+            fprintf(stderr, "[hexana-jitview] wrote %u system-info records\n",
+                header.system_info_count);
+        }
     }
 
     header.syms_offset = offset;

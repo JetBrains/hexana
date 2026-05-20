@@ -17,9 +17,12 @@ import org.jetbrains.hexana.io.CommonByteBuffer
  *     uint64_t string_offset;
  *     size_t   size;                  // unused by the agent (8 bytes on 64-bit)
  *     // v4 additions (header.version >= 4):
- *     uint64_t library_table_offset;  // absolute byte offset of the library table, 0 = absent
- *     uint32_t library_count;         // number of lib_entry_t records
- * } header_t;                          // 48 bytes on 64-bit platforms
+ *     uint64_t library_table_offset;      // absolute byte offset of the library table, 0 = absent
+ *     uint32_t library_count;             // number of lib_entry_t records
+ *     // v5 additions (header.version >= 5):
+ *     uint64_t system_info_table_offset;  // absolute byte offset of the system-info table, 0 = absent
+ *     uint32_t system_info_count;         // number of info_entry_t records
+ * } header_t;                             // 60 bytes on 64-bit platforms
  * ```
  *
  * Following the header the dump is split into four logical sections:
@@ -33,6 +36,11 @@ import org.jetbrains.hexana.io.CommonByteBuffer
  *     packed `lib_entry_t` records: `{ path_string_id u32; base_addr u64;
  *     size u64; }` (20 bytes each). `path_string_id` is a string-table offset.
  *     Absent (offset == 0) when `dump_libraries` was off or on pre-v4 dumps.
+ *  3b. **System info** (at `header.systemInfoTableOffset`, v5+ only) — zero or
+ *     more packed `info_entry_t` records: `{ key_string_id u32;
+ *     value_string_id u32; }` (8 bytes each). Both IDs are string-table
+ *     offsets. Absent (offset == 0) when `system_info` was off or on pre-v5
+ *     dumps. Ordered by the agent's fixed key list (`java.version` first).
  *  4. **Symbols** (at `header.symsOffset`) — a chain of `sym_entry_t`
  *     records, each followed by its line-number table, address-location
  *     map, and inline-records blob. Records are linked by their `next`
@@ -56,10 +64,23 @@ class JitFile internal constructor(internal val buffer: CommonByteBuffer) {
                 if (version >= 4.toUByte()) buffer.u8At(OFFSET_LIBRARY_TABLE_OFFSET) else 0uL,
             libraryCount =
                 if (version >= 4.toUByte()) buffer.u4At(OFFSET_LIBRARY_COUNT) else 0u,
+            systemInfoTableOffset =
+                if (version >= 5.toUByte()) buffer.u8At(OFFSET_SYSTEM_INFO_TABLE_OFFSET) else 0uL,
+            systemInfoCount =
+                if (version >= 5.toUByte()) buffer.u4At(OFFSET_SYSTEM_INFO_COUNT) else 0u,
         )
     }
 
     val symbols: List<JitSym> by lazy { loadSymbols() }
+
+    /**
+     * JVM system properties captured by the agent at `Agent_OnUnload` time.
+     * Populated only when the agent was started with `system_info` and the
+     * dump format is v5 or newer. Empty list for older dumps or when the flag
+     * was off. Order-preserving: entries follow the agent's fixed emission
+     * order (`java.version` first, `sun.arch.data.model` last).
+     */
+    val systemInfo: List<Pair<String, String>> by lazy { loadSystemInfo() }
 
     /**
      * Native libraries loaded into the JVM process at the time the dump was
@@ -97,6 +118,24 @@ class JitFile internal constructor(internal val buffer: CommonByteBuffer) {
         val bytes = ByteArray(len)
         for (i in 0 until len) bytes[i] = buffer[start + i]
         bytes.decodeToString()
+    }
+
+    private fun loadSystemInfo(): List<Pair<String, String>> {
+        // Pre-v5 dumps or flag-off dumps have system_info_table_offset == 0.
+        val tableOffset = header.systemInfoTableOffset
+        val count = header.systemInfoCount.toInt()
+        if (tableOffset == 0uL || count <= 0) return emptyList()
+
+        val entries = ArrayList<Pair<String, String>>(count)
+        var p = tableOffset.toInt()
+        repeat(count) {
+            if (p + INFO_ENTRY_SIZE > buffer.size) return@repeat
+            val keyStringId = buffer.u4At(p + INFO_ENTRY_OFFSET_KEY)
+            val valueStringId = buffer.u4At(p + INFO_ENTRY_OFFSET_VALUE)
+            entries += string(keyStringId) to string(valueStringId)
+            p += INFO_ENTRY_SIZE
+        }
+        return entries.toList()
     }
 
     private fun loadLibraries(): List<JitLoadedLibrary> {
@@ -199,14 +238,17 @@ class JitFile internal constructor(internal val buffer: CommonByteBuffer) {
         const val SYM_MAGIC1: ULong = 0xdeadbeef00000002uL
 
         // header_t (packed) field offsets (on 64-bit platforms where size_t == 8):
-        //   magic[3]              offset  0 .. 2  (3 bytes)
-        //   version               offset  3       (1 byte)
-        //   offset                offset  4 .. 11 (8 bytes)
-        //   syms_offset           offset 12 .. 19 (8 bytes)
-        //   string_offset         offset 20 .. 27 (8 bytes)
-        //   size (size_t, 8 b)    offset 28 .. 35 (8 bytes)
-        //   library_table_offset  offset 36 .. 43 (8 bytes, v4+)
-        //   library_count         offset 44 .. 47 (4 bytes, v4+)
+        //   magic[3]                     offset  0 .. 2  (3 bytes)
+        //   version                      offset  3       (1 byte)
+        //   offset                       offset  4 .. 11 (8 bytes)
+        //   syms_offset                  offset 12 .. 19 (8 bytes)
+        //   string_offset                offset 20 .. 27 (8 bytes)
+        //   size (size_t, 8 b)           offset 28 .. 35 (8 bytes)
+        //   library_table_offset         offset 36 .. 43 (8 bytes, v4+)
+        //   library_count                offset 44 .. 47 (4 bytes, v4+)
+        //   system_info_table_offset     offset 48 .. 55 (8 bytes, v5+)
+        //   system_info_count            offset 56 .. 59 (4 bytes, v5+)
+        //   total: 60 bytes
         private const val OFFSET_VERSION = 3
         private const val OFFSET_OFFSET = 4
         private const val OFFSET_SYMS_OFFSET = 12
@@ -214,6 +256,9 @@ class JitFile internal constructor(internal val buffer: CommonByteBuffer) {
         // v4 additions — only read when header.version >= 4.
         private const val OFFSET_LIBRARY_TABLE_OFFSET = 36
         private const val OFFSET_LIBRARY_COUNT = 44
+        // v5 additions — only read when header.version >= 5.
+        private const val OFFSET_SYSTEM_INFO_TABLE_OFFSET = 48
+        private const val OFFSET_SYSTEM_INFO_COUNT = 56
 
         // lib_entry_t (packed) field byte offsets (relative to entry start):
         //   path_string_id  u32   offset 0 .. 3   (4 bytes)
@@ -224,6 +269,14 @@ class JitFile internal constructor(internal val buffer: CommonByteBuffer) {
         private const val LIB_ENTRY_OFFSET_BASE = 4
         private const val LIB_ENTRY_OFFSET_SIZE = 12
         internal const val LIB_ENTRY_SIZE = 20
+
+        // info_entry_t (packed) field byte offsets (relative to entry start):
+        //   key_string_id    u32   offset 0 .. 3  (4 bytes)
+        //   value_string_id  u32   offset 4 .. 7  (4 bytes)
+        //   total: 8 bytes
+        internal const val INFO_ENTRY_OFFSET_KEY = 0
+        internal const val INFO_ENTRY_OFFSET_VALUE = 4
+        internal const val INFO_ENTRY_SIZE = 8
 
         // sym_entry_t (packed) field byte offsets (relative to sym start):
         internal const val SYM_OFFSET_MAGIC = 0
@@ -292,6 +345,17 @@ data class JitHeader(
      * [libraryTableOffset] is zero.
      */
     val libraryCount: UInt = 0u,
+    /**
+     * Absolute byte offset in the dump where the system-info table starts.
+     * Zero when no system-info table is present (pre-v5 dump, or `system_info`
+     * was off). Only meaningful when [version] >= 5.
+     */
+    val systemInfoTableOffset: ULong = 0uL,
+    /**
+     * Number of `info_entry_t` records in the system-info table. Zero when
+     * [systemInfoTableOffset] is zero.
+     */
+    val systemInfoCount: UInt = 0u,
 )
 
 /**

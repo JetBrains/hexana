@@ -97,6 +97,10 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
                 append(',')
                 append("dump_libraries")
             }
+            if (settings.captureSystemInfo) {
+                append(',')
+                append("system_info")
+            }
         }
         params.vmParametersList.add("-agentpath:${agentPath.toAbsolutePath()}=$agentOptions")
         configuration.putCopyableUserData(RESOLVED_DUMP_KEY, resolvedDump.path)
@@ -139,7 +143,8 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
             ?: JitviewLogLevel.Off
         val snapshotOnUnload = child.getAttributeValue(ATTR_SNAPSHOT_ON_UNLOAD)?.toBoolean() ?: false
         val dumpLibraries = child.getAttributeValue(ATTR_DUMP_LIBRARIES)?.toBoolean() ?: false
-        runConfiguration.putCopyableUserData(SETTINGS_KEY, JitviewSettings(enabled, dumpPath, logLevel, snapshotOnUnload, dumpLibraries))
+        val captureSystemInfo = child.getAttributeValue(ATTR_CAPTURE_SYSTEM_INFO)?.toBoolean() ?: false
+        runConfiguration.putCopyableUserData(SETTINGS_KEY, JitviewSettings(enabled, dumpPath, logLevel, snapshotOnUnload, dumpLibraries, captureSystemInfo))
     }
 
     override fun writeExternal(runConfiguration: RunConfigurationBase<*>, element: Element) {
@@ -150,7 +155,8 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
             settings.dumpPath == JitviewSettings.DEFAULT_DUMP_PATH &&
             settings.logLevel == JitviewLogLevel.Off &&
             !settings.snapshotOnUnload &&
-            !settings.dumpLibraries
+            !settings.dumpLibraries &&
+            !settings.captureSystemInfo
         ) {
             return
         }
@@ -167,6 +173,9 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
                 if (settings.dumpLibraries) {
                     setAttribute(ATTR_DUMP_LIBRARIES, "true")
                 }
+                if (settings.captureSystemInfo) {
+                    setAttribute(ATTR_CAPTURE_SYSTEM_INFO, "true")
+                }
             },
         )
     }
@@ -178,6 +187,7 @@ class JitviewRunConfigurationExtension : RunConfigurationExtension() {
         const val ATTR_LOG_LEVEL: String = "log-level"
         const val ATTR_SNAPSHOT_ON_UNLOAD: String = "snapshot-on-unload"
         const val ATTR_DUMP_LIBRARIES: String = "dump-libraries"
+        const val ATTR_CAPTURE_SYSTEM_INFO: String = "capture-system-info"
         val SETTINGS_KEY: Key<JitviewSettings> = Key.create("hexana.jitview.settings")
         val RESOLVED_DUMP_KEY: Key<String> = Key.create("hexana.jitview.resolvedDumpPath")
     }
@@ -204,6 +214,14 @@ data class JitviewSettings(
      * of dump space). Pre-v4 dumps do not carry this section.
      */
     val dumpLibraries: Boolean = false,
+    /**
+     * When true, passes `system_info` to the agent, causing it to capture a
+     * fixed set of JVM system properties (`java.version`, `java.vm.name`,
+     * `os.name`, etc.) via JVMTI `GetSystemProperty` at `Agent_OnUnload` time.
+     * Adds ~12 property reads and a few hundred bytes to the dump. Pre-v5
+     * dumps do not carry this section.
+     */
+    val captureSystemInfo: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_DUMP_PATH: String = "default.jit"
@@ -233,6 +251,7 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
     private val logLevelCombo = JComboBox(DefaultComboBoxModel(JitviewLogLevel.entries.toTypedArray()))
     private val snapshotCheckbox = JBCheckBox("Capture post-patch snapshot on method unload")
     private val dumpLibrariesCheckbox = JBCheckBox("Dump loaded native libraries")
+    private val captureSystemInfoCheckbox = JBCheckBox("Capture JVM version and system info")
     private val statusLabel = JBLabel(buildAvailabilityHint())
 
     override fun resetEditorFrom(configuration: P) {
@@ -243,6 +262,7 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
         logLevelCombo.selectedItem = settings?.logLevel ?: JitviewLogLevel.Off
         snapshotCheckbox.isSelected = settings?.snapshotOnUnload ?: false
         dumpLibrariesCheckbox.isSelected = settings?.dumpLibraries ?: false
+        captureSystemInfoCheckbox.isSelected = settings?.captureSystemInfo ?: false
         val available = JitviewAgentLocator.locate() != null
         checkbox.isEnabled = available
         dumpPathField.isEnabled = available
@@ -251,6 +271,7 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
         logLevelLabel.isEnabled = available
         snapshotCheckbox.isEnabled = available
         dumpLibrariesCheckbox.isEnabled = available
+        captureSystemInfoCheckbox.isEnabled = available
         statusLabel.text = buildAvailabilityHint()
     }
 
@@ -263,6 +284,7 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
                 logLevel = (logLevelCombo.selectedItem as? JitviewLogLevel) ?: JitviewLogLevel.Off,
                 snapshotOnUnload = snapshotCheckbox.isSelected,
                 dumpLibraries = dumpLibrariesCheckbox.isSelected,
+                captureSystemInfo = captureSystemInfoCheckbox.isSelected,
             ),
         )
     }
@@ -306,6 +328,10 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
         panel.add(dumpLibrariesCheckbox, c)
 
         c.gridy = 5
+        c.insets = Insets(0, 0, 4, 0)
+        panel.add(captureSystemInfoCheckbox, c)
+
+        c.gridy = 6
         c.insets = Insets(8, 0, 0, 0)
         panel.add(statusLabel, c)
 
@@ -327,6 +353,10 @@ private class JitviewSettingsEditor<P : RunConfigurationBase<*>> : SettingsEdito
                 "libraries loaded into the process (path, base address, size) and records them in " +
                 "the dump. One scan at shutdown — no per-event overhead. Enables the Hexana viewer " +
                 "to resolve raw native addresses (e.g. call targets) to a library + offset."
+        captureSystemInfoCheckbox.toolTipText =
+            "Records `java.vm.version`, `os.name`, and similar properties via JVMTI " +
+                "`GetSystemProperty` at JVM shutdown. Adds ~12 system-property reads and a few " +
+                "hundred bytes to the dump."
         return panel
     }
 

@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.openapi.application.ModalityState
@@ -93,21 +94,37 @@ private val CHICORY_LOG: Logger = Logger.getInstance("hexana.jit.chicory")
  *
  *  - Left:  tree of compiled methods grouped by Java FQN — each method
  *           collapses its recompile versions; clicking the parent expands
- *           and selects the latest version.
+ *           and selects the latest version. A special "Dump info" entry at
+ *           the top of the tree switches the right pane to [JitInfoView].
  *  - Top right:  global hex view over the WHOLE `.jit` file. On sym
  *                selection the view scrolls to that sym's `fileOffset`
  *                and the sym's native byte range is highlighted; selecting
  *                a bytecode row adds per-BCI overlay highlights on top.
+ *                Hidden when Info is selected.
  *  - Bottom right: Bytecode / Lines tabs. The Bytecode tab renders
  *                  `bci opcode operands   <machine-code-hex>` per BCI, and
  *                  any inline records for that BCI hang underneath as a
  *                  foldable group labelled `fqn::method:bci` (click =
  *                  navigate to the inlined method in source via PSI).
+ *                  Replaced by [JitInfoView] when Info is selected.
  *
  * This is the v0 "compiled-method browser" — when the disassembler lands
  * the per-BCI machine-code hex on the right of each row will be replaced
  * with rendered ISA mnemonics, but the rest of the structure stays.
  */
+
+/**
+ * Selection state for the right pane of [JitFileEditorView].
+ *
+ * [Info] renders [JitInfoView] (dump metadata, system properties, loaded
+ * libraries). [Sym] renders the normal bytecode/hex split for the chosen
+ * compiled method at a particular compilation version.
+ */
+private sealed interface JitSelection {
+    data object Info : JitSelection
+    data class Sym(val key: SymKey, val version: Int) : JitSelection
+}
+
 @Composable
 internal fun JitFileEditorView(
     project: Project,
@@ -117,16 +134,26 @@ internal fun JitFileEditorView(
     hexFocusRequester: FocusRequester,
 ) {
     val groups = remember(jit) { groupSyms(jit.symbols) }
-    var selectedKey by rememberSaveable(jit) {
-        mutableStateOf(groups.firstOrNull()?.key)
+
+    // Selection is a sealed type: either the Info entry or a specific sym
+    // version. remember(jit) re-initialises whenever the open file changes,
+    // which is the right semantic (a different .jit file should default to
+    // its own first method, not carry over the previous file's selection).
+    // rememberSaveable would require a custom Saver for the sealed type and
+    // only buys survival across process death in desktop Compose — not worth
+    // the boilerplate for an analysis panel.
+    var selection by remember(jit) {
+        val firstKey = groups.firstOrNull()?.key
+        val firstVersion = groups.firstOrNull()?.versions?.maxOf { it.version.toInt() } ?: -1
+        mutableStateOf<JitSelection>(
+            if (firstKey != null) JitSelection.Sym(firstKey, firstVersion) else JitSelection.Info,
+        )
     }
-    var selectedVersion by rememberSaveable(jit) {
-        // Most-recent version is the default when picking a method by group.
-        mutableStateOf(groups.firstOrNull()?.versions?.maxOf { it.version.toInt() } ?: -1)
-    }
-    val selectedSym = remember(groups, selectedKey, selectedVersion) {
-        val g = groups.firstOrNull { it.key == selectedKey } ?: return@remember null
-        g.versions.firstOrNull { it.version.toInt() == selectedVersion }
+
+    val selectedSym = remember(groups, selection) {
+        val sel = selection as? JitSelection.Sym ?: return@remember null
+        val g = groups.firstOrNull { it.key == sel.key } ?: return@remember null
+        g.versions.firstOrNull { it.version.toInt() == sel.version }
             ?: g.versions.maxByOrNull { it.version.toInt() }
     }
 
@@ -164,30 +191,34 @@ internal fun JitFileEditorView(
         ) {
             JitSymTree(
                 groups = groups,
-                selectedKey = selectedKey,
-                selectedVersion = selectedVersion,
-                onSelect = { key, version ->
-                    selectedKey = key
-                    selectedVersion = version
-                },
+                selection = selection,
+                onSelectInfo = { selection = JitSelection.Info },
+                onSelect = { key, version -> selection = JitSelection.Sym(key, version) },
             )
         }
         Divider(orientation = Orientation.Vertical, modifier = Modifier.fillMaxHeight())
         Box(modifier = Modifier.fillMaxSize()) {
-            if (selectedSym == null) {
-                Box(modifier = Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.Center) {
-                    Text("This JIT dump contains no compiled-method records.", style = MonoStyle)
+            when (val sel = selection) {
+                is JitSelection.Info -> {
+                    JitInfoView(jit = jit)
                 }
-            } else {
-                JitSymDetail(
-                    project = project,
-                    sym = selectedSym,
-                    binaryProvider = binaryProvider,
-                    state = state,
-                    hexFocusRequester = hexFocusRequester,
-                    selectedBci = selectedBci,
-                    onSelectBci = { selectedBci = if (selectedBci == it) null else it },
-                )
+                is JitSelection.Sym -> {
+                    if (selectedSym == null) {
+                        Box(modifier = Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.Center) {
+                            Text("This JIT dump contains no compiled-method records.", style = MonoStyle)
+                        }
+                    } else {
+                        JitSymDetail(
+                            project = project,
+                            sym = selectedSym,
+                            binaryProvider = binaryProvider,
+                            state = state,
+                            hexFocusRequester = hexFocusRequester,
+                            selectedBci = selectedBci,
+                            onSelectBci = { selectedBci = if (selectedBci == it) null else it },
+                        )
+                    }
+                }
             }
         }
     }
@@ -241,8 +272,8 @@ private fun javaFqn(jvmSignature: String): String =
 @Composable
 private fun JitSymTree(
     groups: List<SymGroup>,
-    selectedKey: SymKey?,
-    selectedVersion: Int,
+    selection: JitSelection,
+    onSelectInfo: () -> Unit,
     onSelect: (SymKey, Int) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -257,19 +288,31 @@ private fun JitSymTree(
         }
     }
 
+    val infoSelected = selection is JitSelection.Info
+    val selectedKey = (selection as? JitSelection.Sym)?.key
+    val selectedVersion = (selection as? JitSelection.Sym)?.version ?: -1
+
     Column(modifier = Modifier.fillMaxSize()) {
         SymSearchBar(query = query, onQueryChange = { query = it })
         Divider(orientation = Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
         val listState = rememberLazyListState()
         Box(modifier = Modifier.fillMaxSize()) {
-            if (filtered.isEmpty()) {
-                Text(
-                    if (groups.isEmpty()) "(no compiled methods)" else "(no matches)",
-                    style = RowStyle.copy(color = HexanaMuted),
-                    modifier = Modifier.padding(12.dp),
-                )
-            } else {
-                LazyColumn(state = listState) {
+            LazyColumn(state = listState) {
+                // "Dump info" pinned entry — always at the top of the tree,
+                // above all sym groups. Styled distinctly: italic label,
+                // info glyph, no version count badge.
+                item(key = "__info__") {
+                    InfoEntryRow(selected = infoSelected, onClick = onSelectInfo)
+                }
+                if (filtered.isEmpty()) {
+                    item(key = "__empty__") {
+                        Text(
+                            if (groups.isEmpty()) "(no compiled methods)" else "(no matches)",
+                            style = RowStyle.copy(color = HexanaMuted),
+                            modifier = Modifier.padding(12.dp),
+                        )
+                    }
+                } else {
                     for (group in filtered) {
                         val open = group.key in expanded
                         item(key = "g-${group.key}") {
@@ -307,6 +350,37 @@ private fun JitSymTree(
                 }
             }
         }
+    }
+}
+
+/**
+ * Special pinned row at the top of the sym tree that opens [JitInfoView].
+ * Visually distinct from method-group rows: uses an "ⓘ" glyph and a
+ * slightly different foreground so it reads as a meta-entry rather than a
+ * compiled method.
+ */
+@Composable
+private fun InfoEntryRow(selected: Boolean, onClick: () -> Unit) {
+    val bg = when {
+        selected && JewelTheme.isDark -> Color(0xFF2E436E)
+        selected -> Color(0xFFD4E2FC)
+        else -> Color.Transparent
+    }
+    val labelColor = if (JewelTheme.isDark) Color(0xFF9DA0A8) else Color(0xFF6C6F75)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("ⓘ", style = RowStyle.copy(color = labelColor))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            "Dump info",
+            style = RowStyle.copy(color = labelColor, fontWeight = FontWeight.SemiBold),
+        )
     }
 }
 
@@ -459,6 +533,227 @@ private fun JitSymDetail(
             )
         },
     )
+}
+
+// -----------------------------------------------------------------------------
+// Info view — dump metadata: system properties + loaded-library table
+// -----------------------------------------------------------------------------
+
+/**
+ * Right-pane view shown when the user selects the "Dump info" tree entry.
+ *
+ * Renders two sections in a single scrollable [LazyColumn]:
+ *
+ *  1. **System info** — key/value pairs from [JitFile.systemInfo]. Absent
+ *     when the `system_info` agent flag was off (list is empty).
+ *  2. **Loaded libraries** — address-range table from [JitFile.loadedLibraries].
+ *     Absent when the `dump_libraries` agent flag was off or dump is pre-v4.
+ *
+ * A compact summary line at the top shows the file-format version and the
+ * total number of compiled symbols so users can orient themselves at a glance
+ * without needing to count tree rows.
+ */
+@Composable
+private fun JitInfoView(jit: JitFile) {
+    val systemInfo = remember(jit) { jit.systemInfo }
+    val libraries = remember(jit) { jit.loadedLibraries }
+    val symCount = remember(jit) { jit.symbols.size }
+    val totalNativeBytes = remember(jit) { jit.symbols.sumOf { it.codeSize.toLong() } }
+
+    val sectionHeaderColor = if (JewelTheme.isDark) Color(0xFF9DA0A8) else Color(0xFF6C6F75)
+    // Alternate-stripe tints — same pattern as JitBytecodeTab's bciIndex striping.
+    val stripeDark = Color(0x10FFFFFF)
+    val stripeLight = Color(0x08000000)
+
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)) {
+        // ── Summary ──────────────────────────────────────────────────────────
+        item(key = "__summary__") {
+            Column(modifier = Modifier.padding(bottom = 10.dp)) {
+                Text(
+                    "Format version: v${jit.header.version.toInt()}",
+                    style = RowStyle.copy(color = HexanaMuted),
+                )
+                Text(
+                    "Compiled methods: $symCount   " +
+                        "Native code total: ${formatByteSize(totalNativeBytes)}",
+                    style = RowStyle.copy(color = HexanaMuted),
+                )
+            }
+        }
+
+        // ── System info ──────────────────────────────────────────────────────
+        item(key = "__sysinfo_header__") {
+            InfoSectionHeader(label = "System info", color = sectionHeaderColor)
+        }
+        if (systemInfo.isEmpty()) {
+            item(key = "__sysinfo_empty__") {
+                Text(
+                    "(no system info captured — enable the system_info agent flag to record)",
+                    style = RowStyle.copy(color = HexanaMuted),
+                    modifier = Modifier.padding(vertical = 3.dp),
+                )
+            }
+        } else {
+            for ((idx, pair) in systemInfo.withIndex()) {
+                val (key, value) = pair
+                item(key = "si-$idx") {
+                    val stripe = (idx and 1) == 1
+                    val bg = if (stripe) {
+                        if (JewelTheme.isDark) stripeDark else stripeLight
+                    } else Color.Transparent
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(bg)
+                            .padding(vertical = 2.dp),
+                    ) {
+                        Text(
+                            key,
+                            style = RowStyle,
+                            modifier = Modifier.weight(0.4f),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            value,
+                            style = RowStyle.copy(fontFamily = FontFamily.Monospace),
+                            modifier = Modifier.weight(0.6f),
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── Loaded libraries ─────────────────────────────────────────────────
+        item(key = "__libs_header__") {
+            Spacer(modifier = Modifier.padding(top = 8.dp))
+            InfoSectionHeader(label = "Loaded libraries", color = sectionHeaderColor)
+        }
+        if (libraries.isEmpty()) {
+            item(key = "__libs_empty__") {
+                Text(
+                    "(no library map captured — enable the dump_libraries agent flag to record)",
+                    style = RowStyle.copy(color = HexanaMuted),
+                    modifier = Modifier.padding(vertical = 3.dp),
+                )
+            }
+        } else {
+            // Column-header row for the library table.
+            item(key = "__libs_col_header__") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                ) {
+                    Text(
+                        "Path",
+                        style = RowStyle.copy(color = HexanaMuted, fontWeight = FontWeight.SemiBold),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Base addr",
+                        style = RowStyle.copy(color = HexanaMuted, fontWeight = FontWeight.SemiBold),
+                        modifier = Modifier.width(LibAddrColumnWidth),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Size",
+                        style = RowStyle.copy(color = HexanaMuted, fontWeight = FontWeight.SemiBold),
+                        modifier = Modifier.width(LibSizeColumnWidth),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "End addr",
+                        style = RowStyle.copy(color = HexanaMuted, fontWeight = FontWeight.SemiBold),
+                        modifier = Modifier.width(LibAddrColumnWidth),
+                    )
+                }
+            }
+            for ((idx, lib) in libraries.withIndex()) {
+                item(key = "lib-$idx") {
+                    val stripe = (idx and 1) == 1
+                    val bg = if (stripe) {
+                        if (JewelTheme.isDark) stripeDark else stripeLight
+                    } else Color.Transparent
+                    val endAddr = lib.baseAddr + lib.size
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(bg)
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Path column — weight(1f) so it takes all remaining
+                        // width after the fixed address/size columns. Overflow
+                        // is ellipsized at the start (most-specific part of the
+                        // path is the filename, which sits at the end).
+                        Text(
+                            lib.path.ifEmpty { "(anonymous)" },
+                            style = RowStyle,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            formatNativeAddress(lib.baseAddr),
+                            style = RowStyle.copy(color = HexanaMcHexColor),
+                            modifier = Modifier.width(LibAddrColumnWidth),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            formatByteSize(lib.size.toLong()),
+                            style = RowStyle.copy(color = HexanaMuted),
+                            modifier = Modifier.width(LibSizeColumnWidth),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            formatNativeAddress(endAddr),
+                            style = RowStyle.copy(color = HexanaMcHexColor),
+                            modifier = Modifier.width(LibAddrColumnWidth),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Section-header row inside [JitInfoView] — a short divider-like label. */
+@Composable
+private fun InfoSectionHeader(label: String, color: Color) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = RowStyle.copy(color = color, fontWeight = FontWeight.SemiBold))
+        Spacer(modifier = Modifier.width(6.dp))
+        Divider(
+            orientation = Orientation.Horizontal,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/**
+ * Human-readable size: always emits a `0x`-prefixed hex value matching the
+ * `formatNativeAddress` aesthetic, plus a parenthesised decimal shorthand
+ * for quick mental parsing.
+ *
+ *   1_048_576  →  "0x0000000000100000 (1.0 MB)"
+ *   65_536     →  "0x0000000000010000 (64 KB)"
+ *   1_234      →  "0x00000000000004D2 (1234 B)"
+ */
+private fun formatByteSize(bytes: Long): String {
+    val hex = "0x" + bytes.toULong().toString(16).padStart(16, '0').uppercase()
+    val human = when {
+        bytes >= 1_048_576L -> "%.1f MB".format(bytes / 1_048_576.0)
+        bytes >= 1_024L -> "%.1f KB".format(bytes / 1_024.0)
+        else -> "$bytes B"
+    }
+    return "$hex ($human)"
 }
 
 // -----------------------------------------------------------------------------
@@ -1138,6 +1433,10 @@ private val InlineLineStyle = TextStyle(fontFamily = FontFamily.Monospace, fontS
 // lines visually align under the first row of a BCI run.
 private val BciColumnWidth = 44.dp
 private val OpcodeColumnWidth = 220.dp
+// Info view — library table address columns (16 hex digits + "0x" = 18 chars)
+// and a compact size column. Mirrored from NativeAddressColumnWidth.
+private val LibAddrColumnWidth = 155.dp
+private val LibSizeColumnWidth = 190.dp
 // 16 hex digits + `0x` prefix = 18 chars in a 12sp monospace font ≈ 130dp;
 // 140dp gives a touch of breathing room before the hex bytes column.
 private val NativeAddressColumnWidth = 140.dp
