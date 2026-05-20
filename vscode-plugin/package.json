@@ -230,7 +230,7 @@
     "compile": "tsc -p ./tsconfig.json",
     "watch": "tsc -watch -p ./tsconfig.json",
     "mock:mcp-release": "node scripts/mock-github-release-server.js",
-    "test:unit": "npm run compile && cd test && npm run unit",
+    "test:unit": "npm run compile && npm --prefix test install && npm --prefix test run unit",
     "package": "npx @vscode/vsce package",
     "publish:vscode": "vsce publish --packagePath",
     "publish:openvsx": "ovsx publish",
