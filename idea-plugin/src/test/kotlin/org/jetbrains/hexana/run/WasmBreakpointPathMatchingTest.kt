@@ -797,6 +797,16 @@ class WasmBreakpointPathMatchingTest : UsefulTestCase() {
         )
     }
 
+    fun testStripCuHashSuffixRustCgu() {
+        // Rust CGU suffixes contain dots, hyphens, and underscores.
+        assertEquals(
+            "/Users/dev/project/debug_add.rs",
+            stripCuHashSuffix(
+                "/Users/dev/project/debug_add.rs/@/debug_add.d8f51c9c58bd83ee-cgu.0"
+            ),
+        )
+    }
+
     // ---------------------------------------------------------------
     // CU path verification with hash-stripped paths: after stripping
     // the hash, cuPathMatchesIdePath should accept the path.

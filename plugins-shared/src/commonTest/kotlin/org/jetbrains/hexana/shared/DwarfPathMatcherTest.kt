@@ -230,6 +230,16 @@ class DwarfPathMatcherTest {
         )
     }
 
+    @Test
+    fun stripRustCguSuffix() {
+        assertEquals(
+            "/Users/dev/project/debug_add.rs",
+            stripCuHashSuffix(
+                "/Users/dev/project/debug_add.rs/@/debug_add.d8f51c9c58bd83ee-cgu.0"
+            )
+        )
+    }
+
     // ── extractProjectRelativePath ──────────────────────────────────
 
     @Test

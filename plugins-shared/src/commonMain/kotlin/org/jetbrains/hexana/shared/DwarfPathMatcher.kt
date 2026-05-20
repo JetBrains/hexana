@@ -223,16 +223,18 @@ fun functionNameMatchesIdePath(
 // ── CU hash suffix stripping ────────────────────────────────────────
 
 /**
- * Matches the opaque hash suffix that LLDB appends to
+ * Matches the opaque hash/CGU suffix that LLDB appends to
  * compilation-unit paths for classic Wasm JIT frames:
- * `/@/<alphanumeric_hash>` at the end of the path.
+ * `/@/<identifier>` at the end of the path.
  *
- * Example:
+ * Examples:
  * `/path/src/lib.rs/@/9le4nom1b1hdoeh9b7lbjqyuq`
  * → stripped to `/path/src/lib.rs`
+ * `/path/debug_add.rs/@/debug_add.d8f51c9c58bd83ee-cgu.0`
+ * → stripped to `/path/debug_add.rs`
  */
 private val CU_HASH_SUFFIX_PATTERN =
-    """/@/[A-Za-z0-9]+$""".toRegex()
+    """/@/[A-Za-z0-9._-]+$""".toRegex()
 
 /**
  * Strips the opaque `/@/<hash>` suffix from a compilation-unit
