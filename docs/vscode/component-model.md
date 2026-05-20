@@ -1,12 +1,12 @@
 ---
-title: Component Model Support in Hexana for VS Code (0.0.2)
+title: Component Model Support in Hexana for VS Code (0.1.0)
 description: How Hexana detects Component Model binaries, resolves their dependencies, composes them for execution, and navigates nested modules.
-version: "0.0.2"
+version: "0.1.0"
 ---
 
 # Component Model Support
 
-Hexana 0.0.2 has first-class support for **WebAssembly Component Model** binaries: it recognises them, lists their nested modules, resolves their imports against the workspace, and composes them for execution.
+Hexana 0.1.0 has first-class support for **WebAssembly Component Model** binaries: it recognises them, lists their nested modules, resolves their imports against the workspace, and composes them for execution.
 
 ## Detection
 
@@ -65,7 +65,7 @@ The implementation lives in `extension-lib/`, in `DependencyResolver.kt`, and is
 
 ### Workspace search scope
 
-By default, Hexana searches every `.wasm` file under every workspace folder, recursively. There is no setting to limit the search scope in 0.0.2; if performance becomes an issue on large workspaces, raise a tracker issue.
+By default, Hexana searches every `.wasm` file under every workspace folder, recursively. There is no setting to limit the search scope in 0.1.0; if performance becomes an issue on large workspaces, raise a tracker issue.
 
 Files in `.gitignore`, `node_modules`, `target`, and similar paths are **not** automatically excluded — Hexana looks at everything VS Code's workspace API exposes. If a stray `.wasm` in a build artifact directory accidentally matches an import, it may be picked up.
 
@@ -87,14 +87,15 @@ After resolution returns a complete dependency set, Hexana invokes a composition
 
 Hexana detects which is on `PATH` and adapts. If neither is installed, the Run flow stops with an actionable install hint. If both are installed, `wasm-tools` wins.
 
-The composition produces a **single self-contained component** in a temporary directory, which Wasmtime then executes. See [`run-support.md`](run-support.md) for the full run flow.
+The composition produces a **single self-contained component** in a temporary directory, which the chosen runtime then executes. See [`run-support.md`](run-support.md) for the full run flow.
 
-## Limitations in 0.0.2
+## Limitations in 0.1.0
 
 - **No interface-level export/import drill-down UI** — the Exports and Imports tabs list component-level entities by name, but there is no IDE-style "go to definition" jumping between a component's import and the corresponding export in a sibling component.
 - **No WIT support** — `.wit` files have no language support in the VS Code extension (the JetBrains plugin has full WIT language support, see [`../jetbrains/wit-language.md`](../jetbrains/wit-language.md)).
 - **No component-instance edit** — read-only inspection only.
 - **No interface-version conflict reporting** — if two dependencies require different `@semver` versions of the same interface, Hexana picks one and proceeds; you may want to verify the choice manually.
+- **Debugging across component boundaries** is Wasmtime-only; WAMR's debugger does not yet surface nested-module symbols.
 
 ## See also
 

@@ -1,12 +1,12 @@
 ---
-title: Hexana for VS Code — Troubleshooting (0.0.2)
+title: Hexana for VS Code — Troubleshooting (0.1.0)
 description: Common issues users hit with the Hexana VS Code extension and how to resolve them.
-version: "0.0.2"
+version: "0.1.0"
 ---
 
 # Troubleshooting
 
-Common issues users hit with Hexana for VS Code 0.0.2 and how to resolve them.
+Common issues users hit with Hexana for VS Code 0.1.0 and how to resolve them.
 
 ## A .wasm file opens in the default editor, not Hexana
 
@@ -44,12 +44,42 @@ The extension host reads the file via `vscode.workspace.fs`. Failures usually me
 
 ## The Run button is greyed out
 
-Wasmtime is not discoverable. Either:
+No supported runtime (Wasmtime / WAMR / GraalVM) is discoverable. Either:
 
 - Install Wasmtime: `curl https://wasmtime.dev/install.sh -sSf | bash`.
+- Install WAMR — see [WAMR's README](https://github.com/bytecodealliance/wasm-micro-runtime).
+- Install GraalVM with GraalWasm — Hexana auto-detects common install locations.
 - Or set `hexana.wasmtimePath` to an absolute path in your VS Code settings.
 
 After fixing, reload the window.
+
+## The Debug button is greyed out
+
+Debug requires a debug-capable runtime (Wasmtime or WAMR) **and** LLVM 22.1 or newer on `PATH`.
+
+- Check `lldb --version`. If it is older than 22.1, install a newer LLVM toolchain.
+- Confirm Wasmtime or WAMR is on `PATH` (GraalVM debug is not yet wired in 0.1.0).
+- Confirm the binary you opened was compiled with debug info (`-g`); a stripped binary will let the debugger attach but produce no usable source mapping.
+
+## A breakpoint does not bind during Debug
+
+Hexana maps PCs to source files via DWARF. Common reasons a breakpoint does not bind:
+
+- The binary was compiled without `-g`, or with `-Cstrip=debuginfo` (Rust) / equivalent.
+- The source path stored in DWARF differs from what's open in VS Code. Aggressive-CGU Rust builds tag source files with a CGU suffix; Hexana applies fuzzy matching but does not always win.
+- The line you set the breakpoint on lies inside an inlined function whose DWARF was elided.
+
+Open **View → Output → Hexana** and look for `[dwarf-debug]` lines to see what path Hexana tried to resolve.
+
+## "Hexana MCP server: download failed" / MCP integration broken
+
+The MCP server is downloaded on demand from GitHub Releases. If it fails:
+
+1. Check VS Code's **Output → Hexana MCP** channel for the underlying error (network, disk, JDK).
+2. Confirm a Java 21+ JDK is discoverable — through `JAVA_HOME`, `PATH`, or the `hexana.mcp.javaHome` setting.
+3. Run **Hexana: Reinstall MCP Server** from the Command Palette to force a fresh download.
+4. If a previous download appears stuck (no progress, but the download lock file is present), Hexana detects and recovers stale locks automatically; reload the window if that fails.
+5. Disk corruption or a partial extraction sometimes leaves a broken cache — running the Reinstall command from step 3 deletes and re-fetches.
 
 ## Run fails on a component binary with "unable to compose"
 
@@ -76,7 +106,7 @@ Hexana scans the entire workspace and matches by fully-qualified interface name 
 Workarounds:
 
 - Move the unwanted dependency out of the workspace.
-- Add `.vscode/settings.json` to exclude the file from Hexana's search — **not yet supported in 0.0.2**; track on the roadmap.
+- Add `.vscode/settings.json` to exclude the file from Hexana's search — **not yet supported in 0.1.0**; track on the roadmap.
 - Vendor the correct dependency under a unique workspace path.
 
 ## Run terminal closes immediately or shows no output
