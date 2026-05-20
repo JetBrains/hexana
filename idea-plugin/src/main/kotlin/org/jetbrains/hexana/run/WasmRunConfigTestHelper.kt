@@ -105,13 +105,20 @@ object WasmRunConfigTestHelper {
             .findBreakpointType(WasmLineBreakpointType::class.java)
         ApplicationManager.getApplication().invokeAndWait {
             ApplicationManager.getApplication().runWriteAction {
-                XDebuggerManager.getInstance(project).breakpointManager
-                    .addLineBreakpoint(
+                val bpManager = XDebuggerManager.getInstance(project).breakpointManager
+                val alreadyExists = bpManager.allBreakpoints.any { bp ->
+                    bp.type == breakpointType &&
+                        bp.sourcePosition?.file?.url == sourceVirtualFile.url &&
+                        bp.sourcePosition?.line == breakpointLine - 1
+                }
+                if (!alreadyExists) {
+                    bpManager.addLineBreakpoint(
                         breakpointType,
                         sourceVirtualFile.url,
                         breakpointLine - 1, // 0-based
                         null,
                     )
+                }
             }
         }
 
