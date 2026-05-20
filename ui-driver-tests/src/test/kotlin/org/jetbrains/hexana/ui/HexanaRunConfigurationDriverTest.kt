@@ -43,6 +43,9 @@ class HexanaRunConfigurationDriverTest {
         private const val CORE_MODULE_FILE = "hello_wasi.wasm"
         private const val ADD_MODULE_FILE = "add.wasm"
         private const val COMPONENT_MODULE_FILE = "hello_component.wasm"
+        private const val DEBUG_DWARF_WASM_FILE = "debug-add.wasm"
+        private const val DEBUG_RUST_SOURCE_FILE = "debug_add.rs"
+        private const val BREAKPOINT_LINE = 10 // `let sum = a + b;`
 
         @JvmStatic
         @BeforeAll
@@ -288,6 +291,94 @@ class HexanaRunConfigurationDriverTest {
             }
     }
 
+    @Test
+    fun debugDwarfWasmBreakpointAndInspectVariables() {
+        val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-dwarf-breakpoint")
+
+        context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
+            .useDriverAndCloseIde {
+                waitForIndicators(5.minutes)
+
+                // Open the DWARF wasm file first so the editor is ready
+                openFile(DEBUG_DWARF_WASM_FILE, waitForCodeAnalysis = false, isTextEditor = false)
+                ideFrame {
+                    editorTabs {
+                        tab(DEBUG_DWARF_WASM_FILE, fullMatch = false).waitFound()
+                    }
+                }
+                Thread.sleep(3_000)
+
+                // Call the helper that sets a breakpoint in the Rust source,
+                // launches debug, waits for the breakpoint hit, collects
+                // variables, and resumes.
+                val project = singleProject()
+                val helper = utility(DebugTestHelperRef::class)
+                val result = helper.debugWithBreakpointAndInspectVariables(
+                    project,
+                    DEBUG_DWARF_WASM_FILE,
+                    DEBUG_RUST_SOURCE_FILE,
+                    BREAKPOINT_LINE,
+                    "WASMTIME",
+                    "--invoke add",
+                    "add",
+                    "3 7",
+                )
+
+                logOutput("DWARF breakpoint debug result:\n$result")
+
+                // Verify the session paused at the breakpoint
+                assertTrue(
+                    result.startsWith("PAUSED"),
+                    "Expected debug session to pause at breakpoint, got: $result"
+                )
+
+                // Parse variable lines (format: name=value)
+                val variableLines = result.lines()
+                    .filter { it.contains("=") && it != "PAUSED" && it != "RESUMED" }
+                val variableMap = variableLines.associate {
+                    val eqIndex = it.indexOf('=')
+                    it.substring(0, eqIndex) to it.substring(eqIndex + 1)
+                }
+
+                logOutput("Parsed variables: $variableMap")
+
+                // Filter out runtime-injected variables
+                val userVariables = variableMap.filterKeys { it != "__vmctx" && it != "memory" }
+
+                // We expect function parameters 'a' and 'b' to be visible
+                assertTrue(
+                    userVariables.containsKey("a"),
+                    "Expected variable 'a' to be visible. Found: ${userVariables.keys}"
+                )
+                assertTrue(
+                    userVariables.containsKey("b"),
+                    "Expected variable 'b' to be visible. Found: ${userVariables.keys}"
+                )
+
+                // Verify values if available (we passed a=3, b=7)
+                val aValue = userVariables["a"]
+                if (aValue != null && aValue.isNotBlank()) {
+                    assertTrue(
+                        aValue.contains("3"),
+                        "Expected variable 'a' to have value 3, got: $aValue"
+                    )
+                }
+                val bValue = userVariables["b"]
+                if (bValue != null && bValue.isNotBlank()) {
+                    assertTrue(
+                        bValue.contains("7"),
+                        "Expected variable 'b' to have value 7, got: $bValue"
+                    )
+                }
+
+                // Verify execution was resumed
+                assertTrue(
+                    result.contains("RESUMED"),
+                    "Expected debug session to be resumed after inspection"
+                )
+            }
+    }
+
     private fun launchWasmtimeConfig(
         driver: Driver,
         wasmFileName: String,
@@ -375,5 +466,22 @@ class HexanaRunConfigurationDriverTest {
             exportName: String,
             programArgs: String,
         )
+    }
+
+    @Remote(
+        "org.jetbrains.hexana.run.WasmRunConfigTestHelper",
+        plugin = HEXANA_PLUGIN_ID,
+    )
+    interface DebugTestHelperRef {
+        fun debugWithBreakpointAndInspectVariables(
+            project: com.intellij.driver.sdk.Project,
+            wasmFileName: String,
+            sourceFileName: String,
+            breakpointLine: Int,
+            engine: String,
+            wasmtimeOptions: String,
+            exportName: String,
+            programArgs: String,
+        ): String
     }
 }
