@@ -208,23 +208,13 @@ async function ensureHexanaMcpServer(
 
     await fs.promises.mkdir(storageDir, { recursive: true });
 
-    if (!options.force) {
-        if (await isPrepared(serverDir, markerPath, latestRelease.version)) {
-            return vscode.Uri.file(serverDir);
-        }
-        if (latestRelease.source === "fallback" && await getPreparedServerVersion(serverDir, markerPath)) {
-            return vscode.Uri.file(serverDir);
-        }
+    if (await canReuseInstalledServer(serverDir, markerPath, latestRelease, options.force === true)) {
+        return vscode.Uri.file(serverDir);
     }
 
     return withDownloadLock(storageDir, async () => {
-        if (!options.force) {
-            if (await isPrepared(serverDir, markerPath, latestRelease.version)) {
-                return vscode.Uri.file(serverDir);
-            }
-            if (latestRelease.source === "fallback" && await getPreparedServerVersion(serverDir, markerPath)) {
-                return vscode.Uri.file(serverDir);
-            }
+        if (await canReuseInstalledServer(serverDir, markerPath, latestRelease, options.force === true)) {
+            return vscode.Uri.file(serverDir);
         }
 
         await vscode.window.withProgress(
@@ -327,6 +317,25 @@ async function pathExists(filePath: string): Promise<boolean> {
 
 async function isPrepared(serverDir: string, markerPath: string, expectedVersion: string): Promise<boolean> {
     return await getPreparedServerVersion(serverDir, markerPath) === expectedVersion;
+}
+
+async function canReuseInstalledServer(
+    serverDir: string,
+    markerPath: string,
+    release: HexanaMcpRelease,
+    force: boolean,
+): Promise<boolean> {
+    const installed = await getPreparedServerVersion(serverDir, markerPath);
+    if (!installed) {
+        return false;
+    }
+    if (!force && installed === release.version) {
+        return true;
+    }
+    if (release.source === "fallback" && installed !== release.version) {
+        return true;
+    }
+    return false;
 }
 
 async function getPreparedServerVersion(serverDir: string, markerPath: string): Promise<string | undefined> {

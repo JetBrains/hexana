@@ -50,6 +50,10 @@
         "title": "Hexana MCP: Update Server"
       },
       {
+        "command": "hexana.mcp.reinstallServer",
+        "title": "Hexana MCP: Reinstall Server"
+      },
+      {
         "command": "hexana.mcp.showServerStatus",
         "title": "Hexana MCP: Show Server Status"
       }

@@ -193,6 +193,51 @@ describe('Hexana MCP server downloader', function () {
             await server.close();
         }
     });
+
+    it('Reinstall Server command redownloads the same version to repair an incomplete install', async function () {
+        const archivePath = createServerArchive(tempRoot, '0.7.0');
+        const server = await startReleaseServer(archivePath, '0.7.0');
+        process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
+
+        try {
+            const storageDir = process.env.HEXANA_MCP_STORAGE_DIR!;
+            const serverDir = path.join(storageDir, 'server');
+            fs.mkdirSync(serverDir, { recursive: true });
+            fs.writeFileSync(path.join(storageDir, 'server.version'), '0.7.0\n', 'utf8');
+
+            const downloader = requireExtensionModule('mcpServerDownloader');
+            const context = extensionContext(tempRoot);
+            downloader.registerHexanaMcpServerCommands(context);
+
+            await vscode.commands.get('hexana.mcp.reinstallServer')?.();
+
+            expect(server.requestCounts.archive).to.equal(1);
+            expect(fs.existsSync(downloader.getHexanaMcpServerLauncherPath(context))).to.equal(true);
+            expect(vscode.messages).to.contain('Hexana MCP server is reinstalled (0.7.0).');
+        } finally {
+            await server.close();
+        }
+    });
+
+    it('Reinstall Server does not downgrade a newer installed server when release metadata is unavailable', async function () {
+        const server = await startUnavailableMetadataReleaseServer();
+        process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
+        createInstalledServer(process.env.HEXANA_MCP_STORAGE_DIR!, '0.7.0');
+
+        try {
+            const downloader = requireExtensionModule('mcpServerDownloader');
+            const context = extensionContext(tempRoot, '0.1.0');
+            downloader.registerHexanaMcpServerCommands(context);
+
+            await vscode.commands.get('hexana.mcp.reinstallServer')?.();
+
+            expect(server.requestCounts.archive).to.equal(0);
+            expect(fs.readFileSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server.version'), 'utf8').trim())
+                .to.equal('0.7.0');
+        } finally {
+            await server.close();
+        }
+    });
 });
 
 function extensionContext(tempRoot: string): any {
