@@ -33,6 +33,7 @@ const mcpFailureStorageDir = path.resolve(
         path.join(os.tmpdir(), `hexana-vscode-mcp-failure-test-${process.pid}`),
 );
 const mcpFailureRequestLog = path.join(mcpFailureStorageDir, 'mock-requests.log');
+const mcpRequestLog = path.join(mcpStorageDir, 'mock-requests.log');
 
 main().catch(error => {
     console.error(error);
@@ -47,7 +48,11 @@ async function main(): Promise<void> {
         await runExtest(['get-chromedriver', '--code_version', codeVersion]);
         await runExtest(['install-vsix', '--extensions_dir', extensionsDir, '-f', vsixPath]);
 
-        const mockServer = startMcpMockServerIfAvailable();
+        const mockServer = startMcpMockServerIfAvailable({
+            port: mcpMockPort,
+            storageDir: mcpStorageDir,
+            requestLog: mcpRequestLog,
+        });
         try {
             fakePostHog.reset();
             await runExtest([
@@ -66,7 +71,12 @@ async function main(): Promise<void> {
                 wasmFixture,
             ], {
                 ...fakePostHog.env,
-                ...mcpTestEnv(mockServer !== undefined),
+                ...mcpTestEnv({
+                    enabled: mockServer !== undefined,
+                    port: mcpMockPort,
+                    storageDir: mcpStorageDir,
+                    requestLog: mcpRequestLog,
+                }),
                 HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests',
                 VSIX_PATH: vsixPath,
                 WASM_FIXTURE: wasmFixture,

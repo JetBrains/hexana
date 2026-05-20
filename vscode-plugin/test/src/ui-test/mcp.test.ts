@@ -30,6 +30,7 @@ describe('Hexana MCP Server Update - Acceptance Tests', function () {
     const enabled = process.env.HEXANA_VSCODE_MCP_TEST === '1';
     const storageDir = process.env.HEXANA_MCP_STORAGE_DIR;
     const expectedVersion = process.env.HEXANA_MCP_TEST_VERSION;
+    const requestLogPath = process.env.HEXANA_MCP_MOCK_REQUEST_LOG;
     const wasmFixture = path.resolve(process.env.WASM_FIXTURE || path.join(process.cwd(), 'fixtures', 'test-exports.wasm'));
 
     before(function () {
@@ -38,6 +39,7 @@ describe('Hexana MCP Server Update - Acceptance Tests', function () {
         }
         expect(storageDir, 'HEXANA_MCP_STORAGE_DIR must be set').to.be.a('string').and.not.empty;
         expect(expectedVersion, 'HEXANA_MCP_TEST_VERSION must be set').to.be.a('string').and.not.empty;
+        expect(requestLogPath, 'HEXANA_MCP_MOCK_REQUEST_LOG must be set').to.be.a('string').and.not.empty;
     });
 
     it('downloads, extracts, and launches the MCP server from the mocked GitHub release', async function () {
@@ -56,6 +58,16 @@ describe('Hexana MCP Server Update - Acceptance Tests', function () {
         await waitForFile(launcherPath, 90_000);
         await waitForFile(versionMarkerPath, 10_000);
         await waitForNoFile(lockPath, 30_000);
+
+        const requestLog = fs.readFileSync(requestLogPath!, 'utf8');
+        expect(
+            requestLog,
+            'mock metadata endpoint was not hit — extension may have fallen back to real GitHub',
+        ).to.match(/\/repos\/example\/hexana-mcp\/releases\/tags\//);
+        expect(
+            requestLog,
+            'mock archive endpoint was not hit — extension may have fallen back to real GitHub',
+        ).to.match(/DOWNLOAD_STATUS 200 \/download\//);
 
         const marker = fs.readFileSync(versionMarkerPath, 'utf8').trim();
         expect(marker).to.equal(expectedVersion);

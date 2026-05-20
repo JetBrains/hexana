@@ -13,6 +13,7 @@ interface TestReleaseServer {
         metadata: number;
         archive: number;
     };
+    requestPaths: string[];
 }
 
 describe('Hexana MCP server downloader', function () {
@@ -48,6 +49,8 @@ describe('Hexana MCP server downloader', function () {
 
             const firstUri = await downloader.prepareHexanaMcpServer(context);
             expect(firstUri?.fsPath).to.equal(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server'));
+            expect(server.requestCounts.metadata, 'production must hit the tag-based metadata endpoint').to.equal(1);
+            expect(server.requestPaths[0]).to.equal('/repos/example/hexana/releases/tags/v0.7.0');
             expect(server.requestCounts.archive).to.equal(1);
             expect(fs.readFileSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server.version'), 'utf8').trim())
                 .to.equal('0.7.0');
@@ -380,7 +383,9 @@ async function startReleaseServer(
     digest = sha256(archivePath),
 ): Promise<TestReleaseServer> {
     const requestCounts = { metadata: 0, archive: 0 };
+    const requestPaths: string[] = [];
     const server = http.createServer((request, response) => {
+        requestPaths.push(request.url ?? '');
         if (request.url?.startsWith('/repos/example/hexana/releases/tags/')) {
             requestCounts.metadata++;
             response.setHeader('Content-Type', 'application/json');
@@ -413,6 +418,7 @@ async function startReleaseServer(
         apiUrl: baseUrl(server) + '/repos/example/hexana/releases',
         close: () => close(server),
         requestCounts,
+        requestPaths,
     };
 }
 
@@ -450,6 +456,7 @@ async function startBrokenDownloadReleaseServer(version: string): Promise<TestRe
         apiUrl: baseUrl(server) + '/repos/example/hexana/releases',
         close: () => close(server),
         requestCounts,
+        requestPaths: [],
     };
 }
 
@@ -472,6 +479,7 @@ async function startUnavailableMetadataReleaseServer(): Promise<TestReleaseServe
         apiUrl: baseUrl(server) + '/repos/example/hexana/releases',
         close: () => close(server),
         requestCounts,
+        requestPaths: [],
     };
 }
 
