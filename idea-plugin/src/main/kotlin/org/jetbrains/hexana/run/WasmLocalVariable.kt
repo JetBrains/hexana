@@ -45,6 +45,9 @@ internal class WasmLocalVariable(
     val isDwarfMetadataMissing: Boolean
         get() = displayValue == DWARF_MISSING_MARKER
 
+    /** The raw display value string shown in the Variables pane. */
+    val presentationValue: String get() = displayValue
+
     override fun computePresentation(node: XValueNode, place: XValuePlace) {
         node.setPresentation(
             null as Icon?,

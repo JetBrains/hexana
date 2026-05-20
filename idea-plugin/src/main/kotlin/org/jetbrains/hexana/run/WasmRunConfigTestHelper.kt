@@ -28,6 +28,7 @@ object WasmRunConfigTestHelper {
         wasmtimeOptions: String,
         exportName: String,
         programArgs: String,
+        wasmtimePath: String = "",
     ) {
         val basePath = project.basePath ?: error("project basePath is null")
         val wasmFilePath = "$basePath/$wasmFileName"
@@ -49,6 +50,7 @@ object WasmRunConfigTestHelper {
             this.wasmtimeOptions = wasmtimeOptions
             this.exportName = exportName
             this.programArguments = programArgs
+            if (wasmtimePath.isNotBlank()) this.wasmtimePath = wasmtimePath
         }
 
         // Resolve dependencies (mirrors WasmRunUtil.doRun)
@@ -93,6 +95,7 @@ object WasmRunConfigTestHelper {
         wasmtimeOptions: String,
         exportName: String,
         programArgs: String,
+        wasmtimePath: String = "",
     ): String {
         val basePath = project.basePath ?: error("project basePath is null")
 
@@ -142,6 +145,7 @@ object WasmRunConfigTestHelper {
             this.wasmtimeOptions = wasmtimeOptions
             this.exportName = exportName
             this.programArguments = programArgs
+            if (wasmtimePath.isNotBlank()) this.wasmtimePath = wasmtimePath
         }
 
         val wasmBytes = wasmVirtualFile.contentsToByteArray()
@@ -177,32 +181,42 @@ object WasmRunConfigTestHelper {
 
         result.appendLine("PAUSED")
 
-        // Collect variables by accessing the LLDB communicator directly
-        // from the WasmDebugProcess, which avoids implementing complex
-        // XCompositeNode/XValueNode interfaces.
+        // The IDE's own Variables pane calls computeChildren when the
+        // session suspends. That call sends LLDB commands (frame select,
+        // __vmctx->set(), frame variable) through the shared
+        // LldbCommunicator. We must NOT call computeChildren ourselves
+        // because the communicator is not thread-safe for concurrent
+        // sendCommandAndCollectOutput calls — the second caller
+        // overwrites the first caller's response collector, corrupting
+        // both results.
+        //
+        // Instead, we wait for the IDE's computeChildren to finish
+        // (which initializes __vmctx and resolves variables), then
+        // send a single `frame variable` command to read the values.
         val session = XDebuggerManager.getInstance(project).currentSession!!
-        val debugProcess = session.debugProcess
-        if (debugProcess is WasmDebugProcess) {
-            val lldb = debugProcess.getLldb()
-            if (lldb != null) {
-                // Initialize VM context for Wasmtime variable access
-                try {
-                    lldb.sendCommandAndCollectOutput("expression -- __vmctx->set()", timeoutMs = 2_000)
-                } catch (_: Exception) {
-                    // May fail in non-Wasm frames
-                }
 
-                val lines = lldb.sendCommandAndCollectOutput("frame variable")
-                // Parse `(type) name = value` lines directly to avoid
-                // accessing private fields on WasmLocalVariable.
-                val pattern = """\((.+?)\)\s+(.+?)\s+=\s+(.+)""".toRegex(RegexOption.DOT_MATCHES_ALL)
-                for (line in lines) {
-                    val match = pattern.find(line.trim()) ?: continue
-                    val name = match.groupValues[2].trim()
-                    val value = match.groupValues[3].trim()
-                    result.appendLine("$name=$value")
-                }
-            }
+        // Wait for the IDE's own Variables pane computeChildren to
+        // finish. It runs on a pooled thread and sends multiple LLDB
+        // commands sequentially. 10 seconds is generous enough.
+        Thread.sleep(10_000)
+
+        var collectedVariables = collectVariablesViaFrameVariable(session)
+
+        // Retry if variables still look unresolved
+        val userVars = collectedVariables.filter {
+            it.first != "__vmctx" && it.first != "memory"
+        }
+        val looksResolved = userVars.isNotEmpty() && userVars.any { (_, value) ->
+            value.isNotBlank() && value != "0" && !value.contains("collecting", ignoreCase = true)
+                && !value.contains("unavailable", ignoreCase = true)
+        }
+        if (!looksResolved) {
+            Thread.sleep(5_000)
+            collectedVariables = collectVariablesViaFrameVariable(session)
+        }
+
+        for ((name, value) in collectedVariables) {
+            result.appendLine("$name=$value")
         }
 
         // Resume execution
@@ -222,6 +236,7 @@ object WasmRunConfigTestHelper {
         wasmtimeOptions: String,
         exportName: String,
         programArgs: String,
+        wasmtimePath: String = "",
     ) {
         val basePath = project.basePath ?: error("project basePath is null")
         val wasmFilePath = "$basePath/$wasmFileName"
@@ -243,6 +258,7 @@ object WasmRunConfigTestHelper {
             this.wasmtimeOptions = wasmtimeOptions
             this.exportName = exportName
             this.programArguments = programArgs
+            if (wasmtimePath.isNotBlank()) this.wasmtimePath = wasmtimePath
         }
 
         val wasmBytes = wasmVirtualFile.contentsToByteArray()
@@ -257,5 +273,32 @@ object WasmRunConfigTestHelper {
         ApplicationManager.getApplication().invokeLater {
             ProgramRunnerUtil.executeConfiguration(settings, executor)
         }
+    }
+
+    /**
+     * Collects variables by sending a single `frame variable` command
+     * through the [LldbCommunicator]. This avoids calling
+     * [com.intellij.xdebugger.frame.XStackFrame.computeChildren]
+     * which would send multiple LLDB commands that can interleave
+     * with the IDE's own Variables pane (the communicator is not
+     * thread-safe for concurrent `sendCommandAndCollectOutput` calls).
+     *
+     * The caller must ensure that `__vmctx->set()` has already been
+     * called (e.g. by waiting for the IDE's own `computeChildren`
+     * to finish first).
+     */
+    private fun collectVariablesViaFrameVariable(
+        session: com.intellij.xdebugger.XDebugSession,
+    ): List<Pair<String, String>> {
+        val debugProcess = session.debugProcess
+        if (debugProcess !is WasmDebugProcess) return emptyList()
+        val lldb = debugProcess.getLldb() ?: return emptyList()
+
+        val lines = lldb.sendCommandAndCollectOutput("frame variable")
+        val variables = WasmLocalVariable.parseFrameVariableOutput(
+            lines, filterHidden = false,
+        )
+
+        return variables.map { it.name to it.presentationValue }
     }
 }

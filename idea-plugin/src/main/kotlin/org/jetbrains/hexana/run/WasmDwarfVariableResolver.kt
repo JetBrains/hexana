@@ -280,10 +280,11 @@ internal class WasmDwarfVariableResolver private constructor(
      * 1. Direct variable lookup via LLDB Python (`FindVariable`) —
      *    this uses the JIT-transformed DWARF and is the most reliable
      *    path when Cranelift's transformation succeeded.
-     * 2. For `WasmLocal` frame bases: read the frame base value using
-     *    LLDB's register access (`$fp` or frame base register), then
-     *    compute `memory_base + frame_base_value + offset` to read
-     *    from Wasm linear memory.
+     * 2. For `WasmLocal` frame bases: use `__stack_pointer` as the
+     *    frame base value (the function prologue synchronizes the
+     *    local and the global), then compute
+     *    `memory_base + frame_base_value + offset` to read the
+     *    variable from Wasm linear memory.
      * 3. For `WasmGlobal` frame bases: read `__stack_pointer` via
      *    the expression evaluator, then compute the memory address.
      */
@@ -319,30 +320,35 @@ internal class WasmDwarfVariableResolver private constructor(
         val offset = fbreg.offset
         val typeName = variable.typeName ?: "int"
 
-        val frameBaseExpr = when (frameBaseOp) {
+        // For WasmLocal frame bases, GetFP() returns the *native*
+        // frame pointer — NOT the wasm local value. Reading at
+        // native_fp + offset accesses random native stack data and
+        // returns garbage that looks valid (e.g. value=1 instead of
+        // the real parameter value). We must not attempt that path.
+        //
+        // For WasmGlobal frame bases (e.g. __stack_pointer), the
+        // expression evaluator returns the actual wasm stack pointer
+        // value which is a linear-memory offset — safe to use with
+        // __vmctx->memory.
+        when (frameBaseOp) {
             is DwarfExprOp.WasmLocal -> {
-                // Frame base is a Wasm local. After Cranelift JIT,
-                // wasm locals become native registers/stack slots.
-                // Try LLDB's built-in frame base evaluation which
-                // uses the JIT-transformed DW_AT_frame_base.
-                // If that fails, there is no reliable way to access
-                // a raw wasm local in Wasmtime JIT mode.
-                "lldb.frame.GetFP()"
+                // Wasm local frame base: DW_OP_WASM_location local#N
+                // with DW_OP_stack_value. The frame base equals the
+                // value of wasm local #N, which is the stack pointer
+                // local. In LLVM-compiled wasm, the function prologue
+                // loads __stack_pointer global, subtracts the frame
+                // size, stores the result back into both the local and
+                // the global. After the prologue, __stack_pointer ==
+                // local#N == frame_base. We can therefore use the
+                // __stack_pointer global (readable via LLDB expression
+                // evaluator) as the frame base value.
             }
-            is DwarfExprOp.WasmGlobal, is DwarfExprOp.WasmGlobalU32 -> {
-                // For Wasmtime JIT, __vmctx provides access to globals.
-                // The frame base global (typically __stack_pointer, global #0)
-                // can be read via the expression evaluator.
-                "lldb.frame.EvaluateExpression('__stack_pointer').unsigned"
-            }
+            is DwarfExprOp.WasmGlobal, is DwarfExprOp.WasmGlobalU32 -> {}
             else -> return null
         }
 
-        // Use LLDB Python to compute the effective memory address and
-        // read it. For WasmLocal frame bases, the value from GetFP()
-        // is the native frame pointer which may not correspond to the
-        // wasm linear memory address. We try both with and without
-        // adding the linear memory base.
+        val frameBaseExpr = "lldb.frame.EvaluateExpression('__stack_pointer').unsigned"
+
         val script = buildString {
             append("script ")
             append("import sys; ")

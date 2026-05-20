@@ -47,12 +47,15 @@ class HexanaRunConfigurationDriverTest {
         private const val DEBUG_RUST_SOURCE_FILE = "debug_add.rs"
         private const val BREAKPOINT_LINE = 10 // `let sum = a + b;`
 
+        private lateinit var wasmtimePathForTests: String
+
         @JvmStatic
         @BeforeAll
         fun ensureWasmtime() {
             val wasmtimePath = resolveWasmtimePath()
             if (wasmtimePath != null) {
                 logOutput("Wasmtime already available at: $wasmtimePath")
+                wasmtimePathForTests = wasmtimePath
                 return
             }
             logOutput("Wasmtime not found, downloading...")
@@ -60,6 +63,7 @@ class HexanaRunConfigurationDriverTest {
             val verifiedPath = resolveWasmtimePath()
                 ?: error("Wasmtime installation failed: not found after download")
             logOutput("Wasmtime installed at: $verifiedPath")
+            wasmtimePathForTests = verifiedPath
         }
 
         private fun resolveWasmtimePath(): String? {
@@ -99,7 +103,7 @@ class HexanaRunConfigurationDriverTest {
                 }
             }
 
-            val version = "v43.0.0"
+            val version = "v44.0.0"
             val ext = if (os == "windows") "zip" else "tar.xz"
             val fileName = "wasmtime-$version-$arch-$os.$ext"
             val url = "https://github.com/bytecodealliance/wasmtime/releases/download/$version/$fileName"
@@ -315,13 +319,14 @@ class HexanaRunConfigurationDriverTest {
                 val helper = utility(DebugTestHelperRef::class)
                 val result = helper.debugWithBreakpointAndInspectVariables(
                     project,
-                    DEBUG_DWARF_WASM_FILE,
-                    DEBUG_RUST_SOURCE_FILE,
-                    BREAKPOINT_LINE,
-                    "WASMTIME",
-                    "--invoke add",
-                    "add",
-                    "3 7",
+                    wasmFileName = DEBUG_DWARF_WASM_FILE,
+                    sourceFileName = DEBUG_RUST_SOURCE_FILE,
+                    breakpointLine = BREAKPOINT_LINE,
+                    engine = "WASMTIME",
+                    wasmtimeOptions = "--invoke add",
+                    exportName = "add",
+                    programArgs = "3 7",
+                    wasmtimePath = wasmtimePathForTests,
                 )
 
                 logOutput("DWARF breakpoint debug result:\n$result")
@@ -396,6 +401,7 @@ class HexanaRunConfigurationDriverTest {
             wasmtimeOptions,
             exportName,
             programArgs,
+            wasmtimePathForTests,
         )
     }
 
@@ -416,6 +422,7 @@ class HexanaRunConfigurationDriverTest {
             wasmtimeOptions,
             exportName,
             programArgs,
+            wasmtimePathForTests,
         )
     }
 
@@ -456,6 +463,7 @@ class HexanaRunConfigurationDriverTest {
             wasmtimeOptions: String,
             exportName: String,
             programArgs: String,
+            wasmtimePath: String,
         )
 
         fun createAndDebugWasmtime(
@@ -465,6 +473,7 @@ class HexanaRunConfigurationDriverTest {
             wasmtimeOptions: String,
             exportName: String,
             programArgs: String,
+            wasmtimePath: String,
         )
     }
 
@@ -482,6 +491,7 @@ class HexanaRunConfigurationDriverTest {
             wasmtimeOptions: String,
             exportName: String,
             programArgs: String,
+            wasmtimePath: String,
         ): String
     }
 }
