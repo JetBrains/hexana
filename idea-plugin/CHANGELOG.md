@@ -7,8 +7,11 @@
 - Editable binary documents — inline WAT row editing, hex-cell editing, length-changing append+redirect, IDE-keymap Undo/Redo, Discard / Finalize buttons, sidecar persistence with restore-on-reopen — plus a virtualized WAT viewer with per-entry Function / Data / Import / Export breakouts (foldable xxd bodies, `u8`/`u16`/`u32`/`u64`/`ascii`/`utf8` view modes for Data), Go-To-Declaration / Go-To-Symbol / Back / Forward navigation through the IDE keymap, and a section shortcut bar.
 - Java archives & class files: hex view on top + tabs/list below for `.jar`/`.zip`/`.war`/`.apk` (searchable, sortable class list) and `.class` (header / WAT-style foldable methods with decoded bytecode / constant pool); project-view `Open in... → Hexana` action for archives, including entries under External Libraries. [#91](https://github.com/JetBrains/hexana/issues/91)
 - JIT Viewer run-configuration tab — opt-in attachment of the bundled JVMTI agent to any Java run configuration; configurable per-run dump file (`default.jit`) that auto-opens in Hexana when the run completes.
+- WASM proposals used by a binary now are displayed in the information bar, and corresponding arguments are passed to the runtimes to enable them for run configurations
 
 ### Changed
+- Improved support for GraalVM for run configurations – now we support builds of GraalVM without the embedded wasm runner
+- Fixed issues with debug not hitting the breakpoints when the information is encoded in the .debug_loc section in DWARF
 
 ### Deprecated
 
