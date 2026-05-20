@@ -148,6 +148,70 @@ describe('Hexana MCP server downloader', function () {
         }
     });
 
+    it('keeps the existing server when replacing the downloaded server fails', async function () {
+        const archivePath = createServerArchive(tempRoot, '0.8.0');
+        const server = await startReleaseServer(archivePath, '0.8.0');
+        process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
+        createInstalledServer(process.env.HEXANA_MCP_STORAGE_DIR!, '0.7.0');
+
+        const originalRename = fs.promises.rename;
+        fs.promises.rename = (async (oldPath: fs.PathLike, newPath: fs.PathLike) => {
+            if (String(oldPath).includes('.server-staged-') && String(newPath).endsWith(`${path.sep}server`)) {
+                throw new Error('Injected server replacement failure');
+            }
+            return originalRename(oldPath, newPath);
+        }) as typeof fs.promises.rename;
+
+        try {
+            const downloader = requireExtensionModule('mcpServerDownloader');
+            const context = extensionContext(tempRoot, '0.8.0');
+            const result = await downloader.prepareHexanaMcpServer(context, {
+                showErrorNotification: false,
+            });
+
+            expect(result).to.equal(undefined);
+            expect(await downloader.getDownloadedHexanaMcpServerVersion(context)).to.equal('0.7.0');
+            expect(fs.readFileSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server.version'), 'utf8').trim())
+                .to.equal('0.7.0');
+            expect(fs.existsSync(downloader.getHexanaMcpServerLauncherPath(context))).to.equal(true);
+            expect(fs.existsSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, '.download.lock'))).to.equal(false);
+        } finally {
+            fs.promises.rename = originalRename;
+            await server.close();
+        }
+    });
+
+    it('keeps the new server installed when removing the previous backup fails', async function () {
+        const archivePath = createServerArchive(tempRoot, '0.8.0');
+        const server = await startReleaseServer(archivePath, '0.8.0');
+        process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
+        createInstalledServer(process.env.HEXANA_MCP_STORAGE_DIR!, '0.7.0');
+
+        const originalRm = fs.promises.rm;
+        fs.promises.rm = (async (rmPath: fs.PathLike, options?: fs.RmOptions) => {
+            if (String(rmPath).includes('.server-backup-')) {
+                throw new Error('Injected backup removal failure');
+            }
+            return originalRm(rmPath, options);
+        }) as typeof fs.promises.rm;
+
+        try {
+            const downloader = requireExtensionModule('mcpServerDownloader');
+            const context = extensionContext(tempRoot, '0.8.0');
+            const result = await downloader.prepareHexanaMcpServer(context, {
+                showErrorNotification: false,
+            });
+
+            expect(result?.fsPath).to.equal(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server'));
+            expect(await downloader.getDownloadedHexanaMcpServerVersion(context)).to.equal('0.8.0');
+            expect(fs.readFileSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server.version'), 'utf8').trim())
+                .to.equal('0.8.0');
+        } finally {
+            fs.promises.rm = originalRm;
+            await server.close();
+        }
+    });
+
     it('removes a stale download lock and retries the download', async function () {
         const archivePath = createServerArchive(tempRoot, '0.7.0');
         const server = await startReleaseServer(archivePath, '0.7.0');
@@ -240,12 +304,12 @@ describe('Hexana MCP server downloader', function () {
     });
 });
 
-function extensionContext(tempRoot: string): any {
+function extensionContext(tempRoot: string, version = '0.7.0'): any {
     return {
         extensionPath: tempRoot,
         extension: {
             packageJSON: {
-                version: '0.1.0',
+                version,
             },
         },
         globalStorageUri: {
@@ -298,7 +362,7 @@ async function startReleaseServer(
 ): Promise<TestReleaseServer> {
     const requestCounts = { metadata: 0, archive: 0 };
     const server = http.createServer((request, response) => {
-        if (request.url === '/repos/example/hexana/releases/latest') {
+        if (request.url?.startsWith('/repos/example/hexana/releases/tags/')) {
             requestCounts.metadata++;
             response.setHeader('Content-Type', 'application/json');
             response.end(JSON.stringify({
@@ -327,7 +391,7 @@ async function startReleaseServer(
 
     await listen(server);
     return {
-        apiUrl: baseUrl(server) + '/repos/example/hexana/releases/latest',
+        apiUrl: baseUrl(server) + '/repos/example/hexana/releases',
         close: () => close(server),
         requestCounts,
     };
@@ -336,7 +400,7 @@ async function startReleaseServer(
 async function startBrokenDownloadReleaseServer(version: string): Promise<TestReleaseServer> {
     const requestCounts = { metadata: 0, archive: 0 };
     const server = http.createServer((request, response) => {
-        if (request.url === '/repos/example/hexana/releases/latest') {
+        if (request.url?.startsWith('/repos/example/hexana/releases/tags/')) {
             requestCounts.metadata++;
             response.setHeader('Content-Type', 'application/json');
             response.end(JSON.stringify({
@@ -364,7 +428,7 @@ async function startBrokenDownloadReleaseServer(version: string): Promise<TestRe
     });
     await listen(server);
     return {
-        apiUrl: baseUrl(server) + '/repos/example/hexana/releases/latest',
+        apiUrl: baseUrl(server) + '/repos/example/hexana/releases',
         close: () => close(server),
         requestCounts,
     };
@@ -373,7 +437,7 @@ async function startBrokenDownloadReleaseServer(version: string): Promise<TestRe
 async function startUnavailableMetadataReleaseServer(): Promise<TestReleaseServer> {
     const requestCounts = { metadata: 0, archive: 0 };
     const server = http.createServer((request, response) => {
-        if (request.url === '/repos/example/hexana/releases/latest') {
+        if (request.url?.startsWith('/repos/example/hexana/releases/tags/')) {
             requestCounts.metadata++;
             response.statusCode = 503;
             response.end('unavailable');
@@ -386,7 +450,7 @@ async function startUnavailableMetadataReleaseServer(): Promise<TestReleaseServe
     });
     await listen(server);
     return {
-        apiUrl: baseUrl(server) + '/repos/example/hexana/releases/latest',
+        apiUrl: baseUrl(server) + '/repos/example/hexana/releases',
         close: () => close(server),
         requestCounts,
     };

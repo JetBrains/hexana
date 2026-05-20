@@ -105,7 +105,10 @@ describe('Hexana MCP server provider', function () {
             expect(definitions[0].args).to.include('debug');
             expect(definitions[0].env.JAVA_HOME).to.equal('/opt/jbr-21');
             expect(definitions[0].env.HEXANA_MCP_TELEMETRY_ENABLED).to.equal('true');
-            await waitForFile(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server.version'));
+
+            await provider.resolveMcpServerDefinition(definitions[0]);
+            expect(fs.existsSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server.version')))
+                .to.equal(true);
         } finally {
             await server.close();
         }
@@ -218,13 +221,3 @@ function requireExtensionModule(moduleName: string): any {
     return require(path.join(__dirname, '..', '..', '..', '..', '..', 'out', moduleName));
 }
 
-async function waitForFile(filePath: string): Promise<void> {
-    const deadline = Date.now() + 10_000;
-    while (Date.now() < deadline) {
-        if (fs.existsSync(filePath)) {
-            return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    throw new Error(`Timed out waiting for ${filePath}`);
-}
