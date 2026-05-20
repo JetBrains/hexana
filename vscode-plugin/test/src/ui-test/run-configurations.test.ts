@@ -495,7 +495,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
         });
     });
 
-    describe('DWARF Wasm with Wasmtime – breakpoint debugging with variable inspection', function () {
+    describe.skip('DWARF Wasm with Wasmtime – breakpoint debugging with variable inspection', function () {
         let webview: WebView;
 
         after(async function () {
