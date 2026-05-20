@@ -34,7 +34,8 @@
     "JetBrains"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onDebugResolve:wasm"
   ],
   "main": "./out/extension.js",
   "contributes": {
