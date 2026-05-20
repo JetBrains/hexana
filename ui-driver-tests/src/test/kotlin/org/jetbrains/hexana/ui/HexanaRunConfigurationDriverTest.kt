@@ -31,6 +31,7 @@ import kotlin.time.Duration.Companion.seconds
  * - Running a core module (with `_start`) from the hex view Run button
  * - Running an exported function from a core module
  * - Running a component model module (with `wasi:cli/run`) from the hex view Run button
+ * - Debugging a core module (with `_start`) via the Debug executor
  *
  * Wasmtime is downloaded automatically if not present.
  */
@@ -254,6 +255,39 @@ class HexanaRunConfigurationDriverTest {
             }
     }
 
+    @Test
+    fun debugCoreModuleWithWasmtime() {
+        val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-core-module")
+
+        context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
+            .useDriverAndCloseIde {
+                waitForIndicators(5.minutes)
+
+                openFile(CORE_MODULE_FILE, waitForCodeAnalysis = false, isTextEditor = false)
+                ideFrame {
+                    editorTabs {
+                        tab(CORE_MODULE_FILE, fullMatch = false).waitFound()
+                    }
+                }
+                Thread.sleep(3_000)
+
+                launchWasmtimeDebugConfig(
+                    driver = this,
+                    wasmFileName = CORE_MODULE_FILE,
+                    engine = "WASMTIME",
+                )
+                waitForProcessTermination(this)
+
+                val output = readConsoleOutput()
+                logOutput("Core module debug output: $output")
+
+                assertTrue(
+                    output.contains("Hello from Wasm!"),
+                    "Expected 'Hello from Wasm!' in debug output, got: $output"
+                )
+            }
+    }
+
     private fun launchWasmtimeConfig(
         driver: Driver,
         wasmFileName: String,
@@ -265,6 +299,26 @@ class HexanaRunConfigurationDriverTest {
         val project = driver.singleProject()
         val helper = driver.utility(RunConfigHelperRef::class)
         helper.createAndRunWasmtime(
+            project,
+            wasmFileName,
+            engine,
+            wasmtimeOptions,
+            exportName,
+            programArgs,
+        )
+    }
+
+    private fun launchWasmtimeDebugConfig(
+        driver: Driver,
+        wasmFileName: String,
+        engine: String,
+        wasmtimeOptions: String = "",
+        exportName: String = "",
+        programArgs: String = "",
+    ) {
+        val project = driver.singleProject()
+        val helper = driver.utility(RunConfigHelperRef::class)
+        helper.createAndDebugWasmtime(
             project,
             wasmFileName,
             engine,
@@ -305,6 +359,15 @@ class HexanaRunConfigurationDriverTest {
     )
     interface RunConfigHelperRef {
         fun createAndRunWasmtime(
+            project: com.intellij.driver.sdk.Project,
+            wasmFileName: String,
+            engine: String,
+            wasmtimeOptions: String,
+            exportName: String,
+            programArgs: String,
+        )
+
+        fun createAndDebugWasmtime(
             project: com.intellij.driver.sdk.Project,
             wasmFileName: String,
             engine: String,
