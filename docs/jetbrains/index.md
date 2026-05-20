@@ -1,14 +1,14 @@
 ---
-title: Hexana IntelliJ Plugin — Documentation (0.9)
-description: User and contributor documentation for the Hexana IntelliJ Platform plugin, version 0.9 (released 2026-05-07).
-version: "0.9"
-released: 2026-05-07
+title: Hexana IntelliJ Plugin — Documentation (0.9.x)
+description: User and contributor documentation for the Hexana IntelliJ Platform plugin, 0.9 line (0.9 released 2026-05-07, 0.9.1 released 2026-05-20).
+version: "0.9.1"
+released: 2026-05-20
 audience: [users]
 ---
 
 # Hexana — IntelliJ Plugin Documentation
 
-**Hexana** is an IntelliJ Platform plugin (plugin ID `org.jetbrains.hexana`, vendor JetBrains) for WebAssembly and binary analysis. It parses `.wasm` modules, renders WAT and WIT, integrates with WASM runtimes (Wasmtime, WAMR, GraalVM), exposes a Model Context Protocol (MCP) server for AI-assisted exploration, and ships Java-side code completion for the GraalWasm and Chicory APIs. This documentation set describes **release 0.9** (2026-05-07).
+**Hexana** is an IntelliJ Platform plugin (plugin ID `org.jetbrains.hexana`, vendor JetBrains) for WebAssembly and binary analysis. It parses `.wasm` modules, renders WAT and WIT, integrates with WASM runtimes (Wasmtime, WAMR, GraalVM), exposes a Model Context Protocol (MCP) server for AI-assisted exploration, and ships Java-side code completion for the GraalWasm and Chicory APIs. This documentation set describes the **0.9.x** line — initial **0.9** release on 2026-05-07 and **0.9.1** patch on 2026-05-20.
 
 ## What's in this directory
 
@@ -24,12 +24,12 @@ audience: [users]
 | [`js-integration.md`](js-integration.md) | JS / TS users | `WebAssembly.instantiate` imports completion and `.instance.exports` type inference. |
 | [`settings.md`](settings.md) | Users | `Settings → Tools → Hexana` and `Settings → Build, Execution → WASM Runtime`. |
 | [`troubleshooting.md`](troubleshooting.md) | Users | Common failure modes and resolutions. |
-| [`changelog-0.9.md`](changelog-0.9.md) | All | Release notes for 0.9, pinned. |
+| [`changelog-0.9.md`](changelog-0.9.md) | All | Release notes for the 0.9.x line (0.9, 0.9.1), pinned. |
 | [`llms.txt`](../llms.txt) | LLM agents | Curated index for AI assistants reading the docs. |
 
 ## Version and compatibility
 
-- **Plugin version**: 0.9 (built from `release/0.9` branch, commit `6a108799`).
+- **Plugin version**: 0.9.1 (built from `release/0.9` branch, commit `9a615b34`; initial 0.9 cut at `6a108799`).
 - **`since-build`**: defined by `gradle.properties` → `defaultSinceBuild`. Hexana targets IntelliJ Platform 2024.1+.
 - **Optional integrations**: the JavaScript plugin (enables JS interop for `instance.exports`) and the Java module (enables GraalWasm / Chicory completion). Both are loaded when the host IDE bundles them.
 - **Required dependency**: `com.intellij.mcpServer` — Hexana registers its toolset against the platform MCP server.
@@ -49,4 +49,4 @@ A companion **VS Code extension** is published separately on `marketplace.visual
 
 ## Source of truth
 
-This documentation set describes the **0.9** release. For unreleased work, see `idea-plugin/CHANGELOG.md` in the repository root. For the master-branch state, see commit history after `6a108799`.
+This documentation set describes the **0.9.x** line, currently **0.9.1**. For unreleased work, see `idea-plugin/CHANGELOG.md` in the repository root. For the master-branch state, see commit history after `9a615b34`.

@@ -1,18 +1,18 @@
 ---
-title: Hexana for VS Code — Feature Reference (0.0.2)
+title: Hexana for VS Code — Feature Reference (0.1.0)
 description: Complete capability reference for the Hexana VS Code extension.
-version: "0.0.2"
+version: "0.1.0"
 ---
 
 # Hexana for VS Code — Feature Reference
 
-This page enumerates every user-visible capability Hexana 0.0.2 ships for VS Code. For per-tab details on the analysis panels, see [`analysis-tabs.md`](analysis-tabs.md). For per-release changes, see [`changelog.md`](changelog.md).
+This page enumerates every user-visible capability Hexana 0.1.0 ships for VS Code. For per-tab details on the analysis panels, see [`analysis-tabs.md`](analysis-tabs.md). For per-release changes, see [`changelog.md`](changelog.md).
 
 ## Custom binary editor
 
 Hexana registers a `CustomReadonlyEditorProvider` (`hexana.wasmEditor`) for files matching `*.wasm`. When you open a `.wasm`, VS Code uses this editor by default — `workbench.editorAssociations` is set to `{"*.wasm": "hexana.wasmEditor"}` automatically on install.
 
-The editor is **read-only** in 0.0.2. Inspection and run; no in-place editing.
+The editor is **read-only** in 0.1.0. Inspection and run; no in-place editing.
 
 ### Automatic binary kind detection
 
@@ -57,12 +57,32 @@ Up to 11 tabs inside the same editor, surfaced by binary kind. All tables are **
 
 ## Run support
 
-A **Run** button in the editor toolbar, present when Wasmtime is discoverable.
+A **Run** button (and, since 0.1.0, a separate **Debug** button) in the editor toolbar, present when at least one runtime is discoverable.
 
-- **Core modules**: pick an export, supply arguments, Hexana invokes Wasmtime in a VS Code terminal with auto-generated import stubs and `--preload` flags for data segments.
-- **Component Model binaries**: Hexana resolves imports by scanning workspace directories for matching `.wasm` files (transitively), composes the result through `wasm-tools compose` or `wac plug`, then invokes Wasmtime on the composed component.
+- **Runtime picker** — Wasmtime, WAMR, or GraalVM. Unavailable runtimes are greyed out with a tooltip explaining why.
+- **Core modules**: pick an export, the runtime, and supply arguments. Hexana invokes the chosen runtime in a VS Code terminal with auto-generated import stubs and the runtime's equivalent of `--preload` for data segments.
+- **Component Model binaries**: Hexana resolves imports by scanning workspace directories for matching `.wasm` files (transitively), composes the result through `wasm-tools compose` or `wac plug`, then invokes the chosen runtime on the composed component.
 
 See [`run-support.md`](run-support.md) for the full reference.
+
+## Debugging (experimental, 0.1.0+)
+
+A **Debug** button alongside Run launches the module under `lldb` for **Wasmtime** or **WAMR** runtimes (not yet GraalVM). Requires LLVM 22.1 or newer.
+
+- Set breakpoints in source files associated with the module (PC ↔ source mapping via DWARF).
+- Step over, into, out; continue past hit breakpoints.
+- Inspect local variables for compilers that emit DWARF with usable location expressions (Rust, C/C++, Emscripten with `-g`).
+- Component Model nested-module breakpoints are supported on Wasmtime.
+
+See [`run-support.md#debugging-experimental-010`](run-support.md) for the full reference and known limitations.
+
+## MCP server (downloaded on demand, 0.1.0+)
+
+Hexana 0.1.0 ships an integration with VS Code's **Model Context Protocol server registration API**: AI tooling (Claude Desktop, Claude Code, Codex, Cursor's agent mode, Continue) can connect to the Hexana MCP server to inspect the currently open WASM file.
+
+- **First-run download.** On first MCP use, Hexana downloads the standalone MCP server ZIP from the corresponding GitHub release and extracts it to `globalStorage`. Subsequent launches reuse the cached install. Stale download locks are detected and recovered automatically.
+- **`Hexana: Reinstall MCP Server` command** (Command Palette) — re-runs the download to recover from a corrupted install or to re-pull after a Hexana update.
+- **Java requirement.** The MCP server runs on Java 21+. Hexana looks at `JAVA_HOME`, `PATH`, and the `hexana.mcp.javaHome` setting; if no suitable JDK is found, MCP fails to start with an actionable error and Run / Debug are unaffected.
 
 ## Component Model support
 
@@ -74,12 +94,13 @@ See [`component-model.md`](component-model.md).
 
 ## Settings
 
-Two settings under **Settings → Extensions → Hexana**:
+Three settings under **Settings → Extensions → Hexana**:
 
 | Setting | Default | Effect |
 |---|---|---|
 | `hexana.enableStatistics` | `true` | Toggle anonymous usage statistics collection. When `false`, no analytics events are sent regardless of the global VS Code telemetry setting. |
 | `hexana.wasmtimePath` | `""` | Override the Wasmtime executable path. Empty = use whatever is on `PATH`. |
+| `hexana.mcp.javaHome` | `""` | Override the JDK used to launch the on-demand MCP server. Empty = use `JAVA_HOME` / `PATH`. JDK 21+ required for MCP. |
 
 See [`settings.md`](settings.md).
 
@@ -108,17 +129,14 @@ Drag the divider between the hex viewer and the analysis panel to adjust the spl
 
 ## What this version does not do (yet)
 
-Compared to the JetBrains IntelliJ plugin, the 0.0.2 VS Code extension does **not** ship:
+Compared to the JetBrains IntelliJ plugin, the 0.1.0 VS Code extension does **not** ship:
 
 - WIT language support (parser, inspections, completion, navigation).
 - Editable WAT view.
-- MCP server with 17 tools.
 - Java-side completion / inspections for GraalWasm or Chicory.
 - JS / TS-side type inference for `WebAssembly.instantiate`.
-- Debugger.
-- DWARF-based source mapping.
-- Run on WAMR or GraalVM (Wasmtime only in 0.0.2).
-- Goto Symbol contribution.
+- GraalVM debug (debug works on Wasmtime + WAMR only).
+- Goto Symbol contribution scoped to `.wit` declarations and `.wasm` exports.
 
 These are tracked for future versions; some are JetBrains-only by design (where they depend on IntelliJ Platform APIs without a VS Code equivalent).
 

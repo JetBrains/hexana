@@ -1,7 +1,7 @@
 ---
-title: Getting Started with Hexana for VS Code (0.0.2)
+title: Getting Started with Hexana for VS Code (0.1.0)
 description: How to install the Hexana VS Code extension, open a WebAssembly file, and find the main views.
-version: "0.0.2"
+version: "0.1.0"
 ---
 
 # Getting Started with Hexana for VS Code
@@ -27,7 +27,7 @@ The extension activates on `onStartupFinished`, so it is ready as soon as you la
 
 ### From a `.vsix` file (manual)
 
-1. Download `hexana-wasm-0.0.2.vsix` from the GitHub release.
+1. Download `hexana-wasm-0.1.0.vsix` from the GitHub release.
 2. In VS Code, run **Extensions: Install from VSIX…** from the command palette (`Cmd/Ctrl+Shift+P`).
 3. Pick the downloaded file.
 
@@ -51,7 +51,7 @@ Hexana replaces the default editor with a single panel split into three regions:
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  Editor Toolbar                                              │
-│  · file path · binary kind badge · file size · Run button     │
+│  · file path · binary kind badge · file size · Run · Debug    │
 ├─────────────────────────────────┬────────────────────────────┤
 │  Hex Viewer                     │   Analysis Tabs            │
 │  · virtual-scrolling hex dump   │   · Summary · Exports …    │
@@ -70,8 +70,9 @@ The vertical divider between the hex viewer and the analysis panel is **resizabl
 
 - **File path** — full workspace-relative path.
 - **Binary kind badge** — `core`, `component`, or `wasm` (generic).
-- **File size** — in bytes plus a human-readable form.
-- **Run button** — present when Wasmtime is available; clicking it opens the run dialog (see [`run-support.md`](run-support.md)).
+- **File size** — in bytes plus a human-readable form (hover for a per-section breakdown; click to open the **Top** tab).
+- **Run button** — present when at least one runtime (Wasmtime / WAMR / GraalVM) is available; clicking it opens the run dialog with a runtime picker (see [`run-support.md`](run-support.md)).
+- **Debug button** — present when a debug-capable runtime (Wasmtime or WAMR) and LLVM 22.1+ are available; opens the same dialog but launches under `lldb` (experimental).
 
 ### Hex viewer
 
@@ -90,17 +91,20 @@ When you select bytes in the hex viewer, the status bar shows the current byte r
 
 ## How do I run a `.wasm` file?
 
-If you have **Wasmtime** installed, click **Run** in the editor toolbar.
+If you have **Wasmtime**, **WAMR**, or **GraalVM** installed, click **Run** in the editor toolbar.
 
-1. Pick an export (for core modules) — or let Hexana resolve the entry point (for components).
-2. Provide program arguments in the dialog.
-3. The extension opens a terminal and invokes Wasmtime with the right flags.
+1. Pick the **runtime** (Wasmtime / WAMR / GraalVM).
+2. Pick an export (for core modules) — or let Hexana resolve the entry point (for components).
+3. Provide program arguments in the dialog.
+4. The extension opens a terminal and invokes the runtime with the right flags.
 
-If Wasmtime is not on `PATH`, set the path in **Settings → Hexana → Wasmtime Path** (`hexana.wasmtimePath`). See [`run-support.md`](run-support.md) for the full run reference, including Component Model composition with `wasm-tools` or `wac`.
+If Wasmtime is not on `PATH`, set the path in **Settings → Hexana → Wasmtime Path** (`hexana.wasmtimePath`). WAMR and GraalVM are picked up from `PATH` and common install locations.
+
+To **debug** instead of just run, click **Debug** — supported on Wasmtime and WAMR (LLVM 22.1+ required). See [`run-support.md`](run-support.md) for the full reference, including Component Model composition with `wasm-tools` or `wac`.
 
 ## What about WAT files?
 
-Hexana registers the `wat` language association for `.wat` files in 0.0.2 — VS Code gives them a language identifier so other extensions (WebAssembly syntax-highlighting bundles, e.g.) can target them. Hexana itself does **not** open `.wat` in a custom editor in 0.0.2; that surface is JetBrains-IDE-only today.
+Hexana registers the `wat` language association for `.wat` files in 0.1.0 — VS Code gives them a language identifier so other extensions (WebAssembly syntax-highlighting bundles, e.g.) can target them. Hexana itself does **not** open `.wat` in a custom editor in 0.1.0; that surface is JetBrains-IDE-only today.
 
 The **WAT tab** inside the `.wasm` editor *is* available — Hexana renders the WAT representation of the loaded binary in a native VS Code editor tab on demand. See [`analysis-tabs.md#wat`](analysis-tabs.md).
 

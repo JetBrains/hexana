@@ -1,15 +1,30 @@
 ---
 title: Hexana 0.9 Release Notes
-description: Pinned release notes for Hexana 0.9 (2026-05-07).
-version: "0.9"
-released: 2026-05-07
+description: Pinned release notes for the Hexana 0.9.x line (0.9 released 2026-05-07, 0.9.1 released 2026-05-20).
+version: "0.9.1"
+released: 2026-05-20
 ---
 
-# Hexana 0.9 Release Notes
+# Hexana 0.9.x Release Notes
 
-Released **2026-05-07**.
+Current line: **0.9.1**, released **2026-05-20**. Initial 0.9 release: **2026-05-07**.
+
+## What's new in 0.9.1
+
+Released **2026-05-20**. Patch release on top of 0.9.
+
+### Added
+
+- **`.wit` and `.wasm` exports in Goto Symbol / Search Everywhere → Symbols.** `.wit` declarations (interfaces, worlds, functions, types) and Component Model exports are now indexed alongside regular `.wasm` module exports. Picking a `.wasm` export opens the containing binary and selects the matching row in the **Exports** tab.
+
+### Changed
+
+- **Build toolchain bumped to Java 21** for the plugin's compile target, aligning with the IntelliJ Platform 2024.3+ baseline. No behaviour change for users on supported IDE builds.
+- **IntelliJ Driver dependency** updated to `261.22158.277` for the UI-driver test slice (does not affect the shipped plugin).
 
 ## What's new in 0.9
+
+Released **2026-05-07**.
 
 ### Added
 

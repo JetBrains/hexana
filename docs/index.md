@@ -15,17 +15,17 @@ hide:
 
     Full IntelliJ Platform plugin — multi-tab `.wasm` editor, WAT and WIT language support, MCP server with 17 tools, Java-side completion for GraalWasm and Chicory, JavaScript / TypeScript type inference for `WebAssembly.instantiate`, run and debug on Wasmtime / WAMR / GraalVM.
 
-    **Current release**: 0.9 (2026-05-07)
+    **Current release**: 0.9.1 (2026-05-20) — 0.9 line, initial 0.9 on 2026-05-07
     Supported IDEs: IntelliJ IDEA 2024.1+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm.
 
     [Read the docs →](jetbrains/index.md)
 
 -   ### For Visual Studio Code
 
-    VS Code extension with a Compose-for-Web custom editor, virtual-scrolling hex viewer, 11 structural-analysis tabs, Component Model dependency resolution, and Wasmtime run support.
+    VS Code extension with a Compose-for-Web custom editor, virtual-scrolling hex viewer, 11 structural-analysis tabs, Component Model dependency resolution, experimental debugging, an on-demand MCP server, and Run on Wasmtime / WAMR / GraalVM.
 
-    **Current release**: 0.0.2 preview
-    Supports: VS Code 1.85+, Cursor, VSCodium, Code OSS, and other VS Code-based editors via Open VSX.
+    **Current release**: 0.1.0 preview (2026-05-20)
+    Supports: VS Code 1.102+, Cursor, VSCodium, Code OSS, and other VS Code-based editors via Open VSX.
 
     [Read the docs →](vscode/index.md)
 
@@ -45,12 +45,12 @@ Hexana's WASM analysis core is a single Kotlin Multiplatform codebase used by bo
 | You want… | Use |
 |---|---|
 | The deepest WIT editing experience | JetBrains plugin |
-| MCP server for AI assistants | JetBrains plugin |
+| MCP server for AI assistants | Both — bundled in JetBrains plugin; on-demand download in VS Code extension since 0.1.0 |
 | Java-side completion (GraalWasm, Chicory) | JetBrains plugin |
 | JS / TS `WebAssembly.instantiate` type inference | JetBrains plugin |
-| Debugger with breakpoints | JetBrains plugin |
-| DWARF source mapping | JetBrains plugin |
-| Run on WAMR or GraalVM | JetBrains plugin |
+| Debugger with breakpoints | Both — JetBrains plugin since 0.9; VS Code extension experimentally since 0.1.0 |
+| DWARF source mapping | Both |
+| Run on WAMR or GraalVM | Both since VS Code 0.1.0 |
 | Lightweight `.wasm` inspector in VS Code | VS Code extension |
 | Compose-for-Web custom editor in VS Code / Cursor / VSCodium | VS Code extension |
 | Use Hexana from Cursor or VSCodium | VS Code extension |

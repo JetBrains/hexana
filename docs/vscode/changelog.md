@@ -1,13 +1,45 @@
 ---
 title: Hexana for VS Code — Release Notes
 description: Release notes for the Hexana VS Code extension.
-version: "0.0.2"
-released: 2026-05
+version: "0.1.0"
+released: 2026-05-20
 ---
 
 # Release Notes — Hexana for VS Code
 
-This page tracks releases of the VS Code extension. The authoritative source is the commit history on the `release/vscode-0.0.2` and `release/vscode-0.0.1` branches in the repository.
+This page tracks releases of the VS Code extension. The authoritative source is the commit history on the `release/vscode-0.1.0`, `release/vscode-0.0.2`, and `release/vscode-0.0.1` branches in the repository.
+
+## 0.1.0 — preview
+
+Source branch: `release/vscode-0.1.0`. Released **2026-05-20**.
+
+First release in the `0.1.x` line. Still marked `preview` on the marketplace while the debug and MCP integrations stabilise.
+
+### Added
+
+- **Experimental WASM debugging.** Set breakpoints, step, and inspect local variables when running a module through Wasmtime or WAMR. Requires **LLVM 22.1 or newer**; uses `lldb` under the hood. Works only with targets debuggable through `lldb` (typically Rust, C/C++, and Emscripten builds with debug symbols). Supports debugging nested modules inside Component Model binaries (Wasmtime only). Breakpoints resolve across multiple source languages.
+- **Runtime picker for Run / Debug.** Choose between **Wasmtime**, **WAMR**, and **GraalVM** when launching a module. The Run / Debug dialog is always shown so you can pick the runtime and tweak arguments before execution.
+- **WAMR runtime support** for both running and debugging modules.
+- **GraalVM runtime support** with built-in detection of an installed GraalVM. Native-access warnings suppressed during execution.
+- **MCP server integration.** Hexana now ships a Model Context Protocol server that AI tools (Claude Desktop, Claude Code, Codex, etc.) can connect to for inspecting the currently open WASM file. The server is **downloaded on demand** from GitHub Releases on first use; subsequent launches re-use the cached install. Stale download locks are detected and recovered automatically.
+    - **`Hexana: Reinstall MCP Server` command** — re-runs the download to recover from a corrupted install or pin to a new release tag.
+    - **`hexana.mcp.javaHome` setting** — point Hexana at a specific Java runtime when `JAVA_HOME` / `PATH` do not surface a suitable JDK. Java 21 or newer is required for the MCP server to start.
+- **Submodule → parent backreference.** When you open a nested module inside a component, the editor toolbar shows a clickable link back to the containing component's editor tab. (Shared with the JetBrains plugin.)
+
+### Changed
+
+- **VS Code requirement raised to `^1.102.0`** to take advantage of the platform's stable MCP-server-registration API.
+- **Run / Debug dialog is now always shown** before launching a module — previously it was sometimes auto-dismissed on simple cases.
+- **Run-configuration logic deduplicated** between the VS Code extension and the JetBrains plugin; both products now share the same Kotlin core for command-line construction.
+- **Display name** on the marketplace remains `Hexana WebAssembly and Hex Viewer`; homepage URL points at `https://jetbrains.github.io/hexana/`.
+
+### Fixed
+
+- WAMR debugging stability fixes.
+- Path resolution for debug sessions (mapping source paths to compiled units).
+- Breakpoint resolution for nested-module scenarios.
+- Sorting-arrow rendering glitch in the analysis tables.
+- Various UI-test flakes; timeouts increased and editor-ready waits tightened.
 
 ## 0.0.2 — preview
 
@@ -16,7 +48,7 @@ Source branch: `release/vscode-0.0.2`.
 ### Added
 
 - **Setting to specify a custom Wasmtime path** (`hexana.wasmtimePath`) — for cases where Wasmtime is not on `PATH` or you want to pin to a specific build.
-- **Setting to disable statistics collection** (`hexana.enableStatistics`) — independent of VS Code's global telemetry toggle, both must be on for any event to be sent.
+- **Setting to disable statistics collection** (`hexana.enableStatistics`) — independent of VS Code's global telemetry toggle; both must be on for any event to be sent.
 - **Consent notice on first activation** — required disclosure of the anonymous analytics path.
 - **Submodule → parent backreference** in the editor toolbar — opening a nested module from a component shows a clickable link back to the containing component's editor tab.
 - **Marketplace listing improvements** — removed the broken image link, fixed the license link in the README, marked the extension as `preview`, refined the displayName and category list.
@@ -46,16 +78,28 @@ Initial public preview release. Shipped:
 
 ## Versioning policy
 
-The VS Code extension uses **`0.0.x` preview versioning** during the early life cycle to signal that contract changes (settings, editor URIs, etc.) may happen between releases. Versioning will shift to a stable cadence aligned with the JetBrains plugin once the surface stabilises (likely `0.1.0`+).
+The VS Code extension is in the **`0.1.x` preview** line as of 2026-05-20. The `preview` marketplace flag remains on while the debugging and MCP-server integrations stabilise. Contract changes (settings, editor URIs, MCP transport) may still happen between minor versions; we will call them out explicitly in this changelog.
+
+The `0.0.x` line is closed. New work targets `0.1.x`.
 
 ## Compatibility
 
-| VS Code version | Compatible? |
-|---|---|
-| 1.85+ | ✓ |
-| 1.84 and older | ✗ |
+| VS Code version | Compatible? | Notes |
+|---|---|---|
+| 1.102+ | ✓ | Required for 0.1.0 and later (MCP-server registration API). |
+| 1.85 – 1.101 | ✓ for 0.0.x only | 0.0.1 and 0.0.2 still work on 1.85+. |
+| 1.84 and older | ✗ | Missing Custom Editor + Webview APIs. |
 
-The extension targets the Custom Editor API + Webview API as those existed in 1.85 (December 2023). Older versions are missing required APIs.
+VS Code forks (Cursor, Code OSS / VSCodium, Windsurf, Continue.dev) are supported as long as they expose the equivalent VS Code APIs at the listed version. Some terminal- or filesystem-provider-dependent features may behave differently across forks.
+
+### Runtime requirements
+
+- **[wasmtime](https://wasmtime.dev/)** (optional) — needed for Run / Debug via Wasmtime.
+- **[WAMR](https://github.com/bytecodealliance/wasm-micro-runtime)** (optional) — needed for Run / Debug via WAMR.
+- **[GraalVM](https://www.graalvm.org/) with GraalWasm** (optional) — needed for Run via GraalVM.
+- **[wasm-tools](https://github.com/bytecodealliance/wasm-tools)** or **[wac](https://github.com/bytecodealliance/wac)** (optional) — used for component composition when running Component Model binaries with unresolved imports.
+- **Java 21 or later** (optional) — needed for the Hexana MCP server. The server is downloaded on demand; set `hexana.mcp.javaHome` if Java is not available through `JAVA_HOME` or `PATH`.
+- **LLVM 22.1 or newer** (optional) — required for the experimental WASM debugging path.
 
 ## Distribution channels
 
@@ -65,5 +109,5 @@ The extension targets the Custom Editor API + Webview API as those existed in 1.
 
 ## See also
 
-- [`getting-started.md`](getting-started.md), [`features.md`](features.md).
+- [`getting-started.md`](getting-started.md), [`features.md`](features.md), [`run-support.md`](run-support.md), [`settings.md`](settings.md).
 - The JetBrains plugin's [changelog](../jetbrains/changelog-0.9.md).

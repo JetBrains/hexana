@@ -1,12 +1,12 @@
 ---
-title: Hexana for VS Code — Settings (0.0.2)
-description: The two VS Code settings the Hexana extension contributes, plus the telemetry consent model.
-version: "0.0.2"
+title: Hexana for VS Code — Settings (0.1.0)
+description: The VS Code settings the Hexana extension contributes, plus the telemetry consent model.
+version: "0.1.0"
 ---
 
 # Settings
 
-Hexana for VS Code 0.0.2 contributes two settings, both under `Settings → Extensions → Hexana` (`hexana.*` in `settings.json`).
+Hexana for VS Code 0.1.0 contributes three settings, all under `Settings → Extensions → Hexana` (`hexana.*` in `settings.json`).
 
 ## `hexana.enableStatistics`
 
@@ -34,7 +34,26 @@ Absolute path to the Wasmtime executable. Use this when:
 
 Hexana does not validate the path at save time — if the path is wrong, you'll see the failure when you next click **Run**.
 
-There is no analogous setting for `wasm-tools` or `wac` (used in Component Model composition); both must be on `PATH`.
+There are no analogous settings for `wasm-tools`, `wac`, WAMR, or GraalVM in 0.1.0 — all must be on `PATH` (GraalVM is auto-detected from common install locations as well).
+
+## `hexana.mcp.javaHome`
+
+| Field | Value |
+|---|---|
+| **Type** | `string` |
+| **Default** | `""` (empty — Hexana looks at `JAVA_HOME` and the `PATH` `java` binary) |
+
+Absolute path to a Java 21+ home directory. Used to start the **Hexana MCP server**, which is downloaded on demand from GitHub Releases the first time an MCP client requests it.
+
+Use this setting when:
+
+- `JAVA_HOME` points at a JDK older than 21.
+- You want to pin the MCP server to a specific JDK distribution.
+- There is no `java` on `PATH` (e.g. headless containers).
+
+If unset and no suitable JDK is found, the MCP server fails to start with an actionable error in the **Output → Hexana MCP** channel; Run / Debug are not affected.
+
+You can also force a fresh download via the **Hexana: Reinstall MCP Server** command in the Command Palette.
 
 ## Telemetry — the full consent model
 

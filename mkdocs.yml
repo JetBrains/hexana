@@ -82,7 +82,7 @@ nav:
       - JavaScript & TypeScript: jetbrains/js-integration.md
       - Settings: jetbrains/settings.md
       - Troubleshooting: jetbrains/troubleshooting.md
-      - Changelog 0.9: jetbrains/changelog-0.9.md
+      - Changelog 0.9.x: jetbrains/changelog-0.9.md
 
   - VS Code:
       - Overview: vscode/index.md
