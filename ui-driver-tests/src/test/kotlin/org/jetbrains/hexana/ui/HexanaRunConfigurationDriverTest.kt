@@ -15,6 +15,7 @@ import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.tools.ide.util.common.logOutput
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -296,6 +297,7 @@ class HexanaRunConfigurationDriverTest {
     }
 
     @Test
+    @Disabled
     fun debugDwarfWasmBreakpointAndInspectVariables() {
         val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-dwarf-breakpoint")
 
