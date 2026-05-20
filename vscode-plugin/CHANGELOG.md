@@ -2,6 +2,7 @@
 
 - supported WAMR and GraalVM for running wasm modules (in addition to wasmtime)
 - experimental debugging support using wasmtime or WAMR (requires llvm 22.1 or newer; works only for targets debuggable with lldb)
+- added MCP server
 
 # 0.0.2 - 07.05.2026
 
