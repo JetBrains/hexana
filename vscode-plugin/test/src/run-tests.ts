@@ -308,7 +308,7 @@ function mcpTestEnv(options: boolean | McpTestEnvOptions): NodeJS.ProcessEnv {
         HEXANA_VSCODE_MCP_FAILURE_TEST: resolved.failure ? '1' : '0',
         HEXANA_MCP_TEST_VERSION: mcpVersion,
         HEXANA_MCP_STORAGE_DIR: resolved.storageDir,
-        HEXANA_MCP_GITHUB_RELEASE_API_URL: `http://127.0.0.1:${resolved.port}/repos/example/hexana-mcp/releases/latest`,
+        HEXANA_MCP_GITHUB_RELEASE_API_URL: `http://127.0.0.1:${resolved.port}/repos/example/hexana-mcp/releases`,
         HEXANA_MCP_RELEASES_PAGE_URL: `http://127.0.0.1:${resolved.port}/releases`,
         HEXANA_MCP_MOCK_REQUEST_LOG: resolved.requestLog ?? '',
     };
@@ -316,7 +316,7 @@ function mcpTestEnv(options: boolean | McpTestEnvOptions): NodeJS.ProcessEnv {
 
 function waitForMockServer(port: number): void {
     const deadline = Date.now() + 10_000;
-    const url = `http://127.0.0.1:${port}/repos/example/hexana-mcp/releases/latest`;
+    const url = `http://127.0.0.1:${port}/repos/example/hexana-mcp/releases/tags/${mcpVersion}`;
 
     while (Date.now() < deadline) {
         const result = childProcess.spawnSync(process.execPath, [

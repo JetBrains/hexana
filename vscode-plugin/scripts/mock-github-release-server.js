@@ -26,7 +26,7 @@ const server = http.createServer((request, response) => {
     const requestUrl = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
     appendRequestLog(`${request.method ?? "GET"} ${requestUrl.pathname}`);
 
-    if (requestUrl.pathname === "/repos/example/hexana-mcp/releases/latest") {
+    if (requestUrl.pathname.startsWith("/repos/example/hexana-mcp/releases/tags/")) {
         const release = {
             tag_name: version,
             assets: [
@@ -71,7 +71,7 @@ const server = http.createServer((request, response) => {
 });
 
 server.listen(port, "127.0.0.1", () => {
-    console.log(`Mock GitHub release API: http://127.0.0.1:${port}/repos/example/hexana-mcp/releases/latest`);
+    console.log(`Mock GitHub release API: http://127.0.0.1:${port}/repos/example/hexana-mcp/releases/tags/<tag>`);
     console.log(`Mock releases page: http://127.0.0.1:${port}/releases`);
     console.log(`Serving ${absoluteArchivePath}`);
     console.log(`Version ${version}`);

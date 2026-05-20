@@ -231,7 +231,7 @@ npm run mock:mcp-release
 Then launch VS Code with the mock endpoint in the extension host environment:
 
 ```bash
-HEXANA_MCP_GITHUB_RELEASE_API_URL=http://127.0.0.1:18765/repos/example/hexana-mcp/releases/latest \
+HEXANA_MCP_GITHUB_RELEASE_API_URL=http://127.0.0.1:18765/repos/example/hexana-mcp/releases \
 HEXANA_MCP_RELEASES_PAGE_URL=http://127.0.0.1:18765/releases \
 code .
 ```

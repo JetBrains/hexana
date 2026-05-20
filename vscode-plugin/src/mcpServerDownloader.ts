@@ -153,23 +153,35 @@ export function getHexanaMcpServerLauncherPath(context: vscode.ExtensionContext)
 }
 
 async function getHexanaMcpServerStatus(context: vscode.ExtensionContext): Promise<HexanaMcpServerStatus> {
-    const latestRelease = await getCompatibleReleaseOrFallback(context);
     const storageDir = mcpStorageDir(context);
     const serverDir = path.join(storageDir, installedServerDirName);
     const markerPath = path.join(storageDir, versionMarkerFileName);
-
     const installed = await getPreparedServerVersion(serverDir, markerPath);
+
+    let latestRelease: HexanaMcpRelease | undefined;
+    try {
+        latestRelease = await getCompatibleReleaseOrFallback(context);
+    } catch (error) {
+        console.warn("[Hexana] Could not fetch MCP release metadata for status", error);
+    }
+
     if (installed) {
+        const expectedVersion = latestRelease && latestRelease.source !== "fallback"
+            ? latestRelease.version
+            : installed;
+        const downloaded = !latestRelease
+            || latestRelease.source === "fallback"
+            || installed === latestRelease.version;
         return {
-            expectedVersion: latestRelease.source === "fallback" ? installed : latestRelease.version,
-            downloaded: latestRelease.source === "fallback" || installed === latestRelease.version,
+            expectedVersion,
+            downloaded,
             version: installed,
             serverUri: vscode.Uri.file(serverDir),
         };
     }
 
     return {
-        expectedVersion: latestRelease.version,
+        expectedVersion: latestRelease?.version ?? expectedServerTag(context),
         downloaded: false,
     };
 }

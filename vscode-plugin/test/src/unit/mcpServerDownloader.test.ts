@@ -302,6 +302,25 @@ describe('Hexana MCP server downloader', function () {
             await server.close();
         }
     });
+
+    it('Show Server Status reports the installed server when release metadata is unavailable', async function () {
+        const server = await startUnavailableMetadataReleaseServer();
+        process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL = server.apiUrl;
+        createInstalledServer(process.env.HEXANA_MCP_STORAGE_DIR!, '0.7.0');
+
+        try {
+            const downloader = requireExtensionModule('mcpServerDownloader');
+            const context = extensionContext(tempRoot, '0.2.0');
+            downloader.registerHexanaMcpServerCommands(context);
+
+            await vscode.commands.get('hexana.mcp.showServerStatus')?.();
+
+            expect(vscode.messages.some((message) => message.includes('Hexana MCP server: 0.7.0'))).to.equal(true);
+            expect(server.requestCounts.archive).to.equal(0);
+        } finally {
+            await server.close();
+        }
+    });
 });
 
 function extensionContext(tempRoot: string, version = '0.7.0'): any {

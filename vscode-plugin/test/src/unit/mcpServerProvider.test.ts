@@ -220,4 +220,3 @@ function clearExtensionModuleCache(): void {
 function requireExtensionModule(moduleName: string): any {
     return require(path.join(__dirname, '..', '..', '..', '..', '..', 'out', moduleName));
 }
-
