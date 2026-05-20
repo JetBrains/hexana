@@ -83,7 +83,7 @@ async function main(): Promise<void> {
             storageDir: mcpFailureStorageDir,
             failArchive: true,
             requestLog: mcpFailureRequestLog,
-            version: `${mcpVersion}-failure`,
+            version: mcpVersion,
         });
         try {
             if (failureMockServer) {
