@@ -14,6 +14,8 @@ import {
 } from 'vscode-extension-tester';
 import { expect } from 'chai';
 import * as fs from 'fs';
+import * as os from 'os';
+import { execSync } from 'child_process';
 import { submitQuickInputPath } from './test-utils';
 
 /**
@@ -29,6 +31,88 @@ import { submitQuickInputPath } from './test-utils';
  * These tests require `wasmtime` to be available on the system PATH or
  * in `~/.wasmtime/bin/`.
  */
+/**
+ * Ensures wasmtime v44.0.0 is available at `~/.wasmtime/bin/wasmtime`.
+ * Downloads and extracts it if not already present.
+ */
+function ensureWasmtime(): void {
+    const home = os.homedir();
+    const binDir = path.join(home, '.wasmtime', 'bin');
+    const wasmtimeBin = path.join(binDir, process.platform === 'win32' ? 'wasmtime.exe' : 'wasmtime');
+
+    if (fs.existsSync(wasmtimeBin)) {
+        console.log(`Wasmtime already available at: ${wasmtimeBin}`);
+        return;
+    }
+
+    // Also check PATH
+    try {
+        const which = process.platform === 'win32' ? 'where wasmtime' : 'which wasmtime';
+        const found = execSync(which, { encoding: 'utf-8' }).trim();
+        if (found && fs.existsSync(found)) {
+            console.log(`Wasmtime found on PATH at: ${found}`);
+            // Still install to ~/.wasmtime/bin so the extension can find it
+        }
+    } catch {
+        // not on PATH
+    }
+
+    console.log('Wasmtime not found at ~/.wasmtime/bin, downloading v44.0.0...');
+
+    const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
+    const platformMap: Record<string, string> = {
+        darwin: 'macos',
+        linux: 'linux',
+        win32: 'windows',
+    };
+    const plat = platformMap[process.platform];
+    if (!plat) {
+        throw new Error(`Unsupported platform: ${process.platform}`);
+    }
+
+    const version = 'v44.0.0';
+    const ext = plat === 'windows' ? 'zip' : 'tar.xz';
+    const fileName = `wasmtime-${version}-${arch}-${plat}.${ext}`;
+    const url = `https://github.com/bytecodealliance/wasmtime/releases/download/${version}/${fileName}`;
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wasmtime-download-'));
+    const archivePath = path.join(tmpDir, fileName);
+
+    try {
+        console.log(`Downloading wasmtime from: ${url}`);
+        execSync(`curl -sL "${url}" -o "${archivePath}"`, { stdio: 'inherit' });
+
+        fs.mkdirSync(binDir, { recursive: true });
+
+        if (ext === 'tar.xz') {
+            execSync(`tar xf "${archivePath}" -C "${tmpDir}"`, { stdio: 'inherit' });
+            const extracted = fs.readdirSync(tmpDir).find(
+                (d) => d.startsWith('wasmtime-') && fs.statSync(path.join(tmpDir, d)).isDirectory(),
+            );
+            if (!extracted) {
+                throw new Error('Extracted wasmtime directory not found');
+            }
+            const srcBin = path.join(tmpDir, extracted, 'wasmtime');
+            fs.copyFileSync(srcBin, wasmtimeBin);
+            fs.chmodSync(wasmtimeBin, 0o755);
+        } else {
+            execSync(`unzip -o "${archivePath}" -d "${tmpDir}"`, { stdio: 'inherit' });
+            const extracted = fs.readdirSync(tmpDir).find(
+                (d) => d.startsWith('wasmtime-') && fs.statSync(path.join(tmpDir, d)).isDirectory(),
+            );
+            if (!extracted) {
+                throw new Error('Extracted wasmtime directory not found');
+            }
+            const srcBin = path.join(tmpDir, extracted, 'wasmtime.exe');
+            fs.copyFileSync(srcBin, wasmtimeBin);
+        }
+
+        console.log(`Wasmtime installed at: ${wasmtimeBin}`);
+    } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+}
+
 describe('Hexana Run Configurations – Exports Panel', function () {
     this.timeout(300_000);
 
@@ -46,7 +130,9 @@ describe('Hexana Run Configurations – Exports Panel', function () {
     let driver: WebDriver;
 
     before(async function () {
-        this.timeout(90_000);
+        this.timeout(120_000);
+
+        ensureWasmtime();
 
         const browser = VSBrowser.instance;
         if (!browser) {
