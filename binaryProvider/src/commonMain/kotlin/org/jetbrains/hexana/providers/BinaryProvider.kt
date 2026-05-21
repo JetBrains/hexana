@@ -15,6 +15,8 @@ import org.jetbrains.hexana.providers.elf.ElfSymbol
 import org.jetbrains.hexana.providers.macho.MachODwarfAccessor
 import org.jetbrains.hexana.providers.macho.MachODylibCommand
 import org.jetbrains.hexana.providers.macho.MachODysymtabCommand
+import org.jetbrains.hexana.providers.macho.MachOFatArch
+import org.jetbrains.hexana.providers.macho.MachOFatHeader
 import org.jetbrains.hexana.providers.macho.MachOHeader
 import org.jetbrains.hexana.providers.macho.MachOLoadCommand
 import org.jetbrains.hexana.providers.macho.MachOParser
@@ -223,7 +225,14 @@ class FatMachOBinaryProvider(
     sharedBytes: CommonByteBuffer,
     override val nativeFormat: NativeBinaryFormat.FatMachO,
     sourcePath: String? = null,
-) : NativeBinaryProvider(sharedBytes, sourcePath)
+) : NativeBinaryProvider(sharedBytes, sourcePath) {
+
+    val fatHeader: MachOFatHeader? by lazy { MachOParser.parseFatHeader(bytes) }
+
+    val architectures: List<MachOFatArch>? by lazy {
+        fatHeader?.let { MachOParser.parseFatArchitectures(bytes, it) }
+    }
+}
 
 class PeBinaryProvider(
     sharedBytes: CommonByteBuffer,

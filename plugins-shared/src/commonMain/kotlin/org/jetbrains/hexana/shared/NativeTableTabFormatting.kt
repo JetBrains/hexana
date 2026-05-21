@@ -5,6 +5,7 @@ import org.jetbrains.hexana.providers.NativeFunctionRecord
 import org.jetbrains.hexana.providers.elf.ElfHeader
 import org.jetbrains.hexana.providers.elf.ElfSectionHeader
 import org.jetbrains.hexana.providers.macho.MachODylibKind
+import org.jetbrains.hexana.providers.macho.MachOFatHeader
 import org.jetbrains.hexana.providers.macho.MachOHeader
 
 internal data class HeaderRow(val label: String, val value: String, val range: NativeByteRange?)
@@ -96,6 +97,13 @@ internal fun symbolFlags(type: Int): String = buildList {
     if ((type and 0x10) != 0) add("private")
     if ((type and 0xE0) != 0) add("stab")
 }.joinToString("+").ifBlank { "-" }
+
+internal fun machOFatHeaderRows(header: MachOFatHeader): List<HeaderRow> = listOf(
+    HeaderRow("Format", "Universal Mach-O", null),
+    HeaderRow("Word Size", header.wordSize.toString(), null),
+    HeaderRow("Endian", header.endian.toString(), null),
+    HeaderRow("Architectures", header.archCount.toString(), NativeByteRange(4, 4)),
+)
 
 internal fun machOHeaderRows(header: MachOHeader, uuid: String?): List<HeaderRow> = buildList {
     add(HeaderRow("Magic", hex(header.magic), NativeByteRange(0, 4)))

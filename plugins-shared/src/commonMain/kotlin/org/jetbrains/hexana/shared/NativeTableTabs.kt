@@ -2,6 +2,7 @@ package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ElfBinaryProvider
+import org.jetbrains.hexana.providers.FatMachOBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 
@@ -9,9 +10,38 @@ class NativeTableTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> = when (provider) {
         is ElfBinaryProvider -> elfTabs(provider)
         is MachOBinaryProvider -> machOTabs(provider)
+        is FatMachOBinaryProvider -> fatMachOTabs(provider)
         is NativeBinaryProvider -> stringsTab(provider)?.let(::listOf).orEmpty()
         else -> emptyList()
     }
+}
+
+private fun fatMachOTabs(provider: FatMachOBinaryProvider): List<TableTabDescriptor> = buildList {
+    machOFatHeadersTab(provider)?.let { add(it) }
+    machOFatArchitecturesTab(provider)?.let { add(it) }
+    stringsTab(provider)?.let { add(it) }
+}
+
+private fun machOFatHeadersTab(provider: FatMachOBinaryProvider): TableTabDescriptor? {
+    val header = provider.fatHeader ?: return null
+    return keyValueTab("Universal", machOFatHeaderRows(header))
+}
+
+private fun machOFatArchitecturesTab(provider: FatMachOBinaryProvider): TableTabDescriptor? {
+    val architectures = provider.architectures?.takeIf { it.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Slices",
+        columns = listOf(
+            col("Index") { CellValue(architectures[it].index) },
+            col("CPU Type") { CellValue(hex(architectures[it].cpuType)) },
+            col("CPU Subtype") { CellValue(hex(architectures[it].cpuSubtype)) },
+            col("Offset") { CellValue(hex(architectures[it].offset)) },
+            col("Size") { CellValue(hex(architectures[it].size)) },
+            col("Align", ColumnWidth.Fill()) { CellValue(architectures[it].alignment.toString()) },
+        ),
+        rowCount = architectures.size,
+        rowSelectionProvider = { architectures.getOrNull(it)?.let { arch -> selection(arch.sliceRange ?: arch.archRange) } },
+    )
 }
 
 private fun machOTabs(provider: MachOBinaryProvider): List<TableTabDescriptor> = buildList {
