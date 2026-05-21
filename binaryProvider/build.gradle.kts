@@ -21,6 +21,7 @@ kotlin {
                 api(project(":hexanaDocument"))
                 api(project(":parsing:common"))
                 api(project(":parsing:elf"))
+                api(project(":parsing:macho"))
                 implementation(project(":debugInfo:dwarf"))
             }
         }

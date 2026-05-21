@@ -4,6 +4,8 @@ import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.providers.NativeFunctionRecord
 import org.jetbrains.hexana.providers.elf.ElfHeader
 import org.jetbrains.hexana.providers.elf.ElfSectionHeader
+import org.jetbrains.hexana.providers.macho.MachODylibKind
+import org.jetbrains.hexana.providers.macho.MachOHeader
 
 internal data class HeaderRow(val label: String, val value: String, val range: NativeByteRange?)
 
@@ -78,6 +80,66 @@ internal fun symbolType(type: Int): String = when (type) {
     5 -> "common"
     6 -> "tls"
     else -> type.toString()
+}
+
+internal fun symbolKind(type: Int): String = when (type and 0x0E) {
+    0x00 -> "undefined"
+    0x02 -> "absolute"
+    0x0E -> "section"
+    0x0C -> "prebound"
+    0x0A -> "indirect"
+    else -> hex(type and 0x0E)
+}
+
+internal fun symbolFlags(type: Int): String = buildList {
+    if ((type and 0x01) != 0) add("external")
+    if ((type and 0x10) != 0) add("private")
+    if ((type and 0xE0) != 0) add("stab")
+}.joinToString("+").ifBlank { "-" }
+
+internal fun machOHeaderRows(header: MachOHeader, uuid: String?): List<HeaderRow> = buildList {
+    add(HeaderRow("Magic", hex(header.magic), NativeByteRange(0, 4)))
+    add(HeaderRow("CPU Type", hex(header.cpuType), NativeByteRange(4, 4)))
+    add(HeaderRow("CPU Subtype", hex(header.cpuSubtype), NativeByteRange(8, 4)))
+    add(HeaderRow("File Type", hex(header.fileType), NativeByteRange(12, 4)))
+    add(HeaderRow("Load Commands", header.loadCommandCount.toString(), NativeByteRange(16, 4)))
+    add(HeaderRow("Load Commands Size", header.loadCommandsSize.toString(), NativeByteRange(20, 4)))
+    add(HeaderRow("Flags", hex(header.flags), NativeByteRange(24, 4)))
+    header.reserved?.let { add(HeaderRow("Reserved", hex(it), NativeByteRange(28, 4))) }
+    uuid?.let { add(HeaderRow("UUID", it, null)) }
+}
+
+internal fun loadCommandName(type: UInt): String = when (type) {
+    0x1u -> "LC_SEGMENT"
+    0x2u -> "LC_SYMTAB"
+    0xBu -> "LC_DYSYMTAB"
+    0xCu -> "LC_LOAD_DYLIB"
+    0xDu -> "LC_ID_DYLIB"
+    0x80000018u -> "LC_LOAD_WEAK_DYLIB"
+    0x19u -> "LC_SEGMENT_64"
+    0x1Bu -> "LC_UUID"
+    0x8000001Fu -> "LC_REEXPORT_DYLIB"
+    0x20u -> "LC_LAZY_LOAD_DYLIB"
+    0x22u -> "LC_DYLD_INFO"
+    0x80000022u -> "LC_DYLD_INFO_ONLY"
+    0x80000023u -> "LC_LOAD_UPWARD_DYLIB"
+    0x80000028u -> "LC_MAIN"
+    else -> "unknown"
+}
+
+internal fun dylibKindLabel(kind: MachODylibKind): String = when (kind) {
+    MachODylibKind.Load -> "load"
+    MachODylibKind.WeakLoad -> "weak"
+    MachODylibKind.Reexport -> "reexport"
+    MachODylibKind.UpwardLoad -> "upward"
+    MachODylibKind.LazyLoad -> "lazy"
+    MachODylibKind.Id -> "id"
+    MachODylibKind.Other -> "other"
+}
+
+internal fun version(value: UInt): String {
+    val raw = value.toInt()
+    return "${raw ushr 16}.${(raw ushr 8) and 0xFF}.${raw and 0xFF}"
 }
 
 internal fun hex(value: Int): String = "0x${value.toUInt().toString(16).uppercase()}"

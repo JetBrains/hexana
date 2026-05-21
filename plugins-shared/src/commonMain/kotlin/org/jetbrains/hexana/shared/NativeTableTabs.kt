@@ -2,14 +2,163 @@ package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ElfBinaryProvider
+import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 
 class NativeTableTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> = when (provider) {
         is ElfBinaryProvider -> elfTabs(provider)
+        is MachOBinaryProvider -> machOTabs(provider)
         is NativeBinaryProvider -> stringsTab(provider)?.let(::listOf).orEmpty()
         else -> emptyList()
     }
+}
+
+private fun machOTabs(provider: MachOBinaryProvider): List<TableTabDescriptor> = buildList {
+    machOHeadersTab(provider)?.let { add(it) }
+    machOLoadCommandsTab(provider)?.let { add(it) }
+    machOSegmentsTab(provider)?.let { add(it) }
+    machOSectionsTab(provider)?.let { add(it) }
+    machOSymbolsTab(provider)?.let { add(it) }
+    machODynamicSymbolsTab(provider)?.let { add(it) }
+    machODylibsTab(provider)?.let { add(it) }
+    machORelocationsTab(provider)?.let { add(it) }
+    stringsTab(provider)?.let { add(it) }
+}
+
+private fun machOHeadersTab(provider: MachOBinaryProvider): TableTabDescriptor? {
+    val header = provider.header ?: return null
+    return keyValueTab("Headers", machOHeaderRows(header, provider.uuid?.value))
+}
+
+private fun machOLoadCommandsTab(provider: MachOBinaryProvider): TableTabDescriptor? {
+    val commands = provider.loadCommands?.takeIf { it.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Load Commands",
+        columns = listOf(
+            col("Index") { CellValue(commands[it].index) },
+            col("Type") { CellValue(loadCommandName(commands[it].type)) },
+            col("Raw") { CellValue(hex(commands[it].type)) },
+            col("Size", ColumnWidth.Fill()) { CellValue(commands[it].size.toString()) },
+        ),
+        rowCount = commands.size,
+        rowSelectionProvider = { commands.getOrNull(it)?.let { command -> selection(command.range) } },
+    )
+}
+
+private fun machOSegmentsTab(provider: MachOBinaryProvider): TableTabDescriptor? {
+    val segments = provider.segments?.takeIf { it.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Segments",
+        columns = listOf(
+            col("Index") { CellValue(segments[it].index) },
+            col("Name") { CellValue(segments[it].name.ifBlank { "<unnamed>" }) },
+            col("VM Address") { CellValue(hex(segments[it].virtualAddress)) },
+            col("VM Size") { CellValue(hex(segments[it].virtualSize)) },
+            col("File Offset") { CellValue(hex(segments[it].fileOffset)) },
+            col("File Size") { CellValue(hex(segments[it].fileSize)) },
+            col("Sections", ColumnWidth.Fill()) { CellValue(segments[it].sectionCount.toString()) },
+        ),
+        rowCount = segments.size,
+        rowSelectionProvider = { segments.getOrNull(it)?.let { segment -> selection(segment.fileRange ?: segment.commandRange) } },
+    )
+}
+
+private fun machOSectionsTab(provider: MachOBinaryProvider): TableTabDescriptor? {
+    val sections = provider.sections?.takeIf { it.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Sections",
+        columns = listOf(
+            col("Index") { CellValue(sections[it].index) },
+            col("Segment") { CellValue(sections[it].segmentName.ifBlank { "<unnamed>" }) },
+            col("Name", ColumnWidth.Fill(0.25f)) { CellValue(sections[it].name.ifBlank { "<unnamed>" }) },
+            col("Address") { CellValue(hex(sections[it].address)) },
+            col("Offset") { CellValue(hex(sections[it].fileOffset)) },
+            col("Size") { CellValue(hex(sections[it].size)) },
+            col("Flags", ColumnWidth.Fill()) { CellValue(hex(sections[it].flags)) },
+        ),
+        rowCount = sections.size,
+        rowSelectionProvider = { sections.getOrNull(it)?.let { section -> selection(section.contentRange ?: section.headerRange) } },
+    )
+}
+
+private fun machOSymbolsTab(provider: MachOBinaryProvider): TableTabDescriptor? {
+    val symbols = provider.symbols?.takeIf { it.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Symbols",
+        columns = listOf(
+            col("Index") { CellValue(symbols[it].index) },
+            col("Name", ColumnWidth.Fill(0.35f)) { CellValue(symbols[it].name.ifBlank { "<unnamed>" }) },
+            col("Kind") { CellValue(symbolKind(symbols[it].type)) },
+            col("Flags") { CellValue(symbolFlags(symbols[it].type)) },
+            col("Section") { CellValue(symbols[it].sectionIndex) },
+            col("Value") { CellValue(hex(symbols[it].value)) },
+            col("Desc", ColumnWidth.Fill()) { CellValue(hex(symbols[it].description)) },
+        ),
+        rowCount = symbols.size,
+        rowSelectionProvider = { symbols.getOrNull(it)?.let { symbol -> selection(symbol.recordRange) } },
+    )
+}
+
+private fun machODynamicSymbolsTab(provider: MachOBinaryProvider): TableTabDescriptor? {
+    val dysymtab = provider.dysymtab ?: return null
+    return keyValueTab(
+        "Dynamic Symbols",
+        listOf(
+            HeaderRow("Local Symbols", "${dysymtab.localSymbolIndex} + ${dysymtab.localSymbolCount}", dysymtab.commandRange),
+            HeaderRow("External Defined", "${dysymtab.externalDefinedSymbolIndex} + ${dysymtab.externalDefinedSymbolCount}", dysymtab.commandRange),
+            HeaderRow("Undefined", "${dysymtab.undefinedSymbolIndex} + ${dysymtab.undefinedSymbolCount}", dysymtab.commandRange),
+            HeaderRow("TOC", "${hex(dysymtab.tableOfContentsOffset)} + ${dysymtab.tableOfContentsCount}", dysymtab.commandRange),
+            HeaderRow("Module Table", "${hex(dysymtab.moduleTableOffset)} + ${dysymtab.moduleTableCount}", dysymtab.commandRange),
+            HeaderRow("External References", "${hex(dysymtab.externalReferenceSymbolTableOffset)} + ${dysymtab.externalReferenceSymbolTableCount}", dysymtab.commandRange),
+            HeaderRow("Indirect Symbols", "${hex(dysymtab.indirectSymbolTableOffset)} + ${dysymtab.indirectSymbolTableCount}", dysymtab.commandRange),
+            HeaderRow("External Relocations", "${hex(dysymtab.externalRelocationOffset)} + ${dysymtab.externalRelocationCount}", dysymtab.commandRange),
+            HeaderRow("Local Relocations", "${hex(dysymtab.localRelocationOffset)} + ${dysymtab.localRelocationCount}", dysymtab.commandRange),
+        ),
+        labelWidth = ColumnWidth.Fill(0.45f),
+    )
+}
+
+private fun machODylibsTab(provider: MachOBinaryProvider): TableTabDescriptor? {
+    val dylibs = provider.dylibs?.takeIf { it.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Dylibs",
+        columns = listOf(
+            col("Index") { CellValue(dylibs[it].index) },
+            col("Kind") { CellValue(dylibKindLabel(dylibs[it].kind)) },
+            col("Name", ColumnWidth.Fill(0.55f)) { CellValue(dylibs[it].name.ifBlank { "<unnamed>" }) },
+            col("Current") { CellValue(version(dylibs[it].currentVersion)) },
+            col("Compat", ColumnWidth.Fill()) { CellValue(version(dylibs[it].compatibilityVersion)) },
+        ),
+        rowCount = dylibs.size,
+        rowSelectionProvider = { dylibs.getOrNull(it)?.let { dylib -> selection(dylib.nameRange ?: dylib.commandRange) } },
+    )
+}
+
+private fun machORelocationsTab(provider: MachOBinaryProvider): TableTabDescriptor? {
+    val relocations = provider.relocations?.takeIf { it.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Relocations",
+        columns = listOf(
+            col("Index") { CellValue(relocations[it].index) },
+            col("Section", ColumnWidth.Fill(0.22f)) { CellValue(relocations[it].sectionName.ifBlank { relocations[it].sectionIndex.toString() }) },
+            col("Address") { CellValue(hex(relocations[it].address)) },
+            col("Type") { CellValue(hex(relocations[it].type)) },
+            col("Len") { CellValue(relocations[it].length) },
+            col("PCRel") { CellValue(if (relocations[it].pcrel) "yes" else "no") },
+            col("Target", ColumnWidth.Fill()) { index ->
+                val relocation = relocations[index]
+                val target = when {
+                    relocation.scattered -> relocation.value?.let(::hex) ?: ""
+                    relocation.external -> relocation.symbol?.name?.ifBlank { "<unnamed>" } ?: relocation.symbolOrSectionIndex.toString()
+                    else -> "section ${relocation.symbolOrSectionIndex}"
+                }
+                CellValue(target)
+            },
+        ),
+        rowCount = relocations.size,
+        rowSelectionProvider = { relocations.getOrNull(it)?.let { relocation -> selection(relocation.recordRange) } },
+    )
 }
 
 private fun elfTabs(provider: ElfBinaryProvider): List<TableTabDescriptor> = buildList {

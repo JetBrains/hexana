@@ -50,9 +50,11 @@ import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryWordSize
 import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.HexanaSourceLocation
+import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.NativeFunctionRecord
 import org.jetbrains.hexana.providers.elf.ElfAddressMapper
+import org.jetbrains.hexana.providers.macho.MachOSection
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.jewel.foundation.ExperimentalJewelApi
 import org.jetbrains.jewel.ui.component.CircularProgressIndicator
@@ -616,12 +618,21 @@ private fun LlvmObjdumpValidInstruction.nativeXrefs(provider: NativeBinaryProvid
 }
 
 private fun NativeBinaryProvider.virtualAddressToFileOffset(virtualAddress: ULong): Long? {
-    val elf = this as? ElfBinaryProvider ?: return null
-    return ElfAddressMapper.virtualAddressToFileOffset(
-        virtualAddress = virtualAddress,
-        programHeaders = elf.programHeaders.orEmpty(),
-        sections = elf.sections.orEmpty(),
-    )?.toLongOrNull()
+    when (this) {
+        is ElfBinaryProvider -> {
+            return ElfAddressMapper.virtualAddressToFileOffset(
+                virtualAddress = virtualAddress,
+                programHeaders = programHeaders.orEmpty(),
+                sections = sections.orEmpty(),
+            )?.toLongOrNull()
+        }
+        is MachOBinaryProvider -> {
+            return sections.orEmpty()
+                .firstNotNullOfOrNull { it.mapVirtualAddressToFileOffset(virtualAddress) }
+                ?.toLongOrNull()
+        }
+        else -> return null
+    }
 }
 
 private fun NativeBinaryProvider.disassemblyArch(): Arch =
@@ -669,24 +680,44 @@ private fun archFromMachOCpuType(cpuType: Int?): Arch =
 private fun NativeBinaryProvider.disassemblyAddressToFileOffset(address: ULong, sectionName: String?): Long? {
     virtualAddressToFileOffset(address)?.let { return it }
 
-    val elf = this as? ElfBinaryProvider ?: return null
-    val elfSection = sectionName
-        ?.takeIf { it.isNotBlank() }
-        ?.let { name -> elf.sections.orEmpty().firstOrNull { section -> section.name == name } }
-    if (elfSection != null) {
-        if (address >= elfSection.size) return null
-        return (elfSection.fileOffset + address).toLongOrNull()
+    when (this) {
+        is ElfBinaryProvider -> {
+            val elfSection = sectionName
+                ?.takeIf { it.isNotBlank() }
+                ?.let { name -> sections.orEmpty().firstOrNull { section -> section.name == name } }
+            if (elfSection != null) {
+                if (address >= elfSection.size) return null
+                return (elfSection.fileOffset + address).toLongOrNull()
+            }
+        }
+        is MachOBinaryProvider -> {
+            val machOSection = sectionName
+                ?.takeIf { it.isNotBlank() }
+                ?.let { name ->
+                    sections.orEmpty().firstOrNull { it.matchesObjdumpSectionName(name) }
+                }
+            if (machOSection != null) {
+                if (address >= machOSection.size) return null
+                return (machOSection.fileOffset + address).toLongOrNull()
+            }
+        }
+        else -> Unit
     }
-
     return null
 }
 
 private fun NativeBinaryProvider.sectionNameForVirtualAddress(virtualAddress: ULong): String? {
-    val elf = this as? ElfBinaryProvider ?: return null
-    return elf.sections.orEmpty().firstOrNull { section ->
-        section.address != 0uL && section.size != 0uL &&
-                virtualAddress >= section.address && virtualAddress < section.address + section.size
-    }?.name?.takeIf { it.isNotBlank() }
+    when (this) {
+        is ElfBinaryProvider -> return sections.orEmpty().firstOrNull { section ->
+            section.address != 0uL && section.size != 0uL &&
+                    virtualAddress >= section.address && virtualAddress < section.address + section.size
+        }?.name?.takeIf { it.isNotBlank() }
+        is MachOBinaryProvider -> return sections.orEmpty().firstOrNull { section ->
+            section.size != 0uL &&
+                    virtualAddress >= section.address && virtualAddress < section.address + section.size
+        }?.objdumpSectionName()
+        else -> return null
+    }
 }
 
 private fun NativeBinaryProvider.relocationForVirtualAddress(virtualAddress: ULong): NativeRelocationAnnotation? {
@@ -698,6 +729,19 @@ private fun NativeBinaryProvider.relocationForVirtualAddress(virtualAddress: ULo
         )
     }
 }
+
+private fun MachOSection.mapVirtualAddressToFileOffset(virtualAddress: ULong): ULong? {
+    if (size == 0uL || virtualAddress < address) return null
+    val delta = virtualAddress - address
+    if (delta >= size) return null
+    return fileOffset + delta
+}
+
+private fun MachOSection.matchesObjdumpSectionName(name: String): Boolean =
+    name == this.name || name == objdumpSectionName()
+
+private fun MachOSection.objdumpSectionName(): String =
+    listOf(segmentName, name).filter { it.isNotBlank() }.joinToString(",")
 
 private fun List<Int>.toByteText(): String =
     joinToString(" ") { it.toString(16).padStart(2, '0') }

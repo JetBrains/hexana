@@ -12,6 +12,17 @@ import org.jetbrains.hexana.providers.elf.ElfProgramHeader
 import org.jetbrains.hexana.providers.elf.ElfRelocation
 import org.jetbrains.hexana.providers.elf.ElfSectionHeader
 import org.jetbrains.hexana.providers.elf.ElfSymbol
+import org.jetbrains.hexana.providers.macho.MachODylibCommand
+import org.jetbrains.hexana.providers.macho.MachODysymtabCommand
+import org.jetbrains.hexana.providers.macho.MachOHeader
+import org.jetbrains.hexana.providers.macho.MachOLoadCommand
+import org.jetbrains.hexana.providers.macho.MachOParser
+import org.jetbrains.hexana.providers.macho.MachORelocation
+import org.jetbrains.hexana.providers.macho.MachOSection
+import org.jetbrains.hexana.providers.macho.MachOSegment
+import org.jetbrains.hexana.providers.macho.MachOSymbol
+import org.jetbrains.hexana.providers.macho.MachOSymtabCommand
+import org.jetbrains.hexana.providers.macho.MachOUuid
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
@@ -149,7 +160,57 @@ class MachOBinaryProvider(
     sharedBytes: CommonByteBuffer,
     override val nativeFormat: NativeBinaryFormat.MachO,
     sourcePath: String? = null,
-) : NativeBinaryProvider(sharedBytes, sourcePath)
+) : NativeBinaryProvider(sharedBytes, sourcePath) {
+
+    val header: MachOHeader? by lazy { MachOParser.parseHeader(bytes) }
+
+    val loadCommands: List<MachOLoadCommand>? by lazy {
+        header?.let { MachOParser.parseLoadCommands(bytes, it) }
+    }
+
+    val segments: List<MachOSegment>? by lazy {
+        val h = header ?: return@lazy null
+        val c = loadCommands ?: return@lazy null
+        MachOParser.parseSegments(bytes, h, c)
+    }
+
+    val sections: List<MachOSection>? by lazy { segments?.flatMap { it.sections } }
+
+    val uuid: MachOUuid? by lazy {
+        val c = loadCommands ?: return@lazy null
+        MachOParser.parseUuid(bytes, c)
+    }
+
+    val symtab: MachOSymtabCommand? by lazy {
+        val h = header ?: return@lazy null
+        val c = loadCommands ?: return@lazy null
+        MachOParser.parseSymtab(bytes, h, c)
+    }
+
+    val dysymtab: MachODysymtabCommand? by lazy {
+        val h = header ?: return@lazy null
+        val c = loadCommands ?: return@lazy null
+        MachOParser.parseDysymtab(bytes, h, c)
+    }
+
+    val symbols: List<MachOSymbol>? by lazy {
+        val h = header ?: return@lazy null
+        val s = symtab ?: return@lazy emptyList()
+        MachOParser.parseSymbols(bytes, h, s)
+    }
+
+    val dylibs: List<MachODylibCommand>? by lazy {
+        val h = header ?: return@lazy null
+        val c = loadCommands ?: return@lazy null
+        MachOParser.parseDylibs(bytes, h, c)
+    }
+
+    val relocations: List<MachORelocation>? by lazy {
+        val h = header ?: return@lazy null
+        val sec = sections ?: return@lazy null
+        MachOParser.parseRelocations(bytes, h, sec, symbols.orEmpty())
+    }
+}
 
 class FatMachOBinaryProvider(
     sharedBytes: CommonByteBuffer,
