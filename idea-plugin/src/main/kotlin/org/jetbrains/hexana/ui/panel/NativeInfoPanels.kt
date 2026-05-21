@@ -28,6 +28,7 @@ internal fun NativeDebugContextPanel(provider: NativeBinaryProvider, state: HexV
                 append(if (context.embeddedDebugInfoPresent) "embedded debug info present" else "embedded debug info absent")
                 context.elfBuildId?.let { append(", build-id $it") }
                 context.gnuDebugLink?.let { append(", debuglink $it") }
+                context.machOUuid?.let { append(", Mach-O UUID $it") }
                 if (context.binaryPath == null) append(". Nearby companion scan unavailable for in-memory artifacts.")
             },
             modifier = Modifier.padding(bottom = 8.dp),

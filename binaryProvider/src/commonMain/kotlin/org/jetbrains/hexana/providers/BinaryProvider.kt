@@ -12,6 +12,7 @@ import org.jetbrains.hexana.providers.elf.ElfProgramHeader
 import org.jetbrains.hexana.providers.elf.ElfRelocation
 import org.jetbrains.hexana.providers.elf.ElfSectionHeader
 import org.jetbrains.hexana.providers.elf.ElfSymbol
+import org.jetbrains.hexana.providers.macho.MachODwarfAccessor
 import org.jetbrains.hexana.providers.macho.MachODylibCommand
 import org.jetbrains.hexana.providers.macho.MachODysymtabCommand
 import org.jetbrains.hexana.providers.macho.MachOHeader
@@ -209,6 +210,12 @@ class MachOBinaryProvider(
         val h = header ?: return@lazy null
         val sec = sections ?: return@lazy null
         MachOParser.parseRelocations(bytes, h, sec, symbols.orEmpty())
+    }
+
+    override val nativeSourceLocationProvider: NativeDwarfSourceLocationProvider? by lazy {
+        val sec = sections ?: return@lazy null
+        if (sec.none { it.name == "__debug_line" } || sec.none { it.name == "__debug_info" }) return@lazy null
+        NativeDwarfSourceLocationProvider(bytes, MachODwarfAccessor(sec))
     }
 }
 

@@ -526,6 +526,8 @@ private fun BinaryProvider.resolvePanels(
             Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
         )
         is MachOBinaryProvider -> listOf(
+            Panel("Debug Context") { NativeDebugContextPanel(this, state) },
+            Panel("Debug Info") { NativeDebugInfoPanel(this, state) },
             Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
         )
         is NativeBinaryProvider -> emptyList()

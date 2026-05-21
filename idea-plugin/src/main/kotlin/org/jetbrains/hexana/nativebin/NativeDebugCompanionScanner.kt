@@ -4,8 +4,10 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryEndian
 import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.providers.ElfBinaryProvider
+import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.elf.ElfSectionHeader
+import org.jetbrains.hexana.providers.macho.MachOSection
 import java.nio.file.Path
 import kotlin.io.path.exists
 import kotlin.io.path.name
@@ -15,6 +17,7 @@ internal data class NativeDebugContext(
     val embeddedDebugInfoPresent: Boolean,
     val elfBuildId: String?,
     val gnuDebugLink: String?,
+    val machOUuid: String?,
     val companions: List<NativeDebugCompanion>,
 )
 
@@ -48,11 +51,15 @@ internal enum class NativeDebugCompanionStatus(val label: String) {
 
 internal object NativeDebugCompanionScanner {
     fun scan(provider: NativeBinaryProvider): NativeDebugContext {
-        val sections = (provider as? ElfBinaryProvider)?.sections.orEmpty()
+        val elfSections = (provider as? ElfBinaryProvider)?.sections.orEmpty()
+        val machO = provider as? MachOBinaryProvider
         return scan(
             binaryPath = provider.sourcePath?.let { Path.of(it) },
             bytes = provider.bytes,
-            sections = sections,
+            sections = elfSections,
+            machOSections = machO?.sections.orEmpty(),
+            machOUuid = machO?.uuid?.value,
+            machOUuidRange = machO?.uuid?.uuidRange,
         )
     }
 
@@ -60,21 +67,28 @@ internal object NativeDebugCompanionScanner {
         binaryPath: Path?,
         bytes: CommonByteBuffer,
         sections: List<ElfSectionHeader>,
+        machOSections: List<MachOSection> = emptyList(),
+        machOUuid: String? = null,
+        machOUuidRange: NativeByteRange? = null,
     ): NativeDebugContext {
-        val embeddedDebugSections = sections.filter { it.isDebugSection() }
+        val embeddedElfDebug = sections.filter { it.isDebugSection() }
+        val embeddedMachODebug = machOSections.filter { it.isMachOdebugSection() }
+        val embeddedDebugInfoPresent = embeddedElfDebug.isNotEmpty() || embeddedMachODebug.isNotEmpty()
         val buildId = parseElfBuildId(bytes, sections.firstOrNull { it.name == ".note.gnu.build-id" })
         val debugLink = parseGnuDebugLink(bytes, sections.firstOrNull { it.name == ".gnu_debuglink" })
 
         val companions = buildList {
-            if (embeddedDebugSections.isNotEmpty()) {
+            if (embeddedDebugInfoPresent) {
+                val names = (embeddedElfDebug.map { it.name } + embeddedMachODebug.map { it.name }).joinToString()
+                val range = embeddedElfDebug.firstOrNull()?.headerRange ?: embeddedMachODebug.firstOrNull()?.headerRange
                 add(
                     NativeDebugCompanion(
                         kind = NativeDebugCompanionKind.EmbeddedDebugInfo,
                         status = NativeDebugCompanionStatus.Found,
-                        name = embeddedDebugSections.joinToString { it.name },
+                        name = names,
                         location = null,
                         description = "Debug sections are embedded in this binary.",
-                        range = embeddedDebugSections.first().headerRange,
+                        range = range,
                     )
                 )
             } else {
@@ -98,6 +112,19 @@ internal object NativeDebugCompanionScanner {
                         location = localBuildIdDebugPath(buildId)?.toString(),
                         description = "ELF build-id is present. A matching split debug file may exist under a .build-id debug directory.",
                         range = sections.firstOrNull { it.name == ".note.gnu.build-id" }?.headerRange,
+                    )
+                )
+            }
+
+            if (machOUuid != null) {
+                add(
+                    NativeDebugCompanion(
+                        kind = NativeDebugCompanionKind.MachOUuid,
+                        status = NativeDebugCompanionStatus.Found,
+                        name = machOUuid,
+                        location = null,
+                        description = "Mach-O UUID is present. A matching dSYM bundle can be verified against this identity later.",
+                        range = machOUuidRange,
                     )
                 )
             }
@@ -135,9 +162,10 @@ internal object NativeDebugCompanionScanner {
 
         return NativeDebugContext(
             binaryPath = binaryPath,
-            embeddedDebugInfoPresent = embeddedDebugSections.isNotEmpty(),
+            embeddedDebugInfoPresent = embeddedDebugInfoPresent,
             elfBuildId = buildId,
             gnuDebugLink = debugLink,
+            machOUuid = machOUuid,
             companions = companions.distinctBy { listOf(it.kind.name, it.status.name, it.name, it.location).joinToString("|") },
         )
     }
@@ -153,6 +181,8 @@ private fun findNearbyCompanions(binaryPath: Path, gnuDebugLink: String?): List<
         exactDebugLink?.let { it to NativeDebugCompanionKind.SeparateDebugFile },
         "$fileName.debug" to NativeDebugCompanionKind.SeparateDebugFile,
         "$stem.debug" to NativeDebugCompanionKind.SeparateDebugFile,
+        "$fileName.dSYM" to NativeDebugCompanionKind.DsymBundle,
+        "$stem.dSYM" to NativeDebugCompanionKind.DsymBundle,
         "$stem.dbg" to NativeDebugCompanionKind.LegacyDbgFile,
         "$fileName.dbg" to NativeDebugCompanionKind.LegacyDbgFile,
     ).distinct()
@@ -217,6 +247,9 @@ private fun Path.isCrashArtifact(): Boolean {
 
 private fun ElfSectionHeader.isDebugSection(): Boolean =
     name.startsWith(".debug") || name.startsWith(".zdebug")
+
+private fun MachOSection.isMachOdebugSection(): Boolean =
+    name.startsWith("__debug") || name.startsWith("__zdebug")
 
 private fun parseGnuDebugLink(bytes: CommonByteBuffer, section: ElfSectionHeader?): String? {
     val range = section?.contentRange ?: return null
