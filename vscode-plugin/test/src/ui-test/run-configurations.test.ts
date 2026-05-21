@@ -41,6 +41,9 @@ function ensureWasmtime(): void {
     const wasmtimeBin = path.join(binDir, process.platform === 'win32' ? 'wasmtime.exe' : 'wasmtime');
 
     if (fs.existsSync(wasmtimeBin)) {
+        if (process.platform !== 'win32') {
+            fs.chmodSync(wasmtimeBin, 0o755);
+        }
         console.log(`Wasmtime already available at: ${wasmtimeBin}`);
         return;
     }
