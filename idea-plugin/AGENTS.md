@@ -26,7 +26,9 @@ Read these files before making structural changes:
 - `providers/`:
   - `VirtualFile`-backed Wasm providers used by the editor and WAT view.
 - `ui/` and `ui/panel/`:
-  - Compose UI embedded into the IntelliJ editor UI.
+  - Compose UI embedded into the IntelliJ editor UI. Native panels live here: `NativeDisassemblyPanel.kt` (format-agnostic llvm-objdump-backed listing with ELF/Mach-O/PE address-mapping branches), `NativeInfoPanels.kt` (Debug Context + Debug Info), and `NativeSourceNavigation.kt` (open-source-line plumbing).
+- `nativebin/`:
+  - native-binary IDE helpers that aren't editor panels — currently `NativeDebugCompanionScanner.kt` (ELF build-id / debuglink, Mach-O UUID + dSYM, PE CodeView/PDB, plus nearby `.debug`/`.dbg`/core sweep).
 - `wat/`:
   - WAT language support, syntax highlighting, navigation, resolve, inspections/filtering.
 - `wit/`:

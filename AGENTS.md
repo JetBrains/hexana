@@ -42,7 +42,7 @@ This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysi
 - `disassembly/core/`: UI-free native disassembly model: functions, instructions, addresses, xrefs, source locations, relocations, and basic-block candidates.
 - `disassembly/llvm-objdump/`: JVM `llvm-objdump` command construction, candidate discovery, probing, execution result handling, output parsing, and conversion into the core disassembly model.
 - `disassembly/native-fixtures/`: Docker-based generator for committed `llvm-objdump` disassembly snapshots built from `parsing/native-fixtures/test-data`.
-- `binaryProvider/`: thin provider layer that wraps parsed Wasm data for the UI and navigation features.
+- `binaryProvider/`: thin provider layer that wraps parsed Wasm and native binary data for the UI and navigation features. Native providers are a sealed hierarchy (`ElfBinaryProvider`, `MachOBinaryProvider`, `FatMachOBinaryProvider`, `PeBinaryProvider`, `CoffBinaryProvider`, `ArchiveBinaryProvider`) under `NativeBinaryProvider`; format detection is done by `NativeBinaryFormatDetector` and the factory `nativeOrGenericBinaryProvider`.
 - `plugins-shared/`: Kotlin Multiplatform shared logic (no UI framework) used by both `idea-plugin` and `vscode-plugin:webview` — component description formatting, type labels, signature resolution, WAT text generation.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
 - `graalwasm/`: JVM wrappers around embedded `.wasm` utilities used for built-in `wasm -> wat` and `wat -> wasm`.
