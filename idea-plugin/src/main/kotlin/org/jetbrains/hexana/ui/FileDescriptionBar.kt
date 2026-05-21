@@ -30,6 +30,7 @@ import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
+import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.run.PopupMode
@@ -63,7 +64,8 @@ internal fun FileDescriptionBar(
     val moduleType = when (binaryProvider) {
         is WasmBinaryProvider -> "Core Wasm"
         is WasmComponentBinaryProvider -> "Component Model"
-        is GenericBinaryProvider -> "Binary"
+        is NativeBinaryProvider -> binaryProvider.nativeFormat.displayName
+        is GenericBinaryProvider -> binaryProvider.nativeFormat?.displayName ?: "Binary"
     }
 
     val sizeTooltip = remember(binaryProvider) {
@@ -360,6 +362,7 @@ private fun buildSizeTooltip(binaryProvider: BinaryProvider): List<Pair<String, 
     val sizeAnalysis: SizeNode.Module? = when (binaryProvider) {
         is WasmBinaryProvider -> binaryProvider.sizeAnalysis
         is WasmComponentBinaryProvider -> binaryProvider.sizeAnalysis
+        is NativeBinaryProvider -> null
         is GenericBinaryProvider -> null
     }
     val children = sizeAnalysis?.children ?: return null

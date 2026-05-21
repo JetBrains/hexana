@@ -19,6 +19,7 @@ kotlin {
                 implementation(project(":wasmParser"))
                 implementation(project(":encdec"))
                 api(project(":hexanaDocument"))
+                api(project(":parsing:common"))
             }
         }
 

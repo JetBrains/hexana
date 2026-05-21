@@ -2,6 +2,8 @@ package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
+import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
@@ -65,6 +67,68 @@ sealed class BinaryProviderType {
 
 class GenericBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvider {
     override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+
+    val nativeFormat: NativeBinaryFormat? by lazy {
+        NativeBinaryFormatDetector.detect(bytes)
+    }
+}
+
+sealed class NativeBinaryProvider(
+    private val sharedBytes: CommonByteBuffer,
+    val sourcePath: String? = null,
+) : BinaryProvider {
+    override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+    abstract val nativeFormat: NativeBinaryFormat
+}
+
+class ElfBinaryProvider(
+    sharedBytes: CommonByteBuffer,
+    override val nativeFormat: NativeBinaryFormat.Elf,
+    sourcePath: String? = null,
+) : NativeBinaryProvider(sharedBytes, sourcePath)
+
+class MachOBinaryProvider(
+    sharedBytes: CommonByteBuffer,
+    override val nativeFormat: NativeBinaryFormat.MachO,
+    sourcePath: String? = null,
+) : NativeBinaryProvider(sharedBytes, sourcePath)
+
+class FatMachOBinaryProvider(
+    sharedBytes: CommonByteBuffer,
+    override val nativeFormat: NativeBinaryFormat.FatMachO,
+    sourcePath: String? = null,
+) : NativeBinaryProvider(sharedBytes, sourcePath)
+
+class PeBinaryProvider(
+    sharedBytes: CommonByteBuffer,
+    override val nativeFormat: NativeBinaryFormat.Pe,
+    sourcePath: String? = null,
+) : NativeBinaryProvider(sharedBytes, sourcePath)
+
+class CoffBinaryProvider(
+    sharedBytes: CommonByteBuffer,
+    override val nativeFormat: NativeBinaryFormat.Coff,
+    sourcePath: String? = null,
+) : NativeBinaryProvider(sharedBytes, sourcePath)
+
+class ArchiveBinaryProvider(
+    sharedBytes: CommonByteBuffer,
+    sourcePath: String? = null,
+) : NativeBinaryProvider(sharedBytes, sourcePath) {
+    override val nativeFormat: NativeBinaryFormat get() = NativeBinaryFormat.Archive
+}
+
+fun nativeOrGenericBinaryProvider(
+    sharedBytes: CommonByteBuffer,
+    sourcePath: String? = null,
+): BinaryProvider = when (val fmt = NativeBinaryFormatDetector.detect(sharedBytes)) {
+    is NativeBinaryFormat.Elf -> ElfBinaryProvider(sharedBytes, fmt, sourcePath)
+    is NativeBinaryFormat.MachO -> MachOBinaryProvider(sharedBytes, fmt, sourcePath)
+    is NativeBinaryFormat.FatMachO -> FatMachOBinaryProvider(sharedBytes, fmt, sourcePath)
+    is NativeBinaryFormat.Pe -> PeBinaryProvider(sharedBytes, fmt, sourcePath)
+    is NativeBinaryFormat.Coff -> CoffBinaryProvider(sharedBytes, fmt, sourcePath)
+    NativeBinaryFormat.Archive -> ArchiveBinaryProvider(sharedBytes, sourcePath)
+    null -> GenericBinaryProvider(sharedBytes)
 }
 
 open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer): BinaryProvider {

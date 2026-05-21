@@ -153,13 +153,15 @@ class HexanaFileEditor(
             return
         }
 
+        val sourcePath = if (inMemoryBuffer == null) myFile.toNioPathOrNull()?.toString() else null
+
         binaryProvider = when (myFile.extension) {
             "wasm" -> {
                 if (inMemoryBuffer != null) {
                     when (WasmBinaryProviderSelector.select(commonBuffer)) {
                         BinaryProviderType.Wasm -> WasmBinaryProvider(commonBuffer)
                         BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(commonBuffer)
-                        BinaryProviderType.Generic -> GenericBinaryProvider(commonBuffer)
+                        BinaryProviderType.Generic -> nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
                     }
                 } else {
                     val ref = AtomicReference(HexanaSourceLocationProvider.EMPTY)
@@ -217,11 +219,11 @@ class HexanaFileEditor(
                             }
                         }
 
-                        BinaryProviderType.Generic -> GenericBinaryProvider(commonBuffer)
+                        BinaryProviderType.Generic -> nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
                     }
                 }
             }
-            else -> GenericBinaryProvider(commonBuffer)
+            else -> nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
         }
 
         val parentFile = myFile.getUserData(HexanaBinaryVirtualFile.PARENT_FILE_KEY)
