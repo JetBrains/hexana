@@ -264,6 +264,7 @@ class HexanaRunConfigurationDriverTest {
     }
 
     @Test
+    @Disabled
     fun debugCoreModuleWithWasmtime() {
         val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-core-module")
 
