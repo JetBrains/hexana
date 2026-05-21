@@ -1278,6 +1278,12 @@ class WasmDebugAdapterTracker implements vscode.DebugAdapterTracker {
                 args.args = launchConfig.args;
                 args.cwd = launchConfig.cwd;
 
+                // Disable ASLR control so that wasmtime does not
+                // call personality(2), which is blocked by seccomp
+                // in many CI / container environments ("personality
+                // set failed: Operation not permitted").
+                args.disableASLR = false;
+
                 // On macOS, enable the JIT loader inside the DAP
                 // launch request as well so LLDB can discover
                 // Wasmtime's JIT-compiled Wasm symbols and resolve
