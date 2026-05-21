@@ -32,6 +32,13 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
         set(value) {
             state.wasmToolsPath = value?.takeIf { it.isNotBlank() }
         }
+
+    var llvmObjdumpPathInUi: String?
+        get() = state.llvmObjdumpPath
+        set(value) {
+            state.llvmObjdumpPath = value?.takeIf { it.isNotBlank() }
+        }
+
     var useBuiltInWasmTools: Boolean?
         get() = true // state.useBuiltInWasmTools
         set(value) {
@@ -53,10 +60,14 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
     val wasmToolsPath: String
         get() = wasmToolsPathInUi ?: "wasm-tools"
 
+    val llvmObjdumpPath: String?
+        get() = llvmObjdumpPathInUi
+
 }
 
 class HexanaSettingsState : BaseState() {
     var wasmToolsPath: String? by string()
+    var llvmObjdumpPath: String? by string()
     var useBuiltInWasmTools: Boolean by property(false)
     var showOffsets: Boolean by property(false)
     var sendAnalytics: Boolean by property(true)
@@ -86,6 +97,17 @@ class HexanaConfigurable : DslConfigurableBase(), SearchableConfigurable {
                         emptyText.text = HexanaBundle.message("hexana.settings.wasmToolsEmptyText")
                     }
                     .bindText(settings::wasmToolsPathInUi.toNonNullableProperty(""))
+            }
+            row {
+                textFieldWithBrowseButton(FileChooserDescriptorFactory.singleFile())
+                    .label(HexanaBundle.message("hexana.settings.llvmObjdump"))
+                    .align(AlignY.TOP)
+                    .align(AlignX.FILL)
+                    .comment(HexanaBundle.message("hexana.settings.llvmObjdumpComment"))
+                    .applyToComponent {
+                        emptyText.text = HexanaBundle.message("hexana.settings.llvmObjdumpEmptyText")
+                    }
+                    .bindText(settings::llvmObjdumpPathInUi.toNonNullableProperty(""))
             }
             row {
                 checkBox(HexanaBundle.message("hexana.settings.useBuiltInWasmTools"))
