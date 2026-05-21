@@ -19,8 +19,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.ElfBinaryProvider
+import org.jetbrains.hexana.providers.NativeStringRecord
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.elf.ElfDynamicEntry
+import org.jetbrains.hexana.providers.elf.ElfProgramHeader
+import org.jetbrains.hexana.providers.elf.ElfRelocation
+import org.jetbrains.hexana.providers.elf.ElfSectionHeader
+import org.jetbrains.hexana.providers.elf.ElfSymbol
 import org.jetbrains.hexana.wasm.intRange
 import org.jetbrains.jewel.foundation.lazy.SelectableLazyListState
 import org.jetbrains.jewel.foundation.lazy.SelectionMode
@@ -243,7 +251,7 @@ fun StructureViewTree(
         }
 
         tree = withContext(Dispatchers.IO) {
-            buildWasmStructureTree(binaryProvider).also {
+            buildStructureTree(binaryProvider).also {
                 it.roots.forEach { root -> (root as? Tree.Element.Node<HexanaNode>)?.open()}
             }
         }
@@ -377,6 +385,13 @@ fun StructureViewTree(
 }
 
 
+private fun buildStructureTree(binaryProvider: BinaryProvider) = when (binaryProvider) {
+    is WasmBinaryProvider -> buildWasmStructureTree(binaryProvider)
+    is ElfBinaryProvider -> buildElfStructureTree(binaryProvider)
+    else -> buildTree {}
+}
+
+
 private fun buildWasmStructureTree(binaryProvider: BinaryProvider) = buildTree {
     val wasmModule = (binaryProvider as? WasmBinaryProvider)?.wasmModule
     if (wasmModule != null) {
@@ -390,6 +405,133 @@ private fun buildWasmStructureTree(binaryProvider: BinaryProvider) = buildTree {
         }
     }
 }
+
+
+private fun buildElfStructureTree(provider: ElfBinaryProvider) = buildTree {
+    val header = provider.header ?: return@buildTree
+
+    addNode(HexanaNode("Headers", header.headerRange.toIntRange(), isLeaf = false)) {
+        addLeaf(HexanaNode("ELF identification", header.identRange.toIntRange()))
+        addLeaf(HexanaNode("ELF header", header.headerRange.toIntRange()))
+    }
+
+    val sections = provider.sections.orEmpty()
+    if (sections.isNotEmpty()) {
+        addNode(HexanaNode("Sections", sections.sectionHeadersCoveringRange(), isLeaf = false)) {
+            sections.forEach { section ->
+                val name = section.name.ifBlank { "<unnamed>" }
+                val range = section.contentRange?.toIntRangeOrNull() ?: section.headerRange.toIntRange()
+                addLeaf(HexanaNode("Section ${section.index} $name", range))
+            }
+        }
+    }
+
+    val segments = provider.programHeaders.orEmpty()
+    if (segments.isNotEmpty()) {
+        addNode(HexanaNode("Segments", segments.programHeadersCoveringRange(), isLeaf = false)) {
+            segments.forEach { segment ->
+                val range = segment.fileRange?.toIntRangeOrNull() ?: segment.headerRange.toIntRange()
+                addLeaf(HexanaNode("Segment ${segment.index} type=${segment.type.toHex()}", range))
+            }
+        }
+    }
+
+    val symbols = provider.symbols.orEmpty()
+    if (symbols.isNotEmpty()) {
+        addNode(HexanaNode("Symbols", symbols.symbolsCoveringRange(), isLeaf = false)) {
+            symbols.forEach { symbol ->
+                val name = symbol.name.ifBlank { "<unnamed>" }
+                addLeaf(HexanaNode("Symbol ${symbol.index} $name", symbol.recordRange.toIntRange()))
+            }
+        }
+    }
+
+    val relocations = provider.relocations.orEmpty()
+    if (relocations.isNotEmpty()) {
+        addNode(HexanaNode("Relocations", relocations.relocationsCoveringRange(), isLeaf = false)) {
+            relocations.forEach { relocation ->
+                val symbolName = relocation.symbol?.name?.takeIf { it.isNotBlank() }
+                val suffix = symbolName?.let { " -> $it" }.orEmpty()
+                addLeaf(
+                    HexanaNode(
+                        "Relocation ${relocation.index} type=${relocation.type.toHex()}$suffix",
+                        relocation.recordRange.toIntRange(),
+                    )
+                )
+            }
+        }
+    }
+
+    val dynamicEntries = provider.dynamicEntries.orEmpty()
+    if (dynamicEntries.isNotEmpty()) {
+        addNode(HexanaNode("Dynamic", dynamicEntries.dynamicEntriesCoveringRange(), isLeaf = false)) {
+            dynamicEntries.forEach { entry ->
+                val suffix = entry.neededLibrary?.let { " $it" }.orEmpty()
+                addLeaf(HexanaNode("Dynamic ${entry.index} tag=${entry.tag}$suffix", entry.recordRange.toIntRange()))
+            }
+        }
+    }
+
+    val strings = provider.strings
+    if (strings.isNotEmpty()) {
+        addNode(HexanaNode("Strings", strings.stringsCoveringRange(), isLeaf = false)) {
+            strings.forEach { string ->
+                addLeaf(
+                    HexanaNode(
+                        "String ${string.value.previewForStructure()}",
+                        IntRange(string.offset, string.offset + string.size - 1),
+                    )
+                )
+            }
+        }
+    }
+}
+
+
+private fun NativeByteRange.toIntRange(): IntRange {
+    val endInclusive = if (size == 0) offset else offset + size - 1
+    return IntRange(offset, endInclusive)
+}
+
+
+private fun NativeByteRange.toIntRangeOrNull(): IntRange? = if (size == 0) null else toIntRange()
+
+
+private fun Iterable<ElfSectionHeader>.sectionHeadersCoveringRange(): IntRange =
+    map { it.headerRange.toIntRange() }.coveringRange()
+
+
+private fun Iterable<ElfProgramHeader>.programHeadersCoveringRange(): IntRange =
+    map { it.headerRange.toIntRange() }.coveringRange()
+
+
+private fun Iterable<ElfSymbol>.symbolsCoveringRange(): IntRange =
+    map { it.recordRange.toIntRange() }.coveringRange()
+
+
+private fun Iterable<ElfRelocation>.relocationsCoveringRange(): IntRange =
+    map { it.recordRange.toIntRange() }.coveringRange()
+
+
+private fun Iterable<ElfDynamicEntry>.dynamicEntriesCoveringRange(): IntRange =
+    map { it.recordRange.toIntRange() }.coveringRange()
+
+
+private fun Iterable<NativeStringRecord>.stringsCoveringRange(): IntRange =
+    map { IntRange(it.offset, it.offset + it.size - 1) }.coveringRange()
+
+
+private fun Iterable<IntRange>.coveringRange(): IntRange {
+    val ranges = toList()
+    return IntRange(ranges.minOf { it.first }, ranges.maxOf { it.last })
+}
+
+
+private fun UInt.toHex(): String = "0x" + toString(16)
+
+
+private fun String.previewForStructure(): String =
+    if (length <= 48) "\"$this\"" else "\"" + take(45) + "...\""
 
 
 private fun filterTree(

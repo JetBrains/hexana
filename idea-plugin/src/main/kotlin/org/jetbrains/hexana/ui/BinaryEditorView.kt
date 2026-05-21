@@ -520,6 +520,10 @@ private fun BinaryProvider.resolvePanels(
     }
     val extraPanels = when (this) {
         is GenericBinaryProvider -> emptyList()
+        is ElfBinaryProvider -> listOf(
+            Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
+        )
+        is NativeBinaryProvider -> emptyList()
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
                 listOf(

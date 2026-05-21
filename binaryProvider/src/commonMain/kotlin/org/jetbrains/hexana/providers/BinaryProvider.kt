@@ -4,6 +4,13 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
+import org.jetbrains.hexana.providers.elf.ElfDynamicEntry
+import org.jetbrains.hexana.providers.elf.ElfHeader
+import org.jetbrains.hexana.providers.elf.ElfParser
+import org.jetbrains.hexana.providers.elf.ElfProgramHeader
+import org.jetbrains.hexana.providers.elf.ElfRelocation
+import org.jetbrains.hexana.providers.elf.ElfSectionHeader
+import org.jetbrains.hexana.providers.elf.ElfSymbol
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
@@ -83,13 +90,58 @@ sealed class NativeBinaryProvider(
     val strings: List<NativeStringRecord> by lazy {
         NativeStringScanner.scanAscii(bytes)
     }
+
+    open val nativeFunctions: List<NativeFunctionRecord>? get() = null
+    open val nativeSourceLocationProvider: NativeDwarfSourceLocationProvider? get() = null
+}
+
+interface NativeDwarfSourceLocationProvider {
+    fun getSourceLocationForVirtualAddress(virtualAddress: ULong): HexanaSourceLocation?
+    fun virtualAddressesForSourceLocation(filePath: String, line: Int): List<ULong>
 }
 
 class ElfBinaryProvider(
     sharedBytes: CommonByteBuffer,
     override val nativeFormat: NativeBinaryFormat.Elf,
     sourcePath: String? = null,
-) : NativeBinaryProvider(sharedBytes, sourcePath)
+) : NativeBinaryProvider(sharedBytes, sourcePath) {
+
+    val header: ElfHeader? by lazy { ElfParser.parseHeader(bytes) }
+
+    val sections: List<ElfSectionHeader>? by lazy {
+        header?.let { ElfParser.parseSectionHeaders(bytes, it) }
+    }
+
+    val programHeaders: List<ElfProgramHeader>? by lazy {
+        header?.let { ElfParser.parseProgramHeaders(bytes, it) }
+    }
+
+    val symbols: List<ElfSymbol>? by lazy {
+        val h = header ?: return@lazy null
+        val s = sections ?: return@lazy null
+        ElfParser.parseSymbols(bytes, h, s)
+    }
+
+    val relocations: List<ElfRelocation>? by lazy {
+        val h = header ?: return@lazy null
+        val s = sections ?: return@lazy null
+        val sym = symbols ?: return@lazy null
+        ElfParser.parseRelocations(bytes, h, s, sym)
+    }
+
+    val dynamicEntries: List<ElfDynamicEntry>? by lazy {
+        val h = header ?: return@lazy null
+        val s = sections ?: return@lazy null
+        ElfParser.parseDynamicEntries(bytes, h, s)
+    }
+
+    override val nativeFunctions: List<NativeFunctionRecord>? by lazy {
+        val sym = symbols ?: return@lazy null
+        val sec = sections ?: return@lazy null
+        val ph = programHeaders ?: return@lazy null
+        NativeFunctionDiscovery.fromElf(sym, sec, ph)
+    }
+}
 
 class MachOBinaryProvider(
     sharedBytes: CommonByteBuffer,

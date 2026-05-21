@@ -87,6 +87,7 @@ dependencies {
     // tab renders the native bytes for each BCI inline through it.
     implementation(project(":disassembly:core"))
     implementation(project(":disassembly:capstone-wasm"))
+    implementation(project(":disassembly:llvm-objdump"))
     implementation(project(":hexanaDocument"))
     implementation(project(":binaryProvider"))
     implementation(project(":plugins-shared"))

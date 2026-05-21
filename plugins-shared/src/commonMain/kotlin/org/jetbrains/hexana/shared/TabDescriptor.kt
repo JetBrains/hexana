@@ -129,6 +129,7 @@ object TableTabsProviderRegistry {
         listOf(
             WasmComponentTableTabsProvider(),
             WasmTableTabsProvider(),
+            NativeTableTabsProvider(),
         )
     }
 }
