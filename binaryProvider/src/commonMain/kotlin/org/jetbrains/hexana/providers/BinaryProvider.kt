@@ -79,6 +79,10 @@ sealed class NativeBinaryProvider(
 ) : BinaryProvider {
     override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
     abstract val nativeFormat: NativeBinaryFormat
+
+    val strings: List<NativeStringRecord> by lazy {
+        NativeStringScanner.scanAscii(bytes)
+    }
 }
 
 class ElfBinaryProvider(
