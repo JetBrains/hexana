@@ -52,11 +52,33 @@ function resolveLldbDapPath(): string | null {
         // Xcode command-line tools (may not have lldb-dap)
         candidates.push("/usr/bin/lldb-dap");
     } else if (!isWindows) {
-        // Linux common locations
-        for (const ver of ["19", "18", "17", "16", "15", ""]) {
-            const suffix = ver ? `-${ver}` : "";
-            candidates.push(`/usr/bin/lldb-dap${suffix}`);
-            candidates.push(`/usr/lib/llvm${suffix}/bin/lldb-dap`);
+        // Linux: discover lldb-dap dynamically instead of
+        // maintaining a hardcoded version list.
+
+        // 1. /usr/bin/lldb-dap* (e.g. lldb-dap-22, lldb-dap-18)
+        try {
+            const usrBinEntries = fs.readdirSync("/usr/bin")
+                .filter((f) => f.startsWith("lldb-dap"))
+                .sort()
+                .reverse(); // prefer highest version
+            for (const entry of usrBinEntries) {
+                candidates.push(`/usr/bin/${entry}`);
+            }
+        } catch {
+            // /usr/bin not readable — unlikely but safe to skip
+        }
+
+        // 2. /usr/lib/llvm*/bin/lldb-dap
+        try {
+            const usrLibEntries = fs.readdirSync("/usr/lib")
+                .filter((f) => f.startsWith("llvm"))
+                .sort()
+                .reverse(); // prefer highest version
+            for (const entry of usrLibEntries) {
+                candidates.push(`/usr/lib/${entry}/bin/lldb-dap`);
+            }
+        } catch {
+            // /usr/lib not readable — skip
         }
     }
 
