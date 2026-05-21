@@ -53,8 +53,10 @@ import org.jetbrains.hexana.providers.HexanaSourceLocation
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.NativeFunctionRecord
+import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.elf.ElfAddressMapper
 import org.jetbrains.hexana.providers.macho.MachOSection
+import org.jetbrains.hexana.providers.pe.PeSection
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.jewel.foundation.ExperimentalJewelApi
 import org.jetbrains.jewel.ui.component.CircularProgressIndicator
@@ -631,6 +633,11 @@ private fun NativeBinaryProvider.virtualAddressToFileOffset(virtualAddress: ULon
                 .firstNotNullOfOrNull { it.mapVirtualAddressToFileOffset(virtualAddress) }
                 ?.toLongOrNull()
         }
+        is PeBinaryProvider -> {
+            return sections.orEmpty()
+                .firstNotNullOfOrNull { it.mapVirtualAddressToFileOffset(virtualAddress, optionalHeader?.imageBase) }
+                ?.toLongOrNull()
+        }
         else -> return null
     }
 }
@@ -701,6 +708,17 @@ private fun NativeBinaryProvider.disassemblyAddressToFileOffset(address: ULong, 
                 return (machOSection.fileOffset + address).toLongOrNull()
             }
         }
+        is PeBinaryProvider -> {
+            val peSection = sectionName
+                ?.takeIf { it.isNotBlank() }
+                ?.let { name -> sections.orEmpty().firstOrNull { it.name == name } }
+            if (peSection != null) {
+                if (address > UInt.MAX_VALUE.toULong()) return null
+                val sectionOffset = address.toUInt()
+                if (sectionOffset >= peSection.rawDataSize) return null
+                return (peSection.rawDataPointer.toULong() + sectionOffset.toULong()).toLongOrNull()
+            }
+        }
         else -> Unit
     }
     return null
@@ -716,6 +734,9 @@ private fun NativeBinaryProvider.sectionNameForVirtualAddress(virtualAddress: UL
             section.size != 0uL &&
                     virtualAddress >= section.address && virtualAddress < section.address + section.size
         }?.objdumpSectionName()
+        is PeBinaryProvider -> return sections.orEmpty().firstOrNull { section ->
+            section.mapVirtualAddressToFileOffset(virtualAddress, optionalHeader?.imageBase) != null
+        }?.name?.takeIf { it.isNotBlank() }
         else -> return null
     }
 }
@@ -742,6 +763,23 @@ private fun MachOSection.matchesObjdumpSectionName(name: String): Boolean =
 
 private fun MachOSection.objdumpSectionName(): String =
     listOf(segmentName, name).filter { it.isNotBlank() }.joinToString(",")
+
+private fun PeSection.mapVirtualAddressToFileOffset(virtualAddress: ULong, imageBase: ULong?): ULong? {
+    val start = virtualAddress.toPeRva(imageBase) ?: return null
+    val sectionVirtualAddress = this.virtualAddress.toULong()
+    if (start < sectionVirtualAddress) return null
+    val delta = start - sectionVirtualAddress
+    val sectionSize = rawDataSize.takeIf { it != 0u } ?: virtualSize
+    if (delta >= sectionSize.toULong()) return null
+    return rawDataPointer.toULong() + delta
+}
+
+private fun ULong.toPeRva(imageBase: ULong?): ULong? =
+    when {
+        imageBase != null && this >= imageBase -> this - imageBase
+        this <= UInt.MAX_VALUE.toULong() -> this
+        else -> null
+    }
 
 private fun List<Int>.toByteText(): String =
     joinToString(" ") { it.toString(16).padStart(2, '0') }

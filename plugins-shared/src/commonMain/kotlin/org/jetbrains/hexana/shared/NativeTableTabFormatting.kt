@@ -7,6 +7,11 @@ import org.jetbrains.hexana.providers.elf.ElfSectionHeader
 import org.jetbrains.hexana.providers.macho.MachODylibKind
 import org.jetbrains.hexana.providers.macho.MachOFatHeader
 import org.jetbrains.hexana.providers.macho.MachOHeader
+import org.jetbrains.hexana.providers.pe.PeCoffHeader
+import org.jetbrains.hexana.providers.pe.PeDosHeader
+import org.jetbrains.hexana.providers.pe.PeImportEntry
+import org.jetbrains.hexana.providers.pe.PeImportLibrary
+import org.jetbrains.hexana.providers.pe.PeOptionalHeader
 
 internal data class HeaderRow(val label: String, val value: String, val range: NativeByteRange?)
 
@@ -148,6 +153,84 @@ internal fun dylibKindLabel(kind: MachODylibKind): String = when (kind) {
 internal fun version(value: UInt): String {
     val raw = value.toInt()
     return "${raw ushr 16}.${(raw ushr 8) and 0xFF}.${raw and 0xFF}"
+}
+
+internal fun peHeaderRows(dosHeader: PeDosHeader, coffHeader: PeCoffHeader, optionalHeader: PeOptionalHeader?): List<HeaderRow> = buildList {
+    add(HeaderRow("DOS Magic", "MZ", dosHeader.mzRange))
+    add(HeaderRow("PE Header Offset", hex(dosHeader.peHeaderOffset), dosHeader.peHeaderOffsetRange))
+    add(HeaderRow("PE Signature", "PE", dosHeader.peSignatureRange))
+    add(HeaderRow("Machine", machineName(coffHeader.machine), coffHeader.headerRange))
+    add(HeaderRow("Sections", coffHeader.sectionCount.toString(), coffHeader.headerRange))
+    add(HeaderRow("Timestamp", hex(coffHeader.timeDateStamp), coffHeader.headerRange))
+    add(HeaderRow("Symbol Table Offset", hex(coffHeader.symbolTableOffset), coffHeader.headerRange))
+    add(HeaderRow("Symbols", coffHeader.symbolCount.toString(), coffHeader.headerRange))
+    add(HeaderRow("Optional Header Size", coffHeader.optionalHeaderSize.toString(), coffHeader.headerRange))
+    add(HeaderRow("Characteristics", hex(coffHeader.characteristics), coffHeader.headerRange))
+    optionalHeader?.let { header ->
+        add(HeaderRow("Optional Magic", hex(header.magic), header.headerRange))
+        add(HeaderRow("Word Size", header.wordSize.toString(), header.headerRange))
+        add(HeaderRow("Entry Point RVA", hex(header.addressOfEntryPoint), header.headerRange))
+        add(HeaderRow("Image Base", hex(header.imageBase), header.headerRange))
+        add(HeaderRow("Section Alignment", hex(header.sectionAlignment), header.headerRange))
+        add(HeaderRow("File Alignment", hex(header.fileAlignment), header.headerRange))
+        add(HeaderRow("Image Size", hex(header.sizeOfImage), header.headerRange))
+        add(HeaderRow("Headers Size", hex(header.sizeOfHeaders), header.headerRange))
+        add(HeaderRow("Subsystem", subsystemName(header.subsystem), header.headerRange))
+        add(HeaderRow("DLL Characteristics", hex(header.dllCharacteristics), header.headerRange))
+        add(HeaderRow("Data Directories", header.dataDirectoryCount.toString(), header.headerRange))
+    } ?: add(HeaderRow("Optional Header", "absent or unsupported", null))
+}
+
+internal fun peImportRows(libraries: List<PeImportLibrary>): List<PeImportRow> = buildList {
+    libraries.forEach { library ->
+        if (library.entries.isEmpty()) add(PeImportRow(library, null))
+        else library.entries.forEach { add(PeImportRow(library, it)) }
+    }
+}
+
+internal data class PeImportRow(val library: PeImportLibrary, val entry: PeImportEntry?)
+
+internal fun PeImportEntry.displayName(): String =
+    name ?: ordinal?.let { "ordinal #$it" } ?: "<unnamed>"
+
+internal fun machineName(machine: Int): String = when (machine) {
+    0x014C -> "I386 (${hex(machine)})"
+    0x8664 -> "AMD64 (${hex(machine)})"
+    0xAA64 -> "ARM64 (${hex(machine)})"
+    0x01C0 -> "ARM (${hex(machine)})"
+    0x01C4 -> "ARMNT (${hex(machine)})"
+    else -> hex(machine)
+}
+
+internal fun subsystemName(subsystem: Int): String = when (subsystem) {
+    1 -> "Native (${hex(subsystem)})"
+    2 -> "Windows GUI (${hex(subsystem)})"
+    3 -> "Windows CUI (${hex(subsystem)})"
+    9 -> "Windows CE GUI (${hex(subsystem)})"
+    10 -> "EFI application (${hex(subsystem)})"
+    else -> hex(subsystem)
+}
+
+internal fun relocationTypeName(type: Int): String = when (type) {
+    0 -> "ABSOLUTE (${hex(type)})"
+    3 -> "HIGHLOW (${hex(type)})"
+    10 -> "DIR64 (${hex(type)})"
+    else -> hex(type)
+}
+
+internal fun debugTypeName(type: UInt): String = when (type) {
+    2u -> "CodeView (${hex(type)})"
+    12u -> "VC Feature (${hex(type)})"
+    16u -> "Repro (${hex(type)})"
+    20u -> "Extended DLL Characteristics (${hex(type)})"
+    else -> hex(type)
+}
+
+internal fun storageClassName(storageClass: Int): String = when (storageClass) {
+    2 -> "External (${hex(storageClass)})"
+    3 -> "Static (${hex(storageClass)})"
+    103 -> "File (${hex(storageClass)})"
+    else -> hex(storageClass)
 }
 
 internal fun hex(value: Int): String = "0x${value.toUInt().toString(16).uppercase()}"

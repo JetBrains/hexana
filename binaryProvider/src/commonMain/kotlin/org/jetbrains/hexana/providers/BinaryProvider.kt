@@ -26,6 +26,16 @@ import org.jetbrains.hexana.providers.macho.MachOSegment
 import org.jetbrains.hexana.providers.macho.MachOSymbol
 import org.jetbrains.hexana.providers.macho.MachOSymtabCommand
 import org.jetbrains.hexana.providers.macho.MachOUuid
+import org.jetbrains.hexana.providers.pe.PeBaseRelocation
+import org.jetbrains.hexana.providers.pe.PeCoffHeader
+import org.jetbrains.hexana.providers.pe.PeCoffSymbol
+import org.jetbrains.hexana.providers.pe.PeDebugEntry
+import org.jetbrains.hexana.providers.pe.PeDosHeader
+import org.jetbrains.hexana.providers.pe.PeExportDirectory
+import org.jetbrains.hexana.providers.pe.PeImportLibrary
+import org.jetbrains.hexana.providers.pe.PeOptionalHeader
+import org.jetbrains.hexana.providers.pe.PeParser
+import org.jetbrains.hexana.providers.pe.PeSection
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
@@ -238,7 +248,55 @@ class PeBinaryProvider(
     sharedBytes: CommonByteBuffer,
     override val nativeFormat: NativeBinaryFormat.Pe,
     sourcePath: String? = null,
-) : NativeBinaryProvider(sharedBytes, sourcePath)
+) : NativeBinaryProvider(sharedBytes, sourcePath) {
+
+    val dosHeader: PeDosHeader? by lazy { PeParser.parseDosHeader(bytes) }
+
+    val coffHeader: PeCoffHeader? by lazy {
+        dosHeader?.let { PeParser.parseCoffHeader(bytes, it) }
+    }
+
+    val optionalHeader: PeOptionalHeader? by lazy {
+        val d = dosHeader ?: return@lazy null
+        val c = coffHeader ?: return@lazy null
+        PeParser.parseOptionalHeader(bytes, d, c)
+    }
+
+    val sections: List<PeSection>? by lazy {
+        val d = dosHeader ?: return@lazy null
+        val c = coffHeader ?: return@lazy null
+        PeParser.parseSections(bytes, d, c)
+    }
+
+    val imports: List<PeImportLibrary>? by lazy {
+        val o = optionalHeader ?: return@lazy null
+        val s = sections ?: return@lazy null
+        PeParser.parseImports(bytes, o, s)
+    }
+
+    val exports: PeExportDirectory? by lazy {
+        val o = optionalHeader ?: return@lazy null
+        val s = sections ?: return@lazy null
+        PeParser.parseExports(bytes, o, s)
+    }
+
+    val baseRelocations: List<PeBaseRelocation>? by lazy {
+        val o = optionalHeader ?: return@lazy null
+        val s = sections ?: return@lazy null
+        PeParser.parseBaseRelocations(bytes, o, s)
+    }
+
+    val debugEntries: List<PeDebugEntry>? by lazy {
+        val o = optionalHeader ?: return@lazy null
+        val s = sections ?: return@lazy null
+        PeParser.parseDebugEntries(bytes, o, s)
+    }
+
+    val coffSymbols: List<PeCoffSymbol>? by lazy {
+        val c = coffHeader ?: return@lazy null
+        PeParser.parseCoffSymbols(bytes, c)
+    }
+}
 
 class CoffBinaryProvider(
     sharedBytes: CommonByteBuffer,

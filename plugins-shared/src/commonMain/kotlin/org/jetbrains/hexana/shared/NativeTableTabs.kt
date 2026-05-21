@@ -5,15 +5,138 @@ import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.FatMachOBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.providers.PeBinaryProvider
 
 class NativeTableTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> = when (provider) {
         is ElfBinaryProvider -> elfTabs(provider)
         is MachOBinaryProvider -> machOTabs(provider)
         is FatMachOBinaryProvider -> fatMachOTabs(provider)
+        is PeBinaryProvider -> peTabs(provider)
         is NativeBinaryProvider -> stringsTab(provider)?.let(::listOf).orEmpty()
         else -> emptyList()
     }
+}
+
+private fun peTabs(provider: PeBinaryProvider): List<TableTabDescriptor> = buildList {
+    peHeadersTab(provider)?.let { add(it) }
+    peSectionsTab(provider)?.let { add(it) }
+    peImportsTab(provider)?.let { add(it) }
+    peExportsTab(provider)?.let { add(it) }
+    peRelocationsTab(provider)?.let { add(it) }
+    peDebugTab(provider)?.let { add(it) }
+    peSymbolsTab(provider)?.let { add(it) }
+    stringsTab(provider)?.let { add(it) }
+}
+
+private fun peHeadersTab(provider: PeBinaryProvider): TableTabDescriptor? {
+    val dosHeader = provider.dosHeader ?: return null
+    val coffHeader = provider.coffHeader ?: return null
+    return keyValueTab("Headers", peHeaderRows(dosHeader, coffHeader, provider.optionalHeader), labelWidth = ColumnWidth.Fill(0.38f))
+}
+
+private fun peSectionsTab(provider: PeBinaryProvider): TableTabDescriptor? {
+    val sections = provider.sections?.takeIf { it.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Sections",
+        columns = listOf(
+            col("Index") { CellValue(sections[it].index) },
+            col("Name", ColumnWidth.Fill(0.24f)) { CellValue(sections[it].name.ifBlank { "<unnamed>" }) },
+            col("RVA") { CellValue(hex(sections[it].virtualAddress)) },
+            col("VSize") { CellValue(hex(sections[it].virtualSize)) },
+            col("Raw Offset") { CellValue(hex(sections[it].rawDataPointer)) },
+            col("Raw Size") { CellValue(hex(sections[it].rawDataSize)) },
+            col("Relocs") { CellValue(sections[it].relocationCount) },
+            col("Flags", ColumnWidth.Fill()) { CellValue(hex(sections[it].characteristics)) },
+        ),
+        rowCount = sections.size,
+        rowSelectionProvider = { sections.getOrNull(it)?.let { section -> selection(section.contentRange ?: section.headerRange) } },
+    )
+}
+
+private fun peImportsTab(provider: PeBinaryProvider): TableTabDescriptor? {
+    val libraries = provider.imports?.takeIf { it.isNotEmpty() } ?: return null
+    val rows = peImportRows(libraries)
+    return TableTabDescriptor(
+        name = "Imports",
+        columns = listOf(
+            col("Library", ColumnWidth.Fill(0.26f)) { CellValue(rows[it].library.name.ifBlank { "<unnamed>" }) },
+            col("Import", ColumnWidth.Fill(0.34f)) { CellValue(rows[it].entry?.displayName() ?: "<descriptor>") },
+            col("Hint") { CellValue(rows[it].entry?.hint?.toString() ?: "") },
+            col("ILT RVA") { CellValue(hex(rows[it].library.importLookupTableRva)) },
+            col("IAT RVA", ColumnWidth.Fill()) { CellValue(hex(rows[it].library.importAddressTableRva)) },
+        ),
+        rowCount = rows.size,
+        rowSelectionProvider = { index ->
+            val row = rows.getOrNull(index) ?: return@TableTabDescriptor null
+            selection(row.entry?.hintNameRange ?: row.entry?.thunkRange ?: row.library.nameRange ?: row.library.descriptorRange)
+        },
+    )
+}
+
+private fun peExportsTab(provider: PeBinaryProvider): TableTabDescriptor? {
+    val exports = provider.exports?.takeIf { it.entries.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Exports",
+        columns = listOf(
+            col("Ordinal") { CellValue(exports.entries[it].ordinal.toString()) },
+            col("Name", ColumnWidth.Fill(0.36f)) { CellValue(exports.entries[it].name ?: "<ordinal-only>") },
+            col("RVA") { CellValue(hex(exports.entries[it].rva)) },
+            col("Forwarder", ColumnWidth.Fill()) { CellValue(exports.entries[it].forwarder ?: "") },
+        ),
+        rowCount = exports.entries.size,
+        rowSelectionProvider = { exports.entries.getOrNull(it)?.let { entry -> selection(entry.nameRange ?: entry.addressTableRange) } },
+    )
+}
+
+private fun peRelocationsTab(provider: PeBinaryProvider): TableTabDescriptor? {
+    val relocations = provider.baseRelocations?.takeIf { it.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Relocations",
+        columns = listOf(
+            col("Block") { CellValue(relocations[it].blockIndex) },
+            col("Entry") { CellValue(relocations[it].entryIndex) },
+            col("Type", ColumnWidth.Fill(0.28f)) { CellValue(relocationTypeName(relocations[it].type)) },
+            col("Page RVA") { CellValue(hex(relocations[it].pageRva)) },
+            col("Target RVA", ColumnWidth.Fill()) { CellValue(hex(relocations[it].targetRva)) },
+        ),
+        rowCount = relocations.size,
+        rowSelectionProvider = { relocations.getOrNull(it)?.let { relocation -> selection(relocation.recordRange) } },
+    )
+}
+
+private fun peDebugTab(provider: PeBinaryProvider): TableTabDescriptor? {
+    val entries = provider.debugEntries?.takeIf { it.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Debug",
+        columns = listOf(
+            col("Index") { CellValue(entries[it].index) },
+            col("Type") { CellValue(debugTypeName(entries[it].type)) },
+            col("Size") { CellValue(entries[it].sizeOfData.toString()) },
+            col("PDB", ColumnWidth.Fill(0.42f)) { CellValue(entries[it].codeView?.pdbPath ?: "") },
+            col("Signature") { CellValue(entries[it].codeView?.signature ?: "") },
+            col("Age", ColumnWidth.Fill()) { CellValue(entries[it].codeView?.age?.toString() ?: "") },
+        ),
+        rowCount = entries.size,
+        rowSelectionProvider = { entries.getOrNull(it)?.let { entry -> selection(entry.dataRange ?: entry.recordRange) } },
+    )
+}
+
+private fun peSymbolsTab(provider: PeBinaryProvider): TableTabDescriptor? {
+    val symbols = provider.coffSymbols?.takeIf { it.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Symbols",
+        columns = listOf(
+            col("Index") { CellValue(symbols[it].index) },
+            col("Name", ColumnWidth.Fill(0.36f)) { CellValue(symbols[it].name.ifBlank { "<unnamed>" }) },
+            col("Section") { CellValue(symbols[it].sectionNumber) },
+            col("Value") { CellValue(hex(symbols[it].value)) },
+            col("Storage") { CellValue(storageClassName(symbols[it].storageClass)) },
+            col("Aux", ColumnWidth.Fill()) { CellValue(symbols[it].auxiliaryCount) },
+        ),
+        rowCount = symbols.size,
+        rowSelectionProvider = { symbols.getOrNull(it)?.let { symbol -> selection(symbol.recordRange) } },
+    )
 }
 
 private fun fatMachOTabs(provider: FatMachOBinaryProvider): List<TableTabDescriptor> = buildList {

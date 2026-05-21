@@ -29,6 +29,8 @@ internal fun NativeDebugContextPanel(provider: NativeBinaryProvider, state: HexV
                 context.elfBuildId?.let { append(", build-id $it") }
                 context.gnuDebugLink?.let { append(", debuglink $it") }
                 context.machOUuid?.let { append(", Mach-O UUID $it") }
+                context.pePdbPath?.let { append(", PDB $it") }
+                context.peCodeViewId?.let { append(", CodeView $it") }
                 if (context.binaryPath == null) append(". Nearby companion scan unavailable for in-memory artifacts.")
             },
             modifier = Modifier.padding(bottom = 8.dp),

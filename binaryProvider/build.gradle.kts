@@ -22,6 +22,7 @@ kotlin {
                 api(project(":parsing:common"))
                 api(project(":parsing:elf"))
                 api(project(":parsing:macho"))
+                api(project(":parsing:pe"))
                 implementation(project(":debugInfo:dwarf"))
             }
         }

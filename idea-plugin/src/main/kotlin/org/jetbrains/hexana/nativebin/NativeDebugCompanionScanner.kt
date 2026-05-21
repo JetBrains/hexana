@@ -6,8 +6,10 @@ import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.elf.ElfSectionHeader
 import org.jetbrains.hexana.providers.macho.MachOSection
+import org.jetbrains.hexana.providers.pe.PeDebugEntry
 import java.nio.file.Path
 import kotlin.io.path.exists
 import kotlin.io.path.name
@@ -18,6 +20,8 @@ internal data class NativeDebugContext(
     val elfBuildId: String?,
     val gnuDebugLink: String?,
     val machOUuid: String?,
+    val pePdbPath: String?,
+    val peCodeViewId: String?,
     val companions: List<NativeDebugCompanion>,
 )
 
@@ -53,6 +57,7 @@ internal object NativeDebugCompanionScanner {
     fun scan(provider: NativeBinaryProvider): NativeDebugContext {
         val elfSections = (provider as? ElfBinaryProvider)?.sections.orEmpty()
         val machO = provider as? MachOBinaryProvider
+        val pe = provider as? PeBinaryProvider
         return scan(
             binaryPath = provider.sourcePath?.let { Path.of(it) },
             bytes = provider.bytes,
@@ -60,6 +65,7 @@ internal object NativeDebugCompanionScanner {
             machOSections = machO?.sections.orEmpty(),
             machOUuid = machO?.uuid?.value,
             machOUuidRange = machO?.uuid?.uuidRange,
+            peDebugEntries = pe?.debugEntries.orEmpty(),
         )
     }
 
@@ -70,12 +76,18 @@ internal object NativeDebugCompanionScanner {
         machOSections: List<MachOSection> = emptyList(),
         machOUuid: String? = null,
         machOUuidRange: NativeByteRange? = null,
+        peDebugEntries: List<PeDebugEntry> = emptyList(),
     ): NativeDebugContext {
         val embeddedElfDebug = sections.filter { it.isDebugSection() }
         val embeddedMachODebug = machOSections.filter { it.isMachOdebugSection() }
         val embeddedDebugInfoPresent = embeddedElfDebug.isNotEmpty() || embeddedMachODebug.isNotEmpty()
         val buildId = parseElfBuildId(bytes, sections.firstOrNull { it.name == ".note.gnu.build-id" })
         val debugLink = parseGnuDebugLink(bytes, sections.firstOrNull { it.name == ".gnu_debuglink" })
+        val codeView = peDebugEntries.firstNotNullOfOrNull { it.codeView }
+        val pePdbPath = codeView?.pdbPath?.takeIf { it.isNotBlank() }
+        val peCodeViewId = codeView?.let { info ->
+            listOfNotNull(info.guid, info.age?.let { "age $it" }).joinToString(", ").takeIf { it.isNotBlank() }
+        }
 
         val companions = buildList {
             if (embeddedDebugInfoPresent) {
@@ -129,6 +141,25 @@ internal object NativeDebugCompanionScanner {
                 )
             }
 
+            if (pePdbPath != null || peCodeViewId != null) {
+                add(
+                    NativeDebugCompanion(
+                        kind = NativeDebugCompanionKind.PdbFile,
+                        status = NativeDebugCompanionStatus.Unverified,
+                        name = pePdbPath ?: "CodeView debug record",
+                        location = binaryPath?.parent?.let { directory ->
+                            pePdbPath?.let { directory.resolve(Path.of(it).fileName).takeIf { candidate -> candidate.exists() } }
+                        }?.toString(),
+                        description = buildString {
+                            append("PE CodeView debug identity is embedded")
+                            peCodeViewId?.let { append(": $it") }
+                            append(". Matching PDB contents are not verified yet.")
+                        },
+                        range = peDebugEntries.firstOrNull { it.codeView != null }?.dataRange,
+                    )
+                )
+            }
+
             if (debugLink != null) {
                 val resolved = binaryPath?.parent?.let { findLocalDebugLink(it, debugLink) }
                 add(
@@ -166,6 +197,8 @@ internal object NativeDebugCompanionScanner {
             elfBuildId = buildId,
             gnuDebugLink = debugLink,
             machOUuid = machOUuid,
+            pePdbPath = pePdbPath,
+            peCodeViewId = peCodeViewId,
             companions = companions.distinctBy { listOf(it.kind.name, it.status.name, it.name, it.location).joinToString("|") },
         )
     }
@@ -183,6 +216,8 @@ private fun findNearbyCompanions(binaryPath: Path, gnuDebugLink: String?): List<
         "$stem.debug" to NativeDebugCompanionKind.SeparateDebugFile,
         "$fileName.dSYM" to NativeDebugCompanionKind.DsymBundle,
         "$stem.dSYM" to NativeDebugCompanionKind.DsymBundle,
+        "$stem.pdb" to NativeDebugCompanionKind.PdbFile,
+        "$fileName.pdb" to NativeDebugCompanionKind.PdbFile,
         "$stem.dbg" to NativeDebugCompanionKind.LegacyDbgFile,
         "$fileName.dbg" to NativeDebugCompanionKind.LegacyDbgFile,
     ).distinct()
