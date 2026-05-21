@@ -521,6 +521,8 @@ private fun BinaryProvider.resolvePanels(
     val extraPanels = when (this) {
         is GenericBinaryProvider -> emptyList()
         is ElfBinaryProvider -> listOf(
+            Panel("Debug Context") { NativeDebugContextPanel(this, state) },
+            Panel("Debug Info") { NativeDebugInfoPanel(this, state) },
             Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
         )
         is NativeBinaryProvider -> emptyList()

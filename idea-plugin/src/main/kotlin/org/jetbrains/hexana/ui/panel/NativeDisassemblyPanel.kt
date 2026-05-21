@@ -356,7 +356,7 @@ private fun NativeInstructionListingRow(
                 instruction.sourceLocation?.let { sourceLocation ->
                     Link(
                         sourceLocation.toSourceLabel(),
-                        onClick = {},
+                        onClick = { openNativeSourceLocation(sourceLocation.toHexanaSourceLocation(), state, binaryPath) },
                         modifier = Modifier.padding(start = 10.dp),
                     )
                 }

@@ -4,6 +4,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
+import org.jetbrains.hexana.providers.elf.ElfDwarfAccessor
 import org.jetbrains.hexana.providers.elf.ElfDynamicEntry
 import org.jetbrains.hexana.providers.elf.ElfHeader
 import org.jetbrains.hexana.providers.elf.ElfParser
@@ -95,11 +96,6 @@ sealed class NativeBinaryProvider(
     open val nativeSourceLocationProvider: NativeDwarfSourceLocationProvider? get() = null
 }
 
-interface NativeDwarfSourceLocationProvider {
-    fun getSourceLocationForVirtualAddress(virtualAddress: ULong): HexanaSourceLocation?
-    fun virtualAddressesForSourceLocation(filePath: String, line: Int): List<ULong>
-}
-
 class ElfBinaryProvider(
     sharedBytes: CommonByteBuffer,
     override val nativeFormat: NativeBinaryFormat.Elf,
@@ -140,6 +136,12 @@ class ElfBinaryProvider(
         val sec = sections ?: return@lazy null
         val ph = programHeaders ?: return@lazy null
         NativeFunctionDiscovery.fromElf(sym, sec, ph)
+    }
+
+    override val nativeSourceLocationProvider: NativeDwarfSourceLocationProvider? by lazy {
+        val sec = sections ?: return@lazy null
+        if (sec.none { it.name == ".debug_line" } || sec.none { it.name == ".debug_info" }) return@lazy null
+        NativeDwarfSourceLocationProvider(bytes, ElfDwarfAccessor(sec))
     }
 }
 
