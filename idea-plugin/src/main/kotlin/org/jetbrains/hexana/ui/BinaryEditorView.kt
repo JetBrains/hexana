@@ -537,6 +537,9 @@ private fun BinaryProvider.resolvePanels(
             Panel("Debug Context") { NativeDebugContextPanel(this, state) },
             Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
         )
+        is CoffBinaryProvider -> listOf(
+            Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
+        )
         is NativeBinaryProvider -> emptyList()
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {

@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.CoffBinaryProvider
 import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.FatMachOBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
@@ -13,9 +14,32 @@ class NativeTableTabsProvider : TableTabsProvider {
         is MachOBinaryProvider -> machOTabs(provider)
         is FatMachOBinaryProvider -> fatMachOTabs(provider)
         is PeBinaryProvider -> peTabs(provider)
+        is CoffBinaryProvider -> coffTabs(provider)
         is NativeBinaryProvider -> stringsTab(provider)?.let(::listOf).orEmpty()
         else -> emptyList()
     }
+}
+
+private fun coffTabs(provider: CoffBinaryProvider): List<TableTabDescriptor> = buildList {
+    coffSymbolsTab(provider)?.let { add(it) }
+    stringsTab(provider)?.let { add(it) }
+}
+
+private fun coffSymbolsTab(provider: CoffBinaryProvider): TableTabDescriptor? {
+    val symbols = provider.coffSymbols?.takeIf { it.isNotEmpty() } ?: return null
+    return TableTabDescriptor(
+        name = "Symbols",
+        columns = listOf(
+            col("Index") { CellValue(symbols[it].index) },
+            col("Name", ColumnWidth.Fill(0.36f)) { CellValue(symbols[it].name.ifBlank { "<unnamed>" }) },
+            col("Section") { CellValue(symbols[it].sectionNumber) },
+            col("Value") { CellValue(hex(symbols[it].value)) },
+            col("Storage") { CellValue(storageClassName(symbols[it].storageClass)) },
+            col("Aux", ColumnWidth.Fill()) { CellValue(symbols[it].auxiliaryCount) },
+        ),
+        rowCount = symbols.size,
+        rowSelectionProvider = { symbols.getOrNull(it)?.let { symbol -> selection(symbol.recordRange) } },
+    )
 }
 
 private fun peTabs(provider: PeBinaryProvider): List<TableTabDescriptor> = buildList {

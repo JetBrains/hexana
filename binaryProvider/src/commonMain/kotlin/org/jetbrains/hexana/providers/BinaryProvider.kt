@@ -302,7 +302,15 @@ class CoffBinaryProvider(
     sharedBytes: CommonByteBuffer,
     override val nativeFormat: NativeBinaryFormat.Coff,
     sourcePath: String? = null,
-) : NativeBinaryProvider(sharedBytes, sourcePath)
+) : NativeBinaryProvider(sharedBytes, sourcePath) {
+
+    val coffHeader: PeCoffHeader? by lazy { PeParser.parseCoffObjectHeader(bytes) }
+
+    val coffSymbols: List<PeCoffSymbol>? by lazy {
+        val h = coffHeader ?: return@lazy null
+        PeParser.parseCoffSymbols(bytes, h)
+    }
+}
 
 class ArchiveBinaryProvider(
     sharedBytes: CommonByteBuffer,
