@@ -16,3 +16,4 @@ wasm-modules/wasmprinter_wrapper/Cargo.lock
 wasm-modules/disassembler/target
 wasm-modules/disassembler/Cargo.lock
 /plugins/hexana/
+ui-driver-tests/allure-results/
