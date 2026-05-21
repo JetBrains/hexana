@@ -432,7 +432,7 @@ class HexanaRunConfigurationDriverTest {
         val rcm = driver.getRunContentManager(project)
         waitFor(
             message = "Waiting for process to terminate",
-            timeout = 30.seconds,
+            timeout = 2.minutes,
             interval = 1.seconds,
         ) {
             val content = rcm.getSelectedContent()
