@@ -26,14 +26,17 @@ if(WIN32)
   #        when dump_libraries is active. Both MSVC and MinGW accept these names.
   target_link_libraries(jitview Ws2_32 Psapi)
 else()
-  if(LINUX)
+  # Match Linux explicitly via CMAKE_SYSTEM_NAME — the shorthand `LINUX`
+  # variable was only added in CMake 3.25, and our minimum is 3.16, so on
+  # older agents the `if(LINUX)` block would silently never run.
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # _GNU_SOURCE is required for glibc to expose dl_phdr_info and
     # dl_iterate_phdr from <link.h> — they are gated by __USE_GNU, which
     # _DEFAULT_SOURCE alone does not set. Without this the agent.c
     # enumerate_libraries() path fails to compile with
     # "invalid use of undefined type 'struct dl_phdr_info'".
     add_definitions(-D_GNU_SOURCE)
-  endif(LINUX)
+  endif()
   target_include_directories(jitview PRIVATE ${CMAKE_JAVA_HOME}/include/$<LOWER_CASE:$<PLATFORM_ID>>)
 endif()
 
