@@ -3,11 +3,11 @@ package org.jetbrains.hexana.mcp
 
 import com.intellij.mcpserver.McpTool
 import com.intellij.mcpserver.McpToolCallResult
-import com.intellij.mcpserver.McpToolCategory
 import com.intellij.mcpserver.McpToolDescriptor
 import com.intellij.mcpserver.McpToolSchema
 import com.intellij.mcpserver.McpToolsProvider
 import com.intellij.mcpserver.mcpFail
+import kotlin.Any
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.String
@@ -416,8 +416,18 @@ private fun JsonObject.requireIntListArgument(name: String): List<Int> = this[na
 private fun JsonObject.requireIntMapArgument(name: String): Map<String, Int> = this[name]?.jsonObject?.mapValues { (_, value) -> value.jsonPrimitive.int }
     ?: mcpFail("Missing required argument `$name`")
 
-private fun hexanaToolCategory(): McpToolCategory {
-  val constructors = McpToolCategory::class.java.constructors
+/**
+ * Looks up `McpToolCategory` reflectively. The class was added in IntelliJ
+ * 2026.1 and is absent on 2025.2 / 2025.3, so we return `null` there and the
+ * descriptor builder picks a category-less constructor.
+ */
+private fun hexanaToolCategory(): Any? {
+  val categoryClass = try {
+      Class.forName("com.intellij.mcpserver.McpToolCategory")
+  } catch (_: ClassNotFoundException) {
+      return null
+  }
+  val constructors = categoryClass.constructors
   val fourArgumentConstructor = constructors.firstOrNull { it.parameterCount == 4 }
   if (fourArgumentConstructor != null) {
       return fourArgumentConstructor.newInstance(
@@ -425,14 +435,20 @@ private fun hexanaToolCategory(): McpToolCategory {
           "org.jetbrains.hexana.mcp.HexanaToolset",
           false,
           true,
-      ) as McpToolCategory
+      )
   }
   return constructors.single { it.parameterCount == 2 }.newInstance(
       "HexanaToolset",
       "org.jetbrains.hexana.mcp.HexanaToolset",
-  ) as McpToolCategory
+  )
 }
 
+/**
+ * Builds a `McpToolDescriptor` against whichever constructor shape the host
+ * platform exposes:
+ *   * 2025.2 / 2025.3 (no `McpToolCategory`): `(name, description, inputSchema, outputSchema)`
+ *   * 2026.1+ (with `McpToolCategory`): 6-arg or 8-arg shapes with `category`.
+ */
 private fun hexanaToolDescriptor(
   name: String,
   description: String,
@@ -442,61 +458,84 @@ private fun hexanaToolDescriptor(
 ): McpToolDescriptor {
   val category = hexanaToolCategory()
   val constructors = McpToolDescriptor::class.java.constructors
-  constructors.firstOrNull {
-      it.parameterTypes.contentEquals(
-          arrayOf(
-              String::class.java,
-              String::class.java,
-              category::class.java,
-              String::class.java,
-              inputSchema::class.java,
-              outputSchema::class.java,
+  if (category != null) {
+      val categoryClass = category::class.java
+      constructors.firstOrNull {
+          it.parameterTypes.contentEquals(
+              arrayOf(
+                  String::class.java,
+                  String::class.java,
+                  categoryClass,
+                  String::class.java,
+                  inputSchema::class.java,
+                  outputSchema::class.java,
+              )
           )
-      )
-  }?.let {
-      return it.newInstance(
-          name,
-          description,
-          category,
-          fullyQualifiedName,
-          inputSchema,
-          outputSchema,
-      ) as McpToolDescriptor
+      }?.let {
+          return it.newInstance(
+              name,
+              description,
+              category,
+              fullyQualifiedName,
+              inputSchema,
+              outputSchema,
+          ) as McpToolDescriptor
+      }
+      constructors.firstOrNull {
+          it.parameterCount == 8 && it.parameterTypes.getOrNull(3) == categoryClass
+      }?.let {
+          return it.newInstance(
+              name,
+              null,
+              description,
+              category,
+              fullyQualifiedName,
+              inputSchema,
+              outputSchema,
+              null,
+          ) as McpToolDescriptor
+      }
+      constructors.firstOrNull {
+          it.parameterCount == 8 && it.parameterTypes.getOrNull(4) == categoryClass
+      }?.let {
+          return it.newInstance(
+              name,
+              null,
+              description,
+              fullyQualifiedName,
+              category,
+              inputSchema,
+              outputSchema,
+              null,
+          ) as McpToolDescriptor
+      }
+      constructors.firstOrNull { it.parameterCount == 6 }?.let {
+          return it.newInstance(
+              name,
+              description,
+              category,
+              fullyQualifiedName,
+              inputSchema,
+              outputSchema,
+          ) as McpToolDescriptor
+      }
   }
   constructors.firstOrNull {
-      it.parameterCount == 8 && it.parameterTypes.getOrNull(3) == category::class.java
+      it.parameterCount == 4 &&
+          it.parameterTypes[0] == String::class.java &&
+          it.parameterTypes[1] == String::class.java &&
+          it.parameterTypes[2] == inputSchema::class.java &&
+          it.parameterTypes[3] == outputSchema::class.java
   }?.let {
       return it.newInstance(
           name,
-          null,
           description,
-          category,
-          fullyQualifiedName,
           inputSchema,
           outputSchema,
-          null,
       ) as McpToolDescriptor
   }
-  constructors.firstOrNull {
-      it.parameterCount == 8 && it.parameterTypes.getOrNull(4) == category::class.java
-  }?.let {
-      return it.newInstance(
-          name,
-          null,
-          description,
-          fullyQualifiedName,
-          category,
-          inputSchema,
-          outputSchema,
-          null,
-      ) as McpToolDescriptor
-  }
-  return constructors.single { it.parameterCount == 6 }.newInstance(
-      name,
-      description,
-      category,
-      fullyQualifiedName,
-      inputSchema,
-      outputSchema,
-  ) as McpToolDescriptor
+  error(
+      "No supported McpToolDescriptor constructor found. Available shapes: " +
+          constructors.joinToString { ctor -> ctor.parameterTypes.joinToString(prefix = "(", postfix = ")") { it.simpleName } }
+  )
 }

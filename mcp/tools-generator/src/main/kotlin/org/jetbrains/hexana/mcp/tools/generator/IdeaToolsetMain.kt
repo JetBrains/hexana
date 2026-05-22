@@ -31,7 +31,11 @@ private const val PROJECT_PATH_DESCRIPTION =
 private val MCP_TOOL = ClassName("com.intellij.mcpserver", "McpTool")
 private val MCP_TOOLS_PROVIDER = ClassName("com.intellij.mcpserver", "McpToolsProvider")
 private val MCP_TOOL_CALL_RESULT = ClassName("com.intellij.mcpserver", "McpToolCallResult")
-private val MCP_TOOL_CATEGORY = ClassName("com.intellij.mcpserver", "McpToolCategory")
+// `McpToolCategory` is intentionally NOT a typed reference: it was added in
+// IntelliJ 2026.1 (branch 261) and is absent on 2025.2 / 2025.3 platforms.
+// The generated code resolves it via `Class.forName` instead so the toolset
+// stays loadable on older IDEs (see `hexanaToolCategoryFunction`).
+private const val MCP_TOOL_CATEGORY_FQN = "com.intellij.mcpserver.McpToolCategory"
 private val MCP_TOOL_DESCRIPTOR = ClassName("com.intellij.mcpserver", "McpToolDescriptor")
 private val MCP_TOOL_SCHEMA = ClassName("com.intellij.mcpserver", "McpToolSchema")
 private val MCP_FAIL = MemberName("com.intellij.mcpserver", "mcpFail")
@@ -576,12 +580,23 @@ private fun requireIntMapArgumentFunction(): FunSpec {
 }
 
 private fun hexanaToolCategoryFunction(): FunSpec {
+    val nullableAny = ClassName("kotlin", "Any").copy(nullable = true)
     return FunSpec.builder("hexanaToolCategory")
         .addModifiers(KModifier.PRIVATE)
-        .returns(MCP_TOOL_CATEGORY)
+        .returns(nullableAny)
+        .addKdoc(
+            "Looks up `McpToolCategory` reflectively. The class was added in IntelliJ\n" +
+                "2026.1 and is absent on 2025.2 / 2025.3, so we return `null` there and the\n" +
+                "descriptor builder picks a category-less constructor.",
+        )
         .addCode(
             """
-            val constructors = %T::class.java.constructors
+            val categoryClass = try {
+                Class.forName(%S)
+            } catch (_: ClassNotFoundException) {
+                return null
+            }
+            val constructors = categoryClass.constructors
             val fourArgumentConstructor = constructors.firstOrNull { it.parameterCount == 4 }
             if (fourArgumentConstructor != null) {
                 return fourArgumentConstructor.newInstance(
@@ -589,20 +604,18 @@ private fun hexanaToolCategoryFunction(): FunSpec {
                     %S,
                     false,
                     true,
-                ) as %T
+                )
             }
             return constructors.single { it.parameterCount == 2 }.newInstance(
                 %S,
                 %S,
-            ) as %T
+            )
             """.trimIndent(),
-            MCP_TOOL_CATEGORY,
+            MCP_TOOL_CATEGORY_FQN,
             "HexanaToolset",
             "$IDEA_PACKAGE.HexanaToolset",
-            MCP_TOOL_CATEGORY,
             "HexanaToolset",
             "$IDEA_PACKAGE.HexanaToolset",
-            MCP_TOOL_CATEGORY,
         )
         .build()
 }
@@ -616,68 +629,99 @@ private fun hexanaToolDescriptorFunction(): FunSpec {
         .addParameter("inputSchema", MCP_TOOL_SCHEMA)
         .addParameter("outputSchema", MCP_TOOL_SCHEMA)
         .returns(MCP_TOOL_DESCRIPTOR)
+        .addKdoc(
+            "Builds a `McpToolDescriptor` against whichever constructor shape the host\n" +
+                "platform exposes:\n" +
+                "  * 2025.2 / 2025.3 (no `McpToolCategory`): `(name, description, inputSchema, outputSchema)`\n" +
+                "  * 2026.1+ (with `McpToolCategory`): 6-arg or 8-arg shapes with `category`.",
+        )
         .addCode(
             """
             val category = hexanaToolCategory()
             val constructors = %T::class.java.constructors
-            constructors.firstOrNull {
-                it.parameterTypes.contentEquals(
-                    arrayOf(
-                        String::class.java,
-                        String::class.java,
-                        category::class.java,
-                        String::class.java,
-                        inputSchema::class.java,
-                        outputSchema::class.java,
+            if (category != null) {
+                val categoryClass = category::class.java
+                constructors.firstOrNull {
+                    it.parameterTypes.contentEquals(
+                        arrayOf(
+                            String::class.java,
+                            String::class.java,
+                            categoryClass,
+                            String::class.java,
+                            inputSchema::class.java,
+                            outputSchema::class.java,
+                        )
                     )
-                )
-            }?.let {
-                return it.newInstance(
-                    name,
-                    description,
-                    category,
-                    fullyQualifiedName,
-                    inputSchema,
-                    outputSchema,
-                ) as %T
+                }?.let {
+                    return it.newInstance(
+                        name,
+                        description,
+                        category,
+                        fullyQualifiedName,
+                        inputSchema,
+                        outputSchema,
+                    ) as %T
+                }
+                constructors.firstOrNull {
+                    it.parameterCount == 8 && it.parameterTypes.getOrNull(3) == categoryClass
+                }?.let {
+                    return it.newInstance(
+                        name,
+                        null,
+                        description,
+                        category,
+                        fullyQualifiedName,
+                        inputSchema,
+                        outputSchema,
+                        null,
+                    ) as %T
+                }
+                constructors.firstOrNull {
+                    it.parameterCount == 8 && it.parameterTypes.getOrNull(4) == categoryClass
+                }?.let {
+                    return it.newInstance(
+                        name,
+                        null,
+                        description,
+                        fullyQualifiedName,
+                        category,
+                        inputSchema,
+                        outputSchema,
+                        null,
+                    ) as %T
+                }
+                constructors.firstOrNull { it.parameterCount == 6 }?.let {
+                    return it.newInstance(
+                        name,
+                        description,
+                        category,
+                        fullyQualifiedName,
+                        inputSchema,
+                        outputSchema,
+                    ) as %T
+                }
             }
             constructors.firstOrNull {
-                it.parameterCount == 8 && it.parameterTypes.getOrNull(3) == category::class.java
+                it.parameterCount == 4 &&
+                    it.parameterTypes[0] == String::class.java &&
+                    it.parameterTypes[1] == String::class.java &&
+                    it.parameterTypes[2] == inputSchema::class.java &&
+                    it.parameterTypes[3] == outputSchema::class.java
             }?.let {
                 return it.newInstance(
                     name,
-                    null,
                     description,
-                    category,
-                    fullyQualifiedName,
                     inputSchema,
                     outputSchema,
-                    null,
                 ) as %T
             }
-            constructors.firstOrNull {
-                it.parameterCount == 8 && it.parameterTypes.getOrNull(4) == category::class.java
-            }?.let {
-                return it.newInstance(
-                    name,
-                    null,
-                    description,
-                    fullyQualifiedName,
-                    category,
-                    inputSchema,
-                    outputSchema,
-                    null,
-                ) as %T
-            }
-            return constructors.single { it.parameterCount == 6 }.newInstance(
-                name,
-                description,
-                category,
-                fullyQualifiedName,
-                inputSchema,
-                outputSchema,
-            ) as %T
+            error(
+                "No supported %T constructor found. Available shapes: " +
+                    constructors.joinToString { ctor -> ctor.parameterTypes.joinToString(prefix = "(", postfix = ")") { it.simpleName } }
+            )
             """.trimIndent(),
+            MCP_TOOL_DESCRIPTOR,
+            MCP_TOOL_DESCRIPTOR,
             MCP_TOOL_DESCRIPTOR,
             MCP_TOOL_DESCRIPTOR,
             MCP_TOOL_DESCRIPTOR,
