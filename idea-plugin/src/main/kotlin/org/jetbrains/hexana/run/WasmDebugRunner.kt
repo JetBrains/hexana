@@ -158,12 +158,10 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             }
         }
 
-        val result = XDebuggerManager.getInstance(environment.project)
-            .newSessionBuilder(starter)
-            .environment(environment)
-            .startSession()
+        val session = XDebuggerManager.getInstance(environment.project)
+            .startSession(environment, starter)
 
-        return result.runContentDescriptor
+        return session.runContentDescriptor
     }
 
     /**
@@ -237,12 +235,10 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             }
         }
 
-        val result = XDebuggerManager.getInstance(environment.project)
-            .newSessionBuilder(starter)
-            .environment(environment)
-            .startSession()
+        val session = XDebuggerManager.getInstance(environment.project)
+            .startSession(environment, starter)
 
-        return result.runContentDescriptor
+        return session.runContentDescriptor
     }
 
     /**
