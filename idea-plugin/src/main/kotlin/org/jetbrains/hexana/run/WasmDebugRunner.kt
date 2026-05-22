@@ -377,6 +377,63 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
         internal val DEFAULT_LLDB_PATH = if (SystemInfo.isWindows) "lldb.exe" else "lldb"
 
         /**
+         * Resolves the default LLDB executable path by checking
+         * well-known installation locations before falling back
+         * to a bare command name for PATH lookup.
+         *
+         * Resolution order:
+         * 1. Homebrew LLVM installations on macOS
+         * 2. Versioned LLVM packages on Linux
+         * 3. Bare `lldb` / `lldb.exe` for PATH lookup
+         */
+        fun resolveDefaultLldbPath(): String {
+            if (!SystemInfo.isWindows) {
+                val candidates = mutableListOf<String>()
+                if (SystemInfo.isMac) {
+                    candidates.add("/opt/homebrew/opt/llvm/bin/lldb")
+                    candidates.add("/usr/local/opt/llvm/bin/lldb")
+                    candidates.add("/usr/bin/lldb")
+                } else {
+                    // Linux: discover versioned LLVM packages by listing
+                    // directories rather than hardcoding version numbers.
+                    val versionedBins = discoverVersionedFiles(File("/usr/bin"), "lldb-")
+                    for (path in versionedBins) {
+                        candidates.add(path)
+                    }
+                    val llvmDirs = discoverVersionedFiles(File("/usr/lib"), "llvm-")
+                    for (path in llvmDirs) {
+                        candidates.add(path + "/bin/lldb")
+                    }
+                    // Unversioned fallbacks
+                    candidates.add("/usr/bin/lldb")
+                    candidates.add("/usr/lib/llvm/bin/lldb")
+                }
+                for (candidate in candidates) {
+                    if (File(candidate).exists()) return candidate
+                }
+            }
+            return DEFAULT_LLDB_PATH
+        }
+
+        /**
+         * Lists entries in [directory] whose names start with [prefix],
+         * extracts the numeric version suffix, and returns their full
+         * paths sorted by version descending (newest first).
+         */
+        private fun discoverVersionedFiles(directory: File, prefix: String): List<String> {
+            val entries = directory.listFiles() ?: return emptyList()
+            return entries
+                .filter { it.name.startsWith(prefix) }
+                .mapNotNull { file ->
+                    val suffix = file.name.removePrefix(prefix)
+                    val version = suffix.toIntOrNull() ?: return@mapNotNull null
+                    version to file.absolutePath
+                }
+                .sortedByDescending { it.first }
+                .map { it.second }
+        }
+
+        /**
          * Resolves the LLDB executable path from the run configuration.
          *
          * WAMR debugging requires LLDB 22+ which includes the Wasm

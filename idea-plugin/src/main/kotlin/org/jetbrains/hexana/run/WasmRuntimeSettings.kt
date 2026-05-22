@@ -98,7 +98,7 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
     fun effectiveLldbPath(): String {
         val configured = state.lldbPath
         if (!configured.isNullOrBlank()) return configured
-        return WasmDebugRunner.DEFAULT_LLDB_PATH
+        return WasmDebugRunner.resolveDefaultLldbPath()
     }
 }
 

@@ -75,7 +75,7 @@ class WasmRuntimeConfigurable : DslConfigurableBase(), SearchableConfigurable {
                         .align(AlignX.FILL)
                         .comment(HexanaBundle.message("wasm.runtime.settings.lldb.path.comment"))
                         .applyToComponent {
-                            emptyText.text = WasmDebugRunner.DEFAULT_LLDB_PATH
+                            emptyText.text = WasmDebugRunner.resolveDefaultLldbPath()
                         }
                         .bindText(settings::lldbPathInUi.toNonNullableProperty(""))
                 }
