@@ -126,6 +126,13 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     .console
                     .also { it.attachToProcess(processHandler) }
 
+                // Disable ASLR so that LLDB does not attempt to
+                // disable address-space layout randomisation for the
+                // inferior — wasmtime manages its own memory layout
+                // and the ASLR setting can cause launch failures on
+                // some platforms.
+                lldb.sendCommand("settings set target.disable-aslr false")
+
                 // Enable JIT loader for macOS so LLDB can see JIT-compiled symbols
                 if (System.getProperty("os.name")?.lowercase()?.contains("mac") == true) {
                     lldb.sendCommand("settings set plugin.jit-loader.gdb.enable on")
@@ -204,6 +211,11 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
 
                 ProcessTerminatedListener.attach(lldbHandler)
                 lldbHandler.startNotify()
+
+                // Disable ASLR so that LLDB does not attempt to
+                // disable address-space layout randomisation for the
+                // inferior.
+                lldb.sendCommand("settings set target.disable-aslr false")
 
                 val console = TextConsoleBuilderFactory.getInstance()
                     .createBuilder(environment.project)
