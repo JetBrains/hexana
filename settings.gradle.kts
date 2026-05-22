@@ -16,8 +16,16 @@ pluginManagement {
         // and plugins.gradle.org from TeamCity agents is rate-limited and
         // returns HTTP 429, breaking dependency resolution. See INTERNAL-TICKET /
         // INTERNAL-TICKET and #infra-channel.
-        maven("https://cache-redirector.jetbrains.com/plugins.gradle.org/m2")
+        //
+        // Order matters: maven-central must come first. The plugin-portal
+        // mirror also proxies Maven Central artifacts (POMs), but its JARs
+        // for non-plugin coordinates are not always cached. Gradle picks
+        // the first repo where the POM resolves and does not fall through
+        // when the JAR is missing — so putting plugin-portal first causes
+        // failures for plugin transitive deps like com.google.j2objc:*
+        // and com.google.errorprone:* (seen on koog the same way).
         maven("https://cache-redirector.jetbrains.com/maven-central")
+        maven("https://cache-redirector.jetbrains.com/plugins.gradle.org/m2")
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
     }
 }
