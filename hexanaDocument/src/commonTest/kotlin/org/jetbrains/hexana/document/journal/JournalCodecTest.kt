@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import org.jetbrains.hexana.io.toCommonByteBuffer
 
 /**
  * Covers the load-side validation surface from §8/§9 of the design spec —
@@ -18,7 +19,7 @@ class JournalCodecTest {
         Base64.encode(ByteArray(bytes.size) { bytes[it].toByte() })
 
     private fun goodJournal(original: ByteArray): Journal = Journal(
-        originalHash = Journal.ORIGINAL_HASH_PREFIX + Sha256.hex(original),
+        originalHash = Journal.ORIGINAL_HASH_PREFIX + Sha256.hex(original.toCommonByteBuffer()),
         originalLength = original.size.toLong(),
         entries = listOf(
             JournalEntry(
@@ -33,7 +34,7 @@ class JournalCodecTest {
         val original = byteArrayOf(0x01, 0x02, 0x03)
         val journal = goodJournal(original)
         val text = JournalCodec.encode(journal)
-        val result = JournalCodec.loadFromJson(text, original)
+        val result = JournalCodec.loadFromJson(text, original.toCommonByteBuffer())
         val loaded = assertIs<JournalLoadResult.Loaded>(result)
         assertEquals(journal, loaded.journal)
     }
@@ -42,7 +43,7 @@ class JournalCodecTest {
     fun loaded_when_hash_and_length_match() {
         val original = byteArrayOf(0x10, 0x20)
         val text = JournalCodec.encode(goodJournal(original))
-        val result = JournalCodec.loadFromJson(text, original)
+        val result = JournalCodec.loadFromJson(text, original.toCommonByteBuffer())
         assertIs<JournalLoadResult.Loaded>(result)
     }
 
@@ -53,7 +54,7 @@ class JournalCodecTest {
         // Same length, different content → HASH mismatch (length check passes
         // first, hash check second).
         val originalB = byteArrayOf(0x01, 0x02, 0x04)
-        val result = JournalCodec.loadFromJson(text, originalB)
+        val result = JournalCodec.loadFromJson(text, originalB.toCommonByteBuffer())
         val mm = assertIs<JournalLoadResult.Mismatch>(result)
         assertEquals(MismatchReason.HASH, mm.reason)
         // Parsed cleanly — Mismatch.journal is non-null for HASH/LENGTH.
@@ -65,7 +66,7 @@ class JournalCodecTest {
         val originalA = byteArrayOf(0x01, 0x02, 0x03)
         val text = JournalCodec.encode(goodJournal(originalA))
         val originalB = byteArrayOf(0x01, 0x02, 0x03, 0x04)
-        val result = JournalCodec.loadFromJson(text, originalB)
+        val result = JournalCodec.loadFromJson(text, originalB.toCommonByteBuffer())
         val mm = assertIs<JournalLoadResult.Mismatch>(result)
         assertEquals(MismatchReason.LENGTH, mm.reason)
         assertEquals(originalA.size.toLong(), mm.journal?.originalLength)
@@ -74,7 +75,7 @@ class JournalCodecTest {
     @Test
     fun mismatch_CORRUPT_when_json_is_malformed() {
         val original = byteArrayOf(0x01, 0x02)
-        val result = JournalCodec.loadFromJson("{this is not json", original)
+        val result = JournalCodec.loadFromJson("{this is not json", original.toCommonByteBuffer())
         val mm = assertIs<JournalLoadResult.Mismatch>(result)
         assertEquals(MismatchReason.CORRUPT, mm.reason)
         // Spec §8: pure layer doesn't surface a half-parsed object on CORRUPT.
@@ -86,7 +87,7 @@ class JournalCodecTest {
         val original = byteArrayOf(0x01, 0x02)
         // Valid JSON but missing every Journal field — kotlinx surfaces this
         // as SerializationException → CORRUPT.
-        val result = JournalCodec.loadFromJson("""{}""", original)
+        val result = JournalCodec.loadFromJson("""{}""", original.toCommonByteBuffer())
         val mm = assertIs<JournalLoadResult.Mismatch>(result)
         assertEquals(MismatchReason.CORRUPT, mm.reason)
     }
@@ -97,7 +98,7 @@ class JournalCodecTest {
         val text = """
             {"schema":99,"originalHash":"sha256:00","originalLength":2,"entries":[]}
         """.trimIndent()
-        val result = JournalCodec.loadFromJson(text, original)
+        val result = JournalCodec.loadFromJson(text, original.toCommonByteBuffer())
         val mm = assertIs<JournalLoadResult.Mismatch>(result)
         assertEquals(MismatchReason.SCHEMA_UNKNOWN, mm.reason)
         // We don't surface a parsed object for unknown schemas — we don't
@@ -111,11 +112,11 @@ class JournalCodecTest {
         // ordering: schema check fires first so we never accidentally accept
         // a future-version journal just because its hash happened to match.
         val original = byteArrayOf(0x01, 0x02)
-        val correctHash = Journal.ORIGINAL_HASH_PREFIX + Sha256.hex(original)
+        val correctHash = Journal.ORIGINAL_HASH_PREFIX + Sha256.hex(original.toCommonByteBuffer())
         val text = """
             {"schema":99,"originalHash":"$correctHash","originalLength":2,"entries":[]}
         """.trimIndent()
-        val result = JournalCodec.loadFromJson(text, original)
+        val result = JournalCodec.loadFromJson(text, original.toCommonByteBuffer())
         val mm = assertIs<JournalLoadResult.Mismatch>(result)
         assertEquals(MismatchReason.SCHEMA_UNKNOWN, mm.reason)
     }

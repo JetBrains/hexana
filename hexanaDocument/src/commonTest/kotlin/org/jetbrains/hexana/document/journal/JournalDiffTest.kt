@@ -7,6 +7,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import org.jetbrains.hexana.io.toCommonByteBuffer
 
 /**
  * Exercises [JournalDiff]. The headline property: `replay(a, diff(a, b)) == b`
@@ -20,7 +21,7 @@ class JournalDiffTest {
     private fun replay(a: ByteArray, ops: List<JournalOp>): ByteArray {
         if (ops.isEmpty()) return a.copyOf()
         val journal = Journal(
-            originalHash = Journal.ORIGINAL_HASH_PREFIX + Sha256.hex(a),
+            originalHash = Journal.ORIGINAL_HASH_PREFIX + Sha256.hex(a.toCommonByteBuffer()),
             originalLength = a.size.toLong(),
             entries = listOf(JournalEntry("test", ops)),
         )

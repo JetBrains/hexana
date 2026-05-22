@@ -1,13 +1,14 @@
 package org.jetbrains.hexana.document.journal
 
 import kotlinx.serialization.SerializationException
+import org.jetbrains.hexana.io.CommonByteBuffer
 
 /**
  * Pure encode/decode + load-side validation for a [Journal] sidecar file.
  *
  * **Filesystem-free.** [JournalCodec] never opens, reads, or writes a file.
  * Callers (the IDE plugin) handle the actual I/O — they read a file's text
- * and pass it to [loadFromJson] along with the original-binary bytes; they
+ * and pass it to [ loadFromJson] along with the original-binary bytes; they
  * receive a [Journal] back from [encode] as a `String` and write it via the
  * §6 atomic-rename pattern.
  *
@@ -49,7 +50,7 @@ public object JournalCodec {
      * a half-parsed object) and non-null for HASH and LENGTH (parsed cleanly,
      * just bound to the wrong file).
      */
-    public fun loadFromJson(jsonText: String, originalBytes: ByteArray): JournalLoadResult {
+    public fun loadFromJson(jsonText: String, originalBytes: CommonByteBuffer): JournalLoadResult {
         val journal: Journal = try {
             JournalJson.decodeFromString(Journal.serializer(), jsonText)
         } catch (_: SerializationException) {

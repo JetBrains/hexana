@@ -1665,7 +1665,7 @@ class EditableRowEncoderTest {
         // should detect the shape and prepend a `(; redirected to func N ;)`
         // comment row above the body. Annotation is purely visual — it has
         // no `editable` info, so the panel renders it as plain text.
-        val rebuiltSnapshot = binaryDocumentOf(newBytes).snapshot()
+        val rebuiltSnapshot = binaryDocumentOf(newBytes.toCommonByteBuffer()).snapshot()
         val rebuiltParsed = WasmParsedBinary.fromProvider(rebuilt, rebuiltSnapshot)
         val rebuiltRenderer = WasmHexanaWatRenderer(rebuiltParsed)
         val rebuiltChunk = codeChunkFor(rebuilt, indexInSection = 0)

@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.providers.format
 
 import org.jetbrains.hexana.document.binaryDocumentOf
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -13,7 +14,7 @@ import kotlin.test.assertEquals
 class OpcodeLengthsTest {
 
     private fun bytes(vararg b: Int) =
-        binaryDocumentOf(b.map { it.toByte() }.toByteArray()).byteSource()
+        binaryDocumentOf(b.map { it.toByte() }.toByteArray().toCommonByteBuffer()).byteSource()
 
     // ----- 0xFD SIMD ------------------------------------------------------
 

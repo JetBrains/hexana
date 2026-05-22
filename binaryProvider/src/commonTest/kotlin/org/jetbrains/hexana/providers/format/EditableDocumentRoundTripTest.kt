@@ -10,6 +10,7 @@ import org.jetbrains.hexana.document.binaryDocumentOf
 import org.jetbrains.hexana.document.format.BinaryChunk
 import org.jetbrains.hexana.document.io.toCommonByteBuffer
 import org.jetbrains.hexana.document.journal.JournalOp
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 
 /**
@@ -59,7 +60,7 @@ class EditableDocumentRoundTripTest {
     )
 
     private fun parsed(bytes: ByteArray = moduleBytes): WasmParsedBinary {
-        val snapshot = binaryDocumentOf(bytes).snapshot()
+        val snapshot = binaryDocumentOf(bytes.toCommonByteBuffer()).snapshot()
         val provider = WasmBinaryProvider(snapshot.toCommonByteBuffer())
         return WasmParsedBinary.fromProvider(provider, snapshot)
     }
@@ -116,7 +117,7 @@ class EditableDocumentRoundTripTest {
      * structurally broken.
      */
     private fun reparseStrict(bytes: ByteArray): WasmBinaryProvider {
-        val provider = WasmBinaryProvider(binaryDocumentOf(bytes).toCommonByteBuffer())
+        val provider = WasmBinaryProvider(binaryDocumentOf(bytes.toCommonByteBuffer()).toCommonByteBuffer())
         val module = provider.wasmModule ?: error("re-parse returned null wasmModule")
         assertNotNull(module.codeSection, "rebuilt module must keep its code section")
         assertNotNull(module.dataSection, "rebuilt module must keep its data section")

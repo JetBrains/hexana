@@ -6,24 +6,25 @@ import org.jetbrains.hexana.document.ByteSource
 import org.jetbrains.hexana.document.DocumentListener
 import org.jetbrains.hexana.document.EditTransaction
 import org.jetbrains.hexana.document.OriginalLocation
+import org.jetbrains.hexana.io.CommonByteBuffer
 
 private const val EDIT_PHASE_2_MSG: String =
     "Editing arrives in Phase 2 (piece-table backed BinaryDocument). " +
         "The Phase 1 stub is read-only."
 
 /**
- * Phase 1 stub: immutable, single-piece document backed by a [ByteArray]. Both
- * the live document and its snapshot are the same object — there are no edits
- * to capture. Listeners can be registered but never fire.
+ * Phase 1 stub: immutable, single-piece document backed by a [CommonByteBuffer].
+ * Both the live document and its snapshot are the same object — there are no
+ * edits to capture. Listeners can be registered but never fire.
  *
  * Phase 2 will replace this with a piece-tree-backed implementation; the public
  * [BinaryDocument] contract stays unchanged.
  */
 internal class ImmutableBinaryDocument(
-    private val bytes: ByteArray,
+    bytes: CommonByteBuffer,
 ) : BinaryDocumentSnapshot {
 
-    private val source: ByteSource = ByteArrayByteSource(bytes)
+    private val source: ByteSource = CommonByteBufferByteSource(bytes)
 
     override val length: Long get() = source.length
 

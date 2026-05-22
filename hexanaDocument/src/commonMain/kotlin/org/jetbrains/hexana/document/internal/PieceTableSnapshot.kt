@@ -6,6 +6,7 @@ import org.jetbrains.hexana.document.ByteSourceCursor
 import org.jetbrains.hexana.document.DocumentListener
 import org.jetbrains.hexana.document.EditTransaction
 import org.jetbrains.hexana.document.OriginalLocation
+import org.jetbrains.hexana.io.CommonByteBuffer
 
 /**
  * Immutable view of a [BinaryDocument] at a particular point in time.
@@ -18,7 +19,7 @@ import org.jetbrains.hexana.document.OriginalLocation
  */
 internal class PieceTableSnapshot(
     internal val pieces: List<Piece>,
-    private val original: ByteArray,
+    private val original: CommonByteBuffer,
     private val added: GrowableByteBuffer,
     override val modificationStamp: Long,
 ) : BinaryDocumentSnapshot {
@@ -70,7 +71,9 @@ internal class PieceTableSnapshot(
             val take = minOf(p.length.toInt() - skip, remaining)
             val src = (p.start + skip).toInt()
             when (p.source) {
-                Source.ORIGINAL -> original.copyInto(dst, dstCursor, src, src + take)
+                // `original` may be read concurrently by other snapshots, so we
+                // duplicate to get an independent cursor for this bulk read.
+                Source.ORIGINAL -> original.duplicate().position(src).get(dst, dstCursor, take)
                 Source.ADDED -> added.copyInto(src, dst, dstCursor, take)
             }
             dstCursor += take

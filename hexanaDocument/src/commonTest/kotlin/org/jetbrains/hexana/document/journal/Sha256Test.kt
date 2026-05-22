@@ -2,6 +2,7 @@ package org.jetbrains.hexana.document.journal
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.jetbrains.hexana.io.toCommonByteBuffer
 
 /**
  * NIST FIPS 180-4 SHA-256 test vectors. If any of these fail, the journal's
@@ -13,7 +14,7 @@ class Sha256Test {
     fun empty_input() {
         assertEquals(
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-            Sha256.hex(ByteArray(0)),
+            Sha256.hex(ByteArray(0).toCommonByteBuffer()),
         )
     }
 
@@ -21,7 +22,7 @@ class Sha256Test {
     fun abc() {
         assertEquals(
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-            Sha256.hex("abc".encodeToByteArray()),
+            Sha256.hex("abc".encodeToByteArray().toCommonByteBuffer()),
         )
     }
 
@@ -31,7 +32,7 @@ class Sha256Test {
             .encodeToByteArray()
         assertEquals(
             "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
-            Sha256.hex(msg),
+            Sha256.hex(msg.toCommonByteBuffer()),
         )
     }
 
@@ -41,7 +42,7 @@ class Sha256Test {
         val msg = ByteArray(1_000_000) { 'a'.code.toByte() }
         assertEquals(
             "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
-            Sha256.hex(msg),
+            Sha256.hex(msg.toCommonByteBuffer()),
         )
     }
 
@@ -49,13 +50,14 @@ class Sha256Test {
     fun exact_block_boundary_55_bytes() {
         // 55 bytes: largest input that fits with padding into one 64-byte block.
         val msg = ByteArray(55) { 'x'.code.toByte() }
+        val buf = msg.toCommonByteBuffer()
         // Computed against a reference impl; pinned here so future refactors
         // can't silently break the padding edge.
         assertEquals(
             "0bd5876f9b9f9c11baf28e89d3df0f1b2cb1c2dec56d6cb6c8b3df87dba4f7c0".length,
-            Sha256.hex(msg).length,
+            Sha256.hex(buf).length,
         )
         // Idempotent twice: deterministic output.
-        assertEquals(Sha256.hex(msg), Sha256.hex(msg))
+        assertEquals(Sha256.hex(buf), Sha256.hex(buf))
     }
 }

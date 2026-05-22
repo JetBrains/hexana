@@ -66,7 +66,7 @@ internal fun BinaryEditorView(
         } else {
             JournalPersister.NoOp
         }
-        val originalBytes = binaryProvider.bytes.toByteArray()
+        val originalBytes = binaryProvider.bytes.duplicate()
         val doc = editableBinaryDocumentOf(bytes = originalBytes, persister = persister)
         // Restore in-progress edits from a previously-persisted sidecar.
         // The codec validates hash + length; on Mismatch we leave the doc

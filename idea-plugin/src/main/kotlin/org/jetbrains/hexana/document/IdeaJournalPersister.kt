@@ -14,6 +14,7 @@ import org.jetbrains.hexana.document.journal.JournalCodec
 import org.jetbrains.hexana.document.journal.JournalLoadResult
 import org.jetbrains.hexana.document.journal.JournalPersister
 import org.jetbrains.hexana.document.journal.MismatchReason
+import org.jetbrains.hexana.io.CommonByteBuffer
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.InvalidPathException
@@ -141,7 +142,7 @@ internal class IdeaJournalPersister(
  */
 internal fun loadSidecarIfPresent(
     sourceFile: VirtualFile,
-    originalBytes: ByteArray,
+    originalBytes: CommonByteBuffer,
 ): JournalLoadResult? {
     val parent: VirtualFile = sourceFile.parent ?: return null
     val sidecar: VirtualFile = parent.findChild("${sourceFile.name}.hexana.json") ?: return null

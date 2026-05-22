@@ -6,6 +6,7 @@ import org.jetbrains.hexana.document.journal.JournalEntry
 import org.jetbrains.hexana.document.journal.JournalOp
 import org.jetbrains.hexana.document.journal.JournalPersister
 import org.jetbrains.hexana.document.journal.Sha256
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -13,6 +14,14 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
+/** Wraps test-fixture byte literals so they flow into the buffer-typed factory. */
+private fun docOf(
+    bytes: ByteArray,
+    persister: JournalPersister = JournalPersister.NoOp,
+    timestampProvider: () -> String = { "" },
+): EditableBinaryDocument =
+    editableBinaryDocumentOf(bytes.toCommonByteBuffer(), persister, timestampProvider)
 
 /**
  * End-to-end tests for the editable [BinaryDocument] backing — the editing
@@ -30,14 +39,14 @@ class PieceTableDocumentTest {
 
     @Test
     fun fresh_document_reads_original_unchanged() {
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x01, 0x02, 0x03))
+        val doc = docOf(byteArrayOf(0x01, 0x02, 0x03))
         assertEquals(3L, doc.length)
         assertContentEquals(byteArrayOf(0x01, 0x02, 0x03), bytesOf(doc))
     }
 
     @Test
     fun commit_replace_changes_visible_bytes() {
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x10, 0x20, 0x30))
+        val doc = docOf(byteArrayOf(0x10, 0x20, 0x30))
         doc.edit().apply {
             replace(1L, 2L, byteArrayOf(0xFF.toByte()))
             commit()
@@ -47,7 +56,7 @@ class PieceTableDocumentTest {
 
     @Test
     fun commit_insert_grows_document() {
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x01, 0x02))
+        val doc = docOf(byteArrayOf(0x01, 0x02))
         doc.edit().apply {
             insert(1L, byteArrayOf(0xAA.toByte(), 0xBB.toByte()))
             commit()
@@ -57,7 +66,7 @@ class PieceTableDocumentTest {
 
     @Test
     fun commit_delete_shrinks_document() {
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x01, 0x02, 0x03, 0x04))
+        val doc = docOf(byteArrayOf(0x01, 0x02, 0x03, 0x04))
         doc.edit().apply {
             delete(1L, 3L)
             commit()
@@ -67,7 +76,7 @@ class PieceTableDocumentTest {
 
     @Test
     fun close_without_commit_rolls_back() {
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x10, 0x20))
+        val doc = docOf(byteArrayOf(0x10, 0x20))
         val tx = doc.edit()
         tx.replace(0L, 1L, byteArrayOf(0xFF.toByte()))
         tx.close()
@@ -78,7 +87,7 @@ class PieceTableDocumentTest {
     fun multiple_ops_in_one_transaction_apply_in_logical_order() {
         // After insert(1, [FF FF]): 10 FF FF 20 30
         // After delete(1, 2): 10 FF 20 30
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x10, 0x20, 0x30))
+        val doc = docOf(byteArrayOf(0x10, 0x20, 0x30))
         doc.edit().apply {
             insert(1L, byteArrayOf(0xFF.toByte(), 0xFF.toByte()))
             delete(1L, 2L)
@@ -92,7 +101,7 @@ class PieceTableDocumentTest {
 
     @Test
     fun listener_fires_once_per_commit_with_batched_ops() {
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x10, 0x20, 0x30))
+        val doc = docOf(byteArrayOf(0x10, 0x20, 0x30))
         val events = mutableListOf<DocumentChangeEvent>()
         doc.addListener { events += it }
 
@@ -108,7 +117,7 @@ class PieceTableDocumentTest {
 
     @Test
     fun undo_reverts_to_pre_commit_state() {
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x01, 0x02, 0x03))
+        val doc = docOf(byteArrayOf(0x01, 0x02, 0x03))
         doc.edit().apply {
             replace(1L, 2L, byteArrayOf(0xFF.toByte()))
             commit()
@@ -122,7 +131,7 @@ class PieceTableDocumentTest {
 
     @Test
     fun redo_reapplies_undone_commit() {
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x01, 0x02, 0x03))
+        val doc = docOf(byteArrayOf(0x01, 0x02, 0x03))
         doc.edit().apply {
             replace(1L, 2L, byteArrayOf(0xFF.toByte()))
             commit()
@@ -136,7 +145,7 @@ class PieceTableDocumentTest {
 
     @Test
     fun new_commit_after_undo_discards_redo_tail() {
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x01, 0x02, 0x03))
+        val doc = docOf(byteArrayOf(0x01, 0x02, 0x03))
         doc.edit().apply { replace(0L, 1L, byteArrayOf(0xAA.toByte())); commit() }
         doc.edit().apply { replace(2L, 3L, byteArrayOf(0xBB.toByte())); commit() }
         doc.undo()
@@ -151,7 +160,7 @@ class PieceTableDocumentTest {
     fun persister_called_with_journal_on_commit() {
         var lastSeen: Journal? = null
         val persister = JournalPersister { j -> lastSeen = j }
-        val doc = editableBinaryDocumentOf(
+        val doc = docOf(
             bytes = byteArrayOf(0x01, 0x02),
             persister = persister,
             timestampProvider = { "T" },
@@ -168,7 +177,7 @@ class PieceTableDocumentTest {
     @Test
     fun persister_called_with_null_when_undone_back_to_original() {
         val saved = mutableListOf<Journal?>()
-        val doc = editableBinaryDocumentOf(
+        val doc = docOf(
             bytes = byteArrayOf(0x01, 0x02),
             persister = { saved += it },
         )
@@ -185,14 +194,14 @@ class PieceTableDocumentTest {
     @Test
     fun loadJournal_replays_entries_without_persisting() {
         val saved = mutableListOf<Journal?>()
-        val doc = editableBinaryDocumentOf(
+        val doc = docOf(
             bytes = byteArrayOf(0x01, 0x02, 0x03),
             persister = { saved += it },
         )
 
         // Build a journal that flips byte 0 to 0xFF then byte 2 to 0xEE.
         val journal = Journal(
-            originalHash = "sha256:" + Sha256.hex(byteArrayOf(0x01, 0x02, 0x03)),
+            originalHash = "sha256:" + Sha256.hex(byteArrayOf(0x01, 0x02, 0x03).toCommonByteBuffer()),
             originalLength = 3L,
             entries = listOf(
                 JournalEntry(
@@ -226,7 +235,7 @@ class PieceTableDocumentTest {
     @Test
     fun clearPersistedJournal_invokes_persister_with_null_without_touching_state() {
         val saved = mutableListOf<Journal?>()
-        val doc = editableBinaryDocumentOf(
+        val doc = docOf(
             bytes = byteArrayOf(0x01, 0x02),
             persister = { saved += it },
         )
@@ -254,7 +263,7 @@ class PieceTableDocumentTest {
 
     @Test
     fun snapshot_independence_after_subsequent_edit() {
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x10, 0x20, 0x30))
+        val doc = docOf(byteArrayOf(0x10, 0x20, 0x30))
         val before = doc.snapshot()
 
         doc.edit().apply { replace(1L, 2L, byteArrayOf(0xFF.toByte())); commit() }
@@ -268,7 +277,7 @@ class PieceTableDocumentTest {
 
     @Test
     fun originate_returns_null_for_inserted_bytes() {
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x10, 0x20))
+        val doc = docOf(byteArrayOf(0x10, 0x20))
         doc.edit().apply { insert(1L, byteArrayOf(0xFF.toByte())); commit() }
 
         // Logical layout now: 10 (orig 0) | FF (added) | 20 (orig 1)
@@ -279,7 +288,7 @@ class PieceTableDocumentTest {
 
     @Test
     fun modificationStamp_advances_on_commit_and_undo() {
-        val doc = editableBinaryDocumentOf(byteArrayOf(0x10))
+        val doc = docOf(byteArrayOf(0x10))
         val s0 = doc.modificationStamp
         doc.edit().apply { replace(0L, 1L, byteArrayOf(0xFF.toByte())); commit() }
         val s1 = doc.modificationStamp

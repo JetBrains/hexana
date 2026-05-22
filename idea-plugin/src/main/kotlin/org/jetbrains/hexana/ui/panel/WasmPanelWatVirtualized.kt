@@ -437,11 +437,10 @@ private data class PanelState(
 )
 
 private fun buildPanelState(provider: WasmBinaryProvider): PanelState {
-    // Phase 1 stub: copy provider bytes into a BinaryDocument so the chunk tree
-    // builder has a valid BinaryDocumentSnapshot to attach. Phase 2 plumbs the
-    // document directly so this copy goes away.
-    val bytes = provider.bytes.toByteArray()
-    val snapshot = binaryDocumentOf(bytes).snapshot()
+    // Phase 1 stub: wrap provider bytes in a BinaryDocument so the chunk tree
+    // builder has a valid BinaryDocumentSnapshot to attach. `provider.bytes`
+    // already returns an independent-cursor duplicate, so no copy is required.
+    val snapshot = binaryDocumentOf(provider.bytes).snapshot()
     val parsed = WasmParsedBinary.fromProvider(provider, snapshot)
     return PanelState(
         chunkTree = buildWasmChunkTree(parsed),

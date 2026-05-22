@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.document.journal
 
 import kotlin.io.encoding.Base64
+import org.jetbrains.hexana.io.toCommonByteBuffer
 
 /**
  * Pure replay: takes the immutable original-file bytes and a [Journal], returns
@@ -47,7 +48,7 @@ public object JournalReplay {
             throw JournalReplayException.LengthMismatch(journal.originalLength, originalBytes.size.toLong())
         }
         val expected = journal.originalHash.removePrefix(Journal.ORIGINAL_HASH_PREFIX)
-        val actual = Sha256.hex(originalBytes)
+        val actual = Sha256.hex(originalBytes.toCommonByteBuffer())
         if (!expected.equals(actual, ignoreCase = true)) {
             throw JournalReplayException.HashMismatch(expected, actual)
         }

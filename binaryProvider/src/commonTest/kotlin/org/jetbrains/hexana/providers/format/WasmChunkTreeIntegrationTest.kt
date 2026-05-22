@@ -4,6 +4,7 @@ import org.jetbrains.hexana.document.binaryDocumentOf
 import org.jetbrains.hexana.document.format.BinaryChunk
 import org.jetbrains.hexana.document.format.SymbolKind
 import org.jetbrains.hexana.document.io.toCommonByteBuffer
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -58,13 +59,13 @@ class WasmChunkTreeIntegrationTest {
     )
 
     private fun parsed(): WasmParsedBinary {
-        val snapshot = binaryDocumentOf(minimalWasm).snapshot()
+        val snapshot = binaryDocumentOf(minimalWasm.toCommonByteBuffer()).snapshot()
         val provider = WasmBinaryProvider(snapshot.toCommonByteBuffer())
         return WasmParsedBinary.fromProvider(provider, snapshot)
     }
 
     private fun parsedWithMemory(): WasmParsedBinary {
-        val snapshot = binaryDocumentOf(minimalWasmWithMemory).snapshot()
+        val snapshot = binaryDocumentOf(minimalWasmWithMemory.toCommonByteBuffer()).snapshot()
         val provider = WasmBinaryProvider(snapshot.toCommonByteBuffer())
         return WasmParsedBinary.fromProvider(provider, snapshot)
     }

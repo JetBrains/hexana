@@ -1,12 +1,13 @@
 package org.jetbrains.hexana.providers.format
 
 import org.jetbrains.hexana.document.binaryDocumentOf
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 
 private fun source(vararg b: Int) =
-    binaryDocumentOf(b.map { it.toByte() }.toByteArray()).byteSource()
+    binaryDocumentOf(b.map { it.toByte() }.toByteArray().toCommonByteBuffer()).byteSource()
 
 class LebDecodeTest {
 

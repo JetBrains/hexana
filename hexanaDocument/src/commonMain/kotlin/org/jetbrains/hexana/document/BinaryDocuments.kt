@@ -3,13 +3,14 @@ package org.jetbrains.hexana.document
 import org.jetbrains.hexana.document.internal.ImmutableBinaryDocument
 import org.jetbrains.hexana.document.internal.PieceTableDocument
 import org.jetbrains.hexana.document.journal.JournalPersister
+import org.jetbrains.hexana.io.CommonByteBuffer
 
 /**
- * Creates a read-only [BinaryDocument] backed by [bytes]. The array is **not
+ * Creates a read-only [BinaryDocument] backed by [bytes]. The buffer is **not
  * copied** — callers must not mutate it after handoff. Calls to [BinaryDocument.edit]
  * throw — use [editableBinaryDocumentOf] for a mutable backing.
  */
-public fun binaryDocumentOf(bytes: ByteArray): BinaryDocument = ImmutableBinaryDocument(bytes)
+public fun binaryDocumentOf(bytes: CommonByteBuffer): BinaryDocument = ImmutableBinaryDocument(bytes)
 
 /**
  * Creates an editable [BinaryDocument] backed by a piece table. The original
@@ -23,7 +24,7 @@ public fun binaryDocumentOf(bytes: ByteArray): BinaryDocument = ImmutableBinaryD
  * tests; production callers wire a real UTC clock.
  */
 public fun editableBinaryDocumentOf(
-    bytes: ByteArray,
+    bytes: CommonByteBuffer,
     persister: JournalPersister = JournalPersister.NoOp,
     timestampProvider: () -> String = { "" },
 ): EditableBinaryDocument = PieceTableDocument(bytes, persister, timestampProvider)

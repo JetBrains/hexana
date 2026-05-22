@@ -2,15 +2,20 @@ package org.jetbrains.hexana.document.internal
 
 import org.jetbrains.hexana.document.ByteSource
 import org.jetbrains.hexana.document.ByteSourceCursor
+import org.jetbrains.hexana.io.CommonByteBuffer
 
 /**
- * [ByteSource] backed by a single in-memory [ByteArray]. The array is not
+ * [ByteSource] backed by an in-memory [CommonByteBuffer]. The buffer is not
  * copied — callers must not mutate it after handoff. Suitable for documents
- * whose total length fits in [Int.MAX_VALUE] (~2 GB); Phase 2 introduces an
- * mmap-backed source for larger files.
+ * whose total length fits in [Int.MAX_VALUE] (~2 GB); a Phase 2 mmap-backed
+ * source covers larger files.
+ *
+ * Reads are cursor-safe: bulk [read] takes a [CommonByteBuffer.duplicate] so
+ * concurrent readers (e.g. snapshots inspected from different threads) never
+ * share the underlying buffer's position cursor.
  */
-internal class ByteArrayByteSource(
-    private val bytes: ByteArray,
+internal class CommonByteBufferByteSource(
+    private val bytes: CommonByteBuffer,
 ) : ByteSource {
     override val length: Long = bytes.size.toLong()
 
@@ -29,7 +34,7 @@ internal class ByteArrayByteSource(
         if (dstOff < 0 || dstOff + length > dst.size) {
             throw IndexOutOfBoundsException("dst range [$dstOff, ${dstOff + length}) out of [0, ${dst.size})")
         }
-        bytes.copyInto(dst, dstOff, offset.toInt(), offset.toInt() + length)
+        bytes.duplicate().position(offset.toInt()).get(dst, dstOff, length)
     }
 
     override fun cursor(at: Long): ByteSourceCursor = DefaultByteSourceCursor(this, at)

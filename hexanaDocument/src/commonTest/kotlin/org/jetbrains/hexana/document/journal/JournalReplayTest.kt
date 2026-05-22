@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import org.jetbrains.hexana.io.toCommonByteBuffer
 
 /**
  * Replay correctness. Tests the logical-offset semantics that the design spec
@@ -14,7 +15,7 @@ import kotlin.test.assertTrue
 class JournalReplayTest {
 
     private fun journalFor(original: ByteArray, entries: List<JournalEntry>): Journal = Journal(
-        originalHash = Journal.ORIGINAL_HASH_PREFIX + Sha256.hex(original),
+        originalHash = Journal.ORIGINAL_HASH_PREFIX + Sha256.hex(original.toCommonByteBuffer()),
         originalLength = original.size.toLong(),
         entries = entries,
     )
@@ -141,7 +142,7 @@ class JournalReplayTest {
     fun rejects_mismatched_length() {
         val original = byteArrayOf(0x01, 0x02, 0x03)
         val journal = Journal(
-            originalHash = "sha256:" + Sha256.hex(original),
+            originalHash = "sha256:" + Sha256.hex(original.toCommonByteBuffer()),
             originalLength = 999L, // wrong length, fails before hash even runs
             entries = emptyList(),
         )

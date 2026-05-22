@@ -1,10 +1,17 @@
 package org.jetbrains.hexana.document.journal
 
+import org.jetbrains.hexana.io.CommonByteBuffer
+
 /**
  * Pure-Kotlin SHA-256 (FIPS 180-4) — used to bind a journal to its original
  * file's bytes. Multiplatform, sync, no `kotlinx.crypto` / `MessageDigest`
  * dependency. Hot path is one call per document open, so the implementation
  * is straightforward rather than tuned.
+ *
+ * Reads the input via [CommonByteBuffer]'s absolute random-access [get] so
+ * the caller's cursor is left untouched and no 50MB+ scratch copy of the
+ * input is materialized — only a single 64- or 128-byte tail buffer is
+ * allocated for the final padded block(s).
  *
  * Verified against NIST test vectors in `Sha256Test`.
  */
@@ -37,7 +44,7 @@ internal object Sha256 {
     )
 
     /** Returns the SHA-256 digest of [input] as a 64-character lowercase hex string. */
-    fun hex(input: ByteArray): String {
+    fun hex(input: CommonByteBuffer): String {
         val digest = digest(input)
         val sb = StringBuilder(64)
         for (b in digest) {
@@ -51,56 +58,52 @@ internal object Sha256 {
     private val HEX = "0123456789abcdef".toCharArray()
 
     /** Returns the raw 32-byte digest of [input]. */
-    fun digest(input: ByteArray): ByteArray {
-        // -- Pad ----------------------------------------------------------------
-        // Append 0x80, then zero bytes, then 8-byte big-endian bit-length, so
-        // total length is a multiple of 64 bytes.
-        val bitLength = input.size.toLong() * 8L
-        val withPadOne = input.size + 1
-        // We need (withPadOne + zeros + 8) % 64 == 0  ⇒  zeros = (-withPadOne - 8) mod 64.
-        val zerosNeeded = ((PAD_TARGET - (withPadOne + LENGTH_FIELD_BYTES) % PAD_TARGET) % PAD_TARGET)
-        val padded = ByteArray(withPadOne + zerosNeeded + LENGTH_FIELD_BYTES)
-        input.copyInto(padded)
-        padded[input.size] = 0x80.toByte()
-        // bit-length goes in the last 8 bytes, big-endian
+    fun digest(input: CommonByteBuffer): ByteArray {
+        val totalBytes = input.size
+        val bitLength = totalBytes.toLong() * 8L
+
+        val h = H0.copyOf()
+        val w = IntArray(64)
+
+        // -- Process every fully-occupied 64-byte block by reading bytes
+        //    directly from the input buffer; no full-input copy is made.
+        val fullBlocks = totalBytes / PAD_TARGET
+        for (block in 0 until fullBlocks) {
+            val blockStart = block * PAD_TARGET
+            for (i in 0 until 16) {
+                val o = blockStart + i * 4
+                w[i] = ((input[o].toInt() and 0xFF) shl 24) or
+                    ((input[o + 1].toInt() and 0xFF) shl 16) or
+                    ((input[o + 2].toInt() and 0xFF) shl 8) or
+                    (input[o + 3].toInt() and 0xFF)
+            }
+            compress(h, w)
+        }
+
+        // -- Tail: copy the trailing 0..63 bytes into a 64- or 128-byte scratch,
+        //    append 0x80, zero pad, then the 8-byte big-endian bit length.
+        val tailStart = fullBlocks * PAD_TARGET
+        val tailLen = totalBytes - tailStart
+        val zerosNeeded = (PAD_TARGET - (tailLen + 1 + LENGTH_FIELD_BYTES) % PAD_TARGET) % PAD_TARGET
+        val tail = ByteArray(tailLen + 1 + zerosNeeded + LENGTH_FIELD_BYTES)
+        for (i in 0 until tailLen) tail[i] = input[tailStart + i]
+        tail[tailLen] = 0x80.toByte()
         var bl = bitLength
         for (i in 7 downTo 0) {
-            padded[padded.size - 8 + i] = (bl and 0xFF).toByte()
+            tail[tail.size - 8 + i] = (bl and 0xFF).toByte()
             bl = bl ushr 8
         }
 
-        // -- Process 512-bit blocks -------------------------------------------
-        val h = H0.copyOf()
-        val w = IntArray(64)
         var blockStart = 0
-        while (blockStart < padded.size) {
-            // Load schedule words W[0..15] big-endian from this block.
+        while (blockStart < tail.size) {
             for (i in 0 until 16) {
                 val o = blockStart + i * 4
-                w[i] = ((padded[o].toInt() and 0xFF) shl 24) or
-                    ((padded[o + 1].toInt() and 0xFF) shl 16) or
-                    ((padded[o + 2].toInt() and 0xFF) shl 8) or
-                    (padded[o + 3].toInt() and 0xFF)
+                w[i] = ((tail[o].toInt() and 0xFF) shl 24) or
+                    ((tail[o + 1].toInt() and 0xFF) shl 16) or
+                    ((tail[o + 2].toInt() and 0xFF) shl 8) or
+                    (tail[o + 3].toInt() and 0xFF)
             }
-            // Extend to W[16..63].
-            for (i in 16 until 64) {
-                val s0 = w[i - 15].rotateRight(7) xor w[i - 15].rotateRight(18) xor (w[i - 15] ushr 3)
-                val s1 = w[i - 2].rotateRight(17) xor w[i - 2].rotateRight(19) xor (w[i - 2] ushr 10)
-                w[i] = w[i - 16] + s0 + w[i - 7] + s1
-            }
-            var a = h[0]; var b = h[1]; var c = h[2]; var d = h[3]
-            var e = h[4]; var f = h[5]; var g = h[6]; var hh = h[7]
-            for (i in 0 until 64) {
-                val s1 = e.rotateRight(6) xor e.rotateRight(11) xor e.rotateRight(25)
-                val ch = (e and f) xor (e.inv() and g)
-                val t1 = hh + s1 + ch + K[i] + w[i]
-                val s0 = a.rotateRight(2) xor a.rotateRight(13) xor a.rotateRight(22)
-                val mj = (a and b) xor (a and c) xor (b and c)
-                val t2 = s0 + mj
-                hh = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2
-            }
-            h[0] += a; h[1] += b; h[2] += c; h[3] += d
-            h[4] += e; h[5] += f; h[6] += g; h[7] += hh
+            compress(h, w)
             blockStart += PAD_TARGET
         }
 
@@ -114,6 +117,28 @@ internal object Sha256 {
             out[i * 4 + 3] = v.toByte()
         }
         return out
+    }
+
+    private fun compress(h: IntArray, w: IntArray) {
+        // Extend the schedule to W[16..63].
+        for (i in 16 until 64) {
+            val s0 = w[i - 15].rotateRight(7) xor w[i - 15].rotateRight(18) xor (w[i - 15] ushr 3)
+            val s1 = w[i - 2].rotateRight(17) xor w[i - 2].rotateRight(19) xor (w[i - 2] ushr 10)
+            w[i] = w[i - 16] + s0 + w[i - 7] + s1
+        }
+        var a = h[0]; var b = h[1]; var c = h[2]; var d = h[3]
+        var e = h[4]; var f = h[5]; var g = h[6]; var hh = h[7]
+        for (i in 0 until 64) {
+            val s1 = e.rotateRight(6) xor e.rotateRight(11) xor e.rotateRight(25)
+            val ch = (e and f) xor (e.inv() and g)
+            val t1 = hh + s1 + ch + K[i] + w[i]
+            val s0 = a.rotateRight(2) xor a.rotateRight(13) xor a.rotateRight(22)
+            val mj = (a and b) xor (a and c) xor (b and c)
+            val t2 = s0 + mj
+            hh = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2
+        }
+        h[0] += a; h[1] += b; h[2] += c; h[3] += d
+        h[4] += e; h[5] += f; h[6] += g; h[7] += hh
     }
 
     private const val PAD_TARGET: Int = 64

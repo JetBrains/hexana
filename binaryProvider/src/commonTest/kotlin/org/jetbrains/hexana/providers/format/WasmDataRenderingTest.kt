@@ -7,6 +7,7 @@ import kotlin.test.assertTrue
 import org.jetbrains.hexana.document.binaryDocumentOf
 import org.jetbrains.hexana.document.format.BinaryChunk
 import org.jetbrains.hexana.document.io.toCommonByteBuffer
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 
 /**
@@ -64,7 +65,7 @@ class WasmDataRenderingTest {
     )
 
     private fun parsed(bytes: ByteArray): WasmParsedBinary {
-        val snapshot = binaryDocumentOf(bytes).snapshot()
+        val snapshot = binaryDocumentOf(bytes.toCommonByteBuffer()).snapshot()
         val provider = WasmBinaryProvider(snapshot.toCommonByteBuffer())
         return WasmParsedBinary.fromProvider(provider, snapshot)
     }

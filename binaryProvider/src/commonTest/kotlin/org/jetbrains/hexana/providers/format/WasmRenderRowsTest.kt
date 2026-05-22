@@ -3,6 +3,7 @@ package org.jetbrains.hexana.providers.format
 import org.jetbrains.hexana.document.binaryDocumentOf
 import org.jetbrains.hexana.document.format.BinaryChunk
 import org.jetbrains.hexana.document.io.toCommonByteBuffer
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
 import kotlin.test.Test
@@ -41,7 +42,7 @@ class WasmRenderRowsTest {
     )
 
     private fun parsed(): WasmParsedBinary {
-        val snapshot = binaryDocumentOf(moduleBytes).snapshot()
+        val snapshot = binaryDocumentOf(moduleBytes.toCommonByteBuffer()).snapshot()
         val provider = WasmBinaryProvider(snapshot.toCommonByteBuffer())
         return WasmParsedBinary.fromProvider(provider, snapshot)
     }
@@ -135,7 +136,7 @@ class WasmRenderRowsTest {
     )
 
     private fun parsedWithLocals(): WasmParsedBinary {
-        val snapshot = binaryDocumentOf(moduleWithLocalsBytes).snapshot()
+        val snapshot = binaryDocumentOf(moduleWithLocalsBytes.toCommonByteBuffer()).snapshot()
         val provider = WasmBinaryProvider(snapshot.toCommonByteBuffer())
         return WasmParsedBinary.fromProvider(provider, snapshot)
     }

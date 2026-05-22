@@ -13,6 +13,7 @@ import org.jetbrains.hexana.document.journal.JournalEntry
 import org.jetbrains.hexana.document.journal.JournalOp
 import org.jetbrains.hexana.document.journal.JournalPersister
 import org.jetbrains.hexana.document.journal.Sha256
+import org.jetbrains.hexana.io.CommonByteBuffer
 
 /**
  * Editable [BinaryDocument] backed by a piece table. Implements the editing
@@ -33,7 +34,7 @@ import org.jetbrains.hexana.document.journal.Sha256
  *   real one before persisting).
  */
 internal class PieceTableDocument(
-    private val original: ByteArray,
+    private val original: CommonByteBuffer,
     private val persister: JournalPersister = JournalPersister.NoOp,
     private val timestampProvider: () -> String = { "" },
 ) : EditableBinaryDocument {
