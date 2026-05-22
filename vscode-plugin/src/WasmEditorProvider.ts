@@ -170,6 +170,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 webviewPanel.webview.postMessage({
                     type: "load-wasm",
                     fileName: document.displayName ?? document.uri.fsPath,
+                    filePath: document.uri.fsPath,
                     data: Array.from(document.data),
                     wasmRuntime: getSelectedRuntime(),
                 });

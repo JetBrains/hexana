@@ -15,6 +15,7 @@ import org.w3c.dom.events.Event
 data class VscodeMessage(
     val type: String,
     val fileName: String = "",
+    val filePath: String = "",
     val data: ByteArray? = null,
     val wasmRuntime: String? = null,
 )
@@ -205,6 +206,7 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                         VscodeMessage(
                             type = type,
                             fileName = (data.fileName as? String) ?: "",
+                            filePath = (data.filePath as? String) ?: "",
                             data = byteArray,
                             wasmRuntime = (data.wasmRuntime as? String),
                         )

@@ -12,6 +12,7 @@ import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.providers.nativeOrGenericBinaryProvider
 
 fun main() {
     renderComposable(rootElementId = "root") {
@@ -23,11 +24,13 @@ fun main() {
 fun WasmEditorApp() {
     var wasmBytes by remember { mutableStateOf<ByteArray?>(null) }
     var fileName by remember { mutableStateOf("") }
+    var filePath by remember { mutableStateOf("") }
 
     VscodeMessageListener { message ->
         when (message.type) {
             "load-wasm" -> {
                 fileName = message.fileName
+                filePath = message.filePath
                 wasmBytes = message.data
                 configuredRuntimeId = message.wasmRuntime
             }
@@ -45,7 +48,7 @@ fun WasmEditorApp() {
         val provider = when (WasmBinaryProviderSelector.select(buffer)) {
             BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
             BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
-            BinaryProviderType.Generic -> GenericBinaryProvider(buffer)
+            else -> nativeOrGenericBinaryProvider(buffer, filePath)
         }
 
         WasmEditorContent(
