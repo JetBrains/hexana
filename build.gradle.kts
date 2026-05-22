@@ -52,6 +52,43 @@ plugins.withType<WasmNodeJsRootPlugin> {
     }
 }
 
+// Aggregator task driven by ci-configuration's `Tests` build configuration.
+// The TeamCity DSL probes for this task and, when present, uses it in place of the
+// hardcoded per-module list in `.teamcity/legacy/ReleaseZeroNineFallback.kt`.
+// Keep this list synchronised with that file until the fallback is removed; the list
+// must travel with the code branch so release branches stay self-contained.
+tasks.register("teamcityCiTests") {
+    group = "verification"
+    description = "Aggregate every subproject's test surface for the TeamCity Tests build."
+    val taskPaths = listOf(
+        ":analytics:allTests",
+        ":binaryProvider:allTests",
+        ":debugInfo:dwarf:allTests",
+        ":disassembly:capstone-wasm:allTests",
+        ":disassembly:core:allTests",
+        ":disassembly:llvm-objdump:test",
+        ":encdec:allTests",
+        ":hexanaDocument:allTests",
+        ":jvm-jit:allTests",
+        ":mcp:tools-generator:test",
+        ":parsing:common:allTests",
+        ":parsing:elf:allTests",
+        ":parsing:javaBytecode:allTests",
+        ":parsing:macho:allTests",
+        ":parsing:pe:allTests",
+        ":parsing:zip:allTests",
+        ":plugins-shared:allTests",
+        ":vscode-plugin:extension-lib:allTests",
+        ":wasmParser:allTests",
+        ":idea-plugin:test",
+        ":mcp:core:build",
+        ":mcp:server:test",
+        ":mcp:server:integrationTest",
+        ":mcp:vscode-server:test",
+    )
+    taskPaths.forEach { dependsOn(it) }
+}
+
 subprojects {
     val ignoreTestFailuresOnTeamCity = providers.gradleProperty("teamcityIgnoreTestFailures")
         .map(String::toBoolean)
