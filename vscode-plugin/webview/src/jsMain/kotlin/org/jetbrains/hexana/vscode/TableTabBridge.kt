@@ -1,6 +1,12 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.web.css.Color
 import org.jetbrains.compose.web.css.color
 import org.jetbrains.compose.web.dom.Div
@@ -118,13 +124,44 @@ fun TableTabContent(
         if (descriptor.defaultSortAscending) SortDirection.ASC else SortDirection.DESC
     } else SortDirection.NONE
 
+    // Render rows incrementally in batches to avoid blocking the browser
+    // main thread when the table has thousands of entries.
+    val initialBatch = 100
+    val batchSize = 300
+    var renderedCount by remember(descriptor) { mutableStateOf(minOf(initialBatch, descriptor.rowCount)) }
+
+    LaunchedEffect(descriptor, renderedCount) {
+        if (renderedCount < descriptor.rowCount) {
+            // Yield to the browser between batches so the UI stays responsive.
+            delay(1)
+            renderedCount = minOf(renderedCount + batchSize, descriptor.rowCount)
+        }
+    }
+
+    val isLoading = renderedCount < descriptor.rowCount
+
     SearchableTable(
         headers = headers,
         columnAligns = aligns,
         defaultSortColumn = resolvedSortColumn,
         defaultSortDirection = resolvedSortDirection,
+        footer = if (isLoading) {
+            {
+                Div({
+                    classes("loading-hint")
+                    style {
+                        property("text-align", "center")
+                        property("padding", "8px 0")
+                        property("opacity", "0.7")
+                        property("font-size", "12px")
+                    }
+                }) {
+                    Text("Loading rows $renderedCount / ${descriptor.rowCount}\u2026")
+                }
+            }
+        } else null,
     ) {
-        for (index in 0 until descriptor.rowCount) {
+        for (index in 0 until renderedCount) {
             val selData = descriptor.rowSelectionProvider(index)
             val isHighlighted = selData != null && selection.hasSelection &&
                 selection.selectionStart == selData.offset &&
@@ -163,6 +200,7 @@ fun TableTabContent(
                 }
 
                 // Data columns
+                val firstColumn = descriptor.columns.firstOrNull()
                 for (col in descriptor.columns) {
                     val cell = col.cellProvider(index)
                     val cssClass = when (col.widthBehavior) {
@@ -171,7 +209,7 @@ fun TableTabContent(
                         is ColumnWidth.MeasuredMin -> "cell"
                     }
 
-                    if (descriptor.rowClickAction != null && col == descriptor.columns.first()) {
+                    if (descriptor.rowClickAction != null && col === firstColumn) {
                         // Clickable link style for rows with a custom click action (e.g. Modules)
                         Td({
                             classes(cssClass)

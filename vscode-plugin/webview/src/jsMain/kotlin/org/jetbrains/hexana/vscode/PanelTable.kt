@@ -47,6 +47,7 @@ internal fun SearchableTable(
     columnAligns: List<String> = emptyList(),
     defaultSortColumn: Int = headers.indexOf("ID").takeIf { it >= 0 } ?: -1,
     defaultSortDirection: SortDirection = SortDirection.ASC,
+    footer: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     var searchVisible by remember { mutableStateOf(false) }
@@ -106,6 +107,10 @@ internal fun SearchableTable(
                 sortState = sortState,
                 content = content,
             )
+        }
+
+        if (footer != null) {
+            footer()
         }
 
         // Re-apply the filter and sort whenever the query or sort state changes.
