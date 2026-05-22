@@ -128,10 +128,10 @@
     "customEditors": [
       {
         "viewType": "hexana.wasmEditor",
-        "displayName": "Hexana Wasm Editor",
+        "displayName": "Hexana Editor",
         "selector": [
           {
-            "filenamePattern": "*.wasm"
+            "filenamePattern": "{*.wasm,*.bin,*.elf,*.exe,*.so,*.o,*.a,*.dll,*.dylib}"
           }
         ],
         "priority": "default"
@@ -227,7 +227,7 @@
     },
     "configurationDefaults": {
       "workbench.editorAssociations": {
-        "*.wasm": "hexana.wasmEditor"
+        "{*.wasm,*.bin,*.elf,*.exe,*.so,*.o,*.a,*.dll,*.dylib}": "hexana.wasmEditor"
       }
     }
   },
