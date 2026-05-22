@@ -39,24 +39,27 @@ kotlin {
 // -----------------------------------------------------------------------------
 // JVMTI agent — built via CMake out of jvmti-agent/.
 //
-// Two-step pipeline:
-//   1. buildJitviewAgent  — cmake-builds libjitview.{dylib,so,dll}.
-//   2. bundleJitviewAgent — copies the artifact into a generated resources
-//      tree (`native/<os-tag>/libjitview.<ext>`), which is then included in
-//      jvmMain.resources so the file ships inside the jvm jar (and through
-//      that, in the IntelliJ plugin).
+// Three-step pipeline:
+//   1. configureJitviewAgent — runs `cmake <src>` to generate the build tree.
+//   2. buildJitviewAgent     — runs `cmake --build .` to produce
+//      libjitview.{dylib,so,dll}.
+//   3. bundleJitviewAgent    — copies the artifact into a generated
+//      resources tree (`native/<os-tag>/libjitview.<ext>`), which is then
+//      included in jvmMain.resources so the file ships inside the jvm jar
+//      (and through that, in the IntelliJ plugin).
 //
-// Both tasks are allowed to fail silently when cmake / JDK headers aren't
-// available — downstream callers detect the missing slice and skip rather
-// than break the build for hosts that can't produce native code.
+// Native build failures propagate as task failures so CI (per-OS slice
+// builds) goes red when the toolchain is missing or the C source doesn't
+// compile, instead of silently publishing nothing and breaking downstream
+// consumers at artifact-resolution time.
 // -----------------------------------------------------------------------------
 
 val agentSourceDir = layout.projectDirectory.dir("jvmti-agent")
 val agentBuildDir = layout.buildDirectory.dir("jvmti-agent")
 val agentNativeResourcesDir = layout.buildDirectory.dir("generated/jvm-jit-native-resources")
 
-val buildJitviewAgent by tasks.registering(Exec::class) {
-    description = "Builds the JVMTI agent (libjitview.{dylib,so,dll}) via CMake."
+val configureJitviewAgent by tasks.registering(Exec::class) {
+    description = "Configures the JVMTI agent CMake build tree."
     inputs.dir(agentSourceDir)
     outputs.dir(agentBuildDir)
 
@@ -67,14 +70,20 @@ val buildJitviewAgent by tasks.registering(Exec::class) {
     doFirst { agentBuildDir.get().asFile.mkdirs() }
 
     workingDir = agentBuildDir.get().asFile
-    commandLine(
-        "sh", "-c",
-        "cmake \"${agentSourceDir.asFile.absolutePath}\" -DCMAKE_BUILD_TYPE=Release " +
-            "&& cmake --build .",
-    )
-    // Don't fail the wider build when cmake is unavailable — the integration
-    // test and the runtime locator both detect a missing artifact and skip.
-    isIgnoreExitValue = true
+    // Invoke cmake directly rather than through `sh -c`: Windows agents
+    // resolve `sh` only inside Git's bundled bash, which doesn't have
+    // cmake on its PATH, so the shelled-out invocation silently fails.
+    commandLine("cmake", agentSourceDir.asFile.absolutePath, "-DCMAKE_BUILD_TYPE=Release")
+}
+
+val buildJitviewAgent by tasks.registering(Exec::class) {
+    description = "Builds the JVMTI agent (libjitview.{dylib,so,dll}) via CMake."
+    dependsOn(configureJitviewAgent)
+    inputs.dir(agentSourceDir)
+    outputs.dir(agentBuildDir)
+
+    workingDir = agentBuildDir.get().asFile
+    commandLine("cmake", "--build", ".", "--config", "Release")
 }
 
 /**
@@ -115,9 +124,6 @@ val bundleJitviewAgent by tasks.registering(Copy::class) {
         include(libName)
     }
     into(agentNativeResourcesDir.map { it.dir("native").dir(tag) })
-    // If the cmake step didn't produce the file (no cmake / no JDK headers),
-    // we just produce an empty `native/<tag>/` directory and the locator
-    // gracefully returns null at runtime.
     doFirst { agentNativeResourcesDir.get().asFile.mkdirs() }
 }
 

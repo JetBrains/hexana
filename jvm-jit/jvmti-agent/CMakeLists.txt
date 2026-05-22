@@ -27,7 +27,12 @@ if(WIN32)
   target_link_libraries(jitview Ws2_32 Psapi)
 else()
   if(LINUX)
-    add_definitions(-D_DEFAULT_SOURCE)
+    # _GNU_SOURCE is required for glibc to expose dl_phdr_info and
+    # dl_iterate_phdr from <link.h> — they are gated by __USE_GNU, which
+    # _DEFAULT_SOURCE alone does not set. Without this the agent.c
+    # enumerate_libraries() path fails to compile with
+    # "invalid use of undefined type 'struct dl_phdr_info'".
+    add_definitions(-D_GNU_SOURCE)
   endif(LINUX)
   target_include_directories(jitview PRIVATE ${CMAKE_JAVA_HOME}/include/$<LOWER_CASE:$<PLATFORM_ID>>)
 endif()
