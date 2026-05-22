@@ -5,7 +5,7 @@ import java.util.Base64
 
 buildscript {
     repositories {
-        mavenCentral()
+        maven("https://cache-redirector.jetbrains.com/maven-central")
     }
     dependencies {
         // Used by the aotCompileDisassemblerWasm task below.

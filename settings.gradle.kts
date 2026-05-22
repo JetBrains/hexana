@@ -11,8 +11,13 @@ pluginManagement {
                 includeGroupAndSubgroups("com.google")
             }
         }
-        gradlePluginPortal()
-        mavenCentral()
+        // Route Maven Central and the Gradle Plugin Portal through the
+        // JetBrains cache-redirector. Direct access to repo.maven.apache.org
+        // and plugins.gradle.org from TeamCity agents is rate-limited and
+        // returns HTTP 429, breaking dependency resolution. See INTERNAL-TICKET /
+        // INTERNAL-TICKET and #infra-channel.
+        maven("https://cache-redirector.jetbrains.com/plugins.gradle.org/m2")
+        maven("https://cache-redirector.jetbrains.com/maven-central")
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
     }
 }

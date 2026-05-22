@@ -6,7 +6,7 @@ plugins {
 }
 
 repositories {
-    mavenCentral()
+    maven(url = "https://cache-redirector.jetbrains.com/maven-central")
     maven(url = "https://cache-redirector.jetbrains.com/intellij-dependencies")
     maven(url = "https://www.jetbrains.com/intellij-repository/releases")
     maven(url = "https://www.jetbrains.com/intellij-repository/snapshots")
