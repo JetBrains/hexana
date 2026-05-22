@@ -25,6 +25,11 @@ if(WIN32)
   # Psapi: EnumProcessModules / GetModuleInformation used by enumerate_libraries
   #        when dump_libraries is active. Both MSVC and MinGW accept these names.
   target_link_libraries(jitview Ws2_32 Psapi)
+  # MinGW's cmake default would emit `libjitview.dll`; the published artifact
+  # path (and JitviewAgentLocator's expected file) is `jitview.dll`. MSVC does
+  # not add the `lib` prefix on its own, so clearing it here is a no-op there
+  # and the fix for the MinGW cross-compile path.
+  set_target_properties(jitview PROPERTIES PREFIX "")
 else()
   # Match Linux explicitly via CMAKE_SYSTEM_NAME — the shorthand `LINUX`
   # variable was only added in CMake 3.25, and our minimum is 3.16, so on

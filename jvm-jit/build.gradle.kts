@@ -58,13 +58,35 @@ val agentSourceDir = layout.projectDirectory.dir("jvmti-agent")
 val agentBuildDir = layout.buildDirectory.dir("jvmti-agent")
 val agentNativeResourcesDir = layout.buildDirectory.dir("generated/jvm-jit-native-resources")
 
+// Cross-compile selector. When set to a known target (currently only
+// `windows-x86_64`), the build runs on a non-matching host (typically Linux)
+// and emits a Windows DLL using a mingw-w64 toolchain. Pass via Gradle prop:
+//   ./gradlew :jvm-jit:buildJitviewAgent -Pjvm-jit.crossTarget=windows-x86_64
+// The TeamCity `BuildJitviewAgentWindowsX64` slice sets this and apt-installs
+// the toolchain before invoking Gradle (the Default Windows agent pool has
+// no cmake / MSVC, so we cross-compile from Linux instead).
+val crossTarget: String? = providers.gradleProperty("jvm-jit.crossTarget").orNull
+val crossToolchainFile: java.io.File? = when (crossTarget) {
+    null -> null
+    "windows-x86_64" -> agentSourceDir.file("cmake/mingw-w64-x86_64.toolchain.cmake").asFile
+    else -> error("Unsupported jvm-jit.crossTarget: $crossTarget")
+}
+
 val configureJitviewAgent by tasks.registering(Exec::class) {
     description = "Configures the JVMTI agent CMake build tree."
     inputs.dir(agentSourceDir)
     outputs.dir(agentBuildDir)
 
-    val javaHome = System.getenv("JAVA_HOME")
-        ?: System.getProperty("java.home")
+    // When cross-compiling we need the *target* JDK's JNI headers (jni_md.h
+    // is platform-specific), not the host's. The TeamCity step exports
+    // WIN_JDK_HOME pointing at an extracted Windows JDK 17.
+    val javaHome = if (crossTarget != null) {
+        System.getenv("WIN_JDK_HOME")
+            ?: error("WIN_JDK_HOME must be set when jvm-jit.crossTarget=$crossTarget")
+    } else {
+        System.getenv("JAVA_HOME")
+            ?: System.getProperty("java.home")
+    }
     environment("JAVA_HOME", javaHome)
 
     doFirst { agentBuildDir.get().asFile.mkdirs() }
@@ -73,7 +95,12 @@ val configureJitviewAgent by tasks.registering(Exec::class) {
     // Invoke cmake directly rather than through `sh -c`: Windows agents
     // resolve `sh` only inside Git's bundled bash, which doesn't have
     // cmake on its PATH, so the shelled-out invocation silently fails.
-    commandLine("cmake", agentSourceDir.asFile.absolutePath, "-DCMAKE_BUILD_TYPE=Release")
+    commandLine(buildList {
+        add("cmake")
+        add(agentSourceDir.asFile.absolutePath)
+        add("-DCMAKE_BUILD_TYPE=Release")
+        crossToolchainFile?.let { add("-DCMAKE_TOOLCHAIN_FILE=${it.absolutePath}") }
+    })
 }
 
 val buildJitviewAgent by tasks.registering(Exec::class) {
