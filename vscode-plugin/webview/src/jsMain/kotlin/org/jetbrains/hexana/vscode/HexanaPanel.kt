@@ -49,9 +49,11 @@ fun HexanaPanel(
     val tabs = remember(provider, fileName) {
         buildList {
             // Summary is always first
-            add(PanelTab(FixedTab.Summary.label) { sel ->
-                SummaryTabContent(provider, sel)
-            })
+            if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
+                add(PanelTab(FixedTab.Summary.label) { sel ->
+                    SummaryTabContent(provider, sel)
+                })
+            }
 
             val enricher = provider.getTabsEnricher()
             val commonTabs = TableTabsProviderRegistry.providers.flatMap { p ->
