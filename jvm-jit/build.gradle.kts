@@ -72,8 +72,31 @@ val crossToolchainFile: java.io.File? = when (crossTarget) {
     else -> error("Unsupported jvm-jit.crossTarget: $crossTarget")
 }
 
+// Probe for cmake on PATH at configuration time. When cmake is absent and
+// this isn't a CI slice that explicitly needs it (no crossTarget set), the
+// native-build tasks disable themselves and the bundle step produces an
+// empty `native/<tag>/` resource directory. `JitviewAgentLocator` returns
+// null at runtime when nothing is on the classpath, so tests still pass.
+//
+// CI slice builds set `-Pjvm-jit.crossTarget=…` (cross-compile) or run on
+// agents that have cmake installed; in both cases this probe is true and
+// any cmake/compile failure propagates as a task failure (no more silent
+// green-with-no-artifact). The Tests build configuration does neither, so
+// agents without cmake skip the native build cleanly.
+val cmakeAvailable: Boolean = try {
+    ProcessBuilder("cmake", "--version")
+        .redirectErrorStream(true)
+        .start()
+        .also { it.inputStream.readAllBytes() }
+        .waitFor() == 0
+} catch (_: Throwable) {
+    false
+}
+val nativeBuildEnabled: Boolean = crossTarget != null || cmakeAvailable
+
 val configureJitviewAgent by tasks.registering(Exec::class) {
     description = "Configures the JVMTI agent CMake build tree."
+    enabled = nativeBuildEnabled
     inputs.dir(agentSourceDir)
     outputs.dir(agentBuildDir)
 
@@ -105,6 +128,7 @@ val configureJitviewAgent by tasks.registering(Exec::class) {
 
 val buildJitviewAgent by tasks.registering(Exec::class) {
     description = "Builds the JVMTI agent (libjitview.{dylib,so,dll}) via CMake."
+    enabled = nativeBuildEnabled
     dependsOn(configureJitviewAgent)
     inputs.dir(agentSourceDir)
     outputs.dir(agentBuildDir)
