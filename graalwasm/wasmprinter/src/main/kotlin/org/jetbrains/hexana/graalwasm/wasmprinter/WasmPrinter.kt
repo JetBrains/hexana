@@ -14,7 +14,7 @@ internal class WasmPrinter(
     val foldInstructions: Boolean = true,
     val nameUnnamed: Boolean = true,
     val printOffsets: Boolean = false
-) {
+) : AutoCloseable {
     private val context: Context = initWasmContext()
     private val module: Value
     private val memory: WasmModuleMemory
@@ -77,6 +77,12 @@ internal class WasmPrinter(
 
         return WatWithWarnings(out.toByteArray().decodeToString(),
             warning.toByteArray().decodeToString().takeIf { it.isNotEmpty() })
+    }
+
+    // Releases the underlying polyglot Context. See the matching comment on
+    // [org.jetbrains.hexana.graalwasm.wat2wasm.Wat2Wasm.close].
+    override fun close() {
+        context.close()
     }
 }
 
