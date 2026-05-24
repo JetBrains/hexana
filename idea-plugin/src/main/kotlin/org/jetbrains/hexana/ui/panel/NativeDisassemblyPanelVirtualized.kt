@@ -9,8 +9,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
@@ -19,20 +23,29 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.intellij.icons.AllIcons
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.disassembly.capstone.CapstoneWasmDisassembler
@@ -57,11 +70,18 @@ import org.jetbrains.hexana.parsing.common.NativeBinaryWordSize
 import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.providers.NativeStringRecord
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.CircularProgressIndicator
+import org.jetbrains.jewel.ui.component.DefaultButton
+import org.jetbrains.jewel.ui.component.Icon
+import org.jetbrains.jewel.ui.component.IconButton
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.TextField
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
+import org.jetbrains.jewel.ui.theme.colorPalette
 
 // ---------------------------------------------------------------------------
 // Disassembly model (self-contained)
@@ -710,6 +730,316 @@ private fun syntaxLabel(syntax: AssemblySyntax): String = when (syntax) {
     AssemblySyntax.RISC_V_GAS -> "GAS"
 }
 
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+
+internal sealed interface DisasmSearchResult {
+    val label: String
+    val detail: String
+    val chunkId: ChunkId
+
+    data class Symbol(
+        override val label: String,
+        override val detail: String,
+        override val chunkId: ChunkId,
+    ) : DisasmSearchResult
+
+    data class StringHit(
+        override val label: String,
+        override val detail: String,
+        override val chunkId: ChunkId,
+    ) : DisasmSearchResult
+}
+
+/**
+ * Finds the FUNCTION_BODY chunk whose byteRange contains [offset]. We walk
+ * only Element chunks with kind FUNCTION_BODY rather than using the generic
+ * [ChunkTree.chunkContainingByte] because the top-level TEXT SectionHeader
+ * also covers the whole .text extent and would shadow every offset.
+ */
+private fun NativeDisasmChunkTree.findFunctionBodyContaining(offset: Long): ChunkId? {
+    for (i in 0 until totalChunks) {
+        val chunk = chunkAt(i)
+        if (chunk is BinaryChunk.Element && chunk.kind == DisasmSectionKinds.FUNCTION_BODY) {
+            if (offset in chunk.byteRange) return chunk.id
+        }
+    }
+    return null
+}
+
+/**
+ * Mirrors the VirtualizedDisasmListing render loop exactly — same hideAll /
+ * hideBody logic, same items that produce a stickyHeader or item call — so the
+ * returned index is the LazyColumn item index that [target] occupies after
+ * [folded] is applied. Returns null when [target] is not visible (hidden by a
+ * fold or not present in the tree).
+ */
+private fun NativeDisasmChunkTree.computeLazyItemIndex(folded: Set<ChunkId>, target: ChunkId): Int? {
+    var visibleIndex = 0
+    var hideAll = false
+    var hideBody = false
+    for (i in 0 until totalChunks) {
+        val chunk = chunkAt(i)
+        when (chunk) {
+            is BinaryChunk.SectionHeader -> when (chunk.kind) {
+                DisasmSectionKinds.TEXT -> {
+                    hideAll = chunk.id in folded
+                    if (chunk.id == target) return visibleIndex
+                    visibleIndex++
+                }
+                DisasmSectionKinds.FUNCTION -> {
+                    if (!hideAll) {
+                        hideBody = chunk.id in folded
+                        if (chunk.id == target) return visibleIndex
+                        visibleIndex++
+                    }
+                }
+                else -> Unit
+            }
+            is BinaryChunk.Element -> {
+                if (!hideAll && !hideBody) {
+                    if (chunk.id == target) return visibleIndex
+                    visibleIndex++
+                }
+            }
+        }
+    }
+    return null
+}
+
+private fun computeSearchResults(
+    query: String,
+    catalog: DisasmCatalog,
+    provider: NativeBinaryProvider,
+    tree: NativeDisasmChunkTree,
+    limit: Int = 50,
+): List<DisasmSearchResult> {
+    if (query.isBlank()) return emptyList()
+    val q = query.trim().lowercase()
+    val results = mutableListOf<DisasmSearchResult>()
+
+    for (range in catalog.ranges) {
+        if (results.size >= limit) break
+        if (range.displayName.contains(q, ignoreCase = true)) {
+            val vaddrHex = range.virtualAddress.toString(16)
+            results += DisasmSearchResult.Symbol(
+                label = range.displayName,
+                detail = "fn · 0x$vaddrHex · ${range.size} B",
+                chunkId = ChunkId.Symbolic(DisasmSectionKinds.FUNCTION_BODY, range.displayName),
+            )
+        }
+    }
+
+    val remaining = limit - results.size
+    if (remaining > 0) {
+        var stringHits = 0
+        for (record in provider.strings) {
+            if (stringHits >= remaining) break
+            if (!record.value.contains(q, ignoreCase = true)) continue
+            val bodyId = tree.findFunctionBodyContaining(record.offset.toLong()) ?: continue
+            val offsetHex = record.offset.toString(16)
+            results += DisasmSearchResult.StringHit(
+                label = record.value.let { if (it.length > 60) it.take(57) + "..." else it },
+                detail = "str · file 0x$offsetHex",
+                chunkId = bodyId,
+            )
+            stringHits++
+        }
+    }
+
+    return results
+}
+
+@Composable
+private fun DisasmSearchBar(
+    query: TextFieldValue,
+    onQueryChange: (TextFieldValue) -> Unit,
+    results: List<DisasmSearchResult>,
+    onResultPicked: (DisasmSearchResult) -> Unit,
+) {
+    val textColor = HexanaTheme.textColor
+    val accentColor = HexanaTheme.hexTextColor
+    val hoverBg = if (JewelTheme.isDark) {
+        JewelTheme.colorPalette.grayOrNull(3) ?: Color(0xFF393B40)
+    } else {
+        JewelTheme.colorPalette.grayOrNull(12) ?: Color(0xFFEBECF0)
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        TextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            placeholder = { Text("Search symbol or string") },
+            leadingIcon = {
+                Icon(
+                    AllIconsKeys.Actions.Search,
+                    contentDescription = null,
+                    iconClass = AllIcons::class.java,
+                    modifier = Modifier.size(16.dp),
+                )
+            },
+            trailingIcon = if (query.text.isNotEmpty()) {
+                {
+                    IconButton(onClick = { onQueryChange(TextFieldValue("")) }) {
+                        Icon(
+                            AllIconsKeys.Actions.Close,
+                            contentDescription = "Clear search",
+                            iconClass = AllIcons::class.java,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                }
+            } else {
+                null
+            },
+        )
+
+        if (results.isNotEmpty()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 200.dp)
+                    .background(
+                        if (JewelTheme.isDark) {
+                            JewelTheme.colorPalette.grayOrNull(2) ?: Color(0xFF2B2D30)
+                        } else {
+                            JewelTheme.colorPalette.grayOrNull(14) ?: Color(0xFFFFFFFF)
+                        }
+                    ),
+            ) {
+                items(results) { result ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onResultPicked(result) }
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = result.label,
+                            style = TextStyle(color = textColor, fontFamily = FontFamily.Monospace),
+                        )
+                        Text(
+                            text = result.detail,
+                            style = TextStyle(color = accentColor, fontFamily = FontFamily.Monospace),
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(hoverBg),
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Go-to-offset
+// ---------------------------------------------------------------------------
+
+internal sealed interface DisasmGotoResolution {
+    data class Hit(val chunkId: ChunkId) : DisasmGotoResolution
+    data object NotInText : DisasmGotoResolution
+    data object Invalid : DisasmGotoResolution
+}
+
+/** Parses [raw] as a hex (`0x…`) or decimal unsigned 64-bit integer. Returns null on failure. */
+private fun parseGotoInput(raw: String): ULong? {
+    val s = raw.trim()
+    if (s.isEmpty()) return null
+    return if (s.startsWith("0x", ignoreCase = true)) {
+        s.drop(2).toULongOrNull(16)
+    } else {
+        s.toULongOrNull(10)
+    }
+}
+
+/**
+ * Resolves a raw offset/address string to the FUNCTION_BODY chunk that contains it.
+ *
+ * Resolution order:
+ * 1. File offset — cast to Long (if <= Long.MAX_VALUE) and search [NativeDisasmChunkTree].
+ * 2. Virtual address — walk [DisasmCatalog.ranges] for a range that spans the address.
+ */
+internal fun resolveGoto(
+    raw: String,
+    catalog: DisasmCatalog,
+    tree: NativeDisasmChunkTree,
+): DisasmGotoResolution {
+    val value = parseGotoInput(raw) ?: return DisasmGotoResolution.Invalid
+
+    // 1. Try as file offset.
+    if (value <= Long.MAX_VALUE.toULong()) {
+        val chunkId = tree.findFunctionBodyContaining(value.toLong())
+        if (chunkId != null) return DisasmGotoResolution.Hit(chunkId)
+    }
+
+    // 2. Try as virtual address.
+    for (range in catalog.ranges) {
+        val rangeEnd = range.virtualAddress + range.size.toULong()
+        if (value >= range.virtualAddress && value < rangeEnd) {
+            return DisasmGotoResolution.Hit(
+                ChunkId.Symbolic(DisasmSectionKinds.FUNCTION_BODY, range.displayName)
+            )
+        }
+    }
+
+    return DisasmGotoResolution.NotInText
+}
+
+/** Error color used for inline "not in .text" / "invalid number" feedback. */
+private val GOTO_ERROR_COLOR = Color(0xFFD05050)
+
+@Composable
+private fun DisasmGotoBar(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    error: String?,
+    onSubmit: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .weight(1f)
+                .onPreviewKeyEvent { event ->
+                    if (event.key == Key.Enter && event.type == KeyEventType.KeyDown) {
+                        onSubmit()
+                        true
+                    } else {
+                        false
+                    }
+                },
+            placeholder = { Text("Go to offset (0x… or decimal)") },
+        )
+        DefaultButton(
+            onClick = onSubmit,
+            modifier = Modifier.padding(start = 8.dp),
+        ) {
+            Text("Go")
+        }
+        if (error != null) {
+            Text(
+                text = error,
+                style = androidx.compose.ui.text.TextStyle(color = GOTO_ERROR_COLOR),
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun VirtualizedDisasmListing(
@@ -733,48 +1063,82 @@ private fun VirtualizedDisasmListing(
         NativeDisasmChunkRenderer(catalog, arch, syntax)
     }
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     val foldedState: MutableState<Set<ChunkId>> = remember(catalog) { mutableStateOf(emptySet()) }
     var folded by foldedState
+
+    var searchQuery by remember(catalog) { mutableStateOf(TextFieldValue("")) }
+    val searchResults = remember(catalog, searchQuery.text, provider) {
+        computeSearchResults(searchQuery.text, catalog, provider, tree)
+    }
+
+    var gotoInput by remember(catalog) { mutableStateOf(TextFieldValue("")) }
+    var gotoError by remember(catalog) { mutableStateOf<String?>(null) }
 
     if (tree.totalChunks == 0) {
         Text("Disassembly: absent. No instructions were returned.", modifier = Modifier.padding(8.dp))
         return
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-    ) {
-        // Walk the chunk tree once, tracking two fold scopes:
-        //   - `hideAll` mirrors the top-level .text fold state and suppresses
-        //     every per-function header + body below it.
-        //   - `hideBody` mirrors the current function header's fold state and
-        //     suppresses only that function's FUNCTION_BODY element.
-        var hideAll = false
-        var hideBody = false
-        for (i in 0 until tree.totalChunks) {
-            val chunk = tree.chunkAt(i)
-            when (chunk) {
-                is BinaryChunk.SectionHeader -> when (chunk.kind) {
-                    DisasmSectionKinds.TEXT -> {
-                        hideAll = chunk.id in folded
-                        val isFolded = hideAll
-                        stickyHeader(key = chunk.id) {
-                            FoldableSectionHeader(
-                                tokens = renderer.render(snapshot, chunk).tokens,
-                                folded = isFolded,
-                                onToggle = { folded = toggleFold(folded, chunk.id) },
-                            )
-                        }
-                    }
-                    DisasmSectionKinds.FUNCTION -> {
-                        if (!hideAll) {
-                            hideBody = chunk.id in folded
-                            val isFolded = hideBody
+    // Unfold ancestors of [targetChunkId] then scroll to it without animation.
+    // Always unfolds the top-level TEXT header; for FUNCTION_BODY targets, also
+    // unfolds the sibling FUNCTION header so the body is actually visible.
+    fun jumpTo(targetChunkId: ChunkId) {
+        var newFolded = folded - ChunkId.Header(DisasmSectionKinds.TEXT)
+        if (targetChunkId is ChunkId.Symbolic && targetChunkId.sectionKind == DisasmSectionKinds.FUNCTION_BODY) {
+            newFolded = newFolded - ChunkId.Symbolic(DisasmSectionKinds.FUNCTION, targetChunkId.name)
+        }
+        folded = newFolded
+        val itemIndex = tree.computeLazyItemIndex(newFolded, targetChunkId) ?: return
+        scope.launch { listState.scrollToItem(itemIndex) }
+    }
+
+    fun submitGoto() {
+        when (val res = resolveGoto(gotoInput.text, catalog, tree)) {
+            is DisasmGotoResolution.Hit -> { gotoError = null; jumpTo(res.chunkId) }
+            DisasmGotoResolution.NotInText -> gotoError = "not in .text"
+            DisasmGotoResolution.Invalid -> gotoError = "invalid number"
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        DisasmSearchBar(
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            results = searchResults,
+            onResultPicked = { result ->
+                jumpTo(result.chunkId)
+                searchQuery = TextFieldValue("")
+            },
+        )
+        DisasmGotoBar(
+            value = gotoInput,
+            onValueChange = { gotoInput = it; gotoError = null },
+            error = gotoError,
+            onSubmit = ::submitGoto,
+        )
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        ) {
+            // Walk the chunk tree once, tracking two fold scopes:
+            //   - `hideAll` mirrors the top-level .text fold state and suppresses
+            //     every per-function header + body below it.
+            //   - `hideBody` mirrors the current function header's fold state and
+            //     suppresses only that function's FUNCTION_BODY element.
+            var hideAll = false
+            var hideBody = false
+            for (i in 0 until tree.totalChunks) {
+                val chunk = tree.chunkAt(i)
+                when (chunk) {
+                    is BinaryChunk.SectionHeader -> when (chunk.kind) {
+                        DisasmSectionKinds.TEXT -> {
+                            hideAll = chunk.id in folded
+                            val isFolded = hideAll
                             stickyHeader(key = chunk.id) {
                                 FoldableSectionHeader(
                                     tokens = renderer.render(snapshot, chunk).tokens,
@@ -783,22 +1147,35 @@ private fun VirtualizedDisasmListing(
                                 )
                             }
                         }
-                    }
-                    else -> Unit
-                }
-                is BinaryChunk.Element -> {
-                    if (!hideAll && !hideBody) {
-                        item(key = chunk.id) {
-                            // Body chunks decode lazily through `catalog.decode`
-                            // — only the chunks LazyColumn actually composes
-                            // (= visible + small prefetch window) ever hit
-                            // Capstone. The `remember` key freezes the rendered
-                            // token list per (chunk.id, renderer) so scroll
-                            // through already-decoded bodies is allocation-free.
-                            val tokens = remember(chunk.id, renderer) {
-                                renderer.render(snapshot, chunk).tokens
+                        DisasmSectionKinds.FUNCTION -> {
+                            if (!hideAll) {
+                                hideBody = chunk.id in folded
+                                val isFolded = hideBody
+                                stickyHeader(key = chunk.id) {
+                                    FoldableSectionHeader(
+                                        tokens = renderer.render(snapshot, chunk).tokens,
+                                        folded = isFolded,
+                                        onToggle = { folded = toggleFold(folded, chunk.id) },
+                                    )
+                                }
                             }
-                            ChunkLines(tokens)
+                        }
+                        else -> Unit
+                    }
+                    is BinaryChunk.Element -> {
+                        if (!hideAll && !hideBody) {
+                            item(key = chunk.id) {
+                                // Body chunks decode lazily through `catalog.decode`
+                                // — only the chunks LazyColumn actually composes
+                                // (= visible + small prefetch window) ever hit
+                                // Capstone. The `remember` key freezes the rendered
+                                // token list per (chunk.id, renderer) so scroll
+                                // through already-decoded bodies is allocation-free.
+                                val tokens = remember(chunk.id, renderer) {
+                                    renderer.render(snapshot, chunk).tokens
+                                }
+                                ChunkLines(tokens)
+                            }
                         }
                     }
                 }
