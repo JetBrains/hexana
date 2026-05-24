@@ -194,6 +194,10 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             code.addStatement("val detail = args.optionalStringArgument(%S) ?: %S", "detail", detail)
             code.addStatement("val maxBytes = args.optionalIntArgument(%S) ?: %L", "maxBytes", maxBytes)
         }
+        ToolInputPattern.RuntimeCompatibility -> {
+            code.addStatement("val runtime = args.requireStringArgument(%S)", "runtime")
+            code.addStatement("val version = args.optionalStringArgument(%S)", "version")
+        }
     }
     code.addStatement("val file = %M(path)", REQUIRE_WASM_FILE)
     code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
@@ -233,6 +237,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             is ToolInputPattern.ClosedRange -> "(range)"
             ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
             ToolInputPattern.ArtifactQuery -> error("Handled above")
+            ToolInputPattern.RuntimeCompatibility -> "(runtime, version)"
         }
         code.addStatement("val result = provider.%M$callArgs", handlerMember)
     }
@@ -306,6 +311,10 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
             inputField(spec.input, "limit"),
             inputField(spec.input, "detail"),
             inputField(spec.input, "maxBytes"),
+        )
+        ToolInputPattern.RuntimeCompatibility -> listOf(
+            inputField(spec.input, "runtime"),
+            inputField(spec.input, "version"),
         )
     }
 }

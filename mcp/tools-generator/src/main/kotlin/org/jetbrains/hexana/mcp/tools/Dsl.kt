@@ -325,6 +325,7 @@ sealed class ToolInputPattern {
     data class ClosedRange(val parameterName: String) : ToolInputPattern()
     object DataSegments : ToolInputPattern()
     object ArtifactQuery : ToolInputPattern()
+    object RuntimeCompatibility : ToolInputPattern()
 }
 
 @HexanaToolsDsl
@@ -597,6 +598,17 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireNonNullable(maxBytes)
             requireDefault(maxBytes, "Int") { it is Int }
             requireDescribed(maxBytes)
+        }
+        ToolInputPattern.RuntimeCompatibility -> {
+            val runtime = requireField("runtime")
+            requireType(runtime, FieldType.StringT)
+            requireNonNullable(runtime)
+            requireDescribed(runtime)
+
+            val version = requireField("version")
+            requireType(version, FieldType.StringT)
+            requireNullable(version)
+            requireDescribed(version)
         }
     }
 }

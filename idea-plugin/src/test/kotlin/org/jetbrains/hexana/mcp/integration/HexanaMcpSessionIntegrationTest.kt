@@ -23,8 +23,21 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
         }
 
         assertTrue("query_artifacts missing from authorized session tools: $toolNames", "query_artifacts" in toolNames)
-        assertFalse("summarize_module should not be exposed: $toolNames", "summarize_module" in toolNames)
-        assertFalse("list_imports should not be exposed: $toolNames", "list_imports" in toolNames)
+        val requiredGranularTools = setOf(
+            "summarize_module",
+            "list_imports",
+            "list_exports",
+            "list_functions",
+            "list_memory",
+            "list_globals",
+            "list_types",
+            "list_element_segments",
+            "list_data_segments",
+        )
+        assertTrue(
+            "Authorized session tools missing expected granular tools. tools=$toolNames",
+            toolNames.containsAll(requiredGranularTools),
+        )
     }
 
     fun testQueryArtifactsWorksOverAuthorizedSession() {

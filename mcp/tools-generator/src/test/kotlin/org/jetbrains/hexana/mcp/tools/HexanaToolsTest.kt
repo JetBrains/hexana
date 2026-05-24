@@ -11,8 +11,42 @@ class HexanaToolsTest {
     private val queryArtifacts = HexanaTools.single { it.name == "query_artifacts" }
 
     @Test
-    fun `registry exposes only the generic artifact query tool`() {
-        assertEquals(listOf("query_artifacts"), HexanaTools.map { it.name })
+    fun `registry exposes granular tools and the generic artifact query tool`() {
+        assertEquals(
+            listOf(
+                "summarize_module",
+                "list_enabled_features",
+                "list_required_proposals",
+                "check_runtime_compatibility",
+                "list_custom_sections",
+                "list_imports",
+                "list_exports",
+                "search_exports",
+                "list_exported_functions",
+                "list_functions",
+                "list_code_section_offsets",
+                "functions_for_indices",
+                "resolve_function_signature",
+                "disassemble_function",
+                "get_function_call_graph",
+                "search_functions_by_name",
+                "get_locals_for_functions",
+                "get_instructions_for_functions",
+                "list_memory",
+                "get_memory_for_indices",
+                "list_globals",
+                "get_globals_for_indices",
+                "list_types",
+                "list_value_types",
+                "list_reference_types",
+                "get_types_for_indices",
+                "list_element_segments",
+                "list_data",
+                "list_data_segments",
+                "query_artifacts",
+            ),
+            HexanaTools.map { it.name },
+        )
     }
 
     @Test
@@ -78,6 +112,14 @@ class HexanaToolsTest {
     @Test
     fun `query_artifacts uses the artifact query invocation pattern`() {
         assertEquals(ToolInputPattern.ArtifactQuery, queryArtifacts.inputPattern)
+    }
+
+    @Test
+    fun `check_runtime_compatibility uses the runtime compatibility invocation pattern`() {
+        assertEquals(
+            ToolInputPattern.RuntimeCompatibility,
+            HexanaTools.single { it.name == "check_runtime_compatibility" }.inputPattern
+        )
     }
 
     @Test

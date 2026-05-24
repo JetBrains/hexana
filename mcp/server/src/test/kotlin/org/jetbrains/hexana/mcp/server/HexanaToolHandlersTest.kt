@@ -884,6 +884,104 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun listRequiredProposalsReturnsCompactEvidence() {
+        val wasm = createWasmFile(
+            "required-proposals.wasm",
+            """
+            (module
+              (type (func (param funcref) (result i32 i32)))
+              (memory 1)
+              (data ${'$'}d "abc")
+              (func (export "features") (type 0) (param funcref) (result i32 i32)
+                local.get 0
+                ref.is_null
+                i32.extend8_s
+                i32.const 1)
+              (func (export "bulk")
+                i32.const 0
+                i32.const 0
+                i32.const 3
+                memory.init ${'$'}d
+                data.drop ${'$'}d))
+            """.trimIndent()
+        )
+
+        val result = handlers.listRequiredProposals(jsonPath(wasm.toString()))
+
+        assertFalse(result.isError == true)
+        val structured = result.structuredContent ?: error("Expected structured content")
+        val proposalNames = structured["proposals"]!!.jsonArray.map {
+            it.jsonObject["proposal"]!!.jsonPrimitive.content
+        }
+        assertTrue("reference-types" in proposalNames)
+        assertTrue("bulk-memory" in proposalNames)
+        assertTrue("multi-value" in proposalNames)
+        assertTrue("sign-extension" in proposalNames)
+        assertEquals(proposalNames.size, structured["summary"]!!.jsonObject["requiredCount"]!!.jsonPrimitive.int)
+
+        val bulkMemory = structured["proposals"]!!.jsonArray
+            .map { it.jsonObject }
+            .single { it["proposal"]!!.jsonPrimitive.content == "bulk-memory" }
+        assertEquals(true, bulkMemory["required"]!!.jsonPrimitive.boolean)
+        assertEquals("bulkMemory", bulkMemory["evidence"]!!.jsonObject["featureFlag"]!!.jsonPrimitive.content)
+        assertTrue(bulkMemory["evidence"]!!.jsonObject["instructions"]!!.jsonArray.any {
+            it.jsonPrimitive.content == "memory.init"
+        })
+    }
+
+    @Test
+    fun checkRuntimeCompatibilityReportsUnknownGraalWasmProposalSupport() {
+        val wasm = createWasmFile(
+            "runtime-compatibility.wasm",
+            """
+            (module
+              (type (func (param funcref) (result i32 i32)))
+              (memory 1)
+              (data ${'$'}d "abc")
+              (func (export "features") (type 0) (param funcref) (result i32 i32)
+                local.get 0
+                ref.is_null
+                i32.extend8_s)
+              (func (export "bulk")
+                i32.const 0
+                i32.const 0
+                i32.const 3
+                memory.init ${'$'}d))
+            """.trimIndent()
+        )
+
+        val result = handlers.checkRuntimeCompatibility(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("runtime", JsonPrimitive("graalwasm"))
+                put("version", JsonPrimitive("test-profile"))
+            }
+        )
+
+        assertFalse(result.isError == true)
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertEquals("graalwasm", structured["runtime"]!!.jsonPrimitive.content)
+        assertEquals("test-profile", structured["version"]!!.jsonPrimitive.content)
+        assertEquals(false, structured["compatible"]!!.jsonPrimitive.boolean)
+        val required = structured["requiredProposals"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertTrue("reference-types" in required)
+        assertTrue("bulk-memory" in required)
+        assertTrue("sign-extension" in required)
+        val unknown = structured["unknownProposals"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertTrue("reference-types" in unknown)
+        assertTrue("bulk-memory" in unknown)
+        assertTrue("sign-extension" in unknown)
+
+        val bulkMemoryStatus = structured["proposalStatuses"]!!.jsonArray
+            .map { it.jsonObject }
+            .single { it["proposal"]!!.jsonPrimitive.content == "bulk-memory" }
+        assertEquals("unknown", bulkMemoryStatus["status"]!!.jsonPrimitive.content)
+        assertTrue(bulkMemoryStatus["evidence"]!!.jsonObject["instructions"]!!.jsonArray.any {
+            it.jsonPrimitive.content == "memory.init"
+        })
+    }
+
+    @Test
     fun indexToolsValidateArrayInput() {
         val result = handlers.getTypesForIndices(
             buildJsonObject {

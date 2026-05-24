@@ -80,7 +80,7 @@ class HexanaClaudePluginWrapperIntegrationTest {
             val tools = server.client.listTools(ListToolsRequest())
             val toolNames = tools.tools.map { it.name }.sorted()
             logger.info("{} wrapper tools: {}", clientLabel, toolNames)
-            assertEquals(listOf("query_artifacts"), toolNames)
+            assertEquals(EXPECTED_HEXANA_TOOL_NAMES, toolNames)
 
             val wasm = temporaryFolder.newFile("claude-wrapper-summary.wasm").toPath().also {
                 Files.write(it, wat2wasm(

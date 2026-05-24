@@ -55,6 +55,22 @@ class HexanaToolHandlers(
         }
     }
 
+    fun listRequiredProposals(arguments: JsonObject?): CallToolResult {
+        return execute("list_required_proposals") {
+            analysisService.listRequiredProposals(wasmInput(arguments))
+        }
+    }
+
+    fun checkRuntimeCompatibility(arguments: JsonObject?): CallToolResult {
+        return execute("check_runtime_compatibility") {
+            analysisService.checkRuntimeCompatibility(
+                input = wasmInput(arguments),
+                runtime = arguments.requireNonBlankString("runtime"),
+                version = arguments.optionalNonBlankString("version")
+            )
+        }
+    }
+
     fun listCustomSections(arguments: JsonObject?): CallToolResult {
         return execute("list_custom_sections") {
             analysisService.listCustomSections(wasmInput(arguments))

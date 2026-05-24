@@ -4,7 +4,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonPrimitive
 
-@org.junit.Ignore("Low-level MCP tools are no longer exposed; use query_artifacts direct tests.")
 class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
     fun testSummarizeModuleReturnsProjectRelativeFixtureData() {
         val fixture = createWasmFixture(
@@ -133,6 +132,45 @@ class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertTrue(sources.array("instructions").map { it.textValue() }.contains("memory.init"))
         assertTrue(sources.array("instructions").map { it.textValue() }.contains("data.drop"))
         assertTrue(sources.array("instructions").map { it.textValue() }.contains("i32.extend8_s"))
+    }
+
+    fun testCheckRuntimeCompatibilityReturnsProposalEvidence() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/summary/runtime_compatibility.wasm",
+            """
+            (module
+              (type (func (param funcref) (result i32 i32)))
+              (memory 1)
+              (data ${'$'}d "abc")
+              (func (export "features") (type 0) (param funcref) (result i32 i32)
+                local.get 0
+                ref.is_null
+                i32.extend8_s)
+              (func (export "bulk")
+                i32.const 0
+                i32.const 0
+                i32.const 3
+                memory.init ${'$'}d))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "check_runtime_compatibility",
+            JsonObject(
+                jsonPath(fixture.projectRelativePath) + mapOf(
+                    "runtime" to kotlinx.serialization.json.JsonPrimitive("graalwasm")
+                )
+            )
+        )
+
+        assertFalse(result["compatible"]!!.jsonPrimitive.boolean)
+        assertTrue(result.array("requiredProposals").map { it.textValue() }.contains("bulk-memory"))
+        assertTrue(result.array("unknownProposals").map { it.textValue() }.contains("bulk-memory"))
+        val bulkMemory = result.array("proposalStatuses")
+            .map { it as JsonObject }
+            .single { it.text("proposal") == "bulk-memory" }
+        assertEquals("unknown", bulkMemory.text("status"))
+        assertTrue(bulkMemory.obj("evidence").array("instructions").map { it.textValue() }.contains("memory.init"))
     }
 
     fun testListCustomSectionsReturnsOffsetsAndPreviews() {

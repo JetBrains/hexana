@@ -27,8 +27,42 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
-    fun registryExposesOnlyQueryArtifacts() {
-        assertEquals(listOf("query_artifacts"), createHexanaMcpServer().tools.keys.sorted())
+    fun registryExposesGeneratedHexanaTools() {
+        assertEquals(
+            listOf(
+                "check_runtime_compatibility",
+                "disassemble_function",
+                "functions_for_indices",
+                "get_function_call_graph",
+                "get_globals_for_indices",
+                "get_instructions_for_functions",
+                "get_locals_for_functions",
+                "get_memory_for_indices",
+                "get_types_for_indices",
+                "list_code_section_offsets",
+                "list_custom_sections",
+                "list_data",
+                "list_data_segments",
+                "list_element_segments",
+                "list_enabled_features",
+                "list_exported_functions",
+                "list_exports",
+                "list_functions",
+                "list_globals",
+                "list_imports",
+                "list_memory",
+                "list_reference_types",
+                "list_required_proposals",
+                "list_types",
+                "list_value_types",
+                "query_artifacts",
+                "resolve_function_signature",
+                "search_exports",
+                "search_functions_by_name",
+                "summarize_module",
+            ),
+            createHexanaMcpServer().tools.keys.sorted(),
+        )
     }
 
     @Test

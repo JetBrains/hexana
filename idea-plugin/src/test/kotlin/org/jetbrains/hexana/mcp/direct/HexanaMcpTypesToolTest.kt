@@ -6,7 +6,6 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-@org.junit.Ignore("Low-level MCP tools are no longer exposed; use query_artifacts direct tests.")
 class HexanaMcpTypesToolTest : HexanaMcpToolsetDirectTestBase() {
     fun testListTypesReturnsFunctionTypeEntriesForSimpleModule() {
         val fixture = createWasmFixture(

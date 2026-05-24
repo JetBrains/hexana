@@ -21,6 +21,8 @@ import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
+import org.jetbrains.hexana.mcp.model.runtime.CheckRuntimeCompatibilityResult
+import org.jetbrains.hexana.mcp.model.runtime.ListRequiredProposalsResult
 import org.jetbrains.hexana.mcp.model.sections.ListCustomSectionsResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.mcp.model.types.ListReferenceTypesResult
@@ -54,6 +56,12 @@ interface HexanaAnalysisService {
 
     fun summarizeModule(input: WasmInput): SummarizeModuleResult
     fun listEnabledFeatures(input: WasmInput): ListEnabledFeaturesResult
+    fun listRequiredProposals(input: WasmInput): ListRequiredProposalsResult {
+        throw UnsupportedOperationException("listRequiredProposals is not implemented")
+    }
+    fun checkRuntimeCompatibility(input: WasmInput, runtime: String, version: String?): CheckRuntimeCompatibilityResult {
+        throw UnsupportedOperationException("checkRuntimeCompatibility is not implemented")
+    }
     fun listCustomSections(input: WasmInput): ListCustomSectionsResult
     fun listImports(input: WasmInput): ListImportsResult
     fun listExports(input: WasmInput): ListExportsResult
@@ -137,6 +145,21 @@ class DefaultHexanaAnalysisService(
     override fun listEnabledFeatures(input: WasmInput): ListEnabledFeaturesResult {
         val wasm = load(input)
         return wasm.provider.readEnabledFeatures()
+    }
+
+    override fun listRequiredProposals(input: WasmInput): ListRequiredProposalsResult {
+        val wasm = load(input)
+        return wasm.provider.readRequiredProposals()
+    }
+
+    override fun checkRuntimeCompatibility(
+        input: WasmInput,
+        runtime: String,
+        version: String?
+    ): CheckRuntimeCompatibilityResult {
+        requireNonBlank(runtime, "Runtime")
+        val wasm = load(input)
+        return wasm.provider.readRuntimeCompatibility(runtime, version)
     }
 
     override fun listCustomSections(input: WasmInput): ListCustomSectionsResult {

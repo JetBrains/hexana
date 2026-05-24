@@ -51,7 +51,7 @@ class HexanaHttpIntegrationTest {
                     logger.info("Requesting tools/list")
                     val tools = client.listTools(ListToolsRequest())
                     logger.info("Received tools: {}", tools.tools.map { it.name }.sorted())
-                    assertEquals(listOf("query_artifacts"), tools.tools.map { it.name }.sorted())
+                    assertEquals(EXPECTED_HEXANA_TOOL_NAMES, tools.tools.map { it.name }.sorted())
 
                     val wasm = createWasmFile(
                         "summary.wasm",
