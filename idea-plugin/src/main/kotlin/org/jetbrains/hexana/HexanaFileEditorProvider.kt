@@ -24,6 +24,7 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
     ): Boolean {
         return file.fileType is WasmFileType ||
             file.fileType is BinaryFileType ||
+            file.fileType is NativeBinaryFileType ||
             file.extension.equals("class", ignoreCase = true) ||
             file.extension.equals("jar", ignoreCase = true) ||
             file.extension.equals("zip", ignoreCase = true) ||

@@ -72,7 +72,22 @@
         <fileType name="binary"
                   implementationClass="org.jetbrains.hexana.BinaryFileType"
                   fieldName="INSTANCE"
-                  extensions="bin;elf;exe;so;o;a;dll;dylib"/>
+                  extensions="bin"/>
+
+        <fileType name="ELF"
+                  implementationClass="org.jetbrains.hexana.ElfFileType"
+                  fieldName="INSTANCE"
+                  extensions="elf;so"/>
+
+        <fileType name="Mach-O"
+                  implementationClass="org.jetbrains.hexana.MachOFileType"
+                  fieldName="INSTANCE"
+                  extensions="dylib;bundle"/>
+
+        <fileType name="PE"
+                  implementationClass="org.jetbrains.hexana.PeFileType"
+                  fieldName="INSTANCE"
+                  extensions="exe;dll;sys;drv"/>
 
         <fileType name="wat"
                   implementationClass="org.jetbrains.hexana.wat.WatFileType"
@@ -94,6 +109,7 @@
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
         <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>
         <fileTypeOverrider implementation="org.jetbrains.hexana.actions.HexFileTypeOverrider"/>
+        <fileTypeDetector implementation="org.jetbrains.hexana.NativeBinaryFileTypeDetector"/>
         <statistics.counterUsagesCollector
                 implementationClass="org.jetbrains.hexana.statistics.HexanaCounterUsagesCollector"/>
         <useScopeOptimizer implementation="org.jetbrains.hexana.wat.WatScopeOptimizer"/>
