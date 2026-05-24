@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
@@ -71,8 +72,16 @@ import org.jetbrains.jewel.ui.component.Text
 // `NativeFunctionDiscovery`, which already walks sym / dynsym and resolves
 // names through the string table. Each function's `(fileOffset, size)`
 // designates a contiguous range of bytes inside the .text section; we hand
-// that range to Capstone for decoding. The view is a pure read-through of
-// our own knowledge of the binary format.
+// that range to Capstone for decoding.
+//
+// Decoding is virtualised the same way as the WAT viewer's per-function
+// rendering: the upfront load discovers function ranges + brings up the
+// Capstone module, but does NOT decode any bodies. Each function body is
+// decoded the first time its chunk is rendered (= the first time the
+// LazyColumn item enters the composition window) and cached on the
+// [DisasmCatalog] so subsequent recompositions, fold toggles, and dialect
+// switches reuse the work. On a Skiko-sized binary this turns an O(N)
+// upfront Capstone hit into O(visible-chunks) per scroll-stop.
 // ---------------------------------------------------------------------------
 
 internal data class DisasmInstruction(
@@ -83,22 +92,68 @@ internal data class DisasmInstruction(
     val operands: String,
 )
 
-internal data class DisasmFunction(
-    val name: String,
+/**
+ * Contiguous byte range to feed Capstone for one logical "function" — either
+ * a real symbol or a synthetic section-wide fallback for stripped binaries.
+ * Carries no decoded instructions; those live in [DisasmCatalog]'s cache and
+ * are produced on demand per chunk.
+ */
+internal data class DisasmRange(
+    val displayName: String,
     val virtualAddress: ULong,
     val fileOffset: Long,
     val size: Long,
     val sectionName: String?,
-    val instructions: List<DisasmInstruction>,
 )
 
-internal data class DisasmUnit(val functions: List<DisasmFunction>) {
-    val totalBytes: Long = functions.sumOf { it.size }
+/**
+ * Lazy disassembly catalog: the ranges to render plus the Capstone module
+ * needed to decode any single range on demand. The catalog owns the
+ * per-range decoded-instruction cache, which is what makes the panel
+ * virtualised — only ranges whose chunk has been composed at least once
+ * are ever fed to Capstone.
+ *
+ * Lifetime: one per `(provider, arch)`. Dialect switches do NOT rebuild
+ * the catalog (the formatter is fixed at the backend's native dialect and
+ * the renderer post-processes downstream), so the decoded-instruction
+ * cache survives Intel ↔ AT&T toggles.
+ */
+internal class DisasmCatalog(
+    val arch: Arch,
+    private val disassembler: CapstoneWasmDisassembler,
+    private val formatter: AssemblyFormatter,
+    private val bytes: CommonByteBuffer,
+    private val bytesLimit: Int,
+    val ranges: List<DisasmRange>,
+) {
+    val totalBytes: Long = ranges.sumOf { it.size }
+
+    /**
+     * Per-range decoded-body cache. Concurrent because Compose may pull
+     * decode results from the main thread while a background prefetcher
+     * (if ever added) writes from an IO dispatcher. The map is read-mostly
+     * — each range is decoded at most once for the panel's lifetime.
+     */
+    private val cache = ConcurrentHashMap<Int, List<DisasmInstruction>>()
+
+    val rangesByName: Map<String, Int> = ranges
+        .withIndex()
+        .associate { (i, r) -> r.displayName to i }
+
+    /** Decoded instructions for [rangeIndex]; computed and cached on first call. */
+    fun decode(rangeIndex: Int): List<DisasmInstruction> {
+        cache[rangeIndex]?.let { return it }
+        val range = ranges.getOrNull(rangeIndex) ?: return emptyList()
+        val decoded = decodeRange(disassembler, formatter, bytes, bytesLimit, range, arch)
+            ?: emptyList()
+        cache[rangeIndex] = decoded
+        return decoded
+    }
 }
 
 internal sealed interface DisasmLoadState {
     data object Loading : DisasmLoadState
-    data class Loaded(val unit: DisasmUnit) : DisasmLoadState
+    data class Loaded(val catalog: DisasmCatalog) : DisasmLoadState
     data class Error(val message: String) : DisasmLoadState
 }
 
@@ -120,17 +175,25 @@ internal object DisasmSectionKinds {
 }
 
 /**
- * [ChunkTree] over a decoded [DisasmUnit]:
+ * [ChunkTree] over a [DisasmCatalog]'s ranges:
  * - One top-level [BinaryChunk.SectionHeader] for the `.text` group.
- * - For every function: a [BinaryChunk.SectionHeader] (the foldable label) and
+ * - For every range: a [BinaryChunk.SectionHeader] (the foldable label) and
  *   a [BinaryChunk.Element] (its instruction body), in that order.
+ *
+ * No Capstone work happens here — the tree is purely a layout descriptor.
+ * Body decoding is deferred until [NativeDisasmChunkRenderer] is asked for
+ * a specific FUNCTION_BODY chunk (= the chunk's LazyColumn item enters
+ * composition), at which point [DisasmCatalog.decode] is invoked.
+ *
+ * `FUNCTION_BODY.estimatedLines` is a size/byte estimate (no decoded
+ * instruction count is available at construction time). It only matters
+ * for prefetch heuristics; line layout is exact once the renderer runs.
  */
-internal class NativeDisasmChunkTree(unit: DisasmUnit) : ChunkTree {
+internal class NativeDisasmChunkTree(ranges: List<DisasmRange>, totalBytes: Long) : ChunkTree {
 
     private val chunks: List<BinaryChunk> = buildList {
-        val functions = unit.functions
-        val firstOffset = functions.minOfOrNull { it.fileOffset } ?: 0L
-        val lastOffset = functions.maxOfOrNull { it.fileOffset + it.size } ?: firstOffset
+        val firstOffset = ranges.minOfOrNull { it.fileOffset } ?: 0L
+        val lastOffset = ranges.maxOfOrNull { it.fileOffset + it.size } ?: firstOffset
 
         add(
             BinaryChunk.SectionHeader(
@@ -138,30 +201,30 @@ internal class NativeDisasmChunkTree(unit: DisasmUnit) : ChunkTree {
                 byteRange = firstOffset..lastOffset,
                 estimatedLines = 1,
                 kind = DisasmSectionKinds.TEXT,
-                elementCount = functions.size,
-                totalSize = unit.totalBytes,
+                elementCount = ranges.size,
+                totalSize = totalBytes,
             ),
         )
-        functions.forEachIndexed { idx, fn ->
-            val range = fn.fileOffset..(fn.fileOffset + fn.size)
+        ranges.forEachIndexed { idx, range ->
+            val byteRange = range.fileOffset..(range.fileOffset + range.size)
             add(
                 BinaryChunk.SectionHeader(
-                    id = ChunkId.Symbolic(DisasmSectionKinds.FUNCTION, fn.name),
-                    byteRange = range,
+                    id = ChunkId.Symbolic(DisasmSectionKinds.FUNCTION, range.displayName),
+                    byteRange = byteRange,
                     estimatedLines = 1,
                     kind = DisasmSectionKinds.FUNCTION,
                     elementCount = 1,
-                    totalSize = fn.size,
+                    totalSize = range.size,
                 ),
             )
             add(
                 BinaryChunk.Element(
-                    id = ChunkId.Symbolic(DisasmSectionKinds.FUNCTION_BODY, fn.name),
-                    byteRange = range,
-                    estimatedLines = fn.instructions.size,
+                    id = ChunkId.Symbolic(DisasmSectionKinds.FUNCTION_BODY, range.displayName),
+                    byteRange = byteRange,
+                    estimatedLines = (range.size / AVG_INSTR_BYTES).coerceAtLeast(1L).toInt(),
                     kind = DisasmSectionKinds.FUNCTION_BODY,
                     indexInSection = idx,
-                    displayName = fn.name,
+                    displayName = range.displayName,
                 ),
             )
         }
@@ -180,27 +243,36 @@ internal class NativeDisasmChunkTree(unit: DisasmUnit) : ChunkTree {
         chunks.forEachIndexed { i, c -> if (c.id == id) return i }
         return null
     }
+
+    private companion object {
+        // Rough average across the supported arches: x86 ~3.5 B, ARM/AArch64 4 B,
+        // RISC-V 2-4 B with compressed extension. Used only for LazyColumn's
+        // estimatedLines heuristic, so a coarse value is fine.
+        const val AVG_INSTR_BYTES: Long = 4L
+    }
 }
 
 /**
- * [ChunkRenderer] for the read-only disassembly view. Reads from the decoded
- * [DisasmUnit] directly; the [BinaryDocumentSnapshot] parameter exists only
- * to satisfy the [ChunkRenderer] contract — instruction bytes are already
- * baked into the unit.
+ * [ChunkRenderer] for the read-only disassembly view. Reads function bodies
+ * through the [catalog]'s lazy decoder — the first time a body chunk is
+ * rendered, the catalog feeds the corresponding [DisasmRange] to Capstone
+ * and memoises the result. Subsequent renders of the same chunk hit the
+ * cache. The [BinaryDocumentSnapshot] parameter exists only to satisfy the
+ * [ChunkRenderer] contract; the source of truth for instruction bytes is
+ * the catalog's byte buffer.
  *
  * The renderer carries the active [arch] + [syntax] so it can post-process
  * mnemonic / operand text into the requested dialect. Decoding is dialect-
  * independent (the WASM backend renders one canonical form per arch — Intel
  * for x86/x86_64, GAS for ARM, debug for RISC-V); the renderer is the only
- * layer that adapts to user-selected syntax.
+ * layer that adapts to user-selected syntax. A dialect toggle rebuilds the
+ * renderer but NOT the catalog, so the decoded-instruction cache survives.
  */
 internal class NativeDisasmChunkRenderer(
-    private val unit: DisasmUnit,
+    private val catalog: DisasmCatalog,
     private val arch: Arch,
     private val syntax: AssemblySyntax,
 ) : ChunkRenderer {
-
-    private val functionsByName: Map<String, DisasmFunction> = unit.functions.associateBy { it.name }
 
     override fun render(snapshot: BinaryDocumentSnapshot, chunk: BinaryChunk): TokenStream =
         when (chunk) {
@@ -227,24 +299,29 @@ internal class NativeDisasmChunkRenderer(
 
     private fun renderFunctionHeader(chunk: BinaryChunk.SectionHeader): TokenStream {
         val name = (chunk.id as? ChunkId.Symbolic)?.name ?: return TokenStream.EMPTY
-        val fn = functionsByName[name] ?: return TokenStream.EMPTY
+        val rangeIdx = catalog.rangesByName[name] ?: return TokenStream.EMPTY
+        val range = catalog.ranges.getOrNull(rangeIdx) ?: return TokenStream.EMPTY
         val tokens = mutableListOf<RenderToken>()
-        tokens += RenderToken("${fn.name}:", RenderTokenKind.LABEL_REF, fn.fileOffset)
-        val entryHex = fn.virtualAddress.toString(16).padStart(8, '0')
+        tokens += RenderToken("${range.displayName}:", RenderTokenKind.LABEL_REF, range.fileOffset)
+        val entryHex = range.virtualAddress.toString(16).padStart(8, '0')
         tokens += RenderToken("  ", RenderTokenKind.WHITESPACE)
         tokens += RenderToken(
             text = "; entry=0x$entryHex, ${chunk.totalSize} bytes" +
-                (fn.sectionName?.let { " [$it]" } ?: ""),
+                (range.sectionName?.let { " [$it]" } ?: ""),
             kind = RenderTokenKind.COMMENT,
-            sourceOffset = fn.fileOffset,
+            sourceOffset = range.fileOffset,
         )
         return TokenStream(tokens)
     }
 
     private fun renderFunctionBody(chunk: BinaryChunk.Element): TokenStream {
-        val fn = unit.functions.getOrNull(chunk.indexInSection) ?: return TokenStream.EMPTY
+        // Lazy decode: the first render of this chunk pays the Capstone cost;
+        // subsequent renders (recompositions, fold toggles, dialect switches)
+        // hit the catalog cache.
+        val instructions = catalog.decode(chunk.indexInSection)
+        if (instructions.isEmpty()) return TokenStream.EMPTY
         val tokens = mutableListOf<RenderToken>()
-        for (instr in fn.instructions) {
+        for (instr in instructions) {
             val (mnemonic, operands) = retargetSyntax(arch, syntax, instr.mnemonic, instr.operands)
             val addrText = instr.virtualAddress.toString(16).padStart(8, '0')
             tokens += RenderToken("  $addrText: ", RenderTokenKind.OFFSET_ANNOTATION, instr.fileOffset)
@@ -323,23 +400,28 @@ private fun machOArch(cpuType: Int?): Arch = when (cpuType) {
 // ---------------------------------------------------------------------------
 
 /**
- * Builds the [DisasmUnit] for the virtualized panel.
+ * Builds the [DisasmCatalog] for the virtualised panel — discovers the
+ * function ranges, brings up the Capstone module, and returns. No bodies
+ * are decoded here; per-body Capstone calls happen lazily inside
+ * [NativeDisasmChunkRenderer] when each chunk first enters composition.
  *
- * Two sourcing modes, with the symbol path preferred:
+ * Two range-sourcing modes, with the symbol path preferred:
  *
  * 1. **Symbol-driven** — pulls function records from
  *    [NativeBinaryProvider.nativeFunctions] (built by `NativeFunctionDiscovery`
  *    over the ELF/Mach-O/PE sym + dynsym tables). Each non-imported symbol
- *    with a known `(fileOffset, size)` becomes a [DisasmFunction] named after
+ *    with a known `(fileOffset, size)` becomes a [DisasmRange] named after
  *    the symbol.
  *
  * 2. **Stripped fallback** — when the symbol path yields no candidates (the
  *    binary is stripped, or the symbol source isn't recognised), enumerate
- *    the format's executable sections and emit one synthetic [DisasmFunction]
+ *    the format's executable sections and emit one synthetic [DisasmRange]
  *    per section. The synthetic name uses `<section-name>` framing so the
  *    UI makes the absence of symbols visible.
  *
- * Both paths feed the same Capstone decode loop downstream.
+ * A single probe decode runs on the first range so arch-detection errors
+ * surface immediately as a load-time `Error` rather than as silent empty
+ * function bodies during scroll.
  */
 internal suspend fun loadCapstoneDisassembly(
     provider: NativeBinaryProvider,
@@ -363,38 +445,28 @@ internal suspend fun loadCapstoneDisassembly(
     val bytes = provider.bytes
     val bytesLimit = bytes.size
 
-    val functions = ranges.mapNotNull { range ->
-        val instructions = decodeRange(disassembler, formatter, bytes, bytesLimit, range, arch)
-            ?: return@mapNotNull null
-        DisasmFunction(
-            name = range.displayName,
-            virtualAddress = range.virtualAddress,
-            fileOffset = range.fileOffset,
-            size = range.size,
-            sectionName = range.sectionName,
-            instructions = instructions,
-        )
-    }
+    val catalog = DisasmCatalog(
+        arch = arch,
+        disassembler = disassembler,
+        formatter = formatter,
+        bytes = bytes,
+        bytesLimit = bytesLimit,
+        ranges = ranges,
+    )
 
-    if (functions.all { it.instructions.isEmpty() }) {
+    // Probe the first range so arch-detection failures surface as a load-time
+    // error instead of a wall of empty bodies during scroll. The result lands
+    // in the catalog cache, so this work is not duplicated when that chunk
+    // later enters composition.
+    val probe = catalog.decode(0)
+    if (probe.isEmpty() && ranges.size == 1) {
         return DisasmLoadState.Error(
-            "Disassembly: Capstone returned no instructions for any range — check the arch detection (${arch.name})."
+            "Disassembly: Capstone returned no instructions for any range — " +
+                "check the arch detection (${arch.name})."
         )
     }
-    return DisasmLoadState.Loaded(DisasmUnit(functions))
+    return DisasmLoadState.Loaded(catalog)
 }
-
-/**
- * Contiguous byte range to feed Capstone for one logical "function" — either
- * a real symbol or a synthetic section-wide fallback for stripped binaries.
- */
-private data class DisasmRange(
-    val displayName: String,
-    val virtualAddress: ULong,
-    val fileOffset: Long,
-    val size: Long,
-    val sectionName: String?,
-)
 
 private fun NativeBinaryProvider.collectDisasmRanges(): List<DisasmRange> {
     val symbolRanges = nativeFunctions
@@ -555,8 +627,8 @@ internal fun NativeDisassemblyPanelVirtualized(
     var reloadRequest by remember(provider) { mutableStateOf(0) }
 
     // Decoding is dialect-independent — switching syntax must not re-run
-    // Capstone over the whole binary. The renderer applies the dialect
-    // transform on the cached `DisasmUnit`.
+    // Capstone over the binary. The renderer applies the dialect transform
+    // on the catalog's cached instructions; the catalog survives toggles.
     LaunchedEffect(provider, reloadRequest) {
         result = DisasmLoadState.Loading
         result = withContext(Dispatchers.IO) {
@@ -581,7 +653,7 @@ internal fun NativeDisassemblyPanelVirtualized(
                         )
                     }
                 is DisasmLoadState.Loaded ->
-                    VirtualizedDisasmListing(current.unit, provider, syntax, state)
+                    VirtualizedDisasmListing(current.catalog, provider, syntax, state)
             }
         }
     }
@@ -641,25 +713,28 @@ private fun syntaxLabel(syntax: AssemblySyntax): String = when (syntax) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun VirtualizedDisasmListing(
-    unit: DisasmUnit,
+    catalog: DisasmCatalog,
     provider: NativeBinaryProvider,
     syntax: AssemblySyntax,
     @Suppress("UNUSED_PARAMETER") state: HexViewStateHolder,
 ) {
-    // Snapshot satisfies the ChunkRenderer contract; the renderer reads from
-    // `unit` directly.
-    val snapshot = remember(unit, provider) {
+    // Snapshot satisfies the ChunkRenderer contract; the renderer reads
+    // instructions through the catalog's lazy decoder.
+    val snapshot = remember(catalog, provider) {
         binaryDocumentOf(provider.bytes).snapshot()
     }
-    val arch = remember(provider) { provider.archForDisasm() }
-    val tree = remember(unit) { NativeDisasmChunkTree(unit) }
+    val arch = catalog.arch
+    val tree = remember(catalog) { NativeDisasmChunkTree(catalog.ranges, catalog.totalBytes) }
     // Keyed on `syntax` so a dialect switch rebuilds the renderer instance
-    // and invalidates per-chunk token caches downstream (their `remember`
-    // keys include `renderer` via `unit, i, syntax`).
-    val renderer = remember(unit, arch, syntax) { NativeDisasmChunkRenderer(unit, arch, syntax) }
+    // (which invalidates per-chunk token caches downstream via the `remember`
+    // key on `chunk.id, renderer`). The decoded-instruction cache lives on
+    // the catalog and survives this rebuild — Capstone is not re-run.
+    val renderer = remember(catalog, arch, syntax) {
+        NativeDisasmChunkRenderer(catalog, arch, syntax)
+    }
     val listState = rememberLazyListState()
 
-    val foldedState: MutableState<Set<ChunkId>> = remember(unit) { mutableStateOf(emptySet()) }
+    val foldedState: MutableState<Set<ChunkId>> = remember(catalog) { mutableStateOf(emptySet()) }
     var folded by foldedState
 
     if (tree.totalChunks == 0) {
@@ -714,7 +789,13 @@ private fun VirtualizedDisasmListing(
                 is BinaryChunk.Element -> {
                     if (!hideAll && !hideBody) {
                         item(key = chunk.id) {
-                            val tokens = remember(unit, i, syntax) {
+                            // Body chunks decode lazily through `catalog.decode`
+                            // — only the chunks LazyColumn actually composes
+                            // (= visible + small prefetch window) ever hit
+                            // Capstone. The `remember` key freezes the rendered
+                            // token list per (chunk.id, renderer) so scroll
+                            // through already-decoded bodies is allocation-free.
+                            val tokens = remember(chunk.id, renderer) {
                                 renderer.render(snapshot, chunk).tokens
                             }
                             ChunkLines(tokens)
