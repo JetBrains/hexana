@@ -5,6 +5,8 @@ import org.jetbrains.hexana.providers.elf.ElfAddressMapper
 import org.jetbrains.hexana.providers.elf.ElfProgramHeader
 import org.jetbrains.hexana.providers.elf.ElfSectionHeader
 import org.jetbrains.hexana.providers.elf.ElfSymbol
+import org.jetbrains.hexana.providers.macho.MachOSection
+import org.jetbrains.hexana.providers.macho.MachOSymbol
 
 data class NativeFunctionRecord(
     val name: String,
@@ -39,6 +41,80 @@ enum class NativeFunctionRangeConfidence {
 }
 
 object NativeFunctionDiscovery {
+    /**
+     * Builds function records for a Mach-O binary from its symbol table.
+     *
+     * Mach-O's `nlist` doesn't carry an explicit "function" symbol type the
+     * way ELF's STT_FUNC does, so we approximate: a symbol is treated as a
+     * function when it's either undefined (an import — `n_type & N_TYPE` is
+     * `N_UNDF`) or defined in a code-bearing section (`N_SECT` pointing at a
+     * section whose name is `__text` or whose flags carry
+     * `S_ATTR_PURE_INSTRUCTIONS` / `S_ATTR_SOME_INSTRUCTIONS`). Stab
+     * debug entries (`n_type & N_STAB`) are filtered out.
+     *
+     * Section lookup uses the symbol's `n_sect` as a 1-based index into the
+     * flattened section list — that's the on-disk convention preserved by
+     * [MachOSection.index] within each segment's list, joined globally by
+     * `provider.sections = segments.flatMap { it.sections }`.
+     *
+     * File-offset and size come from the symbol's [MachOSymbol.value] (a
+     * virtual address) projected back through the section's
+     * `(address, fileOffset, size)`. Sizes are inferred from the gap to the
+     * next function symbol in the same section, capped by the section end —
+     * Mach-O records don't carry an explicit symbol size.
+     */
+    fun fromMachO(
+        symbols: List<MachOSymbol>,
+        sections: List<MachOSection>,
+    ): List<NativeFunctionRecord> {
+        val sectionByGlobalIndex: Map<Int, MachOSection> = sections.withIndex()
+            .associate { (i, sec) -> (i + 1) to sec }
+
+        val candidateSymbols = symbols.filter { symbol ->
+            if (symbol.name.isBlank()) return@filter false
+            if ((symbol.type and N_STAB) != 0) return@filter false
+            when (symbol.type and N_TYPE) {
+                N_UNDF -> true
+                N_SECT -> sectionByGlobalIndex[symbol.sectionIndex]?.isCodeBearing() == true
+                else -> false
+            }
+        }
+
+        // Group defined function symbols by section so size inference can find
+        // the next symbol's value in the same section.
+        val definedBySection: Map<Int, List<MachOSymbol>> = candidateSymbols
+            .filter { (it.type and N_TYPE) == N_SECT }
+            .groupBy { it.sectionIndex }
+
+        return candidateSymbols.map { symbol ->
+            val isUndefined = (symbol.type and N_TYPE) == N_UNDF
+            val section = if (isUndefined) null else sectionByGlobalIndex[symbol.sectionIndex]
+            val resolvedSize = if (isUndefined) {
+                ResolvedFunctionSize(null, NativeFunctionRangeConfidence.Unknown)
+            } else {
+                resolveMachOFunctionSize(symbol, section, definedBySection)
+            }
+            val fileOffset = if (isUndefined || section == null) null
+            else machOFileOffsetOf(symbol.value, section)
+            NativeFunctionRecord(
+                name = symbol.name,
+                demangledName = NativeSymbolDemangler.demangle(symbol.name),
+                symbolIndex = symbol.index,
+                source = NativeFunctionSymbolSource.Symtab,
+                binding = if ((symbol.type and N_EXT) != 0) 1 else 0,
+                sectionIndex = symbol.sectionIndex,
+                sectionName = section?.qualifiedName(),
+                imported = isUndefined,
+                thunkLike = section?.name == "__stubs" || section?.name == "__stub_helper",
+                virtualAddress = symbol.value,
+                fileOffset = fileOffset,
+                size = resolvedSize.size,
+                rangeConfidence = resolvedSize.confidence,
+                recordRange = symbol.recordRange,
+            )
+        }
+    }
+
     fun fromElf(
         symbols: List<ElfSymbol>,
         sections: List<ElfSectionHeader>,
@@ -122,3 +198,61 @@ private fun ElfSymbol.resolvedFunctionSize(
 
 private const val SHN_UNDEF: Int = 0
 private const val STT_FUNC: Int = 2
+
+// Mach-O `nlist::n_type` bit layout (see /usr/include/mach-o/nlist.h).
+private const val N_STAB: Int = 0xE0
+private const val N_TYPE: Int = 0x0E
+private const val N_UNDF: Int = 0x0
+private const val N_SECT: Int = 0xE
+private const val N_EXT: Int = 0x01
+
+// `MachOSection.flags`: S_ATTR_PURE_INSTRUCTIONS | S_ATTR_SOME_INSTRUCTIONS.
+private const val MACHO_S_ATTR_CODE_MASK: UInt = 0x80000400u
+
+private fun MachOSection.isCodeBearing(): Boolean =
+    name == "__text" || (flags and MACHO_S_ATTR_CODE_MASK) != 0u
+
+/** `"__TEXT,__text"`-style qualified name; empty parts are dropped. */
+private fun MachOSection.qualifiedName(): String? {
+    val seg = segmentName.takeIf { it.isNotBlank() }
+    val sec = name.takeIf { it.isNotBlank() }
+    return when {
+        seg != null && sec != null -> "$seg,$sec"
+        sec != null -> sec
+        seg != null -> seg
+        else -> null
+    }
+}
+
+private fun machOFileOffsetOf(virtualAddress: ULong, section: MachOSection): Long? {
+    if (virtualAddress < section.address) return null
+    val withinSection = virtualAddress - section.address
+    if (withinSection >= section.size) return null
+    val fileOffset = section.fileOffset + withinSection
+    return if (fileOffset > Long.MAX_VALUE.toULong()) null else fileOffset.toLong()
+}
+
+private fun resolveMachOFunctionSize(
+    symbol: MachOSymbol,
+    section: MachOSection?,
+    definedBySection: Map<Int, List<MachOSymbol>>,
+): ResolvedFunctionSize {
+    // `nlist` carries no n_size field. Convention: size = distance to the
+    // next defined symbol in the same section, capped at the section end.
+    val nextValue = definedBySection[symbol.sectionIndex]
+        .orEmpty()
+        .asSequence()
+        .map { it.value }
+        .filter { it > symbol.value }
+        .minOrNull()
+    val sectionEnd = section?.let { it.address + it.size }
+    val end = when {
+        nextValue != null && sectionEnd != null -> minOf(nextValue, sectionEnd)
+        nextValue != null -> nextValue
+        sectionEnd != null -> sectionEnd
+        else -> return ResolvedFunctionSize(null, NativeFunctionRangeConfidence.Unknown)
+    }
+    val size = (end - symbol.value).takeIf { it > 0uL }
+        ?: return ResolvedFunctionSize(null, NativeFunctionRangeConfidence.Unknown)
+    return ResolvedFunctionSize(size, NativeFunctionRangeConfidence.NextSymbolInSection)
+}

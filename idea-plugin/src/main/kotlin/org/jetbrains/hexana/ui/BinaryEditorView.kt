@@ -524,21 +524,26 @@ private fun BinaryProvider.resolvePanels(
             Panel("Debug Context") { NativeDebugContextPanel(this, state) },
             Panel("Debug Info") { NativeDebugInfoPanel(this, state) },
             Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
+            Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) },
         )
         is MachOBinaryProvider -> listOf(
             Panel("Debug Context") { NativeDebugContextPanel(this, state) },
             Panel("Debug Info") { NativeDebugInfoPanel(this, state) },
             Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
+            Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) },
         )
         is FatMachOBinaryProvider -> listOf(
             Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
+            Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) },
         )
         is PeBinaryProvider -> listOf(
             Panel("Debug Context") { NativeDebugContextPanel(this, state) },
             Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
+            Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) },
         )
         is CoffBinaryProvider -> listOf(
             Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
+            Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) },
         )
         is NativeBinaryProvider -> emptyList()
         is WasmBinaryVirtualFileProvider -> {

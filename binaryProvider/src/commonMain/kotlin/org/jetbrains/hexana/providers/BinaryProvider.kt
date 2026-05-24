@@ -224,6 +224,12 @@ class MachOBinaryProvider(
         MachOParser.parseRelocations(bytes, h, sec, symbols.orEmpty())
     }
 
+    override val nativeFunctions: List<NativeFunctionRecord>? by lazy {
+        val sym = symbols ?: return@lazy null
+        val sec = sections ?: return@lazy null
+        NativeFunctionDiscovery.fromMachO(sym, sec)
+    }
+
     override val nativeSourceLocationProvider: NativeDwarfSourceLocationProvider? by lazy {
         val sec = sections ?: return@lazy null
         if (sec.none { it.name == "__debug_line" } || sec.none { it.name == "__debug_info" }) return@lazy null
