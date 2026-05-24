@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.parsing.common.NativeBinaryEndian
 import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.providers.NativeFunctionRecord
 import org.jetbrains.hexana.providers.elf.ElfHeader
@@ -109,6 +110,30 @@ internal fun machOFatHeaderRows(header: MachOFatHeader): List<HeaderRow> = listO
     HeaderRow("Endian", header.endian.toString(), null),
     HeaderRow("Architectures", header.archCount.toString(), NativeByteRange(4, 4)),
 )
+
+/**
+ * Mach-O CPU type → human-readable architecture name. Subtype is reserved
+ * for future refinement (e.g. distinguishing arm64e from arm64); unknown
+ * pairs fall back to the raw cpuType hex. Public so the IDE plugin can use
+ * the same labels when naming opened slice editors.
+ */
+fun machOCpuArchName(cpuType: Int, @Suppress("UNUSED_PARAMETER") cpuSubtype: Int): String = when (cpuType) {
+    0x00000007 -> "x86"
+    0x01000007 -> "x86_64"
+    0x0000000C -> "arm"
+    0x0100000C -> "arm64"
+    0x0200000C -> "arm64_32"
+    0x00000012 -> "ppc"
+    0x01000012 -> "ppc64"
+    0x01000018 -> "riscv64"
+    else -> hex(cpuType)
+}
+
+fun endianLabel(endian: NativeBinaryEndian): String = when (endian) {
+    NativeBinaryEndian.Little -> "little"
+    NativeBinaryEndian.Big -> "big"
+    NativeBinaryEndian.Unknown -> "?"
+}
 
 internal fun machOHeaderRows(header: MachOHeader, uuid: String?): List<HeaderRow> = buildList {
     add(HeaderRow("Magic", hex(header.magic), NativeByteRange(0, 4)))

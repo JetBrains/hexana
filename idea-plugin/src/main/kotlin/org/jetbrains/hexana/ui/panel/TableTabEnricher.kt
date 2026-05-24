@@ -4,10 +4,14 @@ import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.application.runReadActionBlocking
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.HexanaBinaryVirtualFile
+import org.jetbrains.hexana.providers.FatMachOBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.providers.macho.MachOParser
+import org.jetbrains.hexana.parsing.common.NativeBinaryEndian
 import org.jetbrains.hexana.run.WasmRunMode
 import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.run.showEnginePopup
@@ -51,6 +55,7 @@ fun BinaryProvider.getTabEnricher(): List<TableTabDescriptor>.(
     return when (val provider = this) {
         is WasmBinaryVirtualFileProvider -> { hexViewState, pathsNavigationState -> enrichWasmTabs(provider, hexViewState, pathsNavigationState) }
         is WasmComponentBinaryVirtualFileProvider -> { hexViewState, _ -> enrichComponentTabs(provider, provider.file, hexViewState.project) }
+        is FatMachOBinaryProvider -> { hexViewState, _ -> enrichFatMachOTabs(provider, hexViewState.project) }
         else -> { _, _ -> this }
     }
 }
@@ -425,6 +430,69 @@ private fun enrichComponentModulesTab(
             val hexedOffset = moduleRecord.contentOffset.toHexString()
             val fileName = "${file.nameWithoutExtension}_${rowIndex}@$hexedOffset.${file.extension}"
             val virtualFile = HexanaBinaryVirtualFile(fileName, buffer, baseOffset = moduleRecord.contentOffset, parentFile = file)
+            FileEditorManager.getInstance(project).openFile(virtualFile, true)
+        },
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Fat (universal) Mach-O enrichment
+// ---------------------------------------------------------------------------
+
+/**
+ * Adds a row-click handler to the Fat Mach-O "Universal" tab so each slice
+ * row opens its own binary editor view, scoped to that slice's bytes via a
+ * [CommonByteBuffer] slice. The new editor's file name encodes the original
+ * binary name plus the slice's architecture and endianness.
+ */
+internal fun List<TableTabDescriptor>.enrichFatMachOTabs(
+    provider: FatMachOBinaryProvider,
+    project: Project,
+): List<TableTabDescriptor> = map { tab ->
+    if (tab.name == "Universal") enrichFatMachOUniversalTab(tab, provider, project) else tab
+}
+
+private fun enrichFatMachOUniversalTab(
+    tab: TableTabDescriptor,
+    provider: FatMachOBinaryProvider,
+    project: Project,
+): TableTabDescriptor {
+    val architectures = provider.architectures.orEmpty()
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
+        rowSelectionProvider = tab.rowSelectionProvider,
+        rowClickAction = { rowIndex ->
+            val arch = architectures.getOrNull(rowIndex) ?: return@TableTabDescriptor
+            val range = arch.sliceRange ?: return@TableTabDescriptor
+            val buffer = provider.bytes.slice(range.offset, range.size)
+            val endian = MachOParser.parseHeader(buffer)?.endian ?: NativeBinaryEndian.Unknown
+            val archName = machOCpuArchName(arch.cpuType, arch.cpuSubtype)
+            val endianTag = endianLabel(endian)
+
+            val sourcePath = provider.sourcePath
+            val parentFile = sourcePath?.let { LocalFileSystem.getInstance().findFileByPath(it) }
+            val baseName: String = parentFile?.nameWithoutExtension
+                ?: sourcePath?.substringAfterLast('/')?.substringBeforeLast('.', missingDelimiterValue = sourcePath)
+                ?: "binary"
+            val extension: String? = parentFile?.extension
+                ?: sourcePath?.substringAfterLast('/')?.substringAfterLast('.', missingDelimiterValue = "")?.takeIf { it.isNotEmpty() }
+            val fileName = buildString {
+                append(baseName)
+                append('_').append(archName)
+                append('_').append(endianTag)
+                if (!extension.isNullOrEmpty()) append('.').append(extension)
+            }
+
+            val virtualFile = HexanaBinaryVirtualFile(
+                name = fileName,
+                buffer = buffer,
+                baseOffset = range.offset,
+                parentFile = parentFile,
+            )
             FileEditorManager.getInstance(project).openFile(virtualFile, true)
         },
     )

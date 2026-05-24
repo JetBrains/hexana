@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.parsing.common.NativeBinaryEndian
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.CoffBinaryProvider
 import org.jetbrains.hexana.providers.ElfBinaryProvider
@@ -7,6 +8,7 @@ import org.jetbrains.hexana.providers.FatMachOBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
+import org.jetbrains.hexana.providers.macho.MachOParser
 
 class NativeTableTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> = when (provider) {
@@ -164,27 +166,32 @@ private fun peSymbolsTab(provider: PeBinaryProvider): TableTabDescriptor? {
 }
 
 private fun fatMachOTabs(provider: FatMachOBinaryProvider): List<TableTabDescriptor> = buildList {
-    machOFatHeadersTab(provider)?.let { add(it) }
-    machOFatArchitecturesTab(provider)?.let { add(it) }
+    machOUniversalTab(provider)?.let { add(it) }
     stringsTab(provider)?.let { add(it) }
 }
 
-private fun machOFatHeadersTab(provider: FatMachOBinaryProvider): TableTabDescriptor? {
-    val header = provider.fatHeader ?: return null
-    return keyValueTab("Universal", machOFatHeaderRows(header))
-}
-
-private fun machOFatArchitecturesTab(provider: FatMachOBinaryProvider): TableTabDescriptor? {
+private fun machOUniversalTab(provider: FatMachOBinaryProvider): TableTabDescriptor? {
     val architectures = provider.architectures?.takeIf { it.isNotEmpty() } ?: return null
+    // Precompute each slice's endianness once by peeking the slice's Mach-O
+    // header. A universal binary can in principle mix endianness across
+    // slices, so we record it per row instead of inheriting from the fat
+    // header.
+    val sliceEndians: List<NativeBinaryEndian> = architectures.map { arch ->
+        val range = arch.sliceRange ?: return@map NativeBinaryEndian.Unknown
+        val slice = provider.bytes.slice(range.offset, range.size)
+        MachOParser.parseHeader(slice)?.endian ?: NativeBinaryEndian.Unknown
+    }
     return TableTabDescriptor(
-        name = "Slices",
+        name = "Universal",
         columns = listOf(
             col("Index") { CellValue(architectures[it].index) },
-            col("CPU Type") { CellValue(hex(architectures[it].cpuType)) },
-            col("CPU Subtype") { CellValue(hex(architectures[it].cpuSubtype)) },
             col("Offset") { CellValue(hex(architectures[it].offset)) },
             col("Size") { CellValue(hex(architectures[it].size)) },
-            col("Align", ColumnWidth.Fill()) { CellValue(architectures[it].alignment.toString()) },
+            col("Architecture", ColumnWidth.Fill(0.5f)) {
+                val a = architectures[it]
+                CellValue(machOCpuArchName(a.cpuType, a.cpuSubtype))
+            },
+            col("Endianness", ColumnWidth.Fill()) { CellValue(endianLabel(sliceEndians[it])) },
         ),
         rowCount = architectures.size,
         rowSelectionProvider = { architectures.getOrNull(it)?.let { arch -> selection(arch.sliceRange ?: arch.archRange) } },
