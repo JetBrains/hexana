@@ -12,21 +12,29 @@
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        Hexana is a WebAssembly analysis and inspection tool integrated
-  into JetBrains IDEs. It provides a structured view of WASM modules,
-  including imports, exports, function indices, type signatures,
-  locals, code bodies, GC types, and recursive type definitions.
+        <p>Hexana — an IntelliJ Platform plugin for WebAssembly and binary analysis — opens
+        compiled artifacts as structured, navigable documents inside JetBrains IDEs.</p>
 
-  Hexana also exposes a set of Model Context Protocol (MCP) tools that
-  allow AI-assisted exploration of WebAssembly binaries. These tools
-  support tasks such as retrieving function metadata, generating stubs,
-  analyzing signatures, and navigating module structure directly from
-  an AI assistant.
+        <p><b>Binary formats</b></p>
+        <ul>
+          <li>Hex editor for any file, with search and go-to-offset</li>
+          <li>WASM (<code>.wasm</code>): section browser, imports/exports, function types, code bodies, GC types, WIT (Component Model) interfaces, DWARF 4/5 debug info</li>
+          <li>ELF (<code>.elf</code>, <code>.so</code>), Mach-O (<code>.dylib</code>, <code>.bundle</code>), PE (<code>.exe</code>, <code>.dll</code>, <code>.sys</code>) — magic-byte detection</li>
+          <li>Multi-architecture disassembly for x86, x86-64, ARM, AArch64, RISC-V 32/64 — bundled as a Rust/WASM module, no host toolchain required, virtualized for multi-MB binaries</li>
+          <li>Archive viewer for <code>.jar</code>, <code>.zip</code>, <code>.war</code>, <code>.apk</code></li>
+          <li>JVM JIT viewer: a JVMTI agent attaches to any Java run configuration, captures compiled methods into a <code>.jit</code> file, and renders them with a symbol tree and per-method disassembly</li>
+        </ul>
 
-  Hexana aims to streamline work with WebAssembly artifacts by offering
-  an interactive viewer, WAT integration, section browsing, and
-  function-level introspection – providing a seamless workflow for
-  developers working with compiled WASM modules.
+        <p><b>Language support</b></p>
+        <ul>
+          <li>WAT (WebAssembly Text Format): PSI-backed parser, syntax highlighting, brace matching, find-usages, documentation</li>
+          <li>WIT (Component Model interface language): inspections, formatting, completion, go-to-definition, indexing</li>
+          <li>Java: completion and navigation for GraalWasm and Chicory APIs</li>
+          <li>JavaScript / TypeScript: type inference for <code>WebAssembly.instantiate(...)</code> imports and exports, resolved from the referenced <code>.wasm</code> file</li>
+        </ul>
+
+        <p>WASM run configurations support line-breakpoint debugging. An MCP server exposes function lists,
+        type signatures, data segments, and module structure to AI assistants through the Model Context Protocol.</p>
     ]]></description>
 
     <resource-bundle>messages.HexanaBundle</resource-bundle>
