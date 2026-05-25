@@ -128,13 +128,15 @@ sealed class HexanaEvent {
 
     data class HexTabSelected(
         val tabName: String,
-        val surface: Surface
+        val surface: Surface,
+        val binaryFormat: BinaryFormat? = null,
     ) : HexanaEvent() {
         override val name = "hex_tab_selected"
-        override val properties = mapOf(
-            "tab_name" to tabName,
-            "surface" to surface.value
-        )
+        override val properties = buildMap {
+            put("tab_name", tabName)
+            put("surface", surface.value)
+            binaryFormat?.let { put("binary_format", it.value) }
+        }
     }
 
     data class WasmUnparsedOpcodes(

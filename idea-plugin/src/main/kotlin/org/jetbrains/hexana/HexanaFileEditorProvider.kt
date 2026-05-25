@@ -9,17 +9,16 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.annotations.NonNls
 import org.jetbrains.hexana.analytics.HexanaEvent
+import org.jetbrains.hexana.analytics.binaryFormatOf
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryWordSize
 import org.jetbrains.hexana.providers.CoffBinaryProvider
 import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.FatMachOBinaryProvider
-import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.statistics.HexanaCounterUsagesCollector
 import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
 
@@ -111,7 +110,7 @@ private fun buildBinaryOpenedEvent(
     file: VirtualFile,
     editor: HexanaFileEditor,
 ): HexanaEvent.BinaryOpened {
-    val format = detectBinaryFormat(file, editor.binaryProvider)
+    val format = binaryFormatOf(file, editor.binaryProvider)
     val native = editor.binaryProvider as? NativeBinaryProvider
     return HexanaEvent.BinaryOpened(
         format = format,
@@ -124,35 +123,6 @@ private fun buildBinaryOpenedEvent(
             HexanaEvent.SymbolCountBucket.of(symbolCount(it))
         },
     )
-}
-
-private fun detectBinaryFormat(
-    file: VirtualFile,
-    provider: org.jetbrains.hexana.providers.BinaryProvider?,
-): HexanaEvent.BinaryFormat {
-    // The archive / class viewers don't set `binaryProvider`, so fall back
-    // to the extension for them. Order matters: check provider-typed cases
-    // first so a `.bin` ELF doesn't get tagged as GENERIC.
-    when (provider) {
-        is WasmComponentBinaryProvider -> return HexanaEvent.BinaryFormat.WASM_COMPONENT
-        is WasmBinaryProvider -> return HexanaEvent.BinaryFormat.WASM
-        is ElfBinaryProvider -> return HexanaEvent.BinaryFormat.ELF
-        is MachOBinaryProvider -> return HexanaEvent.BinaryFormat.MACHO
-        is FatMachOBinaryProvider -> return HexanaEvent.BinaryFormat.FAT_MACHO
-        is PeBinaryProvider -> return HexanaEvent.BinaryFormat.PE
-        is CoffBinaryProvider -> return HexanaEvent.BinaryFormat.COFF
-        is GenericBinaryProvider -> return HexanaEvent.BinaryFormat.GENERIC
-        null -> Unit
-        else -> return HexanaEvent.BinaryFormat.GENERIC
-    }
-    return when (file.extension?.lowercase()) {
-        "class" -> HexanaEvent.BinaryFormat.CLASS
-        "jar" -> HexanaEvent.BinaryFormat.JAR
-        "war" -> HexanaEvent.BinaryFormat.WAR
-        "apk" -> HexanaEvent.BinaryFormat.APK
-        "zip" -> HexanaEvent.BinaryFormat.ZIP
-        else -> HexanaEvent.BinaryFormat.GENERIC
-    }
 }
 
 private fun archFor(provider: NativeBinaryProvider): HexanaEvent.Arch? =

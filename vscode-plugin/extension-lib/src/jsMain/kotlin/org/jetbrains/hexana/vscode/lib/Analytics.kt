@@ -81,12 +81,22 @@ fun captureWasmFileParsed(fileSizeBytes: Double, durationMs: Double, success: Bo
 
 /**
  * Captures a `hex_tab_selected` event.
+ *
+ * [binaryFormat] is the snake_case PostHog string for the container
+ * format of the currently-open binary (e.g. `wasm`, `elf`, `macho`).
+ * `null` is accepted for callers that don't have format detection wired
+ * yet; unknown strings resolve to null as well, in which case the
+ * `binary_format` property is omitted from the event entirely.
  */
 @JsExport
-fun captureHexTabSelected(tabName: String) {
+fun captureHexTabSelected(tabName: String, binaryFormat: String? = null) {
+    val resolvedFormat = binaryFormat?.let { HexanaEvent.BinaryFormat.fromValue(it) }
     HexanaAnalytics.client.capture(
-        HexanaEvent.HexTabSelected(tabName = tabName,
-            surface = HexanaEvent.Surface.VSCODE_EXTENSION)
+        HexanaEvent.HexTabSelected(
+            tabName = tabName,
+            surface = HexanaEvent.Surface.VSCODE_EXTENSION,
+            binaryFormat = resolvedFormat,
+        )
     )
 }
 

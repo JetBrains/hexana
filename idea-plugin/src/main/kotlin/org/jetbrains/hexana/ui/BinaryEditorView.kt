@@ -19,6 +19,7 @@ import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.analytics.HexanaEvent
+import org.jetbrains.hexana.analytics.binaryFormatOf
 import org.jetbrains.hexana.document.*
 import org.jetbrains.hexana.document.format.ChunkId
 import org.jetbrains.hexana.document.journal.JournalLoadResult
@@ -160,6 +161,12 @@ internal fun BinaryEditorView(
     // and folded-section MutableState references, preserving state.
     val watVirtualizedListState = rememberLazyListState()
     val watVirtualizedFolded = remember { mutableStateOf<Set<ChunkId>>(emptySet()) }
+    // Binary format derived once per opened provider — fed into the
+    // `hex_tab_selected` analytics event so cross-tab funnels can filter
+    // by container format (e.g. "ELF users → Disassembly tab").
+    val binaryFormat = remember(binaryProvider) {
+        binaryFormatOf((binaryProvider as? BinaryVirtualFileProvider)?.file, binaryProvider)
+    }
     // The WASM function nav-target flow. Lifted here (above the panels
     // remember boundary) so the same flow instance persists across provider
     // rebuilds triggered by edit commits. The default is the flow passed in
@@ -301,6 +308,7 @@ internal fun BinaryEditorView(
                         HexanaEvent.HexTabSelected(
                             panel.description,
                             surface = HexanaEvent.Surface.IDE_PLUGIN,
+                            binaryFormat = binaryFormat,
                         )
                     )
                 }

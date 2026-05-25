@@ -183,6 +183,20 @@ class HexanaEventTest {
         assertEquals("hex_tab_selected", event.name)
         assertEquals("Functions", event.properties["tab_name"])
         assertEquals("vscode_extension", event.properties["surface"])
+        assertFalse("binary_format" in event.properties)
+    }
+
+    @Test
+    fun hexTabSelectedWithBinaryFormat() {
+        val event = HexanaEvent.HexTabSelected(
+            tabName = "Disassembly",
+            surface = HexanaEvent.Surface.IDE_PLUGIN,
+            binaryFormat = HexanaEvent.BinaryFormat.ELF,
+        )
+        assertEquals("hex_tab_selected", event.name)
+        assertEquals("Disassembly", event.properties["tab_name"])
+        assertEquals("ide_plugin", event.properties["surface"])
+        assertEquals("elf", event.properties["binary_format"])
     }
 
     @Test
