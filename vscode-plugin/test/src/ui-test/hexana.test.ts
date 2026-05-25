@@ -122,15 +122,16 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
             expect(firstByte.trim()).to.equal('00', 'First byte of .wasm should be 00');
         });
 
-        it('should send wasm_file_opened analytics event', async function () {
+        it('should send binary_opened analytics event', async function () {
             const assertUrl = process.env.HEXANA_FAKE_POSTHOG_ASSERT_URL;
             if (!assertUrl) {
                 this.skip();
                 return;
             }
 
-            const event = await waitForFakePostHogEvent(assertUrl, 'wasm_file_opened');
+            const event = await waitForFakePostHogEvent(assertUrl, 'binary_opened');
             expect(event.distinctId, 'Expected analytics event to include distinct ID').to.be.a('string').and.not.empty;
+            expect(event.properties.format).to.equal('wasm');
             expect(event.properties.surface).to.equal('vscode_extension');
             expect(Number(event.properties.file_size_bytes)).to.be.greaterThan(0);
             expect(event.properties.ide_type).to.be.a('string').and.not.empty;
