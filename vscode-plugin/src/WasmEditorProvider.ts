@@ -141,11 +141,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const key = uri.toString();
         const inMemory = inMemoryModules.get(key);
         if (inMemory) {
-            extensionLib?.captureWasmFileOpened(inMemory.data.byteLength);
+            extensionLib?.captureBinaryOpened(inMemory.data.byteLength, "wasm");
             return new WasmDocument(uri, inMemory.data, inMemory.fileName);
         }
         const data = await vscode.workspace.fs.readFile(uri);
-        extensionLib?.captureWasmFileOpened(data.byteLength);
+        extensionLib?.captureBinaryOpened(data.byteLength, "wasm");
         return new WasmDocument(uri, data);
     }
 
@@ -183,7 +183,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             } else if (message.type === "show-wat") {
                 this.showWatEditor(document, message);
             } else if (message.type === "tab-selected") {
-                extensionLib?.captureHexTabSelected(message.tabName);
+                extensionLib?.captureHexTabSelected(message.tabName, "wasm");
             } else if (message.type === "update-runtime-setting") {
                 const runtime = message.runtime as string;
                 if (runtime) {

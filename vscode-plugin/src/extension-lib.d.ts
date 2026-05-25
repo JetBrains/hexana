@@ -94,8 +94,15 @@ export function shellEscape(arg: string, windows?: boolean): string;
  */
 export function initAnalytics(storagePath: string, telemetryEnabled: boolean, appName: string, appVersion: string): void;
 
-/** Captures a `wasm_file_opened` event. */
-export function captureWasmFileOpened(fileSizeBytes: number): void;
+/**
+ * Captures a `binary_opened` event.
+ *
+ * `format` is the snake_case PostHog string for the container format
+ * (`wasm`, `wasm_component`, `elf`, `macho`, `pe`, `coff`, `fat_macho`,
+ * `jar`, `war`, `zip`, `apk`, `class`, `generic`). Unknown values fall
+ * back to `generic` on the Kotlin side.
+ */
+export function captureBinaryOpened(fileSizeBytes: number, format: string): void;
 
 /** Captures a `wasm_file_parsed` event. */
 export function captureWasmFileParsed(
@@ -105,8 +112,12 @@ export function captureWasmFileParsed(
     functionCount: number | null,
 ): void;
 
-/** Captures a `hex_tab_selected` event. */
-export function captureHexTabSelected(tabName: string): void;
+/**
+ * Captures a `hex_tab_selected` event. `binaryFormat` is optional; pass
+ * the same snake_case format string used for `captureBinaryOpened` so
+ * cross-tab funnels can filter by container format.
+ */
+export function captureHexTabSelected(tabName: string, binaryFormat?: string | null): void;
 
 /** Captures a `wat_view_activated` event. */
 export function captureWatViewActivated(): void;
