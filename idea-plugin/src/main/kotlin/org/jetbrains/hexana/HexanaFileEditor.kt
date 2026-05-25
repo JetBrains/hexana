@@ -406,6 +406,9 @@ class HexanaFileEditor(
             HexanaLog.LOG.warn("Failed to parse ${myFile.name} as a JIT dump", t)
             null
         }
+        if (jit != null) {
+            captureJitDumpOpened(jit)
+        }
         // Global hex view: one provider for the entire `.jit` file. The
         // editor scrolls it to the selected sym's fileOffset and adds a
         // sym-range highlight; the sym's native bytes are then visible
@@ -429,6 +432,37 @@ class HexanaFileEditor(
             }
         }
         panel.add(view)
+    }
+
+    /**
+     * Fires `jit_dump_opened` analytics. Runs symbol enumeration on the
+     * IDE pooled thread because [org.jetbrains.hexana.jvm.jit.JitFile.symbols]
+     * walks the entire sym chain on first access — fine on a background
+     * thread, but worth keeping off the editor-construction EDT path.
+     */
+    private fun captureJitDumpOpened(jit: org.jetbrains.hexana.jvm.jit.JitFile) {
+        val service = HexanaService.getInstance()
+        val sizeBytes = myFile.length
+        val version = jit.header.version.toInt()
+        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+            val count = try {
+                jit.symbols.size
+            } catch (t: Throwable) {
+                HexanaLog.LOG.warn(
+                    "Failed to enumerate symbols in ${myFile.name} for jit_dump_opened analytics",
+                    t,
+                )
+                null
+            }
+            service.captureAnalytics(
+                org.jetbrains.hexana.analytics.HexanaEvent.JitDumpOpened(
+                    fileSizeBytes = sizeBytes,
+                    surface = org.jetbrains.hexana.analytics.HexanaEvent.Surface.IDE_PLUGIN,
+                    version = version,
+                    compiledMethodCount = count,
+                )
+            )
+        }
     }
 
     private fun openZipEntry(

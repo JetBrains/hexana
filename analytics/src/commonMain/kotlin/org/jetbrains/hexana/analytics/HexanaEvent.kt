@@ -42,6 +42,29 @@ sealed class HexanaEvent {
         }
     }
 
+    /**
+     * Fires when the user opens a `.jit` dump produced by Hexana's
+     * libjitview JVMTI agent. The dump's format version is part of the
+     * header (`MIN` magic + version byte). The compiled-method count is
+     * the number of `sym_entry_t` records in the chain — provided when
+     * the agent's symbol loading completes; null when the dump failed to
+     * parse far enough to enumerate symbols.
+     */
+    data class JitDumpOpened(
+        val fileSizeBytes: Long,
+        val surface: Surface,
+        val version: Int,
+        val compiledMethodCount: Int? = null,
+    ) : HexanaEvent() {
+        override val name = "jit_dump_opened"
+        override val properties = buildMap {
+            put("file_size_bytes", fileSizeBytes)
+            put("surface", surface.value)
+            put("version", version)
+            compiledMethodCount?.let { put("compiled_method_count", it) }
+        }
+    }
+
     data class WasmFileParsed(
         val fileSizeBytes: Long,
         val durationMs: Long,

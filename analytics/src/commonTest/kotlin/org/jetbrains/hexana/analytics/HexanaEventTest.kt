@@ -79,6 +79,34 @@ class HexanaEventTest {
     }
 
     @Test
+    fun jitDumpOpenedWithCount() {
+        val event = HexanaEvent.JitDumpOpened(
+            fileSizeBytes = 1_048_576L,
+            surface = HexanaEvent.Surface.IDE_PLUGIN,
+            version = 5,
+            compiledMethodCount = 1842,
+        )
+        assertEquals("jit_dump_opened", event.name)
+        assertEquals(1_048_576L, event.properties["file_size_bytes"])
+        assertEquals("ide_plugin", event.properties["surface"])
+        assertEquals(5, event.properties["version"])
+        assertEquals(1842, event.properties["compiled_method_count"])
+    }
+
+    @Test
+    fun jitDumpOpenedWithoutCount() {
+        val event = HexanaEvent.JitDumpOpened(
+            fileSizeBytes = 256L,
+            surface = HexanaEvent.Surface.IDE_PLUGIN,
+            version = 4,
+            compiledMethodCount = null,
+        )
+        assertEquals("jit_dump_opened", event.name)
+        assertEquals(4, event.properties["version"])
+        assertNull(event.properties["compiled_method_count"])
+    }
+
+    @Test
     fun wasmFileParsedWithFunctionCount() {
         val event = HexanaEvent.WasmFileParsed(
             fileSizeBytes = 8_000_000L,
@@ -197,6 +225,7 @@ class HexanaEventTest {
     fun allEventNamesAreSnakeCase() {
         val events = listOf(
             HexanaEvent.BinaryOpened(HexanaEvent.BinaryFormat.WASM, 0L, HexanaEvent.Surface.IDE_PLUGIN),
+            HexanaEvent.JitDumpOpened(0L, HexanaEvent.Surface.IDE_PLUGIN, 5, null),
             HexanaEvent.WasmFileParsed(0L, 0L, true, null, HexanaEvent.Surface.IDE_PLUGIN),
             HexanaEvent.McpToolInvoked("test", HexanaEvent.McpTransport.STDIO, 0L, true),
             HexanaEvent.McpServerStarted(HexanaEvent.McpTransport.HTTP, false),
