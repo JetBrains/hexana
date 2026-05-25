@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -75,14 +77,31 @@ internal fun NativeDisassemblyPanel(provider: NativeBinaryProvider, state: HexVi
     var syntaxMode by remember(provider) { mutableStateOf(LlvmObjdumpSyntaxMode.ArchitectureDefault) }
     var selectedFunctionName by remember(provider) { mutableStateOf<String?>(null) }
     var reloadRequest by remember(provider) { mutableStateOf(0) }
-    val functions = remember(provider) {
-        provider.nativeFunctions
-            .orEmpty()
-            .filter { function -> !function.imported && function.name.isNotBlank() }
-            .distinctBy { it.name }
+    var functions by remember(provider) { mutableStateOf<List<NativeFunctionRecord>?>(null) }
+    val fullDisassemblyEnabled = remember(provider) { provider.bytes.size <= MAX_DISASSEMBLY_FILE_BYTES }
+
+    LaunchedEffect(provider) {
+        val loadedFunctions = withContext(Dispatchers.IO) {
+            provider.nativeFunctions
+                .orEmpty()
+                .filter { function -> !function.imported && function.name.isNotBlank() }
+                .distinctBy { it.name }
+        }
+        functions = loadedFunctions
+        if (!fullDisassemblyEnabled && selectedFunctionName == null) {
+            selectedFunctionName = loadedFunctions.firstOrNull()?.name
+        }
     }
 
-    LaunchedEffect(provider, syntaxMode, selectedFunctionName, reloadRequest) {
+    LaunchedEffect(provider, syntaxMode, selectedFunctionName, reloadRequest, functions) {
+        if (!fullDisassemblyEnabled && functions == null) {
+            result = NativeDisassemblyPanelState.Loading
+            return@LaunchedEffect
+        }
+        if (!fullDisassemblyEnabled && selectedFunctionName == null) {
+            result = NativeDisassemblyPanelState.FunctionSelectionRequired(provider.bytes.size)
+            return@LaunchedEffect
+        }
         result = NativeDisassemblyPanelState.Loading
         result = withContext(Dispatchers.IO) {
             loadNativeDisassembly(provider, syntaxMode, selectedFunctionName)
@@ -91,7 +110,13 @@ internal fun NativeDisassemblyPanel(provider: NativeBinaryProvider, state: HexVi
 
     Column(modifier = Modifier.fillMaxSize()) {
         NativeDisassemblySyntaxSelector(syntaxMode) { syntaxMode = it }
-        NativeDisassemblyFunctionSelector(functions, selectedFunctionName) { selectedFunctionName = it }
+        functions?.let { loadedFunctions ->
+            NativeDisassemblyFunctionSelector(
+                functions = loadedFunctions,
+                selectedFunctionName = selectedFunctionName,
+                fullDisassemblyEnabled = fullDisassemblyEnabled,
+            ) { selectedFunctionName = it }
+        }
 
         Box(modifier = Modifier.weight(1f)) {
             when (val current = result) {
@@ -101,6 +126,7 @@ internal fun NativeDisassemblyPanel(provider: NativeBinaryProvider, state: HexVi
                 is NativeDisassemblyPanelState.Error -> NativeDisassemblyError(current.message, state) {
                     reloadRequest++
                 }
+                is NativeDisassemblyPanelState.FunctionSelectionRequired -> NativeDisassemblyFunctionSelectionRequired(current.fileSize)
                 is NativeDisassemblyPanelState.Loaded -> NativeDisassemblyListing(current.unit, state, provider.sourcePath)
             }
         }
@@ -114,7 +140,7 @@ private fun NativeDisassemblyError(
     onRetry: () -> Unit,
 ) {
     Column(modifier = Modifier.padding(8.dp)) {
-        Text(message)
+        Text(message.toUiMultiline(MAX_ERROR_TEXT_CHARS))
         Row(modifier = Modifier.padding(top = 8.dp)) {
             Link("Open Hexana settings", onClick = {
                 if (!state.project.isDisposed) {
@@ -128,29 +154,45 @@ private fun NativeDisassemblyError(
 }
 
 @Composable
+private fun NativeDisassemblyFunctionSelectionRequired(fileSize: Int) {
+    Text(
+        "Disassembly is in function-level mode for this ${formatBytes(fileSize)} file. Select a function above.",
+        modifier = Modifier.padding(8.dp),
+    )
+}
+
+@Composable
 private fun NativeDisassemblyFunctionSelector(
     functions: List<NativeFunctionRecord>,
     selectedFunctionName: String?,
+    fullDisassemblyEnabled: Boolean,
     onFunctionSelected: (String?) -> Unit,
 ) {
     if (functions.isEmpty()) return
 
-    Row(
+    LazyRow(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Function:")
-        val allLabel = if (selectedFunctionName == null) "[All]" else "All"
-        Text(
-            allLabel,
-            modifier = Modifier
-                .padding(start = 12.dp)
-                .clickable { onFunctionSelected(null) },
-        )
-        functions.forEach { function ->
-            val label = if (function.name == selectedFunctionName) "[${function.name}]" else function.name
+        item {
+            Text("Function:")
+        }
+        if (fullDisassemblyEnabled) {
+            val allLabel = if (selectedFunctionName == null) "[All]" else "All"
+            item {
+                Text(
+                    allLabel,
+                    modifier = Modifier
+                        .padding(start = 12.dp)
+                        .clickable { onFunctionSelected(null) },
+                )
+            }
+        }
+        items(functions, key = { it.name }) { function ->
+            val displayName = function.name.toUiSingleLine(MAX_FUNCTION_SELECTOR_LABEL_CHARS)
+            val label = if (function.name == selectedFunctionName) "[$displayName]" else displayName
             Text(
                 label,
                 modifier = Modifier
@@ -267,7 +309,7 @@ private fun NativeDisassemblyListing(
                     when (row) {
                         is DisassemblyListingRow.FunctionHeader -> {
                             Text(
-                                "${row.function.name}:",
+                                "${row.function.name.toUiSingleLine(MAX_DISASSEMBLY_TEXT_CHARS)}:",
                                 modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
                                 style = TextStyle(
                                     color = HexanaTheme.textColor,
@@ -359,7 +401,7 @@ private fun NativeInstructionListingRow(
                 }
                 instruction.sourceLocation?.let { sourceLocation ->
                     Link(
-                        sourceLocation.toSourceLabel(),
+                        sourceLocation.toSourceLabel().toUiSingleLine(MAX_SOURCE_LABEL_CHARS),
                         onClick = { openNativeSourceLocation(sourceLocation.toHexanaSourceLocation(), state, binaryPath) },
                         modifier = Modifier.padding(start = 10.dp),
                     )
@@ -368,7 +410,7 @@ private fun NativeInstructionListingRow(
         }
     }
 
-    val tooltip = instruction.toMetadataText()
+    val tooltip = instruction.toMetadataText().toUiMultiline(MAX_TOOLTIP_TEXT_CHARS)
     if (tooltip.isNotEmpty()) {
         Tooltip(tooltip = { Text(tooltip) }) {
             row()
@@ -511,12 +553,6 @@ private suspend fun loadNativeDisassembly(
     val sourcePath = provider.sourcePath
         ?: return NativeDisassemblyPanelState.Error("Disassembly: unavailable. Native file path is not available for this in-memory artifact.")
 
-    if (provider.bytes.size > MAX_DISASSEMBLY_FILE_BYTES) {
-        return NativeDisassemblyPanelState.Error(
-            "Disassembly: skipped. File is ${formatBytes(provider.bytes.size)}; automatic disassembly is limited to ${formatBytes(MAX_DISASSEMBLY_FILE_BYTES)}."
-        )
-    }
-
     val file = Path.of(sourcePath)
     val command = if (functionName != null) {
         LlvmObjdumpCommands.disassembleSymbol(file, functionName, syntaxMode)
@@ -559,6 +595,7 @@ private suspend fun loadNativeDisassembly(
 
 private sealed interface NativeDisassemblyPanelState {
     data object Loading : NativeDisassemblyPanelState
+    data class FunctionSelectionRequired(val fileSize: Int) : NativeDisassemblyPanelState
     data class Loaded(val unit: NativeDisassemblyUnit) : NativeDisassemblyPanelState
     data class Error(val message: String) : NativeDisassemblyPanelState
 }
@@ -828,8 +865,13 @@ private fun selectedInstruction(
     }
 }
 
-private const val MAX_DISASSEMBLY_FILE_BYTES: Int = 32 * 1024 * 1024
+private const val MAX_DISASSEMBLY_FILE_BYTES: Int = 1024 * 1024
 private const val MAX_RENDERED_DISASSEMBLY_INSTRUCTIONS: Int = 100_000
+private const val MAX_FUNCTION_SELECTOR_LABEL_CHARS: Int = 160
+private const val MAX_DISASSEMBLY_TEXT_CHARS: Int = 8_192
+private const val MAX_SOURCE_LABEL_CHARS: Int = 512
+private const val MAX_TOOLTIP_TEXT_CHARS: Int = 16_384
+private const val MAX_ERROR_TEXT_CHARS: Int = 16_384
 
 private fun formatBytes(bytes: Int): String =
     if (bytes >= 1024 * 1024) {
@@ -845,3 +887,18 @@ private fun hex(value: ULong): String = "0x${value.toString(16).uppercase()}"
 private fun ULong.toLongOrNull(): Long? =
     if (this <= Long.MAX_VALUE.toULong()) toLong() else null
 
+private fun String.toUiSingleLine(maxChars: Int): String =
+    replace('\n', ' ')
+        .replace('\r', ' ')
+        .truncateForUi(maxChars)
+
+private fun String.toUiMultiline(maxChars: Int): String =
+    truncateForUi(maxChars)
+
+private fun String.truncateForUi(maxChars: Int): String {
+    require(maxChars >= ELLIPSIS.length)
+    if (length <= maxChars) return this
+    return take(maxChars - ELLIPSIS.length) + ELLIPSIS
+}
+
+private const val ELLIPSIS = "..."
