@@ -145,6 +145,12 @@ cd vscode-plugin
 ./build-and-run-locally.sh
 ```
 
+On macOS, the launcher first uses an already installed VS Code (`code`,
+`code-insiders`, or the standard app bundles under `/Applications` and
+`~/Applications`). If none is available, it downloads a clean fallback VS Code instance into
+`vscode-plugin/test/test-resources/local-dev-vscode`, installs the generated `.vsix` there with `--force`, and opens the
+Hexana repo.
+
 ### Manual Steps
 
 1. **Build the Kotlin/JS extension library:**

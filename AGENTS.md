@@ -100,6 +100,7 @@ Existing IDE run configurations currently include:
 - `Hexana [:idea-plugin:runIde]`
 - `Hexana [:idea-plugin:buildPlugin]`
 - `Hexana [:idea-plugin:test :graalwasm:wat2wasm:test]`
+- `Hexana VSCode [build-and-run-locally.sh]`
 
 ## Working Rules
 
