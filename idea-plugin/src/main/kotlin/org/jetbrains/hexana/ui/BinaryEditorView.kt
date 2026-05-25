@@ -26,7 +26,9 @@ import org.jetbrains.hexana.document.journal.JournalPersister
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.ui.panel.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -59,42 +61,54 @@ internal fun BinaryEditorView(
         // sidecar gets written to `<source>.hexana.json` on every commit
         // and deleted on Finalize via clearPersistedJournal. Providers
         // without a file (synthetic / generic) fall back to NoOp — there's
-        // nothing to attach a sidecar to.
+        // nothing to attach a sidecar to. The doc starts empty here; the
+        // sidecar load + journal replay happen in the LaunchedEffect below
+        // so that VFS I/O (findChild → FSRecordsImpl.update) doesn't run
+        // on the EDT inside `remember { ... }`.
         val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
         val persister: JournalPersister = if (sourceFile != null) {
             IdeaJournalPersister(sourceFile)
         } else {
             JournalPersister.NoOp
         }
-        val originalBytes = binaryProvider.bytes.duplicate()
-        val doc = editableBinaryDocumentOf(bytes = originalBytes, persister = persister)
-        // Restore in-progress edits from a previously-persisted sidecar.
-        // The codec validates hash + length; on Mismatch we leave the doc
-        // empty and log — the stale sidecar stays on disk so the user can
-        // still recover it manually. Discard / Backup-then-discard UX is
-        // a follow-up.
-        if (sourceFile != null) {
-            val result = loadSidecarIfPresent(sourceFile, originalBytes)
-            when (result) {
-                is JournalLoadResult.Loaded -> {
-                    doc.loadJournal(result.journal)
-                    org.jetbrains.hexana.HexanaLog.LOG.info(
-                        "Restored ${result.journal.entries.size} journal entries from " +
-                            "${sourceFile.name}.hexana.json",
-                    )
-                }
-                is JournalLoadResult.Empty -> { /* no-op: design contract — codec never returns Empty */ }
-                is JournalLoadResult.Mismatch -> {
-                    org.jetbrains.hexana.HexanaLog.LOG.warn(
-                        "Sidecar ${sourceFile.name}.hexana.json doesn't match the binary " +
-                            "(reason=${result.reason}); ignoring and starting fresh",
-                    )
-                    notifyJournalMismatch(state.project, sourceFile, result.reason)
-                }
-                null -> { /* no sidecar present */ }
-            }
+        editableBinaryDocumentOf(bytes = binaryProvider.bytes.duplicate(), persister = persister)
+    }
+    // Sidecar restore runs off-EDT. While `loadSidecarIfPresent` is in
+    // flight the editor renders a centred spinner so the user never sees
+    // the original bytes briefly before they're replaced by the restored
+    // ones (a visible "jump" on file open). For files with no sidecar the
+    // gate clears as soon as the IO dispatcher returns null — typically
+    // within one frame.
+    var sidecarRestored by remember(binaryProvider, editableDoc) { mutableStateOf(false) }
+    LaunchedEffect(binaryProvider, editableDoc) {
+        val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
+        if (sourceFile == null) {
+            sidecarRestored = true
+            return@LaunchedEffect
         }
-        doc
+        val originalBytes = binaryProvider.bytes.duplicate()
+        val result = withContext(Dispatchers.IO) {
+            loadSidecarIfPresent(sourceFile, originalBytes)
+        }
+        when (result) {
+            is JournalLoadResult.Loaded -> {
+                editableDoc.loadJournal(result.journal)
+                org.jetbrains.hexana.HexanaLog.LOG.info(
+                    "Restored ${result.journal.entries.size} journal entries from " +
+                        "${sourceFile.name}.hexana.json",
+                )
+            }
+            is JournalLoadResult.Empty -> { /* no-op: design contract — codec never returns Empty */ }
+            is JournalLoadResult.Mismatch -> {
+                org.jetbrains.hexana.HexanaLog.LOG.warn(
+                    "Sidecar ${sourceFile.name}.hexana.json doesn't match the binary " +
+                        "(reason=${result.reason}); ignoring and starting fresh",
+                )
+                notifyJournalMismatch(state.project, sourceFile, result.reason)
+            }
+            null -> { /* no sidecar present */ }
+        }
+        sidecarRestored = true
     }
     // Set to true when a HEX cell edit commits. From then on, raw byte
     // mutations bypass the WAT encoder so the binary's structural shape
@@ -104,27 +118,14 @@ internal fun BinaryEditorView(
     // matching what GenericBinaryProvider would surface for an unknown-
     // format file.
     var hexEditedSinceOpen by remember(binaryProvider) { mutableStateOf(false) }
-    // The "live" provider for the WAT virtualized panel + Hex view. If the
-    // doc replayed a sidecar, the original bytes are stale — build a live
-    // provider from the post-replay bytes so the WAT view + Hex view render
-    // the user's restored edits, not the on-disk original. If the doc is
-    // empty (no sidecar / Mismatch), fall back to the original provider.
+    // The "live" provider for the WAT virtualized panel + Hex view. Starts
+    // as the original provider; if the sidecar LaunchedEffect above replays
+    // a journal, the resulting `loadJournal` call fires the DocumentListener
+    // below, which rebuilds `liveProvider` from the post-replay bytes. The
+    // gate on `sidecarRestored` ensures no panels render against the stale
+    // original provider during the replay window.
     var liveProvider by remember(binaryProvider, editableDoc) {
-        val initial: BinaryProvider = if (editableDoc.canUndo()) {
-            val bytes = editableDoc.read(0L, editableDoc.length.toInt())
-            try {
-                rebuildProviderFromBytes(binaryProvider, bytes) ?: binaryProvider
-            } catch (t: Throwable) {
-                org.jetbrains.hexana.HexanaLog.LOG.warn(
-                    "Parser rejected replayed-journal bytes; showing original provider",
-                    t,
-                )
-                binaryProvider
-            }
-        } else {
-            binaryProvider
-        }
-        mutableStateOf<BinaryProvider>(initial)
+        mutableStateOf<BinaryProvider>(binaryProvider)
     }
     DisposableEffect(editableDoc, binaryProvider) {
         val listener = DocumentListener {
@@ -191,6 +192,12 @@ internal fun BinaryEditorView(
         .fillMaxSize()
         .background(HexanaTheme.backgroundColor)
         .onPreviewKeyEvent(docKeyHandler)) {
+        if (!sidecarRestored) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            }
+            return@BoxWithConstraints
+        }
         val pathsNav = remember { PathsNavigationState() }
         // Panels are keyed to the ORIGINAL provider, not liveProvider — so
         // they don't rebuild on every commit. The WAT virtualized lambda
