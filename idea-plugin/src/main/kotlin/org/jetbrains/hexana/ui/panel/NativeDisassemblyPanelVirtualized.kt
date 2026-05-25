@@ -43,8 +43,9 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
-import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
@@ -138,6 +139,7 @@ internal data class DisasmRange(
  * the renderer post-processes downstream), so the decoded-instruction
  * cache survives Intel ↔ AT&T toggles.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 internal class DisasmCatalog(
     val arch: Arch,
     private val disassembler: CapstoneWasmDisassembler,
@@ -149,25 +151,89 @@ internal class DisasmCatalog(
     val totalBytes: Long = ranges.sumOf { it.size }
 
     /**
-     * Per-range decoded-body cache. Concurrent because Compose may pull
-     * decode results from the main thread while a background prefetcher
-     * (if ever added) writes from an IO dispatcher. The map is read-mostly
-     * — each range is decoded at most once for the panel's lifetime.
+     * LRU-bounded decoded-body cache. The eviction policy keeps the working
+     * set under control on huge stripped binaries where the user could
+     * otherwise touch tens of thousands of 8 KiB chunks during navigation
+     * and pin every one of them in memory. Eldest-on-access (the
+     * `accessOrder = true` ctor flag) means re-opening a recently-closed
+     * function does NOT evict it; the cache only churns once more than
+     * [MAX_CACHED_RANGES] distinct ranges have been touched.
+     *
+     * Not thread-safe by itself: `LinkedHashMap.get` mutates the access
+     * order on every read, so even reader threads are writers from the
+     * map's perspective. Every access — read or write — goes through
+     * `synchronized(cache) { ... }`. The critical sections are O(1) and
+     * uncontended in practice (Capstone writes are already serialised on
+     * [capstoneDispatcher]; the only readers are AsyncFunctionBody calls
+     * via [cached]).
      */
-    private val cache = ConcurrentHashMap<Int, List<DisasmInstruction>>()
+    private val cache = object : LinkedHashMap<Int, List<DisasmInstruction>>(
+        16,
+        0.75f,
+        /* accessOrder = */ true,
+    ) {
+        override fun removeEldestEntry(eldest: Map.Entry<Int, List<DisasmInstruction>>?): Boolean =
+            size > MAX_CACHED_RANGES
+    }
+
+    /**
+     * Single-slot dispatcher that serialises every Capstone WASM call. The
+     * module is not thread-safe (single linear-memory heap, stateful
+     * `alloc` / `free_result` / `dealloc`), so all decode work must run
+     * with parallelism 1. [Dispatchers.IO.limitedParallelism] is the right
+     * primitive: it shares the IO thread pool, so the panel does not own a
+     * dedicated thread for its lifetime, while still guaranteeing that no
+     * two decodes execute concurrently. Coroutines queueing behind an
+     * in-flight decode *suspend* rather than block on a monitor, which
+     * keeps the Default pool free to drive AnnotatedString builds for
+     * chunks whose decode has already landed.
+     */
+    private val capstoneDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1)
 
     val rangesByName: Map<String, Int> = ranges
         .withIndex()
         .associate { (i, r) -> r.displayName to i }
 
-    /** Decoded instructions for [rangeIndex]; computed and cached on first call. */
-    fun decode(rangeIndex: Int): List<DisasmInstruction> {
-        cache[rangeIndex]?.let { return it }
+    /**
+     * Decoded instructions for [rangeIndex]; computed lazily and cached.
+     * Suspending because Capstone is single-threaded: concurrent callers
+     * queue on [capstoneDispatcher] and the runtime hands them out one at
+     * a time. Cache hits short-circuit before any dispatch, so a hot
+     * path scroll-back to a previously-decoded chunk returns immediately
+     * on the calling thread.
+     */
+    suspend fun decode(rangeIndex: Int): List<DisasmInstruction> {
+        synchronized(cache) { cache[rangeIndex] }?.let { return it }
         val range = ranges.getOrNull(rangeIndex) ?: return emptyList()
-        val decoded = decodeRange(disassembler, formatter, bytes, bytesLimit, range, arch)
-            ?: emptyList()
-        cache[rangeIndex] = decoded
-        return decoded
+        return withContext(capstoneDispatcher) {
+            synchronized(cache) { cache[rangeIndex] }?.let { return@withContext it }
+            val decoded = decodeRange(disassembler, formatter, bytes, bytesLimit, range, arch)
+                ?: emptyList()
+            synchronized(cache) { cache[rangeIndex] = decoded }
+            decoded
+        }
+    }
+
+    /**
+     * Non-suspending peek into the decoded-instruction cache. Returns the
+     * decoded list when [decode] has already populated it, `null` when the
+     * cache is still cold or the entry has been evicted. The renderer reads
+     * through this so its `render` contract stays non-suspending; callers
+     * that need the decode are expected to have awaited [decode] before
+     * invoking the renderer.
+     */
+    fun cached(rangeIndex: Int): List<DisasmInstruction>? = synchronized(cache) { cache[rangeIndex] }
+
+    companion object {
+        /**
+         * Upper bound on the number of decoded ranges held in memory at
+         * once. With `MAX_RANGE_BYTES = 8 KiB` per range, ~2300 x86
+         * instructions per range, and ~100 B of decoded-object overhead
+         * per instruction, 256 caps the cache at roughly 60 MiB worst
+         * case — comfortable for an IDE plugin. Evicted ranges decode
+         * again on the next unfold, which costs a few ms per chunk.
+         */
+        const val MAX_CACHED_RANGES: Int = 256
     }
 }
 
@@ -335,10 +401,13 @@ internal class NativeDisasmChunkRenderer(
     }
 
     private fun renderFunctionBody(chunk: BinaryChunk.Element): TokenStream {
-        // Lazy decode: the first render of this chunk pays the Capstone cost;
-        // subsequent renders (recompositions, fold toggles, dialect switches)
-        // hit the catalog cache.
-        val instructions = catalog.decode(chunk.indexInSection)
+        // Pre-decoded read from the catalog cache. The caller (typically
+        // `AsyncFunctionBody`) awaits `catalog.decode` before invoking
+        // the renderer, so by the time we get here the cache is warm.
+        // If somebody invokes `render` synchronously on a cold cache we
+        // degrade silently to an empty body rather than block the EDT
+        // on a Capstone call.
+        val instructions = catalog.cached(chunk.indexInSection) ?: return TokenStream.EMPTY
         if (instructions.isEmpty()) return TokenStream.EMPTY
         val tokens = mutableListOf<RenderToken>()
         for (instr in instructions) {
@@ -503,9 +572,57 @@ private fun NativeBinaryProvider.collectDisasmRanges(): List<DisasmRange> {
                 sectionName = fn.sectionName,
             )
         }
-    if (symbolRanges.isNotEmpty()) return symbolRanges
-    return executableSectionRanges()
+    val raw = if (symbolRanges.isNotEmpty()) symbolRanges else executableSectionRanges()
+    return raw.splitOversized()
 }
+
+/**
+ * Bounds the maximum byte size of a single [DisasmRange] so each LazyColumn
+ * item ends up backed by a small [AnnotatedString] that Compose `Text` can
+ * lay out on the EDT without stalling. Oversize ranges — typically section-
+ * fallback ranges (whole `.text` as one synthetic function), or genuine
+ * giant symbols like GraalVM Native Image's `___svm_code_section` cover-all
+ * — are split into fixed byte windows whose displayed name carries a
+ * `[+0x<offset>]` suffix so each window has a unique [DisasmRange.displayName]
+ * (the `rangesByName` lookup, search hits, and chunk ids all key off this).
+ *
+ * 8 KiB per window is conservative: for x86 (avg ~3.5 B/instr) this is
+ * ~2300 instructions, ~180 KiB of AnnotatedString per window — well within
+ * what Compose `Text` lays out quickly on the EDT. For fixed-4-byte ISAs
+ * (ARM64, RV64I) it is exactly 2048 instructions.
+ *
+ * For variable-length ISAs (x86, ARM Thumb, RISC-V compressed) a fixed-byte
+ * split can land mid-instruction at the window boundary, producing one or
+ * two garbage instructions per chunk transition. That is the cost of being
+ * able to virtualise giant ranges at all; for symbol-driven ranges this
+ * rarely fires (most functions are well under 8 KiB), and for the stripped
+ * fallback the alternative is the EDT freeze you would otherwise observe.
+ */
+private fun List<DisasmRange>.splitOversized(): List<DisasmRange> {
+    val out = mutableListOf<DisasmRange>()
+    for (range in this) {
+        if (range.size <= MAX_RANGE_BYTES) {
+            out += range
+            continue
+        }
+        var offset = 0L
+        while (offset < range.size) {
+            val windowSize = minOf(MAX_RANGE_BYTES, range.size - offset)
+            val suffix = "[+0x${offset.toString(16)}]"
+            out += DisasmRange(
+                displayName = "${range.displayName} $suffix",
+                virtualAddress = range.virtualAddress + offset.toULong(),
+                fileOffset = range.fileOffset + offset,
+                size = windowSize,
+                sectionName = range.sectionName,
+            )
+            offset += windowSize
+        }
+    }
+    return out
+}
+
+private const val MAX_RANGE_BYTES: Long = 8 * 1024L
 
 /**
  * Stripped-binary fallback: every executable section becomes one big
@@ -1065,7 +1182,18 @@ private fun VirtualizedDisasmListing(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    val foldedState: MutableState<Set<ChunkId>> = remember(catalog) { mutableStateOf(emptySet()) }
+    // Start with every FUNCTION sticky header folded. Disassembly is
+    // expensive (one Capstone WASM call + token build + AnnotatedString
+    // assembly per chunk), so the panel only pays that cost when the user
+    // actively opens a function. The TEXT-level header stays unfolded so
+    // the function list itself is visible from the start.
+    val foldedState: MutableState<Set<ChunkId>> = remember(catalog) {
+        val initial: Set<ChunkId> = catalog.ranges
+            .mapTo(HashSet(catalog.ranges.size)) {
+                ChunkId.Symbolic(DisasmSectionKinds.FUNCTION, it.displayName)
+            }
+        mutableStateOf(initial)
+    }
     var folded by foldedState
 
     var searchQuery by remember(catalog) { mutableStateOf(TextFieldValue("")) }
@@ -1165,16 +1293,7 @@ private fun VirtualizedDisasmListing(
                     is BinaryChunk.Element -> {
                         if (!hideAll && !hideBody) {
                             item(key = chunk.id) {
-                                // Body chunks decode lazily through `catalog.decode`
-                                // — only the chunks LazyColumn actually composes
-                                // (= visible + small prefetch window) ever hit
-                                // Capstone. The `remember` key freezes the rendered
-                                // token list per (chunk.id, renderer) so scroll
-                                // through already-decoded bodies is allocation-free.
-                                val tokens = remember(chunk.id, renderer) {
-                                    renderer.render(snapshot, chunk).tokens
-                                }
-                                ChunkLines(tokens)
+                                AsyncFunctionBody(chunk, catalog, renderer, snapshot)
                             }
                         }
                     }
@@ -1234,29 +1353,94 @@ private fun FoldableSectionHeader(
     }
 }
 
+/**
+ * Decodes + token-builds + annotated-string-builds a FUNCTION_BODY chunk on
+ * [Dispatchers.Default] so the EDT stays free during fast scroll. Two EDT
+ * costs were folded into the background dispatch:
+ *  - Capstone WASM decode (see `CapstoneWasmDisassembler.disassemble` — the
+ *    returned `Sequence` wraps an already-eagerly-decoded list).
+ *  - Token → [AnnotatedString] conversion. For a function with thousands
+ *    of instructions the renderer emits ~5x that many tokens and the
+ *    builder iterates them all; doing this on the EDT during scroll
+ *    re-introduced the stutter even after the decode moved off it.
+ *
+ * The EDT emits a single [Text] per chunk (vs the previous
+ * `Column { for line in lines Text(...) }` of N widgets); LazyColumn
+ * virtualises items but not the contents within one item, so collapsing
+ * to one [Text] is the main lever for chunk layout cost.
+ *
+ * The catalog cache survives recomposition, so scroll-back to a previously
+ * decoded chunk skips Capstone — only the token + annotated-string build
+ * re-runs, and that still runs off-EDT through the same [LaunchedEffect].
+ */
 @Composable
-private fun ChunkLines(tokens: List<RenderToken>) {
-    val textColor = HexanaTheme.textColor
+private fun AsyncFunctionBody(
+    chunk: BinaryChunk.Element,
+    catalog: DisasmCatalog,
+    renderer: NativeDisasmChunkRenderer,
+    snapshot: BinaryDocumentSnapshot,
+) {
     val accentColor = HexanaTheme.hexTextColor
-    val styleForKind: (RenderTokenKind) -> SpanStyle? = { kind ->
-        when (kind) {
-            RenderTokenKind.KEYWORD, RenderTokenKind.LABEL_REF -> SpanStyle(fontWeight = FontWeight.Bold)
+    var annotated by remember(chunk.id, renderer, accentColor) {
+        mutableStateOf<AnnotatedString?>(null)
+    }
+    LaunchedEffect(chunk.id, renderer, accentColor) {
+        // Phase 1: await Capstone on the catalog's single-slot dispatcher.
+        // Concurrent AsyncFunctionBody instances queue here; the wait is
+        // suspending, so Default-pool threads aren't blocked while ahead-of-
+        // them decodes drain.
+        catalog.decode(chunk.indexInSection)
+        // Phase 2: token build + AnnotatedString assembly. Pure CPU work
+        // with no Capstone interaction, fully reentrant — run on Default
+        // so multiple chunks whose decode landed can render in parallel.
+        val rendered = withContext(Dispatchers.Default) {
+            val tokens = renderer.render(snapshot, chunk).tokens
+            tokensToAnnotatedString(tokens, accentColor)
+        }
+        annotated = rendered
+    }
+    val current = annotated
+    if (current == null) {
+        DecodingPlaceholder()
+    } else {
+        ChunkLines(current)
+    }
+}
+
+private fun tokensToAnnotatedString(
+    tokens: List<RenderToken>,
+    accentColor: Color,
+): AnnotatedString = buildAnnotatedString {
+    for (token in tokens) {
+        when (token.kind) {
+            RenderTokenKind.LINE_BREAK -> append('\n')
+            RenderTokenKind.KEYWORD, RenderTokenKind.LABEL_REF ->
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(token.text) }
             RenderTokenKind.OFFSET_ANNOTATION,
             RenderTokenKind.RAW_BYTES,
-            RenderTokenKind.COMMENT -> SpanStyle(color = accentColor)
-            else -> null
+            RenderTokenKind.COMMENT ->
+                withStyle(SpanStyle(color = accentColor)) { append(token.text) }
+            else -> append(token.text)
         }
     }
-    val lines = remember(tokens) { splitTokensIntoLines(tokens) }
-    Column {
-        for (line in lines) {
-            Text(
-                text = line.toAnnotatedString(styleForKind),
-                style = TextStyle(color = textColor, fontFamily = FontFamily.Monospace),
-                modifier = Modifier.padding(vertical = 1.dp),
-            )
-        }
-    }
+}
+
+@Composable
+private fun DecodingPlaceholder() {
+    Text(
+        text = "  // decoding…",
+        style = TextStyle(color = HexanaTheme.hexTextColor, fontFamily = FontFamily.Monospace),
+        modifier = Modifier.padding(vertical = 1.dp),
+    )
+}
+
+@Composable
+private fun ChunkLines(annotated: AnnotatedString) {
+    Text(
+        text = annotated,
+        style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
+        modifier = Modifier.padding(vertical = 1.dp),
+    )
 }
 
 private fun splitTokensIntoLines(tokens: List<RenderToken>): List<List<RenderToken>> {
