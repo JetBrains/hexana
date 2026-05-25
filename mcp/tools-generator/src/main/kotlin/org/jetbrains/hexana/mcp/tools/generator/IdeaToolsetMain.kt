@@ -140,6 +140,8 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
     code.addStatement("val path = args.requireStringArgument(%S)", "path")
     when (val pattern = spec.inputPattern) {
         ToolInputPattern.WasmOnly -> Unit
+        ToolInputPattern.WasmWithBaseline ->
+            code.addStatement("val baselinePath = args.requireStringArgument(%S)", "baselinePath")
         ToolInputPattern.FunctionPage -> {
             val offset = inputField(spec.input, "offset").defaultOrError<Int>()
             val limit = inputField(spec.input, "limit").defaultOrError<Int>()
@@ -226,9 +228,20 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
                 ")",
             handlerMember,
         )
+    } else if (spec.inputPattern == ToolInputPattern.WasmWithBaseline) {
+        code.addStatement(
+            "val baselineProvider = %M(baselinePath).%M()",
+            REQUIRE_WASM_FILE,
+            REQUIRE_CORE_WASM_BINARY_PROVIDER,
+        )
+        code.addStatement(
+            "val result = provider.%M(baseline = baselineProvider, pathLabel = path, baselinePathLabel = baselinePath)",
+            handlerMember,
+        )
     } else {
         val callArgs: String = when (spec.inputPattern) {
             ToolInputPattern.WasmOnly -> "()"
+            ToolInputPattern.WasmWithBaseline -> error("Handled above")
             ToolInputPattern.FunctionPage -> "(offset, limit)"
             ToolInputPattern.Funcidx -> "(funcidx)"
             ToolInputPattern.FunctionNameSearch -> "(query, limit)"
@@ -288,6 +301,7 @@ private fun buildIdeaInputSchema(spec: ToolSpec): CodeBlock {
 private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
     return when (val pattern = spec.inputPattern) {
         ToolInputPattern.WasmOnly -> emptyList()
+        ToolInputPattern.WasmWithBaseline -> listOf(inputField(spec.input, "baselinePath"))
         ToolInputPattern.FunctionPage -> listOf(inputField(spec.input, "offset"), inputField(spec.input, "limit"))
         ToolInputPattern.Funcidx -> listOf(inputField(spec.input, "funcidx"))
         ToolInputPattern.FunctionNameSearch -> listOf(inputField(spec.input, "query"), inputField(spec.input, "limit"))

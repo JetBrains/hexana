@@ -6,6 +6,8 @@ import org.jetbrains.hexana.mcp.model.features.EnabledFeatureSourcesResult
 import org.jetbrains.hexana.mcp.model.features.EnabledFeaturesResult
 import org.jetbrains.hexana.mcp.model.features.ListEnabledFeaturesResult
 import org.jetbrains.hexana.mcp.model.runtime.CheckRuntimeCompatibilityResult
+import org.jetbrains.hexana.mcp.model.runtime.DiffRequiredProposalsResult
+import org.jetbrains.hexana.mcp.model.runtime.DiffRequiredProposalsSummaryResult
 import org.jetbrains.hexana.mcp.model.runtime.ListRequiredProposalsResult
 import org.jetbrains.hexana.mcp.model.runtime.ProposalEvidenceResult
 import org.jetbrains.hexana.mcp.model.runtime.RequiredProposalResult
@@ -26,6 +28,18 @@ fun WasmBinaryProvider.readRuntimeCompatibility(
     version: String?
 ): CheckRuntimeCompatibilityResult {
     return readRequiredProposals().checkRuntimeCompatibility(runtime, version)
+}
+
+fun WasmBinaryProvider.diffRequiredProposals(
+    baseline: WasmBinaryProvider,
+    pathLabel: String? = null,
+    baselinePathLabel: String? = null
+): DiffRequiredProposalsResult {
+    return readRequiredProposals().diffRequiredProposals(
+        baseline = baseline.readRequiredProposals(),
+        pathLabel = pathLabel,
+        baselinePathLabel = baselinePathLabel,
+    )
 }
 
 private fun ListEnabledFeaturesResult.toRequiredProposals(): ListRequiredProposalsResult {
@@ -89,6 +103,36 @@ private fun ListRequiredProposalsResult.checkRuntimeCompatibility(
         notes = listOf(
             "Compatibility is conservative: `unknown` means the runtime/version/flag/environment combination was not confirmed by this built-in matrix.",
             "The optional `version` value is reported for context but exact version parsing is intentionally not attempted."
+        )
+    )
+}
+
+private fun ListRequiredProposalsResult.diffRequiredProposals(
+    baseline: ListRequiredProposalsResult,
+    pathLabel: String?,
+    baselinePathLabel: String?
+): DiffRequiredProposalsResult {
+    val currentByProposal = proposals.associateBy { it.proposal }
+    val baselineByProposal = baseline.proposals.associateBy { it.proposal }
+    val currentNames = currentByProposal.keys.sorted()
+    val baselineNames = baselineByProposal.keys.sorted()
+    val newlyRequired = currentNames.filterNot(baselineByProposal::containsKey)
+    val noLongerRequired = baselineNames.filterNot(currentByProposal::containsKey)
+
+    return DiffRequiredProposalsResult(
+        path = pathLabel,
+        baselinePath = baselinePathLabel,
+        currentRequiredProposals = currentNames,
+        baselineRequiredProposals = baselineNames,
+        newlyRequiredProposals = newlyRequired,
+        noLongerRequiredProposals = noLongerRequired,
+        newlyRequiredEvidence = newlyRequired.mapNotNull(currentByProposal::get),
+        noLongerRequiredEvidence = noLongerRequired.mapNotNull(baselineByProposal::get),
+        summary = DiffRequiredProposalsSummaryResult(
+            currentRequiredCount = currentNames.size,
+            baselineRequiredCount = baselineNames.size,
+            newlyRequiredCount = newlyRequired.size,
+            noLongerRequiredCount = noLongerRequired.size,
         )
     )
 }

@@ -6,6 +6,7 @@ class HexanaMcpRegistrationTest : HexanaMcpToolsetDirectTestBase() {
         assertTrue("query_artifacts" in names)
         assertTrue("summarize_module" in names)
         assertTrue("list_required_proposals" in names)
+        assertTrue("diff_required_proposals" in names)
         assertTrue("check_runtime_compatibility" in names)
         assertTrue("list_imports" in names)
         assertTrue("list_exports" in names)

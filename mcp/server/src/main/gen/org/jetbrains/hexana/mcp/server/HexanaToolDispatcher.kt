@@ -48,6 +48,7 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   registerSummarizeModuleTool(handlers)
   registerListEnabledFeaturesTool(handlers)
   registerListRequiredProposalsTool(handlers)
+  registerDiffRequiredProposalsTool(handlers)
   registerCheckRuntimeCompatibilityTool(handlers)
   registerListCustomSectionsTool(handlers)
   registerListImportsTool(handlers)
@@ -469,6 +470,266 @@ private fun Server.registerListRequiredProposalsTool(handlers: HexanaToolHandler
     ),
   ))  {
     request: CallToolRequest -> handlers.listRequiredProposals(request.arguments)
+  }
+}
+
+private fun Server.registerDiffRequiredProposalsTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "diff_required_proposals",
+    description = "Diff required WebAssembly proposals between a current and baseline module.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("baselinePath", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to the baseline `.wasm` file to compare against the current module."))
+      })
+    },
+    required = listOf("baselinePath")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Input path label for the current module when the caller provided `path`."))
+      })
+      put("baselinePath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Input path label for the baseline module."))
+      })
+      put("currentRequiredProposals", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Required proposal names for the current module."))
+      })
+      put("baselineRequiredProposals", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Required proposal names for the baseline module."))
+      })
+      put("newlyRequiredProposals", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Proposals required by the current module but not the baseline."))
+      })
+      put("noLongerRequiredProposals", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Proposals required by the baseline but not the current module."))
+      })
+      put("newlyRequiredEvidence", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("proposal", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("WebAssembly proposal name."))
+            })
+            put("required", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the proposal is required by detected module features."))
+            })
+            put("evidence", buildJsonObject {
+              put("type", JsonPrimitive("object"))
+              put("properties", buildJsonObject {
+                put("featureFlag", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Enabled feature flag that required the proposal."))
+                })
+                put("sections", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Module sections that contributed evidence for the proposal."))
+                })
+                put("instructions", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Instructions that contributed evidence for the proposal."))
+                })
+                put("customSections", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Feature-related custom sections found in the module."))
+                })
+                put("notes", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Short conservative interpretation notes for the evidence."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("featureFlag"))
+                add(JsonPrimitive("sections"))
+                add(JsonPrimitive("instructions"))
+                add(JsonPrimitive("customSections"))
+                add(JsonPrimitive("notes"))
+              })
+              put("description", JsonPrimitive("Evidence that made the proposal required."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("proposal"))
+            add(JsonPrimitive("required"))
+            add(JsonPrimitive("evidence"))
+          })
+        })
+        put("description", JsonPrimitive("Evidence for proposals that became newly required in the current module."))
+      })
+      put("noLongerRequiredEvidence", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("proposal", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("WebAssembly proposal name."))
+            })
+            put("required", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the proposal is required by detected module features."))
+            })
+            put("evidence", buildJsonObject {
+              put("type", JsonPrimitive("object"))
+              put("properties", buildJsonObject {
+                put("featureFlag", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Enabled feature flag that required the proposal."))
+                })
+                put("sections", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Module sections that contributed evidence for the proposal."))
+                })
+                put("instructions", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Instructions that contributed evidence for the proposal."))
+                })
+                put("customSections", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Feature-related custom sections found in the module."))
+                })
+                put("notes", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Short conservative interpretation notes for the evidence."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("featureFlag"))
+                add(JsonPrimitive("sections"))
+                add(JsonPrimitive("instructions"))
+                add(JsonPrimitive("customSections"))
+                add(JsonPrimitive("notes"))
+              })
+              put("description", JsonPrimitive("Evidence that made the proposal required."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("proposal"))
+            add(JsonPrimitive("required"))
+            add(JsonPrimitive("evidence"))
+          })
+        })
+        put("description", JsonPrimitive("Evidence for proposals that are no longer required in the current module."))
+      })
+      put("summary", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("currentRequiredCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of required proposals in the current module."))
+          })
+          put("baselineRequiredCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of required proposals in the baseline module."))
+          })
+          put("newlyRequiredCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of proposals newly required by the current module."))
+          })
+          put("noLongerRequiredCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of proposals that were required only by the baseline module."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("currentRequiredCount"))
+          add(JsonPrimitive("baselineRequiredCount"))
+          add(JsonPrimitive("newlyRequiredCount"))
+          add(JsonPrimitive("noLongerRequiredCount"))
+        })
+        put("description", JsonPrimitive("Compact proposal-diff counts."))
+      })
+    },
+    required = listOf("currentRequiredProposals", "baselineRequiredProposals", "newlyRequiredProposals", "noLongerRequiredProposals", "newlyRequiredEvidence", "noLongerRequiredEvidence", "summary")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.diffRequiredProposals(request.arguments)
   }
 }
 

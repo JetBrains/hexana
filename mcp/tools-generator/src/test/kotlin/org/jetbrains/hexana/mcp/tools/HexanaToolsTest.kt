@@ -17,6 +17,7 @@ class HexanaToolsTest {
                 "summarize_module",
                 "list_enabled_features",
                 "list_required_proposals",
+                "diff_required_proposals",
                 "check_runtime_compatibility",
                 "list_custom_sections",
                 "list_imports",
@@ -119,6 +120,14 @@ class HexanaToolsTest {
         assertEquals(
             ToolInputPattern.RuntimeCompatibility,
             HexanaTools.single { it.name == "check_runtime_compatibility" }.inputPattern
+        )
+    }
+
+    @Test
+    fun `diff_required_proposals uses the wasm with baseline invocation pattern`() {
+        assertEquals(
+            ToolInputPattern.WasmWithBaseline,
+            HexanaTools.single { it.name == "diff_required_proposals" }.inputPattern
         )
     }
 

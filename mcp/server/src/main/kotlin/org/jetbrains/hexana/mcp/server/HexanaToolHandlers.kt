@@ -61,6 +61,15 @@ class HexanaToolHandlers(
         }
     }
 
+    fun diffRequiredProposals(arguments: JsonObject?): CallToolResult {
+        return execute("diff_required_proposals") {
+            analysisService.diffRequiredProposals(
+                input = wasmInput(arguments),
+                baselineInput = WasmInput.FilePath(arguments.requireNonBlankString("baselinePath"))
+            )
+        }
+    }
+
     fun checkRuntimeCompatibility(arguments: JsonObject?): CallToolResult {
         return execute("check_runtime_compatibility") {
             analysisService.checkRuntimeCompatibility(

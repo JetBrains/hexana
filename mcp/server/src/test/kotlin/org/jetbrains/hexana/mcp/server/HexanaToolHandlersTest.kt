@@ -930,6 +930,63 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun diffRequiredProposalsReturnsCurrentAndBaselineDelta() {
+        val baseline = createWasmFile(
+            "required-proposals-baseline.wasm",
+            """
+            (module
+              (type (func (result i32 i32)))
+              (func (export "base") (type 0)
+                i32.const 1
+                i32.const 2))
+            """.trimIndent()
+        )
+        val current = createWasmFile(
+            "required-proposals-current.wasm",
+            """
+            (module
+              (type (func (param funcref) (result i32 i32)))
+              (memory 1)
+              (data ${'$'}d "abc")
+              (func (export "features") (type 0) (param funcref) (result i32 i32)
+                local.get 0
+                ref.is_null
+                i32.extend8_s
+                i32.const 1)
+              (func (export "bulk")
+                i32.const 0
+                i32.const 0
+                i32.const 3
+                memory.init ${'$'}d))
+            """.trimIndent()
+        )
+
+        val result = handlers.diffRequiredProposals(
+            buildJsonObject {
+                put("path", JsonPrimitive(current.toString()))
+                put("baselinePath", JsonPrimitive(baseline.toString()))
+            }
+        )
+
+        assertFalse(result.isError == true)
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertEquals(current.toString(), structured["path"]!!.jsonPrimitive.content)
+        assertEquals(baseline.toString(), structured["baselinePath"]!!.jsonPrimitive.content)
+        assertEquals(
+            listOf("multi-value"),
+            structured["baselineRequiredProposals"]!!.jsonArray.map { it.jsonPrimitive.content }
+        )
+        assertEquals(
+            listOf("bulk-memory", "reference-types", "sign-extension"),
+            structured["newlyRequiredProposals"]!!.jsonArray.map { it.jsonPrimitive.content }
+        )
+        assertTrue(structured["newlyRequiredEvidence"]!!.jsonArray.any {
+            it.jsonObject["proposal"]!!.jsonPrimitive.content == "bulk-memory"
+        })
+        assertEquals(3, structured["summary"]!!.jsonObject["newlyRequiredCount"]!!.jsonPrimitive.int)
+    }
+
+    @Test
     fun checkRuntimeCompatibilityReportsUnknownGraalWasmProposalSupport() {
         val wasm = createWasmFile(
             "runtime-compatibility.wasm",

@@ -173,6 +173,57 @@ class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertTrue(bulkMemory.obj("evidence").array("instructions").map { it.textValue() }.contains("memory.init"))
     }
 
+    fun testDiffRequiredProposalsReturnsCompactDelta() {
+        val baseline = createWasmFixture(
+            "fixtures/direct/summary/runtime_compatibility_baseline.wasm",
+            """
+            (module
+              (type (func (result i32 i32)))
+              (func (export "base") (type 0)
+                i32.const 1
+                i32.const 2))
+            """.trimIndent()
+        )
+        val current = createWasmFixture(
+            "fixtures/direct/summary/runtime_compatibility_current.wasm",
+            """
+            (module
+              (type (func (param funcref) (result i32 i32)))
+              (memory 1)
+              (data ${'$'}d "abc")
+              (func (export "features") (type 0) (param funcref) (result i32 i32)
+                local.get 0
+                ref.is_null
+                i32.extend8_s)
+              (func (export "bulk")
+                i32.const 0
+                i32.const 0
+                i32.const 3
+                memory.init ${'$'}d))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "diff_required_proposals",
+            JsonObject(
+                jsonPath(current.projectRelativePath) + mapOf(
+                    "baselinePath" to kotlinx.serialization.json.JsonPrimitive(baseline.projectRelativePath)
+                )
+            )
+        )
+
+        assertEquals(current.projectRelativePath, result.text("path"))
+        assertEquals(baseline.projectRelativePath, result.text("baselinePath"))
+        assertEquals(
+            listOf("bulk-memory", "reference-types", "sign-extension"),
+            result.array("newlyRequiredProposals").map { it.textValue() }
+        )
+        assertTrue(result.array("newlyRequiredEvidence").any {
+            (it as JsonObject).text("proposal") == "bulk-memory"
+        })
+        assertEquals(3, result.obj("summary").int("newlyRequiredCount"))
+    }
+
     fun testListCustomSectionsReturnsOffsetsAndPreviews() {
         val fixture = createBinaryFixture(
             "fixtures/direct/summary/custom_sections.wasm",

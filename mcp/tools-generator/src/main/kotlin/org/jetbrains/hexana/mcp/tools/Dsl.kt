@@ -317,6 +317,7 @@ data class ToolSpec(
 
 sealed class ToolInputPattern {
     object WasmOnly : ToolInputPattern()
+    object WasmWithBaseline : ToolInputPattern()
     object FunctionPage : ToolInputPattern()
     object Funcidx : ToolInputPattern()
     object FunctionNameSearch : ToolInputPattern()
@@ -480,6 +481,12 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
     requireWasmInput()
     when (pattern) {
         ToolInputPattern.WasmOnly -> Unit
+        ToolInputPattern.WasmWithBaseline -> {
+            val baselinePath = requireField("baselinePath")
+            requireType(baselinePath, FieldType.StringT)
+            requireNonNullable(baselinePath)
+            requireDescribed(baselinePath)
+        }
         ToolInputPattern.FunctionPage -> {
             val offset = requireField("offset")
             requireType(offset, FieldType.Int32)

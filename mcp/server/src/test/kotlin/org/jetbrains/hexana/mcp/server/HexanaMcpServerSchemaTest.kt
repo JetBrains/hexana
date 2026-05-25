@@ -31,6 +31,7 @@ class HexanaMcpServerSchemaTest {
         assertEquals(
             listOf(
                 "check_runtime_compatibility",
+                "diff_required_proposals",
                 "disassemble_function",
                 "functions_for_indices",
                 "get_function_call_graph",

@@ -22,6 +22,7 @@ import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
 import org.jetbrains.hexana.mcp.model.runtime.CheckRuntimeCompatibilityResult
+import org.jetbrains.hexana.mcp.model.runtime.DiffRequiredProposalsResult
 import org.jetbrains.hexana.mcp.model.runtime.ListRequiredProposalsResult
 import org.jetbrains.hexana.mcp.model.sections.ListCustomSectionsResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
@@ -58,6 +59,9 @@ interface HexanaAnalysisService {
     fun listEnabledFeatures(input: WasmInput): ListEnabledFeaturesResult
     fun listRequiredProposals(input: WasmInput): ListRequiredProposalsResult {
         throw UnsupportedOperationException("listRequiredProposals is not implemented")
+    }
+    fun diffRequiredProposals(input: WasmInput, baselineInput: WasmInput): DiffRequiredProposalsResult {
+        throw UnsupportedOperationException("diffRequiredProposals is not implemented")
     }
     fun checkRuntimeCompatibility(input: WasmInput, runtime: String, version: String?): CheckRuntimeCompatibilityResult {
         throw UnsupportedOperationException("checkRuntimeCompatibility is not implemented")
@@ -150,6 +154,16 @@ class DefaultHexanaAnalysisService(
     override fun listRequiredProposals(input: WasmInput): ListRequiredProposalsResult {
         val wasm = load(input)
         return wasm.provider.readRequiredProposals()
+    }
+
+    override fun diffRequiredProposals(input: WasmInput, baselineInput: WasmInput): DiffRequiredProposalsResult {
+        val wasm = load(input)
+        val baseline = load(baselineInput)
+        return wasm.provider.diffRequiredProposals(
+            baseline = baseline.provider,
+            pathLabel = input.artifactPathLabel(),
+            baselinePathLabel = baselineInput.artifactPathLabel(),
+        )
     }
 
     override fun checkRuntimeCompatibility(

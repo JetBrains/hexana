@@ -4,6 +4,7 @@ private val HEXANA_TOOL_ORDER = listOf(
     "summarize_module",
     "list_enabled_features",
     "list_required_proposals",
+    "diff_required_proposals",
     "check_runtime_compatibility",
     "list_custom_sections",
     "list_imports",

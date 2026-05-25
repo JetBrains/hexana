@@ -29,6 +29,30 @@ val ListRequiredProposalsResultClass = class_(
     embed("summary", of = RequiredProposalsSummaryResultClass).describe("Compact proposal count and name summary.")
 }
 
+val DiffRequiredProposalsSummaryResultClass = class_("DiffRequiredProposalsSummaryResult") {
+    int("currentRequiredCount").describe("Number of required proposals in the current module.")
+    int("baselineRequiredCount").describe("Number of required proposals in the baseline module.")
+    int("newlyRequiredCount").describe("Number of proposals newly required by the current module.")
+    int("noLongerRequiredCount").describe("Number of proposals that were required only by the baseline module.")
+}
+
+val DiffRequiredProposalsResultClass = class_(
+    "DiffRequiredProposalsResult",
+    kotlinPackage = RUNTIME_MODEL_PACKAGE
+) {
+    nullable("path", of = string()).describe("Input path label for the current module when the caller provided `path`.")
+    nullable("baselinePath", of = string()).describe("Input path label for the baseline module.")
+    list("currentRequiredProposals", of = string()).describe("Required proposal names for the current module.")
+    list("baselineRequiredProposals", of = string()).describe("Required proposal names for the baseline module.")
+    list("newlyRequiredProposals", of = string()).describe("Proposals required by the current module but not the baseline.")
+    list("noLongerRequiredProposals", of = string()).describe("Proposals required by the baseline but not the current module.")
+    list("newlyRequiredEvidence", of = RequiredProposalResultClass)
+        .describe("Evidence for proposals that became newly required in the current module.")
+    list("noLongerRequiredEvidence", of = RequiredProposalResultClass)
+        .describe("Evidence for proposals that are no longer required in the current module.")
+    embed("summary", of = DiffRequiredProposalsSummaryResultClass).describe("Compact proposal-diff counts.")
+}
+
 val RuntimeProposalStatusResultClass = class_("RuntimeProposalStatusResult") {
     string("proposal").describe("Required WebAssembly proposal name.")
     string("status").describe("Compatibility status: `supported`, `unsupported`, or `unknown`.")
@@ -59,6 +83,10 @@ val RuntimeCompatibilityInputClass = WasmInputClass.with("RuntimeCompatibilityIn
         .describe("Optional runtime version label. Reported for context; exact version parsing is not attempted.")
 }
 
+val ProposalDiffInputClass = WasmInputClass.with("ProposalDiffInput") {
+    string("baselinePath").describe("Path to the baseline `.wasm` file to compare against the current module.")
+}
+
 internal val RuntimeTools: List<ToolSpec> = tools {
     tool("list_required_proposals") {
         summary = "List required WebAssembly proposals inferred from detected module features."
@@ -70,6 +98,18 @@ internal val RuntimeTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.WasmOnly
         output = ListRequiredProposalsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readRequiredProposals"
+    }
+
+    tool("diff_required_proposals") {
+        summary = "Diff required WebAssembly proposals between a current and baseline module."
+        guidance = """
+            Compare the current module against `baselinePath` and return both full required-proposal name lists plus the compact newly-required and no-longer-required subsets.
+            Prefer this over calling `list_required_proposals` twice when the task needs current-versus-baseline proposal changes.
+        """
+        input = ProposalDiffInputClass
+        inputPattern = ToolInputPattern.WasmWithBaseline
+        output = DiffRequiredProposalsResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.diffRequiredProposals"
     }
 
     tool("check_runtime_compatibility") {

@@ -31,6 +31,27 @@ data class ListRequiredProposalsResult(
 )
 
 @Serializable
+data class DiffRequiredProposalsSummaryResult(
+    val currentRequiredCount: Int,
+    val baselineRequiredCount: Int,
+    val newlyRequiredCount: Int,
+    val noLongerRequiredCount: Int
+)
+
+@Serializable
+data class DiffRequiredProposalsResult(
+    val path: String?,
+    val baselinePath: String?,
+    val currentRequiredProposals: List<String>,
+    val baselineRequiredProposals: List<String>,
+    val newlyRequiredProposals: List<String>,
+    val noLongerRequiredProposals: List<String>,
+    val newlyRequiredEvidence: List<RequiredProposalResult>,
+    val noLongerRequiredEvidence: List<RequiredProposalResult>,
+    val summary: DiffRequiredProposalsSummaryResult
+)
+
+@Serializable
 data class RuntimeProposalStatusResult(
     val proposal: String,
     val status: String,
