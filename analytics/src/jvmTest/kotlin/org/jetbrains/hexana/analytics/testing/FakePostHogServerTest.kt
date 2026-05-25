@@ -16,7 +16,7 @@ class FakePostHogServerTest {
                   "api_key": "test-key",
                   "batch": [
                     {
-                      "event": "wasm_file_opened",
+                      "event": "binary_opened",
                       "distinct_id": "test-user",
                       "properties": {
                         "surface": "ide_plugin",
@@ -37,7 +37,7 @@ class FakePostHogServerTest {
             )
 
             val events = server.awaitEvents(2)
-            events.singleEvent("wasm_file_opened")
+            events.singleEvent("binary_opened")
                 .requireDistinctId("test-user")
                 .assertProperty("surface", "ide_plugin")
                 .assertProperty("file_size_bytes", 128)

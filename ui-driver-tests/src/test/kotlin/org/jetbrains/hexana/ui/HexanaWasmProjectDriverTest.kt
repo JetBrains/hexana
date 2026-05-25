@@ -28,8 +28,9 @@ class HexanaWasmProjectDriverTest {
         .let { HexanaUiDriverTestSupport.configureSendAnalytics(it, enabled = true) }
 
       context.openWasmProjectAndWaitForEditor {
-        server.awaitEvent("wasm_file_opened")
+        server.awaitEvent("binary_opened")
           .requireDistinctId()
+          .assertProperty("format", "wasm")
           .assertProperty("surface", "ide_plugin")
           .assertPositiveNumberProperty("file_size_bytes")
       }

@@ -40,9 +40,10 @@ class HexanaPluginAnalyticsTest : BasePlatformTestCase() {
             initializeAnalytics(server)
 
             createEditor(createMinimalWasmFile("fixtures/analytics/enabled.wasm")).use {
-                val event = server.awaitEvent("wasm_file_opened")
+                val event = server.awaitEvent("binary_opened")
                 event
                     .requireDistinctId(TEST_DISTINCT_ID)
+                    .assertProperty("format", "wasm")
                     .assertProperty("surface", "ide_plugin")
                     .assertProperty("file_size_bytes", MINIMAL_WASM_BYTES.size)
                     .assertProperty("ide_type", "IDEA")

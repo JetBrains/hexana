@@ -14,14 +14,16 @@ class PostHogJsClientHttpTest {
         val client = newClient(server, consentAllowed = true)
         try {
             client.capture(
-                HexanaEvent.WasmFileOpened(
+                HexanaEvent.BinaryOpened(
+                    format = HexanaEvent.BinaryFormat.WASM,
                     fileSizeBytes = 512,
                     surface = HexanaEvent.Surface.VSCODE_EXTENSION
                 )
             )
 
-            server.awaitEvent("wasm_file_opened")
+            server.awaitEvent("binary_opened")
                 .requireDistinctId(TEST_DISTINCT_ID)
+                .assertProperty("format", "wasm")
                 .assertProperty("file_size_bytes", 512)
                 .assertProperty("surface", "vscode_extension")
                 .assertProperty("ide_type", "Visual Studio Code")
@@ -61,7 +63,8 @@ class PostHogJsClientHttpTest {
         val client = newClient(server, consentAllowed = false)
         try {
             client.capture(
-                HexanaEvent.WasmFileOpened(
+                HexanaEvent.BinaryOpened(
+                    format = HexanaEvent.BinaryFormat.WASM,
                     fileSizeBytes = 512,
                     surface = HexanaEvent.Surface.VSCODE_EXTENSION
                 )

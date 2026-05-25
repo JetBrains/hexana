@@ -2,20 +2,80 @@ package org.jetbrains.hexana.analytics
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class HexanaEventTest {
 
     @Test
-    fun wasmFileOpenedEvent() {
-        val event = HexanaEvent.WasmFileOpened(
+    fun binaryOpenedMinimal() {
+        val event = HexanaEvent.BinaryOpened(
+            format = HexanaEvent.BinaryFormat.WASM,
             fileSizeBytes = 1024L,
-            surface = HexanaEvent.Surface.IDE_PLUGIN
+            surface = HexanaEvent.Surface.IDE_PLUGIN,
         )
-        assertEquals("wasm_file_opened", event.name)
+        assertEquals("binary_opened", event.name)
+        assertEquals("wasm", event.properties["format"])
         assertEquals(1024L, event.properties["file_size_bytes"])
         assertEquals("ide_plugin", event.properties["surface"])
+    }
+
+    @Test
+    fun binaryOpenedFullyTagged() {
+        val event = HexanaEvent.BinaryOpened(
+            format = HexanaEvent.BinaryFormat.ELF,
+            fileSizeBytes = 8_000_000L,
+            surface = HexanaEvent.Surface.IDE_PLUGIN,
+            arch = HexanaEvent.Arch.X86_64,
+            isStripped = false,
+            hasDebugInfo = true,
+            symbolCountBucket = HexanaEvent.SymbolCountBucket.B_1001_10000,
+        )
+        assertEquals("binary_opened", event.name)
+        assertEquals("elf", event.properties["format"])
+        assertEquals(8_000_000L, event.properties["file_size_bytes"])
+        assertEquals("ide_plugin", event.properties["surface"])
+        assertEquals("x86_64", event.properties["arch"])
+        assertEquals(false, event.properties["is_stripped"])
+        assertEquals(true, event.properties["has_debug_info"])
+        assertEquals("1001-10000", event.properties["symbol_count_bucket"])
+    }
+
+    @Test
+    fun binaryOpenedDropsNullOptionalProps() {
+        val event = HexanaEvent.BinaryOpened(
+            format = HexanaEvent.BinaryFormat.GENERIC,
+            fileSizeBytes = 64L,
+            surface = HexanaEvent.Surface.VSCODE_EXTENSION,
+            // arch, isStripped, hasDebugInfo, symbolCountBucket all null
+        )
+        assertFalse("arch" in event.properties)
+        assertFalse("is_stripped" in event.properties)
+        assertFalse("has_debug_info" in event.properties)
+        assertFalse("symbol_count_bucket" in event.properties)
+    }
+
+    @Test
+    fun binaryFormatFromValueRoundTrips() {
+        for (format in HexanaEvent.BinaryFormat.entries) {
+            assertEquals(format, HexanaEvent.BinaryFormat.fromValue(format.value))
+        }
+        assertNull(HexanaEvent.BinaryFormat.fromValue("not_a_format"))
+    }
+
+    @Test
+    fun symbolCountBucketBoundaries() {
+        assertEquals(HexanaEvent.SymbolCountBucket.NONE, HexanaEvent.SymbolCountBucket.of(0))
+        assertEquals(HexanaEvent.SymbolCountBucket.NONE, HexanaEvent.SymbolCountBucket.of(-5))
+        assertEquals(HexanaEvent.SymbolCountBucket.B_1_100, HexanaEvent.SymbolCountBucket.of(1))
+        assertEquals(HexanaEvent.SymbolCountBucket.B_1_100, HexanaEvent.SymbolCountBucket.of(100))
+        assertEquals(HexanaEvent.SymbolCountBucket.B_101_1000, HexanaEvent.SymbolCountBucket.of(101))
+        assertEquals(HexanaEvent.SymbolCountBucket.B_101_1000, HexanaEvent.SymbolCountBucket.of(1000))
+        assertEquals(HexanaEvent.SymbolCountBucket.B_1001_10000, HexanaEvent.SymbolCountBucket.of(1001))
+        assertEquals(HexanaEvent.SymbolCountBucket.B_1001_10000, HexanaEvent.SymbolCountBucket.of(10_000))
+        assertEquals(HexanaEvent.SymbolCountBucket.B_10000_PLUS, HexanaEvent.SymbolCountBucket.of(10_001))
+        assertEquals(HexanaEvent.SymbolCountBucket.B_10000_PLUS, HexanaEvent.SymbolCountBucket.of(1_000_000))
     }
 
     @Test
@@ -108,7 +168,11 @@ class HexanaEventTest {
     @Test
     fun fakeClientCapturesEvents() {
         val client = FakeAnalyticsClient()
-        val event = HexanaEvent.WasmFileOpened(512L, HexanaEvent.Surface.MCP_SERVER)
+        val event = HexanaEvent.BinaryOpened(
+            format = HexanaEvent.BinaryFormat.WASM,
+            fileSizeBytes = 512L,
+            surface = HexanaEvent.Surface.MCP_SERVER,
+        )
         client.capture(event)
         assertEquals(1, client.captured.size)
         assertEquals(event, client.captured.first())
@@ -117,7 +181,13 @@ class HexanaEventTest {
     @Test
     fun noOpClientDoesNothing() {
         val client = NoOpAnalyticsClient
-        client.capture(HexanaEvent.WasmFileOpened(0L, HexanaEvent.Surface.IDE_PLUGIN))
+        client.capture(
+            HexanaEvent.BinaryOpened(
+                format = HexanaEvent.BinaryFormat.WASM,
+                fileSizeBytes = 0L,
+                surface = HexanaEvent.Surface.IDE_PLUGIN,
+            )
+        )
         client.flush()
         client.shutdown()
         // Should not throw
@@ -126,7 +196,7 @@ class HexanaEventTest {
     @Test
     fun allEventNamesAreSnakeCase() {
         val events = listOf(
-            HexanaEvent.WasmFileOpened(0L, HexanaEvent.Surface.IDE_PLUGIN),
+            HexanaEvent.BinaryOpened(HexanaEvent.BinaryFormat.WASM, 0L, HexanaEvent.Surface.IDE_PLUGIN),
             HexanaEvent.WasmFileParsed(0L, 0L, true, null, HexanaEvent.Surface.IDE_PLUGIN),
             HexanaEvent.McpToolInvoked("test", HexanaEvent.McpTransport.STDIO, 0L, true),
             HexanaEvent.McpServerStarted(HexanaEvent.McpTransport.HTTP, false),

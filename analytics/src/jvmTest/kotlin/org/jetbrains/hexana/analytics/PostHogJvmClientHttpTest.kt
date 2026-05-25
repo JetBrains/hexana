@@ -11,14 +11,16 @@ class PostHogJvmClientHttpTest {
             val client = newClient(server, consentAllowed = true)
             try {
                 client.capture(
-                    HexanaEvent.WasmFileOpened(
+                    HexanaEvent.BinaryOpened(
+                        format = HexanaEvent.BinaryFormat.WASM,
                         fileSizeBytes = 512,
                         surface = HexanaEvent.Surface.IDE_PLUGIN
                     )
                 )
 
-                server.awaitEvent("wasm_file_opened")
+                server.awaitEvent("binary_opened")
                     .requireDistinctId(TEST_DISTINCT_ID)
+                    .assertProperty("format", "wasm")
                     .assertProperty("file_size_bytes", 512)
                     .assertProperty("surface", "ide_plugin")
                     .assertProperty("ide_type", "IntelliJ IDEA")
@@ -60,7 +62,8 @@ class PostHogJvmClientHttpTest {
             val client = newClient(server, consentAllowed = false)
             try {
                 client.capture(
-                    HexanaEvent.WasmFileOpened(
+                    HexanaEvent.BinaryOpened(
+                        format = HexanaEvent.BinaryFormat.WASM,
                         fileSizeBytes = 512,
                         surface = HexanaEvent.Surface.IDE_PLUGIN
                     )

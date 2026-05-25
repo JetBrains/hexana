@@ -14,7 +14,7 @@ class VscodeAnalyticsTest {
     }
 
     @Test
-    fun telemetryEnabledSendsWasmFileOpenedThroughExportedApi() = runTest {
+    fun telemetryEnabledSendsBinaryOpenedThroughExportedApi() = runTest {
         if (!isNodeTestRuntime()) return@runTest
 
         val server = FakePostHogNodeServer.start()
@@ -27,11 +27,12 @@ class VscodeAnalyticsTest {
                     appVersion = "1.102.0",
                 )
 
-                captureWasmFileOpened(512.0)
+                captureBinaryOpened(512.0, "wasm")
                 flushUntilEvents(server, expectedCount = 1)
 
-                server.events().singleEvent("wasm_file_opened")
+                server.events().singleEvent("binary_opened")
                     .requireDistinctId()
+                    .assertProperty("format", "wasm")
                     .assertProperty("file_size_bytes", 512)
                     .assertProperty("surface", "vscode_extension")
                     .assertProperty("ide_type", "Visual Studio Code")
@@ -57,7 +58,7 @@ class VscodeAnalyticsTest {
                     appVersion = "1.102.0",
                 )
 
-                captureWasmFileOpened(512.0)
+                captureBinaryOpened(512.0, "wasm")
                 flushAnalytics()
 
                 server.assertNoRequests()
@@ -77,16 +78,16 @@ class VscodeAnalyticsTest {
         try {
             withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
                 initAnalytics(storagePath, telemetryEnabled = false, appName = "Cursor", appVersion = "1.2.3")
-                captureWasmFileOpened(128.0)
+                captureBinaryOpened(128.0, "wasm")
                 flushAnalytics()
                 server.assertNoRequests()
 
                 shutdownAnalytics()
                 initAnalytics(storagePath, telemetryEnabled = true, appName = "Cursor", appVersion = "1.2.3")
-                captureWasmFileOpened(256.0)
+                captureBinaryOpened(256.0, "wasm")
                 flushUntilEvents(server, expectedCount = 1)
 
-                val event = server.events().singleEvent("wasm_file_opened")
+                val event = server.events().singleEvent("binary_opened")
                     .requireDistinctId()
                     .assertProperty("file_size_bytes", 256)
                     .assertProperty("surface", "vscode_extension")
@@ -95,11 +96,11 @@ class VscodeAnalyticsTest {
 
                 shutdownAnalytics()
                 initAnalytics(storagePath, telemetryEnabled = true, appName = "Cursor", appVersion = "1.2.3")
-                captureWasmFileOpened(384.0)
+                captureBinaryOpened(384.0, "wasm")
                 flushUntilEvents(server, expectedCount = 2)
 
                 val secondEvent = server.events()
-                    .filter { it.name == "wasm_file_opened" }
+                    .filter { it.name == "binary_opened" }
                     .last()
                     .requireDistinctId()
                     .assertProperty("file_size_bytes", 384)

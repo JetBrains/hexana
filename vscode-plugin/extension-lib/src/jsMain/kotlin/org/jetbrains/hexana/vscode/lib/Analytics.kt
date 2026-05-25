@@ -37,14 +37,28 @@ fun initAnalytics(storagePath: String, telemetryEnabled: Boolean, appName: Strin
 }
 
 /**
- * Captures a `wasm_file_opened` event.
+ * Captures a `binary_opened` event.
+ *
+ * [format] is the snake_case PostHog string for the binary container
+ * format (`wasm`, `wasm_component`, `elf`, `macho`, `pe`, `coff`,
+ * `fat_macho`, `jar`, `war`, `zip`, `apk`, `class`, `generic`). Unknown
+ * values fall back to `generic` so the event is never dropped on the JS
+ * side.
+ *
+ * The optional native-binary fields (`arch`, `is_stripped`,
+ * `has_debug_info`, `symbol_count_bucket`) are not surfaced through the
+ * JS API yet — the VS Code extension does not run native-binary
+ * introspection. They can be added to the JS signature once it does.
  */
 @JsExport
-fun captureWasmFileOpened(fileSizeBytes: Double) {
+fun captureBinaryOpened(fileSizeBytes: Double, format: String) {
+    val resolvedFormat = HexanaEvent.BinaryFormat.fromValue(format)
+        ?: HexanaEvent.BinaryFormat.GENERIC
     HexanaAnalytics.client.capture(
-        HexanaEvent.WasmFileOpened(
+        HexanaEvent.BinaryOpened(
+            format = resolvedFormat,
             fileSizeBytes = fileSizeBytes.safeToLong(),
-            surface = HexanaEvent.Surface.VSCODE_EXTENSION
+            surface = HexanaEvent.Surface.VSCODE_EXTENSION,
         )
     )
 }
