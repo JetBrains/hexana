@@ -6,68 +6,33 @@ import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Td
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.providers.BinaryProvider
-import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.formatSize
-import org.jetbrains.hexana.wasm.analysis.SizeNode
+import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 
 @Composable
 fun SizeTabContent(
     provider: BinaryProvider,
     selection: HexSelectionState,
 ) {
-    when (provider) {
-        is WasmBinaryProvider -> CoreWasmSize(provider, selection)
-        is WasmComponentBinaryProvider -> ComponentSize(provider, selection)
-        else -> Div { Text("Not a recognized WebAssembly binary.") }
-    }
-}
+    val root = remember(provider) { provider.sizeAnalysis }
 
-@Composable
-private fun CoreWasmSize(provider: WasmBinaryProvider, selection: HexSelectionState) {
-    if (!provider.canProvideWasmModule()) {
-        Div { Text("Failed to parse core Wasm module.") }
-        return
-    }
-
-    val module = remember(provider) { provider.sizeAnalysis }
-
-    if (module == null) {
+    if (root == null) {
         Div({ classes("empty-hint") }) {
             Text("Size analysis unavailable.")
         }
         return
     }
 
-    SizeNodeTable(module, selection)
+    SizeNodeTable(root, selection)
 }
 
 @Composable
-private fun ComponentSize(provider: WasmComponentBinaryProvider, selection: HexSelectionState) {
-    if (!provider.canProvideWasmModule()) {
-        Div { Text("Failed to parse component-model binary.") }
-        return
-    }
-
-    val module = remember(provider) { provider.sizeAnalysis }
-
-    if (module == null) {
-        Div({ classes("empty-hint") }) {
-            Text("Size analysis unavailable.")
-        }
-        return
-    }
-
-    SizeNodeTable(module, selection)
-}
-
-@Composable
-private fun SizeNodeTable(module: SizeNode.Module, selection: HexSelectionState) {
+private fun SizeNodeTable(root: BinarySizeNode, selection: HexSelectionState) {
     Div({ style { property("margin-bottom", "8px"); property("font-size", "12px") } }) {
-        Text("Total: ${formatSize(module.size)}")
+        Text("Total: ${formatSize(root.size)}")
     }
 
-    if (module.children.isEmpty()) {
+    if (root.children.isEmpty()) {
         Div({ classes("empty-hint") }) {
             Text("No size data available.")
         }
@@ -80,8 +45,8 @@ private fun SizeNodeTable(module: SizeNode.Module, selection: HexSelectionState)
         defaultSortColumn = 2,
         defaultSortDirection = SortDirection.DESC,
     ) {
-        for ((index, child) in module.children.withIndex()) {
-            val pct = child.percentage(module.size)
+        for ((index, child) in root.children.withIndex()) {
+            val pct = child.percentage(root.size)
             val pctStr = "${((pct * 10).toInt() / 10)}.${((pct * 10).toInt() % 10)}%"
             val hex = "0x${child.offset.toString(16).uppercase()}"
 

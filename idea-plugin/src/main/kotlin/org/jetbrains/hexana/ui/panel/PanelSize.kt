@@ -29,8 +29,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.borderBottom
 import org.jetbrains.hexana.wasm.analysis.SizeAnalysisBuilder
@@ -51,22 +51,17 @@ import org.jetbrains.jewel.ui.component.VerticalScrollbar
 private enum class SizeSortColumn { TYPE, SIZE, OFFSET }
 
 @Composable
-fun WasmPanelSize(provider: WasmBinaryProvider, state: HexViewStateHolder) {
-    val module = remember(provider) { provider.sizeAnalysis } ?: return
-    val builder = remember(provider) { provider.sizeAnalysisBuilder }
-    val dataRecords = remember(provider) { provider.data }
-    SizeTreeContent(module, builder, provider, dataRecords, state)
-}
-
-@Composable
-fun WasmPanelSize(provider: WasmComponentBinaryProvider, state: HexViewStateHolder) {
-    val module = remember(provider) { provider.sizeAnalysis } ?: return
-    SizeTreeContent(module, builder = null, provider = null, dataRecords = emptyList(), state)
+fun PanelSize(provider: BinaryProvider, state: HexViewStateHolder) {
+    val root = remember(provider) { provider.sizeAnalysis } ?: return
+    val builder = remember(provider) { (provider as? WasmBinaryProvider)?.sizeAnalysisBuilder }
+    val wasmProvider = remember(provider) { provider as? WasmBinaryProvider }
+    val dataRecords = remember(provider) { wasmProvider?.data ?: emptyList() }
+    SizeTreeContent(root, builder, wasmProvider, dataRecords, state)
 }
 
 @Composable
 private fun SizeTreeContent(
-    module: SizeNode.Module,
+    module: BinarySizeNode,
     builder: SizeAnalysisBuilder?,
     provider: WasmBinaryProvider?,
     dataRecords: List<WasmDataRecord>,

@@ -564,7 +564,7 @@ private fun BinaryProvider.resolvePanels(
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
-                    Panel("Top") { WasmPanelSize(this, state) },
+                    Panel("Top") { PanelSize(this, state) },
                     Panel("Monos") { WasmPanelMonos(this, state) },
                     Panel("Garbage") { WasmPanelGarbage(this, state) },
                     Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
@@ -593,7 +593,7 @@ private fun BinaryProvider.resolvePanels(
         is WasmComponentBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
-                    Panel("Top") { WasmPanelSize(this, state) },
+                    Panel("Top") { PanelSize(this, state) },
                     Panel("Wat") { WasmPanelWat(this, state) },
                 )
             } else {
@@ -603,7 +603,7 @@ private fun BinaryProvider.resolvePanels(
         is WasmBinaryProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
-                    Panel("Top") { WasmPanelSize(this, state) },
+                    Panel("Top") { PanelSize(this, state) },
                     Panel("Monos") { WasmPanelMonos(this, state) },
                     Panel("Garbage") { WasmPanelGarbage(this, state) },
                     Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
@@ -625,13 +625,18 @@ private fun BinaryProvider.resolvePanels(
         is WasmComponentBinaryProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
-                    Panel("Top") { WasmPanelSize(this, state) },
+                    Panel("Top") { PanelSize(this, state) },
                 )
             } else emptyList()
         }
         else -> emptyList()
     }
-    val panels = (tabPanels + extraPanels).toMutableList()
+    val sizePanel = if (sizeAnalysis != null && extraPanels.none { it.description == "Top" }) {
+        listOf(Panel("Top") { PanelSize(this, state) })
+    } else {
+        emptyList()
+    }
+    val panels = (tabPanels + sizePanel + extraPanels).toMutableList()
     // Wire Garbage → Dominators cross-panel navigation
     val domIndex = panels.indexOfFirst { it.description == "Dominators" }
     val garbageIndex = panels.indexOfFirst { it.description == "Garbage" }

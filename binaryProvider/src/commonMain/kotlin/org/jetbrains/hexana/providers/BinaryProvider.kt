@@ -177,7 +177,7 @@ class ElfBinaryProvider(
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
         val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy null
-        val totalSize = bytes.capacity()
+        val totalSize = bytes.size
         val children = secs.map { sec ->
             BinarySizeNode(
                 name = sec.name.ifEmpty { "<unnamed>" },
@@ -258,7 +258,7 @@ class MachOBinaryProvider(
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
         val segs = segments?.takeIf { it.isNotEmpty() } ?: return@lazy null
-        val totalSize = bytes.capacity()
+        val totalSize = bytes.size
         val children = segs.map { seg ->
             val sectionChildren = seg.sections.map { sec ->
                 BinarySizeNode(
@@ -292,7 +292,7 @@ class FatMachOBinaryProvider(
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
         val archs = architectures?.takeIf { it.isNotEmpty() } ?: return@lazy null
-        val totalSize = bytes.capacity()
+        val totalSize = bytes.size
         val children = archs.map { arch ->
             BinarySizeNode(
                 name = "Slice ${arch.index}",
@@ -359,7 +359,7 @@ class PeBinaryProvider(
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
         val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy null
-        val totalSize = bytes.capacity()
+        val totalSize = bytes.size
         val children = secs.map { sec ->
             BinarySizeNode(
                 name = sec.name.ifBlank { "<unnamed>" },

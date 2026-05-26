@@ -63,8 +63,8 @@ fun HexanaPanel(
             } }
             addAll(commonTabs.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
 
-            // Size tab (always present for Wasm and component)
-            if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
+            // Size tab (shown whenever the provider supports size analysis)
+            if (provider.sizeAnalysis != null) {
                 add(PanelTab(FixedTab.Size.label) { sel ->
                     SizeTabContent(provider, sel)
                 })
