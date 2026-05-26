@@ -45,6 +45,7 @@ import org.jetbrains.hexana.wasm.analysis.WasmProposal
 import org.jetbrains.hexana.wasm.analysis.WasmProposalDetector
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageAnalyzer
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageResult
+import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.wasm.analysis.SizeAnalysisBuilder
 import org.jetbrains.hexana.wasm.analysis.SizeNode
 import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphBuilder
@@ -68,6 +69,12 @@ sealed interface BinaryProvider {
      * give two different cursors.
      */
     val bytes: CommonByteBuffer
+
+    /**
+     * Hierarchical size breakdown of the binary, or `null` when the format
+     * does not (yet) support size profiling.
+     */
+    val sizeAnalysis: BinarySizeNode? get() = null
 }
 
 object WasmBinaryProviderSelector {
@@ -375,7 +382,7 @@ open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer
         }
     }
 
-    val sizeAnalysis: SizeNode.Module? by lazy {
+    override val sizeAnalysis: SizeNode.Module? by lazy {
         wasmModule?.let { SizeAnalysisBuilder(bytes, it).buildTree() }
     }
 
@@ -548,7 +555,7 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
         signatures
     }
 
-    val sizeAnalysis: SizeNode.Module? by lazy {
+    override val sizeAnalysis: SizeNode.Module? by lazy {
         parsedModule?.let { SizeAnalysisBuilder(bytes, it).buildTree() }
     }
 

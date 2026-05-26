@@ -10,7 +10,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
-import org.jetbrains.hexana.wasm.analysis.SizeNode
+import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 
@@ -324,19 +324,11 @@ private fun ProposalBadges(proposals: List<WasmProposal>) {
 }
 
 private fun buildSizeTooltip(provider: BinaryProvider): List<Pair<String, String>>? {
-    val sizeAnalysis: SizeNode.Module? = when (provider) {
-        is WasmBinaryProvider -> {
-            provider.sizeAnalysis
-        }
-        is WasmComponentBinaryProvider -> {
-            provider.sizeAnalysis
-        }
-        else -> null
-    }
-    val children = sizeAnalysis?.children ?: return null
+    val sizeAnalysis = provider.sizeAnalysis ?: return null
+    val children = sizeAnalysis.children
     if (children.isEmpty()) return null
 
-    val grouped = linkedMapOf<String, MutableList<SizeNode>>()
+    val grouped = linkedMapOf<String, MutableList<BinarySizeNode>>()
     for (child in children) {
         grouped.getOrPut(child.name) { mutableListOf() }.add(child)
     }

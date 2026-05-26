@@ -36,6 +36,7 @@ import org.jetbrains.hexana.ui.borderBottom
 import org.jetbrains.hexana.wasm.analysis.SizeAnalysisBuilder
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.theme.treeStyle
+import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.wasm.analysis.SizeNode
 import org.jetbrains.hexana.wasm.sections.WasmDataRecord
 import org.jetbrains.jewel.foundation.lazy.SelectableLazyListState
@@ -78,7 +79,7 @@ private fun SizeTreeContent(
 
     LaunchedEffect(module, sortColumn, sortAsc) {
         tree = withContext(Dispatchers.IO) {
-            val detailCache = mutableMapOf<Any, List<SizeNode>>()
+            val detailCache = mutableMapOf<Any, List<BinarySizeNode>>()
             buildTree {
                 addSizeChildren(module, builder, provider, dataRecords, detailCache, sortColumn, sortAsc)
             }
@@ -138,7 +139,7 @@ private fun SizeTreeContent(
                 modifier = Modifier.fillMaxSize(),
                 onElementClick = { element ->
                     val data = element.data
-                    if (data is SizeNode && data.size > 0) {
+                    if (data is BinarySizeNode && data.size > 0) {
                         state.scrollHexViewTo(data.offset, data.size)
                     }
                 },
@@ -147,7 +148,7 @@ private fun SizeTreeContent(
                     Spacer(Modifier.width(chevronSpacerWidth))
                 }
                 val data = element.data
-                if (data is SizeNode) {
+                if (data is BinarySizeNode) {
                     SizeNodeRow(data, module.size, nameColumnWidth, sizeColumnWidth, percentColumnWidth, nestingRightPadding)
                 } else {
                     Text(
@@ -167,11 +168,11 @@ private fun SizeTreeContent(
 }
 
 private fun TreeGeneratorScope<Any>.addSizeChildren(
-    parent: SizeNode,
+    parent: BinarySizeNode,
     builder: SizeAnalysisBuilder?,
     provider: WasmBinaryProvider?,
     dataRecords: List<WasmDataRecord>,
-    detailCache: MutableMap<Any, List<SizeNode>>,
+    detailCache: MutableMap<Any, List<BinarySizeNode>>,
     sortColumn: SizeSortColumn,
     sortAsc: Boolean,
 ) {
@@ -189,8 +190,8 @@ private fun TreeGeneratorScope<Any>.addSizeChildren(
     }
 }
 
-private fun sizeNodeComparator(column: SizeSortColumn, asc: Boolean): Comparator<SizeNode> {
-    val base: Comparator<SizeNode> = when (column) {
+private fun sizeNodeComparator(column: SizeSortColumn, asc: Boolean): Comparator<BinarySizeNode> {
+    val base: Comparator<BinarySizeNode> = when (column) {
         SizeSortColumn.TYPE -> compareBy { it.name }
         SizeSortColumn.SIZE -> compareBy { it.size }
         SizeSortColumn.OFFSET -> compareBy { it.offset }
@@ -199,12 +200,12 @@ private fun sizeNodeComparator(column: SizeSortColumn, asc: Boolean): Comparator
 }
 
 private fun resolveChildren(
-    node: SizeNode,
+    node: BinarySizeNode,
     builder: SizeAnalysisBuilder?,
     provider: WasmBinaryProvider?,
     dataRecords: List<WasmDataRecord>,
-    cache: MutableMap<Any, List<SizeNode>>,
-): List<SizeNode> {
+    cache: MutableMap<Any, List<BinarySizeNode>>,
+): List<BinarySizeNode> {
     if (node.children.isNotEmpty()) return node.children
     if (builder == null) return emptyList()
 
@@ -280,7 +281,7 @@ private fun SortableHeaderCell(
 
 @Composable
 private fun SizeNodeRow(
-    node: SizeNode,
+    node: BinarySizeNode,
     moduleSize: Int,
     nameColumnWidth: Dp,
     sizeColumnWidth: Dp,

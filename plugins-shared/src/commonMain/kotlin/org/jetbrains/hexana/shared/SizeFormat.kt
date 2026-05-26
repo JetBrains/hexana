@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.shared
 
-import org.jetbrains.hexana.wasm.analysis.SizeNode
+import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import kotlin.math.roundToInt
 
 private fun formatOneDecimal(value: Double): String {
@@ -27,9 +27,9 @@ fun formatSizeLong(bytes: Long): String = when {
 }
 
 /**
- * Builds a descriptive label for a [SizeNode] within a module of the given total [moduleSize].
+ * Builds a descriptive label for a [BinarySizeNode] within a module of the given total [moduleSize].
  */
-fun sizeNodeLabel(node: SizeNode, moduleSize: Int): String {
+fun sizeNodeLabel(node: BinarySizeNode, moduleSize: Int): String {
     val pct = node.percentage(moduleSize)
     val pctStr = "${formatOneDecimal(pct)}%"
     val hex = "0x${node.offset.toString(16).uppercase()}"

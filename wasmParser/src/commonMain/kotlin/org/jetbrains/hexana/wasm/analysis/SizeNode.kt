@@ -1,15 +1,13 @@
 package org.jetbrains.hexana.wasm.analysis
 
 sealed class SizeNode(
-    val name: String,
-    val size: Int,
-    val offset: Int,
-    val children: List<SizeNode> = emptyList()
-) {
-    fun percentage(parentSize: Int): Double =
-        if (parentSize == 0) 0.0 else (size.toDouble() / parentSize) * 100.0
+    name: String,
+    size: Int,
+    offset: Int,
+    children: List<BinarySizeNode> = emptyList()
+) : BinarySizeNode(name, size, offset, children) {
 
-    class Module(name: String, size: Int, offset: Int, children: List<SizeNode>)
+    class Module(name: String, size: Int, offset: Int, children: List<BinarySizeNode>)
         : SizeNode(name, size, offset, children)
 
     class Section(name: String, size: Int, offset: Int, val sectionId: Int?, children: List<SizeNode>)
