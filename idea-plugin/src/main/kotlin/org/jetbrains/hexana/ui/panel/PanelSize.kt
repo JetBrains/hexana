@@ -52,11 +52,16 @@ private enum class SizeSortColumn { TYPE, SIZE, OFFSET }
 
 @Composable
 fun PanelSize(provider: BinaryProvider, state: HexViewStateHolder) {
-    val root = remember(provider) { provider.sizeAnalysis } ?: return
-    val builder = remember(provider) { (provider as? WasmBinaryProvider)?.sizeAnalysisBuilder }
-    val wasmProvider = remember(provider) { provider as? WasmBinaryProvider }
-    val dataRecords = remember(provider) { wasmProvider?.data ?: emptyList() }
-    SizeTreeContent(root, builder, wasmProvider, dataRecords, state)
+    val root = remember(provider) { provider.sizeAnalysis }
+    if (root != null) {
+        val builder = remember(provider) { (provider as? WasmBinaryProvider)?.sizeAnalysisBuilder }
+        val wasmProvider = remember(provider) { provider as? WasmBinaryProvider }
+        val dataRecords = remember(provider) { wasmProvider?.data ?: emptyList() }
+        SizeTreeContent(root, builder, wasmProvider, dataRecords, state)
+    }
+    else {
+        Text("No size information available")
+    }
 }
 
 @Composable
