@@ -107,9 +107,9 @@ private fun SizeTreeContent(
     val expandedNestingDepth by remember(currentTree) {
         derivedStateOf { currentTree.maxExpandedDepth(treeState.openNodes) }
     }
-    val nestingRightPadding = when {
-        expandedNestingDepth <= 0 -> 0.dp
-        expandedNestingDepth == 1 -> 20.dp
+    val nestingRightPadding = when (expandedNestingDepth) {
+        0 -> 0.dp
+        1 -> 20.dp
         else -> 40.dp
     }
 
@@ -325,11 +325,7 @@ private fun Tree<*>.maxExpandedDepth(openNodes: Set<Any>): Int =
     walkDepthFirst().filter { it.id in openNodes }.maxOfOrNull { it.depth + 1 } ?: 0
 
 internal fun formatSize(bytes: Int): String {
-    return when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
-        else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
-    }
+    return formatSize(bytes.toLong())
 }
 
 internal fun formatSize(bytes: Long): String {
