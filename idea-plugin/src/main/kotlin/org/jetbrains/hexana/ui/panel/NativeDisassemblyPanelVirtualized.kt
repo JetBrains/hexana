@@ -277,6 +277,18 @@ internal object DisasmSectionKinds {
  */
 internal class NativeDisasmChunkTree(ranges: List<DisasmRange>, totalBytes: Long) : ChunkTree {
 
+    /**
+     * One catalog decode per range still produces the full, correctly-aligned
+     * instruction list (no byte-aligned mid-instruction garbage). The tree
+     * sub-divides the *displayed* instruction list into windows of
+     * [INSTRUCTIONS_PER_WINDOW]; each window is a separate LazyColumn item
+     * with its own small Compose Text. Compose virtualises the items, so the
+     * EDT-bound layout cost is bounded regardless of function size.
+     *
+     * Window count is estimated up front from `range.size / AVG_INSTR_BYTES`;
+     * trailing over-estimated windows render empty when their instruction
+     * slice is out of bounds (cheap — empty Text item).
+     */
     private val chunks: List<BinaryChunk> = buildList {
         val firstOffset = ranges.minOfOrNull { it.fileOffset } ?: 0L
         val lastOffset = ranges.maxOfOrNull { it.fileOffset + it.size } ?: firstOffset
@@ -291,7 +303,7 @@ internal class NativeDisasmChunkTree(ranges: List<DisasmRange>, totalBytes: Long
                 totalSize = totalBytes,
             ),
         )
-        ranges.forEachIndexed { idx, range ->
+        ranges.forEachIndexed { rangeIdx, range ->
             val byteRange = range.fileOffset..(range.fileOffset + range.size)
             add(
                 BinaryChunk.SectionHeader(
@@ -303,16 +315,21 @@ internal class NativeDisasmChunkTree(ranges: List<DisasmRange>, totalBytes: Long
                     totalSize = range.size,
                 ),
             )
-            add(
-                BinaryChunk.Element(
-                    id = ChunkId.Symbolic(DisasmSectionKinds.FUNCTION_BODY, range.displayName),
-                    byteRange = byteRange,
-                    estimatedLines = (range.size / AVG_INSTR_BYTES).coerceAtLeast(1L).toInt(),
-                    kind = DisasmSectionKinds.FUNCTION_BODY,
-                    indexInSection = idx,
-                    displayName = range.displayName,
-                ),
-            )
+            val estimatedInstrCount = (range.size / AVG_INSTR_BYTES).coerceAtLeast(1L)
+            val windowCount = ((estimatedInstrCount + INSTRUCTIONS_PER_WINDOW - 1) /
+                INSTRUCTIONS_PER_WINDOW).coerceAtLeast(1L).toInt()
+            for (windowIdx in 0 until windowCount) {
+                add(
+                    BinaryChunk.Element(
+                        id = chunkBodyId(range.displayName, windowIdx),
+                        byteRange = byteRange,
+                        estimatedLines = INSTRUCTIONS_PER_WINDOW.toInt(),
+                        kind = DisasmSectionKinds.FUNCTION_BODY,
+                        indexInSection = rangeIdx,
+                        displayName = range.displayName,
+                    ),
+                )
+            }
         }
     }
 
@@ -331,11 +348,59 @@ internal class NativeDisasmChunkTree(ranges: List<DisasmRange>, totalBytes: Long
     }
 
     private companion object {
-        // Rough average across the supported arches: x86 ~3.5 B, ARM/AArch64 4 B,
-        // RISC-V 2-4 B with compressed extension. Used only for LazyColumn's
-        // estimatedLines heuristic, so a coarse value is fine.
-        const val AVG_INSTR_BYTES: Long = 4L
+        // 3 B/instr balances arches: over-estimates ARM64 (4 B) and roughly
+        // matches x86 (3-4 B avg), Thumb (2-3 B), RV+C (2-3 B). Slight
+        // over-estimate is safe — trailing windows render empty. Under-
+        // estimate would drop the function's tail; never do that.
+        const val AVG_INSTR_BYTES: Long = 3L
     }
+}
+
+/**
+ * Instruction-window size for FUNCTION_BODY sub-chunking. Each window
+ * becomes one LazyColumn item with one Compose `Text(AnnotatedString)`.
+ * Compose virtualises the items; the EDT-bound layout cost is bounded
+ * to W instructions per visible window. At 256: ~256 lines × ~80 chars
+ * ≈ 20 KiB of AnnotatedString per item — well within what Compose
+ * `Text` lays out quickly.
+ */
+internal const val INSTRUCTIONS_PER_WINDOW: Long = 256L
+
+/**
+ * ChunkId factory for a windowed FUNCTION_BODY. Window 0 uses the bare
+ * displayName so existing search-by-name and goto-offset resolution
+ * (which build the id from a range's displayName alone) keep landing
+ * on the first window. Higher windows append `" [+w<idx>]"` so their
+ * ids are distinct LazyColumn keys.
+ */
+internal fun chunkBodyId(displayName: String, windowIdx: Int): ChunkId.Symbolic =
+    if (windowIdx == 0) {
+        ChunkId.Symbolic(DisasmSectionKinds.FUNCTION_BODY, displayName)
+    } else {
+        ChunkId.Symbolic(DisasmSectionKinds.FUNCTION_BODY, "$displayName [+w$windowIdx]")
+    }
+
+/**
+ * Recovers the window index from a [chunkBodyId]-shaped name. Returns
+ * 0 for names without the `[+w<idx>]` suffix (= window 0).
+ */
+internal fun windowIdxFromName(name: String): Int {
+    val marker = " [+w"
+    val markerStart = name.lastIndexOf(marker)
+    if (markerStart < 0 || !name.endsWith("]")) return 0
+    val idxStr = name.substring(markerStart + marker.length, name.length - 1)
+    return idxStr.toIntOrNull() ?: 0
+}
+
+/**
+ * Strips the `[+w<idx>]` suffix from a windowed name, returning the
+ * underlying range displayName. Used by `rangesByName` lookups so all
+ * windows of a function resolve back to its single catalog range.
+ */
+internal fun displayNameFromWindowed(name: String): String {
+    val marker = " [+w"
+    val markerStart = name.lastIndexOf(marker)
+    return if (markerStart >= 0 && name.endsWith("]")) name.substring(0, markerStart) else name
 }
 
 /**
@@ -409,8 +474,18 @@ internal class NativeDisasmChunkRenderer(
         // on a Capstone call.
         val instructions = catalog.cached(chunk.indexInSection) ?: return TokenStream.EMPTY
         if (instructions.isEmpty()) return TokenStream.EMPTY
+        // Slice by instruction window: chunk.id encodes the window index
+        // via [chunkBodyId]. Trailing over-estimated windows (start past
+        // actual instruction count) render empty — no Compose layout cost
+        // beyond a single placeholder Text.
+        val name = (chunk.id as? ChunkId.Symbolic)?.name ?: return TokenStream.EMPTY
+        val windowIdx = windowIdxFromName(name)
+        val start = windowIdx * INSTRUCTIONS_PER_WINDOW.toInt()
+        if (start >= instructions.size) return TokenStream.EMPTY
+        val end = (start + INSTRUCTIONS_PER_WINDOW.toInt()).coerceAtMost(instructions.size)
+        val window = instructions.subList(start, end)
         val tokens = mutableListOf<RenderToken>()
-        for (instr in instructions) {
+        for (instr in window) {
             val (mnemonic, operands) = retargetSyntax(arch, syntax, instr.mnemonic, instr.operands)
             val addrText = instr.virtualAddress.toString(16).padStart(8, '0')
             tokens += RenderToken("  $addrText: ", RenderTokenKind.OFFSET_ANNOTATION, instr.fileOffset)
@@ -523,6 +598,20 @@ internal suspend fun loadCapstoneDisassembly(
         )
     }
 
+    // Backend + perf gating are driven by IntelliJ Registry keys —
+    // toggleable live via Help → Find Action → Registry. The Capstone WASM
+    // module (in `disassembly/capstone-wasm`) has no IntelliJ dependency,
+    // so we bridge the backend choice to the system property that module
+    // already reads. Changes take effect on the next panel open / Retry.
+    val redlineBackend = com.intellij.openapi.util.registry.Registry.`is`(
+        "hexana.disassembly.backend.redline",
+    )
+    val backend = if (redlineBackend) "redline" else "aot"
+    System.setProperty("hexana.disassembly.backend", backend)
+    org.jetbrains.hexana.HexanaLog.LOG.warn(
+        "[disasm] loading Capstone WASM module, backend=$backend, " +
+            "arch=${arch.name}, ranges=${ranges.size}",
+    )
     val disassembler = try {
         CapstoneWasmDisassembler.loadFromClasspath()
     } catch (t: Throwable) {
@@ -572,57 +661,8 @@ private fun NativeBinaryProvider.collectDisasmRanges(): List<DisasmRange> {
                 sectionName = fn.sectionName,
             )
         }
-    val raw = if (symbolRanges.isNotEmpty()) symbolRanges else executableSectionRanges()
-    return raw.splitOversized()
+    return if (symbolRanges.isNotEmpty()) symbolRanges else executableSectionRanges()
 }
-
-/**
- * Bounds the maximum byte size of a single [DisasmRange] so each LazyColumn
- * item ends up backed by a small [AnnotatedString] that Compose `Text` can
- * lay out on the EDT without stalling. Oversize ranges — typically section-
- * fallback ranges (whole `.text` as one synthetic function), or genuine
- * giant symbols like GraalVM Native Image's `___svm_code_section` cover-all
- * — are split into fixed byte windows whose displayed name carries a
- * `[+0x<offset>]` suffix so each window has a unique [DisasmRange.displayName]
- * (the `rangesByName` lookup, search hits, and chunk ids all key off this).
- *
- * 8 KiB per window is conservative: for x86 (avg ~3.5 B/instr) this is
- * ~2300 instructions, ~180 KiB of AnnotatedString per window — well within
- * what Compose `Text` lays out quickly on the EDT. For fixed-4-byte ISAs
- * (ARM64, RV64I) it is exactly 2048 instructions.
- *
- * For variable-length ISAs (x86, ARM Thumb, RISC-V compressed) a fixed-byte
- * split can land mid-instruction at the window boundary, producing one or
- * two garbage instructions per chunk transition. That is the cost of being
- * able to virtualise giant ranges at all; for symbol-driven ranges this
- * rarely fires (most functions are well under 8 KiB), and for the stripped
- * fallback the alternative is the EDT freeze you would otherwise observe.
- */
-private fun List<DisasmRange>.splitOversized(): List<DisasmRange> {
-    val out = mutableListOf<DisasmRange>()
-    for (range in this) {
-        if (range.size <= MAX_RANGE_BYTES) {
-            out += range
-            continue
-        }
-        var offset = 0L
-        while (offset < range.size) {
-            val windowSize = minOf(MAX_RANGE_BYTES, range.size - offset)
-            val suffix = "[+0x${offset.toString(16)}]"
-            out += DisasmRange(
-                displayName = "${range.displayName} $suffix",
-                virtualAddress = range.virtualAddress + offset.toULong(),
-                fileOffset = range.fileOffset + offset,
-                size = windowSize,
-                sectionName = range.sectionName,
-            )
-            offset += windowSize
-        }
-    }
-    return out
-}
-
-private const val MAX_RANGE_BYTES: Long = 8 * 1024L
 
 /**
  * Stripped-binary fallback: every executable section becomes one big
@@ -766,10 +806,16 @@ internal fun NativeDisassemblyPanelVirtualized(
     // Decoding is dialect-independent — switching syntax must not re-run
     // Capstone over the binary. The renderer applies the dialect transform
     // on the catalog's cached instructions; the catalog survives toggles.
+    val activityTracker = DisasmActivityTracker.getInstance(state.project)
     LaunchedEffect(provider, reloadRequest) {
         result = DisasmLoadState.Loading
-        result = withContext(Dispatchers.IO) {
-            loadCapstoneDisassembly(provider)
+        activityTracker.begin()
+        try {
+            result = withContext(Dispatchers.IO) {
+                loadCapstoneDisassembly(provider)
+            }
+        } finally {
+            activityTracker.end()
         }
     }
 
@@ -1293,7 +1339,7 @@ private fun VirtualizedDisasmListing(
                     is BinaryChunk.Element -> {
                         if (!hideAll && !hideBody) {
                             item(key = chunk.id) {
-                                AsyncFunctionBody(chunk, catalog, renderer, snapshot)
+                                AsyncFunctionBody(chunk, catalog, renderer, snapshot, state.project)
                             }
                         }
                     }
@@ -1379,25 +1425,52 @@ private fun AsyncFunctionBody(
     catalog: DisasmCatalog,
     renderer: NativeDisasmChunkRenderer,
     snapshot: BinaryDocumentSnapshot,
+    project: com.intellij.openapi.project.Project,
 ) {
     val accentColor = HexanaTheme.hexTextColor
     var annotated by remember(chunk.id, renderer, accentColor) {
         mutableStateOf<AnnotatedString?>(null)
     }
     LaunchedEffect(chunk.id, renderer, accentColor) {
-        // Phase 1: await Capstone on the catalog's single-slot dispatcher.
-        // Concurrent AsyncFunctionBody instances queue here; the wait is
-        // suspending, so Default-pool threads aren't blocked while ahead-of-
-        // them decodes drain.
-        catalog.decode(chunk.indexInSection)
-        // Phase 2: token build + AnnotatedString assembly. Pure CPU work
-        // with no Capstone interaction, fully reentrant — run on Default
-        // so multiple chunks whose decode landed can render in parallel.
-        val rendered = withContext(Dispatchers.Default) {
-            val tokens = renderer.render(snapshot, chunk).tokens
-            tokensToAnnotatedString(tokens, accentColor)
+        // Status-bar tracker: every in-flight decode+render contributes +1
+        // to the project-level activity counter; the widget surfaces the
+        // total. The try/finally guarantees decrement even if the
+        // coroutine is cancelled (e.g. the item left composition before
+        // decode landed).
+        val tracker = DisasmActivityTracker.getInstance(project)
+        tracker.begin()
+        try {
+            // Phase 1: await Capstone on the catalog's single-slot dispatcher.
+            // Concurrent AsyncFunctionBody instances queue here; the wait is
+            // suspending, so Default-pool threads aren't blocked while
+            // ahead-of-them decodes drain.
+            val perfTracing = com.intellij.openapi.util.registry.Registry.`is`(
+                "hexana.disassembly.perf.logging",
+            )
+            val t0 = if (perfTracing) System.nanoTime() else 0L
+            catalog.decode(chunk.indexInSection)
+            val tAfterDecode = if (perfTracing) System.nanoTime() else 0L
+            // Phase 2: token build + AnnotatedString assembly. Pure CPU
+            // work with no Capstone interaction, fully reentrant — run on
+            // Default so multiple chunks whose decode landed can render
+            // in parallel.
+            val rendered = withContext(Dispatchers.Default) {
+                val tokens = renderer.render(snapshot, chunk).tokens
+                tokensToAnnotatedString(tokens, accentColor)
+            }
+            val tAfterRender = if (perfTracing) System.nanoTime() else 0L
+            annotated = rendered
+            if (perfTracing) {
+                org.jetbrains.hexana.HexanaLog.LOG.warn(
+                    "[disasm-perf] chunk=${chunk.id} " +
+                        "decodeMs=${(tAfterDecode - t0) / 1_000_000} " +
+                        "renderMs=${(tAfterRender - tAfterDecode) / 1_000_000} " +
+                        "annotatedLen=${rendered.length}",
+                )
+            }
+        } finally {
+            tracker.end()
         }
-        annotated = rendered
     }
     val current = annotated
     if (current == null) {

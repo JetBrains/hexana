@@ -1,6 +1,8 @@
 import com.dylibso.chicory.build.time.compiler.Config as AotConfig
 import com.dylibso.chicory.build.time.compiler.Generator as AotGenerator
 import com.dylibso.chicory.compiler.InterpreterFallback
+import io.roastedroot.redline.build.Config as RedlineConfig
+import io.roastedroot.redline.build.Generator as RedlineGenerator
 import java.util.Base64
 
 buildscript {
@@ -10,6 +12,11 @@ buildscript {
     dependencies {
         // Used by the aotCompileDisassemblerWasm task below.
         classpath("com.dylibso.chicory:build-time-compiler:1.4.0")
+        // Used by the redlineCompileDisassemblerWasm task below — experimental
+        // Cranelift-based native AOT alongside the vanilla bytecode AOT. See
+        // `user/capstone-chicory-redline` branch + chicory-redline-expert
+        // agent for rationale.
+        classpath("io.roastedroot:redline-build-time-compiler:0.0.4")
     }
 }
 
@@ -120,6 +127,105 @@ val aotClassesJar by tasks.registering(Jar::class) {
     from(aotClassesDir)
 }
 
+// ---------------------------------------------------------------------------
+// Chicory Redline (experimental, side-by-side with vanilla AOT)
+//
+// Redline uses Cranelift (the Wasmtime compiler backend) to lower
+// disassembler.wasm to *native* machine code at build time, one slice per
+// (OS, arch) target. At runtime, Redline's universal builder picks the
+// matching native slice via SPI (Panama FFM on Java 25+, jffi on Java 11+);
+// when no slice matches it falls back to Chicory's bytecode interpreter,
+// preserving the pure-JVM portability the existing AOT path provides.
+//
+// Output layout (under `build/generated/chicory-redline/`):
+//  - `classes/`          — bytecode fallback `.class` files
+//                          (`DisassemblerWasmMachine` + emitters).
+//  - `compiled-classes/` — the `DisassemblerWasm.java` source, compiled.
+//  - `resources/`        — `.native` slices (one per target triple),
+//                          `.meta` wasm.
+//  - `sources/`          — generated `DisassemblerWasm.java` source.
+//
+// Runtime selection is wired in `CapstoneWasmModule.jvm.kt` via the
+// `hexana.disassembly.backend` system property (`aot` default | `redline`).
+// ---------------------------------------------------------------------------
+
+val redlineClassesDir = layout.buildDirectory.dir("generated/chicory-redline/classes")
+val redlineCompiledClassesDir = layout.buildDirectory.dir("generated/chicory-redline/compiled-classes")
+val redlineResourcesDir = layout.buildDirectory.dir("generated/chicory-redline/resources")
+val redlineSourcesDir = layout.buildDirectory.dir("generated/chicory-redline/sources")
+
+/**
+ * Classpath the JavaCompile step needs to resolve the Redline runtime API
+ * the generated `DisassemblerWasm.java` imports (`RedlineInstance`,
+ * `RedlineTarget`, `NativeCodeSerializer`, …). Separate from the project's
+ * jvmMain configuration because the compile happens before Gradle has
+ * resolved that source set's classpath.
+ */
+val redlineCodegenClasspath: Configuration = configurations.create("redlineCodegenClasspath") {
+    isCanBeResolved = true
+    isCanBeConsumed = false
+}
+dependencies {
+    add(redlineCodegenClasspath.name, "io.roastedroot:redline:0.0.4")
+    add(redlineCodegenClasspath.name, "com.dylibso.chicory:runtime:1.4.0")
+    add(redlineCodegenClasspath.name, "com.dylibso.chicory:wasm:1.4.0")
+}
+
+val redlineCompileDisassemblerWasm by tasks.registering {
+    description = "Cranelift-compiled native variant of disassembler.wasm via chicory-redline."
+    val wasm = layout.projectDirectory.file("src/commonMain/resources/disassembler.wasm")
+    inputs.file(wasm)
+    outputs.dir(redlineClassesDir)
+    outputs.dir(redlineResourcesDir)
+    outputs.dir(redlineSourcesDir)
+    doLast {
+        listOf(redlineClassesDir, redlineResourcesDir, redlineSourcesDir).forEach { d ->
+            val f = d.get().asFile
+            f.deleteRecursively()
+            f.mkdirs()
+        }
+        val cfg = RedlineConfig.builder()
+            .withWasmFile(wasm.asFile.toPath())
+            .withName("org.jetbrains.hexana.disassembly.capstone.redline.DisassemblerWasm")
+            .withTargetClassFolder(redlineClassesDir.get().asFile.toPath())
+            .withTargetResourceFolder(redlineResourcesDir.get().asFile.toPath())
+            .withTargetSourceFolder(redlineSourcesDir.get().asFile.toPath())
+            // bytecodeFallback = true preserves portability: on a platform with
+            // no matching native slice (or with both Panama + jffi disabled)
+            // the universal builder transparently uses the Chicory bytecode
+            // path. We default ALL_TARGETS (Linux/macOS/Windows × x86_64/aarch64)
+            // — the same matrix Hexana already targets.
+            .withBytecodeFallback(true)
+            .build()
+        val gen = RedlineGenerator(cfg)
+        gen.generateNativeCode()
+        gen.generateMetaWasm()
+        gen.generateChicoryBytecode()
+        gen.generateSources()
+    }
+}
+
+val redlineCompileJava by tasks.registering(JavaCompile::class) {
+    description = "Compiles the Redline-generated DisassemblerWasm.java."
+    dependsOn(redlineCompileDisassemblerWasm)
+    source(redlineSourcesDir)
+    // DisassemblerWasm.java references DisassemblerWasmMachine (bytecode
+    // fallback) which lives in the same package under redlineClassesDir;
+    // include it on the classpath so resolution works.
+    classpath = redlineCodegenClasspath + files(redlineClassesDir)
+    destinationDirectory.set(redlineCompiledClassesDir)
+    options.release.set(21)
+}
+
+val redlineClassesJar by tasks.registering(Jar::class) {
+    description = "Packages Redline bytecode-fallback + generated DisassemblerWasm classes."
+    dependsOn(redlineCompileDisassemblerWasm, redlineCompileJava)
+    archiveBaseName.set("capstone-wasm-redline")
+    destinationDirectory.set(layout.buildDirectory.dir("generated/chicory-redline/jar"))
+    from(redlineClassesDir)
+    from(redlineCompiledClassesDir)
+}
+
 kotlin {
     jvmToolchain(21)
 
@@ -152,22 +258,32 @@ kotlin {
 
         jvmMain {
             // Meta .wasm flows into the jvm target's resources.
+            // Both AOT (`<...>.aot/DisassemblerWasm.meta`) and Redline
+            // (`<...>.redline/DisassemblerWasm.meta` + `.native` slices)
+            // resource trees are added; the runtime-side switch
+            // (`hexana.disassembly.backend`) decides which to load.
             resources.srcDir(aotResourcesDir)
+            resources.srcDir(redlineResourcesDir)
             dependencies {
                 implementation(libs.chicory.runtime)
                 implementation(libs.chicory.compiler)
+                // Redline runtime (api/bridge transitively pulled). Pulls
+                // Panama FFM (Java 25+) or jffi (Java 11+) backend via SPI.
+                implementation("io.roastedroot:redline:0.0.4")
             }
         }
     }
 }
 
-// Precompiled .class files: ship them as a real jar (see [aotClassesJar])
-// rather than a loose-class directory, so IntelliJ plugin classloaders —
-// which scan `lib/*.jar` only — can resolve `DisassemblerWasmMachine` at
-// runtime. Direct JVM consumers (tests, other Gradle modules) pick the jar
-// up off the runtime classpath the same way they would a loose tree.
+// Precompiled .class files: ship them as a real jar (see [aotClassesJar] /
+// [redlineClassesJar]) rather than a loose-class directory, so IntelliJ
+// plugin classloaders — which scan `lib/*.jar` only — can resolve the
+// generated classes at runtime. Direct JVM consumers (tests, other Gradle
+// modules) pick the jars up off the runtime classpath the same way they
+// would a loose tree.
 dependencies {
     "jvmMainImplementation"(files(aotClassesJar))
+    "jvmMainImplementation"(files(redlineClassesJar))
 }
 
 // Provider<Directory> from layout.buildDirectory.dir(...) doesn't auto-track
@@ -175,6 +291,6 @@ dependencies {
 // an explicit dependency for each consumer.
 listOf("jvmProcessResources").forEach { taskName ->
     tasks.matching { it.name == taskName }.configureEach {
-        dependsOn(aotCompileDisassemblerWasm)
+        dependsOn(aotCompileDisassemblerWasm, redlineCompileDisassemblerWasm)
     }
 }
