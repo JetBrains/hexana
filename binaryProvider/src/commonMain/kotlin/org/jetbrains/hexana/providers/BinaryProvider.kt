@@ -174,6 +174,19 @@ class ElfBinaryProvider(
         if (sec.none { it.name == ".debug_line" } || sec.none { it.name == ".debug_info" }) return@lazy null
         NativeDwarfSourceLocationProvider(bytes, ElfDwarfAccessor(sec))
     }
+
+    override val sizeAnalysis: BinarySizeNode? by lazy {
+        val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy null
+        val totalSize = bytes.capacity()
+        val children = secs.map { sec ->
+            BinarySizeNode(
+                name = sec.name.ifEmpty { "<unnamed>" },
+                size = sec.size.toInt(),
+                offset = sec.fileOffset.toInt(),
+            )
+        }
+        BinarySizeNode(name = "ELF", size = totalSize, offset = 0, children = children)
+    }
 }
 
 class MachOBinaryProvider(
@@ -242,6 +255,27 @@ class MachOBinaryProvider(
         if (sec.none { it.name == "__debug_line" } || sec.none { it.name == "__debug_info" }) return@lazy null
         NativeDwarfSourceLocationProvider(bytes, MachODwarfAccessor(sec))
     }
+
+    override val sizeAnalysis: BinarySizeNode? by lazy {
+        val segs = segments?.takeIf { it.isNotEmpty() } ?: return@lazy null
+        val totalSize = bytes.capacity()
+        val children = segs.map { seg ->
+            val sectionChildren = seg.sections.map { sec ->
+                BinarySizeNode(
+                    name = sec.name.ifBlank { "<unnamed>" },
+                    size = sec.size.toInt(),
+                    offset = sec.fileOffset.toInt(),
+                )
+            }
+            BinarySizeNode(
+                name = seg.name.ifBlank { "<unnamed>" },
+                size = seg.fileSize.toInt(),
+                offset = seg.fileOffset.toInt(),
+                children = sectionChildren,
+            )
+        }
+        BinarySizeNode(name = "Mach-O", size = totalSize, offset = 0, children = children)
+    }
 }
 
 class FatMachOBinaryProvider(
@@ -254,6 +288,19 @@ class FatMachOBinaryProvider(
 
     val architectures: List<MachOFatArch>? by lazy {
         fatHeader?.let { MachOParser.parseFatArchitectures(bytes, it) }
+    }
+
+    override val sizeAnalysis: BinarySizeNode? by lazy {
+        val archs = architectures?.takeIf { it.isNotEmpty() } ?: return@lazy null
+        val totalSize = bytes.capacity()
+        val children = archs.map { arch ->
+            BinarySizeNode(
+                name = "Slice ${arch.index}",
+                size = arch.size.toInt(),
+                offset = arch.offset.toInt(),
+            )
+        }
+        BinarySizeNode(name = "Universal", size = totalSize, offset = 0, children = children)
     }
 }
 
@@ -308,6 +355,19 @@ class PeBinaryProvider(
     val coffSymbols: List<PeCoffSymbol>? by lazy {
         val c = coffHeader ?: return@lazy null
         PeParser.parseCoffSymbols(bytes, c)
+    }
+
+    override val sizeAnalysis: BinarySizeNode? by lazy {
+        val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy null
+        val totalSize = bytes.capacity()
+        val children = secs.map { sec ->
+            BinarySizeNode(
+                name = sec.name.ifBlank { "<unnamed>" },
+                size = sec.rawDataSize.toInt(),
+                offset = sec.rawDataPointer.toInt(),
+            )
+        }
+        BinarySizeNode(name = "PE", size = totalSize, offset = 0, children = children)
     }
 }
 
