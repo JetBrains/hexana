@@ -505,6 +505,14 @@ private fun rebuildProviderFromBytes(original: BinaryProvider, newBytes: ByteArr
     }
 }
 
+private fun NativeBinaryProvider.commonNativePanels(state: HexViewStateHolder): List<Panel> {
+    return listOfNotNull(
+        Panel("Top") { PanelSize(this, state) }.takeIf { this.sizeAnalysis != null },
+        Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
+        Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) }
+    )
+}
+
 /**
  * Resolves the panel list for an editor.
  *
@@ -538,29 +546,19 @@ private fun BinaryProvider.resolvePanels(
         is ElfBinaryProvider -> listOf(
             Panel("Debug Context") { NativeDebugContextPanel(this, state) },
             Panel("Debug Info") { NativeDebugInfoPanel(this, state) },
-            Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
-            Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) },
-        )
+        ) + commonNativePanels(state)
         is MachOBinaryProvider -> listOf(
             Panel("Debug Context") { NativeDebugContextPanel(this, state) },
-            Panel("Debug Info") { NativeDebugInfoPanel(this, state) },
-            Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
-            Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) },
+            Panel("Debug Info") { NativeDebugInfoPanel(this, state) }
+        ) + commonNativePanels(state)
+        is FatMachOBinaryProvider ->  commonNativePanels(state)
+        is PeBinaryProvider -> listOfNotNull(
+            Panel("Debug Context") { NativeDebugContextPanel(this, state) }
+        ) + commonNativePanels(state)
+        is CoffBinaryProvider -> commonNativePanels(state)
+        is NativeBinaryProvider -> listOfNotNull(
+            Panel("Top") { PanelSize(this, state) }.takeIf { this.sizeAnalysis != null },
         )
-        is FatMachOBinaryProvider -> listOf(
-            Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
-            Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) },
-        )
-        is PeBinaryProvider -> listOf(
-            Panel("Debug Context") { NativeDebugContextPanel(this, state) },
-            Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
-            Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) },
-        )
-        is CoffBinaryProvider -> listOf(
-            Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
-            Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) },
-        )
-        is NativeBinaryProvider -> emptyList()
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
@@ -631,12 +629,7 @@ private fun BinaryProvider.resolvePanels(
         }
         else -> emptyList()
     }
-    val sizePanel = if (sizeAnalysis != null && extraPanels.none { it.description == "Top" }) {
-        listOf(Panel("Top") { PanelSize(this, state) })
-    } else {
-        emptyList()
-    }
-    val panels = (tabPanels + sizePanel + extraPanels).toMutableList()
+    val panels = (tabPanels + extraPanels).toMutableList()
     // Wire Garbage → Dominators cross-panel navigation
     val domIndex = panels.indexOfFirst { it.description == "Dominators" }
     val garbageIndex = panels.indexOfFirst { it.description == "Garbage" }
