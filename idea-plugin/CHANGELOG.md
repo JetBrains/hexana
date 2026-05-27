@@ -12,6 +12,7 @@
 ### Changed
 - Improved support for GraalVM for run configurations – now we support builds of GraalVM without the embedded wasm runner
 - Fixed issues with debug not hitting the breakpoints when the information is encoded in the .debug_loc section in DWARF
+- Fixed WASM debug backwards compatibility with IntelliJ IDEA 2025.2
 
 ### Deprecated
 
