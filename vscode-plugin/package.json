@@ -2,7 +2,7 @@
   "name": "hexana-wasm",
   "displayName": "Hexana WebAssembly and Native (ELF/PE/Mach-O) Hex Viewer",
   "description": "Binary hex viewer and analyzer with a focus on WebAssembly and Native (ELF/PE/Mach-O) formats",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "buildDate": "",
   "preview": true,
   "author": "JetBrains",
