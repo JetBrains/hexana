@@ -8,11 +8,14 @@
 - Java archives & class files: hex view on top + tabs/list below for `.jar`/`.zip`/`.war`/`.apk` (searchable, sortable class list) and `.class` (header / WAT-style foldable methods with decoded bytecode / constant pool); project-view `Open in... → Hexana` action for archives, including entries under External Libraries. [#91](https://github.com/JetBrains/hexana/issues/91)
 - JIT Viewer run-configuration tab — opt-in attachment of the bundled JVMTI agent to any Java run configuration; configurable per-run dump file (`default.jit`) that auto-opens in Hexana when the run completes.
 - WASM proposals used by a binary now are displayed in the information bar, and corresponding arguments are passed to the runtimes to enable them for run configurations
+- Experimental support for [ELF, Mach-O, PE](https://github.com/JetBrains/hexana/issues/90)
+- Experimental support for llvm-objdump disassembly
 
 ### Changed
 - Improved support for GraalVM for run configurations – now we support builds of GraalVM without the embedded wasm runner
 - Fixed issues with debug not hitting the breakpoints when the information is encoded in the .debug_loc section in DWARF
 - Fixed WASM debug backwards compatibility with IntelliJ IDEA 2025
+- Improved MCP
 
 ### Deprecated
 

@@ -2,6 +2,7 @@
 
 - support for ELF/Mach-O/PE binary formats
 - improved logic for automatic discovery of lldp-dap executable on Linux
+- mcp improved
 
 # 0.1.0 - 20.05.2026
 
