@@ -35,8 +35,7 @@
 
 ### Added
 
-- Goto Symbol / Search Everywhere → Symbols now surfaces `.wit` declarations, component-model exports, and regular
-  `.wasm` exports; picking a `.wasm` export opens the file and selects the matching row in the Exports tab
+- Goto Symbol / Search Everywhere → Symbols now surfaces `.wit` declarations, component-model exports, and regular `.wasm` exports; picking a `.wasm` export opens the file and selects the matching row in the Exports tab
 
 ## 0.9 - 2026-05-07
 
