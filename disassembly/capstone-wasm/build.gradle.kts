@@ -214,7 +214,14 @@ val redlineCompileJava by tasks.registering(JavaCompile::class) {
     // include it on the classpath so resolution works.
     classpath = redlineCodegenClasspath + files(redlineClassesDir)
     destinationDirectory.set(redlineCompiledClassesDir)
-    options.release.set(21)
+    // Target 17, not 21: TeamCity build agents may run an older JDK that
+    // doesn't support `-release 21`. The Redline-generated source uses
+    // only stdlib features available in 17 (try-with-resources, generics,
+    // lambdas), and 17 is the IntelliJ Platform minimum so the produced
+    // class files load in any supported IDE. The KMP plugin doesn't apply
+    // the full `java` plugin so JavaToolchainService isn't available here;
+    // any JDK 17+ accepts `--release 17`, which matches JBR / TC agents.
+    options.release.set(17)
 }
 
 val redlineClassesJar by tasks.registering(Jar::class) {
