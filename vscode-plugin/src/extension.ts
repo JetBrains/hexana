@@ -125,13 +125,20 @@ function ensureWasmEditorAssociation(): void {
     const config = vscode.workspace.getConfiguration("workbench");
     const inspected = config.inspect<Record<string, string>>("editorAssociations");
 
-    // Check whether the user (or workspace) has already set an association for *.wasm.
+    // Ensure all supported binary extensions are associated with the Hexana editor.
     const userValue = inspected?.globalValue ?? {};
-    if (userValue["*.wasm"] !== undefined) {
-        return; // user already made a choice — respect it
+    const patterns = ["*.wasm", "*.jar", "*.zip", "*.war", "*.apk"];
+    const merged: Record<string, string> = { ...userValue };
+    let changed = false;
+    for (const pattern of patterns) {
+        if (merged[pattern] === undefined) {
+            merged[pattern] = "hexana.wasmEditor";
+            changed = true;
+        }
     }
-
-    const merged: Record<string, string> = { ...userValue, "*.wasm": "hexana.wasmEditor" };
+    if (!changed) {
+        return;
+    }
     config.update("editorAssociations", merged, vscode.ConfigurationTarget.Global);
 }
 
@@ -155,7 +162,8 @@ function reopenWasmBinaryTabs(): void {
             const input = tab.input;
             // TabInputText is used for the built-in text/binary editor.
             // Our custom editor uses TabInputCustom instead.
-            if (input instanceof vscode.TabInputText && input.uri.path.endsWith(".wasm")) {
+            const p = input instanceof vscode.TabInputText ? input.uri.path.toLowerCase() : "";
+            if (input instanceof vscode.TabInputText && (p.endsWith(".wasm") || p.endsWith(".jar") || p.endsWith(".zip") || p.endsWith(".war") || p.endsWith(".apk"))) {
                 staleTabs.push({ tab, uri: input.uri });
             }
         }

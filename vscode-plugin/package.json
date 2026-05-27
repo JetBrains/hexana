@@ -134,7 +134,7 @@
         "displayName": "Hexana Editor",
         "selector": [
           {
-            "filenamePattern": "{*.wasm,*.bin,*.elf,*.exe,*.so,*.o,*.a,*.dll,*.dylib}"
+            "filenamePattern": "{*.wasm,*.bin,*.elf,*.exe,*.so,*.o,*.a,*.dll,*.dylib,*.jar,*.zip,*.war,*.apk}"
           }
         ],
         "priority": "default"

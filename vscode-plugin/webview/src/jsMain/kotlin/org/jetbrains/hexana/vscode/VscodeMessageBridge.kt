@@ -162,6 +162,29 @@ fun postNavigateToParent() {
 }
 
 /**
+ * Asks the extension host to open a ZIP entry in a new editor tab.
+ *
+ * The extension host reads the compressed bytes from the archive document,
+ * decompresses them, and opens the result with the appropriate editor.
+ */
+fun postOpenZipEntryToHost(
+    name: String,
+    dataOffset: Long,
+    compressedSize: Long,
+    uncompressedSize: Long,
+    compressionMethod: Int,
+) {
+    val msg = js("{}")
+    msg.type = "open-zip-entry"
+    msg.name = name
+    msg.dataOffset = dataOffset.toDouble()
+    msg.compressedSize = compressedSize.toDouble()
+    msg.uncompressedSize = uncompressedSize.toDouble()
+    msg.compressionMethod = compressionMethod
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open a nested module in a new editor tab.
  *
  * [moduleIndex] is the zero-based index of the module inside the component,

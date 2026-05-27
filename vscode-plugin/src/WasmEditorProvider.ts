@@ -1,4 +1,5 @@
 import * as path from "path";
+import * as zlib from "zlib";
 import * as vscode from "vscode";
 import { getWebviewContent } from "./webviewContent";
 import { extensionLib, getSelectedRuntime, runExport } from "./WasmRunConfigurations";
@@ -167,11 +168,14 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         // Once the webview signals it is ready, send the binary payload.
         webviewPanel.webview.onDidReceiveMessage((message) => {
             if (message.type === "ready") {
+                const payload = document.data instanceof Buffer
+                    ? new Uint8Array(document.data.buffer, document.data.byteOffset, document.data.byteLength)
+                    : document.data;
                 webviewPanel.webview.postMessage({
                     type: "load-wasm",
                     fileName: document.displayName ?? document.uri.fsPath,
                     filePath: document.uri.fsPath,
-                    data: Array.from(document.data),
+                    data: payload,
                     wasmRuntime: getSelectedRuntime(),
                 });
             } else if (message.type === "open-module") {
@@ -180,6 +184,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.navigateToParent(document);
             } else if (message.type === "run-export") {
                 runExport(document, message);
+            } else if (message.type === "open-zip-entry") {
+                this.openZipEntry(document, message);
             } else if (message.type === "show-wat") {
                 this.showWatEditor(document, message);
             } else if (message.type === "tab-selected") {
@@ -251,6 +257,78 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             );
         } catch (err) {
             console.error("[Hexana] Failed to navigate to parent:", err);
+        }
+    }
+
+    /**
+     * Handles an `open-zip-entry` message from the webview by reading the
+     * compressed bytes from the archive, decompressing them, and opening the
+     * result in a new editor tab.
+     */
+    private async openZipEntry(
+        document: WasmDocument,
+        message: {
+            name: string;
+            dataOffset: number;
+            compressedSize: number;
+            uncompressedSize: number;
+            compressionMethod: number;
+        },
+    ): Promise<void> {
+        const { name, dataOffset, compressedSize, uncompressedSize, compressionMethod } = message;
+        const childName = name.includes("/") ? name.substring(name.lastIndexOf("/") + 1) : name;
+        if (!childName) {
+            return;
+        }
+
+        let bytes: Uint8Array;
+        try {
+            const compressed = document.data.slice(dataOffset, dataOffset + compressedSize);
+            if (compressionMethod === 0) {
+                // Stored — no compression.
+                bytes = compressed;
+            } else if (compressionMethod === 8) {
+                // Deflate — use raw inflate (no zlib/gzip header).
+                bytes = zlib.inflateRawSync(compressed);
+            } else {
+                vscode.window.showWarningMessage(
+                    `Unsupported compression method ${compressionMethod} for "${name}".`,
+                );
+                return;
+            }
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to decompress "${name}": ${err}`);
+            return;
+        }
+
+        // Check if the entry is a binary format we handle (wasm, class, jar, etc.)
+        const ext = childName.includes(".") ? childName.substring(childName.lastIndexOf(".") + 1).toLowerCase() : "";
+        const binaryExtensions = new Set(["wasm", "class", "jar", "zip", "war", "apk", "bin", "elf", "exe", "so", "o", "a", "dll", "dylib"]);
+
+        if (binaryExtensions.has(ext)) {
+            // Open as a binary in our custom editor.
+            const parentKey = document.uri.toString();
+            const moduleUri = vscode.Uri.parse(
+                `hexana-module:/${childName}?parent=${encodeURIComponent(parentKey)}&entry=${encodeURIComponent(name)}`,
+            );
+            const key = moduleUri.toString();
+            inMemoryModules.set(key, { data: bytes, fileName: childName });
+
+            try {
+                await vscode.commands.executeCommand(
+                    "vscode.openWith",
+                    moduleUri,
+                    WasmEditorProvider.viewType,
+                );
+            } catch (err) {
+                console.error("[Hexana] Failed to open zip entry:", err);
+                vscode.window.showErrorMessage(`Failed to open "${childName}": ${err}`);
+            }
+        } else {
+            // Open as a text document.
+            const content = new TextDecoder("utf-8").decode(bytes);
+            const doc = await vscode.workspace.openTextDocument({ content, language: ext || undefined });
+            await vscode.window.showTextDocument(doc, { preview: true });
         }
     }
 

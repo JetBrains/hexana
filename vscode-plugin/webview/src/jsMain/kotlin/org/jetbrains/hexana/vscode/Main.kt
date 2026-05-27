@@ -39,22 +39,30 @@ fun WasmEditorApp() {
 
     if (wasmBytes == null) {
         Div({ classes("loading") }) {
-            Text("Waiting for WebAssembly binary…")
+            Text("Waiting for binary…")
         }
     } else {
         val bytes = wasmBytes!!
         val buffer = bytes.toCommonByteBuffer()
         buffer.position(0)
-        val provider = when (WasmBinaryProviderSelector.select(buffer)) {
-            BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
-            BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
-            else -> nativeOrGenericBinaryProvider(buffer, filePath)
-        }
 
-        WasmEditorContent(
-            fileName = fileName,
-            provider = provider,
-        )
+        if (isZipFile(buffer)) {
+            ZipEditorContent(
+                fileName = fileName,
+                buffer = buffer,
+            )
+        } else {
+            val provider = when (WasmBinaryProviderSelector.select(buffer)) {
+                BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
+                BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
+                else -> nativeOrGenericBinaryProvider(buffer, filePath)
+            }
+
+            WasmEditorContent(
+                fileName = fileName,
+                provider = provider,
+            )
+        }
     }
 }
 
