@@ -39,6 +39,7 @@ import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.Orientation
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.VerticalScrollbar
 
 /**
  * Editor view for a JAR / ZIP archive. Vertical split: a [HexViewer] over the
@@ -148,6 +149,7 @@ private fun ZipEntriesPanel(
                         ZipEntryRow(displayed[idx], onOpenEntry)
                     }
                 }
+                VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
             }
         }
     }
