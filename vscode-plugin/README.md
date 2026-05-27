@@ -1,12 +1,15 @@
 # Hexana
 
-A VS Code extension for viewing and analyzing WebAssembly binaries. Open any `.wasm` file to explore its structure, inspect hex data, and run modules — all inside VS Code.
+A VS Code extension for viewing and analyzing binary files with a focus on WebAssembly and Native binary formats.
+Open any `.wasm` file to explore its structure, inspect hex data, and run modules — all inside VS Code.
+Open any ELF/Mach-O/PE file and explore its structure and inspect hex data.
 
 ## Features
 
 ### Custom Binary Editor
 
-Opens `.wasm` files in a dedicated read-only editor instead of the default hex view. Automatically detects Core Wasm modules, Component Model binaries, and generic Wasm files.
+Opens WASM and Native binary files in a dedicated read-only editor instead of the default hex view.
+For WASM, it automatically detects Core Wasm modules, Component Model binaries, and generic Wasm files.
 
 ### Hex Viewer
 
@@ -14,8 +17,9 @@ Virtual-scrolling hex dump with byte selection (click, shift-click, drag), keybo
 
 ### Structural Analysis
 
-A tabbed analysis panel with up to 11 views depending on the binary type:
+A tabbed analysis panel with views depending on the binary type.
 
+For example, for WASM files we show the following tabs:
 - **Summary** — section table and binary statistics.
 - **Exports** — exported items with kind, name, index, and function signatures.
 - **Imports** — imported items with kind, module, and name.
@@ -30,11 +34,11 @@ A tabbed analysis panel with up to 11 views depending on the binary type:
 
 All analysis tables support column sorting and text search.
 
-### Run Support
+### Run Support (WASM only)
 
 Run Wasm modules directly from the editor toolbar via [wasmtime](https://wasmtime.dev/), with a dialog for choosing exports and program arguments. Supports both core modules (with automatic import stub generation) and component model binaries (with dependency resolution and composition).
 
-### Component Model
+### WASM Component Model
 
 - Automatic component dependency resolution by scanning workspace directories for matching `.wasm` files, including transitive dependencies.
 - Navigate nested modules inside a component binary by opening them in separate editor tabs.

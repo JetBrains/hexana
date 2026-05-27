@@ -1,4 +1,9 @@
-# 0.1.0
+# 0.2.0 - 27.05.2026
+
+- support for ELF/Mach-O/PE binary formats
+- improved logic for automatic discovery of lldp-dap executable on Linux
+
+# 0.1.0 - 20.05.2026
 
 - supported WAMR and GraalVM for running wasm modules (in addition to wasmtime)
 - experimental debugging support using wasmtime or WAMR (requires llvm 22.1 or newer; works only for targets debuggable with lldb)
