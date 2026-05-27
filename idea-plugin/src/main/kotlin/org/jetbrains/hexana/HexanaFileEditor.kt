@@ -18,6 +18,7 @@ import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.toNioPathOrNull
+import com.intellij.testFramework.LightVirtualFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -469,6 +470,39 @@ class HexanaFileEditor(
         entry: org.jetbrains.hexana.zip.ZipEntry,
         parentBuffer: CommonByteBuffer,
     ) {
+        val childName = entry.name.substringAfterLast('/').ifEmpty { entry.name }
+
+        if (isHexanaSupportedExtension(childName)) {
+            // Binary entries need the hex viewer with buffer/offset — always use HexanaBinaryVirtualFile.
+            val bytes = decompressZipEntry(entry, parentBuffer)
+            if (bytes == null) {
+                HexanaLog.LOG.warn(
+                    "Cannot open ${entry.name}: unsupported compression method ${entry.compressionMethod} or decode failure",
+                )
+                return
+            }
+            val childFile = HexanaBinaryVirtualFile(
+                name = childName,
+                buffer = bytes.toCommonByteBuffer(),
+                baseOffset = entry.dataOffset.toInt(),
+                parentFile = myFile,
+            )
+            FileEditorManager.getInstance(myProject).openFile(childFile, true)
+            return
+        }
+
+        // For text entries, prefer JarFileSystem when the parent archive is a real on-disk file.
+        val localPath = myFile.toNioPathOrNull()
+        if (localPath != null) {
+            val jarFs = com.intellij.openapi.vfs.JarFileSystem.getInstance()
+            val entryFile = jarFs.findFileByPath("${myFile.path}!/${entry.name}")
+            if (entryFile != null) {
+                FileEditorManager.getInstance(myProject).openFile(entryFile, true)
+                return
+            }
+        }
+
+        // Fallback for in-memory parents (nested archives) — decompress and wrap manually.
         val bytes = decompressZipEntry(entry, parentBuffer)
         if (bytes == null) {
             HexanaLog.LOG.warn(
@@ -476,15 +510,20 @@ class HexanaFileEditor(
             )
             return
         }
-        val childName = entry.name.substringAfterLast('/').ifEmpty { entry.name }
-        val childFile = HexanaBinaryVirtualFile(
-            name = childName,
-            buffer = bytes.toCommonByteBuffer(),
-            baseOffset = entry.dataOffset.toInt(),
-            parentFile = myFile,
+        FileEditorManager.getInstance(myProject).openFile(
+            LightVirtualFile(childName, String(bytes)),
+            true,
         )
-        FileEditorManager.getInstance(myProject).openFile(childFile, true)
     }
+}
+
+private fun isHexanaSupportedExtension(fileName: String): Boolean {
+    val ext = fileName.substringAfterLast('.', "").lowercase()
+    val hexanaExtensions = setOf("wasm", "class", "jar", "zip", "war", "apk", "jit")
+    if (ext in hexanaExtensions) return true
+    val fileType = com.intellij.openapi.fileTypes.FileTypeManager.getInstance()
+        .getFileTypeByFileName(fileName)
+    return fileType is BinaryFileType || fileType is NativeBinaryFileType
 }
 
 /**
