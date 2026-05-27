@@ -42,10 +42,11 @@ import org.jetbrains.jewel.ui.component.Text
 
 /**
  * Editor view for a JAR / ZIP archive. Vertical split: a [HexViewer] over the
- * raw archive bytes on top, a sortable + searchable list of class entries on
- * the bottom. Clicking a row hands the (decompressed) bytes off to
- * [onOpenEntry] — the IDE-side wiring opens those bytes in a child
- * [ClassFileEditorView].
+ * raw archive bytes on top, a sortable + searchable entry list on the bottom.
+ * For JARs (archives containing `.class` files) only class entries are shown;
+ * for plain ZIP files all non-directory entries are listed. Clicking a row
+ * hands the (decompressed) bytes off to [onOpenEntry] — the IDE-side wiring
+ * opens those bytes in a child [ClassFileEditorView].
  */
 @Composable
 internal fun JarEditorView(
@@ -67,26 +68,43 @@ internal fun JarEditorView(
             }
         },
         southPanel = {
-            JarClassesPanel(entries.filter { it.isClass }, onOpenEntry)
+            val classEntries = entries.filter { it.isClass }
+            if (classEntries.isNotEmpty()) {
+                ZipEntriesPanel(
+                    allEntries = classEntries,
+                    onOpenEntry = onOpenEntry,
+                    searchPlaceholder = "Search classes\u2026",
+                    emptyMessage = "(no class entries)",
+                )
+            } else {
+                ZipEntriesPanel(
+                    allEntries = entries.filter { !it.isDirectory },
+                    onOpenEntry = onOpenEntry,
+                    searchPlaceholder = "Search entries\u2026",
+                    emptyMessage = "(no entries)",
+                )
+            }
         },
     )
 }
 
 @Composable
-private fun JarClassesPanel(
-    classEntries: List<ZipEntry>,
+private fun ZipEntriesPanel(
+    allEntries: List<ZipEntry>,
     onOpenEntry: (ZipEntry) -> Unit,
+    searchPlaceholder: String,
+    emptyMessage: String,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var sortColumn by rememberSaveable { mutableStateOf(SortColumn.Name) }
     var sortAsc by rememberSaveable { mutableStateOf(true) }
 
-    val displayed by remember(classEntries, query, sortColumn, sortAsc) {
+    val displayed by remember(allEntries, query, sortColumn, sortAsc) {
         derivedStateOf {
             val filtered = if (query.isBlank()) {
-                classEntries
+                allEntries
             } else {
-                classEntries.filter { it.name.contains(query, ignoreCase = true) }
+                allEntries.filter { it.name.contains(query, ignoreCase = true) }
             }
             val sorted = when (sortColumn) {
                 SortColumn.Name -> filtered.sortedBy { it.name.lowercase() }
@@ -98,7 +116,7 @@ private fun JarClassesPanel(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        SearchBar(query = query, onQueryChange = { query = it })
+        SearchBar(query = query, onQueryChange = { query = it }, placeholder = searchPlaceholder)
         ColumnHeaderRow(
             sortColumn = sortColumn,
             sortAsc = sortAsc,
@@ -117,7 +135,7 @@ private fun JarClassesPanel(
         Box(modifier = Modifier.fillMaxSize()) {
             if (displayed.isEmpty()) {
                 Text(
-                    if (classEntries.isEmpty()) "(no class entries)" else "(no matches for \"$query\")",
+                    if (allEntries.isEmpty()) emptyMessage else "(no matches for \"$query\")",
                     style = RowStyle,
                     modifier = Modifier.padding(12.dp),
                 )
@@ -127,7 +145,7 @@ private fun JarClassesPanel(
                         count = displayed.size,
                         key = { idx -> displayed[idx].localHeaderOffset },
                     ) { idx ->
-                        ClassEntryRow(displayed[idx], onOpenEntry)
+                        ZipEntryRow(displayed[idx], onOpenEntry)
                     }
                 }
             }
@@ -136,7 +154,7 @@ private fun JarClassesPanel(
 }
 
 @Composable
-private fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
+private fun SearchBar(query: String, onQueryChange: (String) -> Unit, placeholder: String = "Search classes\u2026") {
     val outline = if (JewelTheme.isDark) Color(0xFF393B3D) else Color(0xFFC9CCD6)
     Box(
         modifier = Modifier
@@ -160,7 +178,7 @@ private fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
             decorationBox = { inner ->
                 if (query.isEmpty()) {
                     Text(
-                        "Search classes…",
+                        placeholder,
                         style = RowStyle.copy(color = HexanaTheme.hexTextColor),
                     )
                 }
@@ -227,7 +245,7 @@ private fun RowScope.HeaderCell(
 }
 
 @Composable
-private fun ClassEntryRow(entry: ZipEntry, onOpen: (ZipEntry) -> Unit) {
+private fun ZipEntryRow(entry: ZipEntry, onOpen: (ZipEntry) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
