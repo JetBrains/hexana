@@ -3,6 +3,20 @@
 ## Unreleased
 
 ### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## 0.10 - 2025-05-27
+
+### Added
 - Goto Symbol / Search Everywhere → Symbols now surfaces `.wit` declarations, component-model exports, and regular `.wasm` exports; picking a `.wasm` export opens the file and selects the matching row in the Exports tab
 - Editable binary documents — inline WAT row editing, hex-cell editing, length-changing append+redirect, IDE-keymap Undo/Redo, Discard / Finalize buttons, sidecar persistence with restore-on-reopen — plus a virtualized WAT viewer with per-entry Function / Data / Import / Export breakouts (foldable xxd bodies, `u8`/`u16`/`u32`/`u64`/`ascii`/`utf8` view modes for Data), Go-To-Declaration / Go-To-Symbol / Back / Forward navigation through the IDE keymap, and a section shortcut bar.
 - Java archives & class files: hex view on top + tabs/list below for `.jar`/`.zip`/`.war`/`.apk` (searchable, sortable class list) and `.class` (header / WAT-style foldable methods with decoded bytecode / constant pool); project-view `Open in... → Hexana` action for archives, including entries under External Libraries. [#91](https://github.com/JetBrains/hexana/issues/91)
@@ -16,14 +30,6 @@
 - Fixed issues with debug not hitting the breakpoints when the information is encoded in the .debug_loc section in DWARF
 - Fixed WASM debug backwards compatibility with IntelliJ IDEA 2025
 - Improved MCP
-
-### Deprecated
-
-### Removed
-
-### Fixed
-
-### Security
 
 ## 0.9 - 2026-05-07
 
