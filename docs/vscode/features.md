@@ -1,30 +1,31 @@
 ---
-title: Hexana for VS Code — Feature Reference (0.1.0)
+title: Hexana for VS Code — Feature Reference
 description: Complete capability reference for the Hexana VS Code extension.
-version: "0.1.0"
+version: "0.2.0"
 ---
 
 # Hexana for VS Code — Feature Reference
 
-This page enumerates every user-visible capability Hexana 0.1.0 ships for VS Code. For per-tab details on the analysis panels, see [`analysis-tabs.md`](analysis-tabs.md). For per-release changes, see [`changelog.md`](changelog.md).
+This page enumerates every user-visible capability Hexana ships for VS Code. For per-tab details on the analysis panels, see [`analysis-tabs.md`](analysis-tabs.md). For per-release changes, see [`changelog.md`](changelog.md).
 
 ## Custom binary editor
 
 Hexana registers a `CustomReadonlyEditorProvider` (`hexana.wasmEditor`) for files matching `*.wasm`. When you open a `.wasm`, VS Code uses this editor by default — `workbench.editorAssociations` is set to `{"*.wasm": "hexana.wasmEditor"}` automatically on install.
 
-The editor is **read-only** in 0.1.0. Inspection and run; no in-place editing.
+The editor is **read-only**. Inspection and run; no in-place editing.
 
 ### Automatic binary kind detection
 
-Three kinds are detected and badged in the editor toolbar:
+Four kinds are detected and badged in the editor toolbar:
 
 | Badge | Detection |
 |---|---|
 | `core` | Standard core WebAssembly module (magic `\0asm`, version 1). |
 | `component` | Component Model binary (magic `\0asm`, version 0x0a, layer 1). |
 | `wasm` | Falls back to generic when neither kind matches but the file is otherwise WebAssembly. |
+| `native` | ELF, Mach-O, or PE binary detected from magic bytes. |
 
-Tab availability adapts per kind — Component Model files surface a **Modules** tab; core modules surface **Functions**, **Data**, **Custom**, **Monos**, **Garbage**.
+Tab availability adapts per kind — Component Model files surface a **Modules** tab; core modules surface **Functions**, **Data**, **Custom**, **Monos**, **Garbage**; native binaries surface a structure tab covering sections, segments, and symbols.
 
 ## Hex viewer
 
@@ -36,6 +37,16 @@ A virtual-scrolling hex dump with:
 - **Selection status bar**: shows the current byte range and decoded interpretations.
 
 The viewer renders through Compose-for-Web inside a VS Code webview — it scales smoothly to large files without DOM-node-per-byte overhead.
+
+## Native binaries (experimental, 0.2.0+)
+
+Hexana detects **ELF**, **Mach-O**, and **PE** files by magic bytes and opens them in the same custom editor as `.wasm` files. The hex viewer behaves identically; the structure tab surfaces format-specific information:
+
+- **ELF**: sections, segments, dynamic symbols, imports.
+- **Mach-O**: load commands, segments, sections, symbols.
+- **PE**: headers, sections, exports, imports.
+
+Common extensions are recognised (`.elf`, `.so`, `.dylib`, `.bundle`, `.exe`, `.dll`, `.sys`); extensionless binaries with matching magic bytes also open through the Hexana editor. Run and Debug are not applicable for native binaries.
 
 ## Analysis tabs
 
@@ -57,7 +68,7 @@ Up to 11 tabs inside the same editor, surfaced by binary kind. All tables are **
 
 ## Run support
 
-A **Run** button (and, since 0.1.0, a separate **Debug** button) in the editor toolbar, present when at least one runtime is discoverable.
+A **Run** button and a separate **Debug** button in the editor toolbar, present when at least one runtime is discoverable.
 
 - **Runtime picker** — Wasmtime, WAMR, or GraalVM. Unavailable runtimes are greyed out with a tooltip explaining why.
 - **Core modules**: pick an export, the runtime, and supply arguments. Hexana invokes the chosen runtime in a VS Code terminal with auto-generated import stubs and the runtime's equivalent of `--preload` for data segments.
@@ -65,7 +76,7 @@ A **Run** button (and, since 0.1.0, a separate **Debug** button) in the editor t
 
 See [`run-support.md`](run-support.md) for the full reference.
 
-## Debugging (experimental, 0.1.0+)
+## Debugging (experimental)
 
 A **Debug** button alongside Run launches the module under `lldb` for **Wasmtime** or **WAMR** runtimes (not yet GraalVM). Requires LLVM 22.1 or newer.
 
@@ -74,11 +85,11 @@ A **Debug** button alongside Run launches the module under `lldb` for **Wasmtime
 - Inspect local variables for compilers that emit DWARF with usable location expressions (Rust, C/C++, Emscripten with `-g`).
 - Component Model nested-module breakpoints are supported on Wasmtime.
 
-See [`run-support.md#debugging-experimental-010`](run-support.md) for the full reference and known limitations.
+See [`run-support.md`](run-support.md) for the full reference and known limitations.
 
-## MCP server (downloaded on demand, 0.1.0+)
+## MCP server (downloaded on demand)
 
-Hexana 0.1.0 ships an integration with VS Code's **Model Context Protocol server registration API**: AI tooling (Claude Desktop, Claude Code, Codex, Cursor's agent mode, Continue) can connect to the Hexana MCP server to inspect the currently open WASM file.
+Hexana integrates with VS Code's **Model Context Protocol server registration API**: AI tooling (Claude Desktop, Claude Code, Codex, Cursor's agent mode, Continue) can connect to the Hexana MCP server to inspect the currently open WASM file.
 
 - **First-run download.** On first MCP use, Hexana downloads the standalone MCP server ZIP from the corresponding GitHub release and extracts it to `globalStorage`. Subsequent launches reuse the cached install. Stale download locks are detected and recovered automatically.
 - **`Hexana: Reinstall MCP Server` command** (Command Palette) — re-runs the download to recover from a corrupted install or to re-pull after a Hexana update.
@@ -129,7 +140,7 @@ Drag the divider between the hex viewer and the analysis panel to adjust the spl
 
 ## What this version does not do (yet)
 
-Compared to the JetBrains IntelliJ plugin, the 0.1.0 VS Code extension does **not** ship:
+Compared to the JetBrains IntelliJ plugin, the VS Code extension does **not** ship:
 
 - WIT language support (parser, inspections, completion, navigation).
 - Editable WAT view.
@@ -137,6 +148,7 @@ Compared to the JetBrains IntelliJ plugin, the 0.1.0 VS Code extension does **no
 - JS / TS-side type inference for `WebAssembly.instantiate`.
 - GraalVM debug (debug works on Wasmtime + WAMR only).
 - Goto Symbol contribution scoped to `.wit` declarations and `.wasm` exports.
+- JVM artifact viewers (`.class`, `.jar`, `.jit`) and the switchable AOT / Cranelift disassembler backend.
 
 These are tracked for future versions; some are JetBrains-only by design (where they depend on IntelliJ Platform APIs without a VS Code equivalent).
 

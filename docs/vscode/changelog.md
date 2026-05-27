@@ -1,19 +1,31 @@
 ---
 title: Hexana for VS Code — Release Notes
 description: Release notes for the Hexana VS Code extension.
-version: "0.1.0"
-released: 2026-05-20
+version: "0.2.0"
 ---
 
 # Release Notes — Hexana for VS Code
 
-This page tracks releases of the VS Code extension. The authoritative source is the commit history on the `release/vscode-0.1.0`, `release/vscode-0.0.2`, and `release/vscode-0.0.1` branches in the repository.
+This page tracks releases of the VS Code extension.
 
-## 0.1.0 — preview
+## 0.2.0
 
-Source branch: `release/vscode-0.1.0`. Released **2026-05-20**.
+Released **2026-05-27**.
 
-First release in the `0.1.x` line. Still marked `preview` on the marketplace while the debug and MCP integrations stabilise.
+### Added
+
+- **Native binary support (experimental).** ELF, Mach-O, and PE binaries open in the Hexana custom editor by magic-byte detection. Common extensions (`.elf`, `.so`, `.dylib`, `.bundle`, `.exe`, `.dll`, `.sys`) are matched first, but extensionless binaries with matching magic also open through Hexana. The hex viewer is identical to the `.wasm` case; the structure tab surfaces format-specific information (sections / segments / dynamic symbols for ELF, load commands for Mach-O, sections / exports / imports for PE).
+
+### Changed
+
+- **Improved discovery of `lldb-dap` on Linux.** The debug path now picks up `lldb-dap` from a wider set of paths and version-suffixed names, reducing the cases where a user has LLVM 22.1+ installed but Hexana fails to find it.
+- **MCP server improvements.** Various correctness and ergonomics improvements to the bundled MCP tools.
+
+## 0.1.0
+
+Released **2026-05-20**.
+
+First release in the `0.1.x` line.
 
 ### Added
 
@@ -41,9 +53,7 @@ First release in the `0.1.x` line. Still marked `preview` on the marketplace whi
 - Sorting-arrow rendering glitch in the analysis tables.
 - Various UI-test flakes; timeouts increased and editor-ready waits tightened.
 
-## 0.0.2 — preview
-
-Source branch: `release/vscode-0.0.2`.
+## 0.0.2
 
 ### Added
 
@@ -78,9 +88,7 @@ Initial public preview release. Shipped:
 
 ## Versioning policy
 
-The VS Code extension is in the **`0.1.x` preview** line as of 2026-05-20. The `preview` marketplace flag remains on while the debugging and MCP-server integrations stabilise. Contract changes (settings, editor URIs, MCP transport) may still happen between minor versions; we will call them out explicitly in this changelog.
-
-The `0.0.x` line is closed. New work targets `0.1.x`.
+Contract changes (settings, editor URIs, MCP transport) may still happen between minor versions while the extension stabilises; we will call them out explicitly in this changelog. The `0.0.x` line is closed.
 
 ## Compatibility
 
@@ -110,4 +118,4 @@ VS Code forks (Cursor, Code OSS / VSCodium, Windsurf, Continue.dev) are supporte
 ## See also
 
 - [`getting-started.md`](getting-started.md), [`features.md`](features.md), [`run-support.md`](run-support.md), [`settings.md`](settings.md).
-- The JetBrains plugin's [changelog](../jetbrains/changelog-0.9.md).
+- The JetBrains plugin's [changelog](../jetbrains/changelog-0.10.md).

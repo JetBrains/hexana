@@ -1,15 +1,13 @@
 ---
-title: Hexana VS Code Extension — Documentation (0.1.0)
-description: User and contributor documentation for the Hexana VS Code extension, version 0.1.0 (released 2026-05-20).
-version: "0.1.0"
-released: 2026-05-20
+title: Hexana VS Code Extension — Documentation
+description: User and contributor documentation for the Hexana VS Code extension.
+version: "0.2.0"
 audience: [users]
-source-branch: release/vscode-0.1.0
 ---
 
 # Hexana — VS Code Extension Documentation
 
-**Hexana** is a Visual Studio Code extension by JetBrains for inspecting and running WebAssembly binaries. Open any `.wasm` file and Hexana replaces the default editor with a Compose-for-Web webview: a virtual-scrolling hex viewer alongside up to **11 structural-analysis tabs** (Summary, Exports, Imports, Functions, Data, Custom, Top, Monos, Garbage, Modules, WAT). Run modules through **Wasmtime**, **WAMR**, or **GraalVM**, **debug** them (experimental, LLVM 22.1+), resolve Component Model dependencies automatically, and drive analysis from an AI tool over the on-demand-downloaded **MCP server**. This documentation set describes **release 0.1.0** (2026-05-20) sourced from branch `release/vscode-0.1.0`.
+**Hexana** is a Visual Studio Code extension by JetBrains for inspecting and running WebAssembly binaries — and, as of 0.2.0, native binaries (ELF, Mach-O, PE) as well. Open any `.wasm` file and Hexana replaces the default editor with a Compose-for-Web webview: a virtual-scrolling hex viewer alongside up to **11 structural-analysis tabs** (Summary, Exports, Imports, Functions, Data, Custom, Top, Monos, Garbage, Modules, WAT). Native binaries open with the same hex + structure layout. Run modules through **Wasmtime**, **WAMR**, or **GraalVM**, **debug** them (experimental, LLVM 22.1+), resolve Component Model dependencies automatically, and drive analysis from an AI tool over the on-demand-downloaded **MCP server**.
 
 > Looking for the IntelliJ Platform plugin? See the [JetBrains IDEs section](../jetbrains/index.md). The VS Code and JetBrains products share the same WASM parser core but differ in language-support depth, run integrations, and target audience.
 
@@ -28,7 +26,7 @@ source-branch: release/vscode-0.1.0
 
 ## Version and compatibility
 
-- **Extension version**: 0.1.0 (marked `preview` on the marketplace).
+- **Extension version**: 0.2.0.
 - **VS Code requirement**: `^1.102.0` — required for the MCP-server registration API used by the on-demand MCP integration. Older 0.0.x releases ran on 1.85+.
 - **Optional Java**: 21 or newer for the MCP server. The server is downloaded on demand on first MCP use; set `hexana.mcp.javaHome` to point at a specific JDK if `JAVA_HOME` / `PATH` do not surface one.
 - **Optional LLVM**: 22.1 or newer for the experimental debug path (Wasmtime + WAMR, `lldb` under the hood).
@@ -53,7 +51,3 @@ Some features that depend on VS Code's terminal, filesystem, or MCP providers ma
 - **Already opened a `.wasm`, want to run it**: [`run-support.md`](run-support.md).
 - **Working with Component Model binaries**: [`component-model.md`](component-model.md).
 - **Plugin doesn't load / file doesn't open**: [`troubleshooting.md`](troubleshooting.md).
-
-## Source of truth
-
-This documentation set describes the **0.1.0** preview release. For unreleased work, see the commit history on `master` after `release/vscode-0.1.0`.

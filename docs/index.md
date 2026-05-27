@@ -13,18 +13,18 @@ hide:
 
 -   ### For JetBrains IDEs
 
-    Full IntelliJ Platform plugin — multi-tab `.wasm` editor, WAT and WIT language support, MCP server with 17 tools, Java-side completion for GraalWasm and Chicory, JavaScript / TypeScript type inference for `WebAssembly.instantiate`, run and debug on Wasmtime / WAMR / GraalVM.
+    Full IntelliJ Platform plugin — multi-tab `.wasm` editor with an editable virtualised WAT view, WAT and WIT language support, MCP server with Hexana tools, Java-side completion for GraalWasm and Chicory, JavaScript / TypeScript type inference for `WebAssembly.instantiate`, run and debug on Wasmtime / WAMR / GraalVM. Experimental ELF / Mach-O / PE binary support, JVM artifact viewers (`.class`, `.jar`, `.war`, `.apk`, `.jit`), and a switchable disassembler backend (bytecode AOT or Cranelift native).
 
-    **Current release**: 0.9.1 (2026-05-20) — 0.9 line, initial 0.9 on 2026-05-07
+    **Current release**: 0.10
     Supported IDEs: IntelliJ IDEA 2024.1+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm.
 
     [Read the docs →](jetbrains/index.md)
 
 -   ### For Visual Studio Code
 
-    VS Code extension with a Compose-for-Web custom editor, virtual-scrolling hex viewer, 11 structural-analysis tabs, Component Model dependency resolution, experimental debugging, an on-demand MCP server, and Run on Wasmtime / WAMR / GraalVM.
+    VS Code extension with a Compose-for-Web custom editor, virtual-scrolling hex viewer, 11 structural-analysis tabs, Component Model dependency resolution, experimental debugging, an on-demand MCP server, and Run on Wasmtime / WAMR / GraalVM. ELF / Mach-O / PE binaries open with the same hex + structure layout.
 
-    **Current release**: 0.1.0 preview (2026-05-20)
+    **Current release**: 0.2.0
     Supports: VS Code 1.102+, Cursor, VSCodium, Code OSS, and other VS Code-based editors via Open VSX.
 
     [Read the docs →](vscode/index.md)
@@ -38,19 +38,23 @@ Hexana's WASM analysis core is a single Kotlin Multiplatform codebase used by bo
 - **WASM parser** supporting Core Wasm, Component Model, GC, SIMD, Threads, Tail Call, Reference Types, Bulk Memory, Multi-Value, and Legacy Exception Handling.
 - **Binary analysis** — imports, exports, function and type catalogues, size profiling, dead-code detection, monomorphisation analysis, custom-section inspection (including DWARF for the JetBrains plugin).
 - **Component Model awareness** — both products detect components, list nested modules, and resolve component dependencies.
-- **Run support** through Wasmtime, with automatic proposal-flag detection.
+- **Native binary support** (experimental) — ELF, Mach-O, PE detection from magic bytes; the same hex + structure layout applies to native binaries as to WebAssembly modules.
+- **Run support** through Wasmtime, WAMR, and GraalVM with automatic proposal-flag detection.
 
 ## Choosing between the two
 
 | You want… | Use |
 |---|---|
 | The deepest WIT editing experience | JetBrains plugin |
-| MCP server for AI assistants | Both — bundled in JetBrains plugin; on-demand download in VS Code extension since 0.1.0 |
+| Editable WAT with inline row editing | JetBrains plugin |
+| MCP server for AI assistants | Both — bundled in JetBrains plugin; on-demand download in VS Code extension |
 | Java-side completion (GraalWasm, Chicory) | JetBrains plugin |
 | JS / TS `WebAssembly.instantiate` type inference | JetBrains plugin |
-| Debugger with breakpoints | Both — JetBrains plugin since 0.9; VS Code extension experimentally since 0.1.0 |
+| Native-binary disassembly with backend choice (AOT or Cranelift) | JetBrains plugin |
+| `.jar` / `.class` / `.jit` viewers | JetBrains plugin |
+| Debugger with breakpoints | Both — experimental in both |
 | DWARF source mapping | Both |
-| Run on WAMR or GraalVM | Both since VS Code 0.1.0 |
+| Run on WAMR or GraalVM | Both |
 | Lightweight `.wasm` inspector in VS Code | VS Code extension |
 | Compose-for-Web custom editor in VS Code / Cursor / VSCodium | VS Code extension |
 | Use Hexana from Cursor or VSCodium | VS Code extension |

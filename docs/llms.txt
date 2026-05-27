@@ -1,11 +1,11 @@
 # Hexana — WebAssembly and Binary Analysis
 
-> Hexana is a WebAssembly and binary analysis toolkit by JetBrains, available as an IntelliJ Platform plugin (`org.jetbrains.hexana`) and a VS Code extension (`JetBrains.hexana-wasm`). It parses `.wasm` binaries, renders WAT and WIT, integrates with WASM runtimes (Wasmtime, WAMR, GraalVM), exposes Model Context Protocol tools, supports Component Model dependency resolution, and provides experimental WASM debugging via `lldb`. This index covers both products as of 2026-05-20.
+> Hexana is a WebAssembly and binary analysis toolkit by JetBrains, available as an IntelliJ Platform plugin (`org.jetbrains.hexana`) and a VS Code extension (`JetBrains.hexana-wasm`). It parses `.wasm` binaries, renders WAT and WIT, opens native binaries (ELF, Mach-O, PE) and JVM artifacts (`.class`, `.jar`, `.war`, `.apk`, `.jit`) in the JetBrains plugin, integrates with WASM runtimes (Wasmtime, WAMR, GraalVM), exposes Model Context Protocol tools, supports Component Model dependency resolution, and provides experimental WASM debugging via `lldb`.
 
 ## Products
 
-- **JetBrains IDE plugin** — version 0.9.1, released 2026-05-20 (0.9 line; initial 0.9 on 2026-05-07). Source branch `release/0.9`. Compatible with IntelliJ IDEA 2024.1+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm.
-- **VS Code extension** — version 0.1.0 preview, released 2026-05-20. Source branch `release/vscode-0.1.0`. Compatible with VS Code 1.102+, Cursor, VSCodium, Code OSS.
+- **JetBrains IDE plugin** — version 0.10. Compatible with IntelliJ IDEA 2024.1+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm.
+- **VS Code extension** — version 0.2.0. Compatible with VS Code 1.102+, Cursor, VSCodium, Code OSS.
 
 ## Identity
 
@@ -23,22 +23,24 @@
 
 - [Home](index.md): product overview and routing between JetBrains and VS Code documentation.
 
-## Docs — JetBrains IDE plugin (0.9.x)
+## Docs — JetBrains IDE plugin
 
 - [Overview](jetbrains/index.md): documentation landing for the JetBrains plugin.
 - [Getting Started](jetbrains/getting-started.md): install, open a .wasm, find the main views.
 - [Features](jetbrains/features.md): complete capability reference grouped by surface.
-- [File Types](jetbrains/file-types.md): .wasm, .wat, .wit, and generic binary.
+- [File Types](jetbrains/file-types.md): .wasm, .wat, .wit, native binaries (ELF / Mach-O / PE), JVM artifacts (.class / .jar / .war / .apk / .jit).
+- [Disassembler Backends](jetbrains/disassembler-backends.md): switching between the bytecode AOT and Cranelift native disassembler backends.
 - [WIT Language](jetbrains/wit-language.md): full WebAssembly Interface Types language support.
 - [Run and Debug](jetbrains/run-and-debug.md): Wasmtime, WAMR, GraalVM, experimental debugger.
-- [MCP Tools](jetbrains/mcp-tools.md): 17 Model Context Protocol tools, one section per tool.
+- [MCP Tools](jetbrains/mcp-tools.md): Model Context Protocol tools, one section per tool.
 - [Java Integration](jetbrains/java-integration.md): GraalWasm and Chicory completion and inspections.
 - [JS and TS Integration](jetbrains/js-integration.md): WebAssembly.instantiate imports completion and .instance.exports type inference.
-- [Settings](jetbrains/settings.md): IDE settings pages.
+- [Settings](jetbrains/settings.md): IDE settings pages and Registry-key toggles.
 - [Troubleshooting](jetbrains/troubleshooting.md): common failure modes and resolutions.
-- [Changelog 0.9](jetbrains/changelog-0.9.md): pinned release notes for the 0.9.x line (0.9, 0.9.1).
+- [Changelog 0.10](jetbrains/changelog-0.10.md): release notes for 0.10.
+- [Changelog 0.9](jetbrains/changelog-0.9.md): release notes for the 0.9 line.
 
-## Docs — VS Code extension (0.1.0)
+## Docs — VS Code extension
 
 - [Overview](vscode/index.md): documentation landing for the VS Code extension.
 - [Getting Started](vscode/getting-started.md): install, open a .wasm, find the main panels.
@@ -48,13 +50,13 @@
 - [Component Model](vscode/component-model.md): dependency resolution and nested-module navigation.
 - [Settings](vscode/settings.md): the three VS Code settings the extension contributes.
 - [Troubleshooting](vscode/troubleshooting.md): common failure modes and resolutions.
-- [Changelog](vscode/changelog.md): release notes (0.0.1 → 0.1.0).
+- [Changelog](vscode/changelog.md): release notes.
 
 ## FAQ
 
 ### What is Hexana?
 
-Hexana is a WebAssembly and binary analysis toolkit by JetBrains, available as an IntelliJ Platform plugin and a VS Code extension. Both products parse `.wasm` binaries (Core Wasm and Component Model), render WAT, list imports / exports / functions / types / data / custom sections, profile binary size, run modules through Wasmtime / WAMR / GraalVM, and (as of JetBrains 0.9 and VS Code 0.1.0) debug via `lldb`. The JetBrains plugin additionally ships full WIT language support, an in-process MCP server with 17 tools, Java-side completion (GraalWasm, Chicory), JavaScript / TypeScript type inference (`WebAssembly.instantiate`), and Goto-Symbol integration for `.wit` and `.wasm` exports. The VS Code extension is a lighter-weight inspector with a Compose-for-Web custom editor, 11 structural-analysis tabs, and an on-demand-downloaded MCP server (since 0.1.0).
+Hexana is a WebAssembly and binary analysis toolkit by JetBrains, available as an IntelliJ Platform plugin and a VS Code extension. Both products parse `.wasm` binaries (Core Wasm and Component Model), render WAT, list imports / exports / functions / types / data / custom sections, profile binary size, run modules through Wasmtime / WAMR / GraalVM, debug via `lldb`, and open native binaries (ELF, Mach-O, PE) in the same multi-tab editor. The JetBrains plugin additionally ships full WIT language support, an in-process MCP server, Java-side completion (GraalWasm, Chicory), JavaScript / TypeScript type inference (`WebAssembly.instantiate`), Goto-Symbol integration for `.wit` and `.wasm` exports, JVM artifact viewers (`.class`, `.jar`, `.war`, `.apk`, `.jit`), an editable WAT viewer with inline row editing, and a switchable disassembler backend (bytecode AOT or Cranelift native). The VS Code extension is a lighter-weight inspector with a Compose-for-Web custom editor, 11 structural-analysis tabs, native-binary support, and an on-demand-downloaded MCP server.
 
 ### How do I install Hexana?
 
@@ -74,23 +76,27 @@ Yes. Both products detect Component Model binaries, list their nested modules, a
 
 ### Does Hexana have an MCP server?
 
-The JetBrains plugin exposes 17 Model Context Protocol tools (`summarize_module`, `list_imports`, `list_exports`, `list_functions`, `get_instructions_for_functions`, `list_data`, and more) through the platform MCP server. AI assistants like Claude Desktop, Claude Code, Cursor's agent mode, and Continue can call these to explore the loaded module. The VS Code extension ships the same MCP server since 0.1.0, downloaded on demand from GitHub Releases the first time an MCP client requests it; a Java 21+ JDK is required to launch it (`hexana.mcp.javaHome` setting lets you pin one).
+The JetBrains plugin exposes a set of Model Context Protocol tools (`summarize_module`, `list_imports`, `list_exports`, `list_functions`, `get_instructions_for_functions`, `list_data`, and more) through the platform MCP server. AI assistants like Claude Desktop, Claude Code, Cursor's agent mode, and Continue can call these to explore the loaded module. The VS Code extension ships the same MCP server, downloaded on demand from GitHub Releases the first time an MCP client requests it; a Java 21+ JDK is required to launch it (`hexana.mcp.javaHome` setting lets you pin one).
 
 ### Does Hexana support debugging?
 
-Yes — experimental in both products. JetBrains plugin since 0.9; VS Code extension since 0.1.0. Works with Wasmtime and WAMR runtimes, requires LLVM 22.1 or newer, uses `lldb` under the hood. Set breakpoints in source files; they are mapped to PCs via DWARF when available. GraalVM debug is not yet wired in either product.
+Yes — experimental in both products. Works with Wasmtime and WAMR runtimes, requires LLVM 22.1 or newer, uses `lldb` under the hood. Set breakpoints in source files; they are mapped to PCs via DWARF when available. GraalVM debug is not yet wired in either product.
 
 ### Which WASM runtimes does Hexana support?
 
-JetBrains plugin: Wasmtime, WAMR, GraalVM. VS Code extension (since 0.1.0): Wasmtime, WAMR, GraalVM — pick at Run/Debug time via the runtime picker.
+Wasmtime, WAMR, GraalVM in both products — pick at Run / Debug time via the runtime picker.
 
 ### Does Hexana auto-detect WASM proposals?
 
-Yes. Both products detect which proposals a binary uses (Threads, SIMD, GC, Tail Call, Exception Handling including Legacy EH, Reference Types, Bulk Memory, Multi-Value, Component Model) and pass the appropriate `--wasm-features` flags to the runtime.
+Yes. Both products detect which proposals a binary uses (Threads, SIMD, GC, Tail Call, Exception Handling including Legacy EH, Reference Types, Bulk Memory, Multi-Value, Component Model) and pass the appropriate `--wasm-features` flags to the runtime. The JetBrains plugin also displays proposal pills in the information bar above the editor.
+
+### Does Hexana support native binaries?
+
+Yes — experimentally. Both products detect ELF, Mach-O, and PE files by magic bytes and open them in the Hexana editor. The JetBrains plugin also offers multi-architecture disassembly (x86, x86-64, ARM, AArch64, RISC-V 32 / 64) with a switchable execution backend (bytecode AOT or Cranelift native). The VS Code extension surfaces the hex viewer and a structure tab; disassembly is not yet exposed.
 
 ### Does Hexana parse DWARF debug info?
 
-The JetBrains plugin parses DWARF v4 and v5 sections embedded in `.wasm` custom sections and uses them for source-line mapping in the debugger and for WAT→source navigation. The VS Code extension uses DWARF for breakpoint resolution in the experimental debugger (since 0.1.0); the Custom tab also lists DWARF sections.
+The JetBrains plugin parses DWARF v4 and v5 sections embedded in `.wasm` custom sections and uses them for source-line mapping in the debugger and for WAT→source navigation. The VS Code extension uses DWARF for breakpoint resolution in the experimental debugger; the Custom tab also lists DWARF sections.
 
 ### Where is Hexana's source code?
 
@@ -99,5 +105,3 @@ github.com/JetBrains/hexana. Public, open-source. JetBrains plugin sources under
 ## Optional
 
 - [GitHub repository](https://github.com/JetBrains/hexana): authoritative source code.
-- [JetBrains plugin `plugin.xml`](https://github.com/JetBrains/hexana/blob/release/0.9/idea-plugin/src/main/resources/META-INF/plugin.xml): authoritative IntelliJ extension and dependency declarations.
-- [VS Code extension `package.json`](https://github.com/JetBrains/hexana/blob/release/vscode-0.1.0/vscode-plugin/package.json): authoritative VS Code manifest.

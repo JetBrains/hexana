@@ -1,12 +1,12 @@
 ---
-title: Hexana Settings Pages (0.9)
-description: The two Settings pages Hexana registers — Tools → Hexana, and Build, Execution, Deployment → WASM Runtime.
-version: "0.9"
+title: Hexana Settings Pages
+description: The Settings pages and Registry keys Hexana exposes — Tools → Hexana, Build/Execution → WASM Runtime, and disassembler-backend toggles in the Registry.
+version: "0.10"
 ---
 
 # Settings
 
-Hexana 0.9 registers two `applicationConfigurable` entries (IDE-wide, not per-project).
+Hexana registers two `applicationConfigurable` entries (IDE-wide, not per-project) and exposes additional behaviour through the platform Registry.
 
 ## Settings → Tools → Hexana
 
@@ -20,7 +20,7 @@ General Hexana plugin settings. Surfaces include:
 - Hex view appearance.
 - Diagnostic / logging toggles for the plugin.
 
-The exact field set in 0.9 is the responsibility of `HexanaConfigurableProvider`; consult that class for the source of truth.
+The exact field set is the responsibility of `HexanaConfigurableProvider`; consult that class for the source of truth.
 
 ## Settings → Build, Execution, Deployment → WASM Runtime
 
@@ -53,7 +53,20 @@ Contributed by `WitCodeStyleSettingsProvider`. Standard indent, tabs, and wrappi
 
 ## Settings → Tools → Server (MCP)
 
-The platform MCP server lives in the bundled `com.intellij.mcpServer` plugin and exposes its own Settings page. Hexana adds tools to that server but does not introduce its own MCP settings page in 0.9. See [`mcp-tools.md`](mcp-tools.md) for the tools Hexana contributes.
+The platform MCP server lives in the bundled `com.intellij.mcpServer` plugin and exposes its own Settings page. Hexana adds tools to that server but does not introduce its own MCP settings page. See [`mcp-tools.md`](mcp-tools.md) for the tools Hexana contributes.
+
+## Registry keys (experimental toggles)
+
+Some Hexana behaviour is exposed only through the platform Registry — these are toggles for experimental code paths that don't yet warrant a dedicated Settings field.
+
+Open the Registry from **Help → Find Action…** (`Cmd+Shift+A` on macOS, `Ctrl+Shift+A` on Linux / Windows), type `Registry…`, and filter for `hexana.`.
+
+| Registry key | Default | Effect |
+|---|---|---|
+| `hexana.disassembly.backend.redline` | `false` | Use the Cranelift native disassembler backend instead of the bytecode AOT default. See [`disassembler-backends.md`](disassembler-backends.md). |
+| `hexana.disassembly.perf.logging` | `false` | Emit `[disasm-perf]` timing lines to `idea.log` for every decoded chunk. Useful when comparing the two disassembler backends on a specific binary. |
+
+Registry-key changes take effect immediately on the next operation that reads them (next disassembly panel open, next decode chunk). No IDE restart is required.
 
 ## Settings → Plugins → Marketplace → "Hexana"
 

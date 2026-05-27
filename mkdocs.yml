@@ -75,6 +75,7 @@ nav:
       - Getting Started: jetbrains/getting-started.md
       - Features: jetbrains/features.md
       - File Types: jetbrains/file-types.md
+      - Disassembler Backends: jetbrains/disassembler-backends.md
       - WIT Language: jetbrains/wit-language.md
       - Run and Debug: jetbrains/run-and-debug.md
       - MCP Tools: jetbrains/mcp-tools.md
@@ -82,7 +83,8 @@ nav:
       - JavaScript & TypeScript: jetbrains/js-integration.md
       - Settings: jetbrains/settings.md
       - Troubleshooting: jetbrains/troubleshooting.md
-      - Changelog 0.9.x: jetbrains/changelog-0.9.md
+      - Changelog 0.10: jetbrains/changelog-0.10.md
+      - Changelog 0.9: jetbrains/changelog-0.9.md
 
   - VS Code:
       - Overview: vscode/index.md
