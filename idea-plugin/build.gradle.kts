@@ -161,11 +161,28 @@ tasks {
         jvmArgs("-Xmx8g", "-XX:HeapDumpPath=/tmp")
     }
     named<PublishPluginTask>("publishPlugin") {
-        providers.gradleProperty("hexanaPublishPluginArchiveFile").orNull?.let {
-            providers.gradleProperty("hexanaPublishChannel").orNull?.takeIf { channel -> channel.isNotBlank() }
+        providers.gradleProperty("hexanaPublishPluginArchiveFile").orNull?.takeIf { it.isNotBlank() }?.let {
+            val explicitPublishChannel = providers.gradleProperty("hexanaPublishChannel").orNull?.takeIf { channel ->
+                channel.isNotBlank()
+            }
                 ?: throw GradleException(
                     "hexanaPublishChannel must be set when hexanaPublishPluginArchiveFile is set.",
                 )
+            val expectedBuild = when (explicitPublishChannel) {
+                "default" -> "release"
+                "nightly" -> "nightly"
+                else -> throw GradleException(
+                    "Unsupported hexanaPublishChannel '$explicitPublishChannel' when hexanaPublishPluginArchiveFile " +
+                            "is set. Expected 'default' or 'nightly'.",
+                )
+            }
+            val actualBuild = hexanaBuild.toString()
+            if (actualBuild != expectedBuild) {
+                throw GradleException(
+                    "hexanaBuild must be '$expectedBuild' when publishing a prebuilt archive to " +
+                            "'$explicitPublishChannel', but was '$actualBuild'.",
+                )
+            }
             archiveFile.set(project.file(it))
         }
     }
