@@ -6,6 +6,7 @@ import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 import org.jetbrains.intellij.platform.gradle.tasks.PublishPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
+import org.jetbrains.intellij.platform.gradle.tasks.SignPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.aware.SplitModeAware
 
 plugins {
@@ -80,6 +81,7 @@ dependencies {
         // TODO: whenever composeUI() will be updated, we can safely remove direct dependencies to dekstop runtime
         // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
         composeUI()
+        zipSigner()
     }
 
     implementation(project(":analytics"))
@@ -163,6 +165,12 @@ tasks {
         jvmArgs("-Xmx8g", "-XX:HeapDumpPath=/tmp")
     }
 
+    named<SignPluginTask>("signPlugin") {
+        hexanaPublishPluginArchiveFile?.let {
+            archiveFile.set(project.file(it))
+        }
+    }
+
     named<PublishPluginTask>("publishPlugin") {
         hexanaPublishPluginArchiveFile?.let {
             val explicitPublishChannel = hexanaPublishChannel
@@ -184,7 +192,6 @@ tasks {
                             "'$explicitPublishChannel', but was '$actualBuild'.",
                 )
             }
-            archiveFile.set(project.file(it))
         }
     }
 
