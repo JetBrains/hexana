@@ -12,9 +12,7 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.macho.MachOParser
 import org.jetbrains.hexana.parsing.common.NativeBinaryEndian
-import org.jetbrains.hexana.run.WasmRunMode
 import org.jetbrains.hexana.run.runWasmConfiguration
-import org.jetbrains.hexana.run.showEnginePopup
 import org.jetbrains.hexana.shared.*
 import org.jetbrains.hexana.wasm.components.ComponentDefType
 import org.jetbrains.hexana.wasm.components.ComponentEnumType
@@ -131,9 +129,7 @@ private fun enrichWasmExportsTab(
             action = { index ->
                 val export = exports.getOrNull(index) ?: return@RowActionDescriptor
                 if (export is WasmFunctionExportRecordEntry) {
-                    showEnginePopup { engine, mode ->
-                        runWasmExportedFunction(provider, file, project, export, engine, mode)
-                    }
+                    runWasmExportedFunction(provider, file, project, export)
                 }
             },
         ),
@@ -145,21 +141,23 @@ private fun runWasmExportedFunction(
     file: VirtualFile,
     project: Project,
     export: WasmFunctionExportRecordEntry,
-    engine: org.jetbrains.hexana.run.WasmEngine,
-    mode: WasmRunMode,
 ) {
     val exportName = export.name
     val signature = resolveFunctionSignature(wasmBinaryProvider, export)
     val params = signature?.params ?: emptyList()
 
-    var programArgs = ""
     if (params.isNotEmpty() && params.all { isTrivialType(it) }) {
         val dialog = FunctionArgsDialog(project, exportName, wasmArgDescriptors(params))
         if (!dialog.showAndGet()) return
-        programArgs = dialog.argValues.joinToString(" ")
+        val result = dialog.result ?: return
+        val programArgs = dialog.argValues.joinToString(" ")
+        runWasmConfiguration(project, file, exportName, programArgs, "--invoke $exportName", result.engine, result.mode)
+    } else {
+        val dialog = WasmRunDialog.createSimple(project, "Run '$exportName'")
+        if (!dialog.showAndGet()) return
+        val result = dialog.result ?: return
+        runWasmConfiguration(project, file, exportName, "", "--invoke $exportName", result.engine, result.mode)
     }
-
-    runWasmConfiguration(project, file, exportName, programArgs, "--invoke $exportName", engine, mode)
 }
 
 private fun wasmArgDescriptors(params: List<WasmValueType<*>>): List<FunctionArgDescriptor> =
@@ -263,12 +261,10 @@ private fun enrichComponentExportsTab(
             },
             action = { index ->
                 val export = exports.getOrNull(index) ?: return@RowActionDescriptor
-                showEnginePopup(isComponentModel = true) { engine, mode ->
-                    if (isWasiCliRunExport(export)) {
-                        runWasiCliComponent(file, project, export, engine, mode)
-                    } else {
-                        runComponentExportedFunction(provider, file, project, export, engine, mode)
-                    }
+                if (isWasiCliRunExport(export)) {
+                    runWasiCliComponent(file, project, export)
+                } else {
+                    runComponentExportedFunction(provider, file, project, export)
                 }
             },
         ),
@@ -292,12 +288,11 @@ private fun runWasiCliComponent(
     file: VirtualFile,
     project: Project,
     export: org.jetbrains.hexana.wasm.components.WasmComponentExport,
-    engine: org.jetbrains.hexana.run.WasmEngine,
-    mode: WasmRunMode,
 ) {
-    val dialog = ProgramArgsDialog(project, export.exportName)
+    val dialog = ProgramArgsDialog(project, export.exportName, isComponentModel = true)
     if (!dialog.showAndGet()) return
-    runWasmConfiguration(project, file, "", dialog.programArgs, "", engine, mode)
+    val result = dialog.result ?: return
+    runWasmConfiguration(project, file, "", dialog.programArgs, "", result.engine, result.mode)
 }
 
 private fun runComponentExportedFunction(
@@ -305,22 +300,24 @@ private fun runComponentExportedFunction(
     file: VirtualFile,
     project: Project,
     export: org.jetbrains.hexana.wasm.components.WasmComponentExport,
-    engine: org.jetbrains.hexana.run.WasmEngine,
-    mode: WasmRunMode,
 ) {
     val invokeName = resolveInvokeName(export, wasmBinaryProvider)
     val funcType = resolveComponentFunctionType(export, wasmBinaryProvider)
     val params = funcType?.params ?: emptyList()
     val componentTypes = wasmBinaryProvider.types
 
-    var argsString = ""
     if (params.isNotEmpty() && params.all { isTrivialComponentType(it.value, componentTypes) }) {
-        val dialog = FunctionArgsDialog(project, invokeName, componentArgDescriptors(params, componentTypes))
+        val dialog = FunctionArgsDialog(project, invokeName, componentArgDescriptors(params, componentTypes), isComponentModel = true)
         if (!dialog.showAndGet()) return
-        argsString = dialog.argValues.joinToString(", ")
+        val result = dialog.result ?: return
+        val argsString = dialog.argValues.joinToString(", ")
+        runWasmConfiguration(project, file, invokeName, "", "--invoke \"${invokeName}($argsString)\"", result.engine, result.mode)
+    } else {
+        val dialog = WasmRunDialog.createSimple(project, "Run '$invokeName'", isComponentModel = true)
+        if (!dialog.showAndGet()) return
+        val result = dialog.result ?: return
+        runWasmConfiguration(project, file, invokeName, "", "--invoke \"${invokeName}()\"", result.engine, result.mode)
     }
-
-    runWasmConfiguration(project, file, invokeName, "", "--invoke \"${invokeName}($argsString)\"", engine, mode)
 }
 
 private fun componentArgDescriptors(

@@ -10,23 +10,18 @@ import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessTerminatedListener
-import com.intellij.icons.AllIcons
-import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.ui.awt.RelativePoint
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.shared.WasmCommandLine
 import org.jetbrains.hexana.shared.WasmRunInput
-import java.awt.MouseInfo
 
 enum class WasmRunMode {
     RUN, DEBUG
@@ -111,99 +106,6 @@ fun runWasmFile(binaryProvider: BinaryProvider, state: HexViewStateHolder, engin
     doRun(file, project, settings, runManager, mode)
 }
 
-data class EngineRunOption(val engine: WasmEngine, val mode: WasmRunMode) {
-    override fun toString(): String = when (mode) {
-        WasmRunMode.RUN -> HexanaBundle.message("wasm.run.with", engine.displayName)
-        WasmRunMode.DEBUG -> HexanaBundle.message("wasm.debug.with", engine.displayName)
-    }
-}
-
-fun showEnginePopup(
-    isComponentModel: Boolean = false,
-    popupMode: PopupMode = PopupMode.RUN_AND_DEBUG,
-    onSelected: (WasmEngine, WasmRunMode) -> Unit,
-) {
-    val settings = WasmRuntimeSettings.getInstance()
-    val defaultEngine = settings.resolveDefaultEngine()
-
-    if (defaultEngine != null && (!isComponentModel || defaultEngine.supportsComponentsModel)) {
-        when (popupMode) {
-            PopupMode.RUN_AND_DEBUG, PopupMode.RUN_ONLY -> {
-                onSelected(defaultEngine, WasmRunMode.RUN)
-                return
-            }
-            PopupMode.DEBUG_ONLY -> if (defaultEngine.supportsDebug) {
-                onSelected(defaultEngine, WasmRunMode.DEBUG)
-                return
-            }
-        }
-    }
-
-    val engines = WasmEngine.entries.filter { !isComponentModel || it.supportsComponentsModel }
-    val options = engines.flatMap { engine ->
-        buildList {
-            if (popupMode != PopupMode.DEBUG_ONLY) {
-                add(EngineRunOption(engine, WasmRunMode.RUN))
-            }
-            if (engine.supportsDebug && popupMode != PopupMode.RUN_ONLY) {
-                add(EngineRunOption(engine, WasmRunMode.DEBUG))
-            }
-        }
-    }
-    if (options.size == 1) {
-        val single = options.single()
-        onSelected(single.engine, single.mode)
-        return
-    }
-
-    val configureLabel = HexanaBundle.message("wasm.engine.popup.configure")
-    val allItems: List<Any> = options + configureLabel
-
-    val popup = JBPopupFactory.getInstance()
-        .createPopupChooserBuilder(allItems)
-        .setTitle(HexanaBundle.message("wasm.engine.popup.title"))
-        .setRenderer { _, value, _, isSelected, _ ->
-            if (value is EngineRunOption) {
-                val icon = when (value.mode) {
-                    WasmRunMode.DEBUG -> AllIcons.Actions.StartDebugger
-                    else -> AllIcons.Actions.Execute
-                }
-                javax.swing.JLabel(value.toString(), icon, javax.swing.SwingConstants.LEFT).apply {
-                    isOpaque = true
-                    iconTextGap = 6
-                    border = javax.swing.BorderFactory.createEmptyBorder(4, 8, 4, 8)
-                    if (isSelected) {
-                        background = javax.swing.UIManager.getColor("List.selectionBackground")
-                        foreground = javax.swing.UIManager.getColor("List.selectionForeground")
-                    }
-                }
-            } else {
-                javax.swing.JLabel(value?.toString() ?: "", AllIcons.General.Settings, javax.swing.SwingConstants.LEFT).apply {
-                    isOpaque = true
-                    iconTextGap = 6
-                    border = javax.swing.BorderFactory.createEmptyBorder(4, 8, 4, 8)
-                    if (isSelected) {
-                        background = javax.swing.UIManager.getColor("List.selectionBackground")
-                        foreground = javax.swing.UIManager.getColor("List.selectionForeground")
-                    }
-                }
-            }
-        }
-        .setItemChosenCallback { item ->
-            if (item is EngineRunOption) {
-                onSelected(item.engine, item.mode)
-            } else {
-                ShowSettingsUtil.getInstance().showSettingsDialog(null, WasmRuntimeConfigurable::class.java)
-            }
-        }
-        .createPopup()
-    val pointerInfo = MouseInfo.getPointerInfo()
-    if (pointerInfo != null) {
-        popup.show(RelativePoint(pointerInfo.location))
-    } else {
-        popup.showInFocusCenter()
-    }
-}
 
 private fun executorForMode(mode: WasmRunMode): Executor = when (mode) {
     WasmRunMode.RUN -> DefaultRunExecutor.getRunExecutorInstance()

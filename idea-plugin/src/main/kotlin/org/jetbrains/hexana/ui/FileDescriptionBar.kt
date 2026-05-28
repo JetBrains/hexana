@@ -37,9 +37,9 @@ import org.jetbrains.hexana.run.PopupMode
 import org.jetbrains.hexana.run.WasmEngine
 import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.run.runWasmFile
-import org.jetbrains.hexana.run.showEnginePopup
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
+import org.jetbrains.hexana.ui.panel.WasmRunDialog
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.wasm.analysis.SizeNode
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
@@ -274,16 +274,16 @@ private fun ToolbarActionButton(
                 .background(buttonBackground, RoundedCornerShape(4.dp))
                 .onClick {
                     if (isComponentCliRun) {
-                        showEnginePopup(isComponentModel = true, popupMode = popupMode) { engine, mode ->
-                            val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return@showEnginePopup
-                            val dialog = ProgramArgsDialog(state.project, "wasi:cli/run")
-                            if (!dialog.showAndGet()) return@showEnginePopup
-                            runWasmConfiguration(state.project, file, "", dialog.programArgs, "", engine, mode)
-                        }
+                        val dialog = ProgramArgsDialog(state.project, "wasi:cli/run", isComponentModel = true, popupMode = popupMode)
+                        if (!dialog.showAndGet()) return@onClick
+                        val result = dialog.result ?: return@onClick
+                        val file = (binaryProvider as? BinaryVirtualFileProvider)?.file ?: return@onClick
+                        runWasmConfiguration(state.project, file, "", dialog.programArgs, "", result.engine, result.mode)
                     } else {
-                        showEnginePopup(popupMode = popupMode) { engine, mode ->
-                            runWasmFile(binaryProvider, state, engine, mode)
-                        }
+                        val dialog = WasmRunDialog.createSimple(state.project, "Run Wasm Module", popupMode = popupMode)
+                        if (!dialog.showAndGet()) return@onClick
+                        val result = dialog.result ?: return@onClick
+                        runWasmFile(binaryProvider, state, result.engine, result.mode)
                     }
                 }
                 .height(20.dp)
