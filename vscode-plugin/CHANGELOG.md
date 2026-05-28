@@ -1,3 +1,7 @@
+# 0.2.1 - 28.05.2026
+
+- fix mcp downloading archive problem
+
 # 0.2.0 - 27.05.2026
 
 - support for ELF/Mach-O/PE binary formats
