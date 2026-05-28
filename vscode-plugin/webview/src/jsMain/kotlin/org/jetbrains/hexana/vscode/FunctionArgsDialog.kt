@@ -44,6 +44,7 @@ val coreRuntimeOptions = listOf(
     RuntimeOption("wasmtime", "Wasmtime", supportsDebug = true),
     RuntimeOption("wamr", "WAMR", supportsDebug = true),
     RuntimeOption("graalwasm", "GraalWasm", supportsDebug = false),
+    RuntimeOption("browser", "Default Browser", supportsDebug = false),
 )
 
 /**

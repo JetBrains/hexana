@@ -66,6 +66,15 @@ export interface JsImportModuleStub {
 /** Generates stub Wasm modules for all imports of the given core Wasm binary. */
 export function generateImportStubs(wasmBytes: Int8Array): JsImportModuleStub[];
 
+// ── BrowserRunner ───────────────────────────────────────────────────
+
+/**
+ * Generates the HTML page for the browser-based Wasm runner.
+ * Backed by the shared `plugins-shared` implementation so that both
+ * the IntelliJ plugin and the VS Code extension produce identical output.
+ */
+export function generateBrowserHtml(wasmFileName: string, exportName: string, programArgs: string): string;
+
 // ── ShellUtils ──────────────────────────────────────────────────────
 
 /**

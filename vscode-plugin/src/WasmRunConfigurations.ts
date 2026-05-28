@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import * as http from "http";
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
@@ -136,10 +137,10 @@ const nodeToolResolver: ExtensionLib.JsToolResolver = {
  * Returns the currently selected Wasm runtime from settings.
  * Returns `"ask"` when the user wants to see a picker every time.
  */
-export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "ask" {
+export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "browser" | "ask" {
     const config = vscode.workspace.getConfiguration("hexana");
     const runtime = config.get<string>("wasmRuntime", "ask").trim();
-    if (runtime === "wamr" || runtime === "graalwasm" || runtime === "ask") {
+    if (runtime === "wamr" || runtime === "graalwasm" || runtime === "browser" || runtime === "ask") {
         return runtime;
     }
     return "wasmtime";
@@ -150,7 +151,7 @@ export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "ask" 
  * whether the user selected a run or debug action.
  */
 export interface RuntimePickerResult {
-    runtime: "wasmtime" | "wamr" | "graalwasm";
+    runtime: "wasmtime" | "wamr" | "graalwasm" | "browser";
     action: "run" | "debug";
 }
 
@@ -170,7 +171,7 @@ export async function showRuntimePicker(
     isComponent: boolean = false,
 ): Promise<RuntimePickerResult | undefined> {
     interface RuntimeItem extends vscode.QuickPickItem {
-        runtime?: "wasmtime" | "wamr" | "graalwasm";
+        runtime?: "wasmtime" | "wamr" | "graalwasm" | "browser";
         action?: "run" | "debug";
         isConfigure?: boolean;
     }
@@ -194,6 +195,11 @@ export async function showRuntimePicker(
             action: "run",
         });
     }
+    items.push({
+        label: "$(globe) Run in Default Browser",
+        runtime: "browser",
+        action: "run",
+    });
 
     // Debug options — Wasmtime supports debugging for both core and
     // component modules; WAMR only supports core modules.
@@ -727,14 +733,14 @@ export async function runExport(
 
     const isComponent = message.isComponent && message.componentImports && message.componentImports.length > 0;
 
-    let runtime: "wasmtime" | "wamr" | "graalwasm";
+    let runtime: "wasmtime" | "wamr" | "graalwasm" | "browser";
     let action: "run" | "debug";
 
     // When the webview dialog already collected a runtime and action,
     // use them directly and skip the native VS Code picker.
     if (message.runtime && message.action) {
         const rawRuntime = message.runtime as string;
-        runtime = (rawRuntime === "wasmtime" || rawRuntime === "wamr" || rawRuntime === "graalwasm") ? rawRuntime : "wasmtime";
+        runtime = (rawRuntime === "wasmtime" || rawRuntime === "wamr" || rawRuntime === "graalwasm" || rawRuntime === "browser") ? rawRuntime : "wasmtime";
         action = message.action === "debug" ? "debug" : "run";
     } else {
         const configured = getSelectedRuntime();
@@ -773,6 +779,12 @@ export async function runExport(
             return;
         }
         runComponentExport(document, message);
+        return;
+    }
+
+    // Browser runtime — serve the module over a local HTTP server and open the default browser
+    if (runtime === "browser") {
+        await runInBrowser(filePath, message.exportName ?? "", message.programArgs ?? "");
         return;
     }
 
@@ -999,4 +1011,170 @@ function runComponentExport(
     terminal.sendText(
         `${extensionLib.shellEscape(wasmtimeCmd, isWindows)} ${cmdLine.arguments.map((a: string) => extensionLib!.shellEscape(a, isWindows)).join(" ")}`,
     );
+}
+
+/**
+ * Active browser-runner HTTP servers keyed by the `.wasm` file path.
+ * Tracked so that re-running the same file shuts down the previous
+ * server instead of leaking ports.
+ */
+const activeBrowserServers = new Map<string, http.Server>();
+
+/**
+ * Runs a `.wasm` module in the user's default browser by starting a
+ * lightweight local HTTP server that serves an HTML page with the
+ * WebAssembly runner and the binary itself.
+ *
+ * Mirrors the IntelliJ `BrowserCommandLineState` implementation.
+ */
+async function runInBrowser(
+    filePath: string,
+    exportName: string,
+    programArgs: string,
+): Promise<void> {
+    if (!fs.existsSync(filePath)) {
+        vscode.window.showErrorMessage(`Wasm file not found: ${filePath}`);
+        return;
+    }
+
+    // Shut down a previous server for the same file, if any
+    const prev = activeBrowserServers.get(filePath);
+    if (prev) {
+        prev.close();
+        activeBrowserServers.delete(filePath);
+    }
+
+    const wasmFileName = path.basename(filePath);
+    const effectiveExport = exportName || "_start";
+    const wasmBytes = fs.readFileSync(filePath);
+    const htmlContent = extensionLib
+        ? extensionLib.generateBrowserHtml(wasmFileName, effectiveExport, programArgs)
+        : generateBrowserHtmlStubFallback(wasmFileName, effectiveExport, programArgs);
+
+    const server = http.createServer((req, res) => {
+        const urlPath = req.url?.split("?")[0] ?? "/";
+        if (urlPath === "/" || urlPath === "/index.html") {
+            res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+            res.end(htmlContent);
+        } else if (urlPath === `/${wasmFileName}`) {
+            res.writeHead(200, { "Content-Type": "application/wasm" });
+            res.end(wasmBytes);
+        } else {
+            res.writeHead(404);
+            res.end();
+        }
+    });
+
+    await new Promise<void>((resolve, reject) => {
+        server.listen(0, "127.0.0.1", () => resolve());
+        server.on("error", reject);
+    });
+
+    const addr = server.address();
+    if (!addr || typeof addr === "string") {
+        vscode.window.showErrorMessage("Failed to start local HTTP server for browser runner.");
+        server.close();
+        return;
+    }
+
+    activeBrowserServers.set(filePath, server);
+
+    const url = `http://127.0.0.1:${addr.port}/`;
+
+    const outputChannel = vscode.window.createOutputChannel(`Wasm Browser: ${effectiveExport}`);
+    outputChannel.show(true);
+    outputChannel.appendLine(`Serving WebAssembly module at ${url}`);
+    outputChannel.appendLine(`Export: ${effectiveExport}`);
+    outputChannel.appendLine("Open the browser developer console to see the output.");
+    outputChannel.appendLine("Close this output channel or re-run to shut down the server.\n");
+
+    vscode.env.openExternal(vscode.Uri.parse(url));
+}
+
+/**
+ * Fallback HTML generator used when the Kotlin/JS extension library
+ * is not available.  When the library is present, the shared
+ * `generateBrowserHtml` (backed by `plugins-shared`) is used instead
+ * so that both the IntelliJ plugin and the VS Code extension produce
+ * identical output.
+ */
+function generateBrowserHtmlStubFallback(wasmFileName: string, exportName: string, programArgs: string): string {
+    const argsArray = programArgs.trim()
+        ? programArgs.trim().split(/\s+/).map(a => `"${a}"`).join(", ")
+        : "";
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>WebAssembly Runner — ${wasmFileName}</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem; background: #1e1e1e; color: #d4d4d4; }
+        h1 { color: #569cd6; font-size: 1.4rem; }
+        pre { background: #252526; padding: 1rem; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
+        .info { color: #9cdcfe; }
+        .error { color: #f44747; }
+        .success { color: #6a9955; }
+    </style>
+</head>
+<body>
+    <h1>WebAssembly Runner</h1>
+    <p class="info">Module: <code>${wasmFileName}</code> | Export: <code>${exportName}</code></p>
+    <pre id="output"></pre>
+    <script>
+        const output = document.getElementById('output');
+        function log(msg, cls) {
+            const span = document.createElement('span');
+            span.className = cls || '';
+            span.textContent = msg + '\\n';
+            output.appendChild(span);
+            console.log(msg);
+        }
+
+        (async () => {
+            try {
+                const response = await fetch('${wasmFileName}');
+                const bytes = await response.arrayBuffer();
+
+                const module = await WebAssembly.compile(bytes);
+                const imports = WebAssembly.Module.imports(module);
+                const importObject = {};
+                for (const { module: mod, name, kind } of imports) {
+                    if (!importObject[mod]) {
+                        importObject[mod] = {};
+                    }
+                    if (kind === 'function') {
+                        importObject[mod][name] = (...args) => {
+                            log(mod + '.' + name + '(' + args.join(', ') + ')', 'info');
+                            return 0;
+                        };
+                    } else if (kind === 'memory') {
+                        importObject[mod][name] = new WebAssembly.Memory({ initial: 256 });
+                    } else if (kind === 'table') {
+                        importObject[mod][name] = new WebAssembly.Table({ initial: 0, element: 'anyfunc' });
+                    } else if (kind === 'global') {
+                        importObject[mod][name] = new WebAssembly.Global({ value: 'i32', mutable: true }, 0);
+                    }
+                }
+                const instance = await WebAssembly.instantiate(module, importObject);
+
+                const exportFn = instance.exports['${exportName}'];
+                if (typeof exportFn === 'function') {
+                    log('Calling export: ${exportName}(${argsArray})');
+                    const result = exportFn(${argsArray});
+                    log('Result: ' + result, 'success');
+                } else if (exportFn !== undefined) {
+                    log('Export "${exportName}" is not a function, value: ' + exportFn, 'info');
+                } else {
+                    const available = Object.keys(instance.exports).join(', ');
+                    log('Export "${exportName}" not found. Available exports: ' + available, 'error');
+                }
+            } catch (e) {
+                log('Error: ' + e.message, 'error');
+                console.error(e);
+            }
+        })();
+    </script>
+</body>
+</html>`;
 }

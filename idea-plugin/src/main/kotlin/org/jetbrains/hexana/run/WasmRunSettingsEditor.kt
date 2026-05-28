@@ -157,6 +157,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         when (newEngine) {
             WasmEngine.GRAALWASM -> migrateWasmtimeToGraalWasm()
             WasmEngine.WAMR -> migrateWasmtimeToGraalWasm()
+            WasmEngine.BROWSER -> migrateWasmtimeToGraalWasm()
             WasmEngine.WASMTIME -> migrateGraalWasmToWasmtime()
         }
     }

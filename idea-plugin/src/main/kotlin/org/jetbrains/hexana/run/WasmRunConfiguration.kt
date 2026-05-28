@@ -79,7 +79,7 @@ class WasmRunConfiguration(
         if (!file.exists()) {
             throw RuntimeConfigurationError("Wasm file not found: $path")
         }
-        if (engine == WasmEngine.GRAALWASM || engine == WasmEngine.WAMR) {
+        if (engine == WasmEngine.GRAALWASM || engine == WasmEngine.WAMR || engine == WasmEngine.BROWSER) {
             val binaryType = WasmBinaryProviderSelector.select(file.readBytes().toCommonByteBuffer())
             if (binaryType is BinaryProviderType.WasmComponent) {
                 throw RuntimeConfigurationError(
@@ -98,6 +98,7 @@ class WasmRunConfiguration(
             WasmEngine.WASMTIME -> WasmtimeCommandLineState(this, environment)
             WasmEngine.WAMR -> WamrCommandLineState(this, environment)
             WasmEngine.GRAALWASM -> GraalWasmCommandLineState(this, environment)
+            WasmEngine.BROWSER -> BrowserCommandLineState(this, environment)
         }
     }
 }
