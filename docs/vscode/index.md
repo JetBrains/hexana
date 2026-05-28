@@ -22,7 +22,7 @@ audience: [users]
 | [`component-model.md`](component-model.md) | Users | Component Model support — dependency resolution and nested-module navigation. |
 | [`settings.md`](settings.md) | Users | VS Code settings Hexana contributes (`hexana.wasmtimePath`, `hexana.enableStatistics`, `hexana.mcp.javaHome`). |
 | [`troubleshooting.md`](troubleshooting.md) | Users | Common failure modes and resolutions. |
-| [`changelog.md`](changelog.md) | All | Release notes, currently pinned at 0.1.0. |
+| [`changelog.md`](changelog.md) | All | Release notes. |
 
 ## Version and compatibility
 

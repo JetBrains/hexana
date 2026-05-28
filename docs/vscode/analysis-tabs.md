@@ -1,7 +1,7 @@
 ---
-title: Hexana for VS Code — Analysis Tab Reference (0.1.0)
+title: Hexana for VS Code — Analysis Tab Reference
 description: Per-tab reference for all 11 analysis panels inside the Hexana VS Code editor.
-version: "0.1.0"
+version: "0.2.0"
 ---
 
 # Analysis Tab Reference
@@ -163,7 +163,7 @@ Generates the **WebAssembly Text** representation of the loaded binary and opens
 
 The conversion runs in the webview via a WASM-based wat printer (`WasmPrinterJs`), so there is no external dependency.
 
-In 0.1.0 the WAT view is read-only and is regenerated on each open. Inline WAT editing — present in the JetBrains plugin since the editable-binary-documents arc — is not yet in the VS Code extension.
+The WAT view is read-only and is regenerated on each open. Inline WAT editing — present in the JetBrains plugin — is not yet in the VS Code extension.
 
 ## See also
 

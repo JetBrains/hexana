@@ -1,12 +1,12 @@
 ---
-title: Hexana for VS Code — Settings (0.1.0)
+title: Hexana for VS Code — Settings
 description: The VS Code settings the Hexana extension contributes, plus the telemetry consent model.
-version: "0.1.0"
+version: "0.2.0"
 ---
 
 # Settings
 
-Hexana for VS Code 0.1.0 contributes three settings, all under `Settings → Extensions → Hexana` (`hexana.*` in `settings.json`).
+Hexana for VS Code contributes three settings, all under `Settings → Extensions → Hexana` (`hexana.*` in `settings.json`).
 
 ## `hexana.enableStatistics`
 
@@ -34,7 +34,7 @@ Absolute path to the Wasmtime executable. Use this when:
 
 Hexana does not validate the path at save time — if the path is wrong, you'll see the failure when you next click **Run**.
 
-There are no analogous settings for `wasm-tools`, `wac`, WAMR, or GraalVM in 0.1.0 — all must be on `PATH` (GraalVM is auto-detected from common install locations as well).
+There are no analogous settings for `wasm-tools`, `wac`, WAMR, or GraalVM — all must be on `PATH` (GraalVM is auto-detected from common install locations as well).
 
 ## `hexana.mcp.javaHome`
 

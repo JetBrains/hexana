@@ -1,12 +1,12 @@
 ---
-title: Running and Debugging WebAssembly from Hexana for VS Code (0.1.0)
+title: Running and Debugging WebAssembly from Hexana for VS Code
 description: How to run and debug .wasm modules through Wasmtime, WAMR, or GraalVM — core modules with auto-generated import stubs and Component Model binaries with dependency composition.
-version: "0.1.0"
+version: "0.2.0"
 ---
 
 # Running and Debugging WebAssembly from Hexana for VS Code
 
-Hexana 0.1.0 ships **Run** and **Debug** buttons in the editor toolbar. You can invoke a module through one of three runtimes — **Wasmtime**, **WAMR**, or **GraalVM** — and (experimental) attach an `lldb`-backed debugger when running on Wasmtime or WAMR. Both core WebAssembly modules and Component Model binaries are supported, with different orchestration for each.
+Hexana ships **Run** and **Debug** buttons in the editor toolbar. You can invoke a module through one of three runtimes — **Wasmtime**, **WAMR**, or **GraalVM** — and (experimental) attach an `lldb`-backed debugger when running on Wasmtime or WAMR. Both core WebAssembly modules and Component Model binaries are supported, with different orchestration for each.
 
 ## Requirements
 
@@ -33,7 +33,7 @@ At least one runtime must be on `PATH` (or pointed at via the corresponding sett
    - **Unresolved imports**: Hexana generates **import stubs** — functions that satisfy the import signatures and do nothing (or trap, depending on the kind) — and supplies them via the runtime's preload / linking mechanism.
 5. A VS Code terminal opens with the runtime's command line, runs the export, and shows output.
 
-The Run dialog is always shown so you can confirm runtime, export, and arguments before launch. (Earlier 0.0.x builds sometimes auto-dismissed the dialog.)
+The Run dialog is always shown so you can confirm runtime, export, and arguments before launch.
 
 ### Generated import stubs
 
@@ -73,7 +73,7 @@ The dialog has four sections:
 
 Click **Run** (or **Debug** to launch under the debugger — see below) to start; the dialog closes and a terminal opens with the live invocation.
 
-## Debugging (experimental, 0.1.0+)
+## Debugging (experimental)
 
 Click **Debug** instead of **Run** to launch the module under `lldb`. Supported on **Wasmtime** and **WAMR**; not yet on GraalVM.
 
@@ -100,7 +100,7 @@ Killing the terminal kills the runtime process.
 | `hexana.wasmtimePath` | `""` (use PATH) | Absolute path to a specific Wasmtime executable. Useful for testing pre-release builds or pinning to a vendored copy. |
 | `hexana.mcp.javaHome` | `""` (use JAVA_HOME / PATH) | Absolute path to a JDK 21+ home directory. Only relevant when the MCP server is enabled (used by AI tooling); not required for Run / Debug. |
 
-There is no setting to override `wasm-tools`, `wac`, WAMR, or GraalVM paths in 0.1.0 — all must be on `PATH` (GraalVM is auto-detected from common install locations as well).
+There is no setting to override `wasm-tools`, `wac`, WAMR, or GraalVM paths — all must be on `PATH` (GraalVM is auto-detected from common install locations as well).
 
 ## What this version does not do
 

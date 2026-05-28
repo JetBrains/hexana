@@ -1,12 +1,12 @@
 ---
-title: Hexana for VS Code — Troubleshooting (0.1.0)
+title: Hexana for VS Code — Troubleshooting
 description: Common issues users hit with the Hexana VS Code extension and how to resolve them.
-version: "0.1.0"
+version: "0.2.0"
 ---
 
 # Troubleshooting
 
-Common issues users hit with Hexana for VS Code 0.1.0 and how to resolve them.
+Common issues users hit with Hexana for VS Code and how to resolve them.
 
 ## A .wasm file opens in the default editor, not Hexana
 
@@ -58,7 +58,7 @@ After fixing, reload the window.
 Debug requires a debug-capable runtime (Wasmtime or WAMR) **and** LLVM 22.1 or newer on `PATH`.
 
 - Check `lldb --version`. If it is older than 22.1, install a newer LLVM toolchain.
-- Confirm Wasmtime or WAMR is on `PATH` (GraalVM debug is not yet wired in 0.1.0).
+- Confirm Wasmtime or WAMR is on `PATH` (GraalVM debug is not yet wired).
 - Confirm the binary you opened was compiled with debug info (`-g`); a stripped binary will let the debugger attach but produce no usable source mapping.
 
 ## A breakpoint does not bind during Debug
@@ -106,7 +106,7 @@ Hexana scans the entire workspace and matches by fully-qualified interface name 
 Workarounds:
 
 - Move the unwanted dependency out of the workspace.
-- Add `.vscode/settings.json` to exclude the file from Hexana's search — **not yet supported in 0.1.0**; track on the roadmap.
+- Add `.vscode/settings.json` to exclude the file from Hexana's search — **not yet supported**; track on the roadmap.
 - Vendor the correct dependency under a unique workspace path.
 
 ## Run terminal closes immediately or shows no output

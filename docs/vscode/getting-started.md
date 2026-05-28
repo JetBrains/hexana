@@ -1,7 +1,7 @@
 ---
-title: Getting Started with Hexana for VS Code (0.1.0)
+title: Getting Started with Hexana for VS Code
 description: How to install the Hexana VS Code extension, open a WebAssembly file, and find the main views.
-version: "0.1.0"
+version: "0.2.0"
 ---
 
 # Getting Started with Hexana for VS Code
@@ -27,7 +27,7 @@ The extension activates on `onStartupFinished`, so it is ready as soon as you la
 
 ### From a `.vsix` file (manual)
 
-1. Download `hexana-wasm-0.1.0.vsix` from the GitHub release.
+1. Download the `hexana-wasm-*.vsix` artefact from the GitHub release.
 2. In VS Code, run **Extensions: Install from VSIX…** from the command palette (`Cmd/Ctrl+Shift+P`).
 3. Pick the downloaded file.
 
@@ -104,7 +104,7 @@ To **debug** instead of just run, click **Debug** — supported on Wasmtime and 
 
 ## What about WAT files?
 
-Hexana registers the `wat` language association for `.wat` files in 0.1.0 — VS Code gives them a language identifier so other extensions (WebAssembly syntax-highlighting bundles, e.g.) can target them. Hexana itself does **not** open `.wat` in a custom editor in 0.1.0; that surface is JetBrains-IDE-only today.
+Hexana registers the `wat` language association for `.wat` files — VS Code gives them a language identifier so other extensions (WebAssembly syntax-highlighting bundles, e.g.) can target them. Hexana itself does **not** open `.wat` in a custom editor; that surface is JetBrains-IDE-only today.
 
 The **WAT tab** inside the `.wasm` editor *is* available — Hexana renders the WAT representation of the loaded binary in a native VS Code editor tab on demand. See [`analysis-tabs.md#wat`](analysis-tabs.md).
 
