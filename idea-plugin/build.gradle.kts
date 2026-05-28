@@ -1,8 +1,10 @@
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
+import org.gradle.api.GradleException
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
+import org.jetbrains.intellij.platform.gradle.tasks.PublishPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
 import org.jetbrains.intellij.platform.gradle.tasks.aware.SplitModeAware
 
@@ -119,7 +121,10 @@ intellijPlatform {
 
     publishing {
         token = providers.gradleProperty("publishToken")
-        if (hexanaBuild == "nightly") {
+        val explicitPublishChannel = providers.gradleProperty("hexanaPublishChannel").orNull?.takeIf { it.isNotBlank() }
+        if (explicitPublishChannel != null) {
+            channels = listOf(explicitPublishChannel)
+        } else if (hexanaBuild == "nightly") {
             channels = listOf("nightly")
         }
     }
@@ -154,6 +159,15 @@ tasks {
     withType<org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask>().configureEach {
         //jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5007")
         jvmArgs("-Xmx8g", "-XX:HeapDumpPath=/tmp")
+    }
+    named<PublishPluginTask>("publishPlugin") {
+        providers.gradleProperty("hexanaPublishPluginArchiveFile").orNull?.let {
+            providers.gradleProperty("hexanaPublishChannel").orNull?.takeIf { channel -> channel.isNotBlank() }
+                ?: throw GradleException(
+                    "hexanaPublishChannel must be set when hexanaPublishPluginArchiveFile is set.",
+                )
+            archiveFile.set(project.file(it))
+        }
     }
 
     patchPluginXml {
