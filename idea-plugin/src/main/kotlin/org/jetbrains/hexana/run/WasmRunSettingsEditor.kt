@@ -86,6 +86,8 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private val wamrPathField = TextFieldWithBrowseButton()
     private val wamrOptionsField = RawCommandLineEditor()
     private val graalVmPathField = TextFieldWithBrowseButton()
+    private val nodePathField = TextFieldWithBrowseButton()
+    private val nodeOptionsField = RawCommandLineEditor()
     private val lldbPathField = TextFieldWithBrowseButton()
     private val exportNameField = JBTextField()
     private val programArgumentsField = RawCommandLineEditor()
@@ -97,6 +99,8 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private var wamrPathRow: Row? = null
     private var wamrOptionsRow: Row? = null
     private var graalVmPathRow: Row? = null
+    private var nodePathRow: Row? = null
+    private var nodeOptionsRow: Row? = null
     private var lldbPathRow: Row? = null
     private var exportNameRow: Row? = null
 
@@ -128,6 +132,13 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         if (effectiveGraalVm != null) {
             (graalVmPathField.childComponent as? JBTextField)?.emptyText?.setText(effectiveGraalVm)
         }
+        nodePathField.addBrowseFolderListener(
+            project,
+            FileChooserDescriptorFactory.singleFile(),
+        )
+        (nodePathField.childComponent as? JBTextField)?.emptyText?.setText(
+            WasmRuntimeSettings.getInstance().effectiveNodePath()
+        )
         lldbPathField.addBrowseFolderListener(
             project,
             FileChooserDescriptorFactory.singleFile(),
@@ -158,6 +169,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
             WasmEngine.GRAALWASM -> migrateWasmtimeToGraalWasm()
             WasmEngine.WAMR -> migrateWasmtimeToGraalWasm()
             WasmEngine.BROWSER -> migrateWasmtimeToGraalWasm()
+            WasmEngine.NODE_JS -> migrateWasmtimeToGraalWasm()
             WasmEngine.WASMTIME -> migrateGraalWasmToWasmtime()
         }
     }
@@ -192,11 +204,14 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         val isWasmtime = selected == WasmEngine.WASMTIME
         val isWamr = selected == WasmEngine.WAMR
         val isGraalWasm = selected == WasmEngine.GRAALWASM
+        val isNodeJs = selected == WasmEngine.NODE_JS
         wasmtimePathRow?.visible(isWasmtime)
         wasmtimeOptionsRow?.visible(isWasmtime)
         wamrPathRow?.visible(isWamr)
         wamrOptionsRow?.visible(isWamr)
         graalVmPathRow?.visible(isGraalWasm)
+        nodePathRow?.visible(isNodeJs)
+        nodeOptionsRow?.visible(isNodeJs)
         lldbPathRow?.visible(isWasmtime || isWamr)
         exportNameRow?.visible(!isWasmtime)
     }
@@ -209,6 +224,8 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         wamrPathField.text = configuration.wamrPath
         wamrOptionsField.text = configuration.wamrOptions
         graalVmPathField.text = configuration.graalVmPath
+        nodePathField.text = configuration.nodePath
+        nodeOptionsField.text = configuration.nodeOptions
         lldbPathField.text = configuration.lldbPath
         exportNameField.text = configuration.exportName
         programArgumentsField.text = configuration.programArguments
@@ -225,6 +242,8 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         configuration.wamrPath = wamrPathField.text
         configuration.wamrOptions = wamrOptionsField.text
         configuration.graalVmPath = graalVmPathField.text
+        configuration.nodePath = nodePathField.text
+        configuration.nodeOptions = nodeOptionsField.text
         configuration.lldbPath = lldbPathField.text
         configuration.exportName = exportNameField.text
         configuration.programArguments = programArgumentsField.text
@@ -252,6 +271,12 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         }
         graalVmPathRow = row(HexanaBundle.message("wasm.run.configuration.graalvm.path")) {
             cell(graalVmPathField).align(AlignX.FILL)
+        }
+        nodePathRow = row(HexanaBundle.message("wasm.run.configuration.node.path")) {
+            cell(nodePathField).align(AlignX.FILL)
+        }
+        nodeOptionsRow = row(HexanaBundle.message("wasm.run.configuration.node.options")) {
+            cell(nodeOptionsField).align(AlignX.FILL)
         }
         lldbPathRow = row(HexanaBundle.message("wasm.run.configuration.lldb.path")) {
             cell(lldbPathField).align(AlignX.FILL)

@@ -33,6 +33,7 @@ object WasmRuntimeResolver {
         wasmtimePath: String = "",
         wamrPath: String = "",
         graalVmHome: String = "",
+        nodePath: String = "",
     ): String? {
         return when (runtime) {
             "wasmtime" -> {
@@ -51,6 +52,11 @@ object WasmRuntimeResolver {
                 val exeName = if (isWindows) "java.exe" else "java"
                 val sep = if (isWindows) "\\" else "/"
                 "${home}${sep}bin${sep}${exeName}"
+            }
+            "nodejs" -> {
+                val custom = nodePath.trim()
+                if (custom.isNotEmpty()) custom
+                else if (isWindows) "node.exe" else "node"
             }
             else -> if (isWindows) "wasmtime.exe" else "wasmtime"
         }
@@ -101,6 +107,7 @@ object WasmRuntimeResolver {
             "wasmtime" -> buildWasmtimeRunArgs(input)
             "wamr" -> buildWamrRunArgs(input, stubFileWriter = stubFileWriter)
             "graalwasm" -> buildGraalWasmRunArgs(input)
+            "nodejs" -> buildNodeJsRunArgs(input)
             else -> buildWasmtimeRunArgs(input)
         }
     }

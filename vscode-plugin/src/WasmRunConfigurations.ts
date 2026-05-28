@@ -137,10 +137,10 @@ const nodeToolResolver: ExtensionLib.JsToolResolver = {
  * Returns the currently selected Wasm runtime from settings.
  * Returns `"ask"` when the user wants to see a picker every time.
  */
-export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "browser" | "ask" {
+export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "browser" | "nodejs" | "ask" {
     const config = vscode.workspace.getConfiguration("hexana");
     const runtime = config.get<string>("wasmRuntime", "ask").trim();
-    if (runtime === "wamr" || runtime === "graalwasm" || runtime === "browser" || runtime === "ask") {
+    if (runtime === "wamr" || runtime === "graalwasm" || runtime === "browser" || runtime === "nodejs" || runtime === "ask") {
         return runtime;
     }
     return "wasmtime";
@@ -151,7 +151,7 @@ export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "brows
  * whether the user selected a run or debug action.
  */
 export interface RuntimePickerResult {
-    runtime: "wasmtime" | "wamr" | "graalwasm" | "browser";
+    runtime: "wasmtime" | "wamr" | "graalwasm" | "browser" | "nodejs";
     action: "run" | "debug";
 }
 
@@ -171,7 +171,7 @@ export async function showRuntimePicker(
     isComponent: boolean = false,
 ): Promise<RuntimePickerResult | undefined> {
     interface RuntimeItem extends vscode.QuickPickItem {
-        runtime?: "wasmtime" | "wamr" | "graalwasm" | "browser";
+        runtime?: "wasmtime" | "wamr" | "graalwasm" | "browser" | "nodejs";
         action?: "run" | "debug";
         isConfigure?: boolean;
     }
@@ -200,6 +200,13 @@ export async function showRuntimePicker(
         runtime: "browser",
         action: "run",
     });
+    if (!isComponent) {
+        items.push({
+            label: "$(play) Run with Node.js",
+            runtime: "nodejs",
+            action: "run",
+        });
+    }
 
     // Debug options — Wasmtime supports debugging for both core and
     // component modules; WAMR only supports core modules.
@@ -259,9 +266,10 @@ export function getRuntimeCommand(runtime: string, isWindows: boolean): string |
     const wasmtimePath = config.get<string>("wasmtimePath", "");
     const wamrPath = config.get<string>("wamrPath", "");
     const graalVmHome = resolveGraalVmHome();
+    const nodePath = config.get<string>("nodePath", "");
 
     const result = extensionLib.resolveRuntimeExecutable(
-        runtime, isWindows, wasmtimePath, wamrPath, graalVmHome,
+        runtime, isWindows, wasmtimePath, wamrPath, graalVmHome, nodePath,
     );
 
     if (result === null) {

@@ -39,6 +39,11 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
         get() = state.graalVmPath
         set(value) { state.graalVmPath = value?.takeIf { it.isNotBlank() } }
 
+    /** User-configured Node.js path for UI binding. */
+    var nodePathInUi: String?
+        get() = state.nodePath
+        set(value) { state.nodePath = value?.takeIf { it.isNotBlank() } }
+
     /** User-configured LLDB path for UI binding. */
     var lldbPathInUi: String?
         get() = state.lldbPath
@@ -93,6 +98,15 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
     }
 
     /**
+     * Returns the effective Node.js executable path.
+     */
+    fun effectiveNodePath(): String {
+        val configured = state.nodePath
+        if (!configured.isNullOrBlank()) return configured
+        return NodeJsCommandLineState.resolveDefaultNodePath()
+    }
+
+    /**
      * Returns the effective LLDB executable path.
      */
     fun effectiveLldbPath(): String {
@@ -106,6 +120,7 @@ class WasmRuntimeSettingsState : BaseState() {
     var wasmtimePath: String? by string()
     var wamrPath: String? by string()
     var graalVmPath: String? by string()
+    var nodePath: String? by string()
     var lldbPath: String? by string()
     var defaultEngine: String? by string()
 }

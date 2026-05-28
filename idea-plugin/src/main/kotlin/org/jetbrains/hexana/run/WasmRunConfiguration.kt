@@ -58,6 +58,14 @@ class WasmRunConfiguration(
         get() = options.getGraalVmPath()
         set(value) { options.setGraalVmPath(value) }
 
+    var nodePath: String
+        get() = options.getNodePath()
+        set(value) { options.setNodePath(value) }
+
+    var nodeOptions: String
+        get() = options.getNodeOptions()
+        set(value) { options.setNodeOptions(value) }
+
     var lldbPath: String
         get() = options.getLldbPath()
         set(value) { options.setLldbPath(value) }
@@ -79,7 +87,7 @@ class WasmRunConfiguration(
         if (!file.exists()) {
             throw RuntimeConfigurationError("Wasm file not found: $path")
         }
-        if (engine == WasmEngine.GRAALWASM || engine == WasmEngine.WAMR || engine == WasmEngine.BROWSER) {
+        if (engine == WasmEngine.GRAALWASM || engine == WasmEngine.WAMR || engine == WasmEngine.BROWSER || engine == WasmEngine.NODE_JS) {
             val binaryType = WasmBinaryProviderSelector.select(file.readBytes().toCommonByteBuffer())
             if (binaryType is BinaryProviderType.WasmComponent) {
                 throw RuntimeConfigurationError(
@@ -99,6 +107,7 @@ class WasmRunConfiguration(
             WasmEngine.WAMR -> WamrCommandLineState(this, environment)
             WasmEngine.GRAALWASM -> GraalWasmCommandLineState(this, environment)
             WasmEngine.BROWSER -> BrowserCommandLineState(this, environment)
+            WasmEngine.NODE_JS -> NodeJsCommandLineState(this, environment)
         }
     }
 }

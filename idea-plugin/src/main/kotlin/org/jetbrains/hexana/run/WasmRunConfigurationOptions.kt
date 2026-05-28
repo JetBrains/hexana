@@ -12,6 +12,8 @@ class WasmRunConfigurationOptions : RunConfigurationOptions() {
     private val wamrPath = string("").provideDelegate(this, "wamrPath")
     private val wamrOptions = string("").provideDelegate(this, "wamrOptions")
     private val graalVmPath = string("").provideDelegate(this, "graalVmPath")
+    private val nodePath = string("").provideDelegate(this, "nodePath")
+    private val nodeOptions = string("").provideDelegate(this, "nodeOptions")
     private val lldbPath = string("").provideDelegate(this, "lldbPath")
     private val exportName = string("").provideDelegate(this, "exportName")
     private val dependencies = list<String>().provideDelegate(this, "dependencies")
@@ -42,6 +44,12 @@ class WasmRunConfigurationOptions : RunConfigurationOptions() {
 
     fun getGraalVmPath(): String = graalVmPath.getValue(this) ?: ""
     fun setGraalVmPath(value: String) { graalVmPath.setValue(this, value) }
+
+    fun getNodePath(): String = nodePath.getValue(this) ?: ""
+    fun setNodePath(value: String) { nodePath.setValue(this, value) }
+
+    fun getNodeOptions(): String = nodeOptions.getValue(this) ?: ""
+    fun setNodeOptions(value: String) { nodeOptions.setValue(this, value) }
 
     fun getLldbPath(): String = lldbPath.getValue(this) ?: ""
     fun setLldbPath(value: String) { lldbPath.setValue(this, value) }

@@ -615,3 +615,77 @@ fun buildGraalWasmRunArgs(input: WasmRunInput): WasmCommandLine {
     val workDir = input.workingDirectory.ifBlank { null }
     return WasmCommandLine(arguments = args, workingDirectory = workDir)
 }
+
+// ---------------------------------------------------------------------------
+// Node.js
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the argument list for running a Wasm module via Node.js.
+ *
+ * Node.js does not have a built-in CLI flag to run `.wasm` files
+ * directly, so we pass an inline script via `--eval` that reads the
+ * binary, instantiates it through the WebAssembly API, and invokes
+ * the requested export.
+ *
+ * The inline script:
+ * 1. Reads the `.wasm` file from disk.
+ * 2. Compiles and instantiates it (with a minimal WASI shim).
+ * 3. Calls the target export (defaulting to `_start`).
+ * 4. Prints the result to stdout when it is not `undefined`.
+ */
+fun buildNodeJsRunArgs(input: WasmRunInput): WasmCommandLine {
+    val args = mutableListOf<String>()
+
+    val options = input.runtimeOptions.trim()
+    if (options.isNotEmpty()) {
+        args.addAll(splitOptions(options))
+    }
+
+    val exportName = input.exportName.ifBlank { "_start" }
+    val wasmPath = input.wasmFilePath.replace("\\", "\\\\").replace("'", "\\'")
+
+    val programArgs = input.programArguments.trim()
+    val argsArray = if (programArgs.isNotEmpty()) {
+        programArgs.split("\\s+".toRegex()).joinToString(",") { "\"${it.replace("\"", "\\\"")}\"" }
+    } else ""
+
+    val script = buildString {
+        append("const fs=require('fs');")
+        append("const buf=fs.readFileSync('$wasmPath');")
+        append("(async()=>{")
+        // Compile the module first to discover its imports, then build
+        // stub objects for every imported module automatically.
+        append("const mod=await WebAssembly.compile(buf);")
+        append("const imps=WebAssembly.Module.imports(mod);")
+        append("const importObj={};")
+        append("for(const i of imps){")
+        append("if(!importObj[i.module])importObj[i.module]={};")
+        append("if(i.kind==='function'){")
+        append("if(i.name==='proc_exit')importObj[i.module][i.name]=(c)=>process.exit(c);")
+        append("else importObj[i.module][i.name]=()=>0;")
+        append("}else if(i.kind==='memory'){")
+        append("importObj[i.module][i.name]=new WebAssembly.Memory({initial:1});")
+        append("}else if(i.kind==='table'){")
+        append("importObj[i.module][i.name]=new WebAssembly.Table({initial:1,element:'anyfunc'});")
+        append("}else if(i.kind==='global'){")
+        append("importObj[i.module][i.name]=new WebAssembly.Global({value:'i32',mutable:true},0);")
+        append("}}")
+        append("const instance=await WebAssembly.instantiate(mod,importObj);")
+        append("const fn=instance.exports['$exportName'];")
+        append("if(!fn)throw new Error('Export not found: $exportName');")
+        if (argsArray.isNotEmpty()) {
+            append("const r=fn($argsArray);")
+        } else {
+            append("const r=fn();")
+        }
+        append("if(r!==undefined)console.log(r);")
+        append("})()")
+    }
+
+    args.add("--eval")
+    args.add(script)
+
+    val workDir = input.workingDirectory.ifBlank { null }
+    return WasmCommandLine(arguments = args, workingDirectory = workDir)
+}
