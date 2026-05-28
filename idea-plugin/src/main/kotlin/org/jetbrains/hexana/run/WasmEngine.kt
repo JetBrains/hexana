@@ -4,8 +4,8 @@ enum class WasmEngine(val displayName: String, val supportsComponentsModel: Bool
     WASMTIME("Wasmtime", true, true),
     WAMR("WAMR", false, true),
     GRAALWASM("GraalWasm", false, false),
-    BROWSER("Browser", false, false),
-    NODE_JS("Node.js", false, false),
+    BROWSER("Browser", false, true),
+    NODE_JS("Node.js", false, true),
     ;
 
     companion object {

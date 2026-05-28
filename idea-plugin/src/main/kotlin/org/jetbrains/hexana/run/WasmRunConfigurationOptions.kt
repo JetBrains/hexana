@@ -15,6 +15,7 @@ class WasmRunConfigurationOptions : RunConfigurationOptions() {
     private val nodePath = string("").provideDelegate(this, "nodePath")
     private val nodeOptions = string("").provideDelegate(this, "nodeOptions")
     private val lldbPath = string("").provideDelegate(this, "lldbPath")
+    private val chromePath = string("").provideDelegate(this, "chromePath")
     private val exportName = string("").provideDelegate(this, "exportName")
     private val dependencies = list<String>().provideDelegate(this, "dependencies")
 
@@ -53,6 +54,9 @@ class WasmRunConfigurationOptions : RunConfigurationOptions() {
 
     fun getLldbPath(): String = lldbPath.getValue(this) ?: ""
     fun setLldbPath(value: String) { lldbPath.setValue(this, value) }
+
+    fun getChromePath(): String = chromePath.getValue(this) ?: ""
+    fun setChromePath(value: String) { chromePath.setValue(this, value) }
 
     fun getExportName(): String = exportName.getValue(this) ?: ""
     fun setExportName(value: String) { exportName.setValue(this, value) }

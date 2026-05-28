@@ -89,6 +89,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private val nodePathField = TextFieldWithBrowseButton()
     private val nodeOptionsField = RawCommandLineEditor()
     private val lldbPathField = TextFieldWithBrowseButton()
+    private val chromePathField = TextFieldWithBrowseButton()
     private val exportNameField = JBTextField()
     private val programArgumentsField = RawCommandLineEditor()
     private val workingDirectoryField = TextFieldWithBrowseButton()
@@ -102,6 +103,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private var nodePathRow: Row? = null
     private var nodeOptionsRow: Row? = null
     private var lldbPathRow: Row? = null
+    private var chromePathRow: Row? = null
     private var exportNameRow: Row? = null
 
     init {
@@ -145,6 +147,13 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         )
         (lldbPathField.childComponent as? JBTextField)?.emptyText?.setText(
             WasmRuntimeSettings.getInstance().effectiveLldbPath()
+        )
+        chromePathField.addBrowseFolderListener(
+            project,
+            FileChooserDescriptorFactory.singleFile(),
+        )
+        (chromePathField.childComponent as? JBTextField)?.emptyText?.setText(
+            WasmRuntimeSettings.getInstance().effectiveChromePath()
         )
         workingDirectoryField.addBrowseFolderListener(
             project,
@@ -205,6 +214,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         val isWamr = selected == WasmEngine.WAMR
         val isGraalWasm = selected == WasmEngine.GRAALWASM
         val isNodeJs = selected == WasmEngine.NODE_JS
+        val isBrowser = selected == WasmEngine.BROWSER
         wasmtimePathRow?.visible(isWasmtime)
         wasmtimeOptionsRow?.visible(isWasmtime)
         wamrPathRow?.visible(isWamr)
@@ -213,6 +223,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         nodePathRow?.visible(isNodeJs)
         nodeOptionsRow?.visible(isNodeJs)
         lldbPathRow?.visible(isWasmtime || isWamr)
+        chromePathRow?.visible(isBrowser)
         exportNameRow?.visible(!isWasmtime)
     }
 
@@ -227,6 +238,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         nodePathField.text = configuration.nodePath
         nodeOptionsField.text = configuration.nodeOptions
         lldbPathField.text = configuration.lldbPath
+        chromePathField.text = configuration.chromePath
         exportNameField.text = configuration.exportName
         programArgumentsField.text = configuration.programArguments
         workingDirectoryField.text = configuration.workingDirectory
@@ -245,6 +257,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         configuration.nodePath = nodePathField.text
         configuration.nodeOptions = nodeOptionsField.text
         configuration.lldbPath = lldbPathField.text
+        configuration.chromePath = chromePathField.text
         configuration.exportName = exportNameField.text
         configuration.programArguments = programArgumentsField.text
         configuration.workingDirectory = workingDirectoryField.text
@@ -280,6 +293,9 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         }
         lldbPathRow = row(HexanaBundle.message("wasm.run.configuration.lldb.path")) {
             cell(lldbPathField).align(AlignX.FILL)
+        }
+        chromePathRow = row(HexanaBundle.message("wasm.run.configuration.chrome.path")) {
+            cell(chromePathField).align(AlignX.FILL)
         }
         exportNameRow = row(HexanaBundle.message("wasm.run.configuration.exportName")) {
             cell(exportNameField).align(AlignX.FILL)

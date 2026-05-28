@@ -70,6 +70,10 @@ class WasmRunConfiguration(
         get() = options.getLldbPath()
         set(value) { options.setLldbPath(value) }
 
+    var chromePath: String
+        get() = options.getChromePath()
+        set(value) { options.setChromePath(value) }
+
     var exportName: String
         get() = options.getExportName()
         set(value) { options.setExportName(value) }

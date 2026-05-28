@@ -49,6 +49,11 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
         get() = state.lldbPath
         set(value) { state.lldbPath = value?.takeIf { it.isNotBlank() } }
 
+    /** User-configured Chrome/Chromium path for UI binding. */
+    var chromePathInUi: String?
+        get() = state.chromePath
+        set(value) { state.chromePath = value?.takeIf { it.isNotBlank() } }
+
     /**
      * The default engine selection. `null` or [ASK_EVERY_TIME]
      * means the runtime selection popup is shown on every run.
@@ -114,6 +119,15 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
         if (!configured.isNullOrBlank()) return configured
         return WasmDebugRunner.resolveDefaultLldbPath()
     }
+
+    /**
+     * Returns the effective Chrome/Chromium executable path.
+     */
+    fun effectiveChromePath(): String {
+        val configured = state.chromePath
+        if (!configured.isNullOrBlank()) return configured
+        return CdpDebugRunner.resolveDefaultChromePath()
+    }
 }
 
 class WasmRuntimeSettingsState : BaseState() {
@@ -122,5 +136,6 @@ class WasmRuntimeSettingsState : BaseState() {
     var graalVmPath: String? by string()
     var nodePath: String? by string()
     var lldbPath: String? by string()
+    var chromePath: String? by string()
     var defaultEngine: String? by string()
 }

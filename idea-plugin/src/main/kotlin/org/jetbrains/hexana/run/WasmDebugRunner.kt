@@ -3,7 +3,6 @@ package org.jetbrains.hexana.run
 import com.intellij.execution.ExecutionException
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.configurations.RunProfile
-import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.configurations.RunnerSettings
 import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.filters.TextConsoleBuilderFactory
@@ -12,8 +11,7 @@ import com.intellij.execution.process.ProcessAdapter
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
-import com.intellij.execution.runners.GenericProgramRunner
-import com.intellij.execution.ui.RunContentDescriptor
+import com.intellij.execution.runners.ProgramRunner
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.util.Key
@@ -30,7 +28,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * A [GenericProgramRunner] that handles the **Debug** executor for
+ * A [ProgramRunner] that handles the **Debug** executor for
  * [WasmRunConfiguration] when the selected engine is **Wasmtime** or
  * **WAMR**.
  *
@@ -52,7 +50,7 @@ import java.util.concurrent.TimeUnit
  * remote debug stub, then launches LLDB separately and connects to
  * the stub via `process connect --plugin wasm connect://<host>:<port>`.
  */
-class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
+class WasmDebugRunner : ProgramRunner<RunnerSettings> {
 
     override fun getRunnerId(): String = RUNNER_ID
 
@@ -62,11 +60,11 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
         return config.engine == WasmEngine.WASMTIME || config.engine == WasmEngine.WAMR
     }
 
-    override fun doExecute(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor? {
+    override fun execute(environment: ExecutionEnvironment) {
         val configuration = environment.runProfile as? WasmRunConfiguration
             ?: throw ExecutionException("Expected WasmRunConfiguration")
 
-        return when (configuration.engine) {
+        when (configuration.engine) {
             WasmEngine.WASMTIME -> doExecuteWasmtime(configuration, environment)
             WasmEngine.WAMR -> doExecuteWamr(configuration, environment)
             else -> throw ExecutionException("Debug is not supported for ${configuration.engine.displayName}")
@@ -76,7 +74,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
     private fun doExecuteWasmtime(
         configuration: WasmRunConfiguration,
         environment: ExecutionEnvironment,
-    ): RunContentDescriptor? {
+    ) {
         // Pre-compute DWARF resolver in a modal progress task so that
         // file I/O does not block the EDT. The modal dialog pumps UI
         // events, keeping the IDE responsive.
@@ -158,10 +156,8 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             }
         }
 
-        val session = XDebuggerManager.getInstance(environment.project)
+        XDebuggerManager.getInstance(environment.project)
             .startSession(environment, starter)
-
-        return session.runContentDescriptor
     }
 
     /**
@@ -178,7 +174,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
     private fun doExecuteWamr(
         configuration: WasmRunConfiguration,
         environment: ExecutionEnvironment,
-    ): RunContentDescriptor? {
+    ) {
         // All blocking preparatory work (iwasm launch, server
         // readiness wait, DWARF parsing) runs inside a modal
         // progress task. The modal dialog pumps UI events so the
@@ -235,10 +231,8 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             }
         }
 
-        val session = XDebuggerManager.getInstance(environment.project)
+        XDebuggerManager.getInstance(environment.project)
             .startSession(environment, starter)
-
-        return session.runContentDescriptor
     }
 
     /**

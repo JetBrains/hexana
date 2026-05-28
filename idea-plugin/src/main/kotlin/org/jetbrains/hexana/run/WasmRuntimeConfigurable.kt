@@ -88,6 +88,15 @@ class WasmRuntimeConfigurable : DslConfigurableBase(), SearchableConfigurable {
                         }
                         .bindText(settings::lldbPathInUi.toNonNullableProperty(""))
                 }
+                row(HexanaBundle.message("wasm.runtime.settings.chrome.path")) {
+                    textFieldWithBrowseButton(FileChooserDescriptorFactory.singleFile())
+                        .align(AlignX.FILL)
+                        .comment(HexanaBundle.message("wasm.runtime.settings.chrome.path.comment"))
+                        .applyToComponent {
+                            emptyText.text = CdpDebugRunner.resolveDefaultChromePath()
+                        }
+                        .bindText(settings::chromePathInUi.toNonNullableProperty(""))
+                }
             }
         }
     }
