@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
 }
@@ -66,10 +68,31 @@ val agentNativeResourcesDir = layout.buildDirectory.dir("generated/jvm-jit-nativ
 // the toolchain before invoking Gradle (the Default Windows agent pool has
 // no cmake / MSVC, so we cross-compile from Linux instead).
 val crossTarget: String? = providers.gradleProperty("jvm-jit.crossTarget").orNull
-val crossToolchainFile: java.io.File? = when (crossTarget) {
+val crossToolchainFile: File? = when (crossTarget) {
     null -> null
     "windows-x86_64" -> agentSourceDir.file("cmake/mingw-w64-x86_64.toolchain.cmake").asFile
     else -> error("Unsupported jvm-jit.crossTarget: $crossTarget")
+}
+
+fun resolveExecutableOnPath(name: String): File? {
+    val path = System.getenv("PATH")
+        ?.split(File.pathSeparator)
+        ?.filter { it.isNotBlank() }
+        ?: return null
+    val isWindows = System.getProperty("os.name").contains("Windows", ignoreCase = true)
+    val executableNames = if (isWindows && !name.contains('.')) {
+        val pathExt = System.getenv("PATHEXT")
+            ?.split(File.pathSeparator)
+            ?.filter { it.isNotBlank() }
+            ?: listOf(".exe", ".cmd", ".bat")
+        listOf(name) + pathExt.map { name + it.lowercase() }
+    } else {
+        listOf(name)
+    }
+
+    return path.asSequence()
+        .flatMap { dir -> executableNames.asSequence().map { executable -> File(dir, executable) } }
+        .firstOrNull { it.isFile && it.canExecute() }
 }
 
 // Probe for cmake on PATH at configuration time. When cmake is absent and
@@ -83,8 +106,10 @@ val crossToolchainFile: java.io.File? = when (crossTarget) {
 // any cmake/compile failure propagates as a task failure (no more silent
 // green-with-no-artifact). The Tests build configuration does neither, so
 // agents without cmake skip the native build cleanly.
-val cmakeAvailable: Boolean = try {
-    ProcessBuilder("cmake", "--version")
+val cmakeExecutable: File? = resolveExecutableOnPath("cmake")
+val cmakeCommand: String = cmakeExecutable?.absolutePath ?: "cmake"
+val cmakeAvailable: Boolean = cmakeExecutable != null && try {
+    ProcessBuilder(cmakeCommand, "--version")
         .redirectErrorStream(true)
         .start()
         .also { it.inputStream.readAllBytes() }
@@ -93,6 +118,11 @@ val cmakeAvailable: Boolean = try {
     false
 }
 val nativeBuildEnabled: Boolean = crossTarget != null || cmakeAvailable
+if (!nativeBuildEnabled) {
+    logger.warn(
+        "CMake was not found on PATH; skipping :jvm-jit JVMTI agent native build."
+    )
+}
 
 val configureJitviewAgent by tasks.registering(Exec::class) {
     description = "Configures the JVMTI agent CMake build tree."
@@ -119,7 +149,7 @@ val configureJitviewAgent by tasks.registering(Exec::class) {
     // resolve `sh` only inside Git's bundled bash, which doesn't have
     // cmake on its PATH, so the shelled-out invocation silently fails.
     commandLine(buildList {
-        add("cmake")
+        add(cmakeCommand)
         add(agentSourceDir.asFile.absolutePath)
         add("-DCMAKE_BUILD_TYPE=Release")
         crossToolchainFile?.let { add("-DCMAKE_TOOLCHAIN_FILE=${it.absolutePath}") }
@@ -134,7 +164,7 @@ val buildJitviewAgent by tasks.registering(Exec::class) {
     outputs.dir(agentBuildDir)
 
     workingDir = agentBuildDir.get().asFile
-    commandLine("cmake", "--build", ".", "--config", "Release")
+    commandLine(cmakeCommand, "--build", ".", "--config", "Release")
 }
 
 /**
