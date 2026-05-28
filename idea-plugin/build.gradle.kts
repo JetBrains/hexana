@@ -6,6 +6,7 @@ import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 import org.jetbrains.intellij.platform.gradle.tasks.PublishPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
+import org.jetbrains.intellij.platform.gradle.tasks.SignPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.aware.SplitModeAware
 
 plugins {
@@ -34,6 +35,9 @@ group = "org.jetbrains.hexana"
 
 val baseVersion = project.property("pluginVersion") as String
 val hexanaBuild = project.property("hexanaBuild")
+val hexanaPublishPluginArchiveFile =
+    providers.gradleProperty("hexanaPublishPluginArchiveFile").orNull?.takeIf { it.isNotBlank() }
+val hexanaPublishChannel = providers.gradleProperty("hexanaPublishChannel").orNull?.takeIf { it.isNotBlank() }
 val defaultIdeaType = ideLibs.versions.defaultIdeType.map(IntelliJPlatformType::valueOf)
 version = when (hexanaBuild) {
     "release" -> {
@@ -121,9 +125,8 @@ intellijPlatform {
 
     publishing {
         token = providers.gradleProperty("publishToken")
-        val explicitPublishChannel = providers.gradleProperty("hexanaPublishChannel").orNull?.takeIf { it.isNotBlank() }
-        if (explicitPublishChannel != null) {
-            channels = listOf(explicitPublishChannel)
+        if (hexanaPublishChannel != null) {
+            channels = listOf(hexanaPublishChannel)
         } else if (hexanaBuild == "nightly") {
             channels = listOf("nightly")
         }
@@ -160,11 +163,16 @@ tasks {
         //jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5007")
         jvmArgs("-Xmx8g", "-XX:HeapDumpPath=/tmp")
     }
+
+    val signPluginTask = named<SignPluginTask>("signPlugin") {
+        hexanaPublishPluginArchiveFile?.let {
+            archiveFile.set(project.file(it))
+        }
+    }
+
     named<PublishPluginTask>("publishPlugin") {
-        providers.gradleProperty("hexanaPublishPluginArchiveFile").orNull?.takeIf { it.isNotBlank() }?.let {
-            val explicitPublishChannel = providers.gradleProperty("hexanaPublishChannel").orNull?.takeIf { channel ->
-                channel.isNotBlank()
-            }
+        hexanaPublishPluginArchiveFile?.let {
+            val explicitPublishChannel = hexanaPublishChannel
                 ?: throw GradleException(
                     "hexanaPublishChannel must be set when hexanaPublishPluginArchiveFile is set.",
                 )
@@ -183,7 +191,7 @@ tasks {
                             "'$explicitPublishChannel', but was '$actualBuild'.",
                 )
             }
-            archiveFile.set(project.file(it))
+            archiveFile.set(signPluginTask.flatMap { task -> task.signedArchiveFile })
         }
     }
 
