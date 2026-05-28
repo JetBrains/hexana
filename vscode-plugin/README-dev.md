@@ -220,6 +220,9 @@ On Windows, use `publish.bat` and set environment variables with `set` before ru
 
 ### Mock MCP Release
 
+The downloader queries GitHub Releases and installs the newest semver-tagged release that contains a `server-*.zip`
+asset with a SHA-256 digest. The VS Code extension version does not have to match the MCP server version.
+
 Build the standalone MCP server distribution:
 
 ```bash
@@ -243,6 +246,13 @@ code .
 ```
 
 Run `Hexana MCP: Update Server` from the Command Palette to download and extract the served server ZIP.
+
+To include the live GitHub release/download smoke test in the unit run:
+
+```bash
+cd vscode-plugin
+HEXANA_RUN_LIVE_MCP_RELEASE_TESTS=true npm --prefix test run unit
+```
 
 ### Runtime Dependencies (optional)
 

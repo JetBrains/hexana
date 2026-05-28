@@ -3,8 +3,8 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
-import { expect } from 'chai';
-import { installVscodeMock, MockMcpStdioServerDefinition, VscodeMock } from './vscode-mock';
+import {expect} from 'chai';
+import {installVscodeMock, MockMcpStdioServerDefinition, VscodeMock} from './vscode-mock';
 
 describe('Hexana MCP server provider', function () {
     this.timeout(30_000);
@@ -169,9 +169,9 @@ function createZipArchive(sourceDir: string, archivePath: string): void {
 async function startReleaseServer(archivePath: string, version: string): Promise<{ apiUrl: string; close(): Promise<void> }> {
     const digest = crypto.createHash('sha256').update(fs.readFileSync(archivePath)).digest('hex');
     const server = http.createServer((request, response) => {
-        if (request.url?.startsWith('/repos/example/hexana/releases/tags/')) {
+        if (request.url?.startsWith('/repos/example/hexana/releases?')) {
             response.setHeader('Content-Type', 'application/json');
-            response.end(JSON.stringify({
+            response.end(JSON.stringify([{
                 tag_name: version,
                 assets: [
                     {
@@ -180,7 +180,7 @@ async function startReleaseServer(archivePath: string, version: string): Promise
                         digest: `sha256:${digest}`,
                     },
                 ],
-            }));
+            }]));
             return;
         }
 

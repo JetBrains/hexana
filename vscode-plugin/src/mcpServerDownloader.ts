@@ -4,6 +4,7 @@ import * as http from "http";
 import * as https from "https";
 import * as os from "os";
 import * as path from "path";
+import * as semver from "semver";
 import * as vscode from "vscode";
 
 const githubReleaseApiBaseUrl = "https://api.github.com/repos/JetBrains/hexana/releases";
@@ -21,6 +22,7 @@ const installedServerDirName = "server";
 const versionMarkerFileName = "server.version";
 const lockFileName = ".download.lock";
 const downloadLockTimeoutMs = 120_000;
+const githubReleasesPageSize = 100;
 
 interface PrepareOptions {
     force?: boolean;
@@ -160,7 +162,7 @@ async function getHexanaMcpServerStatus(context: vscode.ExtensionContext): Promi
 
     let latestRelease: HexanaMcpRelease | undefined;
     try {
-        latestRelease = await getCompatibleReleaseOrFallback(context);
+        latestRelease = await getLatestReleaseOrFallback();
     } catch (error) {
         console.warn("[Hexana] Could not fetch MCP release metadata for status", error);
     }
@@ -181,7 +183,7 @@ async function getHexanaMcpServerStatus(context: vscode.ExtensionContext): Promi
     }
 
     return {
-        expectedVersion: latestRelease?.version ?? expectedServerTag(context),
+        expectedVersion: latestRelease?.version ?? fallbackMcpServerVersion,
         downloaded: false,
     };
 }
@@ -208,7 +210,7 @@ async function ensureHexanaMcpServer(
 
     let latestRelease: HexanaMcpRelease;
     try {
-        latestRelease = await getCompatibleReleaseOrFallback(context);
+        latestRelease = await getLatestReleaseOrFallback();
     } catch (error) {
         const installed = await getPreparedServerVersion(serverDir, markerPath);
         if (installed) {
@@ -374,17 +376,11 @@ async function getPreparedServerVersion(serverDir: string, markerPath: string): 
     }
 }
 
-async function getCompatibleReleaseOrFallback(context: vscode.ExtensionContext): Promise<HexanaMcpRelease> {
-    const expectedTag = expectedServerTag(context);
+async function getLatestReleaseOrFallback(): Promise<HexanaMcpRelease> {
     try {
-        return await fetchReleaseByTag(expectedTag);
+        return await fetchLatestSemverRelease();
     } catch (error) {
-        if (expectedTag !== fallbackMcpServerVersion) {
-            throw new Error(
-                `Could not fetch compatible Hexana MCP release ${expectedTag} and no fallback is bundled for this extension version: ${error instanceof Error ? error.message : String(error)}`,
-            );
-        }
-        console.warn("[Hexana] Could not fetch MCP release metadata, using fallback", error);
+        console.warn("[Hexana] Could not fetch latest MCP release metadata, using fallback", error);
         return {
             version: fallbackMcpServerVersion,
             downloadUrl: fallbackMcpServerDownloadUrl,
@@ -394,42 +390,56 @@ async function getCompatibleReleaseOrFallback(context: vscode.ExtensionContext):
     }
 }
 
-function expectedServerTag(context: vscode.ExtensionContext): string {
-    const version = String(context.extension.packageJSON.version ?? "").trim();
-    if (!version) {
-        return fallbackMcpServerVersion;
+async function fetchLatestSemverRelease(): Promise<HexanaMcpRelease> {
+    const candidates: Array<{ version: string; release: HexanaMcpRelease }> = [];
+    let page = 1;
+    while (true) {
+        const releases = await getJson<GitHubRelease[]>(getGitHubReleasesApiUrl(page));
+        for (const release of releases) {
+            const version = semver.valid(release.tag_name);
+            const mcpRelease = version ? toMcpRelease(release) : undefined;
+            if (version && mcpRelease) {
+                candidates.push({version, release: mcpRelease});
+            }
+        }
+        if (releases.length < githubReleasesPageSize) {
+            break;
+        }
+        page++;
     }
-    return version.startsWith("v") ? version : `v${version}`;
+
+    const latest = candidates.sort((left, right) => semver.rcompare(left.version, right.version))[0]?.release;
+    if (!latest) {
+        throw new Error("GitHub releases pages do not contain a semver-tagged server-*.zip asset with a SHA-256 digest");
+    }
+
+    return latest;
 }
 
-async function fetchReleaseByTag(tag: string): Promise<HexanaMcpRelease> {
-    const release = await getJson<GitHubRelease>(getGitHubReleaseApiUrl(tag));
-    const bareTag = tag.replace(/^v/, "");
-    if (release.tag_name !== tag && release.tag_name !== bareTag) {
-        throw new Error(`GitHub release tag ${release.tag_name} does not match the expected ${tag}`);
-    }
-    const asset = release.assets.find((candidate) => /^server-.+\.zip$/.test(candidate.name));
+function toMcpRelease(release: GitHubRelease): HexanaMcpRelease | undefined {
+    const asset = release.assets
+        .map((candidate) => ({
+            asset: candidate,
+            sha256: /^server-.+\.zip$/.test(candidate.name) ? parseGitHubSha256Digest(candidate.digest) : undefined,
+        }))
+        .find((candidate) => candidate.sha256 !== undefined);
 
-    if (!asset) {
-        throw new Error("Latest GitHub release does not contain a server-*.zip asset");
-    }
-
-    const sha256 = parseGitHubSha256Digest(asset.digest);
-    if (!sha256) {
-        throw new Error(`GitHub release asset ${asset.name} does not provide a SHA-256 digest`);
+    if (!asset?.sha256) {
+        return undefined;
     }
 
     return {
         version: release.tag_name,
-        downloadUrl: asset.browser_download_url,
-        sha256,
+        downloadUrl: asset.asset.browser_download_url,
+        sha256: asset.sha256,
         source: "github",
     };
 }
 
-function getGitHubReleaseApiUrl(tag: string): string {
+function getGitHubReleasesApiUrl(page: number): string {
     const base = process.env[githubReleaseApiBaseUrlOverrideEnv] ?? githubReleaseApiBaseUrl;
-    return `${base}/tags/${encodeURIComponent(tag)}`;
+    const separator = base.includes("?") ? "&" : "?";
+    return `${base}${separator}per_page=${githubReleasesPageSize}&page=${page}`;
 }
 
 function getGitHubReleasesPageUrl(): string {
