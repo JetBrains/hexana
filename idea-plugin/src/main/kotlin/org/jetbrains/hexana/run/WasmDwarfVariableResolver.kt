@@ -154,14 +154,41 @@ internal class WasmDwarfVariableResolver private constructor(
      * @param functionName the name of the current function
      * @return a map from wasm local index to the DWARF variable name
      */
+    /**
+     * Returns `true` when the given function name matches a DWARF
+     * subprogram entry (by name only, no offset fallback).
+     */
+    fun hasDwarfSubprogram(functionName: String?): Boolean {
+        if (functionName == null) return false
+        val normalizedName = functionName.removePrefix("$")
+        // Use only exact name/linkageName matching — no prefix fallback.
+        // Prefix matching would incorrectly match wasm-bindgen wrappers
+        // whose mangled names contain the real function's name as a
+        // substring (e.g. `__wasm_bindgen_generated_add` starts with
+        // a subprogram's linkageName).
+        return subprograms.any { sp ->
+            sp.name == functionName || sp.name == normalizedName ||
+                sp.linkageName == functionName || sp.linkageName == normalizedName
+        }
+    }
+
     fun buildWasmLocalToNameMap(functionName: String?, wasmByteOffset: Int? = null): Map<Long, String> {
-        val matchingSubprograms = findMatchingSubprograms(functionName, wasmByteOffset)
+        // Use name-only matching first. The offset-based fallback in
+        // findMatchingSubprograms can match a *different* function whose
+        // address range covers the current offset (e.g. the real `add`
+        // function matched when we're paused in a wasm-bindgen wrapper).
+        // Local indices are function-specific, so using another function's
+        // DWARF locals produces garbage values. Only fall back to offset
+        // matching when name matching succeeds — i.e. we trust the offset
+        // fallback only for findDwarfVariable (LLDB path), not here.
+        val matchingSubprograms = findMatchingSubprogramsByName(functionName)
         if (matchingSubprograms.isEmpty()) {
             LOG.debug("buildWasmLocalToNameMap: no matching subprograms for function='$functionName' offset=$wasmByteOffset")
             return emptyMap()
         }
         val result = mutableMapOf<Long, String>()
         for (sp in matchingSubprograms) {
+            // First pass: collect variables that have explicit WasmLocal ops
             for (v in sp.variables) {
                 val name = v.name ?: continue
                 val loc = effectiveLocation(v) ?: continue
@@ -170,9 +197,61 @@ internal class WasmDwarfVariableResolver private constructor(
                     result.putIfAbsent(primaryOp.index, name)
                 }
             }
+            // Second pass: if no WasmLocal ops were found (e.g. Rust DWARF
+            // uses DW_OP_fbreg for parameters), assign indices positionally.
+            // In wasm, parameters occupy locals 0..N-1 in declaration order,
+            // followed by local variables.
+            if (result.isEmpty()) {
+                var index = 0L
+                // Parameters first, in declaration order
+                for (v in sp.variables.filter { it.isParameter }) {
+                    val name = v.name ?: continue
+                    result.putIfAbsent(index, name)
+                    index++
+                }
+                // Then non-parameter locals
+                for (v in sp.variables.filter { !it.isParameter }) {
+                    val name = v.name ?: continue
+                    result.putIfAbsent(index, name)
+                    index++
+                }
+            }
         }
         LOG.debug("buildWasmLocalToNameMap: function='$functionName' offset=$wasmByteOffset -> $result")
         return result
+    }
+
+    /**
+     * Finds subprograms matching by name only. Used by
+     * [buildWasmLocalToNameMap] where local indices are
+     * function-specific and offset-based fallback would match
+     * the wrong function.
+     */
+    private fun findMatchingSubprogramsByName(
+        functionName: String?,
+    ): List<DwarfSubprogramInfo> {
+        if (functionName == null) return emptyList()
+        val normalizedName = functionName.removePrefix("$")
+        // Prefer exact name matches (DW_AT_name) over linkage name
+        // matches. V8 reports wasm functions by their export name,
+        // which matches the wrapper's linkageName but the real
+        // function's name — we want the real function first.
+        val byName = subprograms.filter { sp ->
+            sp.name == functionName || sp.name == normalizedName
+        }
+        if (byName.isNotEmpty()) return byName
+        // Then try linkage name exact matches
+        val byLinkage = subprograms.filter { sp ->
+            sp.linkageName == functionName || sp.linkageName == normalizedName
+        }
+        if (byLinkage.isNotEmpty()) return byLinkage
+        // Fall back to prefix matching (for mangled/demangled names)
+        return subprograms.filter { sp ->
+            sp.name?.let { functionName.startsWith(it) } == true ||
+                sp.name?.let { normalizedName.startsWith(it) } == true ||
+                sp.linkageName?.let { normalizedName.startsWith(it) } == true ||
+                sp.linkageName?.let { functionName.startsWith(it) } == true
+        }
     }
 
     /**
@@ -184,21 +263,8 @@ internal class WasmDwarfVariableResolver private constructor(
         functionName: String?,
         wasmByteOffset: Int? = null,
     ): List<DwarfSubprogramInfo> {
-        if (functionName != null) {
-            // V8 prepends '$' to wasm function names; strip it for matching
-            val normalizedName = functionName.removePrefix("$")
-            val byName = subprograms.filter { sp ->
-                sp.name == functionName ||
-                    sp.linkageName == functionName ||
-                    sp.name == normalizedName ||
-                    sp.linkageName == normalizedName ||
-                    sp.name?.let { functionName.startsWith(it) } == true ||
-                    sp.name?.let { normalizedName.startsWith(it) } == true ||
-                    sp.linkageName?.let { normalizedName.startsWith(it) } == true ||
-                    sp.linkageName?.let { functionName.startsWith(it) } == true
-            }
-            if (byName.isNotEmpty()) return byName
-        }
+        val byName = findMatchingSubprogramsByName(functionName)
+        if (byName.isNotEmpty()) return byName
         // Fall back to address range matching
         if (wasmByteOffset != null) {
             val byOffset = subprograms.filter { sp ->

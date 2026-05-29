@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.run
 
+import com.intellij.execution.process.ProcessAdapter
+import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.openapi.diagnostic.Logger
@@ -23,6 +25,7 @@ import kotlinx.coroutines.*
 import java.io.File
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * An [XDebugProcess] that communicates with Node.js or Chrome via the
@@ -48,6 +51,9 @@ internal class CdpDebugProcess(
     private val cdp = CdpClient(scope)
 
     private val breakpointHandler = CdpBreakpointHandler(this)
+    private val stopping = AtomicBoolean(false)
+    /** Set to `true` once at least one `wasm://` script has been parsed by V8. */
+    private val wasmScriptSeen = AtomicBoolean(false)
 
     /** Maps CDP breakpoint IDs to the IDE breakpoint objects. */
     internal val cdpBreakpointToIde = ConcurrentHashMap<String, XLineBreakpoint<WasmBreakpointProperties>>()
@@ -65,23 +71,49 @@ internal class CdpDebugProcess(
 
     override fun getEditorsProvider(): XDebuggerEditorsProvider = CdpEditorsProvider()
 
-    override fun doGetProcessHandler(): ProcessHandler {
-        // The process handler has already been started (startNotify called)
-        // during the preparation phase to capture the WebSocket URL from
-        // stdout. The debug session framework calls startNotify again on
-        // the handler returned here, so we wrap it to silently ignore the
-        // second call and avoid "startNotify called already" errors.
-        return object : ProcessHandler() {
-            override fun startNotify() {
-                // Already started — ignore to prevent double-start error
-            }
+    private val sessionProcessHandler = object : ProcessHandler() {
+        private var started = false
 
-            override fun destroyProcessImpl() = processHandler.destroyProcess()
-            override fun detachProcessImpl() = processHandler.detachProcess()
-            override fun detachIsDefault(): Boolean = processHandler.detachIsDefault()
-            override fun getProcessInput() = processHandler.processInput
+        override fun startNotify() {
+            if (started) return // Ignore double-start
+            started = true
+            super.startNotify()
         }
+
+        override fun destroyProcessImpl() {
+            processHandler.destroyProcess()
+            notifyProcessTerminated(0)
+        }
+
+        override fun detachProcessImpl() {
+            processHandler.detachProcess()
+            notifyProcessDetached()
+        }
+
+        override fun detachIsDefault(): Boolean = processHandler.detachIsDefault()
+        override fun getProcessInput() = processHandler.processInput
+
+        /** Expose protected method for the process listener below. */
+        fun fireProcessTerminated(exitCode: Int) = notifyProcessTerminated(exitCode)
+    }.also { wrapper ->
+        // Forward termination from the real process handler so the
+        // debug session UI reflects the actual process state.
+        processHandler.addProcessListener(object : ProcessAdapter() {
+            override fun processTerminated(event: ProcessEvent) {
+                if (!wrapper.isProcessTerminated && !wrapper.isProcessTerminating) {
+                    wrapper.fireProcessTerminated(event.exitCode)
+                }
+                // Stop the debug session when the debuggee exits
+                ApplicationManager.getApplication().invokeLater {
+                    if (!session.isStopped) {
+                        session.stop()
+                    }
+                }
+            }
+        })
     }
+
+    override fun doGetProcessHandler(): ProcessHandler = sessionProcessHandler
 
     override fun createConsole(): ExecutionConsole = console
 
@@ -105,35 +137,94 @@ internal class CdpDebugProcess(
 
     @Suppress("UNCHECKED_CAST")
     private suspend fun initializeCdpSession() {
+        LOG.info("CDP: connecting to $wsUrl")
         cdp.connect(wsUrl)
+        LOG.info("CDP: connected")
+
+        // Stop the debug session when the CDP WebSocket disconnects
+        // (e.g. the debuggee process was killed externally).
+        cdp.onDisconnect = {
+            LOG.info("CDP: WebSocket disconnected")
+            ApplicationManager.getApplication().invokeLater {
+                if (!session.isStopped) {
+                    session.stop()
+                }
+            }
+        }
 
         // Register event handlers before enabling domains
         cdp.on("Debugger.paused") { params ->
             handleDebuggerPaused(params)
         }
-        cdp.on("Debugger.resumed") { _ -> }
+        cdp.on("Debugger.resumed") { _ ->
+            LOG.info("CDP: Debugger.resumed event received")
+        }
         cdp.on("Debugger.scriptParsed") { params ->
+            val scriptId = params["scriptId"] as? String
             val url = params["url"] as? String ?: return@on
+            LOG.info("CDP: Debugger.scriptParsed scriptId=$scriptId url=$url")
             if (url.startsWith("wasm://")) {
+                wasmScriptSeen.set(true)
+                LOG.info("CDP: wasm script seen, retrying ${pendingWasmBreakpoints.size} pending breakpoints")
                 // A wasm module was compiled — retry any pending breakpoints
                 retryPendingWasmBreakpoints()
             }
         }
 
         // Enable CDP domains
+        LOG.info("CDP: sending Runtime.enable")
         cdp.send("Runtime.enable")
+        LOG.info("CDP: sending Debugger.enable")
         cdp.send("Debugger.enable")
 
-        // Resume execution — the target was started with --inspect-brk
-        // which pauses before user code. We resume so breakpoints can
-        // be hit naturally. If the user has set breakpoints, they were
-        // registered via registerBreakpoint() before sessionInitialized().
+        // The target was started with --inspect-brk which pauses before
+        // user code. We send Runtime.runIfWaitingForDebugger to let the
+        // runtime proceed, but the Debugger domain still needs an explicit
+        // Debugger.resume (handled in handleDebuggerPaused when the
+        // "Break on start" pause event arrives).
+        LOG.info("CDP: sending Runtime.runIfWaitingForDebugger")
         cdp.send("Runtime.runIfWaitingForDebugger")
+
+        // Retry any breakpoints that were queued before the WebSocket
+        // was connected (breakpoint handler can fire before connect()).
+        if (pendingWasmBreakpoints.isNotEmpty()) {
+            LOG.info("CDP: retrying ${pendingWasmBreakpoints.size} breakpoints queued before connect")
+            retryPendingWasmBreakpoints()
+        }
+
+        LOG.info("CDP: initializeCdpSession complete")
+    }
+
+    /**
+     * Returns `true` when at least one call frame in the pause event
+     * belongs to a wasm script (`wasm://` URL). When no wasm frames
+     * are present and no Hexana breakpoints were hit, the pause is a
+     * pure JS/TS event that we should not interfere with.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun hasWasmFrames(callFrames: List<Map<String, Any?>>): Boolean {
+        for (frame in callFrames) {
+            val location = frame["location"] as? Map<String, Any?> ?: continue
+            val scriptId = location["scriptId"] as? String ?: continue
+            val scriptInfo = cdp.scripts[scriptId] ?: continue
+            if (scriptInfo.url.startsWith("wasm://")) return true
+        }
+        return false
     }
 
     @Suppress("UNCHECKED_CAST")
     private fun handleDebuggerPaused(params: Map<String, Any?>) {
         val callFrames = params["callFrames"] as? List<Map<String, Any?>>
+        val hitBreakpoints = params["hitBreakpoints"] as? List<String>
+        val reason = params["reason"] as? String
+        val data = params["data"]
+
+        LOG.info("CDP: Debugger.paused reason=$reason hitBreakpoints=$hitBreakpoints " +
+            "callFrames.size=${callFrames?.size} data=$data " +
+            "wasmScriptSeen=${wasmScriptSeen.get()} " +
+            "registeredCdpBreakpoints=${cdpBreakpointToIde.keys} " +
+            "pendingWasmBreakpoints=${pendingWasmBreakpoints.size}")
+
         if (callFrames == null) {
             LOG.warn("Debugger.paused: callFrames is null or not a list")
             return
@@ -143,25 +234,35 @@ internal class CdpDebugProcess(
             return
         }
 
-        val topFrame = callFrames[0]
-        val topStackFrame = buildStackFrame(topFrame, 0)
-
-        val suspendContext = CdpSuspendContext(
-            topFrame = topStackFrame,
-            allFrames = callFrames.mapIndexed { index, frame -> buildStackFrame(frame, index) },
-        )
-
-        // Check if this pause corresponds to a user breakpoint
-        val hitBreakpoints = params["hitBreakpoints"] as? List<String>
-        val reason = params["reason"] as? String
+        // Log top frames for diagnostics
+        for ((i, frame) in callFrames.withIndex()) {
+            if (i >= 5) break // only log top 5 frames
+            val loc = frame["location"] as? Map<String, Any?>
+            val sid = loc?.get("scriptId") as? String
+            val line = loc?.get("lineNumber")
+            val col = loc?.get("columnNumber")
+            val fn = frame["functionName"] as? String
+            val scriptUrl = sid?.let { cdp.scripts[it]?.url }
+            LOG.info("CDP:   frame[$i] fn=$fn scriptId=$sid url=$scriptUrl line=$line col=$col")
+        }
 
         if (reason == "Break on start" && hitBreakpoints.isNullOrEmpty()) {
             // Initial pause from --inspect-brk before user code runs.
-            // Auto-resume so the program can proceed to compile wasm
-            // modules and hit user breakpoints naturally.
+            // Runtime.runIfWaitingForDebugger lets the runtime proceed
+            // but does not resume the Debugger pause — we must always
+            // send Debugger.resume here.
+            //
+            // Always resume immediately. Pending wasm breakpoints will
+            // be registered when the wasm scriptParsed event fires
+            // (after JS runs and instantiates the wasm module). V8
+            // processes Debugger.setBreakpoint synchronously before
+            // entering wasm code, so breakpoints set in the
+            // scriptParsed handler will be active in time.
+            LOG.info("CDP: auto-resuming from 'Break on start' (pendingWasmBreakpoints=${pendingWasmBreakpoints.size})")
             scope.launch {
                 try {
                     cdp.send("Debugger.resume")
+                    LOG.info("CDP: Debugger.resume sent for 'Break on start'")
                 } catch (e: Exception) {
                     LOG.warn("Failed to auto-resume from 'Break on start'", e)
                 }
@@ -169,8 +270,47 @@ internal class CdpDebugProcess(
             return
         }
 
+        // Determine whether any of the hit breakpoints belong to us
+        val hasOurBreakpoint = !hitBreakpoints.isNullOrEmpty() &&
+            hitBreakpoints.any { cdpBreakpointToIde.containsKey(it) }
+        val hasWasm = hasWasmFrames(callFrames)
+
+        LOG.info("CDP: hasOurBreakpoint=$hasOurBreakpoint hasWasmFrames=$hasWasm wasmScriptSeen=${wasmScriptSeen.get()}")
+
+        // If no wasm frames are on the stack and none of our breakpoints
+        // were hit, this is a pure JS/TS pause — auto-resume so we don't
+        // interfere with other debuggers or block the target.
+        // Only apply this guard after at least one wasm script has been
+        // parsed; before that, pauses are part of the startup sequence
+        // (loading JS that instantiates the wasm module) and resuming
+        // them prematurely would skip past breakpoint registration.
+        if (wasmScriptSeen.get() && !hasWasm && !hasOurBreakpoint) {
+            LOG.info("CDP: auto-resuming pure JS/TS pause (no wasm frames, no our breakpoints)")
+            scope.launch {
+                try {
+                    cdp.send("Debugger.resume")
+                } catch (e: Exception) {
+                    LOG.warn("Failed to auto-resume from pure JS/TS pause", e)
+                }
+            }
+            return
+        }
+
+        val topFrame = callFrames[0]
+        val topStackFrame = buildStackFrame(topFrame, 0)
+
+        val allBuiltFrames = callFrames.mapIndexed { index, frame -> buildStackFrame(frame, index) }
+        val filteredFrames = filterWasmWrapperFrames(allBuiltFrames)
+        val effectiveTopFrame = filteredFrames.firstOrNull() ?: topStackFrame
+
+        val suspendContext = CdpSuspendContext(
+            topFrame = effectiveTopFrame,
+            allFrames = filteredFrames,
+        )
+
         if (reason == "other" && hitBreakpoints.isNullOrEmpty()) {
             // Pause from debugger statement or other non-breakpoint reason
+            LOG.info("CDP: positionReached for reason='other' (debugger statement or similar)")
             ApplicationManager.getApplication().invokeLater {
                 session.positionReached(suspendContext)
             }
@@ -180,32 +320,38 @@ internal class CdpDebugProcess(
         if (!hitBreakpoints.isNullOrEmpty()) {
             val cdpBpId = hitBreakpoints[0]
             val ideBp = cdpBreakpointToIde[cdpBpId]
+            LOG.info("CDP: hitBreakpoint cdpId=$cdpBpId ideBp=${ideBp != null}")
             if (ideBp != null) {
-                // Use the breakpoint's own source position for the top frame
-                // so the IDE highlights the correct line, even when DWARF
-                // resolves the wasm offset to a different (e.g. libc) location.
+                // The breakpoint may have been hit in a wasm-bindgen
+                // wrapper frame rather than the real function. Use the
+                // filtered frame list and pick the real function frame
+                // as the top frame so variables come from the correct
+                // scope. If the effective top frame's source position
+                // doesn't match the breakpoint, override it.
                 val bpPosition = ideBp.sourcePosition
-                val correctedContext = if (bpPosition != null && topStackFrame.sourcePosition != bpPosition) {
+                val correctedContext = if (bpPosition != null && effectiveTopFrame.sourcePosition != bpPosition) {
                     val correctedTopFrame = CdpStackFrame(
                         sourcePosition = bpPosition,
-                        functionName = topStackFrame.functionName,
-                        callFrameId = topStackFrame.callFrameId,
-                        scopeChain = topStackFrame.scopeChain,
+                        functionName = effectiveTopFrame.functionName,
+                        callFrameId = effectiveTopFrame.callFrameId,
+                        scopeChain = effectiveTopFrame.scopeChain,
                         cdp = cdp,
                         scope = scope,
                         frameIndex = 0,
-                        scriptId = topStackFrame.scriptId,
-                        lineNumber = topStackFrame.lineNumber,
-                        columnNumber = topStackFrame.columnNumber,
+                        scriptId = effectiveTopFrame.scriptId,
+                        lineNumber = effectiveTopFrame.lineNumber,
+                        columnNumber = effectiveTopFrame.columnNumber,
                         dwarfVariableResolver = dwarfVariableResolver,
                     )
+                    val remainingFrames = filteredFrames.drop(1)
                     CdpSuspendContext(
                         topFrame = correctedTopFrame,
-                        allFrames = listOf(correctedTopFrame) + callFrames.drop(1).mapIndexed { index, frame -> buildStackFrame(frame, index + 1) },
+                        allFrames = listOf(correctedTopFrame) + remainingFrames,
                     )
                 } else {
                     suspendContext
                 }
+                LOG.info("CDP: breakpointReached for ideBp at ${ideBp.sourcePosition}")
                 ApplicationManager.getApplication().invokeLater {
                     session.breakpointReached(ideBp, null, correctedContext)
                 }
@@ -213,9 +359,67 @@ internal class CdpDebugProcess(
             }
         }
 
+        LOG.info("CDP: positionReached (fallthrough, reason=$reason hitBreakpoints=$hitBreakpoints)")
         ApplicationManager.getApplication().invokeLater {
             session.positionReached(suspendContext)
         }
+    }
+
+    /**
+     * Returns `true` when the frame belongs to a wasm-bindgen or
+     * similar generated/runtime function that should be hidden from
+     * the user. This includes:
+     * - Functions with no DWARF subprogram entry (generated wrappers)
+     * - Functions whose DWARF source location doesn't resolve to a
+     *   file the user can navigate to (runtime/library internals like
+     *   `wasm_bindgen::__rt::maybe_catch_unwind`)
+     */
+    private fun isWasmWrapperFrame(frame: CdpStackFrame): Boolean {
+        // Only hide wasm frames (scriptId present, on a wasm:// script)
+        val sid = frame.scriptId ?: return false
+        val scriptInfo = cdp.scripts[sid] ?: return false
+        if (!scriptInfo.url.startsWith("wasm://")) return false
+        // Hide frames with blank or "unknown" function names — these
+        // are V8 internal frames with no useful debug information.
+        if (frame.functionName.isBlank() || frame.functionName == "unknown") return true
+        // Hide well-known wasm-bindgen wrapper patterns by name,
+        // regardless of whether DWARF info is available.
+        if (isWasmBindgenWrapperName(frame.functionName)) return true
+        val resolver = dwarfVariableResolver
+        if (resolver != null) {
+            // Hide frames that have no DWARF subprogram entry — these are
+            // generated wrappers (wasm-bindgen closures, thunks, etc.)
+            // whose locals are compiler-internal garbage.
+            if (!resolver.hasDwarfSubprogram(frame.functionName)) return true
+        }
+        // Also hide frames whose source position couldn't be resolved
+        // (runtime/library functions whose source isn't available).
+        if (frame.sourcePosition == null) return true
+        return false
+    }
+
+    /**
+     * Detects wasm-bindgen generated wrapper function names by
+     * matching known mangled name patterns. These wrappers are
+     * always hidden from the call stack regardless of DWARF info.
+     */
+    private fun isWasmBindgenWrapperName(name: String): Boolean {
+        val n = name.removePrefix("$")
+        // wasm-bindgen generated closure wrappers contain
+        // `__wasm_bindgen_generated_` in their mangled name
+        if ("__wasm_bindgen_generated_" in n) return true
+        // wasm-bindgen runtime internals like `maybe_catch_unwind`
+        if ("wasm_bindgen" in n && ("maybe_catch_unwind" in n || "__rt" in n)) return true
+        return false
+    }
+
+    /**
+     * Filters out wasm-bindgen wrapper frames from the call stack.
+     * Keeps all non-wasm frames and wasm frames that have a DWARF
+     * subprogram entry (i.e. real user functions).
+     */
+    private fun filterWasmWrapperFrames(frames: List<CdpStackFrame>): List<CdpStackFrame> {
+        return frames.filter { !isWasmWrapperFrame(it) }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -352,61 +556,99 @@ internal class CdpDebugProcess(
     // ---- Breakpoint management ----
 
     internal fun registerBreakpointInCdp(breakpoint: XLineBreakpoint<WasmBreakpointProperties>) {
-        val sourcePosition = breakpoint.sourcePosition ?: return
+        val sourcePosition = breakpoint.sourcePosition ?: run {
+            LOG.info("CDP: registerBreakpoint skipped — no source position")
+            return
+        }
         val file = sourcePosition.file
         val line = sourcePosition.line
+        LOG.info("CDP: registerBreakpoint file=${file.path} line=$line")
 
-        // If this breakpoint has a DWARF mapping but no wasm script
-        // is available yet (V8 hasn't compiled the module), queue it
-        // for later registration when the wasm script appears.
-        val locResolver = sourceLocationResolver
-        if (locResolver != null && locResolver.sourceToWasmOffset(file.name, line) != null) {
-            if (findWasmScriptId() == null) {
-                pendingWasmBreakpoints.add(breakpoint)
-                return
-            }
+        // If the CDP WebSocket isn't connected yet (breakpoint handler
+        // fires during session setup before connect() completes), queue
+        // the breakpoint for later registration.
+        if (!cdp.connected) {
+            LOG.info("CDP: breakpoint queued as pending (WebSocket not connected yet)")
+            pendingWasmBreakpoints.add(breakpoint)
+            return
         }
 
         scope.launch {
-            try {
-                val results = trySetBreakpointsViaDwarf(file, line)
+            registerBreakpointInCdpImpl(breakpoint, file, line)
+        }
+    }
 
-                if (results.isNotEmpty()) {
-                    val cdpIds = ideBreakpointToCdp.getOrPut(breakpoint) { mutableListOf() }
-                    for (result in results) {
-                        val breakpointId = result["breakpointId"] as? String ?: continue
-                        cdpBreakpointToIde[breakpointId] = breakpoint
-                        cdpIds.add(breakpointId)
-                    }
+    /**
+     * Suspend version of [registerBreakpointInCdp] used by
+     * [retryPendingWasmBreakpoints] so it can await completion
+     * before signalling the deferred resume.
+     */
+    private suspend fun registerBreakpointInCdpSuspend(breakpoint: XLineBreakpoint<WasmBreakpointProperties>) {
+        val sourcePosition = breakpoint.sourcePosition ?: run {
+            LOG.info("CDP: registerBreakpoint skipped — no source position")
+            return
+        }
+        val file = sourcePosition.file
+        val line = sourcePosition.line
+        LOG.info("CDP: registerBreakpoint (suspend) file=${file.path} line=$line")
+        registerBreakpointInCdpImpl(breakpoint, file, line)
+    }
+
+    private suspend fun registerBreakpointInCdpImpl(
+        breakpoint: XLineBreakpoint<WasmBreakpointProperties>,
+        file: VirtualFile,
+        line: Int,
+    ) {
+        try {
+            // If a wasm script is already known, use scriptId-based
+            // breakpoints. Otherwise, use URL-regex breakpoints that
+            // V8 will apply automatically when the wasm script appears
+            // — this avoids the race between breakpoint registration
+            // and wasm code execution.
+            val wasmScriptId = findWasmScriptId()
+            val results = if (wasmScriptId != null) {
+                trySetBreakpointsViaDwarf(file, line)
+            } else {
+                trySetBreakpointsViaDwarfByUrl(file, line)
+            }
+
+            LOG.info("CDP: DWARF breakpoint results count=${results.size} (byUrl=${wasmScriptId == null})")
+            if (results.isNotEmpty()) {
+                val cdpIds = ideBreakpointToCdp.getOrPut(breakpoint) { mutableListOf() }
+                for (result in results) {
+                    val breakpointId = result["breakpointId"] as? String ?: continue
+                    LOG.info("CDP: registered DWARF breakpoint cdpId=$breakpointId for ${file.name}:$line")
+                    cdpBreakpointToIde[breakpointId] = breakpoint
+                    cdpIds.add(breakpointId)
+                }
+                session.updateBreakpointPresentation(
+                    breakpoint, null, null
+                )
+            } else {
+                // Fall back to URL-based breakpoint for non-wasm scripts
+                val urlResult = trySetBreakpointByUrl(file, line)
+                val breakpointId = urlResult?.get("breakpointId") as? String
+                if (breakpointId != null) {
+                    cdpBreakpointToIde[breakpointId] = breakpoint
+                    ideBreakpointToCdp.getOrPut(breakpoint) { mutableListOf() }.add(breakpointId)
                     session.updateBreakpointPresentation(
                         breakpoint, null, null
                     )
                 } else {
-                    // Fall back to URL-based breakpoint for non-wasm scripts
-                    val urlResult = trySetBreakpointByUrl(file, line)
-                    val breakpointId = urlResult?.get("breakpointId") as? String
-                    if (breakpointId != null) {
-                        cdpBreakpointToIde[breakpointId] = breakpoint
-                        ideBreakpointToCdp.getOrPut(breakpoint) { mutableListOf() }.add(breakpointId)
-                        session.updateBreakpointPresentation(
-                            breakpoint, null, null
-                        )
-                    } else {
-                        session.updateBreakpointPresentation(
-                            breakpoint,
-                            com.intellij.icons.AllIcons.Debugger.Db_invalid_breakpoint,
-                            "No DWARF mapping found for this source location",
-                        )
-                    }
+                    session.updateBreakpointPresentation(
+                        breakpoint,
+                        com.intellij.icons.AllIcons.Debugger.Db_invalid_breakpoint,
+                        "No DWARF mapping found for this source location",
+                    )
                 }
-            } catch (e: Exception) {
-                LOG.warn("Failed to set CDP breakpoint at ${file.path}:$line", e)
-                session.updateBreakpointPresentation(
-                    breakpoint,
-                    com.intellij.icons.AllIcons.Debugger.Db_invalid_breakpoint,
-                    "Failed to set breakpoint: ${e.message}",
-                )
             }
+        } catch (e: Exception) {
+            LOG.warn("Failed to set CDP breakpoint at ${file.path}:$line", e)
+            session.updateBreakpointPresentation(
+                breakpoint,
+                com.intellij.icons.AllIcons.Debugger.Db_invalid_breakpoint,
+                "Failed to set breakpoint: ${e.message}",
+            )
         }
     }
 
@@ -417,9 +659,47 @@ internal class CdpDebugProcess(
             pendingWasmBreakpoints.clear()
         }
         if (pending.isEmpty()) return
-        for (bp in pending) {
-            registerBreakpointInCdp(bp)
+        scope.launch {
+            for (bp in pending) {
+                registerBreakpointInCdpSuspend(bp)
+            }
         }
+    }
+
+    /**
+     * Sets wasm breakpoints using `Debugger.setBreakpointByUrl` with a
+     * URL regex that matches any `wasm://` script. Unlike
+     * `Debugger.setBreakpoint` (which requires a specific scriptId),
+     * this variant tells V8 to apply the breakpoint to any matching
+     * script — including scripts that haven't been parsed yet. This
+     * eliminates the race between breakpoint registration and wasm
+     * code execution.
+     */
+    private suspend fun trySetBreakpointsViaDwarfByUrl(
+        file: VirtualFile,
+        line: Int,
+    ): List<Map<String, Any?>> {
+        val locResolver = sourceLocationResolver ?: return emptyList()
+
+        val wasmOffsets = locResolver.sourceToAllWasmOffsets(file.name, line)
+        if (wasmOffsets.isEmpty()) return emptyList()
+
+        val results = mutableListOf<Map<String, Any?>>()
+        for (offset in wasmOffsets) {
+            try {
+                val result = cdp.send("Debugger.setBreakpointByUrl", mapOf(
+                    "urlRegex" to "^wasm://",
+                    "lineNumber" to 0,
+                    "columnNumber" to offset.toInt(),
+                ))
+                if (result["breakpointId"] != null) {
+                    results.add(result)
+                }
+            } catch (e: Exception) {
+                LOG.debug("Failed to set DWARF breakpoint by URL at offset $offset: ${e.message}")
+            }
+        }
+        return results
     }
 
     /**
@@ -568,7 +848,8 @@ internal class CdpDebugProcess(
     }
 
     override fun stop() {
-        scope.launch {
+        if (!stopping.compareAndSet(false, true)) return
+        runBlocking {
             try {
                 cdp.close()
             } catch (_: Exception) {
@@ -584,6 +865,11 @@ internal class CdpDebugProcess(
         }
         if (!processHandler.isProcessTerminated) {
             processHandler.destroyProcess()
+        }
+        // Ensure the wrapper process handler is marked as terminated
+        // so the debug session UI finishes cleanly.
+        if (!sessionProcessHandler.isProcessTerminated && !sessionProcessHandler.isProcessTerminating) {
+            sessionProcessHandler.fireProcessTerminated(0)
         }
         scope.cancel()
     }
@@ -658,14 +944,21 @@ internal class CdpStackFrame(
 
     override fun computeChildren(node: XCompositeNode) {
         val localToName = dwarfVariableResolver?.buildWasmLocalToNameMap(functionName, wasmByteOffset) ?: emptyMap()
+        // Check whether this function has a DWARF subprogram entry.
+        // Wrapper functions (e.g. wasm-bindgen generated) have no
+        // DWARF subprogram — their locals are compiler-internal
+        // (stack pointers, etc.) and show garbage values.
+        val hasDwarfMatch = dwarfVariableResolver?.hasDwarfSubprogram(functionName) ?: false
         scope.launch {
             try {
                 val list = XValueChildrenList()
                 var localIndex = 0L
                 for (scopeEntry in scopeChain) {
                     val type = scopeEntry["type"] as? String ?: continue
-                    // Skip global scope — too noisy
-                    if (type == "global") continue
+                    // Skip global and module scopes — too noisy and not
+                    // useful for source-level debugging (module scope
+                    // contains instance, module, functions, globals, etc.)
+                    if (type == "global" || type == "module") continue
 
                     val objectRef = scopeEntry["object"] as? Map<String, Any?> ?: continue
                     val objectId = objectRef["objectId"] as? String ?: continue
@@ -684,6 +977,22 @@ internal class CdpStackFrame(
                         // then fall back to positional index for non-$varN
                         // names (e.g. wasm name section names like "arg0_1")
                         val displayName = resolveVariableDisplayName(name, localToName, localIndex)
+
+                        // Hide variables in two cases:
+                        // 1. Function has no DWARF subprogram (wrapper/
+                        //    generated function) — all its locals are
+                        //    compiler-internal garbage (stack pointers etc.)
+                        // 2. Function has DWARF info and localToName is
+                        //    non-empty but this specific local has no
+                        //    mapping — it's a compiler-internal spill slot
+                        if (dwarfVariableResolver != null && !hasDwarfMatch && subtype == "wasmvalue") {
+                            localIndex++
+                            continue
+                        }
+                        if (localToName.isNotEmpty() && displayName == name) {
+                            localIndex++
+                            continue
+                        }
 
                         if (subtype == "wasmvalue") {
                             // Flatten wasmvalue objects: extract the inner

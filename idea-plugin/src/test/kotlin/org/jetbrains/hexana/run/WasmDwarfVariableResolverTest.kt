@@ -107,6 +107,18 @@ class WasmDwarfVariableResolverTest : UsefulTestCase() {
         )
     }
 
+    fun testBuildWasmLocalToNameMapForRustAddPositional() {
+        val bytes = loadWasmResource("rust/hello_world.wasm")
+        val resolver = WasmDwarfVariableResolver.create(bytes)!!
+        // Rust DWARF uses DW_OP_fbreg (not WasmLocal) for params,
+        // so the positional fallback assigns indices by declaration
+        // order: a=0, b=1
+        val map = resolver.buildWasmLocalToNameMap("\$add")
+        assertEquals("a", map[0L])
+        assertEquals("b", map[1L])
+        assertEquals(2, map.size)
+    }
+
     fun testDescribeVariableLocationForRustAddParams() {
         val bytes = loadWasmResource("rust/hello_world.wasm")
         val resolver = WasmDwarfVariableResolver.create(bytes)!!
@@ -123,6 +135,29 @@ class WasmDwarfVariableResolverTest : UsefulTestCase() {
         assertTrue(
             "Location for 'b' should mention fbreg: $descB",
             descB!!.contains("fbreg"),
+        )
+    }
+
+    fun testHasDwarfSubprogramDistinguishesRealFromWrapper() {
+        val bytes = loadWasmResource("rust/hello_world.wasm")
+        val resolver = WasmDwarfVariableResolver.create(bytes)!!
+
+        // The real "add" function has a DWARF subprogram entry
+        assertTrue("'add' should have a DWARF subprogram", resolver.hasDwarfSubprogram("add"))
+        assertTrue("'\$add' should have a DWARF subprogram", resolver.hasDwarfSubprogram("\$add"))
+
+        // wasm-bindgen wrapper has no DWARF subprogram — its locals
+        // are compiler-internal and should be hidden.
+        // Test both a truncated prefix and a realistic full mangled name.
+        val wrapperPrefix = "\$_ZN11hello_world1_28__wasm_bindgen_generated_add28_"
+        assertFalse(
+            "wasm-bindgen wrapper prefix should NOT have a DWARF subprogram",
+            resolver.hasDwarfSubprogram(wrapperPrefix),
+        )
+        val fullWrapper = "\$_ZN11hello_world1_28__wasm_bindgen_generated_add28_\$u7b\$\$u7b\$closure\$u7d\$\$u7d\$\$u7d\$17h2e9ce"
+        assertFalse(
+            "full wasm-bindgen wrapper should NOT have a DWARF subprogram",
+            resolver.hasDwarfSubprogram(fullWrapper),
         )
     }
 

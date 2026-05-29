@@ -38,6 +38,9 @@ class CdpClient(private val scope: CoroutineScope) {
     var connected = false
         private set
 
+    /** Callback invoked when the WebSocket connection is lost. */
+    var onDisconnect: (() -> Unit)? = null
+
     data class ScriptInfo(
         val scriptId: String,
         val url: String,
@@ -71,6 +74,7 @@ class CdpClient(private val scope: CoroutineScope) {
                 LOG.warn("CDP WebSocket read error", e)
             } finally {
                 connected = false
+                onDisconnect?.invoke()
             }
         }
     }
