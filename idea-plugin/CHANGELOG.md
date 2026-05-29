@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- jitview: tab is split on 'Combined', 'Bytecode', 'Machine Code' and copy bytecode/instructions possible 
 
 ### Changed
 
