@@ -1,8 +1,16 @@
 package org.jetbrains.hexana.jit
 
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,10 +34,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed as keyIsCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed as keyIsMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +63,7 @@ import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.pom.Navigatable
@@ -48,6 +72,7 @@ import com.intellij.psi.PsiCompiledFile
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.util.concurrency.AppExecutorUtil
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexHighlightRange
 import org.jetbrains.hexana.HexViewStateHolder
@@ -75,6 +100,7 @@ import org.jetbrains.hexana.jvm.jit.JitFile
 import org.jetbrains.hexana.jvm.jit.JitSym
 import org.jetbrains.hexana.jvm.jit.Sym
 import org.jetbrains.hexana.providers.BinaryProvider
+import java.awt.datatransfer.StringSelection
 import java.util.Locale
 import org.jetbrains.hexana.ui.HexViewer
 import org.jetbrains.hexana.ui.VerticalSplitPanel
@@ -868,7 +894,8 @@ private fun JitTab(label: String, selected: Boolean, onClick: () -> Unit) {
 /**
  * Flat JVM-bytecode listing for the selected method: one row per decoded
  * instruction, `bci  opcode operands`. No native code — this is the pure
- * bytecode side of the Combined tab.
+ * bytecode side of the Combined tab. Rows are multi-selectable; the copy menu
+ * offers the full line, the bytecode text, or the raw bytecode hex.
  */
 @Composable
 private fun JitFlatBytecodeTab(sym: JitSym, instructions: List<JavaBytecodeInstruction>) {
@@ -880,32 +907,42 @@ private fun JitFlatBytecodeTab(sym: JitSym, instructions: List<JavaBytecodeInstr
         EmptyTabMessage("(bytecode decoder rejected ${sym.bytecode.size} bytes — see idea.log)")
         return
     }
-    val listState = rememberLazyListState()
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-        for ((idx, insn) in instructions.withIndex()) {
-            val stripe = (idx and 1) == 1
-            item(key = "fb-${insn.bytecodeOffset}") {
-                val bg = when {
-                    !stripe -> Color.Transparent
-                    JewelTheme.isDark -> Color(0x10FFFFFF)
-                    else -> Color(0x08000000)
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(bg)
-                        .padding(horizontal = 6.dp, vertical = 1.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Text(
-                        insn.bytecodeOffset.toString().padStart(5, ' '),
-                        style = RowStyle.copy(color = HexanaMuted),
-                        modifier = Modifier.width(BciColumnWidth),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(formatInstruction(insn), style = RowStyle)
-                }
-            }
+    val rows = remember(sym, instructions) {
+        val code = sym.bytecode
+        instructions.map { insn ->
+            val start = insn.bytecodeOffset.coerceIn(0, code.size)
+            val end = (insn.bytecodeOffset + insn.size).coerceIn(start, code.size)
+            BytecodeRowData(
+                bci = insn.bytecodeOffset,
+                opcodeText = formatInstruction(insn),
+                hex = formatHexBytes(code.copyOfRange(start, end), Int.MAX_VALUE),
+            )
+        }
+    }
+    SelectableCopyableList(
+        items = rows,
+        rowKey = { _, r -> "fb-${r.bci}" },
+        copyVariants = { sel ->
+            listOf(
+                "Copy" to sel.joinToString("\n") {
+                    "${it.bci.toString().padStart(5, ' ')}  ${it.hex}  ${it.opcodeText}"
+                },
+                "Copy bytecode" to sel.joinToString("\n") { it.opcodeText },
+                "Copy hex" to sel.joinToString(" ") { it.hex },
+            )
+        },
+    ) { r ->
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 1.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Text(
+                r.bci.toString().padStart(5, ' '),
+                style = RowStyle.copy(color = HexanaMuted),
+                modifier = Modifier.width(BciColumnWidth),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(r.opcodeText, style = RowStyle)
         }
     }
 }
@@ -914,7 +951,8 @@ private fun JitFlatBytecodeTab(sym: JitSym, instructions: List<JavaBytecodeInstr
  * Flat native-code listing for the selected method: every decoded instruction
  * in the method's code block, start to end — `addr  hex  asm`. Unlike the
  * Combined tab this includes prologue / epilogue / stub code that maps to no
- * JVM bytecode index.
+ * JVM bytecode index. Rows are multi-selectable; the copy menu offers the full
+ * line, the machine-code hex, or the disassembled instructions.
  */
 @Composable
 private fun JitMachineCodeTab(
@@ -941,38 +979,36 @@ private fun JitMachineCodeTab(
         EmptyTabMessage("(disassembler produced no instructions for ${sym.codeSize} bytes)")
         return
     }
-    val listState = rememberLazyListState()
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-        for ((idx, row) in nativeRows.withIndex()) {
-            val stripe = (idx and 1) == 1
-            item(key = "mc-${row.address}-$idx") {
-                val bg = when {
-                    !stripe -> Color.Transparent
-                    JewelTheme.isDark -> Color(0x10FFFFFF)
-                    else -> Color(0x08000000)
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(bg)
-                        .padding(horizontal = 6.dp, vertical = 1.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Text(
-                        formatNativeAddress(row.address),
-                        style = RowStyle.copy(color = HexanaMuted),
-                        modifier = Modifier.width(NativeAddressColumnWidth),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        row.hex,
-                        style = RowStyle.copy(color = HexanaMcHexColor),
-                        modifier = Modifier.width(HexColumnWidth),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(row.asm, style = RowStyle, modifier = Modifier.weight(1f))
-                }
-            }
+    SelectableCopyableList(
+        items = nativeRows,
+        rowKey = { idx, row -> "mc-${row.address}-$idx" },
+        copyVariants = { sel ->
+            listOf(
+                "Copy" to sel.joinToString("\n") {
+                    "${formatNativeAddress(it.address)}  ${it.hex}  ${it.asm}"
+                },
+                "Copy hex" to sel.joinToString(" ") { it.hex },
+                "Copy instructions" to sel.joinToString("\n") { it.asm },
+            )
+        },
+    ) { row ->
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 1.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Text(
+                formatNativeAddress(row.address),
+                style = RowStyle.copy(color = HexanaMuted),
+                modifier = Modifier.width(NativeAddressColumnWidth),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                row.hex,
+                style = RowStyle.copy(color = HexanaMcHexColor),
+                modifier = Modifier.width(HexColumnWidth),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(row.asm, style = RowStyle, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -982,6 +1018,184 @@ private fun JitMachineCodeTab(
 private fun EmptyTabMessage(text: String) {
     Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Text(text, style = RowStyle.copy(color = HexanaMuted))
+    }
+}
+
+/** Row model for the flat Bytecode tab — precomputed display text + raw-byte hex for copy. */
+private data class BytecodeRowData(val bci: Int, val opcodeText: String, val hex: String)
+
+/**
+ * A scrollable list of monospace rows with multi-row selection and clipboard
+ * copy — shared by the Bytecode and Machine-code tabs.
+ *
+ * Selection: a primary click selects a single row; Shift+click extends a range
+ * from the anchor; Cmd/Ctrl+click toggles an individual row. A right-click on a
+ * row outside the current selection targets just that row.
+ *
+ * Copy: the right-click menu lists the per-tab [copyVariants] (the first entry
+ * is treated as "full" and is also what Cmd/Ctrl+C copies); Cmd/Ctrl+A selects
+ * everything. Text is placed on the IDE clipboard via [CopyPasteManager], the
+ * same path the table + hex views use.
+ *
+ * [copyVariants] receives the selected items in row order and returns
+ * `label -> text` pairs; the text is built lazily when the menu opens or the
+ * copy shortcut fires.
+ */
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
+@Composable
+private fun <T> SelectableCopyableList(
+    items: List<T>,
+    rowKey: (index: Int, item: T) -> Any,
+    copyVariants: (selected: List<T>) -> List<Pair<String, String>>,
+    rowContent: @Composable (item: T) -> Unit,
+) {
+    var selected by remember(items) { mutableStateOf<Set<Int>>(emptySet()) }
+    var anchor by remember(items) { mutableStateOf<Int?>(null) }
+    var pressed by remember(items) { mutableStateOf(false) }
+    var pointerY by remember(items) { mutableStateOf(Float.NaN) }
+    var areaHeight by remember(items) { mutableStateOf(0f) }
+    val listState = rememberLazyListState()
+    val focusRequester = remember { FocusRequester() }
+
+    fun orderedSelection(indices: Set<Int>): List<T> =
+        indices.sorted().mapNotNull { items.getOrNull(it) }
+
+    fun copyToClipboard(text: String) {
+        CopyPasteManager.getInstance().setContents(StringSelection(text))
+    }
+
+    // Map a pointer Y (list coordinate space) to a row index, mirroring
+    // HexViewer.resolveSelectionPosition: clamp above the first / below the last
+    // visible item so a drag past either edge still extends to the end.
+    fun rowAt(y: Float): Int? {
+        val visible = listState.layoutInfo.visibleItemsInfo
+        if (visible.isEmpty() || items.isEmpty()) return null
+        val first = visible.first()
+        val last = visible.last()
+        val row = when {
+            y < first.offset -> first.index - 1
+            y > last.offset + last.size -> last.index + 1
+            else -> visible.indexOfLast { it.offset <= y } + listState.firstVisibleItemIndex
+        }
+        return row.coerceIn(0, items.size - 1)
+    }
+
+    fun selectRangeTo(target: Int) {
+        val a = anchor ?: target
+        selected = (minOf(a, target)..maxOf(a, target)).toSet()
+    }
+
+    // Edge auto-scroll while dragging a selection past the top/bottom — same
+    // 40dp threshold + proportional speed as the hex view, so a drag can extend
+    // the selection across the whole method, not just the visible rows.
+    LaunchedEffect(pressed, pointerY, areaHeight) {
+        if (!pressed || pointerY.isNaN() || areaHeight <= 0f) return@LaunchedEffect
+        while (pressed && !pointerY.isNaN()) {
+            val threshold = 40.dp.value
+            val speed = 50f
+            val delta = when {
+                pointerY < threshold -> -speed * ((threshold - maxOf(0f, pointerY)) / threshold)
+                pointerY > areaHeight - threshold ->
+                    speed * (maxOf(0f, pointerY - (areaHeight - threshold)) / threshold)
+                else -> 0f
+            }
+            if (delta == 0f) break
+            val consumed = listState.scrollBy(delta)
+            rowAt(pointerY)?.let { selectRangeTo(it) }
+            if (consumed == 0f) break
+            delay(16)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { areaHeight = it.size.height.toFloat() }
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val meta = event.keyIsCtrlPressed || event.keyIsMetaPressed
+                when {
+                    meta && event.key == Key.C -> {
+                        val sel = orderedSelection(selected)
+                        if (sel.isNotEmpty()) {
+                            copyVariants(sel).firstOrNull()?.let { copyToClipboard(it.second) }
+                        }
+                        true
+                    }
+                    meta && event.key == Key.A -> {
+                        selected = items.indices.toSet()
+                        anchor = 0
+                        true
+                    }
+                    else -> false
+                }
+            }
+            // Press-and-drag selects a contiguous range; a plain press selects
+            // one row. Shift+click extends from the anchor, Cmd/Ctrl+click
+            // toggles. Right-click targets the row under the cursor (if it's
+            // outside the current selection) and lets the menu open.
+            .pointerInput(items) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    focusRequester.requestFocus()
+                    val startRow = rowAt(down.position.y) ?: return@awaitEachGesture
+                    val mods = currentEvent.keyboardModifiers
+                    if (currentEvent.buttons.isSecondaryPressed) {
+                        if (startRow !in selected) {
+                            selected = setOf(startRow)
+                            anchor = startRow
+                        }
+                        return@awaitEachGesture
+                    }
+                    when {
+                        mods.isShiftPressed && anchor != null -> selectRangeTo(startRow)
+                        mods.isCtrlPressed || mods.isMetaPressed -> {
+                            selected = if (startRow in selected) selected - startRow else selected + startRow
+                            anchor = startRow
+                        }
+                        else -> {
+                            selected = setOf(startRow)
+                            anchor = startRow
+                        }
+                    }
+                    pressed = true
+                    pointerY = down.position.y
+                    drag(down.id) { change ->
+                        pointerY = change.position.y
+                        rowAt(change.position.y)?.let { selectRangeTo(it) }
+                    }
+                    pressed = false
+                    pointerY = Float.NaN
+                }
+            },
+    ) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            for ((index, item) in items.withIndex()) {
+                item(key = rowKey(index, item)) {
+                    val isSelected = index in selected
+                    val stripe = (index and 1) == 1
+                    val bg = when {
+                        isSelected && JewelTheme.isDark -> Color(0xFF2E436E)
+                        isSelected -> Color(0xFFD4E2FC)
+                        stripe && JewelTheme.isDark -> Color(0x10FFFFFF)
+                        stripe -> Color(0x08000000)
+                        else -> Color.Transparent
+                    }
+                    ContextMenuArea(items = {
+                        val sel = orderedSelection(if (index in selected) selected else setOf(index))
+                        copyVariants(sel).map { (label, text) ->
+                            ContextMenuItem(label) { copyToClipboard(text) }
+                        }
+                    }) {
+                        Box(modifier = Modifier.fillMaxWidth().background(bg)) {
+                            rowContent(item)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
