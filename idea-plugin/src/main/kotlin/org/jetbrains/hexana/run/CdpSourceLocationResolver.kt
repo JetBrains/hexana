@@ -44,25 +44,58 @@ internal class CdpSourceLocationResolver private constructor(
      * @return the Wasm byte offset, or `null` if no mapping exists
      */
     fun sourceToWasmOffset(fileName: String, line: Int): ULong? {
+        return sourceToAllWasmOffsets(fileName, line).firstOrNull()
+    }
+
+    /**
+     * Returns all Wasm byte offsets that map to the given source
+     * file and line number. Multiple offsets occur when the same
+     * source line is compiled into several wasm functions (e.g.
+     * wasm-bindgen wrappers alongside the real function body).
+     *
+     * Setting breakpoints at all returned offsets ensures the
+     * debugger pauses in the correct function.
+     */
+    fun sourceToAllWasmOffsets(fileName: String, line: Int): List<ULong> {
         val normalizedName = normalizeFileName(fileName)
-        val entries = sourceToOffsets[normalizedName] ?: return null
+        val entries = sourceToOffsets[normalizedName] ?: return emptyList()
 
         // DWARF lines are 1-based, IDE lines are 0-based
         val dwarfLine = line + 1
 
-        // Find exact match first
-        val exact = entries.find { it.line == dwarfLine }
-        if (exact != null) return toModuleOffset(exact.offset)
+        // Find all exact matches first.
+        // Multiple DWARF line entries for the same source line
+        // correspond to individual wasm instructions (e.g. local.get/
+        // local.set chains in the function prologue). Setting
+        // breakpoints at all of them causes the debugger to pause
+        // repeatedly as each local is progressively initialized.
+        // We keep only the *last* (highest) offset — the point where
+        // all locals for that statement are fully set up.
+        val exact = entries.filter { it.line == dwarfLine }
+        if (exact.isNotEmpty()) {
+            val maxOffset = exact.maxOf { it.offset }
+            return listOf(toModuleOffset(maxOffset))
+        }
 
         // Find the closest line that is >= the requested line
         // (snap forward to the next executable statement, which is
         // standard debugger behavior when a line has no direct mapping)
-        val forward = entries.filter { it.line >= dwarfLine }.minByOrNull { it.line }
-        if (forward != null) return toModuleOffset(forward.offset)
+        val forwardLine = entries.filter { it.line >= dwarfLine }.minByOrNull { it.line }?.line
+        if (forwardLine != null) {
+            val matching = entries.filter { it.line == forwardLine }
+            val maxOffset = matching.maxOf { it.offset }
+            return listOf(toModuleOffset(maxOffset))
+        }
 
         // Fall back to the closest preceding line if no forward match
-        val backward = entries.filter { it.line <= dwarfLine }.maxByOrNull { it.line }
-        return backward?.let { toModuleOffset(it.offset) }
+        val backwardLine = entries.filter { it.line <= dwarfLine }.maxByOrNull { it.line }?.line
+        if (backwardLine != null) {
+            val matching = entries.filter { it.line == backwardLine }
+            val maxOffset = matching.maxOf { it.offset }
+            return listOf(toModuleOffset(maxOffset))
+        }
+
+        return emptyList()
     }
 
     /**

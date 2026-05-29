@@ -51,7 +51,7 @@ internal class CdpDebugProcess(
 
     /** Maps CDP breakpoint IDs to the IDE breakpoint objects. */
     internal val cdpBreakpointToIde = ConcurrentHashMap<String, XLineBreakpoint<WasmBreakpointProperties>>()
-    internal val ideBreakpointToCdp = ConcurrentHashMap<XLineBreakpoint<WasmBreakpointProperties>, String>()
+    internal val ideBreakpointToCdp = ConcurrentHashMap<XLineBreakpoint<WasmBreakpointProperties>, MutableList<String>>()
 
     /**
      * Breakpoints that need DWARF-based wasm offset mapping but were
@@ -196,6 +196,8 @@ internal class CdpDebugProcess(
                         frameIndex = 0,
                         scriptId = topStackFrame.scriptId,
                         lineNumber = topStackFrame.lineNumber,
+                        columnNumber = topStackFrame.columnNumber,
+                        dwarfVariableResolver = dwarfVariableResolver,
                     )
                     CdpSuspendContext(
                         topFrame = correctedTopFrame,
@@ -238,6 +240,8 @@ internal class CdpDebugProcess(
             frameIndex = frameIndex,
             scriptId = scriptId,
             lineNumber = lineNumber,
+            columnNumber = columnNumber,
+            dwarfVariableResolver = dwarfVariableResolver,
         )
     }
 
@@ -365,22 +369,35 @@ internal class CdpDebugProcess(
 
         scope.launch {
             try {
-                val result = trySetBreakpointViaDwarf(file, line)
-                    ?: trySetBreakpointByUrl(file, line)
+                val results = trySetBreakpointsViaDwarf(file, line)
 
-                val breakpointId = result?.get("breakpointId") as? String
-                if (breakpointId != null) {
-                    cdpBreakpointToIde[breakpointId] = breakpoint
-                    ideBreakpointToCdp[breakpoint] = breakpointId
+                if (results.isNotEmpty()) {
+                    val cdpIds = ideBreakpointToCdp.getOrPut(breakpoint) { mutableListOf() }
+                    for (result in results) {
+                        val breakpointId = result["breakpointId"] as? String ?: continue
+                        cdpBreakpointToIde[breakpointId] = breakpoint
+                        cdpIds.add(breakpointId)
+                    }
                     session.updateBreakpointPresentation(
                         breakpoint, null, null
                     )
                 } else {
-                    session.updateBreakpointPresentation(
-                        breakpoint,
-                        com.intellij.icons.AllIcons.Debugger.Db_invalid_breakpoint,
-                        "No DWARF mapping found for this source location",
-                    )
+                    // Fall back to URL-based breakpoint for non-wasm scripts
+                    val urlResult = trySetBreakpointByUrl(file, line)
+                    val breakpointId = urlResult?.get("breakpointId") as? String
+                    if (breakpointId != null) {
+                        cdpBreakpointToIde[breakpointId] = breakpoint
+                        ideBreakpointToCdp.getOrPut(breakpoint) { mutableListOf() }.add(breakpointId)
+                        session.updateBreakpointPresentation(
+                            breakpoint, null, null
+                        )
+                    } else {
+                        session.updateBreakpointPresentation(
+                            breakpoint,
+                            com.intellij.icons.AllIcons.Debugger.Db_invalid_breakpoint,
+                            "No DWARF mapping found for this source location",
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 LOG.warn("Failed to set CDP breakpoint at ${file.path}:$line", e)
@@ -406,30 +423,48 @@ internal class CdpDebugProcess(
     }
 
     /**
-     * Tries to set a breakpoint using DWARF source-to-offset mapping.
+     * Tries to set breakpoints using DWARF source-to-offset mapping.
      * For source files (C, Rust, etc.), this translates the source
-     * file + line into a Wasm byte offset and sets the breakpoint
-     * on the wasm script using `Debugger.setBreakpoint` with the
-     * byte offset as columnNumber.
+     * file + line into Wasm byte offsets and sets breakpoints on the
+     * wasm script using `Debugger.setBreakpoint` with the byte
+     * offset as columnNumber.
+     *
+     * Returns breakpoints for ALL matching offsets. When wasm-bindgen
+     * or similar tools generate wrapper functions that reference the
+     * same source line, multiple offsets exist — setting breakpoints
+     * at all of them ensures the debugger pauses in the correct
+     * function (the real function body, not just the wrapper).
      */
-    private suspend fun trySetBreakpointViaDwarf(
+    private suspend fun trySetBreakpointsViaDwarf(
         file: VirtualFile,
         line: Int,
-    ): Map<String, Any?>? {
-        val locResolver = sourceLocationResolver ?: return null
+    ): List<Map<String, Any?>> {
+        val locResolver = sourceLocationResolver ?: return emptyList()
 
-        val wasmOffset = locResolver.sourceToWasmOffset(file.name, line) ?: return null
+        val wasmOffsets = locResolver.sourceToAllWasmOffsets(file.name, line)
+        if (wasmOffsets.isEmpty()) return emptyList()
 
         // Find the wasm script in CDP — V8 reports wasm modules with wasm:// URLs
-        val wasmScriptId = findWasmScriptId() ?: return null
+        val wasmScriptId = findWasmScriptId() ?: return emptyList()
 
-        return cdp.send("Debugger.setBreakpoint", mapOf(
-            "location" to mapOf(
-                "scriptId" to wasmScriptId,
-                "lineNumber" to 0,
-                "columnNumber" to wasmOffset.toInt(),
-            ),
-        ))
+        val results = mutableListOf<Map<String, Any?>>()
+        for (offset in wasmOffsets) {
+            try {
+                val result = cdp.send("Debugger.setBreakpoint", mapOf(
+                    "location" to mapOf(
+                        "scriptId" to wasmScriptId,
+                        "lineNumber" to 0,
+                        "columnNumber" to offset.toInt(),
+                    ),
+                ))
+                if (result["breakpointId"] != null) {
+                    results.add(result)
+                }
+            } catch (e: Exception) {
+                LOG.debug("Failed to set DWARF breakpoint at offset $offset: ${e.message}")
+            }
+        }
+        return results
     }
 
     /**
@@ -464,14 +499,18 @@ internal class CdpDebugProcess(
     }
 
     internal fun unregisterBreakpointInCdp(breakpoint: XLineBreakpoint<WasmBreakpointProperties>) {
-        val cdpId = ideBreakpointToCdp.remove(breakpoint) ?: return
-        cdpBreakpointToIde.remove(cdpId)
+        val cdpIds = ideBreakpointToCdp.remove(breakpoint) ?: return
+        for (cdpId in cdpIds) {
+            cdpBreakpointToIde.remove(cdpId)
+        }
 
         scope.launch {
-            try {
-                cdp.send("Debugger.removeBreakpoint", mapOf("breakpointId" to cdpId))
-            } catch (e: Exception) {
-                LOG.debug("Failed to remove CDP breakpoint $cdpId: ${e.message}")
+            for (cdpId in cdpIds) {
+                try {
+                    cdp.send("Debugger.removeBreakpoint", mapOf("breakpointId" to cdpId))
+                } catch (e: Exception) {
+                    LOG.debug("Failed to remove CDP breakpoint $cdpId: ${e.message}")
+                }
             }
         }
     }
@@ -596,11 +635,20 @@ internal class CdpStackFrame(
     private val frameIndex: Int,
     internal val scriptId: String?,
     internal val lineNumber: Int,
+    internal val columnNumber: Int = 0,
+    private val dwarfVariableResolver: WasmDwarfVariableResolver? = null,
 ) : XStackFrame() {
+
+    /** For wasm frames, columnNumber is the byte offset within the module. */
+    private val wasmByteOffset: Int?
+        get() = if (scriptId != null) columnNumber else null
 
     override fun getSourcePosition(): XSourcePosition? = sourcePosition
 
-    override fun getEvaluator(): XDebuggerEvaluator = CdpDebuggerEvaluator(cdp, callFrameId, scope)
+    override fun getEvaluator(): XDebuggerEvaluator = CdpDebuggerEvaluator(
+        cdp, callFrameId, scope,
+        dwarfVariableResolver?.buildWasmLocalToNameMap(functionName, wasmByteOffset) ?: emptyMap(),
+    )
 
     override fun customizePresentation(component: com.intellij.ui.ColoredTextContainer) {
         val name = functionName.ifBlank { sourcePosition?.file?.name ?: "unknown" }
@@ -609,9 +657,11 @@ internal class CdpStackFrame(
     }
 
     override fun computeChildren(node: XCompositeNode) {
+        val localToName = dwarfVariableResolver?.buildWasmLocalToNameMap(functionName, wasmByteOffset) ?: emptyMap()
         scope.launch {
             try {
                 val list = XValueChildrenList()
+                var localIndex = 0L
                 for (scopeEntry in scopeChain) {
                     val type = scopeEntry["type"] as? String ?: continue
                     // Skip global scope — too noisy
@@ -627,10 +677,24 @@ internal class CdpStackFrame(
                     val properties = result["result"] as? List<Map<String, Any?>> ?: continue
                     for (prop in properties) {
                         val name = prop["name"] as? String ?: continue
-                        val value = prop["value"] as? Map<String, Any?>
-                        if (value != null) {
-                            list.add(name, CdpValue(name, value, cdp, scope))
+                        val value = prop["value"] as? Map<String, Any?> ?: continue
+                        val subtype = value["subtype"] as? String
+
+                        // Resolve display name: try $varN pattern first,
+                        // then fall back to positional index for non-$varN
+                        // names (e.g. wasm name section names like "arg0_1")
+                        val displayName = resolveVariableDisplayName(name, localToName, localIndex)
+
+                        if (subtype == "wasmvalue") {
+                            // Flatten wasmvalue objects: extract the inner
+                            // type and value and present them directly
+                            val wasmType = value["description"] as? String
+                            val innerValue = resolveWasmValue(value, cdp)
+                            list.add(displayName, CdpWasmLocalValue(displayName, wasmType, innerValue, value, cdp, scope))
+                        } else {
+                            list.add(displayName, CdpValue(displayName, value, cdp, scope))
                         }
+                        localIndex++
                     }
                 }
                 node.addChildren(list, true)
@@ -638,6 +702,99 @@ internal class CdpStackFrame(
                 node.setErrorMessage("Failed to retrieve variables: ${e.message}")
             }
         }
+    }
+
+    companion object {
+        /** Pattern matching V8's internal wasm local variable names like `$var0`, `$var1`. */
+        private val WASM_VAR_PATTERN = """\${'$'}var(\d+)""".toRegex()
+
+        /**
+         * Resolves a V8 internal variable name (e.g. `$var0`) to its
+         * DWARF source-level name using the local-index-to-name map.
+         *
+         * V8 may report wasm locals as `$varN` (numeric index) or
+         * using names from the wasm name section (e.g. `arg0_1`).
+         * For `$varN` names, the index is extracted directly. For
+         * other names, the positional index is used as a fallback.
+         *
+         * Returns the original name if no mapping is found.
+         */
+        internal fun resolveVariableDisplayName(
+            name: String,
+            localToName: Map<Long, String>,
+            positionalIndex: Long = -1,
+        ): String {
+            if (localToName.isEmpty()) return name
+            // Try extracting index from $varN pattern
+            val match = WASM_VAR_PATTERN.matchEntire(name)
+            if (match != null) {
+                val index = match.groupValues[1].toLongOrNull() ?: return name
+                return localToName[index] ?: name
+            }
+            // For non-$varN names (wasm name section), use positional index
+            if (positionalIndex >= 0) {
+                return localToName[positionalIndex] ?: name
+            }
+            return name
+        }
+
+        /**
+         * Resolves the inner value of a wasmvalue object by fetching
+         * its properties and extracting the `value` field.
+         */
+        @Suppress("UNCHECKED_CAST")
+        private suspend fun resolveWasmValue(
+            valueDescriptor: Map<String, Any?>,
+            cdp: CdpClient,
+        ): String? {
+            val objectId = valueDescriptor["objectId"] as? String ?: return null
+            return try {
+                val result = cdp.send("Runtime.getProperties", mapOf(
+                    "objectId" to objectId,
+                    "ownProperties" to true,
+                ))
+                val properties = result["result"] as? List<Map<String, Any?>> ?: return null
+                for (prop in properties) {
+                    if (prop["name"] == "value") {
+                        val innerValue = prop["value"] as? Map<String, Any?> ?: continue
+                        val v = innerValue["value"]
+                        if (v != null) {
+                            // Format numeric values: drop trailing .0 for integers
+                            val str = v.toString()
+                            return if (v is Number && str.endsWith(".0")) {
+                                str.removeSuffix(".0")
+                            } else {
+                                str
+                            }
+                        }
+                    }
+                }
+                null
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+}
+
+/**
+ * Presents a wasm local/parameter value with its type and resolved
+ * inner value, avoiding the need to expand the wasmvalue object.
+ */
+@Suppress("UNCHECKED_CAST")
+internal class CdpWasmLocalValue(
+    private val name: String,
+    private val wasmType: String?,
+    private val resolvedValue: String?,
+    private val valueDescriptor: Map<String, Any?>,
+    private val cdp: CdpClient,
+    private val scope: CoroutineScope,
+) : XNamedValue(name) {
+
+    override fun computePresentation(node: XValueNode, place: XValuePlace) {
+        val displayType = wasmType ?: "wasmvalue"
+        val displayValue = resolvedValue ?: valueDescriptor["description"]?.toString() ?: "?"
+        node.setPresentation(null, displayType, displayValue, false)
     }
 }
 
@@ -713,15 +870,31 @@ internal class CdpDebuggerEvaluator(
     private val cdp: CdpClient,
     private val callFrameId: String,
     private val scope: CoroutineScope,
+    private val localToName: Map<Long, String> = emptyMap(),
 ) : XDebuggerEvaluator() {
+
+    /** Reverse map: DWARF source name → V8 internal `$varN` name. */
+    private val nameToVar: Map<String, String> by lazy {
+        localToName.entries.associate { (index, name) -> name to "\$var$index" }
+    }
 
     @Suppress("UNCHECKED_CAST")
     override fun evaluate(expression: String, callback: XEvaluationCallback, expressionPosition: XSourcePosition?) {
+        // Translate source-level variable names to V8 internal names
+        // so that the user can evaluate expressions using DWARF names.
+        val resolvedExpression = if (nameToVar.isNotEmpty()) {
+            nameToVar.entries.fold(expression) { expr, (sourceName, varName) ->
+                expr.replace("""\b${Regex.escape(sourceName)}\b""".toRegex(), varName)
+            }
+        } else {
+            expression
+        }
+
         scope.launch {
             try {
                 val result = cdp.send("Debugger.evaluateOnCallFrame", mapOf(
                     "callFrameId" to callFrameId,
-                    "expression" to expression,
+                    "expression" to resolvedExpression,
                     "returnByValue" to false,
                 ))
                 val resultObj = result["result"] as? Map<String, Any?>

@@ -147,6 +147,80 @@ internal class WasmDwarfVariableResolver private constructor(
     }
 
     /**
+     * Builds a mapping from Wasm local indices to DWARF variable names
+     * for the given function. This is used by the CDP debugger to
+     * resolve internal names like `$var0` to their source-level names.
+     *
+     * @param functionName the name of the current function
+     * @return a map from wasm local index to the DWARF variable name
+     */
+    fun buildWasmLocalToNameMap(functionName: String?, wasmByteOffset: Int? = null): Map<Long, String> {
+        val matchingSubprograms = findMatchingSubprograms(functionName, wasmByteOffset)
+        if (matchingSubprograms.isEmpty()) {
+            LOG.debug("buildWasmLocalToNameMap: no matching subprograms for function='$functionName' offset=$wasmByteOffset")
+            return emptyMap()
+        }
+        val result = mutableMapOf<Long, String>()
+        for (sp in matchingSubprograms) {
+            for (v in sp.variables) {
+                val name = v.name ?: continue
+                val loc = effectiveLocation(v) ?: continue
+                val primaryOp = loc.operations.firstOrNull() ?: continue
+                if (primaryOp is DwarfExprOp.WasmLocal) {
+                    result.putIfAbsent(primaryOp.index, name)
+                }
+            }
+        }
+        LOG.debug("buildWasmLocalToNameMap: function='$functionName' offset=$wasmByteOffset -> $result")
+        return result
+    }
+
+    /**
+     * Finds subprograms matching by name first, falling back to
+     * address range matching using the wasm byte offset when name
+     * matching fails (common with mangled wasm-bindgen names).
+     */
+    private fun findMatchingSubprograms(
+        functionName: String?,
+        wasmByteOffset: Int? = null,
+    ): List<DwarfSubprogramInfo> {
+        if (functionName != null) {
+            // V8 prepends '$' to wasm function names; strip it for matching
+            val normalizedName = functionName.removePrefix("$")
+            val byName = subprograms.filter { sp ->
+                sp.name == functionName ||
+                    sp.linkageName == functionName ||
+                    sp.name == normalizedName ||
+                    sp.linkageName == normalizedName ||
+                    sp.name?.let { functionName.startsWith(it) } == true ||
+                    sp.name?.let { normalizedName.startsWith(it) } == true ||
+                    sp.linkageName?.let { normalizedName.startsWith(it) } == true ||
+                    sp.linkageName?.let { functionName.startsWith(it) } == true
+            }
+            if (byName.isNotEmpty()) return byName
+        }
+        // Fall back to address range matching
+        if (wasmByteOffset != null) {
+            val byOffset = subprograms.filter { sp ->
+                val low = sp.lowPc ?: return@filter false
+                val high = sp.highPc ?: return@filter false
+                wasmByteOffset in low until high
+            }
+            if (byOffset.isNotEmpty()) return byOffset
+        }
+        return emptyList()
+    }
+
+    /**
+     * Returns the effective location for a variable, checking both
+     * the inline location and the first location list entry.
+     */
+    private fun effectiveLocation(v: DwarfVariableInfo): DwarfLocationDescription? {
+        v.location?.let { return it }
+        return v.locationList.firstOrNull()?.location
+    }
+
+    /**
      * Returns `true` when the variable is present in DWARF metadata
      * (as a local/parameter of the given function, or as a global),
      * regardless of whether it has location information. This
@@ -167,12 +241,17 @@ internal class WasmDwarfVariableResolver private constructor(
         functionName: String?,
     ): DwarfVariableInfo? {
         if (functionName == null) return null
+        // V8 prepends '$' to wasm function names; strip it for matching
+        val normalizedName = functionName.removePrefix("$")
         // Match by function name — try both name and linkage name
         val matchingSubprograms = subprograms.filter { sp ->
             sp.name == functionName ||
                 sp.linkageName == functionName ||
+                sp.name == normalizedName ||
+                sp.linkageName == normalizedName ||
                 // LLDB may report demangled names with arguments stripped
-                sp.name?.let { functionName.startsWith(it) } == true
+                sp.name?.let { functionName.startsWith(it) } == true ||
+                sp.name?.let { normalizedName.startsWith(it) } == true
         }
         for (sp in matchingSubprograms) {
             val v = sp.variables.find { it.name == variableName }
