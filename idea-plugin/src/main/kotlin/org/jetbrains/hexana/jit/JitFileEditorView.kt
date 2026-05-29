@@ -101,11 +101,16 @@ private val CHICORY_LOG: Logger = Logger.getInstance("hexana.jit.chicory")
  *                and the sym's native byte range is highlighted; selecting
  *                a bytecode row adds per-BCI overlay highlights on top.
  *                Hidden when Info is selected.
- *  - Bottom right: Bytecode / Lines tabs. The Bytecode tab renders
- *                  `bci opcode operands   <machine-code-hex>` per BCI, and
- *                  any inline records for that BCI hang underneath as a
- *                  foldable group labelled `fqn::method:bci` (click =
- *                  navigate to the inlined method in source via PSI).
+ *  - Bottom right: a tab strip with three tabs over the selected method:
+ *                  • Combined — one row per JVM bytecode index pairing the
+ *                    decoded bytecode with the JIT-emitted native instructions
+ *                    for that BCI (`bci opcode | addr hex asm`), with inline
+ *                    records shown as a clickable inlay.
+ *                  • Bytecode — the method's decoded JVM bytecode, flat
+ *                    (`bci opcode operands`), independent of any native code.
+ *                  • Machine code — the whole native code block disassembled
+ *                    start-to-end (`addr hex asm`), including prologue /
+ *                    epilogue / stub code that maps to no BCI.
  *                  Replaced by [JitInfoView] when Info is selected.
  *
  * This is the v0 "compiled-method browser" — when the disassembler lands
@@ -501,13 +506,19 @@ private fun JitSymDetail(
     // by BCI via the address-location map.
     val disasmState = rememberDisassembler(state)
     val arch = remember { hostArch() }
-    val nativeRowsByBci = remember(sym, disasmState, arch) {
-        val ready = disasmState as? DisasmState.Ready ?: return@remember emptyMap<Int, List<NativeRow>>()
+    // Decode the whole method's native bytes once. The Machine-code tab shows
+    // this flat list as-is; the Combined tab buckets it by BCI through the
+    // address-location map — so the disassembler runs exactly once per sym.
+    val nativeRowsFlat = remember(sym, disasmState, arch) {
+        val ready = disasmState as? DisasmState.Ready ?: return@remember emptyList<NativeRow>()
         runCatching {
-            disassembleByBci(sym, ready.bundle.disassembler, arch, ready.bundle.formatterFor(arch))
+            disassembleFlat(sym, ready.bundle.disassembler, arch, ready.bundle.formatterFor(arch))
         }.getOrElse {
-            emptyMap()
+            emptyList()
         }
+    }
+    val nativeRowsByBci = remember(sym, nativeRowsFlat) {
+        if (nativeRowsFlat.isEmpty()) emptyMap() else bucketByBci(sym, nativeRowsFlat)
     }
 
     VerticalSplitPanel(
@@ -522,11 +533,12 @@ private fun JitSymDetail(
             }
         },
         southPanel = {
-            JitBytecodeTab(
+            JitDetailTabs(
                 project = project,
                 sym = sym,
                 instructions = instructions,
                 nativeRowsByBci = nativeRowsByBci,
+                nativeRowsFlat = nativeRowsFlat,
                 disasmState = disasmState,
                 selectedBci = selectedBci,
                 onSelectBci = onSelectBci,
@@ -757,6 +769,223 @@ private fun formatByteSize(bytes: Long): String {
 }
 
 // -----------------------------------------------------------------------------
+// Detail tabs — Combined / Bytecode / Machine code over the selected method
+// -----------------------------------------------------------------------------
+
+/** The three tabs shown in the bottom-right pane for a selected compiled method. */
+private enum class JitDetailTab(val label: String) {
+    Combined("Combined"),
+    Bytecode("Bytecode"),
+    MachineCode("Machine code"),
+}
+
+/**
+ * Tabbed container for the south (bottom-right) pane. Tab #1 is the existing
+ * per-BCI [JitBytecodeTab] (bytecode paired with its native instructions); the
+ * two added tabs render each side on its own — [JitFlatBytecodeTab] for the
+ * decoded JVM bytecode and [JitMachineCodeTab] for the whole native code block
+ * disassembled flat.
+ *
+ * Tab selection is held in a plain [remember] (not keyed on [sym]) so it
+ * persists as the user clicks through methods in the tree — switching method
+ * keeps you on the tab you were reading.
+ */
+@Composable
+private fun JitDetailTabs(
+    project: Project,
+    sym: JitSym,
+    instructions: List<JavaBytecodeInstruction>,
+    nativeRowsByBci: Map<Int, List<NativeRow>>,
+    nativeRowsFlat: List<NativeRow>,
+    disasmState: DisasmState,
+    selectedBci: Int?,
+    onSelectBci: (Int) -> Unit,
+) {
+    var tab by remember { mutableStateOf(JitDetailTab.Combined) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        JitTabStrip(selected = tab, onSelect = { tab = it })
+        Divider(orientation = Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            when (tab) {
+                JitDetailTab.Combined -> JitBytecodeTab(
+                    project = project,
+                    sym = sym,
+                    instructions = instructions,
+                    nativeRowsByBci = nativeRowsByBci,
+                    nativeRowsFlat = nativeRowsFlat,
+                    disasmState = disasmState,
+                    selectedBci = selectedBci,
+                    onSelectBci = onSelectBci,
+                )
+                JitDetailTab.Bytecode -> JitFlatBytecodeTab(sym = sym, instructions = instructions)
+                JitDetailTab.MachineCode -> JitMachineCodeTab(
+                    sym = sym,
+                    nativeRows = nativeRowsFlat,
+                    disasmState = disasmState,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun JitTabStrip(selected: JitDetailTab, onSelect: (JitDetailTab) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (t in JitDetailTab.values()) {
+            JitTab(label = t.label, selected = t == selected, onClick = { onSelect(t) })
+            Spacer(modifier = Modifier.width(2.dp))
+        }
+    }
+}
+
+@Composable
+private fun JitTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    val bg = when {
+        selected && JewelTheme.isDark -> Color(0xFF2E436E)
+        selected -> Color(0xFFD4E2FC)
+        else -> Color.Transparent
+    }
+    Box(
+        modifier = Modifier
+            .background(bg, RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 3.dp),
+    ) {
+        Text(
+            label,
+            style = RowStyle.copy(
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            ),
+        )
+    }
+}
+
+/**
+ * Flat JVM-bytecode listing for the selected method: one row per decoded
+ * instruction, `bci  opcode operands`. No native code — this is the pure
+ * bytecode side of the Combined tab.
+ */
+@Composable
+private fun JitFlatBytecodeTab(sym: JitSym, instructions: List<JavaBytecodeInstruction>) {
+    if (sym.bytecode.isEmpty()) {
+        EmptyTabMessage("(no JVM bytecode captured — pre-v2 dump or native method)")
+        return
+    }
+    if (instructions.isEmpty()) {
+        EmptyTabMessage("(bytecode decoder rejected ${sym.bytecode.size} bytes — see idea.log)")
+        return
+    }
+    val listState = rememberLazyListState()
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+        for ((idx, insn) in instructions.withIndex()) {
+            val stripe = (idx and 1) == 1
+            item(key = "fb-${insn.bytecodeOffset}") {
+                val bg = when {
+                    !stripe -> Color.Transparent
+                    JewelTheme.isDark -> Color(0x10FFFFFF)
+                    else -> Color(0x08000000)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(bg)
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text(
+                        insn.bytecodeOffset.toString().padStart(5, ' '),
+                        style = RowStyle.copy(color = HexanaMuted),
+                        modifier = Modifier.width(BciColumnWidth),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(formatInstruction(insn), style = RowStyle)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Flat native-code listing for the selected method: every decoded instruction
+ * in the method's code block, start to end — `addr  hex  asm`. Unlike the
+ * Combined tab this includes prologue / epilogue / stub code that maps to no
+ * JVM bytecode index.
+ */
+@Composable
+private fun JitMachineCodeTab(
+    sym: JitSym,
+    nativeRows: List<NativeRow>,
+    disasmState: DisasmState,
+) {
+    when (disasmState) {
+        DisasmState.Loading -> {
+            EmptyTabMessage("loading disassembler…")
+            return
+        }
+        is DisasmState.Failed -> {
+            EmptyTabMessage("disassembler failed: ${disasmState.reason}")
+            return
+        }
+        is DisasmState.Ready -> Unit
+    }
+    if (sym.codeSize == 0uL) {
+        EmptyTabMessage("(no native code captured for this record)")
+        return
+    }
+    if (nativeRows.isEmpty()) {
+        EmptyTabMessage("(disassembler produced no instructions for ${sym.codeSize} bytes)")
+        return
+    }
+    val listState = rememberLazyListState()
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+        for ((idx, row) in nativeRows.withIndex()) {
+            val stripe = (idx and 1) == 1
+            item(key = "mc-${row.address}-$idx") {
+                val bg = when {
+                    !stripe -> Color.Transparent
+                    JewelTheme.isDark -> Color(0x10FFFFFF)
+                    else -> Color(0x08000000)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(bg)
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text(
+                        formatNativeAddress(row.address),
+                        style = RowStyle.copy(color = HexanaMuted),
+                        modifier = Modifier.width(NativeAddressColumnWidth),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        row.hex,
+                        style = RowStyle.copy(color = HexanaMcHexColor),
+                        modifier = Modifier.width(HexColumnWidth),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(row.asm, style = RowStyle, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+/** Centered muted message used by the detail tabs for empty / loading / error states. */
+@Composable
+private fun EmptyTabMessage(text: String) {
+    Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+        Text(text, style = RowStyle.copy(color = HexanaMuted))
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Bytecode tab — one row per native instruction, four columns:
 //   bci  | opcode operands     | hex bytes      | disassembled asm
 // The bci + opcode columns are populated only on the *first* native row of
@@ -770,6 +999,7 @@ private fun JitBytecodeTab(
     sym: JitSym,
     instructions: List<JavaBytecodeInstruction>,
     nativeRowsByBci: Map<Int, List<NativeRow>>,
+    nativeRowsFlat: List<NativeRow>,
     disasmState: DisasmState,
     selectedBci: Int?,
     onSelectBci: (Int) -> Unit,
@@ -794,6 +1024,27 @@ private fun JitBytecodeTab(
     // a native row in-place — one clickable line per inline frame, right
     // side of the row, no fold toggle.
     val inlinesByPc = remember(sym) { buildInlinesByPc(sym) }
+
+    // Native instructions the per-BCI loop below would otherwise drop, so the
+    // Combined tab covers the SAME address range as the Machine-code tab:
+    //  • prologue / setup — bytes before the first BCI-mapped instruction
+    //    (frame build, sync entry); these have no address-location entry.
+    //  • trailing — instructions whose address-location entry points at a BCI
+    //    not present in the decoded bytecode (rare; handler/stub regions).
+    // `prologueRows` render above the bytecode, `trailingRows` below it; both
+    // as native-only rows (blank bci/opcode columns).
+    val (prologueRows, trailingRows) = remember(instructions, nativeRowsByBci, nativeRowsFlat) {
+        val shownBcis = instructions.mapTo(HashSet()) { it.bytecodeOffset }
+        val shownAddrs = HashSet<ULong>()
+        for ((bci, rows) in nativeRowsByBci) {
+            if (bci in shownBcis) rows.forEach { shownAddrs += it.address }
+        }
+        val orphans = nativeRowsFlat.filter { it.address !in shownAddrs }
+        val firstShown = shownAddrs.minOrNull()
+        val leading = orphans.filter { firstShown == null || it.address < firstShown }
+        val trailing = orphans.filter { firstShown != null && it.address >= firstShown }
+        leading to trailing
+    }
 
     // Recognise classes generated by the chicory-compiler-{maven,gradle}-plugin
     // — `<moduleInterfaceFqn>ModuleMachineFunGroup_<n>::func_<idx>`. When this
@@ -821,6 +1072,19 @@ private fun JitBytecodeTab(
         }
 
     LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f)) {
+        if (prologueRows.isNotEmpty()) {
+            item(key = "__prologue_header__") { OrphanSectionLabel("prologue / setup") }
+            for ((i, row) in prologueRows.withIndex()) {
+                item(key = "pro-${row.address}-$i") {
+                    OrphanNativeRow(
+                        project = project,
+                        row = row,
+                        inlineStack = inlinesByPc[row.address].orEmpty(),
+                        stripe = (i and 1) == 1,
+                    )
+                }
+            }
+        }
         // bciIndex flips the row background between adjacent BCIs so a
         // multi-row native fan-out reads as one cohesive block — every row
         // of the same BCI shares the same tint, every transition between
@@ -886,7 +1150,65 @@ private fun JitBytecodeTab(
                 }
             }
         }
+        if (trailingRows.isNotEmpty()) {
+            item(key = "__trailing_header__") { OrphanSectionLabel("unmapped native code") }
+            for ((i, row) in trailingRows.withIndex()) {
+                item(key = "orph-${row.address}-$i") {
+                    OrphanNativeRow(
+                        project = project,
+                        row = row,
+                        inlineStack = inlinesByPc[row.address].orEmpty(),
+                        stripe = (i and 1) == 1,
+                    )
+                }
+            }
+        }
     }
+    }
+}
+
+/**
+ * A native row in the Combined tab with no owning JVM bytecode index — method
+ * prologue or an unmapped handler / stub region. Renders like a continuation
+ * [PairedRow] (blank bci/opcode columns) and isn't selectable, since there's
+ * no BCI to drive the per-BCI hex highlight.
+ */
+@Composable
+private fun OrphanNativeRow(
+    project: Project,
+    row: NativeRow,
+    inlineStack: List<Inlined>,
+    stripe: Boolean,
+) {
+    PairedRow(
+        project = project,
+        bci = -1,
+        opcodeText = "",
+        nativeAddress = row.address,
+        hexText = row.hex,
+        asmText = row.asm,
+        inlineStack = inlineStack,
+        showBcOpcode = false,
+        selected = false,
+        stripe = stripe,
+        asmMuted = false,
+        onRowClick = {},
+    )
+}
+
+/** Muted divider label introducing a prologue / unmapped native-code group. */
+@Composable
+private fun OrphanSectionLabel(text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "· $text ·",
+            style = RowStyle.copy(color = HexanaMuted, fontWeight = FontWeight.SemiBold),
+        )
     }
 }
 
@@ -1172,6 +1494,12 @@ private fun formatHexBytes(bytes: ByteArray, maxBytes: Int): String {
 private data class NativeRow(
     /** Absolute runtime memory address of the instruction (JIT code-cache address). */
     val address: ULong,
+    /**
+     * Byte offset of this instruction within the method's code block. Kept so
+     * [bucketByBci] can attribute the flat-decoded instruction to a JVM
+     * bytecode index via the address-location map.
+     */
+    val nativeOffset: Int,
     val hex: String,
     val asm: String,
 )
@@ -1267,28 +1595,50 @@ private fun hostArch(): Arch {
 }
 
 /**
- * Disassemble [sym]'s native bytes once and bucket the decoded instructions
- * by the JVM bytecode index whose native byte range they fall into,
- * using the address-location map.
- *
- * Instructions that don't land inside any mapped BCI range (function
- * prologue / epilogue, deoptimisation pads, vtable stubs) are dropped here
- * — the disassembly view replacement will surface them; the v0 bytecode
- * tab only shows what's directly attributable to a BCI.
+ * Disassemble [sym]'s native bytes once, start-to-end, into a flat list of
+ * display rows in decode (address-ascending) order. This is the whole method:
+ * prologue, body, epilogue, deopt pads and stubs all included. The Machine-code
+ * tab renders this directly; the Combined tab funnels it through [bucketByBci].
  */
-private fun disassembleByBci(
+private fun disassembleFlat(
     sym: JitSym,
     disasm: CapstoneWasmDisassembler,
     arch: Arch,
     formatter: AssemblyFormatter,
-): Map<Int, List<NativeRow>> {
-    if (sym.codeSize == 0uL) return emptyMap()
+): List<NativeRow> {
+    if (sym.codeSize == 0uL) return emptyList()
     val buf = sym.codeBlock.toCommonByteBuffer()
     val decoded = with(disasm) { buf.disassemble(sym.address, arch) }.toList()
-    if (decoded.isEmpty()) return emptyMap()
+    if (decoded.isEmpty()) return emptyList()
 
+    val code = sym.codeBlock
+    val out = ArrayList<NativeRow>(decoded.size)
+    for (insn in decoded) {
+        val nativeOffset = insn.byteRange.first
+        val instructionBytes = ByteArray(insn.size) { code[insn.byteRange.first + it] }
+        val hex = formatHexBytes(instructionBytes, Int.MAX_VALUE)
+        val asm = when (insn) {
+            is DecodedInstruction.Valid -> formatter.format(insn)
+            is DecodedInstruction.Unknown -> with(formatter) { buf.formatUnknown(insn) }
+            else -> "" // sealed interface; future variants render empty
+        }
+        out.add(NativeRow(address = insn.address, nativeOffset = nativeOffset, hex = hex, asm = asm))
+    }
+    return out
+}
+
+/**
+ * Bucket already-decoded [flat] rows by the JVM bytecode index whose native
+ * byte range they fall into, using the address-location map.
+ *
+ * Instructions that don't land inside any mapped BCI range (function
+ * prologue / epilogue, deoptimisation pads, vtable stubs) are dropped here —
+ * those are visible in full on the Machine-code tab; the Combined tab only
+ * shows what's directly attributable to a BCI.
+ */
+private fun bucketByBci(sym: JitSym, flat: List<NativeRow>): Map<Int, List<NativeRow>> {
     val map = sym.addressLocationMap
-    if (map.isEmpty()) return emptyMap()
+    if (map.isEmpty() || flat.isEmpty()) return emptyMap()
     val limit = sym.codeSize.toLong()
     // (start, end, bci) sorted by start; address-location entries are
     // already in start-ascending order per the JVMTI spec.
@@ -1309,19 +1659,10 @@ private fun disassembleByBci(
         return null
     }
 
-    val code = sym.codeBlock
     val out = HashMap<Int, MutableList<NativeRow>>()
-    for (insn in decoded) {
-        val nativeOffset = insn.byteRange.first
-        val bci = bciAt(nativeOffset) ?: continue
-        val instructionBytes = ByteArray(insn.size) { code[insn.byteRange.first + it] }
-        val hex = formatHexBytes(instructionBytes, Int.MAX_VALUE)
-        val asm = when (insn) {
-            is DecodedInstruction.Valid -> formatter.format(insn)
-            is DecodedInstruction.Unknown -> with(formatter) { buf.formatUnknown(insn) }
-            else -> "" // sealed interface; future variants render empty
-        }
-        out.getOrPut(bci) { ArrayList() }.add(NativeRow(insn.address, hex, asm))
+    for (row in flat) {
+        val bci = bciAt(row.nativeOffset) ?: continue
+        out.getOrPut(bci) { ArrayList() }.add(row)
     }
     return out
 }
