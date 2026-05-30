@@ -22,6 +22,8 @@ import java.io.File
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.util.zip.ZipInputStream
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -71,12 +73,14 @@ class HexanaRunConfigurationDriverTest {
             val defaultPath = defaultWasmtimePath()
             if (File(defaultPath).exists()) return defaultPath
             return try {
-                val process = ProcessBuilder("which", "wasmtime")
+                val lookupCommand = if (isWindows()) "where" else "which"
+                val process = ProcessBuilder(lookupCommand, "wasmtime")
                     .redirectErrorStream(true)
                     .start()
                 val output = process.inputStream.bufferedReader().readText().trim()
                 process.waitFor()
-                if (process.exitValue() == 0 && output.isNotBlank() && File(output).exists()) output else null
+                val firstPath = output.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
+                if (process.exitValue() == 0 && firstPath != null && File(firstPath).exists()) firstPath else null
             } catch (_: Exception) {
                 null
             }
@@ -84,7 +88,12 @@ class HexanaRunConfigurationDriverTest {
 
         private fun defaultWasmtimePath(): String {
             val home = System.getProperty("user.home")
-            return "$home/.wasmtime/bin/wasmtime"
+            val executableName = if (isWindows()) "wasmtime.exe" else "wasmtime"
+            return "$home/.wasmtime/bin/$executableName"
+        }
+
+        private fun isWindows(): Boolean {
+            return System.getProperty("os.name").contains("windows", ignoreCase = true)
         }
 
         private fun downloadWasmtime() {
@@ -138,13 +147,10 @@ class HexanaRunConfigurationDriverTest {
 
                 val wasmtimeBin = extractedDir.resolve("wasmtime")
                 val targetBin = binDir.resolve("wasmtime")
-                Files.copy(wasmtimeBin, targetBin, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                Files.copy(wasmtimeBin, targetBin, StandardCopyOption.REPLACE_EXISTING)
                 targetBin.toFile().setExecutable(true)
             } else {
-                val process = ProcessBuilder("unzip", "-o", archiveFile.toString(), "-d", tempDir.toString())
-                    .redirectErrorStream(true)
-                    .start()
-                process.waitFor()
+                unzip(archiveFile, tempDir)
 
                 val extractedDir = Files.list(tempDir)
                     .filter { Files.isDirectory(it) && it.fileName.toString().startsWith("wasmtime-") }
@@ -153,10 +159,30 @@ class HexanaRunConfigurationDriverTest {
 
                 val wasmtimeBin = extractedDir.resolve("wasmtime.exe")
                 val targetBin = binDir.resolve("wasmtime.exe")
-                Files.copy(wasmtimeBin, targetBin, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                Files.copy(wasmtimeBin, targetBin, StandardCopyOption.REPLACE_EXISTING)
             }
 
             tempDir.toFile().deleteRecursively()
+        }
+
+        private fun unzip(archiveFile: Path, destinationDir: Path) {
+            val normalizedDestination = destinationDir.toAbsolutePath().normalize()
+            ZipInputStream(Files.newInputStream(archiveFile)).use { zipInput ->
+                generateSequence { zipInput.nextEntry }.forEach { entry ->
+                    val outputPath = normalizedDestination.resolve(entry.name).normalize()
+                    require(outputPath.startsWith(normalizedDestination)) {
+                        "Refusing to extract ZIP entry outside destination: ${entry.name}"
+                    }
+
+                    if (entry.isDirectory) {
+                        Files.createDirectories(outputPath)
+                    } else {
+                        Files.createDirectories(outputPath.parent)
+                        Files.copy(zipInput, outputPath, StandardCopyOption.REPLACE_EXISTING)
+                    }
+                    zipInput.closeEntry()
+                }
+            }
         }
     }
 
