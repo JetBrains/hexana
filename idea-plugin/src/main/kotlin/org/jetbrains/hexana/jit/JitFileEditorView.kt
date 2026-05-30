@@ -374,6 +374,39 @@ private fun groupSyms(syms: List<JitSym>): List<SymGroup> {
 private fun javaFqn(jvmSignature: String): String =
     jvmSignature.removePrefix("L").removeSuffix(";").replace('/', '.')
 
+/** Tree-search prefix that switches to "find compiled methods that inline <method>" mode. */
+private const val INLINE_PREFIX = "in:"
+
+/**
+ * Normalises a method reference for separator-insensitive matching: `::`, `#`, and `/` all
+ * collapse to `.`, so `Foo#run`, `Foo::run`, `Foo/run`, and `Foo.run` are equivalent (the JVMTI
+ * label uses `::`, but users naturally type `#` or `.`).
+ */
+private fun normalizeMethodRef(s: String): String =
+    s.replace("::", ".").replace('#', '.').replace('/', '.')
+
+/**
+ * The distinct `class::method` labels of every method inlined into any version of [group],
+ * read from the JVMTI inline records. This is the inverse of the per-row inline-stack view:
+ * it lets the tree answer "which compiled methods inlined X?" — useful because a hot small
+ * method (e.g. an interpreter's dispatch loop) often has no standalone nmethod and only shows
+ * up inlined into its callers.
+ */
+private fun inlinedLabelsOf(group: SymGroup): Set<String> {
+    val out = LinkedHashSet<String>()
+    for (sym in group.versions) {
+        for (record in sym.inlineRecords) {
+            for (at in record.inlines) {
+                for (frame in at.inlined) {
+                    val s = frame.sym ?: continue
+                    out += "${javaFqn(s.classSignature)}::${s.methodName}"
+                }
+            }
+        }
+    }
+    return out
+}
+
 // -----------------------------------------------------------------------------
 // Left column — sym tree
 // -----------------------------------------------------------------------------
@@ -391,9 +424,27 @@ private fun JitSymTree(
         mutableStateOf(setOf<SymKey>())
     }
 
+    // Inverse inline index (group -> labels it inlines), built lazily so opening a file doesn't
+    // force parsing every sym's inline records — only an `in:` search realises it.
+    val inlineIndex = remember(groups) { lazy { groups.associateWith { inlinedLabelsOf(it) } } }
+
     val filtered by remember(groups, query) {
         derivedStateOf {
+            val q = query.trim()
             when {
+                // "in:<method>" — show compiled methods that inlined a method matching <method>.
+                q.startsWith(INLINE_PREFIX) -> {
+                    val needle = normalizeMethodRef(q.removePrefix(INLINE_PREFIX).trim())
+                    if (needle.isEmpty()) {
+                        groups
+                    } else {
+                        groups.filter { g ->
+                            inlineIndex.value[g].orEmpty().any {
+                                normalizeMethodRef(it).contains(needle, ignoreCase = true)
+                            }
+                        }
+                    }
+                }
                 // Address mode (0x…) is a jump, not a name filter — keep the whole
                 // tree visible so the jumped-to method shows its selection highlight.
                 parseMachineAddress(query) != null -> groups
@@ -580,6 +631,7 @@ private fun SymSearchBar(
     val outline = if (JewelTheme.isDark) Color(0xFF393B3D) else Color(0xFFC9CCD6)
     val textColor = if (JewelTheme.isDark) Color(0xFFBCBEC4) else Color(0xFF1F1F1F)
     val addr = parseMachineAddress(query)
+    val inlineNeedle = query.trim().let { if (it.startsWith(INLINE_PREFIX)) it.removePrefix(INLINE_PREFIX).trim() else null }
     // Reset the not-found flag whenever the query changes.
     var notFound by remember(query) { mutableStateOf(false) }
     Column(
@@ -607,7 +659,7 @@ private fun SymSearchBar(
                 },
             decorationBox = { inner ->
                 if (query.isEmpty()) {
-                    Text("Search class/method, or 0x<addr>…", style = RowStyle.copy(color = HexanaMuted))
+                    Text("Search class/method, 0x<addr>, or in:<inlined>…", style = RowStyle.copy(color = HexanaMuted))
                 }
                 inner()
             },
@@ -620,6 +672,13 @@ private fun SymSearchBar(
                     fontSize = 10.sp,
                     color = if (notFound) HexanaSearchErrorColor else HexanaMuted,
                 ),
+                modifier = Modifier.padding(top = 3.dp, start = 2.dp),
+            )
+        } else if (inlineNeedle != null) {
+            Text(
+                if (inlineNeedle.isEmpty()) "type a method to find compiled methods that inline it"
+                else "compiled methods that inline “$inlineNeedle”",
+                style = RowStyle.copy(fontSize = 10.sp, color = HexanaMuted),
                 modifier = Modifier.padding(top = 3.dp, start = 2.dp),
             )
         }
