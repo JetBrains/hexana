@@ -31,6 +31,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -73,6 +74,7 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.util.concurrency.AppExecutorUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexHighlightRange
 import org.jetbrains.hexana.HexViewStateHolder
@@ -933,6 +935,48 @@ private enum class JitDetailTab(val label: String) {
  * persists as the user clicks through methods in the tree — switching method
  * keeps you on the tab you were reading.
  */
+/**
+ * One-line header above the tab strip identifying the compiled method the tabs show:
+ * `class::method(sig)   vN   @0x…   N B`. A muted "no bytecode" tag flags native /
+ * VM-synthetic methods (machine code present, Bytecode tab empty) so it's clear at a
+ * glance why the bytecode side is blank.
+ */
+@Composable
+private fun JitSymHeader(sym: JitSym) {
+    val s = sym.sym()
+    val label = if (s != null) {
+        "${javaFqn(s.classSignature)}::${s.methodName}${s.methodSignature}"
+    } else {
+        "(unresolved symbol)"
+    }
+    val noBytecode = sym.bytecode.isEmpty()
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = RowStyle.copy(fontWeight = FontWeight.SemiBold),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        if (noBytecode) {
+            Text("no bytecode", style = RowStyle.copy(fontSize = 10.sp, color = HexanaMuted))
+            Spacer(modifier = Modifier.width(10.dp))
+        }
+        Text("v${sym.version.toInt()}", style = RowStyle.copy(color = HexanaMuted))
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            "@0x${sym.address.toString(16)}",
+            style = RowStyle.copy(fontSize = 11.sp, color = HexanaMcHexColor),
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text("${sym.codeSize} B", style = RowStyle.copy(color = HexanaMuted))
+    }
+}
+
 @Composable
 private fun JitDetailTabs(
     project: Project,
@@ -963,6 +1007,8 @@ private fun JitDetailTabs(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        JitSymHeader(sym)
+        Divider(orientation = Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
         JitTabStrip(selected = tab, onSelect = { tab = it })
         Divider(orientation = Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
@@ -1055,30 +1101,49 @@ private fun JitFlatBytecodeTab(sym: JitSym, instructions: List<JavaBytecodeInstr
             )
         }
     }
-    SelectableCopyableList(
-        items = rows,
-        rowKey = { _, r -> "fb-${r.bci}" },
-        copyVariants = { sel ->
-            listOf(
-                "Copy" to sel.joinToString("\n") {
-                    "${it.bci.toString().padStart(5, ' ')}  ${it.hex}  ${it.opcodeText}"
+    var gotoIndex by remember(rows) { mutableStateOf<Int?>(null) }
+    var gotoNonce by remember(rows) { mutableStateOf(0) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        GotoBar(label = "goto bci", placeholder = "e.g. 42") { input ->
+            val bci = input.trim().toIntOrNull() ?: return@GotoBar false
+            val idx = rows.indexOfFirst { it.bci == bci }
+            if (idx < 0) {
+                false
+            } else {
+                gotoIndex = idx
+                gotoNonce += 1
+                true
+            }
+        }
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            SelectableCopyableList(
+                items = rows,
+                rowKey = { _, r -> "fb-${r.bci}" },
+                copyVariants = { sel ->
+                    listOf(
+                        "Copy" to sel.joinToString("\n") {
+                            "${it.bci.toString().padStart(5, ' ')}  ${it.hex}  ${it.opcodeText}"
+                        },
+                        "Copy bytecode" to sel.joinToString("\n") { it.opcodeText },
+                        "Copy hex" to sel.joinToString(" ") { it.hex },
+                    )
                 },
-                "Copy bytecode" to sel.joinToString("\n") { it.opcodeText },
-                "Copy hex" to sel.joinToString(" ") { it.hex },
-            )
-        },
-    ) { r ->
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 1.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Text(
-                r.bci.toString().padStart(5, ' '),
-                style = RowStyle.copy(color = HexanaMuted),
-                modifier = Modifier.width(BciColumnWidth),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(r.opcodeText, style = RowStyle)
+                scrollToIndex = gotoIndex,
+                scrollNonce = gotoNonce,
+            ) { r ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 1.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text(
+                        r.bci.toString().padStart(5, ' '),
+                        style = RowStyle.copy(color = HexanaMuted),
+                        modifier = Modifier.width(BciColumnWidth),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(r.opcodeText, style = RowStyle)
+                }
+            }
         }
     }
 }
@@ -1117,38 +1182,73 @@ private fun JitMachineCodeTab(
         EmptyTabMessage("(disassembler produced no instructions for ${sym.codeSize} bytes)")
         return
     }
-    SelectableCopyableList(
-        items = nativeRows,
-        rowKey = { idx, row -> "mc-${row.address}-$idx" },
-        copyVariants = { sel ->
-            listOf(
-                "Copy" to sel.joinToString("\n") {
-                    "${formatNativeAddress(it.address)}  ${it.hex}  ${it.asm}"
+    // Merge two scroll sources into one (index, token): the external address search
+    // (scrollToIndex/scrollNonce from the tree, via JitDetailTabs) and this tab's own
+    // "goto addr" field. Both bump the same token, so the most recent one wins.
+    var scrollIdx by remember(nativeRows) { mutableStateOf<Int?>(null) }
+    var scrollTok by remember(nativeRows) { mutableStateOf(0) }
+    LaunchedEffect(scrollNonce) {
+        if (scrollNonce != null && scrollToIndex != null) {
+            scrollIdx = scrollToIndex
+            scrollTok += 1
+        }
+    }
+    Column(modifier = Modifier.fillMaxSize()) {
+        GotoBar(label = "goto addr", placeholder = "0x…") { input ->
+            val a = parseCodeAddress(input)
+            if (a == null || a < sym.address || a >= sym.address + sym.codeSize) {
+                false
+            } else {
+                val idx = indexOfAddress(nativeRows, a)
+                if (idx == null) {
+                    false
+                } else {
+                    scrollIdx = idx
+                    scrollTok += 1
+                    true
+                }
+            }
+        }
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            SelectableCopyableList(
+                items = nativeRows,
+                rowKey = { idx, row -> "mc-${row.address}-$idx" },
+                copyVariants = { sel ->
+                    // Method-relative offset width, padded so the asm column lines up.
+                    val offWidth = sel.maxOfOrNull { it.nativeOffset.toString(16).length } ?: 1
+                    listOf(
+                        "Copy" to sel.joinToString("\n") {
+                            "${formatNativeAddress(it.address)}  ${it.hex}  ${it.asm}"
+                        },
+                        "Copy offset + instructions" to sel.joinToString("\n") {
+                            "+0x${it.nativeOffset.toString(16).padStart(offWidth, '0')}  ${it.asm}"
+                        },
+                        "Copy hex" to sel.joinToString(" ") { it.hex },
+                        "Copy instructions" to sel.joinToString("\n") { it.asm },
+                    )
                 },
-                "Copy hex" to sel.joinToString(" ") { it.hex },
-                "Copy instructions" to sel.joinToString("\n") { it.asm },
-            )
-        },
-        scrollToIndex = scrollToIndex,
-        scrollNonce = scrollNonce,
-    ) { row ->
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 1.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Text(
-                formatNativeAddress(row.address),
-                style = RowStyle.copy(color = HexanaMuted),
-                modifier = Modifier.width(NativeAddressColumnWidth),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                row.hex,
-                style = RowStyle.copy(color = HexanaMcHexColor),
-                modifier = Modifier.width(HexColumnWidth),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(row.asm, style = RowStyle, modifier = Modifier.weight(1f))
+                scrollToIndex = scrollIdx,
+                scrollNonce = scrollTok,
+            ) { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 1.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text(
+                        formatNativeAddress(row.address),
+                        style = RowStyle.copy(color = HexanaMuted),
+                        modifier = Modifier.width(NativeAddressColumnWidth),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        row.hex,
+                        style = RowStyle.copy(color = HexanaMcHexColor),
+                        modifier = Modifier.width(HexColumnWidth),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(row.asm, style = RowStyle, modifier = Modifier.weight(1f))
+                }
+            }
         }
     }
 }
@@ -1159,6 +1259,69 @@ private fun EmptyTabMessage(text: String) {
     Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Text(text, style = RowStyle.copy(color = HexanaMuted))
     }
+}
+
+/**
+ * Compact "go to" field shown at the top of each detail tab. [onSubmit] parses the
+ * entered text and navigates, returning false when nothing matched (rendered as a
+ * muted "not found" note and a red outline). Enter submits.
+ *
+ * The coordinate is per tab: bytecode offset (BCI) for the Bytecode / Combined tabs,
+ * machine address for the Machine-code tab — each tab supplies its own [onSubmit].
+ */
+@Composable
+private fun GotoBar(label: String, placeholder: String, onSubmit: (String) -> Boolean) {
+    val outline = if (JewelTheme.isDark) Color(0xFF393B3D) else Color(0xFFC9CCD6)
+    val textColor = if (JewelTheme.isDark) Color(0xFFBCBEC4) else Color(0xFF1F1F1F)
+    var text by remember { mutableStateOf("") }
+    var notFound by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = RowStyle.copy(color = HexanaMuted))
+        Spacer(modifier = Modifier.width(6.dp))
+        BasicTextField(
+            value = text,
+            onValueChange = {
+                text = it
+                notFound = false
+            },
+            singleLine = true,
+            textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = textColor),
+            cursorBrush = SolidColor(textColor),
+            modifier = Modifier
+                .width(180.dp)
+                .border(1.dp, if (notFound) HexanaSearchErrorColor else outline, RoundedCornerShape(3.dp))
+                .padding(horizontal = 8.dp, vertical = 3.dp)
+                .onPreviewKeyEvent { e ->
+                    if (e.type == KeyEventType.KeyDown && e.key == Key.Enter) {
+                        if (text.isNotBlank()) notFound = !onSubmit(text)
+                        true
+                    } else {
+                        false
+                    }
+                },
+            decorationBox = { inner ->
+                if (text.isEmpty()) {
+                    Text(placeholder, style = RowStyle.copy(color = HexanaMuted))
+                }
+                inner()
+            },
+        )
+        if (notFound) {
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("not found", style = RowStyle.copy(fontSize = 10.sp, color = HexanaSearchErrorColor))
+        }
+    }
+}
+
+/** Parse a "goto addr" field value (with or without a `0x` prefix) into an address. */
+private fun parseCodeAddress(s: String): ULong? {
+    val t = s.trim()
+    val hex = if (t.startsWith("0x") || t.startsWith("0X")) t.substring(2) else t
+    if (hex.isEmpty() || hex.length > 16) return null
+    return hex.toULongOrNull(16)
 }
 
 /** Row model for the flat Bytecode tab — precomputed display text + raw-byte hex for copy. */
@@ -1432,10 +1595,33 @@ private fun JitBytecodeTab(
     }
 
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    // First LazyColumn item index for a BCI — mirrors the emission order below
+    // (prologue header + rows, then per-instruction fan-out) so "goto bci" can scroll.
+    fun firstItemIndexForBci(targetBci: Int): Int? {
+        var index = 0
+        if (prologueRows.isNotEmpty()) index += 1 + prologueRows.size
+        for (insn in instructions) {
+            if (insn.bytecodeOffset == targetBci) return index
+            val rows = nativeRowsByBci[insn.bytecodeOffset].orEmpty()
+            index += if (rows.isEmpty()) 1 else rows.size
+        }
+        return null
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (chicoryMatch != null) {
             ChicoryWasmBadge(project, chicoryMatch)
+        }
+
+        GotoBar(label = "goto bci", placeholder = "e.g. 42") { input ->
+            val bci = input.trim().toIntOrNull() ?: return@GotoBar false
+            val idx = firstItemIndexForBci(bci) ?: return@GotoBar false
+            // Highlight the BCI (drives the per-BCI hex highlight too); set, don't toggle.
+            if (selectedBci != bci) onSelectBci(bci)
+            scope.launch { runCatching { listState.scrollToItem(idx) } }
+            true
         }
 
     LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f)) {
