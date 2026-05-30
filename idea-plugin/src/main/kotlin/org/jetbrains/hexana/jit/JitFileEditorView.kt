@@ -156,6 +156,48 @@ private sealed interface JitSelection {
     data class Sym(val key: SymKey, val version: Int) : JitSelection
 }
 
+/**
+ * A pending "go to machine address" navigation, produced when the user types a
+ * `0x…` address into the tree search box. [address] is the absolute runtime address;
+ * [nonce] bumps on every search so downstream one-shot effects (tab switch, list
+ * scroll, hex scroll) re-fire even when the same address is searched twice.
+ */
+private data class AddressNav(val address: ULong, val nonce: Int)
+
+/**
+ * Parse a tree-search query as a machine address. Requires an explicit `0x` / `0X`
+ * prefix (so a bare-hex-looking method name like `feed` stays a name search) and at
+ * most 16 hex digits. Returns null when the query is not an address.
+ */
+private fun parseMachineAddress(query: String): ULong? {
+    val t = query.trim()
+    if (t.length < 3 || !(t.startsWith("0x") || t.startsWith("0X"))) return null
+    val hex = t.substring(2)
+    if (hex.length > 16) return null
+    return hex.toULongOrNull(16)
+}
+
+/**
+ * Index of the [NativeRow] whose instruction covers [addr] — the row with the
+ * greatest `address <= addr`. Rows are address-ascending, so this is a binary
+ * search. Returns null when [addr] precedes the first row or the list is empty.
+ */
+private fun indexOfAddress(rows: List<NativeRow>, addr: ULong): Int? {
+    var lo = 0
+    var hi = rows.size - 1
+    var ans = -1
+    while (lo <= hi) {
+        val mid = (lo + hi) ushr 1
+        if (rows[mid].address <= addr) {
+            ans = mid
+            lo = mid + 1
+        } else {
+            hi = mid - 1
+        }
+    }
+    return if (ans >= 0) ans else null
+}
+
 @Composable
 internal fun JitFileEditorView(
     project: Project,
@@ -213,6 +255,38 @@ internal fun JitFileEditorView(
         state.scrollHexViewTo(sym.fileOffset.toLong())
     }
 
+    // --- Search by machine address (typed as 0x… in the tree search box) ---
+    // Resolve the dump-wide method whose [address, address+codeSize) contains the
+    // target, select it, and stash an AddressNav so the detail pane switches to the
+    // Machine-code tab and scrolls to the instruction. Returns false (no change)
+    // when no compiled method covers the address.
+    var addressNav by remember(jit) { mutableStateOf<AddressNav?>(null) }
+    var navCounter by remember(jit) { mutableStateOf(0) }
+    val onGoToAddress: (ULong) -> Boolean = { addr ->
+        val target = jit.symbols.firstOrNull { addr >= it.address && addr < it.address + it.codeSize }
+        val grp = target?.let { t -> groups.firstOrNull { g -> g.versions.any { it === t } } }
+        if (target != null && grp != null) {
+            selection = JitSelection.Sym(grp.key, target.version.toInt())
+            navCounter += 1
+            addressNav = AddressNav(addr, navCounter)
+            true
+        } else {
+            false
+        }
+    }
+
+    // Address-nav hex sync: when a fresh address search lands inside the selected
+    // sym, scroll the hex view to that instruction's byte offset. Keyed on the nonce
+    // only (declared after the selection effect above), so a later BCI click isn't
+    // fought by this effect, and the last scroll emission wins at search time.
+    LaunchedEffect(addressNav?.nonce) {
+        val nav = addressNav ?: return@LaunchedEffect
+        val sym = selectedSym ?: return@LaunchedEffect
+        if (nav.address >= sym.address && nav.address < sym.address + sym.codeSize) {
+            state.scrollHexViewTo(sym.fileOffset.toLong() + (nav.address - sym.address).toLong())
+        }
+    }
+
     Row(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -225,6 +299,7 @@ internal fun JitFileEditorView(
                 selection = selection,
                 onSelectInfo = { selection = JitSelection.Info },
                 onSelect = { key, version -> selection = JitSelection.Sym(key, version) },
+                onGoToAddress = onGoToAddress,
             )
         }
         Divider(orientation = Orientation.Vertical, modifier = Modifier.fillMaxHeight())
@@ -247,6 +322,7 @@ internal fun JitFileEditorView(
                             hexFocusRequester = hexFocusRequester,
                             selectedBci = selectedBci,
                             onSelectBci = { selectedBci = if (selectedBci == it) null else it },
+                            addressNav = addressNav,
                         )
                     }
                 }
@@ -306,6 +382,7 @@ private fun JitSymTree(
     selection: JitSelection,
     onSelectInfo: () -> Unit,
     onSelect: (SymKey, Int) -> Unit,
+    onGoToAddress: (ULong) -> Boolean,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable {
@@ -314,8 +391,13 @@ private fun JitSymTree(
 
     val filtered by remember(groups, query) {
         derivedStateOf {
-            if (query.isBlank()) groups
-            else groups.filter { it.displayLabel.contains(query, ignoreCase = true) }
+            when {
+                // Address mode (0x…) is a jump, not a name filter — keep the whole
+                // tree visible so the jumped-to method shows its selection highlight.
+                parseMachineAddress(query) != null -> groups
+                query.isBlank() -> groups
+                else -> groups.filter { it.displayLabel.contains(query, ignoreCase = true) }
+            }
         }
     }
 
@@ -324,7 +406,7 @@ private fun JitSymTree(
     val selectedVersion = (selection as? JitSelection.Sym)?.version ?: -1
 
     Column(modifier = Modifier.fillMaxSize()) {
-        SymSearchBar(query = query, onQueryChange = { query = it })
+        SymSearchBar(query = query, onQueryChange = { query = it }, onAddressSubmit = onGoToAddress)
         Divider(orientation = Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
         val listState = rememberLazyListState()
         Box(modifier = Modifier.fillMaxSize()) {
@@ -480,11 +562,25 @@ private fun GroupVersionRow(
     }
 }
 
+/**
+ * Tree search box. Doubles as a "go to machine address" jump: when the query is a
+ * `0x…` address ([parseMachineAddress]), pressing Enter calls [onAddressSubmit] to
+ * locate + select the compiled method containing that address (and drive the
+ * Machine-code tab / hex view to it). A hint line below the field shows the parsed
+ * address, or a not-found message when no method covers it.
+ */
 @Composable
-private fun SymSearchBar(query: String, onQueryChange: (String) -> Unit) {
+private fun SymSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onAddressSubmit: (ULong) -> Boolean,
+) {
     val outline = if (JewelTheme.isDark) Color(0xFF393B3D) else Color(0xFFC9CCD6)
     val textColor = if (JewelTheme.isDark) Color(0xFFBCBEC4) else Color(0xFF1F1F1F)
-    Box(
+    val addr = parseMachineAddress(query)
+    // Reset the not-found flag whenever the query changes.
+    var notFound by remember(query) { mutableStateOf(false) }
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 6.dp, vertical = 6.dp),
@@ -498,14 +594,33 @@ private fun SymSearchBar(query: String, onQueryChange: (String) -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .border(1.dp, outline, RoundedCornerShape(3.dp))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .onPreviewKeyEvent { e ->
+                    if (e.type == KeyEventType.KeyDown && e.key == Key.Enter && addr != null) {
+                        notFound = !onAddressSubmit(addr)
+                        true
+                    } else {
+                        false
+                    }
+                },
             decorationBox = { inner ->
                 if (query.isEmpty()) {
-                    Text("Search class or method…", style = RowStyle.copy(color = HexanaMuted))
+                    Text("Search class/method, or 0x<addr>…", style = RowStyle.copy(color = HexanaMuted))
                 }
                 inner()
             },
         )
+        if (addr != null) {
+            Text(
+                if (notFound) "no compiled method contains 0x${addr.toString(16)}"
+                else "press ↵ to go to 0x${addr.toString(16)}",
+                style = RowStyle.copy(
+                    fontSize = 10.sp,
+                    color = if (notFound) HexanaSearchErrorColor else HexanaMuted,
+                ),
+                modifier = Modifier.padding(top = 3.dp, start = 2.dp),
+            )
+        }
     }
 }
 
@@ -522,6 +637,7 @@ private fun JitSymDetail(
     hexFocusRequester: FocusRequester,
     selectedBci: Int?,
     onSelectBci: (Int) -> Unit,
+    addressNav: AddressNav?,
 ) {
     val instructions = remember(sym) {
         runCatching { JavaBytecodeDecoder.decode(sym.bytecode) }.getOrDefault(emptyList())
@@ -568,6 +684,7 @@ private fun JitSymDetail(
                 disasmState = disasmState,
                 selectedBci = selectedBci,
                 onSelectBci = onSelectBci,
+                addressNav = addressNav,
             )
         },
     )
@@ -826,8 +943,25 @@ private fun JitDetailTabs(
     disasmState: DisasmState,
     selectedBci: Int?,
     onSelectBci: (Int) -> Unit,
+    addressNav: AddressNav?,
 ) {
     var tab by remember { mutableStateOf(JitDetailTab.Combined) }
+
+    // Row index in this sym's flat native rows for an address search — null when the
+    // searched address isn't inside this method, or the rows haven't decoded yet.
+    val mcTargetIndex = remember(addressNav, nativeRowsFlat, sym) {
+        val nav = addressNav ?: return@remember null
+        if (nav.address < sym.address || nav.address >= sym.address + sym.codeSize) return@remember null
+        indexOfAddress(nativeRowsFlat, nav.address)
+    }
+    // A fresh address search that lands in this sym jumps to the Machine-code tab.
+    LaunchedEffect(addressNav?.nonce) {
+        val nav = addressNav ?: return@LaunchedEffect
+        if (nav.address >= sym.address && nav.address < sym.address + sym.codeSize) {
+            tab = JitDetailTab.MachineCode
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         JitTabStrip(selected = tab, onSelect = { tab = it })
         Divider(orientation = Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
@@ -848,6 +982,8 @@ private fun JitDetailTabs(
                     sym = sym,
                     nativeRows = nativeRowsFlat,
                     disasmState = disasmState,
+                    scrollToIndex = mcTargetIndex,
+                    scrollNonce = addressNav?.nonce,
                 )
             }
         }
@@ -959,6 +1095,8 @@ private fun JitMachineCodeTab(
     sym: JitSym,
     nativeRows: List<NativeRow>,
     disasmState: DisasmState,
+    scrollToIndex: Int? = null,
+    scrollNonce: Int? = null,
 ) {
     when (disasmState) {
         DisasmState.Loading -> {
@@ -991,6 +1129,8 @@ private fun JitMachineCodeTab(
                 "Copy instructions" to sel.joinToString("\n") { it.asm },
             )
         },
+        scrollToIndex = scrollToIndex,
+        scrollNonce = scrollNonce,
     ) { row ->
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 1.dp),
@@ -1047,6 +1187,8 @@ private fun <T> SelectableCopyableList(
     items: List<T>,
     rowKey: (index: Int, item: T) -> Any,
     copyVariants: (selected: List<T>) -> List<Pair<String, String>>,
+    scrollToIndex: Int? = null,
+    scrollNonce: Int? = null,
     rowContent: @Composable (item: T) -> Unit,
 ) {
     var selected by remember(items) { mutableStateOf<Set<Int>>(emptySet()) }
@@ -1105,6 +1247,17 @@ private fun <T> SelectableCopyableList(
             if (consumed == 0f) break
             delay(16)
         }
+    }
+
+    // External scroll request (machine-address search): scroll to and select the
+    // target row. Keyed on the nonce AND items, so it also fires once the
+    // disassembler's rows arrive if the search happened before decode finished.
+    LaunchedEffect(scrollNonce, items) {
+        val idx = scrollToIndex ?: return@LaunchedEffect
+        if (scrollNonce == null || idx !in items.indices) return@LaunchedEffect
+        selected = setOf(idx)
+        anchor = idx
+        runCatching { listState.scrollToItem(idx) }
     }
 
     Box(
@@ -2002,6 +2155,8 @@ private val InlineColumnWidth = 360.dp
 private val HexanaMuted = Color(0xFF7F8186)
 private val HexanaLinkColor = Color(0xFF3574F0)
 private val HexanaMcHexColor = Color(0xFF6F8294)
+// Soft red for the "no method at this address" search hint.
+private val HexanaSearchErrorColor = Color(0xFFE06C75)
 // Per-sym range — translucent blue, drawn whenever a sym is selected.
 private val SymRangeColor = Color(0x223B82F6)
 // Per-BCI range — saturated blue, layered on top of SymRangeColor.
