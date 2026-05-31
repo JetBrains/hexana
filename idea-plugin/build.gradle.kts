@@ -90,6 +90,7 @@ dependencies {
     implementation(project(":parsing:javaBytecode"))
     implementation(project(":parsing:zip"))
     implementation(project(":jvm-jit"))
+    implementation(project(":jvm-jit-jmh"))
     // Capstone-WASM is the project's default disassembler; the JIT-view
     // tab renders the native bytes for each BCI inline through it.
     implementation(project(":disassembly:core"))
