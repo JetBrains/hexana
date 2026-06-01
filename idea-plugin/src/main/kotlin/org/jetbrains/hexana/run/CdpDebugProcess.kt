@@ -137,14 +137,14 @@ internal class CdpDebugProcess(
 
     @Suppress("UNCHECKED_CAST")
     private suspend fun initializeCdpSession() {
-        LOG.info("CDP: connecting to $wsUrl")
+        LOG.debug("CDP: connecting to $wsUrl")
         cdp.connect(wsUrl)
-        LOG.info("CDP: connected")
+        LOG.debug("CDP: connected")
 
         // Stop the debug session when the CDP WebSocket disconnects
         // (e.g. the debuggee process was killed externally).
         cdp.onDisconnect = {
-            LOG.info("CDP: WebSocket disconnected")
+            LOG.debug("CDP: WebSocket disconnected")
             ApplicationManager.getApplication().invokeLater {
                 if (!session.isStopped) {
                     session.stop()
@@ -157,15 +157,15 @@ internal class CdpDebugProcess(
             handleDebuggerPaused(params)
         }
         cdp.on("Debugger.resumed") { _ ->
-            LOG.info("CDP: Debugger.resumed event received")
+            LOG.debug("CDP: Debugger.resumed event received")
         }
         cdp.on("Debugger.scriptParsed") { params ->
             val scriptId = params["scriptId"] as? String
             val url = params["url"] as? String ?: return@on
-            LOG.info("CDP: Debugger.scriptParsed scriptId=$scriptId url=$url")
+            LOG.debug("CDP: Debugger.scriptParsed scriptId=$scriptId url=$url")
             if (url.startsWith("wasm://")) {
                 wasmScriptSeen.set(true)
-                LOG.info("CDP: wasm script seen, retrying ${pendingWasmBreakpoints.size} pending breakpoints")
+                LOG.debug("CDP: wasm script seen, retrying ${pendingWasmBreakpoints.size} pending breakpoints")
                 // A wasm module was compiled — retry any pending breakpoints
                 retryPendingWasmBreakpoints()
             }
@@ -177,7 +177,7 @@ internal class CdpDebugProcess(
         // until the CDP connection is closed. Detect this and
         // proactively disconnect so the debug session finishes cleanly.
         cdp.on("Runtime.executionContextDestroyed") { params ->
-            LOG.info("CDP: Runtime.executionContextDestroyed params=$params")
+            LOG.debug("CDP: Runtime.executionContextDestroyed params=$params")
             // Disable the debugger domain first so Node.js doesn't
             // stay paused, then close the CDP connection which lets
             // the Node.js process exit naturally.
@@ -195,9 +195,7 @@ internal class CdpDebugProcess(
         }
 
         // Enable CDP domains
-        LOG.info("CDP: sending Runtime.enable")
         cdp.send("Runtime.enable")
-        LOG.info("CDP: sending Debugger.enable")
         cdp.send("Debugger.enable")
 
         // The target was started with --inspect-brk which pauses before
@@ -205,17 +203,16 @@ internal class CdpDebugProcess(
         // runtime proceed, but the Debugger domain still needs an explicit
         // Debugger.resume (handled in handleDebuggerPaused when the
         // "Break on start" pause event arrives).
-        LOG.info("CDP: sending Runtime.runIfWaitingForDebugger")
         cdp.send("Runtime.runIfWaitingForDebugger")
 
         // Retry any breakpoints that were queued before the WebSocket
         // was connected (breakpoint handler can fire before connect()).
         if (pendingWasmBreakpoints.isNotEmpty()) {
-            LOG.info("CDP: retrying ${pendingWasmBreakpoints.size} breakpoints queued before connect")
+            LOG.debug("CDP: retrying ${pendingWasmBreakpoints.size} breakpoints queued before connect")
             retryPendingWasmBreakpoints()
         }
 
-        LOG.info("CDP: initializeCdpSession complete")
+        LOG.debug("CDP: initializeCdpSession complete")
     }
 
     /**
@@ -242,7 +239,7 @@ internal class CdpDebugProcess(
         val reason = params["reason"] as? String
         val data = params["data"]
 
-        LOG.info("CDP: Debugger.paused reason=$reason hitBreakpoints=$hitBreakpoints " +
+        LOG.debug("CDP: Debugger.paused reason=$reason hitBreakpoints=$hitBreakpoints " +
             "callFrames.size=${callFrames?.size} data=$data " +
             "wasmScriptSeen=${wasmScriptSeen.get()} " +
             "registeredCdpBreakpoints=${cdpBreakpointToIde.keys} " +
@@ -257,16 +254,17 @@ internal class CdpDebugProcess(
             return
         }
 
-        // Log top frames for diagnostics
-        for ((i, frame) in callFrames.withIndex()) {
-            if (i >= 5) break // only log top 5 frames
-            val loc = frame["location"] as? Map<String, Any?>
-            val sid = loc?.get("scriptId") as? String
-            val line = loc?.get("lineNumber")
-            val col = loc?.get("columnNumber")
-            val fn = frame["functionName"] as? String
-            val scriptUrl = sid?.let { cdp.scripts[it]?.url }
-            LOG.info("CDP:   frame[$i] fn=$fn scriptId=$sid url=$scriptUrl line=$line col=$col")
+        if (LOG.isDebugEnabled) {
+            for ((i, frame) in callFrames.withIndex()) {
+                if (i >= 5) break
+                val loc = frame["location"] as? Map<String, Any?>
+                val sid = loc?.get("scriptId") as? String
+                val line = loc?.get("lineNumber")
+                val col = loc?.get("columnNumber")
+                val fn = frame["functionName"] as? String
+                val scriptUrl = sid?.let { cdp.scripts[it]?.url }
+                LOG.debug("CDP:   frame[$i] fn=$fn scriptId=$sid url=$scriptUrl line=$line col=$col")
+            }
         }
 
         if (reason == "Break on start" && hitBreakpoints.isNullOrEmpty()) {
@@ -281,11 +279,11 @@ internal class CdpDebugProcess(
             // processes Debugger.setBreakpoint synchronously before
             // entering wasm code, so breakpoints set in the
             // scriptParsed handler will be active in time.
-            LOG.info("CDP: auto-resuming from 'Break on start' (pendingWasmBreakpoints=${pendingWasmBreakpoints.size})")
+            LOG.debug("CDP: auto-resuming from 'Break on start'")
             scope.launch {
                 try {
                     cdp.send("Debugger.resume")
-                    LOG.info("CDP: Debugger.resume sent for 'Break on start'")
+                    LOG.debug("CDP: Debugger.resume sent for 'Break on start'")
                 } catch (e: Exception) {
                     LOG.warn("Failed to auto-resume from 'Break on start'", e)
                 }
@@ -298,7 +296,7 @@ internal class CdpDebugProcess(
             hitBreakpoints.any { cdpBreakpointToIde.containsKey(it) }
         val hasWasm = hasWasmFrames(callFrames)
 
-        LOG.info("CDP: hasOurBreakpoint=$hasOurBreakpoint hasWasmFrames=$hasWasm wasmScriptSeen=${wasmScriptSeen.get()}")
+        LOG.debug("CDP: hasOurBreakpoint=$hasOurBreakpoint hasWasmFrames=$hasWasm wasmScriptSeen=${wasmScriptSeen.get()}")
 
         // If no wasm frames are on the stack and none of our breakpoints
         // were hit, this is a pure JS/TS pause — auto-resume so we don't
@@ -308,7 +306,7 @@ internal class CdpDebugProcess(
         // (loading JS that instantiates the wasm module) and resuming
         // them prematurely would skip past breakpoint registration.
         if (wasmScriptSeen.get() && !hasWasm && !hasOurBreakpoint) {
-            LOG.info("CDP: auto-resuming pure JS/TS pause (no wasm frames, no our breakpoints)")
+            LOG.debug("CDP: auto-resuming pure JS/TS pause (no wasm frames, no our breakpoints)")
             scope.launch {
                 try {
                     cdp.send("Debugger.resume")
@@ -333,7 +331,7 @@ internal class CdpDebugProcess(
 
         if (reason == "other" && hitBreakpoints.isNullOrEmpty()) {
             // Pause from debugger statement or other non-breakpoint reason
-            LOG.info("CDP: positionReached for reason='other' (debugger statement or similar)")
+            LOG.debug("CDP: positionReached for reason='other'")
             ApplicationManager.getApplication().invokeLater {
                 session.positionReached(suspendContext)
             }
@@ -343,7 +341,7 @@ internal class CdpDebugProcess(
         if (!hitBreakpoints.isNullOrEmpty()) {
             val cdpBpId = hitBreakpoints[0]
             val ideBp = cdpBreakpointToIde[cdpBpId]
-            LOG.info("CDP: hitBreakpoint cdpId=$cdpBpId ideBp=${ideBp != null}")
+            LOG.debug("CDP: hitBreakpoint cdpId=$cdpBpId ideBp=${ideBp != null}")
             if (ideBp != null) {
                 // The breakpoint may have been hit in a wasm-bindgen
                 // wrapper frame rather than the real function. Use the
@@ -374,7 +372,7 @@ internal class CdpDebugProcess(
                 } else {
                     suspendContext
                 }
-                LOG.info("CDP: breakpointReached for ideBp at ${ideBp.sourcePosition}")
+                LOG.debug("CDP: breakpointReached for ideBp at ${ideBp.sourcePosition}")
                 ApplicationManager.getApplication().invokeLater {
                     session.breakpointReached(ideBp, null, correctedContext)
                 }
@@ -382,7 +380,7 @@ internal class CdpDebugProcess(
             }
         }
 
-        LOG.info("CDP: positionReached (fallthrough, reason=$reason hitBreakpoints=$hitBreakpoints)")
+        LOG.debug("CDP: positionReached (fallthrough, reason=$reason hitBreakpoints=$hitBreakpoints)")
         ApplicationManager.getApplication().invokeLater {
             session.positionReached(suspendContext)
         }
@@ -580,18 +578,18 @@ internal class CdpDebugProcess(
 
     internal fun registerBreakpointInCdp(breakpoint: XLineBreakpoint<WasmBreakpointProperties>) {
         val sourcePosition = breakpoint.sourcePosition ?: run {
-            LOG.info("CDP: registerBreakpoint skipped — no source position")
+            LOG.debug("CDP: registerBreakpoint skipped — no source position")
             return
         }
         val file = sourcePosition.file
         val line = sourcePosition.line
-        LOG.info("CDP: registerBreakpoint file=${file.path} line=$line")
+        LOG.debug("CDP: registerBreakpoint file=${file.path} line=$line")
 
         // If the CDP WebSocket isn't connected yet (breakpoint handler
         // fires during session setup before connect() completes), queue
         // the breakpoint for later registration.
         if (!cdp.connected) {
-            LOG.info("CDP: breakpoint queued as pending (WebSocket not connected yet)")
+            LOG.debug("CDP: breakpoint queued as pending (WebSocket not connected yet)")
             pendingWasmBreakpoints.add(breakpoint)
             return
         }
@@ -608,12 +606,12 @@ internal class CdpDebugProcess(
      */
     private suspend fun registerBreakpointInCdpSuspend(breakpoint: XLineBreakpoint<WasmBreakpointProperties>) {
         val sourcePosition = breakpoint.sourcePosition ?: run {
-            LOG.info("CDP: registerBreakpoint skipped — no source position")
+            LOG.debug("CDP: registerBreakpoint skipped — no source position")
             return
         }
         val file = sourcePosition.file
         val line = sourcePosition.line
-        LOG.info("CDP: registerBreakpoint (suspend) file=${file.path} line=$line")
+        LOG.debug("CDP: registerBreakpoint (suspend) file=${file.path} line=$line")
         registerBreakpointInCdpImpl(breakpoint, file, line)
     }
 
@@ -635,12 +633,12 @@ internal class CdpDebugProcess(
                 trySetBreakpointsViaDwarfByUrl(file, line)
             }
 
-            LOG.info("CDP: DWARF breakpoint results count=${results.size} (byUrl=${wasmScriptId == null})")
+            LOG.debug("CDP: DWARF breakpoint results count=${results.size} (byUrl=${wasmScriptId == null})")
             if (results.isNotEmpty()) {
                 val cdpIds = ideBreakpointToCdp.getOrPut(breakpoint) { mutableListOf() }
                 for (result in results) {
                     val breakpointId = result["breakpointId"] as? String ?: continue
-                    LOG.info("CDP: registered DWARF breakpoint cdpId=$breakpointId for ${file.name}:$line")
+                    LOG.debug("CDP: registered DWARF breakpoint cdpId=$breakpointId for ${file.name}:$line")
                     cdpBreakpointToIde[breakpointId] = breakpoint
                     cdpIds.add(breakpointId)
                 }
