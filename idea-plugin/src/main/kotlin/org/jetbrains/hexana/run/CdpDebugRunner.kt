@@ -26,7 +26,9 @@ import org.jetbrains.hexana.shared.WasmRunInput
 import org.jetbrains.hexana.shared.buildNodeJsRunArgs
 import org.jetbrains.hexana.shared.generateBrowserRunnerHtml
 import java.io.File
+import java.net.HttpURLConnection
 import java.net.InetSocketAddress
+import java.net.URI
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -346,7 +348,68 @@ class CdpDebugRunner : ProgramRunner<RunnerSettings> {
             )
         }
 
-        return BrowserPrepResult(handler, detectedWsUrl[0]!!, httpServer, tempUserDataDir)
+        // The WebSocket URL from Chrome's stderr is the *browser-level*
+        // endpoint which doesn't support Runtime/Debugger domains
+        // directly. We need the *page-level* WebSocket URL instead.
+        // Extract the debug port and query Chrome's /json endpoint to
+        // find the page target's webSocketDebuggerUrl.
+        val browserWsUrl = detectedWsUrl[0]!!
+        val pageWsUrl = discoverPageWebSocketUrl(browserWsUrl)
+            ?: throw ExecutionException(
+                "Failed to discover Chrome page debug target. " +
+                    "Browser WebSocket URL: $browserWsUrl"
+            )
+
+        return BrowserPrepResult(handler, pageWsUrl, httpServer, tempUserDataDir)
+    }
+
+    /**
+     * Queries Chrome's `/json` HTTP endpoint to discover the page-level
+     * WebSocket debugger URL. Chrome's browser-level WebSocket (printed
+     * to stderr) doesn't support per-page CDP domains like `Runtime`
+     * and `Debugger` — those require connecting to a specific target.
+     *
+     * Retries a few times because the page target may not appear
+     * immediately after Chrome starts.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun discoverPageWebSocketUrl(browserWsUrl: String): String? {
+        // Extract host and port from ws://host:port/devtools/browser/...
+        val uri = URI(browserWsUrl)
+        val host = uri.host ?: "127.0.0.1"
+        val port = uri.port.takeIf { it > 0 } ?: return null
+        val jsonUrl = "http://$host:$port/json"
+
+        repeat(PAGE_DISCOVERY_RETRIES) { attempt ->
+            try {
+                val conn = URI(jsonUrl).toURL().openConnection() as HttpURLConnection
+                conn.connectTimeout = 2_000
+                conn.readTimeout = 2_000
+                val body = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+
+                // Parse the JSON array of targets
+                val targets = com.google.gson.Gson().fromJson(
+                    body, List::class.java
+                ) as? List<Map<String, Any?>> ?: emptyList()
+
+                // Find the first "page" target with a webSocketDebuggerUrl
+                for (target in targets) {
+                    val type = target["type"] as? String
+                    if (type == "page") {
+                        val wsDebugUrl = target["webSocketDebuggerUrl"] as? String
+                        if (wsDebugUrl != null) {
+                            LOG.info("Discovered page WebSocket URL: $wsDebugUrl")
+                            return wsDebugUrl
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                LOG.debug("Page discovery attempt ${attempt + 1} failed: ${e.message}")
+            }
+            Thread.sleep(PAGE_DISCOVERY_INTERVAL_MS)
+        }
+        return null
     }
 
     private fun createDwarfResolver(configuration: WasmRunConfiguration): WasmDwarfVariableResolver? {
@@ -379,6 +442,8 @@ class CdpDebugRunner : ProgramRunner<RunnerSettings> {
 
         private const val NODE_DEBUG_READY_TIMEOUT_MS = 10_000L
         private const val CHROME_DEBUG_READY_TIMEOUT_MS = 15_000L
+        private const val PAGE_DISCOVERY_RETRIES = 10
+        private const val PAGE_DISCOVERY_INTERVAL_MS = 500L
 
         /** Matches WebSocket debug URLs printed by Node.js and Chrome. */
         private val WS_URL_REGEX =
