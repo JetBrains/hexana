@@ -115,6 +115,7 @@ public fun buildWasmChunkTree(parsed: WasmParsedBinary): WasmChunkTree {
                 appendFunctionChunks(chunks, provider, resolver, section as WasmSectionFunctions)
             WasmSectionKinds.CODE -> appendCodeChunks(chunks, provider, resolver)
             WasmSectionKinds.TYPE -> appendTypeChunks(chunks, provider, section as WasmSectionTypes)
+            WasmSectionKinds.CUSTOM -> appendCustomBody(chunks, headerId, section)
             else -> appendGenericRecords(chunks, kind, records)
         }
     }
@@ -220,6 +221,32 @@ private fun appendTypeChunks(
     }
 }
 
+/**
+ * One Element per custom section, covering the section content (name + raw
+ * payload). Rendered like a Data entry — `offset hex name` header plus a
+ * foldable body with the u8/u16/u32/u64/ascii/utf8 encodings — by the
+ * renderer's `buildCustomRows`. The id is keyed on [sectionOffset] (unique per
+ * section, distinct from the section header's Symbolic id so LazyColumn keys
+ * don't collide); the renderer addresses the body via byteRange, not index.
+ */
+private fun appendCustomBody(
+    chunks: MutableList<BinaryChunk>,
+    headerId: ChunkId,
+    section: WasmSection,
+) {
+    if (section.contentSize <= 0) return
+    val name = (headerId as? ChunkId.Symbolic)?.name
+        ?: WasmSectionKinds.displayName(WasmSectionKinds.CUSTOM)
+    chunks += BinaryChunk.Element(
+        id = ChunkId.Indexed(WasmSectionKinds.CUSTOM, section.sectionOffset),
+        byteRange = section.contentOffset.toLong()..(section.contentOffset + section.contentSize - 1).toLong(),
+        estimatedLines = 1,
+        kind = WasmSectionKinds.CUSTOM,
+        indexInSection = 0,
+        displayName = name,
+    )
+}
+
 private fun appendCodeChunks(
     chunks: MutableList<BinaryChunk>,
     provider: WasmBinaryProvider,
@@ -274,6 +301,7 @@ private fun elementCountFor(
         with(s) { provider.bytes.parseTypes() }
             .sumOf { if (it is WasmRecursiveTypeRecord) it.entries.size else 1 }
     } ?: 0
+    WasmSectionKinds.CUSTOM -> if (section.contentSize > 0) 1 else 0
     else -> records.size
 }
 

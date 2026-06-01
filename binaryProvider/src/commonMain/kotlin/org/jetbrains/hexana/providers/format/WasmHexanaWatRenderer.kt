@@ -180,6 +180,17 @@ public class WasmHexanaWatRenderer(
                 viewMode = dataViewMode,
             )
         }
+        // Custom-section body: header (offset + hex + name) + expander + raw
+        // payload rows in the requested view mode — same foldable, multi-
+        // encoding (u8/u16/u32/u64/ascii/utf8) representation as Data entries.
+        if (chunk.kind == WasmSectionKinds.CUSTOM) {
+            return buildCustomRows(
+                snapshot = snapshot,
+                chunk = chunk,
+                headerTokens = rawRows.firstOrNull() ?: emptyList(),
+                viewMode = dataViewMode,
+            )
+        }
         // Import-section rows: header (always shown — the single-line
         // `(import "mod" "name" (func (type N)))` form) + expander + 3
         // descriptor rows (module slice, symbol slice, type slice).
@@ -520,6 +531,7 @@ public class WasmHexanaWatRenderer(
             WasmSectionKinds.TYPE -> renderTypeElement(chunk, source, tokens)
             WasmSectionKinds.FUNCTION -> renderFunctionElement(chunk, source, tokens)
             WasmSectionKinds.DATA -> renderDataElement(chunk, source, tokens)
+            WasmSectionKinds.CUSTOM -> renderCustomElement(chunk, source, tokens)
             else -> renderInlineHexElement(chunk, source, tokens)
         }
     }
@@ -1043,12 +1055,53 @@ public class WasmHexanaWatRenderer(
         // ULEB) — between expander and body so the descriptor bytes are
         // visually split from the data bytes the user asked for.
         out += buildDescriptorRows(chunk, record, source)
-        val dataStart = dataPayloadStart(chunk, record)
+        out += byteBodyRows(source, dataPayloadStart(chunk, record), byteCount, viewMode)
+        return out
+    }
+
+    /**
+     * Custom-section body rows, mirroring the Data-entry layout: header
+     * (offset + hex + name comment) + an expander + raw content bytes in the
+     * requested [viewMode]. Reuses the Data RowKinds so [ChunkRow] folds it
+     * and shows the u8/u16/u32/u64/ascii/utf8 mode bar with no extra UI. The
+     * whole section content (name string included) is shown as raw bytes;
+     * the name is decoded into the header comment.
+     */
+    private fun buildCustomRows(
+        snapshot: BinaryDocumentSnapshot,
+        chunk: BinaryChunk.Element,
+        headerTokens: List<RenderToken>,
+        viewMode: DataViewMode,
+    ): List<RenderedRow> {
+        val out = ArrayList<RenderedRow>(2 + DATA_BODY_ROW_CAP)
+        out += RenderedRow(tokens = headerTokens, kind = RowKind.DataHeader)
+        val byteCount = (chunk.byteRange.last - chunk.byteRange.first + 1L).toInt().coerceAtLeast(0)
+        if (byteCount == 0) return out
+        out += RenderedRow(
+            tokens = listOf(RenderToken("", RenderTokenKind.COMMENT)),
+            kind = RowKind.DataExpander(byteCount),
+        )
+        out += byteBodyRows(snapshot.byteSource(), chunk.byteRange.first, byteCount, viewMode)
+        return out
+    }
+
+    /**
+     * Body rows for a contiguous byte range in the requested [viewMode], one
+     * per [bytesPerRow], capped at [DATA_BODY_ROW_CAP] with an elision row.
+     * Shared by Data entries and custom sections.
+     */
+    private fun byteBodyRows(
+        source: ByteSource,
+        start: Long,
+        byteCount: Int,
+        viewMode: DataViewMode,
+    ): List<RenderedRow> {
+        val out = ArrayList<RenderedRow>()
         val bytesPerRow = bytesPerRow(viewMode)
         val totalRows = (byteCount + bytesPerRow - 1) / bytesPerRow
         val renderedRows = minOf(totalRows, DATA_BODY_ROW_CAP)
         for (r in 0 until renderedRows) {
-            val rowStart = dataStart + (r.toLong() * bytesPerRow.toLong())
+            val rowStart = start + (r.toLong() * bytesPerRow.toLong())
             val len = minOf(bytesPerRow, byteCount - r * bytesPerRow)
             out += RenderedRow(
                 tokens = dataBodyRowTokens(rowStart, source, len, viewMode),
@@ -1066,6 +1119,18 @@ public class WasmHexanaWatRenderer(
             )
         }
         return out
+    }
+
+    private fun renderCustomElement(
+        chunk: BinaryChunk.Element,
+        source: ByteSource,
+        tokens: MutableList<RenderToken>,
+    ) {
+        emitOffsetGutter(chunk.byteRange.first, tokens)
+        emitChunkHexColumn(chunk, source, tokens)
+        val byteCount = (chunk.byteRange.last - chunk.byteRange.first + 1L).toInt().coerceAtLeast(0)
+        val name = chunk.displayName ?: "custom"
+        tokens += comment("(; \"$name\"  ${formatByteCount(byteCount)} ;)")
     }
 
     private fun bytesPerRow(mode: DataViewMode): Int = when (mode) {
