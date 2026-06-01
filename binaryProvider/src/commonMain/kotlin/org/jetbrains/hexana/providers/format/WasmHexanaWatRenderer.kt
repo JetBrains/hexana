@@ -1487,7 +1487,8 @@ public class WasmHexanaWatRenderer(
         out += punct(")")
         if (record.superTypes.isNotEmpty()) {
             out += space()
-            out += comment("(; sub ${record.superTypes.joinToString(",")}${if (record.isFinal) " final" else ""} ;)")
+            val supers = record.superTypes.joinToString(",") { "\$type$it" }
+            out += comment("(; sub $supers${if (record.isFinal) " final" else ""} ;)")
         }
     }
 
@@ -1598,7 +1599,7 @@ public class WasmHexanaWatRenderer(
         is WasmNoExternRefHeapType -> "noextern"
         is WasmNoFuncHeapType -> "nofunc"
         is WasmNoExnHeapType -> "noexn"
-        is WasmIndexHeapType -> heap.type.toString()
+        is WasmIndexHeapType -> "\$type${heap.type}"
         is WasmAbsHeapType -> "abs?"
     }
 
