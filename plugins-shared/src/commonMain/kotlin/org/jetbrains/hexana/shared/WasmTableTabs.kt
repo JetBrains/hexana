@@ -125,6 +125,11 @@ private fun functionsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
     val functionNamesMap = nameSection?.functionSubsection?.namemap
     val typeNames = nameSection?.typesSection?.namemap
 
+    // The name section's function subsection is keyed by the GLOBAL function index (imported
+    // functions occupy [0, importFuncCount), defined functions follow), whereas this table's row
+    // index is 0-based over defined functions only. Convert before indexing the name map.
+    val importFuncCount = provider.importFuncCount
+
     return TableTabDescriptor(
         name = "Functions",
         columns = buildList {
@@ -133,7 +138,7 @@ private fun functionsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
                     name = "Name",
                     widthBehavior = ColumnWidth.Measured(UNIVERSAL_NAME_MEASURE),
                 ) { index ->
-                    val nameResolved = resolveFunctionName(functionNamesMap, index)
+                    val nameResolved = resolveFunctionName(functionNamesMap, importFuncCount + index)
                     CellValue(
                         nameResolved,
                         tooltip = nameResolved.takeIf { it.length > UNIVERSAL_NAME_MEASURE.length },

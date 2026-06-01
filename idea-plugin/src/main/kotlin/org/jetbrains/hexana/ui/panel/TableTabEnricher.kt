@@ -73,7 +73,7 @@ internal fun List<TableTabDescriptor>.enrichWasmTabs(
 ): List<TableTabDescriptor> = map { tab ->
     when (tab.name) {
         "Exports" -> enrichWasmExportsTab(tab, provider, provider.file, hexViewState.project)
-        "Functions" -> enrichWasmFunctionsTab(tab, provider, { fIdx ->
+        "Functions" -> enrichWasmFunctionsTab(tab, provider, hexViewState.project, { fIdx ->
             pathsNavigationState.targetFuncIndex = fIdx
             hexViewState.requestSelectTabByDescription("Dominators")
         }, {
@@ -187,11 +187,16 @@ private fun validateWasmArg(text: String, type: WasmValueType<*>): ValidationInf
 private fun enrichWasmFunctionsTab(
     tab: TableTabDescriptor,
     provider: WasmBinaryProvider,
+    project: Project,
     onShowPaths: ((funcIndex: Int) -> Unit)?,
     unreachableFuncIndicesProvider: () -> Set<Int>,
 ): TableTabDescriptor {
     val nameSection = provider.nameSection
     val functionNamesMap = nameSection?.functionSubsection?.namemap
+
+    // Row index is 0-based over defined functions; garbage/name data is keyed by the GLOBAL
+    // function index (imports first), so shift by importFuncCount when crossing into that space.
+    val importFuncCount = provider.importFuncCount
 
     // Wrap the Name column's cell provider to prefix "●" for unreachable functions.
     val enrichedColumns = if (functionNamesMap != null) {
@@ -202,7 +207,7 @@ private fun enrichWasmFunctionsTab(
                     widthBehavior = col.widthBehavior,
                 ) { index ->
                     val original = col.cellProvider(index)
-                    val unreachable = index in unreachableFuncIndicesProvider()
+                    val unreachable = (importFuncCount + index) in unreachableFuncIndicesProvider()
                     if (unreachable) {
                         val displayName = "\u25CF ${original.representation}"
                         CellValue(
@@ -217,6 +222,23 @@ private fun enrichWasmFunctionsTab(
         }
     } else tab.columns
 
+    // For GraalVM Web Image (Java→WASM) modules, offer a per-row badge that jumps to the
+    // corresponding Java method's bytecode. Hidden for rows whose function name does not
+    // demangle to a resolvable (non-synthetic) Java symbol.
+    val graalAction = if (provider.graalWebImageInfo.isWebImage) {
+        RowActionDescriptor(
+            label = "Java",
+            tooltipProvider = { index ->
+                val symbol = provider.graalSymbolFor(importFuncCount + index)
+                if (symbol != null && !symbol.isSynthetic) "Go to Java bytecode: ${symbol.display()}" else null
+            },
+            action = { index ->
+                val symbol = provider.graalSymbolFor(importFuncCount + index) ?: return@RowActionDescriptor
+                if (!symbol.isSynthetic) GraalSymbolNavigator.navigateToBytecode(project, symbol)
+            },
+        )
+    } else null
+
     return TableTabDescriptor(
         name = tab.name,
         columns = enrichedColumns,
@@ -224,6 +246,7 @@ private fun enrichWasmFunctionsTab(
         defaultSortColumn = tab.defaultSortColumn,
         defaultSortAscending = tab.defaultSortAscending,
         rowSelectionProvider = tab.rowSelectionProvider,
+        rowAction = graalAction,
         contextMenuItems = if (onShowPaths != null) {
             listOf(
                 RowContextMenuItemDescriptor(

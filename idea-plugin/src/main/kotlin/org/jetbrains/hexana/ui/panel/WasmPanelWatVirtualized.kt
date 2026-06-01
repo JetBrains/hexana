@@ -85,12 +85,15 @@ import org.jetbrains.hexana.providers.format.WasmParsedBinary
 import org.jetbrains.hexana.providers.format.WasmSectionKinds
 import org.jetbrains.hexana.providers.format.buildWasmChunkTree
 import com.intellij.openapi.actionSystem.IdeActions
+import com.intellij.openapi.project.Project
 import org.jetbrains.hexana.ui.HexanaTheme
+import org.jetbrains.hexana.wasm.analysis.GraalJavaSymbol
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.Orientation
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.Tooltip
 
 /**
  * PR 1 of the new virtualized WAT viewer. Compose `LazyColumn` over the
@@ -106,7 +109,7 @@ import org.jetbrains.jewel.ui.component.Text
 @Composable
 internal fun WasmPanelWatVirtualized(
     provider: WasmBinaryProvider,
-    @Suppress("UNUSED_PARAMETER") state: HexViewStateHolder,
+    state: HexViewStateHolder,
     editableDoc: EditableBinaryDocument? = null,
     /**
      * LazyColumn scroll state. When supplied externally (typical case from
@@ -171,6 +174,7 @@ internal fun WasmPanelWatVirtualized(
     }
     WasmPanelWatVirtualizedContent(
         panelState = ready,
+        project = state.project,
         editableDoc = editableDoc,
         listState = listState,
         foldedSectionsExternal = foldedSectionsExternal,
@@ -182,6 +186,7 @@ internal fun WasmPanelWatVirtualized(
 @Composable
 private fun WasmPanelWatVirtualizedContent(
     panelState: PanelState,
+    project: Project,
     editableDoc: EditableBinaryDocument?,
     listState: LazyListState?,
     foldedSectionsExternal: MutableState<Set<ChunkId>>?,
@@ -472,6 +477,7 @@ private fun WasmPanelWatVirtualizedContent(
                                         renderer = renderer,
                                         snapshot = snapshot,
                                         provider = provider,
+                                        project = project,
                                         editableDoc = editableDoc,
                                         focusMap = focusMap,
                                         onCrossChunkUp = navUp,
@@ -643,6 +649,11 @@ private fun ChunkRow(
     renderer: WasmHexanaWatRenderer,
     snapshot: BinaryDocumentSnapshot,
     provider: WasmBinaryProvider,
+    /**
+     * Project for the GraalVM Web Image "Java" badge's navigate-to-bytecode
+     * action. Null in non-IDE / preview callers, which simply omit the badge.
+     */
+    project: Project? = null,
     editableDoc: EditableBinaryDocument?,
     /**
      * Panel-level map of `(chunkId, rowIdx) → FocusRequester`. ChunkRow
@@ -708,6 +719,18 @@ private fun ChunkRow(
     val viewMode = dataChunkViewModes?.value?.get(chunk.id) ?: DataViewMode.U8_HEX
     val rows = remember(chunk.id, renderer, snapshot, viewMode) {
         renderer.renderRows(snapshot, chunk, viewMode)
+    }
+    // GraalVM Web Image: resolve this code chunk's function to a Java symbol
+    // once. Null for non-Web-Image modules, stripped/minified names, synthetic
+    // (lambda) symbols, or non-code chunks — in all those cases no badge shows.
+    // Code-chunk indexInSection is defined-local; the name map is global-keyed.
+    val graalSymbol: GraalJavaSymbol? = if (project != null && chunk.kind == WasmSectionKinds.CODE) {
+        remember(chunk.id, provider) {
+            provider.graalSymbolFor(provider.importFuncCount + chunk.indexInSection)
+                ?.takeIf { !it.isSynthetic }
+        }
+    } else {
+        null
     }
     // Per-row "open insert below" state — survives recompositions until
     // the chunk rebuilds (after a successful commit). Map<rowIndex, true>
@@ -855,24 +878,36 @@ private fun ChunkRow(
                 }
                 else -> null
             }
-            RenderedRowView(
-                row = row,
-                chunkId = chunk.id,
-                rowIndex = rowIndex,
-                editableDoc = editableDoc,
-                provider = provider,
-                chunk = chunk,
-                onEnterRequestInsert = if (editableDoc != null && row.editable?.kind == EditableRowInfo.Kind.OPCODE) {
-                    { insertOpen[rowIndex] = true }
-                } else {
-                    null
-                },
-                focusRequester = focusRequesters[rowIndex],
-                onArrowUp = onArrowUp,
-                onArrowDown = onArrowDown,
-                isAppendedFunc = isAppendedFunc,
-                onFollow = onFollow,
-            )
+            val rowView = @Composable {
+                RenderedRowView(
+                    row = row,
+                    chunkId = chunk.id,
+                    rowIndex = rowIndex,
+                    editableDoc = editableDoc,
+                    provider = provider,
+                    chunk = chunk,
+                    onEnterRequestInsert = if (editableDoc != null && row.editable?.kind == EditableRowInfo.Kind.OPCODE) {
+                        { insertOpen[rowIndex] = true }
+                    } else {
+                        null
+                    },
+                    focusRequester = focusRequesters[rowIndex],
+                    onArrowUp = onArrowUp,
+                    onArrowDown = onArrowDown,
+                    isAppendedFunc = isAppendedFunc,
+                    onFollow = onFollow,
+                )
+            }
+            // The "Java" badge sits inline on the function's header row (the
+            // first rendered row of a code chunk) for Web Image modules.
+            if (graalSymbol != null && project != null && rowIndex == 0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    rowView()
+                    GraalJavaBadge(symbol = graalSymbol, project = project)
+                }
+            } else {
+                rowView()
+            }
             val editable = row.editable
             if (insertOpen[rowIndex] == true && editableDoc != null && editable != null) {
                 InsertedInstructionRow(
@@ -887,6 +922,29 @@ private fun ChunkRow(
                 )
             }
         }
+    }
+}
+
+/**
+ * Small clickable "Java" pill shown inline on a GraalVM Web Image function's
+ * header row. Click navigates to the resolved Java method's bytecode via
+ * [GraalSymbolNavigator]. The tooltip shows the demangled Java signature.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GraalJavaBadge(symbol: GraalJavaSymbol, project: Project) {
+    val badgeBg = if (JewelTheme.isDark) Color(0xFF394A5E) else Color(0xFFDCE7F7)
+    val badgeFg = if (JewelTheme.isDark) Color(0xFFB7C9E2) else Color(0xFF2A4D80)
+    Tooltip(tooltip = { Text("Go to Java bytecode: ${symbol.display()}") }) {
+        Text(
+            text = "Java",
+            style = ROW_TEXT_STYLE.copy(color = badgeFg, fontSize = 10.sp),
+            modifier = Modifier
+                .padding(start = 8.dp)
+                .background(badgeBg, RoundedCornerShape(4.dp))
+                .clickable { GraalSymbolNavigator.navigateToBytecode(project, symbol) }
+                .padding(horizontal = 6.dp, vertical = 1.dp),
+        )
     }
 }
 

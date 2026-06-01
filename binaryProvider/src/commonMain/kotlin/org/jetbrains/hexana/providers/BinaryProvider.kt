@@ -39,6 +39,10 @@ import org.jetbrains.hexana.providers.pe.PeSection
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
+import org.jetbrains.hexana.wasm.analysis.GraalJavaSymbol
+import org.jetbrains.hexana.wasm.analysis.GraalSymbolDemangler
+import org.jetbrains.hexana.wasm.analysis.GraalWebImageDetector
+import org.jetbrains.hexana.wasm.analysis.GraalWebImageInfo
 import org.jetbrains.hexana.wasm.analysis.MonosAnalyzer
 import org.jetbrains.hexana.wasm.analysis.MonosResult
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
@@ -575,6 +579,26 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
                 bytes.parseAsNameSection()
             }
         }
+    }
+
+    /**
+     * Whether this module was produced by GraalVM Web Image (Java→WASM), detected via the
+     * `interop`/`jsbody`/`compat` import-module fingerprint. See [GraalWebImageDetector].
+     */
+    val graalWebImageInfo: GraalWebImageInfo by lazy {
+        val module = wasmModule ?: return@lazy GraalWebImageInfo.NOT_WEB_IMAGE
+        GraalWebImageDetector.detect(module, bytes)
+    }
+
+    /**
+     * Best-effort Java symbol for a global function index (imports first, then defined functions),
+     * available only when this is a Web Image module that retained function names. Returns `null`
+     * for non-Web-Image modules, stripped names, or names that are not compiled Java methods.
+     */
+    fun graalSymbolFor(functionIndex: Int): GraalJavaSymbol? {
+        if (!graalWebImageInfo.canResolveSymbols) return null
+        val mangled = nameSection?.functionSubsection?.namemap?.get(functionIndex) ?: return null
+        return GraalSymbolDemangler.demangle(mangled)
     }
 
     val codeRecords: List<WasmCodeRecord> by lazy {

@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- GraalVM Web Image: `.wasm` modules compiled from Java via Web Image (`native-image --tool:svm-wasm`) are detected by their `interop`/`jsbody`/`compat` import fingerprint. Functions whose names demangle to a Java method get a "Java" badge — in the Functions tab and inline on each code-section entry in the WAT (virtualized) view — that opens the corresponding method's bytecode. Available when the module retained function names (built with debug names); stripped/minified and Graal-internal functions are left unbadged
 - jitview: the `.jit` view splits into Combined / Bytecode / Machine Code tabs, each with multiline selection and copy (full text / bytecode / hex / instruction bytes), a per-tab Go-To-Offset, and a symbol-name header showing the current method; the Machine Code tab can copy offset + instruction bytes
 - jitview: search compiled methods by inlined callee with `in:<method>` — surfaces every nmethod that inlined the given method, using the JVMTI inline records in the dump
 - JIT Viewer: new "Instrument JMH forks" option attaches the dump agent to each forked JMH benchmark JVM via a bundled `-javaagent`, writing one `ClassName_method.jit` per benchmark; because it rides on JVM options (not JMH's `-prof`) it works for any JMH run type — the IDE gutter run, the Gradle JMH plugin, and `org.openjdk.jmh.Main`
@@ -16,6 +17,7 @@
 ### Removed
 
 ### Fixed
+- Functions tab: the Name column and the unreachable `●` marker were keyed by the defined-function row index rather than the global function index, so for modules with function imports both were shifted by the import count; they now resolve the correct name and reachability for every row
 - WAT (virtualized): opening a large WasmGC binary no longer hangs the IDE. The type section's single `(rec …)` group (tens of thousands of types) was rendered as one multi-megabyte row, freezing the UI thread in text layout; it now folds to a collapsible group with each type as a separate virtualized row, and the view's model is built off the UI thread
 
 ### Security
