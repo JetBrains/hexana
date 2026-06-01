@@ -181,6 +181,7 @@ export function resolveRuntimeExecutable(
     wasmtimePath?: string,
     wamrPath?: string,
     graalVmHome?: string,
+    nodePath?: string,
 ): string | null;
 
 /**

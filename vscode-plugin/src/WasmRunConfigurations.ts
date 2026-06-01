@@ -741,14 +741,14 @@ export async function runExport(
 
     const isComponent = message.isComponent && message.componentImports && message.componentImports.length > 0;
 
-    let runtime: "wasmtime" | "wamr" | "graalwasm" | "browser";
+    let runtime: "wasmtime" | "wamr" | "graalwasm" | "browser" | "nodejs";
     let action: "run" | "debug";
 
     // When the webview dialog already collected a runtime and action,
     // use them directly and skip the native VS Code picker.
     if (message.runtime && message.action) {
         const rawRuntime = message.runtime as string;
-        runtime = (rawRuntime === "wasmtime" || rawRuntime === "wamr" || rawRuntime === "graalwasm" || rawRuntime === "browser") ? rawRuntime : "wasmtime";
+        runtime = (rawRuntime === "wasmtime" || rawRuntime === "wamr" || rawRuntime === "graalwasm" || rawRuntime === "browser" || rawRuntime === "nodejs") ? rawRuntime : "wasmtime";
         action = message.action === "debug" ? "debug" : "run";
     } else {
         const configured = getSelectedRuntime();
