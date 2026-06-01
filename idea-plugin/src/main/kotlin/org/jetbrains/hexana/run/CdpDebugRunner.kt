@@ -10,8 +10,10 @@ import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessAdapter
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessTerminatedListener
+import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.runners.ExecutionEnvironment
-import com.intellij.execution.runners.ProgramRunner
+import com.intellij.execution.runners.GenericProgramRunner
+import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.util.Key
@@ -35,7 +37,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
 /**
- * A [ProgramRunner] that handles the **Debug** executor for
+ * A [GenericProgramRunner] that handles the **Debug** executor for
  * [WasmRunConfiguration] when the selected engine is **Browser** (Chrome)
  * or **Node.js**.
  *
@@ -50,7 +52,7 @@ import kotlin.random.Random
  * directory. The runner discovers the WebSocket debug URL from
  * Chrome's `/json/version` endpoint and connects a CDP debug session.
  */
-class CdpDebugRunner : ProgramRunner<RunnerSettings> {
+class CdpDebugRunner : GenericProgramRunner<RunnerSettings>() {
 
     override fun getRunnerId(): String = RUNNER_ID
 
@@ -60,11 +62,11 @@ class CdpDebugRunner : ProgramRunner<RunnerSettings> {
         return config.engine == WasmEngine.BROWSER || config.engine == WasmEngine.NODE_JS
     }
 
-    override fun execute(environment: ExecutionEnvironment) {
+    override fun doExecute(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor? {
         val configuration = environment.runProfile as? WasmRunConfiguration
             ?: throw ExecutionException("Expected WasmRunConfiguration")
 
-        when (configuration.engine) {
+        return when (configuration.engine) {
             WasmEngine.NODE_JS -> doExecuteNodeJs(configuration, environment)
             WasmEngine.BROWSER -> doExecuteBrowser(configuration, environment)
             else -> throw ExecutionException("CDP debug is not supported for ${configuration.engine.displayName}")
@@ -76,7 +78,7 @@ class CdpDebugRunner : ProgramRunner<RunnerSettings> {
     private fun doExecuteNodeJs(
         configuration: WasmRunConfiguration,
         environment: ExecutionEnvironment,
-    ) {
+    ): RunContentDescriptor? {
         val prep = ProgressManager.getInstance()
             .runProcessWithProgressSynchronously(
                 ThrowableComputable { prepareNodeJsSession(configuration) },
@@ -109,12 +111,10 @@ class CdpDebugRunner : ProgramRunner<RunnerSettings> {
             }
         }
 
-        XDebuggerManager.getInstance(environment.project)
-            .newSessionBuilder(starter)
-            .environment(environment)
-            .sessionName(environment.runProfile.name)
-            .showTab(true)
-            .startSession()
+        val session = XDebuggerManager.getInstance(environment.project)
+            .startSession(environment, starter)
+
+        return session.runContentDescriptor
     }
 
     private class NodeJsPrepResult(
@@ -197,7 +197,7 @@ class CdpDebugRunner : ProgramRunner<RunnerSettings> {
     private fun doExecuteBrowser(
         configuration: WasmRunConfiguration,
         environment: ExecutionEnvironment,
-    ) {
+    ): RunContentDescriptor? {
         val prep = ProgressManager.getInstance()
             .runProcessWithProgressSynchronously(
                 ThrowableComputable { prepareBrowserSession(configuration) },
@@ -230,12 +230,10 @@ class CdpDebugRunner : ProgramRunner<RunnerSettings> {
             }
         }
 
-        XDebuggerManager.getInstance(environment.project)
-            .newSessionBuilder(starter)
-            .environment(environment)
-            .sessionName(environment.runProfile.name)
-            .showTab(true)
-            .startSession()
+        val session = XDebuggerManager.getInstance(environment.project)
+            .startSession(environment, starter)
+
+        return session.runContentDescriptor
     }
 
     private class BrowserPrepResult(
