@@ -24,8 +24,11 @@ sealed class LldbStopEvent {
 private val BREAKPOINT_STOP_PATTERN =
     """thread #(\d+).*stop reason = breakpoint (\d+\.\d+)""".toRegex()
 
+private val THREAD_ID_PATTERN =
+    """thread #(\d+)""".toRegex()
+
 private val EXIT_PATTERN =
-    """Process \d+ exited with status = (\d+)""".toRegex()
+    """Process \d+ exited with status = (-?\d+)""".toRegex()
 
 /**
  * Parses a single LLDB output line looking for a stop reason.
@@ -64,7 +67,8 @@ fun parseLldbStopEvent(line: String): LldbStopEvent? {
                 breakpointId = match.groupValues[2],
             )
         } else {
-            LldbStopEvent.BreakpointHit(threadId = 1, breakpointId = "")
+            val tid = THREAD_ID_PATTERN.find(trimmed)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+            LldbStopEvent.BreakpointHit(threadId = tid, breakpointId = "")
         }
     }
     if (trimmed.contains("stop reason = signal SIGSTOP")) {

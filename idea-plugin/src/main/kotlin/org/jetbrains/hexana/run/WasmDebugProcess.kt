@@ -8,6 +8,7 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugSession
@@ -119,15 +120,49 @@ open class WasmDebugProcess(
             // registered by the platform (registerBreakpoint() is called before
             // sessionInitialized()), so LLDB has the breakpoints in place
             // before wasmtime begins execution.
-            //
-            // We use `run` (not `process launch --stop-at-entry`) because
-            // LLDB's JIT loader plugin resolves pending breakpoints during
-            // process execution as wasmtime JIT-compiles the Wasm module.
-            // With `--stop-at-entry`, the process stops at the native
-            // entry point (`_dyld_start`) before wasmtime has even started,
-            // so breakpoints remain permanently pending.
-            lldb.runProcess()
-            startEventLoop()
+            if (SystemInfo.isWindows) {
+                // On Windows, LLDB's JIT loader GDB plugin does not
+                // automatically process JIT debug symbols registered via
+                // the GDB JIT interface. We work around this by:
+                //   1. Removing user breakpoints (they can't resolve yet).
+                //   2. Setting a breakpoint on `__jit_debug_register_code`
+                //      — the GDB JIT interface entry wasmtime calls after
+                //      JIT-compiling a module and registering debug symbols.
+                //   3. Launching the process; each time the JIT breakpoint
+                //      fires, manually reading __jit_debug_descriptor from
+                //      the inferior's memory, extracting the in-memory ELF
+                //      object, writing it to a temp file, and loading it
+                //      into LLDB via target modules add. Then re-adding
+                //      file/line breakpoints which can now resolve against
+                //      the manually loaded debug info.
+                //   4. Once resolved, resuming execution.
+                //
+                // This entire flow runs on a background thread so
+                // sessionInitialized() returns immediately and the UI
+                // stays responsive.
+                lldb.removeAllBreakpoints()
+                lldb.sendBreakpointOnFunction(JIT_REGISTER_FUNCTION)
+                lldb.runProcess()
+                Thread {
+                    try {
+                        windowsJitBreakpointSetup(lldb)
+                    } catch (e: Exception) {
+                        LOG.warn("Windows JIT breakpoint setup failed", e)
+                    }
+                    startEventLoop()
+                }.apply {
+                    name = "Hexana-Windows-JIT-Setup"
+                    isDaemon = true
+                    start()
+                }
+            } else {
+                // On macOS/Linux, LLDB's JIT loader plugin resolves
+                // pending breakpoints during process execution as
+                // wasmtime JIT-compiles the Wasm module. A simple
+                // `run` is sufficient.
+                lldb.runProcess()
+                startEventLoop()
+            }
         }
     }
 
@@ -163,9 +198,69 @@ open class WasmDebugProcess(
      */
     protected fun replayBreakpointsToLldb() {
         for ((_, loc) in registeredBreakpoints) {
-            val baseName = loc.first.substringAfterLast('/')
+            val baseName = loc.first.substringAfterLast('/').substringAfterLast('\\')
             lldb?.sendBreakpoint(baseName, loc.second)
         }
+    }
+
+    /**
+     * On Windows, loops through `__jit_debug_register_code` hits and
+     * manually loads JIT debug objects from the inferior's memory into
+     * LLDB (since the built-in JIT loader doesn't work on Windows).
+     * After loading each object, searches its line tables via the
+     * Python API for addresses matching user breakpoints and sets
+     * address breakpoints directly. Once resolved (or attempts
+     * exhausted), resumes the process.
+     *
+     * Must be called from a background thread — this method blocks
+     * while waiting for stop events.
+     */
+    private fun windowsJitBreakpointSetup(lldb: LldbCommunicator) {
+        val breakpointFiles = registeredBreakpoints.values.map { (path, line) ->
+            val baseName = path.substringAfterLast('/').substringAfterLast('\\')
+            baseName to line
+        }
+
+        val tempDir = java.nio.file.Files.createTempDirectory("hexana-jit").toAbsolutePath().toString()
+
+        var resolved = false
+        for (attempt in 1..MAX_JIT_REGISTER_ATTEMPTS) {
+            val jitEvent = lldb.waitForStopEvent(WINDOWS_JIT_WAIT_TIMEOUT_MS)
+            LOG.info("Windows wasmtime: JIT register attempt=$attempt event=$jitEvent")
+            if (jitEvent == null || jitEvent is LldbCommunicator.StopEvent.ProcessExited) {
+                LOG.warn("Windows wasmtime: process exited or timeout before breakpoints resolved")
+                break
+            }
+            // Read the descriptor at the breakpoint hit. If action=0
+            // (initialization) or entries are empty, skip and wait for
+            // the next hit — do NOT step out, as that would run past
+            // subsequent __jit_debug_register_code calls.
+            lldb.removeAllBreakpoints()
+            val addresses = lldb.loadJitObjectAndResolveBreakpoints(tempDir, breakpointFiles)
+            if (addresses.isNotEmpty()) {
+                LOG.info("Windows wasmtime: breakpoints resolved after attempt $attempt at $addresses")
+                resolved = true
+                break
+            }
+            // No matches yet — re-add the JIT function breakpoint
+            // and continue to the next hit.
+            lldb.sendBreakpointOnFunction(JIT_REGISTER_FUNCTION)
+            lldb.resume()
+        }
+
+        if (!resolved) {
+            LOG.warn("Windows wasmtime: breakpoints did not resolve after $MAX_JIT_REGISTER_ATTEMPTS attempts, continuing with pending breakpoints")
+            // The process may still be stopped (last loop iteration
+            // didn't resume) or already running (if the loop broke
+            // out after a timeout/exit). Interrupt to ensure we can
+            // set breakpoints, then replay and resume.
+            lldb.pause()
+            // Give LLDB a moment to process the interrupt.
+            lldb.waitForStopEvent(2_000)
+            lldb.removeAllBreakpoints()
+            replayBreakpointsToLldb()
+        }
+        lldb.resume()
     }
 
     /**
@@ -282,7 +377,7 @@ open class WasmDebugProcess(
         // Remove all and re-add remaining breakpoints using basenames.
         lldb?.removeAllBreakpoints()
         for ((_, loc) in registeredBreakpoints) {
-            val baseName = loc.first.substringAfterLast('/')
+            val baseName = loc.first.substringAfterLast('/').substringAfterLast('\\')
             lldb?.sendBreakpoint(baseName, loc.second)
         }
     }
@@ -440,6 +535,37 @@ open class WasmDebugProcess(
     }
 
     private fun handleStopImpl(communicator: LldbCommunicator, event: LldbCommunicator.StopEvent) {
+        // On Windows, Exception 0x80000003 stops may fire on system
+        // threads (e.g. thread 5 in ntdll.dll!DbgBreakPoint) that are
+        // unrelated to Wasm execution. These have an empty breakpointId
+        // (the LLDB output doesn't match "breakpoint N.M") and a
+        // non-main thread. Select thread 1 before querying frame info
+        // so we inspect the wasmtime main thread, not a system thread.
+        // If the stop is genuinely on a non-main thread in a system
+        // DLL, just resume without advancing PC.
+        if (SystemInfo.isWindows &&
+            event is LldbCommunicator.StopEvent.BreakpointHit &&
+            event.breakpointId.isEmpty() &&
+            event.threadId != 1
+        ) {
+            // Check if this is a system DLL stop (e.g. ntdll.dll,
+            // kernelbase.dll). Query frame info on the stopped thread
+            // first to see where we are.
+            val sysLines = communicator.sendCommandAndCollectOutput("frame info")
+            val frameDesc = sysLines.joinToString(" ")
+            if (frameDesc.contains(".dll") || frameDesc.contains(".DLL")) {
+                LOG.info(
+                    "Ignoring Exception 0x80000003 on system thread " +
+                        "${event.threadId}: $frameDesc — resuming without PC advance"
+                )
+                communicator.resume()
+                return
+            }
+            // Not a system DLL — switch to thread 1 for further
+            // inspection since Wasm execution runs on the main thread.
+            communicator.sendCommand("thread select 1")
+        }
+
         // Use sendCommandAndCollectOutput so the response is fenced
         // and stop-event detection is suppressed for the output lines.
         var lines = communicator.sendCommandAndCollectOutput("frame info")
@@ -689,6 +815,24 @@ open class WasmDebugProcess(
             )
         }
 
+        // On Windows with Wasmtime, spurious `trace` stops can occur
+        // in JIT code with no DWARF source info (e.g. after resuming
+        // from a system DLL exception). Auto-resume these instead of
+        // presenting a bogus stop to the user.
+        if (SystemInfo.isWindows &&
+            engine == WasmEngine.WASMTIME &&
+            event is LldbCommunicator.StopEvent.Stepped &&
+            sourcePosition == null
+        ) {
+            LOG.info(
+                "Ignoring trace stop with no source position at " +
+                    "${rawDwarfPath ?: "unknown"}:${rawDwarfLine ?: "?"} " +
+                    "(function='$functionName') — resuming"
+            )
+            communicator.resume()
+            return
+        }
+
         val frame = WasmStackFrame(
             sourcePosition, functionName, lldb,
             dwarfVariableResolver = dwarfVariableResolver,
@@ -864,10 +1008,10 @@ open class WasmDebugProcess(
          * LLDB command that advances the program counter past the
          * current trap instruction. Wasmtime JIT emits trap
          * instructions at breakpoint sites: `brk` (4 bytes) on
-         * ARM64, `ud2` (2 bytes) on x86_64. When LLDB stops on
-         * such a trap, the PC still points at the trap; this
-         * command reads the current instruction's byte size and
-         * moves the PC forward by that amount so that a subsequent
+         * ARM64/AArch64, `ud2` (2 bytes) on x86_64. When LLDB
+         * stops on such a trap, the PC still points at the trap;
+         * this command moves the PC forward by that amount so that
+         * a subsequent
          * `continue` or `next` does not re-hit the same trap.
          *
          * Uses LLDB's built-in Python interpreter so it works
@@ -876,7 +1020,29 @@ open class WasmDebugProcess(
          */
         private const val ADVANCE_PC_PAST_TRAP_CMD =
             "script lldb.frame.SetPC(lldb.frame.GetPC() + " +
-                "(4 if 'arm' in lldb.target.GetTriple() else 2))"
+                "(4 if 'arm' in lldb.target.GetTriple() or 'aarch64' in lldb.target.GetTriple() else 2))"
+
+        /**
+         * The GDB JIT interface function that wasmtime calls after
+         * JIT-compiling a module and registering its debug symbols.
+         * On Windows we set a breakpoint on this function to detect
+         * when JIT symbols are available so user breakpoints can
+         * resolve.
+         */
+        private const val JIT_REGISTER_FUNCTION = "__jit_debug_register_code"
+
+        /**
+         * Maximum time in milliseconds to wait for each
+         * [JIT_REGISTER_FUNCTION] breakpoint hit on Windows.
+         */
+        private const val WINDOWS_JIT_WAIT_TIMEOUT_MS = 10_000L
+
+        /**
+         * Maximum number of [JIT_REGISTER_FUNCTION] hits to wait
+         * through before giving up on breakpoint resolution.
+         * Wasmtime typically fires this 2–5 times; 20 is generous.
+         */
+        private const val MAX_JIT_REGISTER_ATTEMPTS = 3
     }
 }
 

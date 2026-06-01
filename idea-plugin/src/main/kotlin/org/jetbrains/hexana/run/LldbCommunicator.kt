@@ -150,6 +150,182 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         sendCommand("breakpoint set --file \"$filePath\" --line $line")
     }
 
+    fun sendBreakpointOnFunction(functionName: String) {
+        sendCommand("breakpoint set --name $functionName")
+    }
+
+    /**
+     * Sends a file/line breakpoint and returns `true` if LLDB resolved
+     * it to at least one location (i.e. the output does NOT contain
+     * "pending").
+     */
+    fun sendBreakpointAndCheckResolved(filePath: String, line: Int): Boolean {
+        val output = sendCommandAndCollectOutput(
+            "breakpoint set --file \"$filePath\" --line $line",
+        )
+        return output.none { "pending" in it }
+    }
+
+    /**
+     * On Windows, LLDB's JIT loader GDB plugin does not automatically
+     * process JIT debug symbols registered via the GDB JIT interface.
+     * This method manually reads `__jit_debug_descriptor.relevant_entry`
+     * from the inferior's memory, extracts the in-memory ELF object
+     * (symfile_addr + symfile_size), writes it to a temporary file,
+     * loads it into LLDB, and then searches the loaded module's line
+     * tables for addresses matching the given file/line breakpoints.
+     *
+     * Must be called while the process is stopped at
+     * `__jit_debug_register_code`.
+     *
+     * @param breakpoints list of (basename, line) pairs to resolve.
+     * @return list of hex addresses that were found and set as
+     *         address breakpoints, empty if nothing resolved.
+     */
+    fun loadJitObjectAndResolveBreakpoints(
+        tempDir: String,
+        breakpoints: List<Pair<String, Int>>,
+    ): List<String> {
+        val bpListPy = breakpoints.joinToString(",") { (file, line) ->
+            "('${file.replace("'", "\\'")}',${line})"
+        }
+        val escapedTempDir = tempDir.replace("\\", "/")
+        // Build a multi-line Python script that will be written to a
+        // temp file and executed via `command script import`.
+        val pythonLines = listOf(
+            "import struct, os, lldb",
+            "t = lldb.debugger.GetSelectedTarget()",
+            "p = t.GetProcess()",
+            "e = t.GetByteOrder()",
+            "ps = t.GetAddressByteSize()",
+            "syms = [s for s in t.FindSymbols('__jit_debug_descriptor')]",
+            "ok = len(syms) > 0",
+            "if not ok:",
+            "    gvs = t.FindGlobalVariables('__jit_debug_descriptor', 1)",
+            "    if gvs.GetSize() > 0:",
+            "        ok = True",
+            "",
+            "print('DIAG:syms=%d ok=%s' % (len(syms), ok))",
+            "desc_addr = 0",
+            "if ok and len(syms) > 0:",
+            "    desc_addr = syms[0].GetSymbol().GetStartAddress().GetLoadAddress(t)",
+            "elif ok:",
+            "    gv = t.FindGlobalVariables('__jit_debug_descriptor', 1).GetValueAtIndex(0)",
+            "    desc_addr = gv.GetLoadAddress() if gv else 0",
+            "    ok = desc_addr != 0 and desc_addr != 0xFFFFFFFFFFFFFFFF",
+            "",
+            "print('DIAG:desc_addr=0x%x' % desc_addr)",
+            "err = lldb.SBError()",
+            "desc_bytes = p.ReadMemory(desc_addr, 4+4+ps+ps, err) if ok else b''",
+            "ok = ok and err.Success() and len(desc_bytes) >= 4+4+ps+ps",
+            "print('DIAG:desc_read ok=%s err=%s len=%d' % (ok, err, len(desc_bytes)))",
+            "bo = '<' if e == lldb.eByteOrderLittle else '>'",
+            "pfmt = bo + ('Q' if ps == 8 else 'I')",
+            "action = struct.unpack_from(bo+'I', desc_bytes, 4)[0] if ok else -1",
+            "rel_entry = struct.unpack_from(pfmt, desc_bytes, 8)[0] if ok else 0",
+            "first_entry = struct.unpack_from(pfmt, desc_bytes, 8+ps)[0] if ok else 0",
+            "print('DIAG:action=%d rel_entry=0x%x first_entry=0x%x' % (action, rel_entry, first_entry))",
+            "print('DIAG:desc_hex=%s' % (desc_bytes.hex() if ok else 'N/A'))",
+            "if rel_entry == 0 and first_entry != 0:",
+            "    rel_entry = first_entry",
+            "",
+            "ok = ok and rel_entry != 0",
+            "entry_bytes = p.ReadMemory(rel_entry, ps+ps+ps+8, err) if ok else b''",
+            "ok = ok and err.Success() and len(entry_bytes) >= ps+ps+ps+8",
+            "print('DIAG:entry_read ok=%s err=%s' % (ok, err))",
+            "sym_addr = struct.unpack_from(pfmt, entry_bytes, ps+ps)[0] if ok else 0",
+            "sym_size = struct.unpack_from(bo+'Q', entry_bytes, ps+ps+ps)[0] if ok else 0",
+            "print('DIAG:sym_addr=0x%x sym_size=%d' % (sym_addr, sym_size))",
+            "ok = ok and sym_addr != 0 and sym_size > 0 and sym_size < 100*1024*1024",
+            "obj_bytes = p.ReadMemory(sym_addr, sym_size, err) if ok else b''",
+            "ok = ok and err.Success() and len(obj_bytes) == sym_size",
+            "print('DIAG:obj_read ok=%s err=%s len=%d' % (ok, err, len(obj_bytes)))",
+            "fp = os.path.join('$escapedTempDir', 'jit_obj_' + hex(sym_addr) + '.elf') if ok else ''",
+            "if ok:",
+            "    with open(fp, 'wb') as f:",
+            "        f.write(obj_bytes)",
+            "    print('DIAG:wrote %s (%d bytes)' % (fp, len(obj_bytes)))",
+            "",  // end of if block
+            "mod = t.AddModule(fp, '', None) if ok else None",
+            "print('DIAG:mod=%s valid=%s' % (mod, mod.IsValid() if mod else False))",
+            "ok = ok and mod is not None and mod.IsValid()",
+            "if ok:",
+            "    for i in range(mod.GetNumSections()):",
+            "        sec = mod.GetSectionAtIndex(i)",
+            "        t.SetSectionLoadAddress(sec, sym_addr + sec.GetFileOffset())",
+            "",  // end of if block
+            "bps = [$bpListPy]",
+            "found = []",
+            // First try the manually-loaded JIT module (if descriptor was populated).
+            "if ok:",
+            "    ncu = mod.GetNumCompileUnits()",
+            "    print('DIAG:compile_units=%d' % ncu)",
+            "    for ci in range(ncu):",
+            "        cu = mod.GetCompileUnitAtIndex(ci)",
+            "        nle = cu.GetNumLineEntries()",
+            "        print('DIAG:cu[%d] line_entries=%d file=%s' % (ci, nle, cu.GetFileSpec()))",
+            "        for li in range(min(nle, 5)):",
+            "            le = cu.GetLineEntryAtIndex(li)",
+            "            fs = le.GetFileSpec()",
+            "            fn = fs.GetFilename() if fs.IsValid() else ''",
+            "            ln = le.GetLine()",
+            "            print('DIAG:  entry[%d] file=%s line=%d' % (li, fn, ln))",
+            "        for li in range(nle):",
+            "            le = cu.GetLineEntryAtIndex(li)",
+            "            fs = le.GetFileSpec()",
+            "            fn = fs.GetFilename() if fs.IsValid() else ''",
+            "            ln = le.GetLine()",
+            "            for (bf, bl) in bps:",
+            "                if fn == bf and ln == bl:",
+            "                    addr = le.GetStartAddress().GetLoadAddress(t)",
+            "                    if addr != lldb.LLDB_INVALID_ADDRESS and addr not in found:",
+            "                        found.append(addr)",
+            "",  // end of if block
+            // Fallback: if the descriptor was empty (wasmtime on Windows ARM64
+            // never populates it), search ALL modules in the target. The
+            // built-in JIT loader (plugin.jit-loader.gdb.enable) may have
+            // loaded JIT objects that we can find line entries in.
+            "if not found:",
+            "    print('DIAG:fallback scanning all %d target modules' % t.GetNumModules())",
+            "    for mi in range(t.GetNumModules()):",
+            "        m = t.GetModuleAtIndex(mi)",
+            "        ncu2 = m.GetNumCompileUnits()",
+            "        if ncu2 == 0:",
+            "            continue",
+            "        for ci2 in range(ncu2):",
+            "            cu2 = m.GetCompileUnitAtIndex(ci2)",
+            "            nle2 = cu2.GetNumLineEntries()",
+            "            for li2 in range(nle2):",
+            "                le2 = cu2.GetLineEntryAtIndex(li2)",
+            "                fs2 = le2.GetFileSpec()",
+            "                fn2 = fs2.GetFilename() if fs2.IsValid() else ''",
+            "                ln2 = le2.GetLine()",
+            "                for (bf, bl) in bps:",
+            "                    if fn2 == bf and ln2 == bl:",
+            "                        addr2 = le2.GetStartAddress().GetLoadAddress(t)",
+            "                        if addr2 != lldb.LLDB_INVALID_ADDRESS and addr2 not in found:",
+            "                            found.append(addr2)",
+            "                            print('DIAG:fallback found addr=0x%x in module=%s cu=%s' % (addr2, m, cu2.GetFileSpec()))",
+            "",  // end of if block
+            "print('DIAG:bps=%s found=%s' % (bps, found))",
+            "if found:",
+            "    for a in found:",
+            "        lldb.debugger.HandleCommand('breakpoint set --address 0x%x' % a)",
+            "        print('RESOLVED:0x%x' % a)",
+            "else:",
+            "    print('NONE')",
+            "",  // end of if/else block
+        )
+        val output = sendPythonScriptAndCollectOutput(pythonLines, timeoutMs = 30_000)
+        val resolved = output.filter { "RESOLVED:" in it }.map { it.substringAfter("RESOLVED:").trim() }
+        if (resolved.isNotEmpty()) {
+            LOG.info("JIT breakpoints resolved at: $resolved")
+        } else {
+            LOG.warn("JIT object load/resolve produced no matches: ${output.joinToString(" ")}")
+        }
+        return resolved
+    }
+
     fun sendSourceMap(from: String, to: String) {
         sendCommand("settings set target.source-map \"$from\" \"$to\"")
     }
@@ -188,22 +364,6 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     }
 
     /**
-     * Launches the inferior and stops it at the entry point.
-     *
-     * This is preferred over [runProcess] for debug sessions because it
-     * allows wasmtime to JIT-compile the Wasm module and register debug
-     * symbols with the JIT loader before user code executes. Pending
-     * breakpoints can then resolve against the JIT-compiled code.
-     *
-     * After launch the process will be in a stopped state; call
-     * [resume] to continue execution.
-     */
-    fun launchStoppedAtEntry() {
-        isRunning = true
-        sendCommand("process launch --stop-at-entry")
-    }
-
-    /**
      * Temporarily suppresses stop-event detection on incoming LLDB
      * output lines for the duration of [block]. This is intended for
      * code paths that issue informational LLDB commands (like
@@ -233,6 +393,68 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
      *
      * @return the collected output lines, or an empty list on timeout.
      */
+    /**
+     * Sends a multi-line Python script to LLDB by writing it to a
+     * temporary file and executing it with `command script import`.
+     * This avoids both the semicolon-as-command-separator issue on
+     * Windows and the problematic interactive Python REPL exit
+     * (`quit()` can kill LLDB on some platforms).
+     */
+    fun sendPythonScriptAndCollectOutput(
+        pythonLines: List<String>,
+        timeoutMs: Long = 5_000,
+    ): List<String> {
+        if (destroyed) return emptyList()
+
+        val marker = "__HEXANA_END_${System.nanoTime()}__"
+
+        // Write the Python script to a temp file, appending the
+        // end-marker print so we know when output is complete.
+        val scriptFile = java.nio.file.Files.createTempFile("hexana_lldb_", ".py")
+        try {
+            val scriptContent = buildString {
+                for (line in pythonLines) {
+                    appendLine(line)
+                }
+                appendLine("print(\"$marker\")")
+            }
+            scriptFile.toFile().writeText(scriptContent)
+
+            val latch = CountDownLatch(1)
+            val collector = mutableListOf<String>()
+
+            synchronized(responseLock) {
+                responseCollector = collector
+                responseLatch = latch
+                responseEndMarker = marker
+            }
+
+            // Execute the script file. Using forward slashes works
+            // on both Windows and Unix LLDB.
+            val path = scriptFile.toAbsolutePath().toString().replace("\\", "/")
+            sendCommand("command script import \"$path\"")
+
+            val completed = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+
+            synchronized(responseLock) {
+                responseCollector = null
+                responseLatch = null
+                responseEndMarker = null
+            }
+
+            if (!completed && !destroyed) {
+                LOG.warn("Timed out collecting Python script output")
+            }
+            return collector.toList()
+        } finally {
+            try {
+                java.nio.file.Files.deleteIfExists(scriptFile)
+            } catch (_: Exception) {
+                // best-effort cleanup
+            }
+        }
+    }
+
     fun sendCommandAndCollectOutput(
         command: String,
         timeoutMs: Long = 5_000,
