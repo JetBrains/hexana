@@ -50,17 +50,52 @@ import org.jetbrains.jewel.ui.component.VerticalScrollbar
 
 private enum class SizeSortColumn { TYPE, SIZE, OFFSET }
 
+/** Off-EDT-computed inputs for the size panel. */
+private class SizePanelData(
+    val root: BinarySizeNode?,
+    val builder: SizeAnalysisBuilder?,
+    val wasmProvider: WasmBinaryProvider?,
+    val dataRecords: List<WasmDataRecord>,
+)
+
 @Composable
 fun PanelSize(provider: BinaryProvider, state: HexViewStateHolder) {
-    val root = remember(provider) { provider.sizeAnalysis }
-    if (root != null) {
-        val builder = remember(provider) { (provider as? WasmBinaryProvider)?.sizeAnalysisBuilder }
-        val wasmProvider = remember(provider) { provider as? WasmBinaryProvider }
-        val dataRecords = remember(provider) { wasmProvider?.data ?: emptyList() }
-        SizeTreeContent(root, builder, wasmProvider, dataRecords, state)
+    // Building the top-level size tree (`provider.sizeAnalysis`) and parsing the
+    // data segments (`provider.data`) is expensive on large binaries and MUST NOT
+    // run on the EDT. Computing them inside `remember { }` during composition
+    // froze the UI. Compute off-thread and show a spinner until it lands; mirrors
+    // WasmPanelWatVirtualized's load pattern. Provider lazies are synchronized and
+    // `provider.bytes` hands out an independent-cursor duplicate, so this is safe.
+    var loaded by remember(provider) { mutableStateOf<SizePanelData?>(null) }
+    LaunchedEffect(provider) {
+        loaded = withContext(Dispatchers.IO) {
+            val root = provider.sizeAnalysis
+            val wasmProvider = provider as? WasmBinaryProvider
+            SizePanelData(
+                root = root,
+                builder = wasmProvider?.sizeAnalysisBuilder,
+                wasmProvider = wasmProvider,
+                dataRecords = if (root != null) wasmProvider?.data ?: emptyList() else emptyList(),
+            )
+        }
     }
-    else {
-        Text("No size information available")
+
+    val data = loaded
+    when {
+        data == null -> {
+            Box(modifier = Modifier.padding(8.dp)) {
+                Text(
+                    "Loading...",
+                    style = TextStyle(fontFamily = FontFamily.Monospace),
+                )
+            }
+        }
+        data.root == null -> {
+            Text("No size information available")
+        }
+        else -> {
+            SizeTreeContent(data.root, data.builder, data.wasmProvider, data.dataRecords, state)
+        }
     }
 }
 

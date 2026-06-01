@@ -17,6 +17,7 @@
 ### Removed
 
 ### Fixed
+- Top (size analysis): switching to the Top tab no longer freezes the IDE on large binaries — the top-level size tree and data-segment parse ran inside composition on the EDT; they now build off-thread with a loading indicator
 - Functions tab: the Name column and the unreachable `●` marker were keyed by the defined-function row index rather than the global function index, so for modules with function imports both were shifted by the import count; they now resolve the correct name and reachability for every row
 - WAT (virtualized): opening a large WasmGC binary no longer hangs the IDE. The type section's single `(rec …)` group (tens of thousands of types) was rendered as one multi-megabyte row, freezing the UI thread in text layout; it now folds to a collapsible group with each type as a separate virtualized row, and the view's model is built off the UI thread
 
