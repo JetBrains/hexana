@@ -202,6 +202,14 @@ private fun WasmPanelWatVirtualizedContent(
         foldedSectionsExternal ?: remember { mutableStateOf(emptySet<ChunkId>()) }
     var foldedSections by foldedSectionsState
 
+    // Expanded WasmGC `(rec …)` type groups, keyed by the rec header chunk's
+    // id. Empty = all collapsed (the default): a single rec can hold tens of
+    // thousands of types, which composed up front would freeze the EDT in
+    // Skia text layout. Member TYPE chunks carry their header's id as
+    // `groupId` and are hidden by the LazyColumn loop unless listed here.
+    // Held without a `provider` key so toggles survive edit-commit rebuilds.
+    var expandedRecGroups by remember { mutableStateOf(emptySet<ChunkId>()) }
+
     // Per-chunk expand state for Data-section entries. Held without a
     // `provider` key so toggles survive edit-commit panel rebuilds (the
     // chunk id is stable across rebuilds via the symbol resolver / index
@@ -434,7 +442,30 @@ private fun WasmPanelWatVirtualizedContent(
                             }
                         }
                         is BinaryChunk.Element -> {
-                            if (!hidden) {
+                            if (chunk.kind == WasmSectionKinds.TYPE_REC) {
+                                // Collapsible header for a WasmGC (rec …) group.
+                                // Its member TYPE chunks (groupId == this id) are
+                                // gated below; default-collapsed so a 50k-type rec
+                                // never composes up front.
+                                if (!hidden) {
+                                    val expanded = chunk.id in expandedRecGroups
+                                    item(key = chunk.id) {
+                                        RecGroupHeaderRow(
+                                            chunk = chunk,
+                                            expanded = expanded,
+                                            onToggle = {
+                                                expandedRecGroups = if (chunk.id in expandedRecGroups) {
+                                                    expandedRecGroups - chunk.id
+                                                } else {
+                                                    expandedRecGroups + chunk.id
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
+                            } else if (!hidden &&
+                                (chunk.groupId == null || chunk.groupId in expandedRecGroups)
+                            ) {
                                 item(key = chunk.id) {
                                     ChunkRow(
                                         chunk = chunk,
@@ -574,6 +605,30 @@ private fun SectionHeaderRow(
             style = textStyle,
         )
     }
+}
+
+/**
+ * Collapsible header for a WasmGC `(rec …)` type group. Click toggles
+ * [expanded]; the member `(type $N …)` chunks (which carry this chunk's id as
+ * their `groupId`) are shown/hidden by the LazyColumn loop. `chunk.displayName`
+ * carries the member count (set by `appendTypeChunks`).
+ */
+@Composable
+private fun RecGroupHeaderRow(
+    chunk: BinaryChunk.Element,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    val arrow = if (expanded) "▼" else "▶"
+    val count = chunk.displayName ?: "?"
+    Text(
+        text = "$arrow (rec  (; $count types ;)",
+        style = ROW_TEXT_STYLE.copy(color = colorFor(RenderTokenKind.KEYWORD)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle() }
+            .padding(horizontal = 16.dp, vertical = 1.dp),
+    )
 }
 
 internal val ROW_TEXT_STYLE = TextStyle(

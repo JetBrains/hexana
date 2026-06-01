@@ -1528,6 +1528,20 @@ public class WasmHexanaWatRenderer(
         else -> wasmValueTypeName(type)
     }
 
+    // Inlined to avoid pulling `plugins-shared` into `binaryProvider` for one
+    // helper. A member (not top-level) so reference types can route through
+    // [referenceTypeName] for the full `(ref null $t)` / `funcref` / `structref`
+    // / … spelling instead of falling back to the data-class `toString()`.
+    private fun wasmValueTypeName(type: WasmValueType<*>): String = when (type) {
+        is WasmI32Type -> "i32"
+        is WasmI64Type -> "i64"
+        is WasmF32Type -> "f32"
+        is WasmF64Type -> "f64"
+        is WasmVecType -> "v128"
+        is WasmRefType -> referenceTypeName(type.code)
+        else -> type.toString()
+    }
+
     private fun appendLimits(out: MutableList<RenderToken>, limits: WasmLimits<*>) {
         out += space()
         out += RenderToken(limits.min.toString(), RenderTokenKind.NUMBER)
@@ -2059,14 +2073,4 @@ public class WasmHexanaWatRenderer(
         /** Bytes per row in [DataViewMode.ASCII] / [DataViewMode.UTF8] modes. */
         public const val DATA_BYTES_PER_ROW_TEXT: Int = 64
     }
-}
-
-/** Inlined to avoid pulling `plugins-shared` into `binaryProvider` for one helper. */
-private fun wasmValueTypeName(type: WasmValueType<*>): String = when (type) {
-    is WasmI32Type -> "i32"
-    is WasmI64Type -> "i64"
-    is WasmF32Type -> "f32"
-    is WasmF64Type -> "f64"
-    is WasmVecType -> "v128"
-    else -> type.toString()
 }

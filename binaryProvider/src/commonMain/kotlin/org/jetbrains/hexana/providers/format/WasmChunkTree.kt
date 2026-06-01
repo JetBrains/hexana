@@ -20,6 +20,7 @@ import org.jetbrains.hexana.wasm.sections.WasmSectionImport
 import org.jetbrains.hexana.wasm.sections.WasmSectionMemory
 import org.jetbrains.hexana.wasm.sections.WasmSectionStart
 import org.jetbrains.hexana.wasm.sections.WasmSectionTable
+import org.jetbrains.hexana.wasm.sections.WasmRecursiveTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmSectionTypes
 import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
 
@@ -80,8 +81,12 @@ public fun buildWasmChunkTree(parsed: WasmParsedBinary): WasmChunkTree {
     var customCounter = 0
     for (section in module.sections) {
         val kind = sectionKindOf(section)
-        val records = if (kind == WasmSectionKinds.CODE || kind == WasmSectionKinds.FUNCTION) {
-            // Skip getRecordRanges for code (use codeOffsets) and function (single chunk).
+        val records = if (kind == WasmSectionKinds.CODE ||
+            kind == WasmSectionKinds.FUNCTION ||
+            kind == WasmSectionKinds.TYPE
+        ) {
+            // Skip getRecordRanges for code (use codeOffsets), function (single
+            // chunk), and type (appendTypeChunks builds rec-group sub-headers).
             emptyList()
         } else {
             provider.getRecords(section)
@@ -109,6 +114,7 @@ public fun buildWasmChunkTree(parsed: WasmParsedBinary): WasmChunkTree {
             WasmSectionKinds.FUNCTION ->
                 appendFunctionChunks(chunks, provider, resolver, section as WasmSectionFunctions)
             WasmSectionKinds.CODE -> appendCodeChunks(chunks, provider, resolver)
+            WasmSectionKinds.TYPE -> appendTypeChunks(chunks, provider, section as WasmSectionTypes)
             else -> appendGenericRecords(chunks, kind, records)
         }
     }
@@ -148,6 +154,69 @@ private fun appendFunctionChunks(
             indexInSection = i,
             displayName = name,
         )
+    }
+}
+
+/**
+ * One chunk per type *index*. A WasmGC `(rec …)` group declares many types
+ * under one top-level record; it gets a [WasmSectionKinds.TYPE_REC] header
+ * chunk (a collapsible sub-group marker) followed by one [WasmSectionKinds.TYPE]
+ * member chunk per entry, each tagged with the header's id as its `groupId` so
+ * the panel can fold the whole group to a single line. Standalone (non-rec)
+ * types emit one [WasmSectionKinds.TYPE] chunk with no group. `indexInSection`
+ * is the global type index — it matches the flattened `typeRecords` list the
+ * renderer indexes by, so a member renders as `(type $N …)`.
+ */
+private fun appendTypeChunks(
+    chunks: MutableList<BinaryChunk>,
+    provider: WasmBinaryProvider,
+    section: WasmSectionTypes,
+) {
+    val records = with(section) { provider.bytes.parseTypes() }
+    var typeIndex = 0
+    var recOrdinal = 0
+    for (record in records) {
+        if (record is WasmRecursiveTypeRecord) {
+            val recId = ChunkId.Indexed(WasmSectionKinds.TYPE_REC, recOrdinal)
+            // Header range covers only the rec prefix (tag + count), ending
+            // before the first member — keeps chunk byteRanges non-overlapping
+            // so chunkContainingByte's binary search stays valid.
+            val headerStart = record.offset.toLong()
+            val headerLast = record.entries.firstOrNull()
+                ?.let { (it.offset.toLong() - 1).coerceAtLeast(headerStart) }
+                ?: (record.offset + record.size - 1).toLong()
+            chunks += BinaryChunk.Element(
+                id = recId,
+                byteRange = headerStart..headerLast,
+                estimatedLines = 1,
+                kind = WasmSectionKinds.TYPE_REC,
+                indexInSection = recOrdinal,
+                displayName = record.entries.size.toString(),
+            )
+            recOrdinal++
+            for (entry in record.entries) {
+                chunks += BinaryChunk.Element(
+                    id = ChunkId.Indexed(WasmSectionKinds.TYPE, typeIndex),
+                    byteRange = entry.offset.toLong()..(entry.offset + entry.size - 1).toLong(),
+                    estimatedLines = 1,
+                    kind = WasmSectionKinds.TYPE,
+                    indexInSection = typeIndex,
+                    displayName = "type $typeIndex",
+                    groupId = recId,
+                )
+                typeIndex++
+            }
+        } else {
+            chunks += BinaryChunk.Element(
+                id = ChunkId.Indexed(WasmSectionKinds.TYPE, typeIndex),
+                byteRange = record.offset.toLong()..(record.offset + record.size - 1).toLong(),
+                estimatedLines = 1,
+                kind = WasmSectionKinds.TYPE,
+                indexInSection = typeIndex,
+                displayName = "type $typeIndex",
+            )
+            typeIndex++
+        }
     }
 }
 
@@ -201,6 +270,10 @@ private fun elementCountFor(
 ): Int = when (kind) {
     WasmSectionKinds.CODE -> provider.codeOffsets.size
     WasmSectionKinds.FUNCTION -> (section as? WasmSectionFunctions)?.let { provider.functions.size } ?: 0
+    WasmSectionKinds.TYPE -> (section as? WasmSectionTypes)?.let { s ->
+        with(s) { provider.bytes.parseTypes() }
+            .sumOf { if (it is WasmRecursiveTypeRecord) it.entries.size else 1 }
+    } ?: 0
     else -> records.size
 }
 

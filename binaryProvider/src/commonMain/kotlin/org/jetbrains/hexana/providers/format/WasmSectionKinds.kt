@@ -13,6 +13,14 @@ import org.jetbrains.hexana.document.format.SectionKind
 public object WasmSectionKinds {
     public val HEADER: SectionKind = SectionKind("wasm.header")
     public val TYPE: SectionKind = SectionKind("wasm.type")
+
+    /**
+     * Synthetic kind for the header row of a WasmGC `(rec …)` recursive type
+     * group inside the Type section. Not a real section; used by the chunk
+     * tree to mark a collapsible sub-group whose member [TYPE] chunks carry
+     * its [org.jetbrains.hexana.document.format.BinaryChunk.Element.groupId].
+     */
+    public val TYPE_REC: SectionKind = SectionKind("wasm.type.rec")
     public val IMPORT: SectionKind = SectionKind("wasm.import")
     public val FUNCTION: SectionKind = SectionKind("wasm.function")
     public val TABLE: SectionKind = SectionKind("wasm.table")
@@ -32,6 +40,7 @@ public object WasmSectionKinds {
     public fun displayName(kind: SectionKind): String = when (kind) {
         HEADER -> "header"
         TYPE -> "type"
+        TYPE_REC -> "rec"
         IMPORT -> "import"
         FUNCTION -> "function"
         TABLE -> "table"

@@ -71,6 +71,15 @@ public sealed interface BinaryChunk {
         override val kind: SectionKind,
         public val indexInSection: Int,
         public val displayName: String?,
+        /**
+         * For chunks nested under a collapsible sub-group (e.g. the member
+         * types of a WasmGC `(rec …)` group), the [id] of that group's header
+         * chunk. The virtualized panel hides such chunks unless the group is
+         * expanded — letting one rec group of tens of thousands of types fold
+         * to a single line while each member stays an independently
+         * virtualized item when expanded. `null` for chunks with no sub-group.
+         */
+        public val groupId: ChunkId? = null,
     ) : BinaryChunk
 }
 
