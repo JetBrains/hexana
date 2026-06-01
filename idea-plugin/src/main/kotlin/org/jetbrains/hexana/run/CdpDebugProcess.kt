@@ -500,9 +500,15 @@ internal class CdpDebugProcess(
     private fun resolveFileFromUrl(url: String): VirtualFile? {
         if (url.isBlank()) return null
 
-        // file:// URLs
+        // file:// URLs — handle both Unix (file:///path) and
+        // Windows (file:///C:/path) forms.
         if (url.startsWith("file://")) {
-            val path = url.removePrefix("file://")
+            var path = url.removePrefix("file://")
+            // Strip the leading slash before a Windows drive letter
+            // (e.g. "/C:/Users/..." → "C:/Users/...").
+            if (path.length >= 3 && path[0] == '/' && path[2] == ':') {
+                path = path.substring(1)
+            }
             return LocalFileSystem.getInstance().findFileByPath(path)
         }
 
@@ -776,11 +782,14 @@ internal class CdpDebugProcess(
         file: VirtualFile,
         line: Int,
     ): Map<String, Any?>? {
-        // Convert IDE VFS URL to a file:// URL that V8 can match
+        // Convert IDE VFS path to a file:// URL that V8 can match.
+        // On Unix, paths start with "/"; on Windows, with a drive
+        // letter like "C:\". V8 expects "file:///path" on both OSes.
         val fileUrl = if (file.path.startsWith("/")) {
             "file://${file.path}"
         } else {
-            file.url
+            // Windows path — needs three slashes: file:///C:/...
+            "file:///" + file.path.replace('\\', '/')
         }
 
         return cdp.send("Debugger.setBreakpointByUrl", mapOf(

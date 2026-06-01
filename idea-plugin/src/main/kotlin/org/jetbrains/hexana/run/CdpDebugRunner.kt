@@ -463,10 +463,23 @@ class CdpDebugRunner : ProgramRunner<RunnerSettings> {
          */
         fun resolveDefaultChromePath(): String {
             val candidates = mutableListOf<String>()
-            if (SystemInfo.isMac) {
+            if (SystemInfo.isWindows) {
+                // Chrome is not on PATH by default on Windows; check
+                // well-known installation directories.
+                val programFiles = System.getenv("ProgramFiles") ?: "C:\\Program Files"
+                val programFilesX86 = System.getenv("ProgramFiles(x86)") ?: "C:\\Program Files (x86)"
+                val localAppData = System.getenv("LOCALAPPDATA") ?: ""
+                candidates.add("$programFiles\\Google\\Chrome\\Application\\chrome.exe")
+                candidates.add("$programFilesX86\\Google\\Chrome\\Application\\chrome.exe")
+                if (localAppData.isNotEmpty()) {
+                    candidates.add("$localAppData\\Google\\Chrome\\Application\\chrome.exe")
+                }
+                candidates.add("$programFiles\\Chromium\\Application\\chrome.exe")
+                candidates.add("$programFilesX86\\Chromium\\Application\\chrome.exe")
+            } else if (SystemInfo.isMac) {
                 candidates.add("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
                 candidates.add("/Applications/Chromium.app/Contents/MacOS/Chromium")
-            } else if (!SystemInfo.isWindows) {
+            } else {
                 candidates.add("/usr/bin/google-chrome")
                 candidates.add("/usr/bin/google-chrome-stable")
                 candidates.add("/usr/bin/chromium")
