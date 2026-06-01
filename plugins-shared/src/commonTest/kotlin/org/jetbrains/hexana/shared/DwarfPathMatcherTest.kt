@@ -45,6 +45,26 @@ class DwarfPathMatcherTest {
         )
     }
 
+    @Test
+    fun windowsBackslashMatchesForwardSlash() {
+        assertTrue(
+            pathMatchesBreakpointLocation(
+                "E:\\project\\src\\lib.rs",
+                "E:/project/src/lib.rs",
+            )
+        )
+    }
+
+    @Test
+    fun windowsBackslashSuffixMatch() {
+        assertTrue(
+            pathMatchesBreakpointLocation(
+                "src\\lib.rs",
+                "E:/project/src/lib.rs",
+            )
+        )
+    }
+
     // ── cuPathMatchesIdePath ────────────────────────────────────────
 
     @Test

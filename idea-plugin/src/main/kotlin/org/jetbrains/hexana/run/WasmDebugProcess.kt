@@ -328,17 +328,17 @@ open class WasmDebugProcess(
      * instruction, then executes the given [action] (e.g. resume,
      * step-over, step-into).
      *
-     * Wasmtime JIT on macOS/ARM emits `brk` (trap) instructions
-     * at breakpoint sites. When LLDB stops on such a trap, the
-     * PC still points at the `brk` instruction. A simple
-     * `continue` or `thread step-inst` would re-execute the same
-     * trap, causing an infinite `EXC_BREAKPOINT` loop.
+     * Wasmtime JIT emits trap instructions at breakpoint sites:
+     * `brk` (4 bytes) on ARM64, `ud2` (2 bytes) on x86_64.
+     * When LLDB stops on such a trap, the PC still points at the
+     * trap instruction. A simple `continue` or `thread step-inst`
+     * would re-execute the same trap, causing an infinite loop.
      *
-     * The fix is to advance the PC past the 4-byte `brk`
-     * instruction via LLDB's Python API before issuing the real
-     * command. This is done through a fire-and-forget
-     * `sendCommand` (no blocking wait for output), so the call
-     * returns instantly and does not freeze the EDT.
+     * The fix is to read the current instruction's byte size via
+     * LLDB's Python API and advance the PC by that amount before
+     * issuing the real command. This is done through a
+     * fire-and-forget `sendCommand` (no blocking wait for output),
+     * so the call returns instantly and does not freeze the EDT.
      *
      * Stop-event detection is suppressed while the PC is adjusted
      * to prevent any intermediate LLDB output from being
@@ -361,8 +361,8 @@ open class WasmDebugProcess(
      * runs inside [LldbCommunicator.withStopEventsSuppressed]),
      * then resumes execution.
      *
-     * The PC adjustment is only needed for Wasmtime on macOS/ARM
-     * where JIT-emitted `brk` instructions require skipping. For
+     * The PC adjustment is only needed for Wasmtime where
+     * JIT-emitted trap instructions require skipping. For
      * WAMR (interpreter-based GDB stub), a plain resume suffices.
      */
     private fun resumePastTrap(communicator: LldbCommunicator) {
@@ -862,19 +862,21 @@ open class WasmDebugProcess(
 
         /**
          * LLDB command that advances the program counter past the
-         * current instruction. On macOS/ARM64, wasmtime JIT emits
-         * 4-byte `brk` (trap) instructions at breakpoint sites.
-         * When LLDB stops on such a trap, the PC still points at
-         * the `brk`; this command moves it forward by 4 bytes so
-         * that a subsequent `continue` or `next` does not re-hit
-         * the same trap.
+         * current trap instruction. Wasmtime JIT emits trap
+         * instructions at breakpoint sites: `brk` (4 bytes) on
+         * ARM64, `ud2` (2 bytes) on x86_64. When LLDB stops on
+         * such a trap, the PC still points at the trap; this
+         * command reads the current instruction's byte size and
+         * moves the PC forward by that amount so that a subsequent
+         * `continue` or `next` does not re-hit the same trap.
          *
          * Uses LLDB's built-in Python interpreter so it works
          * reliably across LLDB versions (unlike `register write
          * pc \`$pc+4\`` which broke in some Xcode releases).
          */
         private const val ADVANCE_PC_PAST_TRAP_CMD =
-            "script lldb.frame.SetPC(lldb.frame.GetPC() + 4)"
+            "script lldb.frame.SetPC(lldb.frame.GetPC() + " +
+                "(4 if 'arm' in lldb.target.GetTriple() else 2))"
     }
 }
 

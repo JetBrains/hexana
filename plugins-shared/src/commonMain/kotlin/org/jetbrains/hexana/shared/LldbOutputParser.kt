@@ -43,13 +43,19 @@ private val EXIT_PATTERN =
  * of a regular `breakpoint N.M` stop reason. We treat
  * `EXC_BREAKPOINT` as a breakpoint hit.
  *
+ * On Windows, LLDB reports `Exception 0x80000003` (the
+ * `STATUS_BREAKPOINT` NT exception code) for hardware trap
+ * instructions (`brk` on ARM64, `int3` on x86_64). We treat
+ * this as a breakpoint hit as well.
+ *
  * @return the parsed [LldbStopEvent], or `null` when the line
  *         does not match any recognised stop pattern.
  */
 fun parseLldbStopEvent(line: String): LldbStopEvent? {
     val trimmed = line.trim()
     if (trimmed.contains("stop reason = breakpoint") ||
-        trimmed.contains("stop reason = EXC_BREAKPOINT")
+        trimmed.contains("stop reason = EXC_BREAKPOINT") ||
+        trimmed.contains("stop reason = Exception 0x80000003")
     ) {
         val match = BREAKPOINT_STOP_PATTERN.find(trimmed)
         return if (match != null) {

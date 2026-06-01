@@ -131,10 +131,11 @@ class WasmDebugRunner : ProgramRunner<RunnerSettings> {
                 // some platforms.
                 lldb.sendCommand("settings set target.disable-aslr false")
 
-                // Enable JIT loader for macOS so LLDB can see JIT-compiled symbols
-                if (System.getProperty("os.name")?.lowercase()?.contains("mac") == true) {
-                    lldb.sendCommand("settings set plugin.jit-loader.gdb.enable on")
-                }
+                // Enable JIT loader so LLDB can see JIT-compiled symbols.
+                // Wasmtime uses the GDB JIT interface to register
+                // JIT-compiled code on all platforms (macOS, Linux,
+                // Windows), so this setting is needed everywhere.
+                lldb.sendCommand("settings set plugin.jit-loader.gdb.enable on")
 
                 // Note: we do NOT call lldb.runProcess() here.
                 // The platform will first call registerBreakpoint() for every

@@ -37,6 +37,16 @@ class LldbOutputParserTest {
     }
 
     @Test
+    fun windowsStatusBreakpoint() {
+        val event = parseLldbStopEvent(
+            "* thread #1, stop reason = Exception 0x80000003"
+        )
+        assertIs<LldbStopEvent.BreakpointHit>(event)
+        assertEquals(1, event.threadId)
+        assertEquals("", event.breakpointId)
+    }
+
+    @Test
     fun stepped() {
         val event = parseLldbStopEvent("* thread #1, stop reason = step in")
         assertIs<LldbStopEvent.Stepped>(event)

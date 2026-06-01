@@ -28,11 +28,13 @@ package org.jetbrains.hexana.shared
  * "/home/user/adder/src/lib.rs".
  */
 fun pathMatchesBreakpointLocation(stoppedPath: String, breakpointPath: String): Boolean {
-    if (stoppedPath == breakpointPath) return true
+    val normStopped = stoppedPath.replace('\\', '/')
+    val normBp = breakpointPath.replace('\\', '/')
+    if (normStopped == normBp) return true
     // stoppedPath is a suffix of breakpointPath (DWARF relative resolved to IDE absolute)
-    if (breakpointPath.endsWith("/$stoppedPath")) return true
+    if (normBp.endsWith("/$normStopped")) return true
     // breakpointPath is a suffix of stoppedPath (IDE path is a suffix of resolved path)
-    if (stoppedPath.endsWith("/$breakpointPath")) return true
+    if (normStopped.endsWith("/$normBp")) return true
     return false
 }
 
