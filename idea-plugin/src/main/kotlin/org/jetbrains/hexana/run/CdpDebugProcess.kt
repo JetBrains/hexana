@@ -171,6 +171,29 @@ internal class CdpDebugProcess(
             }
         }
 
+        // When the runtime finishes executing (e.g. Node.js main script
+        // completes), it emits executionContextDestroyed but keeps the
+        // process alive with "Waiting for the debugger to disconnect..."
+        // until the CDP connection is closed. Detect this and
+        // proactively disconnect so the debug session finishes cleanly.
+        cdp.on("Runtime.executionContextDestroyed") { params ->
+            LOG.info("CDP: Runtime.executionContextDestroyed params=$params")
+            // Disable the debugger domain first so Node.js doesn't
+            // stay paused, then close the CDP connection which lets
+            // the Node.js process exit naturally.
+            scope.launch {
+                try {
+                    cdp.sendFireAndForget("Debugger.disable")
+                    cdp.sendFireAndForget("Runtime.disable")
+                } catch (_: Exception) {
+                }
+                try {
+                    cdp.close()
+                } catch (_: Exception) {
+                }
+            }
+        }
+
         // Enable CDP domains
         LOG.info("CDP: sending Runtime.enable")
         cdp.send("Runtime.enable")
