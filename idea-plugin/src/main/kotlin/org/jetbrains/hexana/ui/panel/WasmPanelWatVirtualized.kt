@@ -103,11 +103,10 @@ import org.jetbrains.jewel.ui.component.Text
  * Hexana-flavored WAT printer lands in PR 2. PR 3 adds the toolbar (search,
  * jump-to-function). PR 4 adds the hex ↔ WAT cross-link.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun WasmPanelWatVirtualized(
     provider: WasmBinaryProvider,
-    state: HexViewStateHolder,
+    @Suppress("UNUSED_PARAMETER") state: HexViewStateHolder,
     editableDoc: EditableBinaryDocument? = null,
     /**
      * LazyColumn scroll state. When supplied externally (typical case from
@@ -134,7 +133,63 @@ internal fun WasmPanelWatVirtualized(
      */
     navTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
 ) {
-    val panelState = remember(provider) { buildPanelState(provider) }
+    // WAT model build (parse + DWARF symbol resolution + the ~130k-chunk
+    // tree) runs OFF the EDT on Dispatchers.IO; a spinner shows on first
+    // load until it lands. Building it synchronously inside `remember`
+    // during composition (the old behaviour) stalled the EDT for the whole
+    // build on large modules. Mirrors NativeDisassemblyPanelVirtualized's
+    // load pattern. `provider.bytes` hands out an independent-cursor
+    // duplicate, so the background read doesn't race the EDT's hex view
+    // over the same buffer.
+    //
+    // The holder is intentionally NOT keyed on `provider`: on an edit-commit
+    // provider rebuild we keep showing the previous (matched) panelState and
+    // swap atomically once the new build lands — no null frame. That keeps
+    // [WasmPanelWatVirtualizedContent] continuously mounted, so its no-key
+    // `remember`s (fold/expand toggles, nav history, appended-func tracking)
+    // survive commits exactly as they did when the build was synchronous.
+    // `provider` travels inside [PanelState], so content never observes a
+    // new provider paired with the old chunk tree during the rebuild window.
+    var panelState by remember { mutableStateOf<PanelState?>(null) }
+    androidx.compose.runtime.LaunchedEffect(provider) {
+        panelState = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            buildPanelState(provider)
+        }
+    }
+    val ready = panelState
+    if (ready == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(HexanaTheme.backgroundColor),
+        ) {
+            org.jetbrains.jewel.ui.component.CircularProgressIndicator(
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+        return
+    }
+    WasmPanelWatVirtualizedContent(
+        panelState = ready,
+        editableDoc = editableDoc,
+        listState = listState,
+        foldedSectionsExternal = foldedSectionsExternal,
+        navTargetFlow = navTargetFlow,
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun WasmPanelWatVirtualizedContent(
+    panelState: PanelState,
+    editableDoc: EditableBinaryDocument?,
+    listState: LazyListState?,
+    foldedSectionsExternal: MutableState<Set<ChunkId>>?,
+    navTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>,
+) {
+    // Read provider from the bundle, not from a separate param: it must stay
+    // matched to chunkTree/renderer/snapshot through edit-commit swaps.
+    val provider = panelState.provider
     val chunkTree = panelState.chunkTree
     val renderer = panelState.renderer
     val snapshot = panelState.snapshot
@@ -431,6 +486,7 @@ internal fun WasmPanelWatVirtualized(
 }
 
 private data class PanelState(
+    val provider: WasmBinaryProvider,
     val chunkTree: WasmChunkTree,
     val renderer: WasmHexanaWatRenderer,
     val snapshot: BinaryDocumentSnapshot,
@@ -443,6 +499,7 @@ private fun buildPanelState(provider: WasmBinaryProvider): PanelState {
     val snapshot = binaryDocumentOf(provider.bytes).snapshot()
     val parsed = WasmParsedBinary.fromProvider(provider, snapshot)
     return PanelState(
+        provider = provider,
         chunkTree = buildWasmChunkTree(parsed),
         renderer = WasmHexanaWatRenderer(parsed),
         snapshot = snapshot,

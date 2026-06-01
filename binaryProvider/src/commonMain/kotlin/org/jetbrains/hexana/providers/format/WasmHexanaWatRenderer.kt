@@ -128,9 +128,15 @@ public class WasmHexanaWatRenderer(
         } ?: emptyList()
     }
 
+    // Flattened to one element per type index (rec-group entries expanded),
+    // matching the per-type chunking in WasmSectionTypes.getRecordRanges so
+    // `renderTypeElement` can index this list by `chunk.indexInSection`. Each
+    // element is a leaf type (struct / array / func), never a rec wrapper —
+    // so a chunk renders a single `(type $N …)` row, not the whole rec group.
     private val typeRecords: List<WasmTypeRecord> by lazy {
         provider.wasmModule?.typesSection?.let { section ->
             with(section) { provider.bytes.parseTypes() }
+                .flatMap { if (it is WasmRecursiveTypeRecord) it.entries else listOf(it) }
         } ?: emptyList()
     }
 

@@ -17,9 +17,17 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
     constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
 
     override fun getRecordRanges(buffer: CommonByteBuffer): List<WasmNamedRange> {
+        // One range per *type index*, not per top-level record. A WasmGC `(rec
+        // …)` group declares many types under a single top-level record; in the
+        // index space (and in the WAT view) each entry is its own type. Emit one
+        // range per leaf type so the chunk tree gets one chunk per type instead
+        // of a single multi-MB chunk for the whole rec group (which froze the
+        // WAT-virtualized view in Skia paragraph layout on javac-class binaries).
         return with (buffer) {
-            parseTypes().mapIndexed { index, record ->
-                WasmNamedRange(record, "type $index")
+            var typeIndex = 0
+            parseTypes().flatMap { record ->
+                val leaves = if (record is WasmRecursiveTypeRecord) record.entries else listOf(record)
+                leaves.map { leaf -> WasmNamedRange(leaf, "type ${typeIndex++}") }
             }
         }
     }
