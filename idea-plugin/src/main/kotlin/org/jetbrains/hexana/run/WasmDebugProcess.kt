@@ -21,6 +21,7 @@ import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider
 import com.intellij.xdebugger.frame.XSuspendContext
 import com.intellij.xdebugger.impl.XDebuggerUtilImpl
 import org.jetbrains.hexana.shared.cuPathEndsWithProjectRelative
+import org.jetbrains.hexana.shared.extractCrateName
 import org.jetbrains.hexana.shared.cuPathMatchesIdePath
 import org.jetbrains.hexana.shared.extractProjectRelativePath
 import org.jetbrains.hexana.shared.functionNameMatchesIdePath
@@ -686,6 +687,24 @@ open class WasmDebugProcess(
                 }
             }
 
+            // Strategy 4: when no verification signal is available
+            // (CU path query returned null AND function name has no
+            // recognisable crate pattern), accept the suffix match
+            // optimistically — there is no contradicting evidence and
+            // the alternative (auto-resume) would silently skip every
+            // breakpoint in simple single-file projects where DWARF
+            // records only a bare filename (e.g. "debug_add.rs").
+            if (!verified && cuPath == null &&
+                (functionName == null || extractCrateName(functionName) == null)
+            ) {
+                verified = true
+                LOG.debug(
+                    "No CU path and no crate name extractable from " +
+                        "function '$functionName' — accepting suffix " +
+                        "match optimistically for '$resolvedIdePath'"
+                )
+            }
+
             if (!verified) {
                 LOG.info(
                     "Suffix match verification failed: CU='$cuPath', " +
@@ -708,7 +727,24 @@ open class WasmDebugProcess(
                     pathMatchesBreakpointLocation(verifiedPath, loc.first)
             }?.key
 
-            if (hitBreakpoint != null) {
+            // When LLDB resolves a file/line breakpoint, it may shift
+            // the actual stop location to a nearby line that has code
+            // (e.g. user sets line 11, LLDB resolves to line 12).
+            // If the stop came from a real LLDB breakpoint (non-empty
+            // breakpointId) and the file matches a registered
+            // breakpoint, accept the nearest breakpoint in that file
+            // even if the line doesn't match exactly.
+            val effectiveBreakpoint = hitBreakpoint
+                ?: if (event is LldbCommunicator.StopEvent.BreakpointHit &&
+                    event.breakpointId.isNotEmpty()
+                ) {
+                    registeredBreakpoints.entries
+                        .filter { (_, loc) -> pathMatchesBreakpointLocation(verifiedPath, loc.first) }
+                        .minByOrNull { (_, loc) -> kotlin.math.abs(loc.second - (resolvedPosition.line + 1)) }
+                        ?.key
+                } else null
+
+            if (effectiveBreakpoint != null) {
                 val frame = WasmStackFrame(
                     resolvedPosition, functionName, lldb,
                     dwarfVariableResolver = dwarfVariableResolver,
@@ -716,7 +752,7 @@ open class WasmDebugProcess(
                 )
                 val context = WasmSuspendContext(frame, lldb, this)
                 ApplicationManager.getApplication().invokeLater {
-                    session.breakpointReached(hitBreakpoint, null, context)
+                    session.breakpointReached(effectiveBreakpoint, null, context)
                 }
                 return
             }
