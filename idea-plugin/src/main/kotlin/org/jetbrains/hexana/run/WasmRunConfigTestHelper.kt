@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.run
 
+import com.intellij.execution.Platform
 import com.intellij.execution.ProgramRunnerUtil
 import com.intellij.execution.RunManager
 import com.intellij.execution.configurations.ConfigurationTypeUtil
@@ -7,6 +8,7 @@ import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
@@ -163,7 +165,9 @@ object WasmRunConfigTestHelper {
 
         // Wait for the debug session to pause at the breakpoint
         val result = StringBuilder()
-        val deadlineMs = System.currentTimeMillis() + 60_000
+        val deadlineMs = System.currentTimeMillis() + (
+             if (SystemInfo.isWindows) 200_000 else 60_000
+        )
         var paused = false
 
         while (System.currentTimeMillis() < deadlineMs) {
@@ -198,7 +202,7 @@ object WasmRunConfigTestHelper {
         // Wait for the IDE's own Variables pane computeChildren to
         // finish. It runs on a pooled thread and sends multiple LLDB
         // commands sequentially. 10 seconds is generous enough.
-        Thread.sleep(10_000)
+        Thread.sleep(if (SystemInfo.isWindows) 30_000 else 10_000)
 
         var collectedVariables = collectVariablesViaFrameVariable(session)
 
