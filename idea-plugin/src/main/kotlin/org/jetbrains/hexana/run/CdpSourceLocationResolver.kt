@@ -4,6 +4,8 @@ import com.intellij.openapi.diagnostic.Logger
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver.AddressSourceLocation
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver.SourceLocation
+import org.jetbrains.hexana.dwarf.DwarfSubprogramInfo
+import org.jetbrains.hexana.dwarf.DwarfVariableInfoExtractor
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.BaseModule
 import org.jetbrains.hexana.wasm.WasmModule
@@ -24,6 +26,19 @@ import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 internal class CdpSourceLocationResolver private constructor(
     private val locations: List<AddressSourceLocation>,
     private val codeSectionOffset: Int,
+    private val subprograms: List<DwarfSubprogramInfo> = emptyList(),
+    /**
+     * Reverse index built from CU-filtered entries only.
+     * These entries use compDir for accurate file paths and produce
+     * offsets that V8 reliably stops at.
+     */
+    private val cuSourceToOffsets: Map<String, List<LineOffset>> = emptyMap(),
+    /**
+     * Reverse index built from unfiltered line-table entries.
+     * These catch functions that fall outside the CU address range
+     * (e.g. `add` in wasm-bindgen binaries).
+     */
+    private val lineTableSourceToOffsets: Map<String, List<LineOffset>> = emptyMap(),
 ) {
 
     /**
@@ -58,44 +73,106 @@ internal class CdpSourceLocationResolver private constructor(
      */
     fun sourceToAllWasmOffsets(fileName: String, line: Int): List<ULong> {
         val normalizedName = normalizeFileName(fileName)
-        val entries = sourceToOffsets[normalizedName] ?: return emptyList()
 
         // DWARF lines are 1-based, IDE lines are 0-based
         val dwarfLine = line + 1
 
+        // Query both CU-filtered and line-table indexes independently.
+        // CU-filtered entries have accurate file paths (via compDir)
+        // and produce offsets V8 reliably stops at, but may miss
+        // functions outside the CU address range. Line-table entries
+        // catch those missing functions but may snap to different
+        // lines. Querying both and merging ensures we get breakpoint
+        // offsets from both resolution strategies.
+        val cuOffsets = resolveOffsetsFromEntries(
+            cuSourceToOffsets[normalizedName], dwarfLine
+        )
+        val ltOffsets = resolveOffsetsFromEntries(
+            lineTableSourceToOffsets[normalizedName], dwarfLine
+        )
+        val merged = (cuOffsets + ltOffsets).distinct()
+        LOG.info("sourceToAllWasmOffsets: file=$fileName dwarfLine=$dwarfLine cuOffsets=$cuOffsets ltOffsets=$ltOffsets merged=$merged")
+        return merged
+    }
+
+    /**
+     * Resolves breakpoint offsets from a single set of entries using
+     * exact match, snap-forward, or snap-backward strategies.
+     */
+    private fun resolveOffsetsFromEntries(
+        entries: List<LineOffset>?,
+        dwarfLine: Int,
+    ): List<ULong> {
+        if (entries.isNullOrEmpty()) return emptyList()
+
         // Find all exact matches first.
-        // Multiple DWARF line entries for the same source line
-        // correspond to individual wasm instructions (e.g. local.get/
-        // local.set chains in the function prologue). Setting
-        // breakpoints at all of them causes the debugger to pause
-        // repeatedly as each local is progressively initialized.
-        // We keep only the *last* (highest) offset — the point where
-        // all locals for that statement are fully set up.
         val exact = entries.filter { it.line == dwarfLine }
         if (exact.isNotEmpty()) {
-            val maxOffset = exact.maxOf { it.offset }
-            return listOf(toModuleOffset(maxOffset))
+            return maxOffsetPerFunction(exact)
         }
 
-        // Find the closest line that is >= the requested line
-        // (snap forward to the next executable statement, which is
-        // standard debugger behavior when a line has no direct mapping)
+        // Snap forward to the next executable statement
         val forwardLine = entries.filter { it.line >= dwarfLine }.minByOrNull { it.line }?.line
         if (forwardLine != null) {
-            val matching = entries.filter { it.line == forwardLine }
-            val maxOffset = matching.maxOf { it.offset }
-            return listOf(toModuleOffset(maxOffset))
+            return maxOffsetPerFunction(entries.filter { it.line == forwardLine })
         }
 
-        // Fall back to the closest preceding line if no forward match
+        // Fall back to the closest preceding line
         val backwardLine = entries.filter { it.line <= dwarfLine }.maxByOrNull { it.line }?.line
         if (backwardLine != null) {
-            val matching = entries.filter { it.line == backwardLine }
-            val maxOffset = matching.maxOf { it.offset }
-            return listOf(toModuleOffset(maxOffset))
+            return maxOffsetPerFunction(entries.filter { it.line == backwardLine })
         }
-
         return emptyList()
+    }
+
+    /**
+     * Groups matching DWARF line entries by function and returns the
+     * max (last) offset from each group, converted to module offsets.
+     *
+     * Multiple DWARF entries for the same source line within a single
+     * function correspond to individual wasm instructions (e.g.
+     * local.get/local.set chains in the function prologue). Setting
+     * breakpoints at all of them causes the debugger to pause
+     * repeatedly. We keep only the last (highest) offset per function
+     * — the point where all locals for that statement are set up.
+     *
+     * When DWARF subprogram info is available, entries are grouped by
+     * function address ranges ([lowPc, highPc)). Otherwise, all
+     * distinct offsets are returned as a fallback.
+     */
+    private fun maxOffsetPerFunction(entries: List<LineOffset>): List<ULong> {
+        if (entries.isEmpty()) return emptyList()
+        if (subprograms.isNotEmpty()) {
+            return maxOffsetPerFunctionViaDwarf(entries)
+        }
+        // Fallback: return all distinct offsets when no subprogram
+        // info is available (each offset becomes its own breakpoint).
+        return entries.map { toModuleOffset(it.offset) }.distinct()
+    }
+
+    /**
+     * Groups entries by DWARF subprogram address ranges and returns
+     * the max offset per function. Each subprogram has [lowPc, highPc)
+     * defining its code range; entries falling within the same range
+     * belong to the same function.
+     */
+    private fun maxOffsetPerFunctionViaDwarf(entries: List<LineOffset>): List<ULong> {
+        // Group entries by the subprogram they belong to.
+        // Key: subprogram index (or -1 for unmatched entries).
+        val groups = mutableMapOf<Int, MutableList<LineOffset>>()
+        for (entry in entries) {
+            val spIndex = subprograms.indexOfFirst { sp ->
+                val low = sp.lowPc ?: return@indexOfFirst false
+                val high = sp.highPc ?: return@indexOfFirst false
+                entry.offset.toLong() >= low && entry.offset.toLong() < high
+            }
+            val spName = if (spIndex >= 0) subprograms[spIndex].let { it.name ?: it.linkageName } else null
+            LOG.info("maxOffsetPerFunctionViaDwarf: offset=${entry.offset} line=${entry.line} -> spIndex=$spIndex spName=$spName")
+            groups.getOrPut(spIndex) { mutableListOf() }.add(entry)
+        }
+        val result = groups.values.map { group -> toModuleOffset(group.maxOf { it.offset }) }
+        LOG.info("maxOffsetPerFunctionViaDwarf: ${entries.size} entries -> ${groups.size} groups -> offsets=$result")
+        return result
     }
 
     /**
@@ -151,13 +228,38 @@ internal class CdpSourceLocationResolver private constructor(
                 if (accessor.debugLineSection() == null) return null
 
                 val resolver = DwarfSourceLocationResolver(accessor)
-                val locations = with(resolver) { buffer.resolveLocations() }
+                // Merge entries from both resolution strategies:
+                // - resolveLocations() filters by CU [low_pc, high_pc) and
+                //   uses compDir for accurate file paths — these entries
+                //   produce offsets that V8 reliably stops at.
+                // - resolveLineTableLocations() reads the line table without
+                //   CU filtering — this catches functions (e.g. `add` in
+                //   wasm-bindgen binaries) that fall outside the CU range.
+                // Merging both ensures we get breakpoint offsets for all
+                // functions while keeping the reliable CU-filtered entries.
+                val cuLocations = with(resolver) { buffer.resolveLocations() }
+                val lineTableLocations = with(resolver) { buffer.resolveLineTableLocations() }
+                val cuOffsets = cuLocations.map { it.offset }.toSet()
+                val locations = (cuLocations + lineTableLocations.filter { it.offset !in cuOffsets })
+                    .sortedBy { it.offset }
 
                 if (locations.isEmpty()) return null
 
                 val codeSectionOffset = (module as? WasmModule)?.codeSection?.contentOffset ?: 0
 
-                CdpSourceLocationResolver(locations, codeSectionOffset)
+                val extractor = DwarfVariableInfoExtractor(accessor)
+                val subprograms = try {
+                    with(extractor) { buffer.extractSubprograms() }
+                } catch (e: Exception) {
+                    LOG.debug("Failed to extract DWARF subprograms for breakpoint grouping", e)
+                    emptyList()
+                }
+
+                CdpSourceLocationResolver(
+                    locations, codeSectionOffset, subprograms,
+                    cuSourceToOffsets = buildReverseIndex(cuLocations),
+                    lineTableSourceToOffsets = buildReverseIndex(lineTableLocations),
+                )
             } catch (e: Exception) {
                 LOG.warn("Failed to parse DWARF line info from Wasm binary", e)
                 null
@@ -176,9 +278,10 @@ internal class CdpSourceLocationResolver private constructor(
         }
 
         private fun normalizeFileName(path: String): String {
-            // Extract just the file name from the path for flexible matching
-            val lastSlash = path.lastIndexOf('/')
-            return if (lastSlash >= 0) path.substring(lastSlash + 1) else path
+            // Extract just the file name from the path for flexible matching.
+            // Handle both Unix (/) and Windows (\) path separators.
+            val lastSep = maxOf(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+            return if (lastSep >= 0) path.substring(lastSep + 1) else path
         }
     }
 }
