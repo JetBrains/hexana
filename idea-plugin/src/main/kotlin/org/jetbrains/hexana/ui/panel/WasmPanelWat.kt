@@ -86,8 +86,17 @@ import java.awt.Color as AwtColor
 internal fun WasmPanelWat(
     wasmBinaryProvider: BinaryVirtualFileProvider,
     state: HexViewStateHolder,
-    wasmViewModel: WasmViewModel = WasmViewModel(state, wasmBinaryProvider)
 ) {
+    // Create the view-model once per composition (keyed on its inputs) rather than
+    // on every recomposition, and cancel its viewModelScope when this panel leaves
+    // composition on tab switch — Compose Desktop has no ViewModelStoreOwner to call
+    // onCleared(), so without this the WAT conversion keeps running on the IO pool.
+    val wasmViewModel = remember(state, wasmBinaryProvider) {
+        WasmViewModel(state, wasmBinaryProvider)
+    }
+    DisposableEffect(wasmViewModel) {
+        onDispose { wasmViewModel.cancelScope() }
+    }
     val wasmViewState by wasmViewModel.conversionState.collectAsState()
     state.setViewMode(HexViewMode.Wat)
 
@@ -872,6 +881,11 @@ internal class WasmViewModel(
 
     init {
         convert()
+    }
+
+    /** Cancels any in-flight WAT conversion when the panel leaves composition. */
+    fun cancelScope() {
+        viewModelScope.cancel()
     }
 
     fun convert() {

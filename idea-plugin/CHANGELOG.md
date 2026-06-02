@@ -11,6 +11,7 @@
 
 ### Changed
 - WAT (virtualized): WasmGC `(rec …)` recursive type groups now render as a collapsible group (collapsed by default) instead of a flat list of types; reference-type targets show as `$typeN` (e.g. `(ref null $type4923)`)
+- Binary editor: switching tabs now cancels the previous tab's in-flight off-thread analysis (for example the Top size tree) instead of letting it run to completion, so navigating away frees CPU and background threads for the tab you just opened
 
 ### Deprecated
 
@@ -20,6 +21,8 @@
 - Top (size analysis): switching to the Top tab no longer freezes the IDE on large binaries — the top-level size tree and data-segment parse ran inside composition on the EDT; they now build off-thread with a loading indicator
 - Functions tab: the Name column and the unreachable `●` marker were keyed by the defined-function row index rather than the global function index, so for modules with function imports both were shifted by the import count; they now resolve the correct name and reachability for every row
 - WAT (virtualized): opening a large WasmGC binary no longer hangs the IDE. The type section's single `(rec …)` group (tens of thousands of types) was rendered as one multi-megabyte row, freezing the UI thread in text layout; it now folds to a collapsible group with each type as a separate virtualized row, and the view's model is built off the UI thread
+- Top (size analysis): restoring a Top tab on startup no longer freezes the IDE on large modules — the size tree's depth metrics were still computed during composition on the EDT even though the tree data was already built off-thread; they now compute off-thread together with the tree
+- WAT: the WAT text conversion was rebuilt on every recomposition and its background coroutine was never cancelled when leaving the tab; it is now created once and cancelled on tab switch
 
 ### Security
 

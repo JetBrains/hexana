@@ -27,6 +27,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
@@ -99,6 +101,19 @@ fun PanelSize(provider: BinaryProvider, state: HexViewStateHolder) {
     }
 }
 
+/**
+ * The built size tree plus depth metrics computed once, off the EDT. Walking
+ * the tree (`walkDepthFirst()`) is O(nodes) and was previously done in the
+ * composable body on every render — for a large module (one node per function /
+ * segment) that froze the EDT on startup (it was the top frame in the freeze
+ * stack: `PanelSize.maxDepth`). [depthById] keeps `maxExpandedDepth` O(openNodes).
+ */
+private data class SizeTreeData(
+    val tree: Tree<Any>,
+    val maxDepth: Int,
+    val depthById: Map<Any, Int>,
+)
+
 @Composable
 private fun SizeTreeContent(
     module: BinarySizeNode,
@@ -110,19 +125,35 @@ private fun SizeTreeContent(
     var sortColumn by remember { mutableStateOf(SizeSortColumn.SIZE) }
     var sortAsc by remember { mutableStateOf(false) }
 
-    var tree by remember { mutableStateOf<Tree<Any>?>(null) }
+    var treeData by remember { mutableStateOf<SizeTreeData?>(null) }
 
     LaunchedEffect(module, sortColumn, sortAsc) {
-        tree = withContext(Dispatchers.IO) {
+        treeData = withContext(Dispatchers.IO) {
+            // Cooperative cancellation: switching away from this tab removes the
+            // panel from composition and Compose cancels this LaunchedEffect. The
+            // build/walk below are CPU-bound, so they poll the job and stop
+            // promptly instead of running to completion on the IO pool.
+            val job = coroutineContext.job
+            val isCancelled: () -> Boolean = { !job.isActive }
             val detailCache = mutableMapOf<Any, List<BinarySizeNode>>()
-            buildTree {
-                addSizeChildren(module, builder, provider, dataRecords, detailCache, sortColumn, sortAsc)
+            val builtTree = buildTree {
+                addSizeChildren(module, builder, provider, dataRecords, detailCache, sortColumn, sortAsc, isCancelled)
             }
+            // Depth metrics computed here, off the EDT — see [SizeTreeData].
+            val depthById = HashMap<Any, Int>()
+            var maxDepth = 0
+            var visited = 0
+            for (element in builtTree.walkDepthFirst()) {
+                if (visited++ and 0xFFF == 0) ensureActive()
+                if (element.depth > maxDepth) maxDepth = element.depth
+                element.id?.let { depthById[it] = element.depth }
+            }
+            SizeTreeData(builtTree, maxDepth, depthById)
         }
     }
 
-    val currentTree = tree
-    if (currentTree == null) {
+    val currentData = treeData
+    if (currentData == null) {
         Box(modifier = Modifier.padding(8.dp)) {
             Text(
                 "Loading...",
@@ -131,6 +162,7 @@ private fun SizeTreeContent(
         }
         return
     }
+    val currentTree = currentData.tree
 
     val treeState = remember(currentTree) {
         TreeState(SelectableLazyListState(LazyListState()))
@@ -139,13 +171,15 @@ private fun SizeTreeContent(
     val treeMetrics = JewelTheme.treeStyle.metrics
     val chevronSpacerWidth = 16.dp + treeMetrics.chevronContentGap
     val indentSize = treeMetrics.indentSize
-    val maxDepth = remember(currentTree) { currentTree.maxDepth() }
+    val maxDepth = currentData.maxDepth
     val maxIndent = indentSize * maxDepth
     val nameColumnWidth = 200.dp
     val sizeColumnWidth = 144.dp + maxIndent
     val percentColumnWidth = 112.dp + maxIndent
-    val expandedNestingDepth by remember(currentTree) {
-        derivedStateOf { currentTree.maxExpandedDepth(treeState.openNodes) }
+    val expandedNestingDepth by remember(currentData) {
+        derivedStateOf {
+            treeState.openNodes.mapNotNull { currentData.depthById[it] }.maxOfOrNull { it + 1 } ?: 0
+        }
     }
     val nestingRightPadding = when (expandedNestingDepth) {
         0 -> 0.dp
@@ -210,14 +244,17 @@ private fun TreeGeneratorScope<Any>.addSizeChildren(
     detailCache: MutableMap<Any, List<BinarySizeNode>>,
     sortColumn: SizeSortColumn,
     sortAsc: Boolean,
+    isCancelled: () -> Boolean = { false },
 ) {
+    if (isCancelled()) return
     val children = resolveChildren(parent, builder, provider, dataRecords, detailCache)
         .sortedWith(sizeNodeComparator(sortColumn, sortAsc))
     for (child in children) {
+        if (isCancelled()) return
         val grandchildren = resolveChildren(child, builder, provider, dataRecords, detailCache)
         if (grandchildren.isNotEmpty()) {
             addNode(child) {
-                addSizeChildren(child, builder, provider, dataRecords, detailCache, sortColumn, sortAsc)
+                addSizeChildren(child, builder, provider, dataRecords, detailCache, sortColumn, sortAsc, isCancelled)
             }
         } else {
             addLeaf(child)
@@ -357,12 +394,6 @@ private fun SizeNodeRow(
         )
     }
 }
-
-private fun Tree<*>.maxDepth(): Int =
-    walkDepthFirst().maxOfOrNull { it.depth } ?: 0
-
-private fun Tree<*>.maxExpandedDepth(openNodes: Set<Any>): Int =
-    walkDepthFirst().filter { it.id in openNodes }.maxOfOrNull { it.depth + 1 } ?: 0
 
 internal fun formatSize(bytes: Int): String {
     return formatSize(bytes.toLong())
