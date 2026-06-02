@@ -99,6 +99,8 @@ object WasmRunConfigTestHelper {
         programArgs: String,
         wasmtimePath: String = "",
     ): String {
+        removeAllBreakpoints(project)
+
         val basePath = project.basePath ?: error("project basePath is null")
 
         // Set breakpoint on the source file
@@ -242,6 +244,8 @@ object WasmRunConfigTestHelper {
         programArgs: String,
         wasmtimePath: String = "",
     ) {
+        removeAllBreakpoints(project)
+
         val basePath = project.basePath ?: error("project basePath is null")
         val wasmFilePath = "$basePath/$wasmFileName"
         val wasmVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(wasmFilePath)
@@ -276,6 +280,15 @@ object WasmRunConfigTestHelper {
         val executor = DefaultDebugExecutor.getDebugExecutorInstance()
         ApplicationManager.getApplication().invokeLater {
             ProgramRunnerUtil.executeConfiguration(settings, executor)
+        }
+    }
+
+    private fun removeAllBreakpoints(project: Project) {
+        ApplicationManager.getApplication().invokeAndWait {
+            ApplicationManager.getApplication().runWriteAction {
+                val bpManager = XDebuggerManager.getInstance(project).breakpointManager
+                bpManager.allBreakpoints.forEach { bpManager.removeBreakpoint(it) }
+            }
         }
     }
 
