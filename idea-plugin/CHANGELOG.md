@@ -8,10 +8,12 @@
 - jitview: search compiled methods by inlined callee with `in:<method>` — surfaces every nmethod that inlined the given method, using the JVMTI inline records in the dump
 - JIT Viewer: new "Instrument JMH forks" option attaches the dump agent to each forked JMH benchmark JVM via a bundled `-javaagent`, writing one `ClassName_method.jit` per benchmark; because it rides on JVM options (not JMH's `-prof`) it works for any JMH run type — the IDE gutter run, the Gradle JMH plugin, and `org.openjdk.jmh.Main`
 - WAT (virtualized): custom sections now render as a foldable entry — an `offset hex name` header with the section's raw content below, shown in selectable `u8`/`u16`/`u32`/`u64`/`ascii`/`utf8` encodings (the same representation as Data entries)
+- NodeJS and Browser (for debug - Chrome only) are supported as wasm runtimes for run/debug wasm configurations
 
 ### Changed
 - WAT (virtualized): WasmGC `(rec …)` recursive type groups now render as a collapsible group (collapsed by default) instead of a flat list of types; reference-type targets show as `$typeN` (e.g. `(ref null $type4923)`)
 - Binary editor: switching tabs now cancels the previous tab's in-flight off-thread analysis (for example the Top size tree) instead of letting it run to completion, so navigating away frees CPU and background threads for the tab you just opened
+- WASM debugging – better handling of breakpoints on Windows (if it didn't attach for you previously it should now)
 
 ### Deprecated
 
