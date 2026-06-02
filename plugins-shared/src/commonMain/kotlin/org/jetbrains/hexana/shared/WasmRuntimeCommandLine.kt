@@ -617,6 +617,59 @@ fun buildGraalWasmRunArgs(input: WasmRunInput): WasmCommandLine {
 }
 
 // ---------------------------------------------------------------------------
+// Chicory
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the argument list for running a Wasm module via the Chicory CLI.
+ *
+ * Chicory is a JVM-based WebAssembly runtime with two execution modes:
+ * - **Interpreter** (`--chicory-mode=interpret`): pure-Java bytecode
+ *   interpretation, no native dependencies.
+ * - **AOT** (`--chicory-mode=aot`): ahead-of-time compilation to JVM
+ *   bytecode via the Chicory "Redline" backend for near-native speed.
+ *
+ * The Chicory CLI (`chicory run …`) accepts the Wasm file path and
+ * optional flags for the function to invoke and extra runtime options.
+ *
+ * @param input shared run input
+ * @param aot   `true` to use AOT/Redline mode, `false` for interpreter
+ */
+fun buildChicoryRunArgs(input: WasmRunInput, aot: Boolean): WasmCommandLine {
+    val args = mutableListOf<String>()
+    args.add("run")
+
+    // Select execution mode
+    if (aot) {
+        args.add("--chicory-mode=aot")
+    } else {
+        args.add("--chicory-mode=interpret")
+    }
+
+    val options = input.runtimeOptions.trim()
+    if (options.isNotEmpty()) {
+        args.addAll(splitOptions(options))
+    }
+
+    // Chicory uses `--invoke <function_name>` to call a specific export
+    val functionName = input.exportName.trim()
+    if (functionName.isNotEmpty()) {
+        args.add("--invoke")
+        args.add(functionName)
+    }
+
+    args.add(input.wasmFilePath)
+
+    val programArgs = input.programArguments.trim()
+    if (programArgs.isNotEmpty()) {
+        args.addAll(programArgs.split("\\s+".toRegex()))
+    }
+
+    val workDir = input.workingDirectory.ifBlank { null }
+    return WasmCommandLine(arguments = args, workingDirectory = workDir)
+}
+
+// ---------------------------------------------------------------------------
 // Node.js
 // ---------------------------------------------------------------------------
 

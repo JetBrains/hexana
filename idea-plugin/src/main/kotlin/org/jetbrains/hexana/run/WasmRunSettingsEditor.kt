@@ -88,6 +88,8 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private val graalVmPathField = TextFieldWithBrowseButton()
     private val nodePathField = TextFieldWithBrowseButton()
     private val nodeOptionsField = RawCommandLineEditor()
+    private val chicoryPathField = TextFieldWithBrowseButton()
+    private val chicoryOptionsField = RawCommandLineEditor()
     private val lldbPathField = TextFieldWithBrowseButton()
     private val chromePathField = TextFieldWithBrowseButton()
     private val exportNameField = JBTextField()
@@ -102,6 +104,8 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private var graalVmPathRow: Row? = null
     private var nodePathRow: Row? = null
     private var nodeOptionsRow: Row? = null
+    private var chicoryPathRow: Row? = null
+    private var chicoryOptionsRow: Row? = null
     private var lldbPathRow: Row? = null
     private var chromePathRow: Row? = null
     private var exportNameRow: Row? = null
@@ -141,6 +145,14 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         (nodePathField.childComponent as? JBTextField)?.emptyText?.setText(
             WasmRuntimeSettings.getInstance().effectiveNodePath()
         )
+        chicoryPathField.addBrowseFolderListener(
+            project,
+            FileChooserDescriptor(false, true, false, false, false, false),
+        )
+        val effectiveChicoryJdk = WasmRuntimeSettings.getInstance().effectiveChicoryJdkPath()
+        if (effectiveChicoryJdk != null) {
+            (chicoryPathField.childComponent as? JBTextField)?.emptyText?.setText(effectiveChicoryJdk)
+        }
         lldbPathField.addBrowseFolderListener(
             project,
             FileChooserDescriptorFactory.singleFile(),
@@ -179,6 +191,8 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
             WasmEngine.WAMR -> migrateWasmtimeToGraalWasm()
             WasmEngine.BROWSER -> migrateWasmtimeToGraalWasm()
             WasmEngine.NODE_JS -> migrateWasmtimeToGraalWasm()
+            WasmEngine.CHICORY_INTERPRETER -> migrateWasmtimeToGraalWasm()
+            WasmEngine.CHICORY_AOT -> migrateWasmtimeToGraalWasm()
             WasmEngine.WASMTIME -> migrateGraalWasmToWasmtime()
         }
     }
@@ -215,6 +229,7 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         val isGraalWasm = selected == WasmEngine.GRAALWASM
         val isNodeJs = selected == WasmEngine.NODE_JS
         val isBrowser = selected == WasmEngine.BROWSER
+        val isChicory = selected == WasmEngine.CHICORY_INTERPRETER || selected == WasmEngine.CHICORY_AOT
         wasmtimePathRow?.visible(isWasmtime)
         wasmtimeOptionsRow?.visible(isWasmtime)
         wamrPathRow?.visible(isWamr)
@@ -222,6 +237,8 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         graalVmPathRow?.visible(isGraalWasm)
         nodePathRow?.visible(isNodeJs)
         nodeOptionsRow?.visible(isNodeJs)
+        chicoryPathRow?.visible(isChicory)
+        chicoryOptionsRow?.visible(false)
         lldbPathRow?.visible(isWasmtime || isWamr)
         chromePathRow?.visible(isBrowser)
         exportNameRow?.visible(!isWasmtime)
@@ -237,6 +254,8 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         graalVmPathField.text = configuration.graalVmPath
         nodePathField.text = configuration.nodePath
         nodeOptionsField.text = configuration.nodeOptions
+        chicoryPathField.text = configuration.chicoryPath
+        chicoryOptionsField.text = configuration.chicoryOptions
         lldbPathField.text = configuration.lldbPath
         chromePathField.text = configuration.chromePath
         exportNameField.text = configuration.exportName
@@ -256,6 +275,8 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         configuration.graalVmPath = graalVmPathField.text
         configuration.nodePath = nodePathField.text
         configuration.nodeOptions = nodeOptionsField.text
+        configuration.chicoryPath = chicoryPathField.text
+        configuration.chicoryOptions = chicoryOptionsField.text
         configuration.lldbPath = lldbPathField.text
         configuration.chromePath = chromePathField.text
         configuration.exportName = exportNameField.text
@@ -290,6 +311,12 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         }
         nodeOptionsRow = row(HexanaBundle.message("wasm.run.configuration.node.options")) {
             cell(nodeOptionsField).align(AlignX.FILL)
+        }
+        chicoryPathRow = row(HexanaBundle.message("wasm.run.configuration.chicory.path")) {
+            cell(chicoryPathField).align(AlignX.FILL)
+        }
+        chicoryOptionsRow = row(HexanaBundle.message("wasm.run.configuration.chicory.options")) {
+            cell(chicoryOptionsField).align(AlignX.FILL)
         }
         lldbPathRow = row(HexanaBundle.message("wasm.run.configuration.lldb.path")) {
             cell(lldbPathField).align(AlignX.FILL)

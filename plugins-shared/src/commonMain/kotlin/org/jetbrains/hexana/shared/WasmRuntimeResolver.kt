@@ -3,10 +3,11 @@ package org.jetbrains.hexana.shared
 /**
  * Platform-agnostic runtime executable resolution.
  *
- * Maps a runtime identifier (`"wasmtime"`, `"wamr"`, `"graalwasm"`) to its
- * default executable name, respecting optional custom paths provided by
- * the caller. Platform-specific details (reading settings, environment
- * variables, checking file existence) remain in the host layer.
+ * Maps a runtime identifier (`"wasmtime"`, `"wamr"`, `"graalwasm"`,
+ * `"chicory-interpreter"`, `"chicory-aot"`) to its default executable
+ * name, respecting optional custom paths provided by the caller.
+ * Platform-specific details (reading settings, environment variables,
+ * checking file existence) remain in the host layer.
  */
 object WasmRuntimeResolver {
 
@@ -19,11 +20,13 @@ object WasmRuntimeResolver {
      * instead, the thin `HexanaGraalWasmRunner` wrapper is compiled on
      * first use and executed via `java`.
      *
-     * @param runtime      runtime identifier: `"wasmtime"`, `"wamr"`, or `"graalwasm"`
+     * @param runtime      runtime identifier: `"wasmtime"`, `"wamr"`, `"graalwasm"`,
+     *                      `"chicory-interpreter"`, or `"chicory-aot"`
      * @param isWindows    `true` on Windows (appends `.exe` to bare names)
      * @param wasmtimePath custom Wasmtime executable path (empty = use default)
      * @param wamrPath     custom WAMR (iwasm) executable path (empty = use default)
      * @param graalVmHome  GraalVM home directory (empty = not configured)
+     * @param chicoryPath  custom Chicory CLI executable/JAR path (empty = use default)
      * @return the resolved executable path, or `null` when the runtime
      *         requires a home directory that was not provided (GraalWasm)
      */
@@ -34,6 +37,7 @@ object WasmRuntimeResolver {
         wamrPath: String = "",
         graalVmHome: String = "",
         nodePath: String = "",
+        chicoryPath: String = "",
     ): String? {
         return when (runtime) {
             "wasmtime" -> {
@@ -58,6 +62,11 @@ object WasmRuntimeResolver {
                 if (custom.isNotEmpty()) custom
                 else if (isWindows) "node.exe" else "node"
             }
+            "chicory-interpreter", "chicory-aot" -> {
+                val custom = chicoryPath.trim()
+                if (custom.isNotEmpty()) custom
+                else if (isWindows) "chicory.bat" else "chicory"
+            }
             else -> if (isWindows) "wasmtime.exe" else "wasmtime"
         }
     }
@@ -66,7 +75,8 @@ object WasmRuntimeResolver {
      * Builds a unified runtime command line by dispatching to the
      * correct shared builder.
      *
-     * @param runtime          runtime identifier: `"wasmtime"`, `"wamr"`, or `"graalwasm"`
+     * @param runtime          runtime identifier: `"wasmtime"`, `"wamr"`, `"graalwasm"`,
+     *                          `"chicory-interpreter"`, or `"chicory-aot"`
      * @param wasmFilePath     path to the `.wasm` file
      * @param wasmBytes        raw bytes of the file, or `null`
      * @param exportName       function to invoke (used by WAMR/GraalWasm)
@@ -108,6 +118,8 @@ object WasmRuntimeResolver {
             "wamr" -> buildWamrRunArgs(input, stubFileWriter = stubFileWriter)
             "graalwasm" -> buildGraalWasmRunArgs(input)
             "nodejs" -> buildNodeJsRunArgs(input)
+            "chicory-interpreter" -> buildChicoryRunArgs(input, aot = false)
+            "chicory-aot" -> buildChicoryRunArgs(input, aot = true)
             else -> buildWasmtimeRunArgs(input)
         }
     }

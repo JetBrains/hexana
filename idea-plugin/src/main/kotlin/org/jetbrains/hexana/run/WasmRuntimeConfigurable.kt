@@ -77,6 +77,12 @@ class WasmRuntimeConfigurable : DslConfigurableBase(), SearchableConfigurable {
                         }
                         .bindText(settings::nodePathInUi.toNonNullableProperty(""))
                 }
+                row(HexanaBundle.message("wasm.runtime.settings.chicory.path")) {
+                    textFieldWithBrowseButton(FileChooserDescriptorFactory.singleDir())
+                        .align(AlignX.FILL)
+                        .comment(HexanaBundle.message("wasm.runtime.settings.chicory.path.comment"))
+                        .bindText(settings::chicoryPathInUi.toNonNullableProperty(""))
+                }
             }
             group(HexanaBundle.message("wasm.runtime.settings.group.debugger")) {
                 row(HexanaBundle.message("wasm.runtime.settings.lldb.path")) {

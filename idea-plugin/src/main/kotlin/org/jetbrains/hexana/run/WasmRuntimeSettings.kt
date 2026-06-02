@@ -44,6 +44,11 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
         get() = state.nodePath
         set(value) { state.nodePath = value?.takeIf { it.isNotBlank() } }
 
+    /** User-configured JDK home path for running Chicory. */
+    var chicoryPathInUi: String?
+        get() = state.chicoryPath
+        set(value) { state.chicoryPath = value?.takeIf { it.isNotBlank() } }
+
     /** User-configured LLDB path for UI binding. */
     var lldbPathInUi: String?
         get() = state.lldbPath
@@ -112,6 +117,15 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
     }
 
     /**
+     * Returns the user-configured JDK home path for Chicory, or `null`
+     * when not set (meaning the IntelliJ-bundled JVM is used).
+     */
+    fun effectiveChicoryJdkPath(): String? {
+        val configured = state.chicoryPath
+        return configured?.takeIf { it.isNotBlank() }
+    }
+
+    /**
      * Returns the effective LLDB executable path.
      */
     fun effectiveLldbPath(): String {
@@ -135,6 +149,7 @@ class WasmRuntimeSettingsState : BaseState() {
     var wamrPath: String? by string()
     var graalVmPath: String? by string()
     var nodePath: String? by string()
+    var chicoryPath: String? by string()
     var lldbPath: String? by string()
     var chromePath: String? by string()
     var defaultEngine: String? by string()
