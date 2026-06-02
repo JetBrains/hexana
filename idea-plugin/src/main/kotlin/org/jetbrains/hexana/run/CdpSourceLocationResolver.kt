@@ -91,7 +91,7 @@ internal class CdpSourceLocationResolver private constructor(
             lineTableSourceToOffsets[normalizedName], dwarfLine
         )
         val merged = (cuOffsets + ltOffsets).distinct()
-        LOG.info("sourceToAllWasmOffsets: file=$fileName dwarfLine=$dwarfLine cuOffsets=$cuOffsets ltOffsets=$ltOffsets merged=$merged")
+        LOG.debug("sourceToAllWasmOffsets: file=$fileName dwarfLine=$dwarfLine cuOffsets=$cuOffsets ltOffsets=$ltOffsets merged=$merged")
         return merged
     }
 
@@ -167,11 +167,11 @@ internal class CdpSourceLocationResolver private constructor(
                 entry.offset.toLong() >= low && entry.offset.toLong() < high
             }
             val spName = if (spIndex >= 0) subprograms[spIndex].let { it.name ?: it.linkageName } else null
-            LOG.info("maxOffsetPerFunctionViaDwarf: offset=${entry.offset} line=${entry.line} -> spIndex=$spIndex spName=$spName")
+            LOG.debug("maxOffsetPerFunctionViaDwarf: offset=${entry.offset} line=${entry.line} -> spIndex=$spIndex spName=$spName")
             groups.getOrPut(spIndex) { mutableListOf() }.add(entry)
         }
         val result = groups.values.map { group -> toModuleOffset(group.maxOf { it.offset }) }
-        LOG.info("maxOffsetPerFunctionViaDwarf: ${entries.size} entries -> ${groups.size} groups -> offsets=$result")
+        LOG.debug("maxOffsetPerFunctionViaDwarf: ${entries.size} entries -> ${groups.size} groups -> offsets=$result")
         return result
     }
 
