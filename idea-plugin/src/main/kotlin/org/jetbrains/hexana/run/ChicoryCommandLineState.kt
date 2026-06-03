@@ -140,6 +140,7 @@ private fun resolveChicoryJars(): List<String> {
     val cacheDir = Path.of(System.getProperty("java.io.tmpdir"), "hexana-chicory-runner", "libs", version)
     Files.createDirectories(cacheDir)
 
+    val asmVersion = "9.9.1"
     val artifacts = listOf(
         "com.dylibso.chicory:runtime:$version",
         "com.dylibso.chicory:wasm:$version",
@@ -147,6 +148,9 @@ private fun resolveChicoryJars(): List<String> {
         "com.dylibso.chicory:compiler:$version",
         "com.dylibso.chicory:annotations:$version",
         "com.dylibso.chicory:log:$version",
+        "org.ow2.asm:asm:$asmVersion",
+        "org.ow2.asm:asm-commons:$asmVersion",
+        "org.ow2.asm:asm-util:$asmVersion",
     )
 
     return artifacts.map { coords ->
