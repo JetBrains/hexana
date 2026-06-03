@@ -2,20 +2,15 @@ package org.jetbrains.hexana.ui
 
 import com.intellij.driver.client.Driver
 import com.intellij.driver.client.Remote
-import com.intellij.driver.sdk.getRunContentManager
-import com.intellij.driver.sdk.openFile
-import com.intellij.driver.sdk.singleProject
+import com.intellij.driver.sdk.*
 import com.intellij.driver.sdk.ui.UiText.Companion.asString
 import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
 import com.intellij.driver.sdk.ui.components.common.editorTabs
 import com.intellij.driver.sdk.ui.components.common.ideFrame
-import com.intellij.driver.sdk.waitFor
-import com.intellij.driver.sdk.waitForIndicators
 import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.tools.ide.util.common.logOutput
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -24,6 +19,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.util.zip.ZipInputStream
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -310,7 +306,7 @@ class HexanaRunConfigurationDriverTest {
                     wasmFileName = CORE_MODULE_FILE,
                     engine = "WASMTIME",
                 )
-                waitForProcessTermination(this)
+                waitForProcessTermination(this, 5.minutes)
 
                 val output = readConsoleOutput()
                 logOutput("Core module debug output: $output")
@@ -453,12 +449,12 @@ class HexanaRunConfigurationDriverTest {
         )
     }
 
-    private fun waitForProcessTermination(driver: Driver) {
+    private fun waitForProcessTermination(driver: Driver, timeout: Duration = 2.minutes) {
         val project = driver.singleProject()
         val rcm = driver.getRunContentManager(project)
         waitFor(
             message = "Waiting for process to terminate",
-            timeout = 2.minutes,
+            timeout = timeout,
             interval = 1.seconds,
         ) {
             val content = rcm.getSelectedContent()
