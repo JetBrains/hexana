@@ -66,6 +66,18 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     private var destroyed = false
 
     /**
+     * Set to `true` when the debuggee process has exited (LLDB
+     * reports `Process exited`).  Commands sent after this point
+     * are silently dropped to avoid "Process is not running"
+     * errors — particularly on Windows where the debuggee can
+     * exit between a stop event being queued and the event loop
+     * sending a `continue`.
+     */
+    @Volatile
+    var debuggeeExited = false
+        private set
+
+    /**
      * Installs a [ProcessAdapter] on the handler that parses every
      * output line for stop-event patterns. Call this before starting
      * the process handler.
@@ -119,6 +131,10 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     fun sendCommand(command: String) {
         if (destroyed) {
             LOG.debug("LLDB CMD (dropped, already destroyed): $command")
+            return
+        }
+        if (debuggeeExited) {
+            LOG.debug("LLDB CMD (dropped, debuggee exited): $command")
             return
         }
         LOG.debug("LLDB CMD: $command")
@@ -404,7 +420,7 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         pythonLines: List<String>,
         timeoutMs: Long = 5_000,
     ): List<String> {
-        if (destroyed) return emptyList()
+        if (destroyed || debuggeeExited) return emptyList()
 
         val marker = "__HEXANA_END_${System.nanoTime()}__"
 
@@ -459,7 +475,7 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         command: String,
         timeoutMs: Long = 5_000,
     ): List<String> {
-        if (destroyed) return emptyList()
+        if (destroyed || debuggeeExited) return emptyList()
 
         val marker = "__HEXANA_END_${System.nanoTime()}__"
         val latch = CountDownLatch(1)
@@ -538,7 +554,11 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
             )
             is LldbStopEvent.Stepped -> StopEvent.Stepped
             is LldbStopEvent.StoppedAtEntry -> StopEvent.StoppedAtEntry
-            is LldbStopEvent.ProcessExited -> StopEvent.ProcessExited(shared.exitCode)
+            is LldbStopEvent.ProcessExited -> {
+                debuggeeExited = true
+                LOG.debug("Debuggee process exited (code=${shared.exitCode}), will drop further commands")
+                StopEvent.ProcessExited(shared.exitCode)
+            }
         }
     }
 
