@@ -7,6 +7,7 @@ import com.intellij.ui.dsl.builder.panel
 import org.jetbrains.hexana.run.PopupMode
 import org.jetbrains.hexana.run.WasmEngine
 import org.jetbrains.hexana.run.WasmRunMode
+import org.jetbrains.hexana.run.WasmRuntimeSettings
 import javax.swing.Action
 import javax.swing.JComponent
 
@@ -51,6 +52,9 @@ internal open class WasmRunDialog(
                 return this
             }
         }
+        WasmRuntimeSettings.getInstance().resolveDefaultEngine()?.let { default ->
+            if (default in engines) selectedItem = default
+        }
         addActionListener { updateDebugEnabled() }
     }
 
@@ -65,6 +69,7 @@ internal open class WasmRunDialog(
 
         override fun doAction(e: java.awt.event.ActionEvent?) {
             applyFields()
+            saveSelectedEngine()
             result = WasmRunDialogResult(engineCombo.item, WasmRunMode.RUN)
             close(OK_EXIT_CODE)
         }
@@ -77,6 +82,7 @@ internal open class WasmRunDialog(
 
         override fun doAction(e: java.awt.event.ActionEvent?) {
             applyFields()
+            saveSelectedEngine()
             result = WasmRunDialogResult(engineCombo.item, WasmRunMode.DEBUG)
             close(OK_EXIT_CODE)
         }
@@ -119,6 +125,11 @@ internal open class WasmRunDialog(
         }
         actions.add(cancelAction)
         return actions.toTypedArray()
+    }
+
+    private fun saveSelectedEngine() {
+        val engine = engineCombo.item ?: return
+        WasmRuntimeSettings.getInstance().defaultEngineInUi = engine.name
     }
 
     override fun getPreferredFocusedComponent(): JComponent = engineCombo
