@@ -222,6 +222,18 @@ open class WasmDebugProcess(
             baseName to line
         }
 
+        // When there are no user breakpoints, there is nothing to
+        // resolve via the JIT loader. Remove the helper breakpoint on
+        // __jit_debug_register_code and resume immediately so the
+        // debuggee runs to completion and the event loop can detect
+        // the process-exit event.
+        if (breakpointFiles.isEmpty()) {
+            LOG.info("Windows wasmtime: no user breakpoints — skipping JIT setup, resuming process")
+            lldb.removeAllBreakpoints()
+            lldb.resume()
+            return
+        }
+
         val tempDir = java.nio.file.Files.createTempDirectory("hexana-jit").toAbsolutePath().toString()
 
         var resolved = false
@@ -273,7 +285,12 @@ open class WasmDebugProcess(
             // set breakpoints, then replay and resume.
             lldb.pause()
             // Give LLDB a moment to process the interrupt.
-            lldb.waitForStopEvent(2_000)
+            val pauseEvent = lldb.waitForStopEvent(2_000)
+            if (pauseEvent is LldbCommunicator.StopEvent.ProcessExited) {
+                LOG.info("Windows wasmtime: process exited during unresolved-breakpoint recovery")
+                lldb.reofferStopEvent(pauseEvent)
+                return
+            }
             lldb.removeAllBreakpoints()
             replayBreakpointsToLldb()
         }
