@@ -141,30 +141,20 @@ open class WasmDebugProcess(
                 // This entire flow runs on a background thread so
                 // sessionInitialized() returns immediately and the UI
                 // stays responsive.
-                //
-                // When there are no user breakpoints, the JIT symbol
-                // loading is unnecessary — skip it and just run the
-                // process so it can exit normally without getting stuck
-                // waiting for JIT register hits that will never resolve.
-                if (registeredBreakpoints.isEmpty()) {
-                    lldb.runProcess()
-                    startEventLoop()
-                } else {
-                    lldb.removeAllBreakpoints()
-                    lldb.sendBreakpointOnFunction(JIT_REGISTER_FUNCTION)
-                    lldb.runProcess()
-                    Thread {
-                        try {
-                            windowsJitBreakpointSetup(lldb)
-                        } catch (e: Exception) {
-                            LOG.warn("Windows JIT breakpoint setup failed", e)
-                        }
-                        startEventLoop()
-                    }.apply {
-                        name = "Hexana-Windows-JIT-Setup"
-                        isDaemon = true
-                        start()
+                lldb.removeAllBreakpoints()
+                lldb.sendBreakpointOnFunction(JIT_REGISTER_FUNCTION)
+                lldb.runProcess()
+                Thread {
+                    try {
+                        windowsJitBreakpointSetup(lldb)
+                    } catch (e: Exception) {
+                        LOG.warn("Windows JIT breakpoint setup failed", e)
                     }
+                    startEventLoop()
+                }.apply {
+                    name = "Hexana-Windows-JIT-Setup"
+                    isDaemon = true
+                    start()
                 }
             } else {
                 // On macOS/Linux, LLDB's JIT loader plugin resolves
