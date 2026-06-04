@@ -39,24 +39,28 @@ internal open class WasmRunDialog(
     private val engines: List<WasmEngine> =
         WasmEngine.entries.filter { !isComponentModel || it.supportsComponentsModel }
 
-    private val engineCombo = com.intellij.openapi.ui.ComboBox(engines.toTypedArray()).apply {
-        renderer = object : javax.swing.DefaultListCellRenderer() {
-            override fun getListCellRendererComponent(
-                list: javax.swing.JList<*>?,
-                value: Any?,
-                index: Int,
-                isSelected: Boolean,
-                cellHasFocus: Boolean,
-            ): java.awt.Component {
-                super.getListCellRendererComponent(list, (value as? WasmEngine)?.displayName ?: value, index, isSelected, cellHasFocus)
-                return this
+    private val singleEngine: WasmEngine? = engines.singleOrNull()
+
+    private val engineCombo = if (singleEngine == null) {
+        com.intellij.openapi.ui.ComboBox(engines.toTypedArray()).apply {
+            renderer = object : javax.swing.DefaultListCellRenderer() {
+                override fun getListCellRendererComponent(
+                    list: javax.swing.JList<*>?,
+                    value: Any?,
+                    index: Int,
+                    isSelected: Boolean,
+                    cellHasFocus: Boolean,
+                ): java.awt.Component {
+                    super.getListCellRendererComponent(list, (value as? WasmEngine)?.displayName ?: value, index, isSelected, cellHasFocus)
+                    return this
+                }
             }
+            WasmRuntimeSettings.getInstance().resolveDefaultEngine()?.let { default ->
+                if (default in engines) selectedItem = default
+            }
+            addActionListener { updateDebugEnabled() }
         }
-        WasmRuntimeSettings.getInstance().resolveDefaultEngine()?.let { default ->
-            if (default in engines) selectedItem = default
-        }
-        addActionListener { updateDebugEnabled() }
-    }
+    } else null
 
     /** The result set when the user clicks Run or Debug; `null` if cancelled. */
     var result: WasmRunDialogResult? = null
@@ -70,7 +74,7 @@ internal open class WasmRunDialog(
         override fun doAction(e: java.awt.event.ActionEvent?) {
             applyFields()
             saveSelectedEngine()
-            result = WasmRunDialogResult(engineCombo.item, WasmRunMode.RUN)
+            result = WasmRunDialogResult(selectedEngine ?: return, WasmRunMode.RUN)
             close(OK_EXIT_CODE)
         }
     }
@@ -83,7 +87,7 @@ internal open class WasmRunDialog(
         override fun doAction(e: java.awt.event.ActionEvent?) {
             applyFields()
             saveSelectedEngine()
-            result = WasmRunDialogResult(engineCombo.item, WasmRunMode.DEBUG)
+            result = WasmRunDialogResult(selectedEngine ?: return, WasmRunMode.DEBUG)
             close(OK_EXIT_CODE)
         }
     }
@@ -100,15 +104,24 @@ internal open class WasmRunDialog(
 
     final override fun createCenterPanel(): JComponent {
         return panel {
-            row("Runtime:") {
-                cell(engineCombo).focused()
+            if (singleEngine != null) {
+                row {
+                    comment("${singleEngine.displayName} will be used as a runtime")
+                }
+            } else {
+                row("Runtime:") {
+                    cell(engineCombo!!).focused()
+                }
             }
             addContentRows()
         }
     }
 
+    private val selectedEngine: WasmEngine?
+        get() = singleEngine ?: engineCombo?.item
+
     private fun updateDebugEnabled() {
-        val engine = engineCombo.item
+        val engine = selectedEngine
         debugAction.isEnabled = engine?.supportsDebug == true
     }
 
@@ -128,11 +141,11 @@ internal open class WasmRunDialog(
     }
 
     private fun saveSelectedEngine() {
-        val engine = engineCombo.item ?: return
+        val engine = selectedEngine ?: return
         WasmRuntimeSettings.getInstance().defaultEngineInUi = engine.name
     }
 
-    override fun getPreferredFocusedComponent(): JComponent = engineCombo
+    override fun getPreferredFocusedComponent(): JComponent? = engineCombo
 
     companion object {
         /**
