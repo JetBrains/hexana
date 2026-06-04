@@ -141,20 +141,30 @@ open class WasmDebugProcess(
                 // This entire flow runs on a background thread so
                 // sessionInitialized() returns immediately and the UI
                 // stays responsive.
-                lldb.removeAllBreakpoints()
-                lldb.sendBreakpointOnFunction(JIT_REGISTER_FUNCTION)
-                lldb.runProcess()
-                Thread {
-                    try {
-                        windowsJitBreakpointSetup(lldb)
-                    } catch (e: Exception) {
-                        LOG.warn("Windows JIT breakpoint setup failed", e)
-                    }
+                //
+                // When there are no user breakpoints, the JIT symbol
+                // loading is unnecessary — skip it and just run the
+                // process so it can exit normally without getting stuck
+                // waiting for JIT register hits that will never resolve.
+                if (registeredBreakpoints.isEmpty()) {
+                    lldb.runProcess()
                     startEventLoop()
-                }.apply {
-                    name = "Hexana-Windows-JIT-Setup"
-                    isDaemon = true
-                    start()
+                } else {
+                    lldb.removeAllBreakpoints()
+                    lldb.sendBreakpointOnFunction(JIT_REGISTER_FUNCTION)
+                    lldb.runProcess()
+                    Thread {
+                        try {
+                            windowsJitBreakpointSetup(lldb)
+                        } catch (e: Exception) {
+                            LOG.warn("Windows JIT breakpoint setup failed", e)
+                        }
+                        startEventLoop()
+                    }.apply {
+                        name = "Hexana-Windows-JIT-Setup"
+                        isDaemon = true
+                        start()
+                    }
                 }
             } else {
                 // On macOS/Linux, LLDB's JIT loader plugin resolves
@@ -225,11 +235,20 @@ open class WasmDebugProcess(
         val tempDir = java.nio.file.Files.createTempDirectory("hexana-jit").toAbsolutePath().toString()
 
         var resolved = false
+        var processExited = false
         for (attempt in 1..MAX_JIT_REGISTER_ATTEMPTS) {
             val jitEvent = lldb.waitForStopEvent(WINDOWS_JIT_WAIT_TIMEOUT_MS)
             LOG.info("Windows wasmtime: JIT register attempt=$attempt event=$jitEvent")
-            if (jitEvent == null || jitEvent is LldbCommunicator.StopEvent.ProcessExited) {
-                LOG.warn("Windows wasmtime: process exited or timeout before breakpoints resolved")
+            if (jitEvent is LldbCommunicator.StopEvent.ProcessExited) {
+                LOG.warn("Windows wasmtime: process exited before breakpoints resolved")
+                processExited = true
+                // Re-offer the exit event so the event loop can pick it up
+                // and terminate the debug session properly.
+                lldb.reofferStopEvent(jitEvent)
+                break
+            }
+            if (jitEvent == null) {
+                LOG.warn("Windows wasmtime: timeout waiting for JIT register hit")
                 break
             }
             // Read the descriptor at the breakpoint hit. If action=0
@@ -247,6 +266,13 @@ open class WasmDebugProcess(
             // and continue to the next hit.
             lldb.sendBreakpointOnFunction(JIT_REGISTER_FUNCTION)
             lldb.resume()
+        }
+
+        if (processExited) {
+            // Process already exited — do not send any more commands.
+            // The re-offered ProcessExited event will be handled by
+            // the event loop.
+            return
         }
 
         if (!resolved) {

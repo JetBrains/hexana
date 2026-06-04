@@ -508,6 +508,16 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     }
 
     /**
+     * Re-offers a stop event back into the queue so it can be
+     * consumed by the event loop. This is used when a stop event
+     * (e.g. [StopEvent.ProcessExited]) is consumed during setup
+     * but must still be processed by the main event loop.
+     */
+    fun reofferStopEvent(event: StopEvent) {
+        stopEvents.offer(event)
+    }
+
+    /**
      * Drains all pending stop events from the queue without blocking.
      *
      * This is useful before starting the event loop in scenarios where
