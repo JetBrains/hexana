@@ -44,6 +44,7 @@ interface HexanaAnalysisService {
         input: WasmInput,
         baselineInput: WasmInput?,
         bindingInput: TextInput?,
+        configInput: TextInput?,
         operation: String,
         entityTypes: List<String>,
         query: List<String>,
@@ -120,6 +121,7 @@ class DefaultHexanaAnalysisService(
         input: WasmInput,
         baselineInput: WasmInput?,
         bindingInput: TextInput?,
+        configInput: TextInput?,
         operation: String,
         entityTypes: List<String>,
         query: List<String>,
@@ -133,9 +135,11 @@ class DefaultHexanaAnalysisService(
         val wasm = load(input)
         val baseline = baselineInput?.let(::load)
         val binding = bindingInput?.let(::loadText)
+        val config = configInput?.let(::loadText)
         return wasm.provider.readArtifactQuery(
             baseline = baseline?.provider,
             bindingText = binding?.text,
+            configText = config?.text,
             operation = operation,
             entityTypes = entityTypes,
             query = query,
@@ -147,7 +151,8 @@ class DefaultHexanaAnalysisService(
             maxBytes = maxBytes,
             pathLabel = input.artifactPathLabel(),
             baselinePathLabel = baselineInput?.artifactPathLabel(),
-            bindingPathLabel = bindingInput?.artifactPathLabel()
+            bindingPathLabel = bindingInput?.artifactPathLabel(),
+            configPathLabel = configInput?.artifactPathLabel()
         )
     }
 

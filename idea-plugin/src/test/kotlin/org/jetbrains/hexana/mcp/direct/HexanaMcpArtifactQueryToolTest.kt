@@ -399,6 +399,108 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         )
     }
 
+    fun testQueryArtifactsHostAdapterRepairReturnsMinimalConfig() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/artifacts/host-adapter-repair.wasm",
+            """
+            (module
+              (import "host" "log_event" (func ${'$'}log_event (param i32)))
+              (import "host" "read_config" (func ${'$'}read_config (param i32) (result i64)))
+              (import "host" "reserve_inventory" (func ${'$'}reserve_inventory (param i32 i64) (result i32)))
+              (import "wasi_snapshot_preview1" "fd_write" (func ${'$'}fd_write (param i32 i32 i32 i32) (result i32)))
+              (func (export "process_order") (param i32 i64) (result i32)
+                i32.const 1))
+            """.trimIndent()
+        )
+        val config = createTextFixture(
+            "fixtures/direct/artifacts/adapter_config.json",
+            """
+            {
+              "module": "dist/plugin/order_adapter.wasm",
+              "profile": "orders-v2-prod",
+              "imports": {
+                "host.log_event": {"params": ["i64"], "results": []},
+                "host.read_config": {"params": [], "results": ["i32"]},
+                "host.reserve_inventory": {"params": ["i32"], "results": ["i32"]},
+                "wasi_snapshot_preview1.fd_write": {"params": ["i32", "i32", "i32", "i32"], "results": ["i32"]}
+              },
+              "entrypoint": {
+                "export": "run_order",
+                "params": ["i32"],
+                "results": ["i32"]
+              },
+              "rollback_entrypoint": {
+                "export": "rollback_order",
+                "params": ["i64"],
+                "results": ["i32"]
+              },
+              "legacy_profiles": [
+                {
+                  "profile": "orders-v1-region-00",
+                  "module": "dist/plugin/order_adapter.wasm",
+                  "entrypoint": {"export": "run_order", "params": ["i32"], "results": ["i32"]},
+                  "imports": {
+                    "host.log_event": {"params": ["i64"], "results": []},
+                    "host.read_config": {"params": [], "results": ["i32"]}
+                  }
+                }
+              ],
+              "notes": ["release gate repairs only active fields"]
+            }
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_artifacts",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("configPath", JsonPrimitive(config.projectRelativePath))
+                put("operation", JsonPrimitive("host_adapter_repair"))
+                put("limit", JsonPrimitive(1))
+            }
+        )
+
+        assertEquals("host_adapter_repair", result.text("operation"))
+        val summary = result.array("records").recordById("host-adapter-repair:summary")
+        assertEquals("process_order", summary.attributeValue("requiredEntrypoint"))
+        assertEquals("legacy_profiles,notes,profile,rollback_entrypoint", summary.attributeValue("ignoredConfigFields"))
+
+        val requiredImports = json.parseToJsonElement(summary.attributeValue("requiredImportsJson")!!).jsonArray
+        assertEquals(
+            listOf(
+                "host.log_event",
+                "host.read_config",
+                "host.reserve_inventory",
+                "wasi_snapshot_preview1.fd_write"
+            ),
+            requiredImports.map { it.jsonObject.text("name") }
+        )
+
+        val mismatches = json.parseToJsonElement(summary.attributeValue("configMismatchesJson")!!).jsonArray
+        assertEquals(
+            setOf(
+                "entrypoint.export",
+                "entrypoint.params",
+                "imports.host.log_event.params",
+                "imports.host.read_config.params",
+                "imports.host.read_config.results",
+                "imports.host.reserve_inventory.params"
+            ),
+            mismatches.map { it.jsonObject.text("field") }.toSet()
+        )
+
+        val repairConfig = json.parseToJsonElement(summary.attributeValue("repairConfigJson")!!).jsonObject
+        assertEquals(fixture.projectRelativePath, repairConfig.text("module"))
+        assertFalse("profile must not be copied into repair_config", "profile" in repairConfig)
+        assertFalse("rollback_entrypoint must not be copied into repair_config", "rollback_entrypoint" in repairConfig)
+        assertFalse("legacy_profiles must not be copied into repair_config", "legacy_profiles" in repairConfig)
+        assertEquals("process_order", repairConfig.obj("entrypoint").text("export"))
+        val imports = repairConfig.obj("imports")
+        assertEquals(listOf("i32"), imports.obj("host.log_event").array("params").map { it.textValue() })
+        assertEquals(listOf("i64"), imports.obj("host.read_config").array("results").map { it.textValue() })
+        assertEquals(listOf("i32", "i64"), imports.obj("host.reserve_inventory").array("params").map { it.textValue() })
+    }
+
     fun testQueryArtifactsEntrypointEffectsScansExportedMemoryWritesAndHostCalls() {
         val fixture = createWasmFixture(
             "fixtures/direct/artifacts/entrypoint-effects.wasm",

@@ -118,6 +118,60 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun queryArtifactsHostAdapterRepairUsesConfigPathAndOmitsStaleFields() {
+        val wasm = createWasmFile(
+            "query-artifacts-host-adapter-repair.wasm",
+            """
+            (module
+              (import "host" "log_event" (func ${'$'}log_event (param i32)))
+              (import "host" "read_config" (func ${'$'}read_config (param i32) (result i64)))
+              (func (export "process_order") (param i32 i64) (result i32)
+                i32.const 1))
+            """.trimIndent()
+        )
+        val config = temporaryFolder.newFile("adapter_config.json").toPath().also {
+            Files.writeString(
+                it,
+                """
+                {
+                  "module": "dist/plugin/order_adapter.wasm",
+                  "profile": "orders-v2-prod",
+                  "imports": {
+                    "host.log_event": {"params": ["i64"], "results": []},
+                    "host.read_config": {"params": [], "results": ["i32"]}
+                  },
+                  "entrypoint": {"export": "run_order", "params": ["i32"], "results": ["i32"]},
+                  "rollback_entrypoint": {"export": "rollback_order", "params": ["i64"], "results": ["i32"]}
+                }
+                """.trimIndent()
+            )
+        }
+
+        val result = handlers.queryArtifacts(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("configPath", JsonPrimitive(config.toString()))
+                put("operation", JsonPrimitive("host_adapter_repair"))
+                put("limit", JsonPrimitive(1))
+            }
+        )
+
+        assertTrue(result.isError != true)
+        val summary = result.structuredContent!!["records"]!!.jsonArray.single().jsonObject
+        val attributes = summary["attributes"]!!.jsonArray
+            .map { it.jsonObject }
+            .associate { it["name"]!!.jsonPrimitive.content to it["value"]!!.jsonPrimitive.content }
+        assertEquals("profile,rollback_entrypoint", attributes["ignoredConfigFields"])
+        val repairConfig = Json.parseToJsonElement(attributes["repairConfigJson"]!!).jsonObject
+        assertFalse("profile" in repairConfig)
+        assertFalse("rollback_entrypoint" in repairConfig)
+        assertEquals("process_order", repairConfig["entrypoint"]!!.jsonObject["export"]!!.jsonPrimitive.content)
+        val mismatches = Json.parseToJsonElement(attributes["configMismatchesJson"]!!).jsonArray
+        assertTrue(mismatches.any { it.jsonObject["field"]!!.jsonPrimitive.content == "entrypoint.export" })
+        assertTrue(mismatches.any { it.jsonObject["field"]!!.jsonPrimitive.content == "imports.host.read_config.results" })
+    }
+
+    @Test
     fun summarizeModuleReturnsStructuredSuccessPayload() {
         val wasm = createWasmFile(
             "summary.wasm",

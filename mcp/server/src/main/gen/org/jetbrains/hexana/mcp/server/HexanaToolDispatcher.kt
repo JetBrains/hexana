@@ -5608,9 +5608,17 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
         put("description", JsonPrimitive("Optional stale binding source file used by `abi_binding_regeneration`; common Python files with MODULE, IMPORTS, and EXPORTS literals are parsed."))
         put("maxLength", JsonPrimitive(4_096))
       })
+      put("configPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional stale host adapter JSON config used by `host_adapter_repair`; only active `module`, `imports`, and `entrypoint` fields are compared."))
+        put("maxLength", JsonPrimitive(4_096))
+      })
       put("operation", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `abi_binding_regeneration`, `import_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `entrypoint_effects`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the task; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details."))
+        put("description", JsonPrimitive("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, `import_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `entrypoint_effects`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the task; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details."))
         put("default", JsonPrimitive("overview"))
         put("maxLength", JsonPrimitive(32))
       })
