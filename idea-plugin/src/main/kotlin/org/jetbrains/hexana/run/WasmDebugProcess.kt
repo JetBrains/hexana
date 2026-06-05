@@ -587,6 +587,7 @@ open class WasmDebugProcess(
     private fun startEventLoop() {
         eventLoopThread = Thread({
             try {
+                var sessionStopRequested = false
                 while (lldb != null && processHandler.isProcessTerminated.not()) {
                     val event = lldb.waitForStopEvent(1_000)
                     if (event == null) {
@@ -596,6 +597,7 @@ open class WasmDebugProcess(
                         // the debug session instead of spinning forever.
                         if (lldb.debuggeeExited) {
                             LOG.info("Debuggee exited (detected via flag) — stopping debug session")
+                            sessionStopRequested = true
                             ApplicationManager.getApplication().invokeLater {
                                 session.stop()
                             }
@@ -613,11 +615,28 @@ open class WasmDebugProcess(
                         }
                         is LldbCommunicator.StopEvent.ProcessExited -> {
                             LOG.info("Wasmtime process exited with code ${event.exitCode}")
+                            sessionStopRequested = true
                             ApplicationManager.getApplication().invokeLater {
                                 session.stop()
                             }
                             break
                         }
+                    }
+                }
+                // Safety net: if the while-loop condition was false from
+                // the start (process already terminated before the event
+                // loop thread began executing) or the loop exited without
+                // handling a ProcessExited event, check whether the
+                // debuggee has exited and stop the session. Without this,
+                // the debug session hangs forever when the process exits
+                // during windowsJitBreakpointSetup (between resume() and
+                // the event loop starting to poll).
+                if (!sessionStopRequested && lldb != null &&
+                    (lldb.debuggeeExited || processHandler.isProcessTerminated)
+                ) {
+                    LOG.info("Event loop exited early — debuggee already exited, stopping debug session")
+                    ApplicationManager.getApplication().invokeLater {
+                        session.stop()
                     }
                 }
             } catch (_: InterruptedException) {
