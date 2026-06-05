@@ -176,6 +176,51 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun granularToolsExposeStableReferenceTypeImportLocation() {
+        val wasm = createWasmFile(
+            "reference_type_import_location.wasm",
+            """
+            (module
+              (type ${'$'}bind_type (func (param externref)))
+              (import "host" "bind_external" (func (type ${'$'}bind_type))))
+            """.trimIndent()
+        )
+
+        val imports = service.listImports(WasmInput.FilePath(wasm.toString()))
+        val functions = service.listFunctions(WasmInput.FilePath(wasm.toString()), offset = 0, limit = 10)
+        val types = service.listTypes(WasmInput.FilePath(wasm.toString()))
+
+        val importedFunction = imports.imports.single()
+        assertEquals(0, importedFunction.funcidx)
+        assertEquals(0, importedFunction.typeidx)
+        assertEquals("import", importedFunction.locationKind)
+        assertEquals("host", importedFunction.module)
+        assertEquals("bind_external", importedFunction.name)
+        assertEquals("import host.bind_external", importedFunction.locationDisplay)
+        assertEquals(listOf("externref"), importedFunction.signature!!.params)
+
+        val function = functions.functions.single()
+        assertEquals(0, function.funcidx)
+        assertEquals(0, function.typeidx)
+        assertEquals("import", function.definedIn)
+        assertEquals("import", function.locationKind)
+        assertEquals("host", function.module)
+        assertEquals("bind_external", function.name)
+        assertEquals("import host.bind_external", function.locationDisplay)
+
+        val type = types.types.single()
+        assertEquals(0, type.typeidx)
+        assertEquals(listOf("ref extern"), type.params)
+        val location = type.importLocations.single()
+        assertEquals("import", location.locationKind)
+        assertEquals("host", location.module)
+        assertEquals("bind_external", location.name)
+        assertEquals("import host.bind_external", location.locationDisplay)
+        assertEquals(0, location.funcidx)
+        assertEquals(0, location.typeidx)
+    }
+
+    @Test
     fun getEntrypointPolicyReturnsDirectHostCallContract() {
         val wasm = createWasmFile(
             "entrypoints.wasm",

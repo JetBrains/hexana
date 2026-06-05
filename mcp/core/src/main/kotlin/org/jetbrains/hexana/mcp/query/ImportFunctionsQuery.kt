@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.mcp.query
 
 import org.jetbrains.hexana.mcp.ParameterSignature
+import org.jetbrains.hexana.mcp.Import
+import org.jetbrains.hexana.mcp.locationDisplay
 import org.jetbrains.hexana.mcp.model.imports.ImportFunctionResult
 import org.jetbrains.hexana.mcp.model.imports.ImportFunctionSignature
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
@@ -19,8 +21,11 @@ fun WasmBinaryProvider.readImportFunctions(): ListImportsResult {
             val functionType = record.type as WasmTypeIndexExternalType
             ImportFunctionResult(
                 funcidx = index,
+                typeidx = functionType.index.toInt(),
+                locationKind = "import",
                 module = record.prefix,
                 name = record.name,
+                locationDisplay = Import(record.prefix, record.name).locationDisplay(),
                 signature = functionType.toSignature(types)?.toImportFunctionSignature()
             )
         }

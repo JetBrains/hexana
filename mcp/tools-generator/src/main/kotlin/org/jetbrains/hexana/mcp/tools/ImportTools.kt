@@ -9,8 +9,11 @@ val ImportFunctionSignatureClass = class_("ImportFunctionSignature") {
 
 val ImportFunctionResultClass = class_("ImportFunctionResult") {
     int("funcidx").describe("Funcidx in the unified function index space.")
+    nullable("typeidx", of = int()).describe("Function type index referenced by this import, when resolved.")
+    string("locationKind").describe("Stable location kind. Function imports use `import`.")
     string("module").describe("Imported module name.")
     string("name").describe("Imported field name.")
+    string("locationDisplay").describe("Stable human-readable import location, for example `import host.bind_external`.")
     nullable("signature", of = ImportFunctionSignatureClass)
         .describe("Parsed signature, when available.")
 }
@@ -27,6 +30,7 @@ internal val ImportTools: List<ToolSpec> = tools {
             List imported functions declared by a WebAssembly (.wasm) module.
             This is the primary MCP tool for import inventories, link-mismatch analysis, and mapping direct host calls to imported functions.
             Returns only function imports from the unified function index space, including the `funcidx` values needed to map direct `call` targets back to imports.
+            Each import includes structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
             For direct host-call analysis, pair these `funcidx` values with `get_instructions_for_functions` to resolve `call N` back to `module.name` imports.
         """
         input = WasmInputClass

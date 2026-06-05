@@ -11,8 +11,11 @@ data class ListImportsResult(
 @Serializable
 data class ImportFunctionResult(
     val funcidx: Int,
+    val typeidx: Int? = null,
+    val locationKind: String = "import",
     val module: String,
     val name: String,
+    val locationDisplay: String,
     val signature: ImportFunctionSignature?
 )
 

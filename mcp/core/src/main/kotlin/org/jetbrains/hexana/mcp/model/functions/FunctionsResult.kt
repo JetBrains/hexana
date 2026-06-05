@@ -11,11 +11,16 @@ data class FunctionsResult(
 @Serializable
 data class FunctionSummaryResult(
     val funcidx: Int,
+    val typeidx: Int? = null,
     val signature: FunctionSignatureResult? = null,
     @SerialName("import")
     val importInfo: FunctionImportResult? = null,
     val exportedAs: List<String> = emptyList(),
     val definedIn: String,
+    val locationKind: String? = null,
+    val module: String? = null,
+    val name: String? = null,
+    val locationDisplay: String? = null,
     val codeOffset: Long? = null,
     val codeSize: Long? = null,
     val instructionCount: Long? = null

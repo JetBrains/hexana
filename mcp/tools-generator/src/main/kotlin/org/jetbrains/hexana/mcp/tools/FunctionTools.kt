@@ -65,11 +65,17 @@ val FunctionSignatureResultClass = class_("FunctionSignatureResult") {
 
 val FunctionSummaryResultClass = class_("FunctionSummaryResult") {
     int("funcidx").describe("Funcidx in the unified function index space.")
+    nullable("typeidx", of = int()).describe("Function type index, when resolved.")
     nullable("signature", of = FunctionSignatureResultClass).describe("Parsed signature when available.")
     nullable("importInfo", of = FunctionImportResultClass).serialName("import")
         .describe("Import descriptor when the function is imported.")
     list("exportedAs", of = string()).describe("Export names pointing at this function.")
     string("definedIn").describe("Which section the function lives in.")
+    nullable("locationKind", of = string()).describe("Stable location kind for imported functions, currently `import`.")
+    nullable("module", of = string()).describe("Import module name when the function is imported.")
+    nullable("name", of = string()).describe("Import field name when the function is imported.")
+    nullable("locationDisplay", of = string())
+        .describe("Stable human-readable import location, for example `import host.bind_external`.")
     nullable("codeOffset", long()).describe("Byte offset of the function body in the module.")
     nullable("codeSize", long()).describe("Size of the function body in bytes.")
     nullable("instructionCount", long()).describe("Number of decoded instructions in the body.")
@@ -264,6 +270,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
             List imported and defined functions from a WebAssembly (.wasm) module using offset/limit pagination.
             The offset is in the unified function index space, so imports appear before defined bodies.
             Use this when you need one mixed index space over both imports and defined bodies; for import-only analysis, prefer `list_imports`.
+            Imported entries include structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
             Use this to map or inspect `funcidx` ranges before targeted body lookup with `get_instructions_for_functions`.
         """
         input = ListFunctionsInput

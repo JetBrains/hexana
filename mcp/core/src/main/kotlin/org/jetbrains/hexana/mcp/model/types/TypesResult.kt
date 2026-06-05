@@ -11,12 +11,23 @@ data class TypesResult(
 data class TypeResult(
     val kind: String,
     val typeidx: Int,
+    val importLocations: List<TypeImportLocationResult> = emptyList(),
     val elementType: TypeFieldResult? = null,
     val superTypes: List<UInt>? = null,
     val fields: List<TypeFieldResult>? = null,
     val entries: List<String>? = null,
     val params: List<String>? = null,
     val retTypes: List<String>? = null
+)
+
+@Serializable
+data class TypeImportLocationResult(
+    val locationKind: String,
+    val module: String,
+    val name: String,
+    val locationDisplay: String,
+    val funcidx: Int,
+    val typeidx: Int
 )
 
 @Serializable

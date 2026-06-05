@@ -12,9 +12,20 @@ val TypeFieldResultClass = class_("TypeFieldResult") {
     boolean("mutable").describe("True when the field is mutable.")
 }
 
+val TypeImportLocationResultClass = class_("TypeImportLocationResult") {
+    string("locationKind").describe("Stable location kind. Function imports use `import`.")
+    string("module").describe("Imported module name.")
+    string("name").describe("Imported field name.")
+    string("locationDisplay").describe("Stable human-readable import location, for example `import host.bind_external`.")
+    int("funcidx").describe("Funcidx of the imported function using this type.")
+    int("typeidx").describe("Type index referenced by the imported function.")
+}
+
 val TypeResultClass = class_("TypeResult") {
     string("kind").describe("Type kind (`func`, `struct`, `array`, etc.).")
     int("typeidx").describe("Type index.")
+    list("importLocations", of = TypeImportLocationResultClass)
+        .describe("Function imports that reference this type, with stable display strings.")
     nullable("elementType", of = TypeFieldResultClass).describe("Array element type, when applicable.")
     nullable("superTypes", of = list(of = uint())).describe("Supertype indices for subtyping, when applicable.")
     nullable("fields", of = list(of = TypeFieldResultClass)).describe("Struct fields, when applicable.")
@@ -108,6 +119,7 @@ internal val TypeTools: List<ToolSpec> = tools {
         guidance = """
             List type entries declared by a WebAssembly (.wasm) module.
             Includes function types and GC-related composite types when present.
+            Function types include `importLocations` for imported functions that use the type, including a stable `locationDisplay` string.
         """
         input = WasmInputClass
         inputPattern = ToolInputPattern.WasmOnly

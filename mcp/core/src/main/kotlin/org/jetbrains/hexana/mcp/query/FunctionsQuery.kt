@@ -32,12 +32,18 @@ fun WasmBinaryProvider.readFunctionsByIndices(
 }
 
 private fun GeneralFunctionEntry.toFunctionSummaryResult(): FunctionSummaryResult {
+    val importLocation = import
     return FunctionSummaryResult(
         funcidx = funcidx,
+        typeidx = typeidx,
         signature = signature?.toFunctionSignatureResult(),
-        importInfo = import?.let { FunctionImportResult(module = it.module, name = it.name) },
+        importInfo = importLocation?.let { FunctionImportResult(module = it.module, name = it.name) },
         exportedAs = exportedAs,
         definedIn = definedIn,
+        locationKind = importLocation?.let { "import" },
+        module = importLocation?.module,
+        name = importLocation?.name,
+        locationDisplay = importLocation?.locationDisplay(),
         codeOffset = codeOffset,
         codeSize = codeSize,
         instructionCount = instructionCount
@@ -48,9 +54,14 @@ private fun FunctionEntry.toFunctionSummaryResult(): FunctionSummaryResult {
     return when (this) {
         is ImportFunctionEntry -> FunctionSummaryResult(
             funcidx = funcidx,
+            typeidx = typeidx,
             signature = signature?.toFunctionSignatureResult(),
             importInfo = FunctionImportResult(module = module, name = name),
-            definedIn = "import"
+            definedIn = "import",
+            locationKind = "import",
+            module = module,
+            name = name,
+            locationDisplay = Import(module, name).locationDisplay()
         )
 
         is GeneralFunctionEntry -> toFunctionSummaryResult()

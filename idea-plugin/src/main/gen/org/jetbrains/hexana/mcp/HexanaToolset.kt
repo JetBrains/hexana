@@ -1142,6 +1142,7 @@ public class HexanaToolset : McpToolsProvider {
       |List imported functions declared by a WebAssembly (.wasm) module.
       |This is the primary MCP tool for import inventories, link-mismatch analysis, and mapping direct host calls to imported functions.
       |Returns only function imports from the unified function index space, including the `funcidx` values needed to map direct `call` targets back to imports.
+      |Each import includes structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
       |For direct host-call analysis, pair these `funcidx` values with `get_instructions_for_functions` to resolve `call N` back to `module.name` imports.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.listImports",
@@ -1170,6 +1171,17 @@ public class HexanaToolset : McpToolsProvider {
                 put("type", JsonPrimitive("integer"))
                 put("description", JsonPrimitive("Funcidx in the unified function index space."))
               })
+              put("typeidx", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("integer"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Function type index referenced by this import, when resolved."))
+              })
+              put("locationKind", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Stable location kind. Function imports use `import`."))
+              })
               put("module", buildJsonObject {
                 put("type", JsonPrimitive("string"))
                 put("description", JsonPrimitive("Imported module name."))
@@ -1177,6 +1189,10 @@ public class HexanaToolset : McpToolsProvider {
               put("name", buildJsonObject {
                 put("type", JsonPrimitive("string"))
                 put("description", JsonPrimitive("Imported field name."))
+              })
+              put("locationDisplay", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
               })
               put("signature", buildJsonObject {
                 put("type", buildJsonArray {
@@ -1208,8 +1224,10 @@ public class HexanaToolset : McpToolsProvider {
             })
             put("required", buildJsonArray {
               add(JsonPrimitive("funcidx"))
+              add(JsonPrimitive("locationKind"))
               add(JsonPrimitive("module"))
               add(JsonPrimitive("name"))
+              add(JsonPrimitive("locationDisplay"))
             })
           })
           put("description", JsonPrimitive("Imported functions declared by the module."))
@@ -1700,6 +1718,7 @@ public class HexanaToolset : McpToolsProvider {
       |List imported and defined functions from a WebAssembly (.wasm) module using offset/limit pagination.
       |The offset is in the unified function index space, so imports appear before defined bodies.
       |Use this when you need one mixed index space over both imports and defined bodies; for import-only analysis, prefer `list_imports`.
+      |Imported entries include structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
       |Use this to map or inspect `funcidx` ranges before targeted body lookup with `get_instructions_for_functions`.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.listFunctions",
@@ -1739,6 +1758,13 @@ public class HexanaToolset : McpToolsProvider {
               put("funcidx", buildJsonObject {
                 put("type", JsonPrimitive("integer"))
                 put("description", JsonPrimitive("Funcidx in the unified function index space."))
+              })
+              put("typeidx", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("integer"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Function type index, when resolved."))
               })
               put("signature", buildJsonObject {
                 put("type", buildJsonArray {
@@ -1798,6 +1824,34 @@ public class HexanaToolset : McpToolsProvider {
               put("definedIn", buildJsonObject {
                 put("type", JsonPrimitive("string"))
                 put("description", JsonPrimitive("Which section the function lives in."))
+              })
+              put("locationKind", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Stable location kind for imported functions, currently `import`."))
+              })
+              put("module", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Import module name when the function is imported."))
+              })
+              put("name", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Import field name when the function is imported."))
+              })
+              put("locationDisplay", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
               })
               put("codeOffset", buildJsonObject {
                 put("type", buildJsonArray {
@@ -1955,6 +2009,13 @@ public class HexanaToolset : McpToolsProvider {
                 put("type", JsonPrimitive("integer"))
                 put("description", JsonPrimitive("Funcidx in the unified function index space."))
               })
+              put("typeidx", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("integer"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Function type index, when resolved."))
+              })
               put("signature", buildJsonObject {
                 put("type", buildJsonArray {
                   add(JsonPrimitive("object"))
@@ -2013,6 +2074,34 @@ public class HexanaToolset : McpToolsProvider {
               put("definedIn", buildJsonObject {
                 put("type", JsonPrimitive("string"))
                 put("description", JsonPrimitive("Which section the function lives in."))
+              })
+              put("locationKind", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Stable location kind for imported functions, currently `import`."))
+              })
+              put("module", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Import module name when the function is imported."))
+              })
+              put("name", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Import field name when the function is imported."))
+              })
+              put("locationDisplay", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
               })
               put("codeOffset", buildJsonObject {
                 put("type", buildJsonArray {
@@ -3629,6 +3718,7 @@ public class HexanaToolset : McpToolsProvider {
       |List type entries declared by a `.wasm` module.
       |List type entries declared by a WebAssembly (.wasm) module.
       |Includes function types and GC-related composite types when present.
+      |Function types include `importLocations` for imported functions that use the type, including a stable `locationDisplay` string.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.listTypes",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -3659,6 +3749,47 @@ public class HexanaToolset : McpToolsProvider {
               put("typeidx", buildJsonObject {
                 put("type", JsonPrimitive("integer"))
                 put("description", JsonPrimitive("Type index."))
+              })
+              put("importLocations", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("object"))
+                  put("properties", buildJsonObject {
+                    put("locationKind", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Stable location kind. Function imports use `import`."))
+                    })
+                    put("module", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Imported module name."))
+                    })
+                    put("name", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Imported field name."))
+                    })
+                    put("locationDisplay", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
+                    })
+                    put("funcidx", buildJsonObject {
+                      put("type", JsonPrimitive("integer"))
+                      put("description", JsonPrimitive("Funcidx of the imported function using this type."))
+                    })
+                    put("typeidx", buildJsonObject {
+                      put("type", JsonPrimitive("integer"))
+                      put("description", JsonPrimitive("Type index referenced by the imported function."))
+                    })
+                  })
+                  put("required", buildJsonArray {
+                    add(JsonPrimitive("locationKind"))
+                    add(JsonPrimitive("module"))
+                    add(JsonPrimitive("name"))
+                    add(JsonPrimitive("locationDisplay"))
+                    add(JsonPrimitive("funcidx"))
+                    add(JsonPrimitive("typeidx"))
+                  })
+                })
+                put("description", JsonPrimitive("Function imports that reference this type, with stable display strings."))
               })
               put("elementType", buildJsonObject {
                 put("type", buildJsonArray {
@@ -3749,6 +3880,7 @@ public class HexanaToolset : McpToolsProvider {
             put("required", buildJsonArray {
               add(JsonPrimitive("kind"))
               add(JsonPrimitive("typeidx"))
+              add(JsonPrimitive("importLocations"))
             })
           })
           put("description", JsonPrimitive("Declared type entries."))
@@ -4345,6 +4477,47 @@ public class HexanaToolset : McpToolsProvider {
                 put("type", JsonPrimitive("integer"))
                 put("description", JsonPrimitive("Type index."))
               })
+              put("importLocations", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("object"))
+                  put("properties", buildJsonObject {
+                    put("locationKind", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Stable location kind. Function imports use `import`."))
+                    })
+                    put("module", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Imported module name."))
+                    })
+                    put("name", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Imported field name."))
+                    })
+                    put("locationDisplay", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
+                    })
+                    put("funcidx", buildJsonObject {
+                      put("type", JsonPrimitive("integer"))
+                      put("description", JsonPrimitive("Funcidx of the imported function using this type."))
+                    })
+                    put("typeidx", buildJsonObject {
+                      put("type", JsonPrimitive("integer"))
+                      put("description", JsonPrimitive("Type index referenced by the imported function."))
+                    })
+                  })
+                  put("required", buildJsonArray {
+                    add(JsonPrimitive("locationKind"))
+                    add(JsonPrimitive("module"))
+                    add(JsonPrimitive("name"))
+                    add(JsonPrimitive("locationDisplay"))
+                    add(JsonPrimitive("funcidx"))
+                    add(JsonPrimitive("typeidx"))
+                  })
+                })
+                put("description", JsonPrimitive("Function imports that reference this type, with stable display strings."))
+              })
               put("elementType", buildJsonObject {
                 put("type", buildJsonArray {
                   add(JsonPrimitive("object"))
@@ -4434,6 +4607,7 @@ public class HexanaToolset : McpToolsProvider {
             put("required", buildJsonArray {
               add(JsonPrimitive("kind"))
               add(JsonPrimitive("typeidx"))
+              add(JsonPrimitive("importLocations"))
             })
           })
           put("description", JsonPrimitive("Declared type entries."))

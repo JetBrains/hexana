@@ -1,6 +1,9 @@
 package org.jetbrains.hexana.mcp.query
 
+import org.jetbrains.hexana.mcp.Import
+import org.jetbrains.hexana.mcp.locationDisplay
 import org.jetbrains.hexana.mcp.model.types.TypeFieldResult
+import org.jetbrains.hexana.mcp.model.types.TypeImportLocationResult
 import org.jetbrains.hexana.mcp.model.types.TypeResult
 import org.jetbrains.hexana.mcp.model.types.TypesResult
 import org.jetbrains.hexana.mcp.types
@@ -9,8 +12,11 @@ import org.jetbrains.hexana.wasm.sections.*
 
 fun WasmBinaryProvider.readTypes(): TypesResult {
     val wasmModule = requireNotNull(wasmModule)
+    val importLocationsByTypeidx = importLocationsByTypeidx()
     return TypesResult(
-        types = bytes.types(wasmModule).mapIndexed { index, record -> record.toTypeResult(index) }
+        types = bytes.types(wasmModule).mapIndexed { index, record ->
+            record.toTypeResult(index, importLocationsByTypeidx[index].orEmpty())
+        }
     )
 }
 
@@ -18,10 +24,11 @@ fun WasmBinaryProvider.readTypesByIndices(
     indices: List<Int>
 ): TypesResult {
     val wasmModule = requireNotNull(wasmModule)
+    val importLocationsByTypeidx = importLocationsByTypeidx()
     return TypesResult(
         types = bytes.types(wasmModule).mapIndexedNotNull { index, record ->
             if (indices.contains(index)) {
-                record.toTypeResult(index)
+                record.toTypeResult(index, importLocationsByTypeidx[index].orEmpty())
             } else {
                 null
             }
@@ -31,16 +38,21 @@ fun WasmBinaryProvider.readTypesByIndices(
 
 private const val MAX_TYPE_RENDER_DEPTH = 100
 
-private fun WasmTypeRecord.toTypeResult(index: Int): TypeResult = when (this) {
+private fun WasmTypeRecord.toTypeResult(
+    index: Int,
+    importLocations: List<TypeImportLocationResult>
+): TypeResult = when (this) {
     is WasmArrayTypeRecord -> TypeResult(
         kind = "array",
         typeidx = index,
+        importLocations = importLocations,
         elementType = fieldType.toTypeFieldResult()
     )
 
     is WasmStructTypeRecord -> TypeResult(
         kind = "struct",
         typeidx = index,
+        importLocations = importLocations,
         superTypes = superTypes,
         fields = fields.map { it.toTypeFieldResult() }
     )
@@ -48,15 +60,35 @@ private fun WasmTypeRecord.toTypeResult(index: Int): TypeResult = when (this) {
     is WasmRecursiveTypeRecord -> TypeResult(
         kind = "rec",
         typeidx = index,
+        importLocations = importLocations,
         entries = entries.map { it.toTypeString() }
     )
 
     is WasmSectionFunctionTypeRecord -> TypeResult(
         kind = "func",
         typeidx = index,
+        importLocations = importLocations,
         params = params.map { it.toTypeString() },
         retTypes = retTypes.map { it.toTypeString() }
     )
+}
+
+private fun WasmBinaryProvider.importLocationsByTypeidx(): Map<Int, List<TypeImportLocationResult>> {
+    return imports
+        .filter { it.type is WasmTypeIndexExternalType }
+        .mapIndexed { index, record ->
+            val typeidx = (record.type as WasmTypeIndexExternalType).index.toInt()
+            val import = Import(record.prefix, record.name)
+            TypeImportLocationResult(
+                locationKind = "import",
+                module = import.module,
+                name = import.name,
+                locationDisplay = import.locationDisplay(),
+                funcidx = index,
+                typeidx = typeidx
+            )
+        }
+        .groupBy { it.typeidx }
 }
 
 private fun WasmFieldType.toTypeFieldResult(): TypeFieldResult {

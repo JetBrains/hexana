@@ -1275,6 +1275,17 @@ private fun Server.registerListImportsTool(handlers: HexanaToolHandlers) {
               put("type", JsonPrimitive("integer"))
               put("description", JsonPrimitive("Funcidx in the unified function index space."))
             })
+            put("typeidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Function type index referenced by this import, when resolved."))
+            })
+            put("locationKind", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Stable location kind. Function imports use `import`."))
+            })
             put("module", buildJsonObject {
               put("type", JsonPrimitive("string"))
               put("description", JsonPrimitive("Imported module name."))
@@ -1282,6 +1293,10 @@ private fun Server.registerListImportsTool(handlers: HexanaToolHandlers) {
             put("name", buildJsonObject {
               put("type", JsonPrimitive("string"))
               put("description", JsonPrimitive("Imported field name."))
+            })
+            put("locationDisplay", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
             })
             put("signature", buildJsonObject {
               put("type", buildJsonArray {
@@ -1313,8 +1328,10 @@ private fun Server.registerListImportsTool(handlers: HexanaToolHandlers) {
           })
           put("required", buildJsonArray {
             add(JsonPrimitive("funcidx"))
+            add(JsonPrimitive("locationKind"))
             add(JsonPrimitive("module"))
             add(JsonPrimitive("name"))
+            add(JsonPrimitive("locationDisplay"))
           })
         })
         put("description", JsonPrimitive("Imported functions declared by the module."))
@@ -1880,6 +1897,13 @@ private fun Server.registerListFunctionsTool(handlers: HexanaToolHandlers) {
               put("type", JsonPrimitive("integer"))
               put("description", JsonPrimitive("Funcidx in the unified function index space."))
             })
+            put("typeidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Function type index, when resolved."))
+            })
             put("signature", buildJsonObject {
               put("type", buildJsonArray {
                 add(JsonPrimitive("object"))
@@ -1938,6 +1962,34 @@ private fun Server.registerListFunctionsTool(handlers: HexanaToolHandlers) {
             put("definedIn", buildJsonObject {
               put("type", JsonPrimitive("string"))
               put("description", JsonPrimitive("Which section the function lives in."))
+            })
+            put("locationKind", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Stable location kind for imported functions, currently `import`."))
+            })
+            put("module", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import module name when the function is imported."))
+            })
+            put("name", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import field name when the function is imported."))
+            })
+            put("locationDisplay", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
             })
             put("codeOffset", buildJsonObject {
               put("type", buildJsonArray {
@@ -2116,6 +2168,13 @@ private fun Server.registerFunctionsForIndicesTool(handlers: HexanaToolHandlers)
               put("type", JsonPrimitive("integer"))
               put("description", JsonPrimitive("Funcidx in the unified function index space."))
             })
+            put("typeidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Function type index, when resolved."))
+            })
             put("signature", buildJsonObject {
               put("type", buildJsonArray {
                 add(JsonPrimitive("object"))
@@ -2174,6 +2233,34 @@ private fun Server.registerFunctionsForIndicesTool(handlers: HexanaToolHandlers)
             put("definedIn", buildJsonObject {
               put("type", JsonPrimitive("string"))
               put("description", JsonPrimitive("Which section the function lives in."))
+            })
+            put("locationKind", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Stable location kind for imported functions, currently `import`."))
+            })
+            put("module", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import module name when the function is imported."))
+            })
+            put("name", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import field name when the function is imported."))
+            })
+            put("locationDisplay", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
             })
             put("codeOffset", buildJsonObject {
               put("type", buildJsonArray {
@@ -3939,6 +4026,47 @@ private fun Server.registerListTypesTool(handlers: HexanaToolHandlers) {
               put("type", JsonPrimitive("integer"))
               put("description", JsonPrimitive("Type index."))
             })
+            put("importLocations", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("locationKind", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Stable location kind. Function imports use `import`."))
+                  })
+                  put("module", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Imported module name."))
+                  })
+                  put("name", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Imported field name."))
+                  })
+                  put("locationDisplay", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
+                  })
+                  put("funcidx", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Funcidx of the imported function using this type."))
+                  })
+                  put("typeidx", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Type index referenced by the imported function."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("locationKind"))
+                  add(JsonPrimitive("module"))
+                  add(JsonPrimitive("name"))
+                  add(JsonPrimitive("locationDisplay"))
+                  add(JsonPrimitive("funcidx"))
+                  add(JsonPrimitive("typeidx"))
+                })
+              })
+              put("description", JsonPrimitive("Function imports that reference this type, with stable display strings."))
+            })
             put("elementType", buildJsonObject {
               put("type", buildJsonArray {
                 add(JsonPrimitive("object"))
@@ -4028,6 +4156,7 @@ private fun Server.registerListTypesTool(handlers: HexanaToolHandlers) {
           put("required", buildJsonArray {
             add(JsonPrimitive("kind"))
             add(JsonPrimitive("typeidx"))
+            add(JsonPrimitive("importLocations"))
           })
         })
         put("description", JsonPrimitive("Declared type entries."))
@@ -4660,6 +4789,47 @@ private fun Server.registerGetTypesForIndicesTool(handlers: HexanaToolHandlers) 
               put("type", JsonPrimitive("integer"))
               put("description", JsonPrimitive("Type index."))
             })
+            put("importLocations", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("locationKind", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Stable location kind. Function imports use `import`."))
+                  })
+                  put("module", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Imported module name."))
+                  })
+                  put("name", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Imported field name."))
+                  })
+                  put("locationDisplay", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
+                  })
+                  put("funcidx", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Funcidx of the imported function using this type."))
+                  })
+                  put("typeidx", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Type index referenced by the imported function."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("locationKind"))
+                  add(JsonPrimitive("module"))
+                  add(JsonPrimitive("name"))
+                  add(JsonPrimitive("locationDisplay"))
+                  add(JsonPrimitive("funcidx"))
+                  add(JsonPrimitive("typeidx"))
+                })
+              })
+              put("description", JsonPrimitive("Function imports that reference this type, with stable display strings."))
+            })
             put("elementType", buildJsonObject {
               put("type", buildJsonArray {
                 add(JsonPrimitive("object"))
@@ -4749,6 +4919,7 @@ private fun Server.registerGetTypesForIndicesTool(handlers: HexanaToolHandlers) 
           put("required", buildJsonArray {
             add(JsonPrimitive("kind"))
             add(JsonPrimitive("typeidx"))
+            add(JsonPrimitive("importLocations"))
           })
         })
         put("description", JsonPrimitive("Declared type entries."))

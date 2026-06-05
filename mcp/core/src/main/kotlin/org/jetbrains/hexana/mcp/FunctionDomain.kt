@@ -40,6 +40,8 @@ data class GeneralFunctionEntry(
 
 data class Import(val module: String, val name: String)
 
+internal fun Import.locationDisplay(): String = "import $module.$name"
+
 internal fun CommonByteBuffer.listExportedInternal(wasmModule: WasmModule?): List<WasmExportFunctionRecord> {
     wasmModule ?: return emptyList()
     val records = with(wasmModule.exportSection) {
