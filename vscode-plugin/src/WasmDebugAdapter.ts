@@ -204,6 +204,7 @@ function getDebugOutputChannel(): vscode.OutputChannel {
     return debugOutputChannel;
 }
 
+
 /**
  * DAP message interface used for JSON-level manipulation.
  * The actual wire format adds `Content-Length` headers.
@@ -320,7 +321,6 @@ class LldbDapProxy implements vscode.DebugAdapter {
      */
     handleMessage(message: vscode.DebugProtocolMessage): void {
         const msg = message as unknown as DapMessage;
-        this.log.appendLine(`[DAP →] ${msg.type}: ${msg.command || msg.event || ""} ${JSON.stringify(msg.arguments || msg.body || "").substring(0, 200)}`);
 
         // Rewrite setBreakpoints source paths to use basename
         // only.  DWARF debug info inside Wasm binaries records
@@ -412,7 +412,8 @@ class LldbDapProxy implements vscode.DebugAdapter {
         });
 
         this.process.stderr?.on("data", (chunk: Buffer) => {
-            this.log.appendLine(`[lldb-dap stderr] ${chunk.toString()}`);
+            const stderrText = chunk.toString();
+            this.log.appendLine(`[lldb-dap stderr] ${stderrText}`);
         });
 
         this.process.on("error", (err) => {
@@ -576,14 +577,6 @@ class LldbDapProxy implements vscode.DebugAdapter {
             this.patchSourcePathInBreakpointEvent(msg);
         }
 
-        // WAMR initial-stop handling: after configurationDone,
-        // lldb-dap sends a `stopped` event for the process that
-        // was already stopped at a `trace` stop.  We intercept
-        // this first stop, query the frame location via
-        // stackTrace, and check if it matches a user breakpoint.
-        // If it does, we present the stop as a breakpoint hit;
-        // otherwise we send `continue` to resume the process.
-        // This matches IntelliJ's checkInitialStopMatchesBreakpoint().
         if (
             !this.isWasmtime &&
             this.wamrInitialStopPending &&
@@ -709,7 +702,6 @@ class LldbDapProxy implements vscode.DebugAdapter {
             return;
         }
 
-        this.log.appendLine(`[DAP ←] ${msg.type}: ${msg.command || msg.event || ""} success=${msg.success ?? ""} ${JSON.stringify(msg.body || "").substring(0, 200)}`);
         this.emitter.fire(msg as unknown as vscode.DebugProtocolMessage);
     }
 
@@ -959,10 +951,17 @@ class WasmDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
 
         const args: string[] = [];
 
-        // On macOS, enable JIT loader for Wasmtime so LLDB can see
+        // Enable JIT loader for Wasmtime so LLDB can see
         // JIT-compiled symbols.  The lldb-dap binary accepts
         // `--pre-init-command` (alias `-c`) — NOT `--init-command`.
-        if (os.platform() === "darwin" && runtime === "wasmtime") {
+        //
+        // On macOS/Linux, this is required for LLDB to
+        // automatically discover symbols in JIT-compiled code.
+        // On Windows, the built-in JIT loader does not work
+        // reliably (the IntelliJ plugin uses a manual workaround),
+        // but enabling it is still attempted as a best-effort
+        // measure for lldb-dap which handles LLDB internally.
+        if (runtime === "wasmtime") {
             args.push(
                 "--pre-init-command",
                 "settings set plugin.jit-loader.gdb.enable on",
@@ -1251,6 +1250,280 @@ function buildWasmtimeLaunchConfig(config: vscode.DebugConfiguration): Record<st
 }
 
 /**
+ * Writes a Python helper script for the Windows JIT loader
+ * workaround to a temporary file and returns its path.
+ *
+ * The script defines `jit_breakpoint_callback(frame, bp_loc, dict)`
+ * which is invoked by LLDB when `__jit_debug_register_code` is hit.
+ * It reads the `__jit_debug_descriptor` structure from inferior
+ * memory, extracts the JIT-compiled ELF object, loads it into LLDB,
+ * scans its line tables for addresses matching pending (unresolved)
+ * source breakpoints, and sets address breakpoints for any matches.
+ *
+ * The callback returns `False` to auto-continue execution so the
+ * process only stops at resolved user breakpoints.  After 3
+ * invocations (matching IntelliJ's MAX_JIT_REGISTER_ATTEMPTS), the
+ * helper breakpoint is deleted to avoid further overhead.
+ *
+ * Returns `undefined` if the file could not be written.
+ */
+function writeWindowsJitLoaderScript(): string | undefined {
+    try {
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hexana-jit-"));
+        const scriptPath = path.join(tmpDir, "hexana_jit_loader.py");
+        // The script defines two things:
+        // 1. A breakpoint callback `jit_breakpoint_callback` that
+        //    reads the JIT descriptor, loads the ELF object, scans
+        //    line tables, and sets address breakpoints.
+        // 2. A module-level `__lldb_init_module` function that
+        //    automatically sets the breakpoint on
+        //    __jit_debug_register_code and attaches the callback
+        //    when the script is imported via `command script import`.
+        //    This avoids the race where lldb-dap creates its own
+        //    breakpoints between our `breakpoint set` and
+        //    `breakpoint command add` preRunCommands.
+        const script = `
+import struct
+import os
+import re
+import tempfile
+import lldb
+
+_hexana_jit_attempt = 0
+_hexana_jit_max_attempts = 3
+_hexana_jit_resolved = False
+_hexana_jit_bp_id = None
+
+def _get_bp_file_line(bp):
+    """Extract the requested file and line from an LLDB breakpoint."""
+    stream = lldb.SBStream()
+    bp.GetDescription(stream)
+    desc = stream.GetData() or ''
+    m = re.search(r"file\\s*=\\s*'([^']+)'\\s*,\\s*line\\s*=\\s*(\\d+)", desc)
+    if m:
+        return (m.group(1), int(m.group(2)))
+    return None
+
+def jit_breakpoint_callback(frame, bp_loc, extra_args, internal_dict):
+    """Breakpoint callback invoked when __jit_debug_register_code is hit.
+
+    Reads the JIT descriptor from inferior memory, extracts the
+    JIT-compiled ELF object, loads it into LLDB, scans its line
+    tables for addresses matching pending source breakpoints, and
+    sets address breakpoints for any matches.
+
+    Returns False to auto-continue execution.
+    """
+    global _hexana_jit_attempt, _hexana_jit_resolved, _hexana_jit_bp_id
+    _hexana_jit_attempt += 1
+    print('[hexana-jit] callback attempt %d' % _hexana_jit_attempt)
+
+    if _hexana_jit_resolved or _hexana_jit_attempt > _hexana_jit_max_attempts:
+        if _hexana_jit_bp_id is not None:
+            bp_loc.GetBreakpoint().GetTarget().BreakpointDelete(_hexana_jit_bp_id)
+            _hexana_jit_bp_id = None
+        return False
+
+    t = frame.GetThread().GetProcess().GetTarget()
+    p = frame.GetThread().GetProcess()
+    e = t.GetByteOrder()
+    ps = t.GetAddressByteSize()
+    bo = '<' if e == lldb.eByteOrderLittle else '>'
+    pfmt = bo + ('Q' if ps == 8 else 'I')
+
+    # Find __jit_debug_descriptor
+    syms = [s for s in t.FindSymbols('__jit_debug_descriptor')]
+    desc_addr = 0
+    if syms:
+        desc_addr = syms[0].GetSymbol().GetStartAddress().GetLoadAddress(t)
+    else:
+        gvs = t.FindGlobalVariables('__jit_debug_descriptor', 1)
+        if gvs.GetSize() > 0:
+            gv = gvs.GetValueAtIndex(0)
+            if gv:
+                desc_addr = gv.GetLoadAddress()
+
+    if not desc_addr or desc_addr == 0xFFFFFFFFFFFFFFFF:
+        print('[hexana-jit] descriptor not found')
+        return False
+
+    err = lldb.SBError()
+    desc_bytes = p.ReadMemory(desc_addr, 4 + 4 + ps + ps, err)
+    if not err.Success() or len(desc_bytes) < 4 + 4 + ps + ps:
+        print('[hexana-jit] failed to read descriptor: %s' % err)
+        return False
+
+    rel_entry = struct.unpack_from(pfmt, desc_bytes, 8)[0]
+    first_entry = struct.unpack_from(pfmt, desc_bytes, 8 + ps)[0]
+    print('[hexana-jit] rel_entry=0x%x first_entry=0x%x' % (rel_entry, first_entry))
+    if rel_entry == 0 and first_entry != 0:
+        rel_entry = first_entry
+
+    if rel_entry == 0:
+        print('[hexana-jit] no entry pointer')
+        return False
+
+    entry_bytes = p.ReadMemory(rel_entry, ps + ps + ps + 8, err)
+    if not err.Success() or len(entry_bytes) < ps + ps + ps + 8:
+        print('[hexana-jit] failed to read entry: %s' % err)
+        return False
+
+    sym_addr = struct.unpack_from(pfmt, entry_bytes, ps + ps)[0]
+    sym_size = struct.unpack_from(bo + 'Q', entry_bytes, ps + ps + ps)[0]
+    print('[hexana-jit] sym_addr=0x%x sym_size=%d' % (sym_addr, sym_size))
+    if sym_addr == 0 or sym_size == 0 or sym_size >= 100 * 1024 * 1024:
+        print('[hexana-jit] invalid sym_addr/sym_size')
+        return False
+
+    obj_bytes = p.ReadMemory(sym_addr, sym_size, err)
+    if not err.Success() or len(obj_bytes) != sym_size:
+        print('[hexana-jit] failed to read object: %s' % err)
+        return False
+
+    # Write the JIT object to a temp file
+    td = tempfile.mkdtemp(prefix='hexana-jit-obj-')
+    fp = os.path.join(td, 'jit_obj_' + hex(sym_addr) + '.elf')
+    with open(fp, 'wb') as f:
+        f.write(obj_bytes)
+    print('[hexana-jit] wrote %s (%d bytes)' % (fp, sym_size))
+
+    # Load the module into LLDB
+    mod = t.AddModule(fp, '', None)
+    if not mod or not mod.IsValid():
+        print('[hexana-jit] failed to load module')
+        return False
+
+    # Set section load addresses
+    for i in range(mod.GetNumSections()):
+        sec = mod.GetSectionAtIndex(i)
+        t.SetSectionLoadAddress(sec, sym_addr + sec.GetFileOffset())
+
+    # Collect pending (unresolved) source breakpoints
+    helper_bp_id = _hexana_jit_bp_id or bp_loc.GetBreakpoint().GetID()
+    pending = []
+    for bi in range(t.GetNumBreakpoints()):
+        bp = t.GetBreakpointAtIndex(bi)
+        if bp.GetID() == helper_bp_id:
+            continue
+        if bp.GetNumLocations() > 0:
+            continue
+        fl = _get_bp_file_line(bp)
+        if fl:
+            basename = fl[0].replace('\\\\', '/').rsplit('/', 1)[-1]
+            pending.append((basename, fl[1]))
+    print('[hexana-jit] pending breakpoints: %s' % pending)
+
+    if not pending:
+        for bi in range(t.GetNumBreakpoints()):
+            bp = t.GetBreakpointAtIndex(bi)
+            if bp.GetID() == helper_bp_id:
+                continue
+            if bp.GetNumLocations() > 0:
+                _hexana_jit_resolved = True
+                t.BreakpointDelete(helper_bp_id)
+                _hexana_jit_bp_id = None
+                print('[hexana-jit] breakpoints auto-resolved after module load')
+                return False
+        return False
+
+    # Scan the JIT module's line tables for matching addresses
+    found = []
+    for ci in range(mod.GetNumCompileUnits()):
+        cu = mod.GetCompileUnitAtIndex(ci)
+        nle = cu.GetNumLineEntries()
+        print('[hexana-jit] cu[%d] entries=%d file=%s' % (ci, nle, cu.GetFileSpec()))
+        for li in range(nle):
+            le = cu.GetLineEntryAtIndex(li)
+            fs = le.GetFileSpec()
+            if not fs.IsValid():
+                continue
+            fn = fs.GetFilename()
+            ln = le.GetLine()
+            addr = le.GetStartAddress().GetLoadAddress(t)
+            if addr == lldb.LLDB_INVALID_ADDRESS:
+                continue
+            for (bf, bl) in pending:
+                if fn == bf and ln == bl and addr not in found:
+                    found.append(addr)
+
+    for addr in found:
+        print('[hexana-jit] setting address breakpoint at 0x%x' % addr)
+        t.BreakpointCreateByAddress(addr)
+
+    if found:
+        _hexana_jit_resolved = True
+        t.BreakpointDelete(helper_bp_id)
+        _hexana_jit_bp_id = None
+        print('[hexana-jit] resolved %d address breakpoints' % len(found))
+    else:
+        # Fallback: scan ALL modules for matching line entries
+        print('[hexana-jit] no matches in JIT module, scanning all %d modules' % t.GetNumModules())
+        for mi in range(t.GetNumModules()):
+            m = t.GetModuleAtIndex(mi)
+            for ci in range(m.GetNumCompileUnits()):
+                cu = m.GetCompileUnitAtIndex(ci)
+                for li in range(cu.GetNumLineEntries()):
+                    le = cu.GetLineEntryAtIndex(li)
+                    fs = le.GetFileSpec()
+                    if not fs.IsValid():
+                        continue
+                    fn = fs.GetFilename()
+                    ln = le.GetLine()
+                    addr = le.GetStartAddress().GetLoadAddress(t)
+                    if addr == lldb.LLDB_INVALID_ADDRESS:
+                        continue
+                    for (bf, bl) in pending:
+                        if fn == bf and ln == bl and addr not in found:
+                            found.append(addr)
+        for addr in found:
+            print('[hexana-jit] (fallback) setting address breakpoint at 0x%x' % addr)
+            t.BreakpointCreateByAddress(addr)
+        if found:
+            _hexana_jit_resolved = True
+            t.BreakpointDelete(helper_bp_id)
+            _hexana_jit_bp_id = None
+            print('[hexana-jit] (fallback) resolved %d address breakpoints' % len(found))
+
+        # Also check if LLDB auto-resolved any existing breakpoints
+        if not found:
+            for bi in range(t.GetNumBreakpoints()):
+                bp = t.GetBreakpointAtIndex(bi)
+                if bp.GetID() == helper_bp_id:
+                    continue
+                if bp.GetNumLocations() > 0:
+                    _hexana_jit_resolved = True
+                    t.BreakpointDelete(helper_bp_id)
+                    _hexana_jit_bp_id = None
+                    print('[hexana-jit] breakpoints auto-resolved (fallback)')
+                    break
+
+    return False
+
+def __lldb_init_module(debugger, internal_dict):
+    """Called automatically when the script is imported via
+    'command script import'.  Sets the breakpoint on
+    __jit_debug_register_code and attaches the callback
+    atomically, avoiding races with lldb-dap's own breakpoint
+    management."""
+    global _hexana_jit_bp_id
+    target = debugger.GetSelectedTarget()
+    bp = target.BreakpointCreateByName('__jit_debug_register_code')
+    if bp.IsValid():
+        _hexana_jit_bp_id = bp.GetID()
+        bp.SetAutoContinue(True)
+        bp.SetScriptCallbackFunction('hexana_jit_loader.jit_breakpoint_callback')
+        print('[hexana-jit] breakpoint %d set on __jit_debug_register_code' % bp.GetID())
+    else:
+        print('[hexana-jit] WARNING: failed to set breakpoint on __jit_debug_register_code')
+`;
+        fs.writeFileSync(scriptPath, script, "utf-8");
+        return scriptPath;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
  * A `DebugAdapterTracker` that intercepts the DAP `launch` request
  * to inject the correct program, arguments, and settings for the
  * Wasm debug session.
@@ -1284,11 +1557,13 @@ class WasmDebugAdapterTracker implements vscode.DebugAdapterTracker {
                 // set failed: Operation not permitted").
                 args.disableASLR = false;
 
-                // On macOS, enable the JIT loader inside the DAP
-                // launch request as well so LLDB can discover
-                // Wasmtime's JIT-compiled Wasm symbols and resolve
-                // breakpoints set in Wasm source files.
-                if (os.platform() === "darwin") {
+                // Enable the JIT loader inside the DAP launch
+                // request so LLDB can discover Wasmtime's
+                // JIT-compiled Wasm symbols and resolve breakpoints
+                // set in Wasm source files.  On Windows the built-in
+                // JIT loader is unreliable but enabling it is still
+                // a best-effort measure for lldb-dap.
+                {
                     const initCmds =
                         (args.initCommands as string[] | undefined) || [];
                     initCmds.push(
@@ -1297,17 +1572,22 @@ class WasmDebugAdapterTracker implements vscode.DebugAdapterTracker {
                     args.initCommands = initCmds;
                 }
 
-                // On macOS/ARM64, Wasmtime JIT emits 4-byte `brk`
-                // (trap) instructions at breakpoint sites.  When
-                // LLDB stops on such a trap the PC still points at
-                // the `brk`; a plain `continue` would re-execute
-                // the same trap, causing an infinite
-                // EXC_BREAKPOINT loop.
+                // Wasmtime JIT emits trap instructions at
+                // breakpoint sites: `brk` (4 bytes) on ARM64,
+                // `ud2` (2 bytes) on x86_64.  When LLDB stops on
+                // such a trap the PC still points at the trap; a
+                // plain `continue` would re-execute the same trap,
+                // causing an infinite loop.
                 //
                 // The stopCommands below run after every stop and
-                // advance the PC past the 4-byte `brk` when the
-                // current instruction is indeed a trap.  The `?`
-                // prefix silences console output on success.
+                // conditionally advance the PC past the trap when
+                // the current instruction is indeed a trap.  The
+                // `?` prefix silences console output on success.
+                //
+                // This handles both ARM64 (`brk`, 4 bytes) and
+                // x86_64 (`ud2`, 2 bytes) — matching the shared
+                // LLDB_DAP_TRAP_ADVANCE_STOP_CMD constant from
+                // plugins-shared.
                 //
                 // Note: __vmctx->set() is NOT placed here — running
                 // `expression` in stopCommands interferes with
@@ -1316,20 +1596,54 @@ class WasmDebugAdapterTracker implements vscode.DebugAdapterTracker {
                 // __vmctx->set() after the frame is selected but
                 // before variables are requested (matching
                 // IntelliJ's approach).
-                if (
-                    os.platform() === "darwin" &&
-                    os.arch() === "arm64"
-                ) {
+                {
                     const stopCmds =
                         (args.stopCommands as string[] | undefined) || [];
                     stopCmds.push(
-                        "?script import lldb; t = lldb.debugger.GetSelectedTarget().GetProcess().GetSelectedThread(); " +
-                        "f = t.GetSelectedFrame(); " +
-                        "err = lldb.SBError(); " +
-                        "inst = f.GetThread().GetProcess().ReadUnsignedFromMemory(f.GetPC(), 4, err); " +
-                        "f.SetPC(f.GetPC() + 4) if err.Success() and (inst & 0xFFE0001F) == 0xD4200000 else None",
+                        "?script import lldb; t = lldb.debugger.GetSelectedTarget(); p = t.GetProcess(); " +
+                        "f = p.GetSelectedThread().GetSelectedFrame(); err = lldb.SBError(); pc = f.GetPC(); " +
+                        "triple = t.GetTriple(); is_arm = 'arm' in triple or 'aarch64' in triple; " +
+                        "inst = p.ReadUnsignedFromMemory(pc, 4, err) if is_arm else p.ReadUnsignedFromMemory(pc, 2, err); " +
+                        "is_trap = (err.Success() and ((inst & 0xFFE0001F) == 0xD4200000)) if is_arm else " +
+                        "(err.Success() and inst == 0x0B0F); " +
+                        "f.SetPC(pc + (4 if is_arm else 2)) if is_trap else None",
                     );
                     args.stopCommands = stopCmds;
+                }
+
+                // On Windows, the built-in JIT loader
+                // (plugin.jit-loader.gdb.enable) does not work
+                // reliably — LLDB never discovers Wasmtime's
+                // JIT-compiled symbols, so source breakpoints
+                // never resolve and the process runs to completion
+                // immediately.
+                //
+                // Workaround: write a Python helper script to a
+                // temp file that defines a breakpoint callback for
+                // __jit_debug_register_code.  When the callback
+                // fires, it reads the JIT descriptor from inferior
+                // memory, dumps the ELF object to disk, loads it
+                // into LLDB, scans its line tables, and sets
+                // address breakpoints for any pending source
+                // breakpoints that match.  The callback returns
+                // False to auto-continue so the process only stops
+                // at resolved user breakpoints.  This replicates
+                // the IntelliJ plugin's windowsJitBreakpointSetup.
+                if (os.platform() === "win32") {
+                    const jitScript = writeWindowsJitLoaderScript();
+                    if (jitScript) {
+                        const preRunCmds =
+                            (args.preRunCommands as string[] | undefined) || [];
+                        const escapedPath = jitScript.replace(/\\/g, "/");
+                        // The script's __lldb_init_module sets the
+                        // breakpoint on __jit_debug_register_code and
+                        // attaches the callback atomically — no
+                        // separate breakpoint set / command add needed.
+                        preRunCmds.push(
+                            `command script import "${escapedPath}"`,
+                        );
+                        args.preRunCommands = preRunCmds;
+                    }
                 }
 
                 message.arguments = args;

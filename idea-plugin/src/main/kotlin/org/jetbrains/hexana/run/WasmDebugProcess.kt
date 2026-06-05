@@ -20,6 +20,8 @@ import com.intellij.xdebugger.evaluation.EvaluationMode
 import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider
 import com.intellij.xdebugger.frame.XSuspendContext
 import com.intellij.xdebugger.impl.XDebuggerUtilImpl
+import org.jetbrains.hexana.shared.JIT_REGISTER_FUNCTION_NAME
+import org.jetbrains.hexana.shared.LLDB_ADVANCE_PC_PAST_TRAP_CMD
 import org.jetbrains.hexana.shared.cuPathEndsWithProjectRelative
 import org.jetbrains.hexana.shared.extractCrateName
 import org.jetbrains.hexana.shared.cuPathMatchesIdePath
@@ -1228,9 +1230,7 @@ open class WasmDebugProcess(
          * reliably across LLDB versions (unlike `register write
          * pc \`$pc+4\`` which broke in some Xcode releases).
          */
-        private const val ADVANCE_PC_PAST_TRAP_CMD =
-            "script lldb.frame.SetPC(lldb.frame.GetPC() + " +
-                "(4 if 'arm' in lldb.target.GetTriple() or 'aarch64' in lldb.target.GetTriple() else 2))"
+        private const val ADVANCE_PC_PAST_TRAP_CMD = LLDB_ADVANCE_PC_PAST_TRAP_CMD
 
         /**
          * The GDB JIT interface function that wasmtime calls after
@@ -1239,7 +1239,7 @@ open class WasmDebugProcess(
          * when JIT symbols are available so user breakpoints can
          * resolve.
          */
-        private const val JIT_REGISTER_FUNCTION = "__jit_debug_register_code"
+        private const val JIT_REGISTER_FUNCTION = JIT_REGISTER_FUNCTION_NAME
 
         /**
          * Maximum time in milliseconds to wait for each
