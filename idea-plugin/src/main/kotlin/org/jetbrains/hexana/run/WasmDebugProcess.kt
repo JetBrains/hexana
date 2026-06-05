@@ -588,7 +588,21 @@ open class WasmDebugProcess(
         eventLoopThread = Thread({
             try {
                 while (lldb != null && processHandler.isProcessTerminated.not()) {
-                    val event = lldb.waitForStopEvent(1_000) ?: continue
+                    val event = lldb.waitForStopEvent(1_000)
+                    if (event == null) {
+                        // Safety net: if the debuggee has exited but the
+                        // ProcessExited stop event was somehow missed (e.g.
+                        // consumed during response collection), terminate
+                        // the debug session instead of spinning forever.
+                        if (lldb.debuggeeExited) {
+                            LOG.info("Debuggee exited (detected via flag) — stopping debug session")
+                            ApplicationManager.getApplication().invokeLater {
+                                session.stop()
+                            }
+                            break
+                        }
+                        continue
+                    }
                     when (event) {
                         is LldbCommunicator.StopEvent.BreakpointHit -> handleStop(event)
                         is LldbCommunicator.StopEvent.Stepped -> handleStop(event)

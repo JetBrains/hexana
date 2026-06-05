@@ -109,9 +109,23 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
                     // Without this guard, `bt` or `frame info` output that
                     // echoes "stop reason = breakpoint" would be
                     // misinterpreted as a new process stop.
+                    //
+                    // ProcessExited events are NEVER suppressed: if the
+                    // debuggee exits while stop events are suppressed
+                    // (e.g. during handleStopImpl → resumePastTrap), the
+                    // exit event must still be queued so the event loop
+                    // can terminate the debug session.
                     if (!insideResponse && !suppressStopEvents) {
                         val stopEvent = parseStopEvent(line)
                         if (stopEvent != null) {
+                            stopEvents.offer(stopEvent)
+                        }
+                    } else if (!insideResponse) {
+                        // Even when suppressed, always parse and queue
+                        // process-exit events to prevent the event loop
+                        // from spinning forever after the debuggee exits.
+                        val stopEvent = parseStopEvent(line)
+                        if (stopEvent is StopEvent.ProcessExited) {
                             stopEvents.offer(stopEvent)
                         }
                     }
