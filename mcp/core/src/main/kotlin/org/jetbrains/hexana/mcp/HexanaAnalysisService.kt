@@ -43,6 +43,7 @@ interface HexanaAnalysisService {
     fun queryArtifacts(
         input: WasmInput,
         baselineInput: WasmInput?,
+        bindingInput: TextInput?,
         operation: String,
         entityTypes: List<String>,
         query: List<String>,
@@ -118,6 +119,7 @@ class DefaultHexanaAnalysisService(
     override fun queryArtifacts(
         input: WasmInput,
         baselineInput: WasmInput?,
+        bindingInput: TextInput?,
         operation: String,
         entityTypes: List<String>,
         query: List<String>,
@@ -130,8 +132,10 @@ class DefaultHexanaAnalysisService(
     ): QueryArtifactsResult {
         val wasm = load(input)
         val baseline = baselineInput?.let(::load)
+        val binding = bindingInput?.let(::loadText)
         return wasm.provider.readArtifactQuery(
             baseline = baseline?.provider,
+            bindingText = binding?.text,
             operation = operation,
             entityTypes = entityTypes,
             query = query,
@@ -142,7 +146,8 @@ class DefaultHexanaAnalysisService(
             detail = detail,
             maxBytes = maxBytes,
             pathLabel = input.artifactPathLabel(),
-            baselinePathLabel = baselineInput?.artifactPathLabel()
+            baselinePathLabel = baselineInput?.artifactPathLabel(),
+            bindingPathLabel = bindingInput?.artifactPathLabel()
         )
     }
 
@@ -356,6 +361,47 @@ class DefaultHexanaAnalysisService(
         }
     }
 
+    private fun loadText(input: TextInput): LoadedText {
+        return when (input) {
+            is TextInput.FilePath -> loadTextFromPath(input.path)
+        }
+    }
+
+    private fun loadTextFromPath(rawPath: String): LoadedText {
+        if (rawPath.isBlank()) {
+            throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Path must not be blank")
+        }
+        val path = Path.of(rawPath)
+        if (!Files.exists(path) || !Files.isRegularFile(path)) {
+            throw HexanaAnalysisException(HexanaAnalysisErrorCode.FILE_NOT_FOUND, "File not found")
+        }
+        val size = try {
+            Files.size(path)
+        } catch (error: Exception) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INTERNAL_ERROR,
+                "Failed to read text file",
+                error
+            )
+        }
+        if (size > 1_000_000L) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INVALID_INPUT,
+                "Text file exceeds maximum size of 1000000 bytes"
+            )
+        }
+        val text = try {
+            Files.readString(path)
+        } catch (error: Exception) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INTERNAL_ERROR,
+                "Failed to read text file",
+                error
+            )
+        }
+        return LoadedText(text)
+    }
+
     private fun loadFromPath(rawPath: String): LoadedWasm {
         if (rawPath.isBlank()) {
             throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Path must not be blank")
@@ -559,7 +605,11 @@ class DefaultHexanaAnalysisService(
     private fun WasmInput.artifactPathLabel(): String? =
         (this as? WasmInput.FilePath)?.path
 
+    private fun TextInput.artifactPathLabel(): String? =
+        (this as? TextInput.FilePath)?.path
+
     private data class LoadedWasm(val provider: WasmBinaryProvider)
+    private data class LoadedText(val text: String)
 
     private fun CommonByteBuffer.loadCoreProviderOrThrow(): WasmBinaryProvider {
         if (WasmBinaryProviderSelector.select(this) !is BinaryProviderType.Wasm) {

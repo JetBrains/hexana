@@ -419,6 +419,7 @@ class DefaultHexanaAnalysisServiceTest {
         val policy = service.queryArtifacts(
             input = WasmInput.FilePath(current.toString()),
             baselineInput = WasmInput.FilePath(baseline.toString()),
+            bindingInput = null,
             operation = "global_state_policy",
             entityTypes = emptyList(),
             query = emptyList(),
@@ -455,6 +456,80 @@ class DefaultHexanaAnalysisServiceTest {
         val featureFlag = policy.records.single { it.id == "global-policy:new-export:feature_flag" }
         assertEquals(50, featureFlag.index)
         assertEquals("i32.const 1", featureFlag.attributeValue("initExpr"))
+    }
+
+    @Test
+    fun abiBindingRegenerationComparesCurrentWasmToStalePythonBindings() {
+        val wasm = createWasmFile(
+            "pricing_plugin.wasm",
+            """
+            (module
+              (import "env" "emit_metric" (func (param i32 i64)))
+              (import "env" "fetch_discount" (func (param i32) (result i32)))
+              (func (export "calculate_total") (param i32 i32) (result i64)
+                i64.const 0)
+              (func (export "adapter_version") (result i32)
+                i32.const 2))
+            """.trimIndent()
+        )
+        val binding = temporaryFolder.newFile("pricing_bindings.py").toPath().also {
+            Files.writeString(
+                it,
+                """
+                MODULE = 'dist/plugin/pricing_plugin.wasm'
+                IMPORTS = {
+                    'env.emit_metric': {'params': ['i32'], 'results': []},
+                    'env.fetch_discount': {'params': ['i64'], 'results': ['i32']},
+                }
+                EXPORTS = {
+                    'calculate_total': {'params': ['i32', 'i32'], 'results': ['i32']},
+                    'legacy_price': {'params': ['i32'], 'results': ['i32']},
+                }
+                """.trimIndent()
+            )
+        }
+
+        val result = service.queryArtifacts(
+            input = WasmInput.FilePath(wasm.toString()),
+            baselineInput = null,
+            bindingInput = TextInput.FilePath(binding.toString()),
+            operation = "abi_binding_regeneration",
+            entityTypes = emptyList(),
+            query = emptyList(),
+            startName = null,
+            startFuncidx = null,
+            relations = emptyList(),
+            limit = 25,
+            detail = "summary",
+            maxBytes = 24_000
+        )
+
+        val summary = result.records.single { it.id == "abi-binding-regeneration:summary" }
+        assertEquals("5", summary.attributeValue("mismatches"))
+        assertTrue(summary.attributeValue("replacementBindingsJson")!!.contains("\"MODULE\":\"dist/plugin/pricing_plugin.wasm\""))
+        assertTrue(summary.attributeValue("replacementBindingsJson")!!.contains("\"adapter_version\""))
+        assertTrue(summary.attributeValue("currentImportsJson")!!.contains("\"env.emit_metric\""))
+        assertTrue(summary.attributeValue("bindingMismatchesJson")!!.contains("\"symbol\":\"EXPORTS.legacy_price\""))
+
+        fun mismatch(symbol: String) = result.records.single { it.attributeValue("symbol") == symbol }
+
+        val missingExport = mismatch("EXPORTS.adapter_version")
+        assertEquals("added", missingExport.status)
+        assertEquals("""{"params":[],"results":["i32"]}""", missingExport.attributeValue("expectedSignatureJson"))
+        assertEquals("null", missingExport.attributeValue("actualSignatureJson"))
+
+        val changedExport = mismatch("EXPORTS.calculate_total")
+        assertEquals("""{"params":["i32","i32"],"results":["i64"]}""", changedExport.attributeValue("expectedSignatureJson"))
+        assertEquals("""{"params":["i32","i32"],"results":["i32"]}""", changedExport.attributeValue("actualSignatureJson"))
+
+        val staleExport = mismatch("EXPORTS.legacy_price")
+        assertEquals("removed", staleExport.status)
+        assertEquals("null", staleExport.attributeValue("expectedSignatureJson"))
+        assertEquals("""{"params":["i32"],"results":["i32"]}""", staleExport.attributeValue("actualSignatureJson"))
+
+        val changedImport = mismatch("IMPORTS.env.emit_metric")
+        assertEquals("""{"params":["i32","i64"],"results":[]}""", changedImport.attributeValue("expectedSignatureJson"))
+        assertEquals("""{"params":["i32"],"results":[]}""", changedImport.attributeValue("actualSignatureJson"))
     }
 
     @Test

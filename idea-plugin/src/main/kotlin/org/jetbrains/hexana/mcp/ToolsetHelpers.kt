@@ -38,6 +38,14 @@ internal fun requireWasmFile(path: String): VirtualFile {
     return file
 }
 
+internal fun requireTextFile(path: String): String {
+    val file = resolveProjectVirtualFile(path) ?: mcpFail("File not found")
+    if (!file.isValid || file.isDirectory) {
+        mcpFail("File not found")
+    }
+    return file.contentsToByteArray().toString(Charsets.UTF_8)
+}
+
 internal fun requireClosedRange(entriesRange: Map<String, Int>, fieldName: String): IntRange {
     val from = entriesRange["from"] ?: mcpFail("Invalid $fieldName: missing `from`")
     val to = entriesRange["to"] ?: mcpFail("Invalid $fieldName: missing `to`")

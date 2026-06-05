@@ -24,3 +24,7 @@ sealed interface WasmInput {
         }
     }
 }
+
+sealed interface TextInput {
+    data class FilePath(val path: String) : TextInput
+}

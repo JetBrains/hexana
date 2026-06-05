@@ -190,6 +190,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             code.addStatement("val entityTypes = args.optionalStringListArgument(%S)", "entityTypes")
             code.addStatement("val query = args.optionalStringListArgument(%S)", "query")
             code.addStatement("val baselinePath = args.optionalStringArgument(%S)", "baselinePath")
+            code.addStatement("val bindingPath = args.optionalStringArgument(%S)", "bindingPath")
             code.addStatement("val startName = args.optionalStringArgument(%S)", "startName")
             code.addStatement("val startFuncidx = args.optionalIntArgument(%S)", "startFuncidx")
             code.addStatement("val relations = args.optionalStringListArgument(%S)", "relations")
@@ -213,8 +214,13 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             REQUIRE_CORE_WASM_BINARY_PROVIDER,
         )
         code.addStatement(
+            "val bindingText = bindingPath?.let { %M(it) }",
+            REQUIRE_TEXT_FILE,
+        )
+        code.addStatement(
             "val result = provider.%M(" +
                 "baseline = baselineProvider, " +
+                "bindingText = bindingText, " +
                 "operation = operation, " +
                 "entityTypes = entityTypes.orEmpty(), " +
                 "query = query.orEmpty(), " +
@@ -225,7 +231,8 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
                 "detail = detail, " +
                 "maxBytes = maxBytes, " +
                 "pathLabel = path, " +
-                "baselinePathLabel = baselinePath" +
+                "baselinePathLabel = baselinePath, " +
+                "bindingPathLabel = bindingPath" +
                 ")",
             handlerMember,
         )
@@ -322,6 +329,7 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
             inputField(spec.input, "entityTypes"),
             inputField(spec.input, "query"),
             inputField(spec.input, "baselinePath"),
+            inputField(spec.input, "bindingPath"),
             inputField(spec.input, "startName"),
             inputField(spec.input, "startFuncidx"),
             inputField(spec.input, "relations"),
@@ -784,6 +792,7 @@ private fun ToolSpec.handlerMemberName(): MemberName =
     MemberName(handlerFqn.substringBeforeLast('.'), handlerFqn.substringAfterLast('.'))
 
 private val REQUIRE_WASM_FILE = MemberName(IDEA_PACKAGE, "requireWasmFile")
+private val REQUIRE_TEXT_FILE = MemberName(IDEA_PACKAGE, "requireTextFile")
 private val REQUIRE_CLOSED_RANGE = MemberName(IDEA_PACKAGE, "requireClosedRange")
 private val REQUIRE_HALF_OPEN_RANGE = MemberName(IDEA_PACKAGE, "requireHalfOpenSegmentRange")
 private val REQUIRE_CORE_WASM_BINARY_PROVIDER = MemberName(IDEA_PACKAGE, "requireCoreWasmBinaryProvider")

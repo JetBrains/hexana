@@ -559,6 +559,11 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireNullable(baselinePath)
             requireDescribed(baselinePath)
 
+            val bindingPath = requireField("bindingPath")
+            requireType(bindingPath, FieldType.StringT)
+            requireNullable(bindingPath)
+            requireDescribed(bindingPath)
+
             val operation = requireField("operation")
             requireType(operation, FieldType.StringT)
             requireNonNullable(operation)

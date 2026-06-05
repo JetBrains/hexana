@@ -27,6 +27,7 @@ class HexanaToolHandlers(
             analysisService.queryArtifacts(
                 input = wasmInput(arguments),
                 baselineInput = arguments.optionalNonBlankString("baselinePath")?.let(WasmInput::FilePath),
+                bindingInput = arguments.optionalNonBlankString("bindingPath")?.let(TextInput::FilePath),
                 operation = arguments.stringOrDefault(
                     "operation",
                     HexanaToolInputDefaults.QUERY_ARTIFACTS_OPERATION
