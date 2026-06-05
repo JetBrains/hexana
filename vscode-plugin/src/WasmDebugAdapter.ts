@@ -293,14 +293,6 @@ class LldbDapProxy implements vscode.DebugAdapter {
     private isWasmtime: boolean;
 
     /**
-     * Tracks whether the debuggee process has exited.
-     * When `true`, the proxy avoids sending further commands
-     * to lldb-dap (e.g. `continue`, `evaluate`) that would
-     * fail with "Process is not running".
-     */
-    private debuggeeExited = false;
-
-    /**
      * Optional iwasm child process for WAMR debugging.
      * The proxy owns this process and kills it on dispose.
      */
@@ -429,7 +421,6 @@ class LldbDapProxy implements vscode.DebugAdapter {
 
         this.process.on("exit", (code, signal) => {
             this.log.appendLine(`[DAP EXIT] code=${code}, signal=${signal}`);
-            this.markDebuggeeExited();
         });
     }
 
@@ -447,17 +438,8 @@ class LldbDapProxy implements vscode.DebugAdapter {
 
     /**
      * Serializes a DAP message and writes it to lldb-dap's stdin.
-     * Silently drops messages when the debuggee has already exited
-     * to avoid "Process is not running" errors.
      */
     private sendToLldbDap(msg: DapMessage): void {
-        if (this.debuggeeExited) {
-            this.log.appendLine(
-                `[Hexana] Dropping message to lldb-dap (debuggee exited): ` +
-                `${msg.type} ${msg.command || ""}`,
-            );
-            return;
-        }
         const json = JSON.stringify(msg);
         const header = `Content-Length: ${Buffer.byteLength(json, "utf-8")}\r\n\r\n`;
         this.process?.stdin?.write(header + json, "utf-8");
@@ -592,13 +574,6 @@ class LldbDapProxy implements vscode.DebugAdapter {
             msg.event === "breakpoint"
         ) {
             this.patchSourcePathInBreakpointEvent(msg);
-        }
-
-        // Track debuggee process exit.  When lldb-dap reports
-        // an `exited` or `terminated` event, mark the debuggee as
-        // gone so the proxy stops sending further commands.
-        if (msg.type === "event" && (msg.event === "exited" || msg.event === "terminated")) {
-            this.markDebuggeeExited();
         }
 
         // WAMR initial-stop handling: after configurationDone,
@@ -798,38 +773,6 @@ class LldbDapProxy implements vscode.DebugAdapter {
      * rather than forwarded to VS Code.
      */
     private readonly injectedRequestSeqs = new Set<number>();
-
-    /**
-     * Marks the debuggee as exited and flushes any pending
-     * deferred responses so VS Code doesn't hang waiting for
-     * them.
-     */
-    private markDebuggeeExited(): void {
-        if (this.debuggeeExited) return;
-        this.debuggeeExited = true;
-        this.log.appendLine(
-            `[Hexana] Debuggee process ended, will not send further commands`,
-        );
-
-        // Flush deferred scopes responses that were waiting for
-        // a __vmctx->set() evaluate reply that will never come.
-        this.pendingVmCtx.forEach((deferred) => {
-            this.log.appendLine(
-                `[Hexana] Flushing deferred scopes response ` +
-                `(seq=${deferred.request_seq}) after debuggee exit`,
-            );
-            this.emitter.fire(deferred as unknown as vscode.DebugProtocolMessage);
-        });
-        this.pendingVmCtx.clear();
-
-        // Cancel pending WAMR initial-stop check — the process
-        // is gone, so forward the stopped event as-is.
-        if (this.pendingWamrInitialStopCheck) {
-            const { stoppedEvent } = this.pendingWamrInitialStopCheck;
-            this.pendingWamrInitialStopCheck = undefined;
-            this.emitter.fire(stoppedEvent as unknown as vscode.DebugProtocolMessage);
-        }
-    }
 
     /**
      * Checks if a source file basename + line matches any
