@@ -128,6 +128,19 @@ class HexanaMcpExportsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals("a", result.array("returned").obj(0).text("name"))
     }
 
+    fun testListExportedFunctionsRejectsMalformedEntriesRange() {
+        val result = callTool(
+            "list_exported_functions",
+            buildJsonObject {
+                put("path", JsonPrimitive("fixtures/direct/exports/list_exported_functions.wasm"))
+                put("entriesRange", JsonPrimitive("""{"from": 0, "10}"""))
+            }
+        )
+
+        assertTrue(result.isError)
+        assertEquals("Invalid `entriesRange`: expected object { from: int, to: int }", result.textPayloads.single())
+    }
+
     fun testListExportedFunctionsPreservesImportedFunctionEntryShape() {
         val fixture = createWasmFixture(
             "fixtures/direct/exports/list_exported_imported_function.wasm",

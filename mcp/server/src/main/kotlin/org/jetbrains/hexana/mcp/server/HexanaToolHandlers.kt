@@ -521,7 +521,12 @@ class HexanaToolHandlers(
 
     private fun JsonObject?.requireClosedRange(name: String): IntRange {
         val value = requireObject(name)
-        return value.requireInt("from")..value.requireInt("to")
+        val from = value.requireRangeInt(name, "from")
+        val to = value.requireRangeInt(name, "to")
+        if (to < from) {
+            throw ToolInputException("`$name.to` must be >= `$name.from`")
+        }
+        return from..to
     }
 
     private fun JsonObject?.requireHalfOpenRange(name: String): Pair<Int, Int> {
@@ -529,6 +534,12 @@ class HexanaToolHandlers(
         val from = value.requireInt("from")
         val toExclusive = value.optionalInt("to") ?: Int.MAX_VALUE
         return from to toExclusive
+    }
+
+    private fun JsonObject.requireRangeInt(rangeName: String, fieldName: String): Int {
+        val element = get(fieldName) ?: throw ToolInputException("`$rangeName.$fieldName` is required")
+        return (element as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull
+            ?: throw ToolInputException("`$rangeName.$fieldName` must be an integer")
     }
 }
 

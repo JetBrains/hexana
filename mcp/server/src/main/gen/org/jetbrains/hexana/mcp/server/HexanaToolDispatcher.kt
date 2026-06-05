@@ -5572,6 +5572,34 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
               })
               put("description", JsonPrimitive("Primary numeric index when one exists."))
             })
+            put("locationKind", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Structured location kind, for example `import`, when the record points at a specific ABI location."))
+            })
+            put("module", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Structured module name for import or module-scoped ABI records."))
+            })
+            put("typeidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Structured type index when the record points at a WebAssembly function type."))
+            })
+            put("locationDisplay", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Stable human-readable location string derived from the structured location fields."))
+            })
             put("relation", buildJsonObject {
               put("type", buildJsonArray {
                 add(JsonPrimitive("string"))

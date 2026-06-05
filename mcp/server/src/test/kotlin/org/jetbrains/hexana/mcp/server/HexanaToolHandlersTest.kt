@@ -623,6 +623,41 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun listExportedFunctionsRejectsMalformedEntriesRangeInput() {
+        val stringRange = handlers.listExportedFunctions(
+            buildJsonObject {
+                put("path", JsonPrimitive("/tmp/module.wasm"))
+                put("entriesRange", JsonPrimitive("""{"from": 0, "10}"""))
+            }
+        )
+        val nonIntegerBound = handlers.listExportedFunctions(
+            buildJsonObject {
+                put("path", JsonPrimitive("/tmp/module.wasm"))
+                put("entriesRange", buildJsonObject {
+                    put("from", JsonPrimitive("0"))
+                    put("to", JsonPrimitive(1))
+                })
+            }
+        )
+        val reversedRange = handlers.listExportedFunctions(
+            buildJsonObject {
+                put("path", JsonPrimitive("/tmp/module.wasm"))
+                put("entriesRange", buildJsonObject {
+                    put("from", JsonPrimitive(2))
+                    put("to", JsonPrimitive(1))
+                })
+            }
+        )
+
+        assertEquals(true, stringRange.isError)
+        assertEquals("`entriesRange` must be an object", (stringRange.content.single() as TextContent).text)
+        assertEquals(true, nonIntegerBound.isError)
+        assertEquals("`entriesRange.from` must be an integer", (nonIntegerBound.content.single() as TextContent).text)
+        assertEquals(true, reversedRange.isError)
+        assertEquals("`entriesRange.to` must be >= `entriesRange.from`", (reversedRange.content.single() as TextContent).text)
+    }
+
+    @Test
     fun inputValidationRejectsMissingOrConflictingWasmInputs() {
         val missingInput = handlers.listImports(buildJsonObject {})
         val conflictingInput = handlers.listImports(

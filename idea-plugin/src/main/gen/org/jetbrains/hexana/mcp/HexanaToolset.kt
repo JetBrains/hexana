@@ -5223,6 +5223,34 @@ public class HexanaToolset : McpToolsProvider {
                 })
                 put("description", JsonPrimitive("Primary numeric index when one exists."))
               })
+              put("locationKind", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Structured location kind, for example `import`, when the record points at a specific ABI location."))
+              })
+              put("module", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Structured module name for import or module-scoped ABI records."))
+              })
+              put("typeidx", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("integer"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Structured type index when the record points at a WebAssembly function type."))
+              })
+              put("locationDisplay", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Stable human-readable location string derived from the structured location fields."))
+              })
               put("relation", buildJsonObject {
                 put("type", buildJsonArray {
                   add(JsonPrimitive("string"))
@@ -5374,8 +5402,15 @@ private fun JsonObject.optionalStringListArgument(name: String): List<String>? =
 private fun JsonObject.requireIntListArgument(name: String): List<Int> = this[name]?.jsonArray?.map { it.jsonPrimitive.int }
     ?: mcpFail("Missing required argument `$name`")
 
-private fun JsonObject.requireIntMapArgument(name: String): Map<String, Int> = this[name]?.jsonObject?.mapValues { (_, value) -> value.jsonPrimitive.int }
-    ?: mcpFail("Missing required argument `$name`")
+private fun JsonObject.requireIntMapArgument(name: String): Map<String, Int> {
+  val element = this[name] ?: mcpFail("Missing required argument `$name`")
+  val value = element as? JsonObject
+      ?: mcpFail("Invalid `$name`: expected object { from: int, to: int }")
+  return value.mapValues { (key, field) ->
+      (field as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull
+          ?: mcpFail("Invalid `$name.$key`: expected integer")
+  }
+}
 
 /**
  * Looks up `McpToolCategory` reflectively. The class was added in IntelliJ

@@ -455,6 +455,7 @@ private fun WasmBinaryProvider.referenceTypeImportRecords(terms: List<String>): 
         .mapNotNull { function ->
             val import = function.import ?: return@mapNotNull null
             val signature = function.signature?.toArtifactSignature()
+            val locationDisplay = "import ${import.module}.${import.name}"
             ArtifactRecordResult(
                 id = "abi-reference-import:${import.module}.${import.name}",
                 entityType = "import",
@@ -463,13 +464,19 @@ private fun WasmBinaryProvider.referenceTypeImportRecords(terms: List<String>): 
                 name = import.name,
                 kind = "reference_type_import",
                 index = function.funcidx,
+                locationKind = "import",
+                module = import.module,
+                typeidx = function.typeidx,
+                locationDisplay = locationDisplay,
                 signature = signature,
                 summary = "Current import `${import.module}.${import.name}` uses reference-type ABI ${signature?.compact().orEmpty()}".trim(),
                 attributes = buildList {
                     add("module", import.module)
                     add("name", import.name)
                     add("import", "${import.module}.${import.name}")
-                    add("where", "import ${import.module}.${import.name}")
+                    add("where", locationDisplay)
+                    add("locationKind", "import")
+                    add("locationDisplay", locationDisplay)
                     add("feature", "reference-types")
                     add("funcidx", function.funcidx.toString())
                     function.typeidx?.let { add("typeidx", it.toString()) }

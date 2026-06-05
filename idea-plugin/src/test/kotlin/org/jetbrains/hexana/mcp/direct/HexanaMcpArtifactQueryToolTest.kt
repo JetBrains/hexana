@@ -155,8 +155,15 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
 
         val referenceImport = records.recordById("abi-reference-import:host.bind_external")
         assertEquals("reference_type_import", referenceImport.text("kind"))
+        assertEquals("import", referenceImport.text("locationKind"))
+        assertEquals("host", referenceImport.text("module"))
+        assertEquals("bind_external", referenceImport.text("name"))
+        assertEquals(0, referenceImport.int("typeidx"))
+        assertEquals("import host.bind_external", referenceImport.text("locationDisplay"))
         assertEquals("reference-types", referenceImport.attributeValue("feature"))
         assertEquals("host.bind_external", referenceImport.attributeValue("import"))
+        assertEquals("import host.bind_external", referenceImport.attributeValue("where"))
+        assertEquals("import", referenceImport.attributeValue("locationKind"))
         assertEquals("[externref]", referenceImport.attributeValue("params"))
         assertEquals("0", referenceImport.attributeValue("typeidx"))
     }

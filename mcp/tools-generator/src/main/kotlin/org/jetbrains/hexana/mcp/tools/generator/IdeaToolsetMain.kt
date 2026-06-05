@@ -597,9 +597,18 @@ private fun requireIntMapArgumentFunction(): FunSpec {
         .returns(Map::class.asTypeName().parameterizedBy(String::class.asTypeName(), Int::class.asTypeName()))
         .addCode(
             """
-            return this[name]?.jsonObject?.mapValues { (_, value) -> value.jsonPrimitive.int }
-                ?: %M("Missing required argument `${'$'}name`")
+            val element = this[name] ?: %M("Missing required argument `${'$'}name`")
+            val value = element as? %T
+                ?: %M("Invalid `${'$'}name`: expected object { from: int, to: int }")
+            return value.mapValues { (key, field) ->
+                (field as? %T)?.takeUnless { it.isString }?.intOrNull
+                    ?: %M("Invalid `${'$'}name.${'$'}key`: expected integer")
+            }
             """.trimIndent(),
+            MCP_FAIL,
+            JSON_OBJECT,
+            MCP_FAIL,
+            JSON_PRIMITIVE,
             MCP_FAIL,
         )
         .build()
