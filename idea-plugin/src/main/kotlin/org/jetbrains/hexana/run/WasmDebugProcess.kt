@@ -97,6 +97,7 @@ open class WasmDebugProcess(
 
     override fun sessionInitialized() {
         super.sessionInitialized()
+        LOG.debug("sessionInitialized: lldb=${lldb != null}, isWindows=${SystemInfo.isWindows}, engine=$engine, registeredBreakpoints=${registeredBreakpoints.size}")
         if (lldb != null) {
             if (compositionUsed) {
                 if (dwarfInjected) {
@@ -141,16 +142,20 @@ open class WasmDebugProcess(
                 // This entire flow runs on a background thread so
                 // sessionInitialized() returns immediately and the UI
                 // stays responsive.
+                LOG.debug("sessionInitialized: starting Windows JIT breakpoint setup")
                 lldb.removeAllBreakpoints()
                 lldb.sendBreakpointOnFunction(JIT_REGISTER_FUNCTION)
                 lldb.runProcess()
                 Thread {
                     try {
+                        LOG.debug("Windows JIT setup thread started")
                         windowsJitBreakpointSetup(lldb)
+                        LOG.debug("Windows JIT setup completed, starting event loop")
                     } catch (e: Exception) {
                         LOG.warn("Windows JIT breakpoint setup failed", e)
                     }
                     startEventLoop()
+                    LOG.debug("Event loop started from Windows JIT setup thread")
                 }.apply {
                     name = "Hexana-Windows-JIT-Setup"
                     isDaemon = true
@@ -217,10 +222,12 @@ open class WasmDebugProcess(
      * while waiting for stop events.
      */
     private fun windowsJitBreakpointSetup(lldb: LldbCommunicator) {
+        LOG.debug("windowsJitBreakpointSetup: entering, processTerminated=${processHandler.isProcessTerminated}, debuggeeExited=${lldb.debuggeeExited}")
         val breakpointFiles = registeredBreakpoints.values.map { (path, line) ->
             val baseName = path.substringAfterLast('/').substringAfterLast('\\')
             baseName to line
         }
+        LOG.debug("windowsJitBreakpointSetup: breakpointFiles=$breakpointFiles")
 
         // When there are no user breakpoints, there is nothing to
         // resolve via the JIT loader. Wait for the process to stop
@@ -228,10 +235,10 @@ open class WasmDebugProcess(
         // breakpoint, and resume so the debuggee runs to completion
         // and the event loop can detect the process-exit event.
         if (breakpointFiles.isEmpty()) {
-            LOG.info("Windows wasmtime: no user breakpoints — skipping JIT setup")
+            LOG.debug("Windows wasmtime: no user breakpoints — skipping JIT setup")
             val initialEvent = lldb.waitForStopEvent(WINDOWS_JIT_WAIT_TIMEOUT_MS)
             if (initialEvent is LldbCommunicator.StopEvent.ProcessExited) {
-                LOG.info("Windows wasmtime: process exited before JIT setup (no breakpoints)")
+                LOG.debug("Windows wasmtime: process exited before JIT setup (no breakpoints)")
                 lldb.reofferStopEvent(initialEvent)
                 return
             }
@@ -251,7 +258,7 @@ open class WasmDebugProcess(
         var processExited = false
         for (attempt in 1..MAX_JIT_REGISTER_ATTEMPTS) {
             val jitEvent = lldb.waitForStopEvent(WINDOWS_JIT_WAIT_TIMEOUT_MS)
-            LOG.info("Windows wasmtime: JIT register attempt=$attempt event=$jitEvent")
+            LOG.debug("Windows wasmtime: JIT register attempt=$attempt event=$jitEvent")
             if (jitEvent is LldbCommunicator.StopEvent.ProcessExited) {
                 LOG.warn("Windows wasmtime: process exited before breakpoints resolved")
                 processExited = true
@@ -282,7 +289,7 @@ open class WasmDebugProcess(
             }
             val addresses = lldb.loadJitObjectAndResolveBreakpoints(tempDir, breakpointFiles)
             if (addresses.isNotEmpty()) {
-                LOG.info("Windows wasmtime: breakpoints resolved after attempt $attempt at $addresses")
+                LOG.debug("Windows wasmtime: breakpoints resolved after attempt $attempt at $addresses")
                 resolved = true
                 break
             }
@@ -293,9 +300,7 @@ open class WasmDebugProcess(
         }
 
         if (processExited) {
-            // Process already exited — do not send any more commands.
-            // The re-offered ProcessExited event will be handled by
-            // the event loop.
+            LOG.debug("windowsJitBreakpointSetup: exiting early — process already exited")
             return
         }
 
@@ -309,13 +314,14 @@ open class WasmDebugProcess(
             // Give LLDB a moment to process the interrupt.
             val pauseEvent = lldb.waitForStopEvent(2_000)
             if (pauseEvent is LldbCommunicator.StopEvent.ProcessExited) {
-                LOG.info("Windows wasmtime: process exited during unresolved-breakpoint recovery")
+                LOG.debug("Windows wasmtime: process exited during unresolved-breakpoint recovery")
                 lldb.reofferStopEvent(pauseEvent)
                 return
             }
             lldb.removeAllBreakpoints()
             replayBreakpointsToLldb()
         }
+        LOG.debug("windowsJitBreakpointSetup: final resume(), resolved=$resolved")
         lldb.resume()
     }
 
@@ -351,7 +357,7 @@ open class WasmDebugProcess(
         val errorRunning = output.any { "Process is running" in it }
         if (!errorRunning) return false
 
-        LOG.info("Windows wasmtime: 'breakpoint delete' hit running-process race, interrupting and retrying")
+        LOG.debug("Windows wasmtime: 'breakpoint delete' hit running-process race, interrupting and retrying")
         lldb.pause()
         val event = lldb.waitForStopEvent(2_000)
         if (event is LldbCommunicator.StopEvent.ProcessExited) {
@@ -485,6 +491,7 @@ open class WasmDebugProcess(
     }
 
     override fun resume(context: XSuspendContext?) {
+        LOG.debug("resume() called, engine=$engine")
         if (engine == WasmEngine.WASMTIME) {
             advancePcPastTrapThen { lldb?.resume() }
         } else {
@@ -570,6 +577,7 @@ open class WasmDebugProcess(
     }
 
     override fun stop() {
+        LOG.debug("stop() called, eventLoopThread=${eventLoopThread?.name}, processTerminated=${processHandler.isProcessTerminated}")
         eventLoopThread?.interrupt()
         lldb?.destroy()
         processHandler.destroyProcess()
@@ -585,9 +593,12 @@ open class WasmDebugProcess(
      * and translates them into [XDebugSession] suspend calls.
      */
     private fun startEventLoop() {
+        LOG.debug("startEventLoop: entering, processTerminated=${processHandler.isProcessTerminated}, debuggeeExited=${lldb?.debuggeeExited}")
         eventLoopThread = Thread({
             try {
                 var sessionStopRequested = false
+                var consecutiveNullEvents = 0
+                LOG.debug("Event loop thread running, processTerminated=${processHandler.isProcessTerminated}, debuggeeExited=${lldb?.debuggeeExited}")
                 while (lldb != null && processHandler.isProcessTerminated.not()) {
                     val event = lldb.waitForStopEvent(1_000)
                     if (event == null) {
@@ -596,25 +607,48 @@ open class WasmDebugProcess(
                         // consumed during response collection), terminate
                         // the debug session instead of spinning forever.
                         if (lldb.debuggeeExited) {
-                            LOG.info("Debuggee exited (detected via flag) — stopping debug session")
+                            LOG.debug("Debuggee exited (detected via flag) — stopping debug session")
                             sessionStopRequested = true
                             ApplicationManager.getApplication().invokeLater {
                                 session.stop()
                             }
                             break
                         }
+                        // Watchdog: on Windows, LLDB sometimes fails to
+                        // spontaneously output "Process exited" after the
+                        // debuggee terminates. After several consecutive
+                        // timeouts, actively query LLDB's process state.
+                        consecutiveNullEvents++
+                        if (SystemInfo.isWindows &&
+                            consecutiveNullEvents >= WATCHDOG_NULL_EVENT_THRESHOLD
+                        ) {
+                            consecutiveNullEvents = 0
+                            LOG.debug("Event loop watchdog: querying LLDB process status")
+                            if (lldb.queryProcessExited()) {
+                                LOG.debug("Event loop watchdog: process exited detected")
+                                // The queryProcessExited method already
+                                // queued a ProcessExited event; the next
+                                // loop iteration will pick it up.
+                            }
+                        }
                         continue
                     }
+                    consecutiveNullEvents = 0
+                    LOG.debug("Event loop: received event=$event, processTerminated=${processHandler.isProcessTerminated}")
                     when (event) {
-                        is LldbCommunicator.StopEvent.BreakpointHit -> handleStop(event)
-                        is LldbCommunicator.StopEvent.Stepped -> handleStop(event)
+                        is LldbCommunicator.StopEvent.BreakpointHit -> {
+                            handleStop(event)
+                        }
+                        is LldbCommunicator.StopEvent.Stepped -> {
+                            handleStop(event)
+                        }
                         is LldbCommunicator.StopEvent.StoppedAtEntry -> {
                             // Unexpected stop at entry; resume automatically.
-                            LOG.info("Process stopped at entry; continuing execution")
+                            LOG.debug("Process stopped at entry; continuing execution")
                             lldb.resume()
                         }
                         is LldbCommunicator.StopEvent.ProcessExited -> {
-                            LOG.info("Wasmtime process exited with code ${event.exitCode}")
+                            LOG.debug("Wasmtime process exited with code ${event.exitCode}")
                             sessionStopRequested = true
                             ApplicationManager.getApplication().invokeLater {
                                 session.stop()
@@ -634,14 +668,17 @@ open class WasmDebugProcess(
                 if (!sessionStopRequested && lldb != null &&
                     (lldb.debuggeeExited || processHandler.isProcessTerminated)
                 ) {
-                    LOG.info("Event loop exited early — debuggee already exited, stopping debug session")
+                    LOG.debug("Event loop exited early — debuggee already exited, stopping debug session")
                     ApplicationManager.getApplication().invokeLater {
                         session.stop()
                     }
                 }
-            } catch (_: InterruptedException) {
-                // Shutdown
+            } catch (e: InterruptedException) {
+                LOG.debug("Event loop interrupted (shutdown)", e)
+            } catch (e: Exception) {
+                LOG.warn("Event loop unexpected exception", e)
             }
+            LOG.debug("Event loop thread exiting")
         }, "wasm-lldb-event-loop").also { it.isDaemon = true; it.start() }
     }
 
@@ -658,6 +695,7 @@ open class WasmDebugProcess(
      * and execution is automatically resumed.
      */
     private fun handleStop(event: LldbCommunicator.StopEvent) {
+        LOG.debug("handleStop: event=$event, debuggeeExited=${lldb?.debuggeeExited}, processTerminated=${processHandler.isProcessTerminated}")
         // Suppress stop-event detection while we issue informational
         // commands (`frame info`). Without this, the `frame info` output
         // echoes `stop reason = breakpoint ...` which would be
@@ -667,9 +705,11 @@ open class WasmDebugProcess(
         communicator.withStopEventsSuppressed {
             handleStopImpl(communicator, event)
         }
+        LOG.debug("handleStop: completed for event=$event")
     }
 
     private fun handleStopImpl(communicator: LldbCommunicator, event: LldbCommunicator.StopEvent) {
+        LOG.debug("handleStopImpl: entering, event=$event")
         // On Windows, Exception 0x80000003 stops may fire on system
         // threads (e.g. thread 5 in ntdll.dll!DbgBreakPoint) that are
         // unrelated to Wasm execution. These have an empty breakpointId
@@ -710,7 +750,7 @@ open class WasmDebugProcess(
         // may not interleave reliably with the GDB remote protocol).
         // Retry once with a longer timeout before giving up.
         if (lines.isEmpty()) {
-            LOG.info("frame info returned empty output, retrying with longer timeout")
+            LOG.debug("frame info returned empty output, retrying with longer timeout")
             lines = communicator.sendCommandAndCollectOutput("frame info", timeoutMs = 10_000)
         }
 
@@ -719,7 +759,7 @@ open class WasmDebugProcess(
         var sourcePosition = parseSourcePosition(lines)
         val functionName = parseLldbFunctionName(lines)
 
-        LOG.debug("handleStop: sourcePosition=$sourcePosition, rawDwarf=$rawDwarfPath, function=$functionName, lines=$lines")
+        LOG.debug("handleStopImpl: sourcePosition=$sourcePosition, rawDwarf=$rawDwarfPath, rawDwarfLine=$rawDwarfLine, function=$functionName, frameInfoLines=$lines")
 
         // Find the breakpoint that was hit by comparing the stop
         // location against registered breakpoint paths. Because LLDB
@@ -1223,6 +1263,14 @@ open class WasmDebugProcess(
          * "error: Process is running" on Windows.
          */
         private const val LLDB_STOP_SETTLE_MS = 200L
+
+        /**
+         * Number of consecutive 1-second event-loop timeouts before
+         * the watchdog queries LLDB's process state on Windows.
+         * LLDB on Windows sometimes fails to spontaneously output
+         * "Process exited" after the debuggee terminates.
+         */
+        private const val WATCHDOG_NULL_EVENT_THRESHOLD = 10
     }
 }
 

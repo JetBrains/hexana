@@ -88,7 +88,7 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
                 val text = event.text ?: return
                 for (line in text.lines()) {
                     if (line.isBlank()) continue
-                    LOG.debug("LLDB: $line")
+                    LOG.debug("LLDB> $line")
                     var insideResponse = false
                     synchronized(responseLock) {
                         val endMarker = responseEndMarker
@@ -122,6 +122,7 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
                     if (!insideResponse && !suppressStopEvents) {
                         val stopEvent = parseStopEvent(line)
                         if (stopEvent != null) {
+                            LOG.debug("LLDB stop-event parsed (normal path): $stopEvent")
                             stopEvents.offer(stopEvent)
                         }
                     } else {
@@ -131,13 +132,17 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
                         // exits.
                         val stopEvent = parseStopEvent(line)
                         if (stopEvent is StopEvent.ProcessExited) {
+                            LOG.debug("LLDB stop-event parsed (insideResponse=$insideResponse, suppressStopEvents=$suppressStopEvents): $stopEvent")
                             stopEvents.offer(stopEvent)
+                        } else if (stopEvent != null) {
+                            LOG.debug("LLDB stop-event DROPPED (insideResponse=$insideResponse, suppressStopEvents=$suppressStopEvents): $stopEvent")
                         }
                     }
                 }
             }
 
             override fun processTerminated(event: ProcessEvent) {
+                LOG.debug("LLDB processTerminated callback: exitCode=${event.exitCode}, debuggeeExited=$debuggeeExited")
                 isRunning = false
                 stopEvents.offer(StopEvent.ProcessExited(event.exitCode))
             }
@@ -178,7 +183,8 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
      * Returns `null` if the timeout expires.
      */
     fun waitForStopEvent(timeoutMs: Long = 30_000): StopEvent? {
-        return stopEvents.poll(timeoutMs, TimeUnit.MILLISECONDS)
+        val event = stopEvents.poll(timeoutMs, TimeUnit.MILLISECONDS)
+        return event
     }
 
     fun sendBreakpoint(filePath: String, line: Int) {
@@ -354,7 +360,7 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         val output = sendPythonScriptAndCollectOutput(pythonLines, timeoutMs = 30_000)
         val resolved = output.filter { "RESOLVED:" in it }.map { it.substringAfter("RESOLVED:").trim() }
         if (resolved.isNotEmpty()) {
-            LOG.info("JIT breakpoints resolved at: $resolved")
+            LOG.debug("JIT breakpoints resolved at: $resolved")
         } else {
             LOG.warn("JIT object load/resolve produced no matches: ${output.joinToString(" ")}")
         }
@@ -370,6 +376,7 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     }
 
     fun resume() {
+        LOG.debug("LLDB resume() called, debuggeeExited=$debuggeeExited")
         isRunning = true
         sendCommand("continue")
     }
@@ -394,6 +401,7 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     }
 
     fun runProcess() {
+        LOG.debug("LLDB runProcess() called")
         isRunning = true
         sendCommand("run")
     }
@@ -494,7 +502,11 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         command: String,
         timeoutMs: Long = 5_000,
     ): List<String> {
-        if (destroyed || debuggeeExited) return emptyList()
+        if (destroyed || debuggeeExited) {
+            LOG.debug("sendCommandAndCollectOutput: skipped (destroyed=$destroyed, debuggeeExited=$debuggeeExited) cmd=$command")
+            return emptyList()
+        }
+        LOG.debug("sendCommandAndCollectOutput: cmd=$command, timeoutMs=$timeoutMs")
 
         val marker = "__HEXANA_END_${System.nanoTime()}__"
         val latch = CountDownLatch(1)
@@ -521,8 +533,9 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         }
 
         if (!completed && !destroyed) {
-            LOG.warn("Timed out collecting output for LLDB command: $command")
+            LOG.warn("Timed out collecting output for LLDB command: $command (collected so far: $collector)")
         }
+        LOG.debug("sendCommandAndCollectOutput: result for '$command' = $collector")
         return collector.toList()
     }
 
@@ -533,7 +546,33 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
      * but must still be processed by the main event loop.
      */
     fun reofferStopEvent(event: StopEvent) {
+        LOG.debug("reofferStopEvent: $event, queueSize=${stopEvents.size}")
         stopEvents.offer(event)
+    }
+
+    /**
+     * Queries LLDB for the current process state via `process status`.
+     * If the output contains "Process exited", sets [debuggeeExited]
+     * and offers a [StopEvent.ProcessExited] into the queue.
+     *
+     * This is a watchdog mechanism for Windows where LLDB sometimes
+     * fails to spontaneously output the "Process exited" line after
+     * the debuggee terminates, leaving the event loop spinning.
+     *
+     * @return `true` if the process has exited.
+     */
+    fun queryProcessExited(): Boolean {
+        if (debuggeeExited || destroyed) return debuggeeExited
+        val lines = sendCommandAndCollectOutput("process status", timeoutMs = 3_000)
+        LOG.debug("queryProcessExited: process status output=$lines")
+        // The onTextAvailable listener already parses "Process exited"
+        // lines and queues ProcessExited events (even inside a response).
+        // Check whether debuggeeExited was set as a side effect.
+        if (debuggeeExited) {
+            LOG.debug("queryProcessExited: detected exit via process status")
+            return true
+        }
+        return false
     }
 
     /**
@@ -555,6 +594,7 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     }
 
     fun destroy() {
+        LOG.debug("LLDB destroy() called, debuggeeExited=$debuggeeExited, isRunning=$isRunning")
         try {
             writer.write("process kill")
             writer.newLine()
