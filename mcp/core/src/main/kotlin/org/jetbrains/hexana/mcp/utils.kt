@@ -59,6 +59,12 @@ fun CommonByteBuffer.listExports(wasmModule: WasmModule?): List<ExportRecord> {
 
 fun CommonByteBuffer.listGlobals(wasmModule: WasmModule?): List<GlobalRecord> {
     wasmModule ?: return emptyList()
+    val exportedGlobals = listExports(wasmModule)
+        .filter { it.kind == 0x3.toByte() }
+        .groupBy(
+            keySelector = { it.externIndex.toInt() },
+            valueTransform = { it.name }
+        )
     val importedGlobals = with(wasmModule.importSection) {
         this ?: return@with emptyList()
         getImportRecords().filter { it.type is WasmGlobalType }.mapIndexed { index, record ->
@@ -71,7 +77,8 @@ fun CommonByteBuffer.listGlobals(wasmModule: WasmModule?): List<GlobalRecord> {
                 globalType.valueType.toSignature(),
                 globalType.mutable,
                 null,
-                "import"
+                "import",
+                exportedGlobals[index].orEmpty()
             )
         }
     }
@@ -85,7 +92,9 @@ fun CommonByteBuffer.listGlobals(wasmModule: WasmModule?): List<GlobalRecord> {
                 null,
                 record.type.valueType.toSignature(),
                 record.type.mutable,
-                record.expression.wat(), "global_section"
+                record.expression.wat(),
+                "global_section",
+                exportedGlobals[baseIndex + index].orEmpty()
             )
         }
     }
@@ -107,7 +116,8 @@ data class GlobalRecord(
     val type: String,
     val mutability: Boolean,
     val expression: String?,
-    val definedIn: String
+    val definedIn: String,
+    val exportedAs: List<String>
 )
 
 fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRecord> {

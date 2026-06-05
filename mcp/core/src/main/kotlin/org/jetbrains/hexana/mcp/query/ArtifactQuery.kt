@@ -694,35 +694,45 @@ private fun WasmBinaryProvider.globalStatePolicyRecords(
     baseline: WasmBinaryProvider?,
     terms: List<String>
 ): List<ArtifactRecordResult> {
-    val globals = entities(setOf("global"), source = "current", detail = "summary").map { it.record }
-    val currentGlobalExports = entities(setOf("export"), source = "current", detail = "summary")
-        .map { it.record }
-        .filter { it.kind == "global" }
-    val baselineGlobalExportNames = baseline
-        ?.entities(setOf("export"), source = "baseline", detail = "summary")
-        .orEmpty()
-        .map { it.record }
-        .filter { it.kind == "global" }
-        .mapNotNull { it.name }
+    val globals = readGlobals().globals
+    val currentGlobalExports = globalExportSnapshots(source = "current")
+    val baselineGlobalExportNames = baseline?.globalExportSnapshots(source = "baseline").orEmpty()
+        .map { it.export }
         .toSet()
 
     val mutableImportedGlobals = globals
-        .filter { it.attrValue("origin") == "import" && it.attrValue("mutable") == "true" }
+        .filter { it.origin == "import" && it.mutability }
         .map { it.toMutableImportedGlobalPolicyRecord() }
 
     val newPublicGlobals = currentGlobalExports
-        .filter { baseline == null || it.name?.let { name -> name !in baselineGlobalExportNames } == true }
+        .filter { baseline == null || it.export !in baselineGlobalExportNames }
         .map { it.toNewPublicGlobalPolicyRecord() }
         .sortedBy { it.name ?: it.id }
 
     val allowedPublicGlobals = currentGlobalExports
-        .filter { it.name?.let { name -> name in baselineGlobalExportNames } == true }
-        .mapNotNull { it.name }
-        .sorted()
+        .filter { it.export in baselineGlobalExportNames }
+        .sortedBy { it.export }
 
     val records = (mutableImportedGlobals + newPublicGlobals)
         .filterRecordsByTermsOrAll(terms)
     return listOf(globalStatePolicyFinding(records, allowedPublicGlobals)) + records
+}
+
+private fun WasmBinaryProvider.globalExportSnapshots(source: String): List<GlobalExportSnapshot> {
+    val globalsByIndex = readGlobals().globals.associateBy { it.globalIdx }
+    return readExports().exports
+        .asSequence()
+        .filter { it.kind.kindName() == "global" }
+        .mapNotNull { export ->
+            val globalidx = export.externIndex.toInt()
+            val global = globalsByIndex[globalidx] ?: return@mapNotNull null
+            GlobalExportSnapshot(
+                source = source,
+                export = export.name,
+                global = global
+            )
+        }
+        .toList()
 }
 
 private fun WasmBinaryProvider.dataPayloadAuditRecords(
@@ -1174,10 +1184,13 @@ private fun ExportResult.toExportEntity(
         global?.let { glob ->
             add("globalidx", glob.globalIdx.toString())
             add("origin", glob.origin())
-            glob.prefix?.let { prefix -> glob.name?.let { name -> add("import", "$prefix.$name") } }
+            glob.importModule?.let { module -> glob.importName?.let { name -> add("import", "$module.$name") } }
+            glob.importModule?.let { add("importModule", it) }
+            glob.importName?.let { add("importName", it) }
             add("type", glob.type)
             add("mutable", glob.mutability.toString())
             glob.expression?.let { add("initExpr", it) }
+            if (glob.exportedAs.isNotEmpty()) add("exportedAs", glob.exportedAs.joinToString(","))
         }
         if (kindName == "table") {
             add("tableidx", externIndex.toString())
@@ -1282,13 +1295,17 @@ private fun MemoryResult.toMemoryEntity(
 
 private fun GlobalResult.toGlobalEntity(source: String, detail: String): EntitySnapshot {
     val attributes = buildList {
+        add("globalidx", globalIdx.toString())
         name?.let { add("name", it) }
         prefix?.let { add("module", it) }
+        importModule?.let { add("importModule", it) }
+        importName?.let { add("importName", it) }
         add("type", type)
         add("mutable", mutability.toString())
         add("definedIn", definedIn)
-        add("origin", origin())
+        add("origin", origin)
         expression?.let { add("expression", it) }
+        if (exportedAs.isNotEmpty()) add("exportedAs", exportedAs.joinToString(","))
     }.toAttributes()
     return EntitySnapshot(
         key = "global:$globalIdx",
@@ -1934,10 +1951,19 @@ private fun apiDiffFinding(
 
 private fun globalStatePolicyFinding(
     records: List<ArtifactRecordResult>,
-    allowedPublicGlobals: List<String>
+    allowedPublicGlobals: List<GlobalExportSnapshot>
 ): ArtifactRecordResult {
     val mutableImports = records.count { it.kind == "mutable_imported_global" }
     val newPublicGlobals = records.count { it.kind == "new_public_global" }
+    val mutableImportFacts = records
+        .filter { it.kind == "mutable_imported_global" }
+        .mapNotNull { it.toGlobalPolicyFact() }
+        .sortedWith(compareBy<GlobalPolicyFact> { it.globalidx }.thenBy { it.export.orEmpty() }.thenBy { it.importNameQualified.orEmpty() })
+    val newPublicGlobalFacts = records
+        .filter { it.kind == "new_public_global" }
+        .mapNotNull { it.toGlobalPolicyFact() }
+        .sortedWith(compareBy<GlobalPolicyFact> { it.export.orEmpty() }.thenBy { it.globalidx })
+    val allowedPublicGlobalFacts = allowedPublicGlobals.map { it.toGlobalPolicyFact() }
     return ArtifactRecordResult(
         id = "global-policy:summary",
         entityType = "finding",
@@ -1947,54 +1973,92 @@ private fun globalStatePolicyFinding(
         attributes = buildList {
             add("mutableImportedGlobals", mutableImports.toString())
             add("newPublicGlobals", newPublicGlobals.toString())
-            if (allowedPublicGlobals.isNotEmpty()) add("allowedPublicGlobals", allowedPublicGlobals.joinToString(","))
-            val targetedIndices = records.mapNotNull { it.index?.toString() }.distinct().sorted()
+            if (allowedPublicGlobals.isNotEmpty()) add("allowedPublicGlobals", allowedPublicGlobals.joinToString(",") { it.export })
+            if (mutableImportFacts.isNotEmpty()) addJsonFacts("mutableImportedGlobalsJson", mutableImportFacts)
+            if (newPublicGlobalFacts.isNotEmpty()) addJsonFacts("newPublicGlobalsJson", newPublicGlobalFacts)
+            if (allowedPublicGlobalFacts.isNotEmpty()) addJsonFacts("allowedPublicGlobalsJson", allowedPublicGlobalFacts)
+            val targetedIndices = records.mapNotNull { it.index }.distinct().sorted()
             if (targetedIndices.isNotEmpty()) add("targetedGlobalIndices", targetedIndices.joinToString(","))
         }.toAttributes()
     )
 }
 
-private fun ArtifactRecordResult.toMutableImportedGlobalPolicyRecord(): ArtifactRecordResult {
-    val importModule = attrValue("module")
-    val importName = name ?: attrValue("name")
+private fun GlobalResult.toMutableImportedGlobalPolicyRecord(): ArtifactRecordResult {
+    val importModule = importModule ?: prefix
+    val importName = importName ?: name
     val import = listOfNotNull(importModule, importName).joinToString(".")
     return ArtifactRecordResult(
-        id = "global-policy:mutable-import:${index ?: id}",
+        id = "global-policy:mutable-import:$globalIdx",
         entityType = "global",
         status = "current",
         source = "current",
         name = importName,
         kind = "mutable_imported_global",
-        index = index,
+        index = globalIdx,
         summary = "Mutable imported global `$import` violates host global-state policy",
         attributes = buildList {
+            add("globalidx", globalIdx.toString())
             if (import.isNotEmpty()) add("import", import)
             importModule?.let { add("importModule", it) }
             importName?.let { add("importName", it) }
-            attrValue("type")?.let { add("type", it) }
-            attrValue("mutable")?.let { add("mutable", it) }
+            add("origin", origin)
+            add("type", type)
+            add("mutable", mutability.toString())
+            if (exportedAs.isNotEmpty()) add("exportedAs", exportedAs.joinToString(","))
         }.toAttributes()
     )
 }
 
-private fun ArtifactRecordResult.toNewPublicGlobalPolicyRecord(): ArtifactRecordResult {
+private fun GlobalExportSnapshot.toNewPublicGlobalPolicyRecord(): ArtifactRecordResult {
     return ArtifactRecordResult(
-        id = "global-policy:new-export:${name ?: id}",
+        id = "global-policy:new-export:$export",
         entityType = "global",
         status = "added",
         source = "current",
-        name = name,
+        name = export,
         kind = "new_public_global",
-        index = index,
-        summary = "New exported global `${name ?: id}` must be reported to the host global-state policy",
+        index = global.globalIdx,
+        summary = "New exported global `$export` must be reported to the host global-state policy",
         attributes = buildList {
-            name?.let { add("export", it) }
-            index?.let { add("globalidx", it.toString()) }
-            attrValue("origin")?.let { add("origin", it) }
-            attrValue("type")?.let { add("type", it) }
-            attrValue("mutable")?.let { add("mutable", it) }
-            attrValue("initExpr")?.let { add("initExpr", it) }
+            add("export", export)
+            add("globalidx", global.globalIdx.toString())
+            add("origin", global.origin)
+            global.importModule?.let { module -> global.importName?.let { name -> add("import", "$module.$name") } }
+            global.importModule?.let { add("importModule", it) }
+            global.importName?.let { add("importName", it) }
+            add("type", global.type)
+            add("mutable", global.mutability.toString())
+            global.expression?.let { add("initExpr", it) }
         }.toAttributes()
+    )
+}
+
+private fun ArtifactRecordResult.toGlobalPolicyFact(): GlobalPolicyFact? {
+    val globalidx = index ?: attrValue("globalidx")?.toIntOrNull() ?: return null
+    return GlobalPolicyFact(
+        export = attrValue("export"),
+        importNameQualified = attrValue("import"),
+        globalidx = globalidx,
+        type = attrValue("type").orEmpty(),
+        mutable = attrValue("mutable")?.toBooleanStrictOrNull() ?: false,
+        initExpr = attrValue("initExpr"),
+        origin = attrValue("origin").orEmpty(),
+        importModule = attrValue("importModule"),
+        importName = attrValue("importName")
+    )
+}
+
+private fun GlobalExportSnapshot.toGlobalPolicyFact(): GlobalPolicyFact {
+    return GlobalPolicyFact(
+        export = export,
+        importNameQualified = global.importModule?.let { module -> global.importName?.let { name -> "$module.$name" } },
+        globalidx = global.globalIdx,
+        type = global.type,
+        mutable = global.mutability,
+        initExpr = global.expression,
+        origin = global.origin,
+        importModule = global.importModule,
+        importName = global.importName
     )
 }
 
@@ -2871,6 +2935,12 @@ private data class ApiExportSnapshot(
     val record: ArtifactRecordResult
 )
 
+private data class GlobalExportSnapshot(
+    val source: String,
+    val export: String,
+    val global: GlobalResult
+)
+
 private data class ImportName(
     val module: String,
     val name: String
@@ -2909,6 +2979,20 @@ private data class FunctionExportFact(
 private data class ArtifactFunctionSignature(
     val params: List<String>,
     val results: List<String>
+)
+
+@Serializable
+private data class GlobalPolicyFact(
+    val export: String? = null,
+    @SerialName("import")
+    val importNameQualified: String? = null,
+    val globalidx: Int,
+    val type: String,
+    val mutable: Boolean,
+    val initExpr: String? = null,
+    val origin: String,
+    val importModule: String? = null,
+    val importName: String? = null
 )
 
 @Serializable

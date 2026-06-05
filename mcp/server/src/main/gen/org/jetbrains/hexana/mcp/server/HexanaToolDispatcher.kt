@@ -3839,12 +3839,39 @@ private fun Server.registerListGlobalsTool(handlers: HexanaToolHandlers) {
               put("type", JsonPrimitive("string"))
               put("description", JsonPrimitive("Section the global is declared in."))
             })
+            put("origin", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Global origin: `import` or `local`."))
+            })
+            put("importModule", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import module name when the global is imported."))
+            })
+            put("importName", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import field name when the global is imported."))
+            })
+            put("exportedAs", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Export names pointing at this global."))
+            })
           })
           put("required", buildJsonArray {
             add(JsonPrimitive("globalIdx"))
             add(JsonPrimitive("type"))
             add(JsonPrimitive("mutability"))
             add(JsonPrimitive("definedIn"))
+            add(JsonPrimitive("origin"))
+            add(JsonPrimitive("exportedAs"))
           })
         })
         put("description", JsonPrimitive("Globals declared or imported by the module."))
@@ -3951,12 +3978,39 @@ private fun Server.registerGetGlobalsForIndicesTool(handlers: HexanaToolHandlers
               put("type", JsonPrimitive("string"))
               put("description", JsonPrimitive("Section the global is declared in."))
             })
+            put("origin", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Global origin: `import` or `local`."))
+            })
+            put("importModule", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import module name when the global is imported."))
+            })
+            put("importName", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import field name when the global is imported."))
+            })
+            put("exportedAs", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Export names pointing at this global."))
+            })
           })
           put("required", buildJsonArray {
             add(JsonPrimitive("globalIdx"))
             add(JsonPrimitive("type"))
             add(JsonPrimitive("mutability"))
             add(JsonPrimitive("definedIn"))
+            add(JsonPrimitive("origin"))
+            add(JsonPrimitive("exportedAs"))
           })
         })
         put("description", JsonPrimitive("Globals declared or imported by the module."))

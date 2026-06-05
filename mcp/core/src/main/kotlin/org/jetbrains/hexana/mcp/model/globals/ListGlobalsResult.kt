@@ -15,5 +15,9 @@ data class GlobalResult(
     val type: String,
     val mutability: Boolean,
     val expression: String? = null,
-    val definedIn: String
+    val definedIn: String,
+    val origin: String,
+    val importModule: String? = null,
+    val importName: String? = null,
+    val exportedAs: List<String> = emptyList()
 )

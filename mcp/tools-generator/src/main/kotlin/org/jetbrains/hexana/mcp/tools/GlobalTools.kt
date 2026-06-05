@@ -15,6 +15,10 @@ val GlobalResultClass = class_("GlobalResult") {
     boolean("mutability").describe("True when the global is mutable.")
     nullable("expression", string()).describe("Initialization expression in WAT syntax.")
     string("definedIn").describe("Section the global is declared in.")
+    string("origin").describe("Global origin: `import` or `local`.")
+    nullable("importModule", string()).describe("Import module name when the global is imported.")
+    nullable("importName", string()).describe("Import field name when the global is imported.")
+    list("exportedAs", of = string()).describe("Export names pointing at this global.")
 }
 
 val ListGlobalsResultClass = class_("ListGlobalsResult", kotlinPackage = MODEL_PACKAGE) {
@@ -26,7 +30,7 @@ internal val GlobalTools: List<ToolSpec> = tools {
         summary = "List imported and defined globals from a `.wasm` module."
         guidance = """
             List imported and defined globals declared by a WebAssembly (.wasm) module.
-            Returns each global with its value type, mutability, and normalized initializer expression.
+            Returns each global with its value type, mutability, normalized initializer expression, import identity, and export names pointing at the global.
         """
         input = WasmInputClass
         inputPattern = ToolInputPattern.WasmOnly

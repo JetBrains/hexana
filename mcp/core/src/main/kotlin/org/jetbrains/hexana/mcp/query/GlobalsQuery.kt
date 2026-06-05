@@ -31,6 +31,10 @@ private fun GlobalRecord.toGlobalResult(): GlobalResult {
         type = type,
         mutability = mutability,
         expression = expression,
-        definedIn = definedIn
+        definedIn = definedIn,
+        origin = if (definedIn == "import") "import" else "local",
+        importModule = prefix.takeIf { definedIn == "import" },
+        importName = name.takeIf { definedIn == "import" },
+        exportedAs = exportedAs
     )
 }

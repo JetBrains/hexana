@@ -397,6 +397,67 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun globalStatePolicyReturnsTargetedGlobalsAmongManyStableGlobals() {
+        val baseline = createWasmFile(
+            "global-policy-baseline.wasm",
+            globalStatePolicyWat(
+                includeClockOffset = false,
+                includeRequestLimit = false,
+                includeFeatureFlag = false
+            )
+        )
+        val current = createWasmFile(
+            "global-policy-current.wasm",
+            globalStatePolicyWat(
+                includeClockOffset = true,
+                includeRequestLimit = true,
+                includeFeatureFlag = true
+            )
+        )
+
+        val globals = service.listGlobals(WasmInput.FilePath(current.toString())).globals
+        val policy = service.queryArtifacts(
+            input = WasmInput.FilePath(current.toString()),
+            baselineInput = WasmInput.FilePath(baseline.toString()),
+            operation = "global_state_policy",
+            entityTypes = emptyList(),
+            query = emptyList(),
+            startName = null,
+            startFuncidx = null,
+            relations = emptyList(),
+            limit = 25,
+            detail = "summary",
+            maxBytes = 24_000
+        )
+
+        assertEquals(listOf("request_limit"), globals.single { it.globalIdx == 34 }.exportedAs)
+        assertEquals(listOf("feature_flag"), globals.single { it.globalIdx == 50 }.exportedAs)
+
+        val summary = policy.records.single { it.id == "global-policy:summary" }
+        assertEquals("2,34,50", summary.attributeValue("targetedGlobalIndices"))
+        assertEquals("abi_version,stable_limit_0", summary.attributeValue("allowedPublicGlobals")!!.substringBefore(",stable_limit_1"))
+        assertTrue(summary.attributeValue("newPublicGlobalsJson")!!.contains("\"export\":\"request_limit\""))
+        assertTrue(summary.attributeValue("newPublicGlobalsJson")!!.contains("\"globalidx\":34"))
+        assertTrue(summary.attributeValue("newPublicGlobalsJson")!!.contains("\"initExpr\":\"i32.const 2048\""))
+        assertTrue(summary.attributeValue("newPublicGlobalsJson")!!.contains("\"export\":\"feature_flag\""))
+        assertTrue(summary.attributeValue("newPublicGlobalsJson")!!.contains("\"globalidx\":50"))
+        assertTrue(summary.attributeValue("mutableImportedGlobalsJson")!!.contains("\"import\":\"env.clock_offset\""))
+
+        val mutableImport = policy.records.single { it.id == "global-policy:mutable-import:2" }
+        assertEquals("mutable_imported_global", mutableImport.kind)
+        assertEquals("env.clock_offset", mutableImport.attributeValue("import"))
+        assertEquals("2", mutableImport.attributeValue("globalidx"))
+
+        val requestLimit = policy.records.single { it.id == "global-policy:new-export:request_limit" }
+        assertEquals(34, requestLimit.index)
+        assertEquals("i32.const 2048", requestLimit.attributeValue("initExpr"))
+
+        val featureFlag = policy.records.single { it.id == "global-policy:new-export:feature_flag" }
+        assertEquals(50, featureFlag.index)
+        assertEquals("i32.const 1", featureFlag.attributeValue("initExpr"))
+    }
+
+    @Test
     fun listDataPaginatesWithoutRepeatingCurrentEntry() {
         val wasm = createWasmFile(
             "data_pagination.wasm",
@@ -668,6 +729,36 @@ class DefaultHexanaAnalysisServiceTest {
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {
         Files.write(it, wat2wasm(wat))
     }
+
+    private fun globalStatePolicyWat(
+        includeClockOffset: Boolean,
+        includeRequestLimit: Boolean,
+        includeFeatureFlag: Boolean
+    ): String {
+        val imports = buildList {
+            add("""(import "env" "readonly_epoch" (global i64))""")
+            add("""(import "env" "readonly_region" (global i32))""")
+            if (includeClockOffset) add("""(import "env" "clock_offset" (global (mut i64)))""")
+        }
+        val globals = buildList {
+            add("""(global (export "abi_version") i32 (i32.const 7))""")
+            for (index in 0..29) {
+                add("""(global (export "stable_limit_$index") i32 (i32.const ${100 + index}))""")
+            }
+            if (includeRequestLimit) add("""(global (export "request_limit") i32 (i32.const 2048))""")
+            for (index in 30..44) {
+                add("""(global (export "stable_limit_$index") i32 (i32.const ${100 + index}))""")
+            }
+            if (includeFeatureFlag) add("""(global (export "feature_flag") i32 (i32.const 1))""")
+            for (index in 45..70) {
+                add("""(global (export "stable_limit_$index") i32 (i32.const ${100 + index}))""")
+            }
+        }
+        return (imports + globals).joinToString(prefix = "(module\n  ", separator = "\n  ", postfix = "\n)")
+    }
+
+    private fun org.jetbrains.hexana.mcp.model.artifacts.ArtifactRecordResult.attributeValue(name: String): String? =
+        attributes.singleOrNull { it.name == name }?.value
 
     private fun createBinaryFile(name: String, bytes: ByteArray) = temporaryFolder.newFile(name).toPath().also {
         Files.write(it, bytes)
