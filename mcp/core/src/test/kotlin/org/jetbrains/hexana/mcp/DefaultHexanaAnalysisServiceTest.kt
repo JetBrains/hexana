@@ -8,6 +8,7 @@ import java.nio.file.Files
 import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DefaultHexanaAnalysisServiceTest {
@@ -77,6 +78,81 @@ class DefaultHexanaAnalysisServiceTest {
         assertEquals(1, result.exports)
         assertEquals(1, result.memories)
         assertTrue(result.moduleSize > 0)
+    }
+
+    @Test
+    fun referenceTypesGlobalAndTargetFeaturesDoNotRequireGc() {
+        val wasm = createBinaryFile(
+            "reference-types-with-target-features.wasm",
+            wat2wasm(
+                """
+                (module
+                  (type (func (param externref) (result i32 i64)))
+                  (global (export "host_ref") externref (ref.null extern))
+                  (func (export "check") (type 0) (param externref) (result i32 i64)
+                    local.get 0
+                    ref.is_null
+                    i32.extend8_s
+                    i64.const 0))
+                """.trimIndent()
+            ) + targetFeaturesSection("reference-types", "multivalue", "sign-ext")
+        )
+
+        val features = service.listEnabledFeatures(WasmInput.FilePath(wasm.toString())).features
+        val proposals = service.listRequiredProposals(WasmInput.FilePath(wasm.toString())).summary.proposals
+        val compatibility = service.checkRuntimeCompatibility(
+            WasmInput.FilePath(wasm.toString()),
+            runtime = "graalwasm",
+            version = "23.1.2"
+        )
+        val baseline = createWasmFile(
+            "reference-types-baseline.wasm",
+            """
+            (module
+              (type (func (result i32 i64)))
+              (func (export "base") (type 0)
+                i32.const 1
+                i64.const 2))
+            """.trimIndent()
+        )
+        val diff = service.diffRequiredProposals(
+            WasmInput.FilePath(wasm.toString()),
+            WasmInput.FilePath(baseline.toString())
+        )
+
+        assertTrue(features.referenceTypes)
+        assertFalse(features.gcTypes)
+        assertTrue("reference-types" in proposals)
+        assertTrue("multi-value" in proposals)
+        assertTrue("sign-extension" in proposals)
+        assertFalse("gc" in proposals)
+        assertFalse("gc" in compatibility.requiredProposals)
+        assertFalse("gc" in compatibility.unsupportedProposals)
+        assertFalse("gc" in diff.newlyRequiredProposals)
+    }
+
+    @Test
+    fun actualGcTypeRequiresGcProposal() {
+        val wasm = createBinaryFile(
+            "struct-type.wasm",
+            wasmModule(
+                wasmSection(
+                    1,
+                    encodeU32(1) + byteArrayOf(
+                        0x5f.toByte(),
+                        0x01,
+                        0x7f.toByte(),
+                        0x00
+                    )
+                )
+            )
+        )
+
+        val features = service.listEnabledFeatures(WasmInput.FilePath(wasm.toString())).features
+        val proposals = service.listRequiredProposals(WasmInput.FilePath(wasm.toString())).summary.proposals
+
+        assertTrue(features.gcTypes)
+        assertTrue("gc" in proposals)
     }
 
     @Test
@@ -500,5 +576,48 @@ class DefaultHexanaAnalysisServiceTest {
 
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {
         Files.write(it, wat2wasm(wat))
+    }
+
+    private fun createBinaryFile(name: String, bytes: ByteArray) = temporaryFolder.newFile(name).toPath().also {
+        Files.write(it, bytes)
+    }
+
+    private fun targetFeaturesSection(vararg features: String): ByteArray {
+        val entries = features.map { feature -> byteArrayOf('+'.code.toByte()) + encodeName(feature) }
+        return wasmSection(0, encodeName("target_features") + encodeVector(entries))
+    }
+
+    private fun wasmModule(vararg sections: ByteArray): ByteArray {
+        return byteArrayOf(0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00) + sections.fold(byteArrayOf()) { acc, section ->
+            acc + section
+        }
+    }
+
+    private fun wasmSection(id: Int, payload: ByteArray): ByteArray {
+        return byteArrayOf(id.toByte()) + encodeU32(payload.size) + payload
+    }
+
+    private fun encodeName(name: String): ByteArray {
+        val bytes = name.encodeToByteArray()
+        return encodeU32(bytes.size) + bytes
+    }
+
+    private fun encodeVector(items: List<ByteArray>): ByteArray {
+        return encodeU32(items.size) + items.fold(byteArrayOf()) { acc, item -> acc + item }
+    }
+
+    private fun encodeU32(value: Int): ByteArray {
+        require(value >= 0)
+        val result = mutableListOf<Byte>()
+        var remaining = value
+        do {
+            var byte = remaining and 0x7f
+            remaining = remaining ushr 7
+            if (remaining != 0) {
+                byte = byte or 0x80
+            }
+            result += byte.toByte()
+        } while (remaining != 0)
+        return result.toByteArray()
     }
 }

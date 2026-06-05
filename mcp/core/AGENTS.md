@@ -44,8 +44,8 @@ Read these files before making structural changes:
 
 ## Testing
 
-- There are no dedicated tests in this module yet.
-- While tests still live in `idea-plugin`, keep public APIs stable enough for:
+- Dedicated JVM tests live under `mcp/core/src/test/kotlin`.
+- Some MCP coverage still lives in `idea-plugin`; keep public APIs stable enough for:
     - `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp`
     - `idea-plugin/src/test/kotlin/org/jetbrains/hexana/mcp/direct`
 - Run `./gradlew :mcp:core:build` first, then the narrowest affected `idea-plugin` test coverage.

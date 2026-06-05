@@ -20,10 +20,13 @@ import org.jetbrains.hexana.wasm.sections.ExprWasmElementSegment
 import org.jetbrains.hexana.wasm.sections.FuncIdxWasmElementSegment
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser
 import org.jetbrains.hexana.wasm.sections.WasmArrayTypeRecord
+import org.jetbrains.hexana.wasm.sections.WasmArrayRefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordActive
 import org.jetbrains.hexana.wasm.sections.WasmDataRecordActiveWithMemoryIndex
 import org.jetbrains.hexana.wasm.sections.WasmFixedI64Limits
 import org.jetbrains.hexana.wasm.sections.WasmGlobalType
+import org.jetbrains.hexana.wasm.sections.WasmHeapType
+import org.jetbrains.hexana.wasm.sections.WasmI31RefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmMemType
 import org.jetbrains.hexana.wasm.sections.WasmOpenI64Limits
 import org.jetbrains.hexana.wasm.sections.WasmPactTypeI16
@@ -32,6 +35,7 @@ import org.jetbrains.hexana.wasm.sections.WasmRecursiveTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmRefType
 import org.jetbrains.hexana.wasm.sections.WasmReferenceType
 import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
+import org.jetbrains.hexana.wasm.sections.WasmStructRefHeapType
 import org.jetbrains.hexana.wasm.sections.WasmStructTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmTableExternalType
 import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
@@ -193,8 +197,7 @@ private class EnabledFeatureDetector {
     fun recordReferenceType(type: WasmReferenceType, section: String) {
         referenceTypes = true
         recordSection(section)
-        val name = type.heapType::class.simpleName.orEmpty()
-        if (name !in setOf("WasmFuncHeapType", "WasmExternRefHeapType")) {
+        if (type.heapType.isGcHeapType()) {
             recordGcTypes(section)
         }
     }
@@ -329,6 +332,15 @@ private class EnabledFeatureDetector {
 
     private fun recordInstruction(opcode: OpCode) {
         instructions += opcode.instructionName()
+    }
+}
+
+private fun WasmHeapType.isGcHeapType(): Boolean {
+    return when (this) {
+        is WasmStructRefHeapType,
+        is WasmArrayRefHeapType,
+        is WasmI31RefHeapType -> true
+        else -> false
     }
 }
 
