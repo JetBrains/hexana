@@ -223,12 +223,23 @@ open class WasmDebugProcess(
         }
 
         // When there are no user breakpoints, there is nothing to
-        // resolve via the JIT loader. Remove the helper breakpoint on
-        // __jit_debug_register_code and resume immediately so the
-        // debuggee runs to completion and the event loop can detect
-        // the process-exit event.
+        // resolve via the JIT loader. Wait for the process to stop
+        // at __jit_debug_register_code (or exit), remove the helper
+        // breakpoint, and resume so the debuggee runs to completion
+        // and the event loop can detect the process-exit event.
         if (breakpointFiles.isEmpty()) {
-            LOG.info("Windows wasmtime: no user breakpoints — skipping JIT setup, resuming process")
+            LOG.info("Windows wasmtime: no user breakpoints — skipping JIT setup")
+            val initialEvent = lldb.waitForStopEvent(WINDOWS_JIT_WAIT_TIMEOUT_MS)
+            if (initialEvent is LldbCommunicator.StopEvent.ProcessExited) {
+                LOG.info("Windows wasmtime: process exited before JIT setup (no breakpoints)")
+                lldb.reofferStopEvent(initialEvent)
+                return
+            }
+            if (initialEvent != null) {
+                // Process stopped — ensure LLDB is ready to accept
+                // commands (same race as the main loop).
+                waitForLldbReady(lldb)
+            }
             lldb.removeAllBreakpoints()
             lldb.resume()
             return
@@ -261,9 +272,10 @@ open class WasmDebugProcess(
             // There is a race between LLDB printing the stop-reason
             // line (which we parse) and LLDB fully transitioning to
             // the stopped state internally. If we send a command too
-            // early, LLDB replies "error: Process is running". Guard
-            // against this by checking the response and retrying with
-            // an explicit interrupt when needed.
+            // early, LLDB replies "error: Process is running". Give
+            // LLDB a moment to finish the state transition, then
+            // verify the command succeeded.
+            waitForLldbReady(lldb)
             if (ensureStoppedAndRemoveBreakpoints(lldb)) {
                 processExited = true
                 break
@@ -308,6 +320,24 @@ open class WasmDebugProcess(
     }
 
     /**
+     * Waits briefly for LLDB to finish its internal state transition
+     * after printing a stop-reason line. There is a race between LLDB
+     * printing the stop event (which we parse from stdout) and LLDB
+     * fully transitioning to the "stopped" state internally. If we
+     * send a command too early, LLDB replies "error: Process is
+     * running". A short sleep gives LLDB time to complete the
+     * transition before we issue commands.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    private fun waitForLldbReady(lldb: LldbCommunicator) {
+        try {
+            Thread.sleep(LLDB_STOP_SETTLE_MS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+    }
+
+    /**
      * Sends `breakpoint delete -f` and verifies that LLDB accepted it.
      * When LLDB replies with "Process is running" (a race between the
      * stop-event output line and LLDB's internal state transition),
@@ -328,6 +358,9 @@ open class WasmDebugProcess(
             lldb.reofferStopEvent(event)
             return true
         }
+        // Give LLDB time to fully settle after the interrupt before
+        // retrying the command.
+        waitForLldbReady(lldb)
         lldb.removeAllBreakpoints()
         return false
     }
@@ -1147,6 +1180,16 @@ open class WasmDebugProcess(
          * Wasmtime typically fires this 2–5 times; 20 is generous.
          */
         private const val MAX_JIT_REGISTER_ATTEMPTS = 3
+
+        /**
+         * Time in milliseconds to wait after receiving a stop event
+         * before sending commands to LLDB. This gives LLDB time to
+         * finish its internal state transition from "running" to
+         * "stopped" — without this delay, commands sent immediately
+         * after parsing a stop-reason line from stdout may get
+         * "error: Process is running" on Windows.
+         */
+        private const val LLDB_STOP_SETTLE_MS = 200L
     }
 }
 
