@@ -599,6 +599,14 @@ class HexanaToolHandlersTest {
             "import",
             memory.structuredContent!!["memories"]!!.jsonArray[0].jsonObject["definedIn"]!!.jsonPrimitive.content
         )
+        assertEquals(
+            "env",
+            memory.structuredContent!!["memories"]!!.jsonArray[0].jsonObject["import"]!!.jsonObject["module"]!!.jsonPrimitive.content
+        )
+        assertEquals(
+            "shared",
+            memory.structuredContent!!["memories"]!!.jsonArray[0].jsonObject["import"]!!.jsonObject["name"]!!.jsonPrimitive.content
+        )
     }
 
     @Test

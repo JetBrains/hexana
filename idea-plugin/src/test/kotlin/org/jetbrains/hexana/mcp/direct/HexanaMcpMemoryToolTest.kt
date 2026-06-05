@@ -14,10 +14,13 @@ class HexanaMcpMemoryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(2, memories.size)
         assertEquals(0, memories.obj(0).int("memoryIdx"))
         assertEquals("import", memories.obj(0).text("definedIn"))
+        assertEquals("env", memories.obj(0).obj("import").text("module"))
+        assertEquals("shared", memories.obj(0).obj("import").text("name"))
         assertEquals("i32", memories.obj(0).obj("limit").text("addressType"))
         assertEquals(1, memories.obj(0).obj("limit").int("min"))
         assertEquals(1, memories.obj(1).int("memoryIdx"))
         assertEquals("memory_section", memories.obj(1).text("definedIn"))
+        assertFalse("import" in memories.obj(1))
         assertEquals(2, memories.obj(1).obj("limit").int("min"))
         assertEquals(4, memories.obj(1).obj("limit").int("max"))
     }
@@ -79,6 +82,7 @@ class HexanaMcpMemoryToolTest : HexanaMcpToolsetDirectTestBase() {
         val memories = structuredContent.array("memories")
         assertEquals(1, memories.size)
         assertEquals(1, memories.obj(0).int("memoryIdx"))
+        assertFalse("import" in memories.obj(0))
     }
 
     private fun createMemoryFixture(pathInProject: String) = createWasmFixture(

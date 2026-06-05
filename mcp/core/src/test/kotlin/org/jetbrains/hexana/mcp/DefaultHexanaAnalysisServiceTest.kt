@@ -286,7 +286,10 @@ class DefaultHexanaAnalysisServiceTest {
         assertEquals("i32", types.types.single().retTypes!!.single())
         assertEquals(2, memory.memories.size)
         assertEquals("import", memory.memories.first().definedIn)
+        assertEquals("env", memory.memories.first().importInfo!!.module)
+        assertEquals("shared", memory.memories.first().importInfo!!.name)
         assertEquals("memory_section", memory.memories.last().definedIn)
+        assertEquals(null, memory.memories.last().importInfo)
         assertEquals(1L, memory.memories.first().limit.min)
         assertEquals(4L, memory.memories.last().limit.max)
     }

@@ -3481,6 +3481,27 @@ private fun Server.registerListMemoryTool(handlers: HexanaToolHandlers) {
               })
               put("description", JsonPrimitive("Page limits for the memory."))
             })
+            put("import", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("module", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Import module name."))
+                })
+                put("name", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Import field name."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("module"))
+                add(JsonPrimitive("name"))
+              })
+              put("description", JsonPrimitive("Import descriptor when the memory is imported."))
+            })
             put("definedIn", buildJsonObject {
               put("type", JsonPrimitive("string"))
               put("description", JsonPrimitive("Section the memory is declared in."))
@@ -3602,6 +3623,27 @@ private fun Server.registerGetMemoryForIndicesTool(handlers: HexanaToolHandlers)
                 add(JsonPrimitive("flag"))
               })
               put("description", JsonPrimitive("Page limits for the memory."))
+            })
+            put("import", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("module", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Import module name."))
+                })
+                put("name", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Import field name."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("module"))
+                add(JsonPrimitive("name"))
+              })
+              put("description", JsonPrimitive("Import descriptor when the memory is imported."))
             })
             put("definedIn", buildJsonObject {
               put("type", JsonPrimitive("string"))

@@ -16,9 +16,16 @@ val MemoryLimitsResultClass = class_("MemoryLimitsResult") {
     string("flag").describe("Raw limits flag byte as hex (`0x00`, `0x01`, etc.).")
 }
 
+val MemoryImportResultClass = class_("MemoryImportResult") {
+    string("module").describe("Import module name.")
+    string("name").describe("Import field name.")
+}
+
 val MemoryResultClass = class_("MemoryResult") {
     int("memoryIdx").describe("Index in the unified memory index space.")
     embed("limit", of = MemoryLimitsResultClass).describe("Page limits for the memory.")
+    nullable("importInfo", of = MemoryImportResultClass).serialName("import")
+        .describe("Import descriptor when the memory is imported.")
     string("definedIn").describe("Section the memory is declared in.")
 }
 

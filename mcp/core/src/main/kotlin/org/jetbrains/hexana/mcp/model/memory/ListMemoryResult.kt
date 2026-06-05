@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.model.memory
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -11,7 +12,15 @@ data class ListMemoryResult(
 data class MemoryResult(
     val memoryIdx: Int,
     val limit: MemoryLimitsResult,
+    @SerialName("import")
+    val importInfo: MemoryImportResult? = null,
     val definedIn: String
+)
+
+@Serializable
+data class MemoryImportResult(
+    val module: String,
+    val name: String
 )
 
 @Serializable

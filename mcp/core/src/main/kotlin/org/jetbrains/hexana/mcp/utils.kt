@@ -116,14 +116,24 @@ fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRecord> {
         this ?: return@with emptyList()
         getImportRecords().filter { it.type is WasmMemType }
     }.mapIndexed { index, record ->
-        MemoryRecord(index, Limits((record.type as WasmMemType).limits), "import")
+        MemoryRecord(
+            memoryIdx = index,
+            limit = Limits((record.type as WasmMemType).limits),
+            import = Import(record.prefix, record.name),
+            definedIn = "import"
+        )
     }
     val importBase = importMemories.size
     val memories = with(wasmModule.memorySection) {
         this ?: return@with emptyList()
         scan()
     }.mapIndexed { index, record ->
-        MemoryRecord(importBase + index, Limits(record.limits), "memory_section")
+        MemoryRecord(
+            memoryIdx = importBase + index,
+            limit = Limits(record.limits),
+            import = null,
+            definedIn = "memory_section"
+        )
     }
     return importMemories + memories
 }
@@ -136,7 +146,7 @@ internal fun CommonByteBuffer.listMemoryByIndices(
     return listMemory(wasmModule).filter { indices.contains(it.memoryIdx) }
 }
 
-data class MemoryRecord(val memoryIdx: Int, val limit: Limits<*>, val definedIn: String)
+data class MemoryRecord(val memoryIdx: Int, val limit: Limits<*>, val import: Import?, val definedIn: String)
 
 class Limits<T>(private val internal: WasmLimits<T>) {
     val addressType: String
