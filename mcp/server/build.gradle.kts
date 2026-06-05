@@ -1,4 +1,5 @@
 import java.util.*
+import java.util.zip.ZipFile
 
 plugins {
     application
@@ -177,6 +178,56 @@ fun Test.configureMcpPackageSmoke(
     }
 }
 
+val java21ClassFileMajorVersion = 65
+
+tasks.register("verifyMcpRuntimeClassFileVersions") {
+    description = "Fails if the standalone MCP runtime contains class files newer than Java 21."
+    group = "verification"
+    dependsOn(tasks.named("installDist"))
+
+    val runtimeLibDir = layout.buildDirectory.dir("install/${application.applicationName}/lib")
+    inputs.dir(runtimeLibDir)
+
+    doLast {
+        val tooNewClasses = mutableListOf<String>()
+        runtimeLibDir.get().asFileTree.matching {
+            include("*.jar")
+        }.files.sortedBy { it.name }.forEach { jarFile ->
+            ZipFile(jarFile).use { jar ->
+                jar.entries().asSequence()
+                    .filter { !it.isDirectory && it.name.endsWith(".class") }
+                    .forEach { entry ->
+                        jar.getInputStream(entry).use { input ->
+                            val header = ByteArray(8)
+                            var offset = 0
+                            while (offset < header.size) {
+                                val read = input.read(header, offset, header.size - offset)
+                                if (read == -1) break
+                                offset += read
+                            }
+                            if (offset == header.size) {
+                                val majorVersion = ((header[6].toInt() and 0xff) shl 8) or (header[7].toInt() and 0xff)
+                                if (majorVersion > java21ClassFileMajorVersion) {
+                                    tooNewClasses += "${jarFile.name}!/${entry.name} has class file major version $majorVersion"
+                                }
+                            }
+                        }
+                    }
+            }
+        }
+
+        check(tooNewClasses.isEmpty()) {
+            buildString {
+                appendLine("Standalone MCP runtime must run on Java 21, but found newer class files:")
+                tooNewClasses.take(50).forEach { appendLine("  $it") }
+                if (tooNewClasses.size > 50) {
+                    appendLine("  ... and ${tooNewClasses.size - 50} more")
+                }
+            }
+        }
+    }
+}
+
 tasks.register<Test>("integrationTest") {
     description = "Runs black-box HTTP and stdio integration tests against the installed standalone MCP server."
     group = "verification"
@@ -201,6 +252,10 @@ tasks.register<Test>("integrationTest") {
             }
         ),
     )
+}
+
+tasks.named("check") {
+    dependsOn(tasks.named("verifyMcpRuntimeClassFileVersions"))
 }
 
 tasks.register<Test>("plainMcpPackagingSmoke") {
