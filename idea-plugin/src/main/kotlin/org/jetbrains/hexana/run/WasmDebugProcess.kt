@@ -257,7 +257,17 @@ open class WasmDebugProcess(
             // (initialization) or entries are empty, skip and wait for
             // the next hit — do NOT step out, as that would run past
             // subsequent __jit_debug_register_code calls.
-            lldb.removeAllBreakpoints()
+            //
+            // There is a race between LLDB printing the stop-reason
+            // line (which we parse) and LLDB fully transitioning to
+            // the stopped state internally. If we send a command too
+            // early, LLDB replies "error: Process is running". Guard
+            // against this by checking the response and retrying with
+            // an explicit interrupt when needed.
+            if (ensureStoppedAndRemoveBreakpoints(lldb)) {
+                processExited = true
+                break
+            }
             val addresses = lldb.loadJitObjectAndResolveBreakpoints(tempDir, breakpointFiles)
             if (addresses.isNotEmpty()) {
                 LOG.info("Windows wasmtime: breakpoints resolved after attempt $attempt at $addresses")
@@ -295,6 +305,31 @@ open class WasmDebugProcess(
             replayBreakpointsToLldb()
         }
         lldb.resume()
+    }
+
+    /**
+     * Sends `breakpoint delete -f` and verifies that LLDB accepted it.
+     * When LLDB replies with "Process is running" (a race between the
+     * stop-event output line and LLDB's internal state transition),
+     * the method interrupts the process and retries.
+     *
+     * @return `true` if the process exited during recovery and the
+     *         caller should abort the JIT setup loop.
+     */
+    private fun ensureStoppedAndRemoveBreakpoints(lldb: LldbCommunicator): Boolean {
+        val output = lldb.sendCommandAndCollectOutput("breakpoint delete -f")
+        val errorRunning = output.any { "Process is running" in it }
+        if (!errorRunning) return false
+
+        LOG.info("Windows wasmtime: 'breakpoint delete' hit running-process race, interrupting and retrying")
+        lldb.pause()
+        val event = lldb.waitForStopEvent(2_000)
+        if (event is LldbCommunicator.StopEvent.ProcessExited) {
+            lldb.reofferStopEvent(event)
+            return true
+        }
+        lldb.removeAllBreakpoints()
+        return false
     }
 
     /**
