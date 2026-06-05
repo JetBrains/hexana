@@ -176,6 +176,49 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun getEntrypointPolicyReturnsDirectHostCallContract() {
+        val wasm = createWasmFile(
+            "entrypoints.wasm",
+            """
+            (module
+              (import "env" "log_i32" (func ${'$'}log_i32 (param i32)))
+              (import "env" "seed" (func ${'$'}seed (result i64)))
+              (func (export "notify_host") (param i32)
+                local.get 0
+                call ${'$'}log_i32)
+              (func (export "read_seed") (result i64)
+                call ${'$'}seed)
+              (func ${'$'}host_helper (param i32)
+                local.get 0
+                call ${'$'}log_i32)
+              (func (export "transitive_log") (param i32)
+                local.get 0
+                call ${'$'}host_helper))
+            """.trimIndent()
+        )
+
+        val result = service.getEntrypointPolicy(WasmInput.FilePath(wasm.toString()))
+
+        assertEquals("entrypoint-host-call-policy-v2", result.policyId)
+        assertEquals(wasm.toString(), result.module)
+        assertEquals(listOf("notify_host", "read_seed"), result.directHostEntrypoints.map { it.export })
+        assertEquals(listOf("transitive_log"), result.excludedTransitiveExports)
+
+        val notify = result.directHostEntrypoints.single { it.export == "notify_host" }
+        assertEquals(2, notify.funcidx)
+        assertEquals(listOf("i32"), notify.signature.params)
+        assertEquals(emptyList(), notify.signature.results)
+        assertEquals("env", notify.calledImports.single().module)
+        assertEquals("log_i32", notify.calledImports.single().name)
+        assertEquals(listOf("i32"), notify.calledImports.single().signature.params)
+        assertEquals(emptyList(), notify.calledImports.single().signature.result)
+
+        val readSeed = result.directHostEntrypoints.single { it.export == "read_seed" }
+        assertEquals(listOf("i64"), readSeed.signature.results)
+        assertEquals("seed", readSeed.calledImports.single().name)
+    }
+
+    @Test
     fun listExportsAndFunctionsReuseCurrentQueryShapes() {
         val wasm = createWasmFile(
             "functions.wasm",

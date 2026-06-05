@@ -32,6 +32,7 @@ import org.jetbrains.hexana.mcp.query.readDataSections
 import org.jetbrains.hexana.mcp.query.readDataSegmentsByRange
 import org.jetbrains.hexana.mcp.query.readElementSegments
 import org.jetbrains.hexana.mcp.query.readEnabledFeatures
+import org.jetbrains.hexana.mcp.query.readEntrypointPolicy
 import org.jetbrains.hexana.mcp.query.readExportedFunctions
 import org.jetbrains.hexana.mcp.query.readExports
 import org.jetbrains.hexana.mcp.query.readExportsByName
@@ -289,6 +290,155 @@ public class HexanaToolset : McpToolsProvider {
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val result = provider.readEnabledFeatures()
+      val text = encodeHexanaJson(result)
+      val structuredContent = encodeHexanaJsonElement(result).jsonObject
+      return McpToolCallResult.text(text, structuredContent)
+    }
+  },
+  object : McpTool {
+    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
+      name = "get_entrypoint_policy",
+      description = """
+      |Return policy-ready direct host-call facts for exported WebAssembly entrypoints.
+      |Use this when repairing or validating entrypoint host-call policy JSON.
+      |It scans exported local functions and returns only imports called directly by each entrypoint body; exports that only reach host imports through local helper calls are listed separately in `excluded_transitive_exports`.
+      |The top-level `policy_id`, `module`, `direct_host_entrypoints`, and `excluded_transitive_exports` fields are ready to copy into policy files that use the entrypoint-host-call-policy-v2 contract.
+      """.trimMargin(),
+      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.getEntrypointPolicy",
+      inputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path relative to the project root"))
+        })
+        put("projectPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
+        })
+      },
+      requiredProperties = setOf("path"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+      outputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("policy_id", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Entrypoint host-call policy identifier."))
+        })
+        put("module", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Module path label echoed from the tool input path."))
+        })
+        put("direct_host_entrypoints", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("export", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Export name of the local entrypoint."))
+              })
+              put("funcidx", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Unified function index of the exported local function."))
+              })
+              put("signature", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("params", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Exported function parameter types."))
+                  })
+                  put("results", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Exported function result types."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("params"))
+                  add(JsonPrimitive("results"))
+                })
+                put("description", JsonPrimitive("Exported entrypoint function signature."))
+              })
+              put("called_imports", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("object"))
+                  put("properties", buildJsonObject {
+                    put("module", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Imported module name."))
+                    })
+                    put("name", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Imported field name."))
+                    })
+                    put("signature", buildJsonObject {
+                      put("type", JsonPrimitive("object"))
+                      put("properties", buildJsonObject {
+                        put("params", buildJsonObject {
+                          put("type", JsonPrimitive("array"))
+                          put("items", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
+                          })
+                          put("description", JsonPrimitive("Imported function parameter types."))
+                        })
+                        put("return", buildJsonObject {
+                          put("type", JsonPrimitive("array"))
+                          put("items", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
+                          })
+                          put("description", JsonPrimitive("Imported function return types."))
+                        })
+                      })
+                      put("required", buildJsonArray {
+                        add(JsonPrimitive("params"))
+                        add(JsonPrimitive("return"))
+                      })
+                      put("description", JsonPrimitive("Imported function signature."))
+                    })
+                  })
+                  put("required", buildJsonArray {
+                    add(JsonPrimitive("module"))
+                    add(JsonPrimitive("name"))
+                    add(JsonPrimitive("signature"))
+                  })
+                })
+                put("description", JsonPrimitive("Unique imports directly called by this entrypoint body, sorted by module then name."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("export"))
+              add(JsonPrimitive("funcidx"))
+              add(JsonPrimitive("signature"))
+              add(JsonPrimitive("called_imports"))
+            })
+          })
+          put("description", JsonPrimitive("Policy-ready entries for exported local functions whose own body directly calls imported functions."))
+        })
+        put("excluded_transitive_exports", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+          put("description", JsonPrimitive("Exports that reach imported functions only through local helper calls and should stay out of the direct policy."))
+        })
+      },
+      requiredProperties = setOf("policy_id", "module", "direct_host_entrypoints", "excluded_transitive_exports"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+    )
+    override suspend fun call(args: JsonObject): McpToolCallResult {
+      val path = args.requireStringArgument("path")
+      val file = requireWasmFile(path)
+      val provider = file.requireCoreWasmBinaryProvider()
+      val result = provider.readEntrypointPolicy(pathLabel = path)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)

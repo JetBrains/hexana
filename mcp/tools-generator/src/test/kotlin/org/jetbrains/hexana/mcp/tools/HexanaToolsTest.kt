@@ -16,6 +16,7 @@ class HexanaToolsTest {
             listOf(
                 "summarize_module",
                 "list_enabled_features",
+                "get_entrypoint_policy",
                 "list_required_proposals",
                 "diff_required_proposals",
                 "check_runtime_compatibility",
@@ -113,6 +114,14 @@ class HexanaToolsTest {
     @Test
     fun `query_artifacts uses the artifact query invocation pattern`() {
         assertEquals(ToolInputPattern.ArtifactQuery, queryArtifacts.inputPattern)
+    }
+
+    @Test
+    fun `get_entrypoint_policy uses the path label invocation pattern`() {
+        assertEquals(
+            ToolInputPattern.WasmPathLabel,
+            HexanaTools.single { it.name == "get_entrypoint_policy" }.inputPattern
+        )
     }
 
     @Test

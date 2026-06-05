@@ -140,6 +140,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
     code.addStatement("val path = args.requireStringArgument(%S)", "path")
     when (val pattern = spec.inputPattern) {
         ToolInputPattern.WasmOnly -> Unit
+        ToolInputPattern.WasmPathLabel -> Unit
         ToolInputPattern.WasmWithBaseline ->
             code.addStatement("val baselinePath = args.requireStringArgument(%S)", "baselinePath")
         ToolInputPattern.FunctionPage -> {
@@ -241,6 +242,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
     } else {
         val callArgs: String = when (spec.inputPattern) {
             ToolInputPattern.WasmOnly -> "()"
+            ToolInputPattern.WasmPathLabel -> "(pathLabel = path)"
             ToolInputPattern.WasmWithBaseline -> error("Handled above")
             ToolInputPattern.FunctionPage -> "(offset, limit)"
             ToolInputPattern.Funcidx -> "(funcidx)"
@@ -301,6 +303,7 @@ private fun buildIdeaInputSchema(spec: ToolSpec): CodeBlock {
 private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
     return when (val pattern = spec.inputPattern) {
         ToolInputPattern.WasmOnly -> emptyList()
+        ToolInputPattern.WasmPathLabel -> emptyList()
         ToolInputPattern.WasmWithBaseline -> listOf(inputField(spec.input, "baselinePath"))
         ToolInputPattern.FunctionPage -> listOf(inputField(spec.input, "offset"), inputField(spec.input, "limit"))
         ToolInputPattern.Funcidx -> listOf(inputField(spec.input, "funcidx"))

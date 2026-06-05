@@ -5,6 +5,7 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.mcp.model.data.ListDataSectionsResult
 import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
 import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
+import org.jetbrains.hexana.mcp.model.entrypoints.EntrypointPolicyResult
 import org.jetbrains.hexana.mcp.model.artifacts.QueryArtifactsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
@@ -53,6 +54,10 @@ interface HexanaAnalysisService {
         maxBytes: Int
     ): QueryArtifactsResult {
         throw UnsupportedOperationException("queryArtifacts is not implemented")
+    }
+
+    fun getEntrypointPolicy(input: WasmInput): EntrypointPolicyResult {
+        throw UnsupportedOperationException("getEntrypointPolicy is not implemented")
     }
 
     fun summarizeModule(input: WasmInput): SummarizeModuleResult
@@ -139,6 +144,11 @@ class DefaultHexanaAnalysisService(
             pathLabel = input.artifactPathLabel(),
             baselinePathLabel = baselineInput?.artifactPathLabel()
         )
+    }
+
+    override fun getEntrypointPolicy(input: WasmInput): EntrypointPolicyResult {
+        val wasm = load(input)
+        return wasm.provider.readEntrypointPolicy(pathLabel = input.artifactPathLabel())
     }
 
     override fun summarizeModule(input: WasmInput): SummarizeModuleResult {

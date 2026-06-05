@@ -34,6 +34,7 @@ class HexanaMcpServerSchemaTest {
                 "diff_required_proposals",
                 "disassemble_function",
                 "functions_for_indices",
+                "get_entrypoint_policy",
                 "get_function_call_graph",
                 "get_globals_for_indices",
                 "get_instructions_for_functions",
