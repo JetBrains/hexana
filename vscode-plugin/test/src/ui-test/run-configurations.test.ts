@@ -99,7 +99,10 @@ function ensureWasmtime(): void {
             fs.copyFileSync(srcBin, wasmtimeBin);
             fs.chmodSync(wasmtimeBin, 0o755);
         } else {
-            execSync(`unzip -o "${archivePath}" -d "${tmpDir}"`, { stdio: 'inherit' });
+            execSync(
+                `powershell -NoProfile -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${tmpDir}' -Force"`,
+                { stdio: 'inherit' },
+            );
             const extracted = fs.readdirSync(tmpDir).find(
                 (d) => d.startsWith('wasmtime-') && fs.statSync(path.join(tmpDir, d)).isDirectory(),
             );
