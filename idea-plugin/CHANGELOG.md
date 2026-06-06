@@ -3,21 +3,31 @@
 ## Unreleased
 
 ### Added
-- GraalVM Web Image: `.wasm` modules compiled from Java via Web Image (`native-image --tool:svm-wasm`) are detected by their `interop`/`jsbody`/`compat` import fingerprint. Functions whose names demangle to a Java method get a "Java" badge — in the Functions tab and inline on each code-section entry in the WAT (virtualized) view — that opens the corresponding method's bytecode. Available when the module retained function names (built with debug names); stripped/minified and Graal-internal functions are left unbadged
-- jitview: the `.jit` view splits into Combined / Bytecode / Machine Code tabs, each with multiline selection and copy (full text / bytecode / hex / instruction bytes), a per-tab Go-To-Offset, and a symbol-name header showing the current method; the Machine Code tab can copy offset + instruction bytes
-- jitview: search compiled methods by inlined callee with `in:<method>` — surfaces every nmethod that inlined the given method, using the JVMTI inline records in the dump
-- JIT Viewer: new "Instrument JMH forks" option attaches the dump agent to each forked JMH benchmark JVM via a bundled `-javaagent`, writing one `ClassName_method.jit` per benchmark; because it rides on JVM options (not JMH's `-prof`) it works for any JMH run type — the IDE gutter run, the Gradle JMH plugin, and `org.openjdk.jmh.Main`
-- WAT (virtualized): custom sections now render as a foldable entry — an `offset hex name` header with the section's raw content below, shown in selectable `u8`/`u16`/`u32`/`u64`/`ascii`/`utf8` encodings (the same representation as Data entries)
 - NodeJS and Browser (for debug - Chrome only) are supported as wasm runtimes for run/debug wasm configurations
 
 ### Changed
-- WAT (virtualized): WasmGC `(rec …)` recursive type groups now render as a collapsible group (collapsed by default) instead of a flat list of types; reference-type targets show as `$typeN` (e.g. `(ref null $type4923)`)
-- Binary editor: switching tabs now cancels the previous tab's in-flight off-thread analysis (for example the Top size tree) instead of letting it run to completion, so navigating away frees CPU and background threads for the tab you just opened
 - WASM debugging – better handling of breakpoints on Windows (if it didn't attach for you previously it should now)
 
 ### Deprecated
 
 ### Removed
+
+### Fixed
+
+### Security
+
+## 0.10.2 - 2025-06-03
+
+### Added
+- GraalVM Web Image: `.wasm` modules compiled from Java via Web Image (`native-image --tool:svm-wasm`) are detected by their `interop`/`jsbody`/`compat` import fingerprint. Functions whose names demangle to a Java method get a "Java" badge — in the Functions tab and inline on each code-section entry in the WAT (virtualized) view — that opens the corresponding method's bytecode. Available when the module retained function names (built with debug names); stripped/minified and Graal-internal functions are left unbadged
+- jitview: the `.jit` view splits into Combined / Bytecode / Machine Code tabs, each with multiline selection and copy (full text / bytecode / hex / instruction bytes), a per-tab Go-To-Offset, and a symbol-name header showing the current method; the Machine Code tab can copy offset + instruction bytes
+- jitview: search compiled methods by inlined callee with `in:<method>` — surfaces every nmethod that inlined the given method, using the JVMTI inline records in the dump
+- JIT Viewer: new "Instrument JMH forks" option attaches the dump agent to each forked JMH benchmark JVM via a bundled `-javaagent`, writing one `ClassName_method.jit` per benchmark; because it rides on JVM options (not JMH's `-prof`) it works for any JMH run type — the IDE gutter run, the Gradle JMH plugin, and `org.openjdk.jmh.Main`
+- WAT (virtualized): custom sections now render as a foldable entry — an `offset hex name` header with the section's raw content below, shown in selectable `u8`/`u16`/`u32`/`u64`/`ascii`/`utf8` encodings (the same representation as Data entries)
+
+### Changed
+- WAT (virtualized): WasmGC `(rec …)` recursive type groups now render as a collapsible group (collapsed by default) instead of a flat list of types; reference-type targets show as `$typeN` (e.g. `(ref null $type4923)`)
+- Binary editor: switching tabs now cancels the previous tab's in-flight off-thread analysis (for example the Top size tree) instead of letting it run to completion, so navigating away frees CPU and background threads for the tab you just opened
 
 ### Fixed
 - Top (size analysis): switching to the Top tab no longer freezes the IDE on large binaries — the top-level size tree and data-segment parse ran inside composition on the EDT; they now build off-thread with a loading indicator
@@ -26,7 +36,12 @@
 - Top (size analysis): restoring a Top tab on startup no longer freezes the IDE on large modules — the size tree's depth metrics were still computed during composition on the EDT even though the tree data was already built off-thread; they now compute off-thread together with the tree
 - WAT: the WAT text conversion was rebuilt on every recomposition and its background coroutine was never cancelled when leaving the tab; it is now created once and cancelled on tab switch
 
-### Security
+## 0.10.1 - 2025-05-29
+
+### Fixed
+- Now we list entries for regular ZIP files instead of showing "no classes"
+- Added a missing scrollbar to the classes/entries list for JAR/ZIP files
+- Fixed problems with JIT binaries
 
 ## 0.10 - 2025-05-27
 
