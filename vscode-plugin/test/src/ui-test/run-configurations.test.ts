@@ -442,6 +442,13 @@ describe('Hexana Run Configurations – Exports Panel', function () {
             } catch {
                 // no active debug session
             }
+
+            // Close all editors so the next test suite starts clean
+            try {
+                await new EditorView().closeAllEditors();
+            } catch {
+                // ignore
+            }
         });
 
         it('should open the core wasm, click debug on the add export, and start a debug session', async function () {
