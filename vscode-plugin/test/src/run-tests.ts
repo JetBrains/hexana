@@ -131,7 +131,7 @@ async function main(): Promise<void> {
             fs.rmSync(mcpFailureStorageDir, { recursive: true, force: true });
         }
 
-        const noJavaPathDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hexana-vscode-no-java-path-'));
+        const noJavaPath = buildPathWithoutJava();
         try {
             console.log('Running Hexana editor smoke test with Java hidden from VS Code...');
             fakePostHog.reset();
@@ -151,15 +151,15 @@ async function main(): Promise<void> {
             ], {
                 ...fakePostHog.env,
                 HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests (Java hidden)',
-                PATH: noJavaPathDir,
-                Path: noJavaPathDir,
+                PATH: noJavaPath,
+                Path: noJavaPath,
                 VSIX_PATH: vsixPath,
                 WASM_FIXTURE: wasmFixture,
                 WASM_WORKSPACE: wasmWorkspace,
                 VSCODE_EXTENSIONS_DIR: extensionsDir,
             }, ['JAVA_HOME']);
         } finally {
-            fs.rmSync(noJavaPathDir, { recursive: true, force: true });
+            // no temp dir to clean up
         }
 
         const disabledSettingsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hexana-vscode-telemetry-disabled-'));
@@ -345,6 +345,34 @@ function waitForMockServer(port: number): void {
 
 function sleep(milliseconds: number): void {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+/**
+ * Builds a PATH string that excludes directories containing a Java
+ * executable, so the "Java hidden" test run cannot find `java` but
+ * still has access to essential system tools like `cmd.exe` on
+ * Windows.
+ *
+ * The previous approach replaced PATH with an empty temp directory,
+ * which hid *everything* — including `cmd.exe` — causing
+ * `spawnSync cmd.exe ENOENT` failures from vscode-extension-tester.
+ */
+function buildPathWithoutJava(): string {
+    const isWindows = os.platform() === 'win32';
+    const sep = isWindows ? ';' : ':';
+    const currentPath = process.env.PATH || process.env.Path || '';
+    const javaExe = isWindows ? 'java.exe' : 'java';
+
+    const filtered = currentPath.split(sep).filter(dir => {
+        if (!dir) return false;
+        try {
+            return !fs.existsSync(path.join(dir, javaExe));
+        } catch {
+            return true;
+        }
+    });
+
+    return filtered.join(sep);
 }
 
 function readMcpServerVersion(): string {
