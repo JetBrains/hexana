@@ -54,6 +54,47 @@ class HexanaEventTest {
         assertFalse("is_stripped" in event.properties)
         assertFalse("has_debug_info" in event.properties)
         assertFalse("symbol_count_bucket" in event.properties)
+        assertFalse("generic_ext" in event.properties)
+        assertFalse("detected_format" in event.properties)
+    }
+
+    @Test
+    fun binaryOpenedGenericBreakdown() {
+        val event = HexanaEvent.BinaryOpened(
+            format = HexanaEvent.BinaryFormat.GENERIC,
+            fileSizeBytes = 4_000_000_000L,
+            surface = HexanaEvent.Surface.IDE_PLUGIN,
+            genericExt = HexanaEvent.GenericExt.BIN,
+            detectedFormat = HexanaEvent.DetectedFormat.GGUF,
+        )
+        assertEquals("generic", event.properties["format"])
+        // A GGUF model named .bin: extension hint and magic sniff disagree,
+        // and both are reported.
+        assertEquals("bin", event.properties["generic_ext"])
+        assertEquals("gguf", event.properties["detected_format"])
+    }
+
+    @Test
+    fun genericExtFromExtensionAllowlist() {
+        assertEquals(HexanaEvent.GenericExt.GGUF, HexanaEvent.GenericExt.fromExtension("gguf"))
+        assertEquals(HexanaEvent.GenericExt.PARQUET, HexanaEvent.GenericExt.fromExtension("parquet"))
+        // Case-insensitive.
+        assertEquals(HexanaEvent.GenericExt.ONNX, HexanaEvent.GenericExt.fromExtension("ONNX"))
+        // Unknown extension and missing extension both bucket to OTHER, never raw.
+        assertEquals(HexanaEvent.GenericExt.OTHER, HexanaEvent.GenericExt.fromExtension("mycompany_secret"))
+        assertEquals(HexanaEvent.GenericExt.OTHER, HexanaEvent.GenericExt.fromExtension(null))
+        assertEquals(HexanaEvent.GenericExt.OTHER, HexanaEvent.GenericExt.fromExtension(""))
+    }
+
+    @Test
+    fun genericBreakdownEnumValuesAreSnakeCase() {
+        val valueRegex = Regex("^[a-z][a-z0-9_]*$")
+        for (ext in HexanaEvent.GenericExt.entries) {
+            assertTrue(valueRegex.matches(ext.value), "GenericExt value '${ext.value}' is not snake_case")
+        }
+        for (fmt in HexanaEvent.DetectedFormat.entries) {
+            assertTrue(valueRegex.matches(fmt.value), "DetectedFormat value '${fmt.value}' is not snake_case")
+        }
     }
 
     @Test

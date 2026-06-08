@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.analytics
 
 import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.CoffBinaryProvider
 import org.jetbrains.hexana.providers.ElfBinaryProvider
@@ -46,4 +47,47 @@ internal fun binaryFormatOf(
         "zip" -> HexanaEvent.BinaryFormat.ZIP
         else -> HexanaEvent.BinaryFormat.GENERIC
     }
+}
+
+/**
+ * Sub-classification of a [HexanaEvent.BinaryFormat.GENERIC] open: the file
+ * extension (bounded to [HexanaEvent.GenericExt], never the raw string) plus
+ * a content magic-byte sniff ([HexanaEvent.DetectedFormat], null when no
+ * magic matched). Call only when [binaryFormatOf] returned GENERIC.
+ *
+ * The magic sniff reads at most the first 16 bytes from the provider's
+ * already-loaded buffer — no fresh disk I/O — and never retains them.
+ */
+internal data class GenericDetail(
+    val ext: HexanaEvent.GenericExt,
+    val detected: HexanaEvent.DetectedFormat?,
+)
+
+internal fun genericDetailOf(
+    file: VirtualFile?,
+    provider: BinaryProvider?,
+): GenericDetail = GenericDetail(
+    ext = HexanaEvent.GenericExt.fromExtension(file?.extension),
+    detected = provider?.let { detectMagic(it.bytes) },
+)
+
+/**
+ * Reads up to 16 header bytes from [buffer] (an independent-cursor duplicate
+ * per [BinaryProvider.bytes]) and classifies them. Defensive: any failure
+ * yields null — analytics must never break the editor open path.
+ */
+private fun detectMagic(buffer: CommonByteBuffer): HexanaEvent.DetectedFormat? = try {
+    val n = minOf(16, buffer.size)
+    if (n < 4) {
+        null
+    } else {
+        val head = ByteArray(n)
+        buffer.position(0)
+        buffer.get(head, 0, n)
+        // Classification table is shared with the VS Code surface; see
+        // HexanaEvent.DetectedFormat.fromMagic.
+        HexanaEvent.DetectedFormat.fromMagic(head)
+    }
+} catch (_: Throwable) {
+    null
 }

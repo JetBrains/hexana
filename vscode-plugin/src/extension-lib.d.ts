@@ -104,14 +104,18 @@ export function shellEscape(arg: string, windows?: boolean): string;
 export function initAnalytics(storagePath: string, telemetryEnabled: boolean, appName: string, appVersion: string): void;
 
 /**
- * Captures a `binary_opened` event.
+ * Captures a `binary_opened` event for a file opened in the custom editor.
  *
- * `format` is the snake_case PostHog string for the container format
- * (`wasm`, `wasm_component`, `elf`, `macho`, `pe`, `coff`, `fat_macho`,
- * `jar`, `war`, `zip`, `apk`, `class`, `generic`). Unknown values fall
- * back to `generic` on the Kotlin side.
+ * `fileName` is used only for its extension (mapped to a bounded bucket; the
+ * raw string is never sent). `bytes` are the file contents; the container
+ * format is detected from them on the Kotlin side (Wasm component/core,
+ * native ELF/Mach-O/PE/COFF, archive/class by extension, else `generic`).
+ * When the format is `generic`, the event is enriched with `generic_ext`
+ * (allowlisted extension) and `detected_format` (magic-byte sniff). Pass an
+ * `Int8Array` view of the bytes (e.g.
+ * `new Int8Array(buf.buffer, buf.byteOffset, buf.byteLength)`).
  */
-export function captureBinaryOpened(fileSizeBytes: number, format: string): void;
+export function captureBinaryOpened(fileName: string, bytes: Int8Array): void;
 
 /** Captures a `wasm_file_parsed` event. */
 export function captureWasmFileParsed(

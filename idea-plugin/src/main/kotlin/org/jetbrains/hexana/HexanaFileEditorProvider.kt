@@ -10,6 +10,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.annotations.NonNls
 import org.jetbrains.hexana.analytics.HexanaEvent
 import org.jetbrains.hexana.analytics.binaryFormatOf
+import org.jetbrains.hexana.analytics.genericDetailOf
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryWordSize
 import org.jetbrains.hexana.providers.CoffBinaryProvider
@@ -112,6 +113,13 @@ private fun buildBinaryOpenedEvent(
 ): HexanaEvent.BinaryOpened {
     val format = binaryFormatOf(file, editor.binaryProvider)
     val native = editor.binaryProvider as? NativeBinaryProvider
+    // Only the GENERIC catch-all carries the extension + magic-sniff
+    // breakdown; structured formats already identify themselves via `format`.
+    val genericDetail = if (format == HexanaEvent.BinaryFormat.GENERIC) {
+        genericDetailOf(file, editor.binaryProvider)
+    } else {
+        null
+    }
     return HexanaEvent.BinaryOpened(
         format = format,
         fileSizeBytes = file.length,
@@ -122,6 +130,8 @@ private fun buildBinaryOpenedEvent(
         symbolCountBucket = native?.let {
             HexanaEvent.SymbolCountBucket.of(symbolCount(it))
         },
+        genericExt = genericDetail?.ext,
+        detectedFormat = genericDetail?.detected,
     )
 }
 

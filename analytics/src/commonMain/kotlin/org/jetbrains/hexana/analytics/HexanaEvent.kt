@@ -20,6 +20,16 @@ sealed class HexanaEvent {
      * binary is stripped, whether debug info is present, and a bucketed
      * symbol count. Symbol names, paths, basenames, and content hashes are
      * never sent.
+     *
+     * When [format] is [BinaryFormat.GENERIC] — the catch-all for files
+     * Hexana opened but could not structurally identify — two extra
+     * sub-classification fields break the bucket down so we can see *what*
+     * those files actually are: [genericExt] (the file extension, mapped
+     * through a bounded allowlist — never the raw string) and
+     * [detectedFormat] (a content magic-byte sniff into a bounded enum).
+     * Both are bounded-cardinality enum values; no raw extension string and
+     * no file bytes are ever transmitted. They are populated only when
+     * [format] is GENERIC and stay null otherwise.
      */
     data class BinaryOpened(
         val format: BinaryFormat,
@@ -29,6 +39,8 @@ sealed class HexanaEvent {
         val isStripped: Boolean? = null,
         val hasDebugInfo: Boolean? = null,
         val symbolCountBucket: SymbolCountBucket? = null,
+        val genericExt: GenericExt? = null,
+        val detectedFormat: DetectedFormat? = null,
     ) : HexanaEvent() {
         override val name = "binary_opened"
         override val properties = buildMap {
@@ -39,6 +51,8 @@ sealed class HexanaEvent {
             isStripped?.let { put("is_stripped", it) }
             hasDebugInfo?.let { put("has_debug_info", it) }
             symbolCountBucket?.let { put("symbol_count_bucket", it.value) }
+            genericExt?.let { put("generic_ext", it.value) }
+            detectedFormat?.let { put("detected_format", it.value) }
         }
     }
 
@@ -194,6 +208,119 @@ sealed class HexanaEvent {
              */
             fun fromValue(value: String): BinaryFormat? =
                 entries.firstOrNull { it.value == value }
+        }
+    }
+
+    /**
+     * Extension-based sub-classification of a [BinaryFormat.GENERIC] open.
+     * Derived from the file extension (lowercased), mapped through this
+     * bounded allowlist so PostHog cardinality stays fixed and no raw
+     * extension string is ever transmitted. Any extension not on the
+     * allowlist — and a missing extension — maps to [OTHER]; that bucket is
+     * permanent and is the "unknown-unknown" residual to watch over time.
+     *
+     * Populated only when the event's format is GENERIC.
+     */
+    enum class GenericExt(val value: String) {
+        GGUF("gguf"),
+        SAFETENSORS("safetensors"),
+        ONNX("onnx"),
+        PARQUET("parquet"),
+        ARROW("arrow"),
+        FEATHER("feather"),
+        PB("pb"),
+        DEX("dex"),
+        SPV("spv"),
+        NPY("npy"),
+        NPZ("npz"),
+        PT("pt"),
+        PTH("pth"),
+        H5("h5"),
+        TFLITE("tflite"),
+        MLMODEL("mlmodel"),
+        PKL("pkl"),
+        WHL("whl"),
+        BIN("bin"),
+        DAT("dat"),
+        SO("so"),
+        DYLIB("dylib"),
+        DLL("dll"),
+        SQLITE("sqlite"),
+        DB("db"),
+        IMG("img"),
+        ISO("iso"),
+        OTHER("other"),
+        ;
+
+        companion object {
+            /** Maps a (possibly null) file extension to a bounded bucket; unknown → [OTHER]. */
+            fun fromExtension(extension: String?): GenericExt {
+                val lower = extension?.lowercase() ?: return OTHER
+                return entries.firstOrNull { it.value == lower } ?: OTHER
+            }
+        }
+    }
+
+    /**
+     * Content magic-byte sub-classification of a [BinaryFormat.GENERIC] open.
+     * Extension-independent — a GGUF file named `.bin` still resolves to
+     * [GGUF] here. Carries only the bounded enum value; the sniffed bytes
+     * are never stored, logged, or transmitted. Absent when no magic matched.
+     *
+     * Conservative by design: formats without a reliable fixed magic at the
+     * file head (safetensors' u64-length-prefixed JSON, ONNX protobuf) are
+     * intentionally NOT detected here — they are covered by [GenericExt]
+     * only — to avoid false positives inflating a bucket.
+     *
+     * Populated only when the event's format is GENERIC.
+     */
+    enum class DetectedFormat(val value: String) {
+        GGUF("gguf"),
+        PARQUET("parquet"),
+        ARROW_IPC("arrow_ipc"),
+        SPIRV("spirv"),
+        DEX("dex"),
+        OAT("oat"),
+        HDF5("hdf5"),
+        SQLITE("sqlite"),
+        ZIP("zip"),
+        GZIP("gzip"),
+        PDF("pdf"),
+        PNG("png"),
+        ;
+
+        companion object {
+            /**
+             * Classifies a file by its leading magic bytes. [header] may be
+             * the whole file or just its head — only a short prefix is
+             * examined. Returns null when no known magic matched. Shared by
+             * the IDE-plugin and VS Code surfaces so the magic table has a
+             * single source of truth.
+             */
+            fun fromMagic(header: ByteArray): DetectedFormat? = when {
+                header.startsWith(0x47, 0x47, 0x55, 0x46) -> GGUF // "GGUF"
+                header.startsWith(0x50, 0x41, 0x52, 0x31) -> PARQUET // "PAR1"
+                header.startsWith(0x41, 0x52, 0x52, 0x4F, 0x57, 0x31) -> ARROW_IPC // "ARROW1"
+                header.startsWith(0x03, 0x02, 0x23, 0x07) -> SPIRV // SPIR-V 0x07230203 LE
+                header.startsWith(0x07, 0x23, 0x02, 0x03) -> SPIRV // SPIR-V BE
+                header.startsWith(0x64, 0x65, 0x78, 0x0A) -> DEX // "dex\n"
+                header.startsWith(0x6F, 0x61, 0x74, 0x0A) -> OAT // "oat\n"
+                header.startsWith(0x89, 0x48, 0x44, 0x46) -> HDF5 // "\x89HDF"
+                header.startsWith(0x53, 0x51, 0x4C, 0x69, 0x74, 0x65) -> SQLITE // "SQLite"
+                header.startsWith(0x50, 0x4B, 0x03, 0x04) -> ZIP // "PK\x03\x04"
+                header.startsWith(0x1F, 0x8B) -> GZIP
+                header.startsWith(0x25, 0x50, 0x44, 0x46) -> PDF // "%PDF"
+                header.startsWith(0x89, 0x50, 0x4E, 0x47) -> PNG // "\x89PNG"
+                else -> null
+            }
+
+            private fun ByteArray.startsWith(vararg expected: Int): Boolean {
+                if (size < expected.size) return false
+                for (i in expected.indices) {
+                    if (this[i] != expected[i].toByte()) return false
+                }
+                return true
+            }
         }
     }
 

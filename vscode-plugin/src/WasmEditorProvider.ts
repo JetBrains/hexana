@@ -142,11 +142,18 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const key = uri.toString();
         const inMemory = inMemoryModules.get(key);
         if (inMemory) {
-            extensionLib?.captureBinaryOpened(inMemory.data.byteLength, "wasm");
+            const d = inMemory.data;
+            extensionLib?.captureBinaryOpened(
+                inMemory.fileName,
+                new Int8Array(d.buffer, d.byteOffset, d.byteLength),
+            );
             return new WasmDocument(uri, inMemory.data, inMemory.fileName);
         }
         const data = await vscode.workspace.fs.readFile(uri);
-        extensionLib?.captureBinaryOpened(data.byteLength, "wasm");
+        extensionLib?.captureBinaryOpened(
+            path.basename(uri.fsPath),
+            new Int8Array(data.buffer, data.byteOffset, data.byteLength),
+        );
         return new WasmDocument(uri, data);
     }
 
