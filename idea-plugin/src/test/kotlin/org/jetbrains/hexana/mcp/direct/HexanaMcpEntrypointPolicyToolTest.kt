@@ -25,7 +25,9 @@ class HexanaMcpEntrypointPolicyToolTest : HexanaMcpToolsetDirectTestBase() {
         )
 
         val result = callToolJsonObject("get_entrypoint_policy", jsonPath(fixture.projectRelativePath))
+        val aliasResult = callToolJsonObject("repair_entrypoint_policy", jsonPath(fixture.projectRelativePath))
 
+        assertEquals(result, aliasResult)
         assertEquals("entrypoint-host-call-policy-v2", result.text("policy_id"))
         assertEquals(fixture.projectRelativePath, result.text("module"))
         assertEquals(listOf("notify_host", "read_seed"), result.array("direct_host_entrypoints").map {

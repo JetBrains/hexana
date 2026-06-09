@@ -16,6 +16,7 @@ class HexanaToolsTest {
             listOf(
                 "summarize_module",
                 "list_enabled_features",
+                "repair_entrypoint_policy",
                 "get_entrypoint_policy",
                 "list_required_proposals",
                 "diff_required_proposals",
@@ -124,6 +125,23 @@ class HexanaToolsTest {
             ToolInputPattern.WasmPathLabel,
             HexanaTools.single { it.name == "get_entrypoint_policy" }.inputPattern
         )
+    }
+
+    @Test
+    fun `repair_entrypoint_policy is an alias over entrypoint policy analysis`() {
+        val repair = HexanaTools.single { it.name == "repair_entrypoint_policy" }
+        val get = HexanaTools.single { it.name == "get_entrypoint_policy" }
+
+        assertEquals(ToolInputPattern.WasmPathLabel, repair.inputPattern)
+        assertEquals(get.input, repair.input)
+        assertEquals(get.output, repair.output)
+        assertEquals(get.handlerFqn, repair.handlerFqn)
+        assertTrue(repair.summary.contains("policy-ready"))
+        val guidance = assertNotNull(repair.guidance)
+        assertTrue(guidance.contains("building, repairing, or validating entrypoint host-call policy JSON"))
+        assertTrue(guidance.contains("direct_host_entrypoints"))
+        assertTrue(!guidance.contains("entrypoint_policy_repair"))
+        assertTrue(!guidance.contains("task"))
     }
 
     @Test

@@ -60,6 +60,7 @@ class HexanaMcpServerSchemaTest {
                 "list_types",
                 "list_value_types",
                 "query_artifacts",
+                "repair_entrypoint_policy",
                 "resolve_function_signature",
                 "search_exports",
                 "search_functions_by_name",
@@ -67,6 +68,19 @@ class HexanaMcpServerSchemaTest {
             ),
             createHexanaMcpServer().tools.keys.sorted(),
         )
+    }
+
+    @Test
+    fun repairEntrypointPolicyDescriptorDescribesDomainBehavior() {
+        val tool = createHexanaMcpServer()
+            .tools
+            .getValue("repair_entrypoint_policy")
+            .tool
+
+        val description = tool.description ?: error("Missing repair_entrypoint_policy description")
+        assertTrue(description.contains("Build policy-ready entrypoint host-call facts"))
+        assertFalse(description.contains("entrypoint_policy_repair"))
+        assertFalse(description.contains("task"))
     }
 
     @Test

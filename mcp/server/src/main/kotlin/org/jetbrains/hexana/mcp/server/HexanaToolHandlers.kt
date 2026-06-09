@@ -57,6 +57,12 @@ class HexanaToolHandlers(
         }
     }
 
+    fun repairEntrypointPolicy(arguments: JsonObject?): CallToolResult {
+        return execute("repair_entrypoint_policy") {
+            analysisService.getEntrypointPolicy(wasmInput(arguments))
+        }
+    }
+
     fun listEnabledFeatures(arguments: JsonObject?): CallToolResult {
         return execute("list_enabled_features") {
             analysisService.listEnabledFeatures(wasmInput(arguments))
