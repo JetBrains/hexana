@@ -460,6 +460,118 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun auditGlobalStatePolicyReportsAllowedForbiddenAndMutableGlobals() {
+        val baseline = createWasmFile(
+            "global-audit-baseline.wasm",
+            globalStatePolicyWat(
+                includeClockOffset = false,
+                includeRequestLimit = false,
+                includeFeatureFlag = false
+            )
+        )
+        val current = createWasmFile(
+            "global-audit-current.wasm",
+            globalStatePolicyWat(
+                includeClockOffset = true,
+                includeRequestLimit = true,
+                includeFeatureFlag = true
+            )
+        )
+        val policy = createTextFile(
+            "global-audit-policy.json",
+            """
+            {
+              "policyId": "global-state-policy-v1",
+              "requestLimits": {
+                "exports": ["request_limit"],
+                "maxValue": 2048
+              }
+            }
+            """.trimIndent()
+        )
+
+        val result = service.auditGlobalStatePolicy(
+            input = WasmInput.FilePath(current.toString()),
+            baselineInput = WasmInput.FilePath(baseline.toString()),
+            policyInput = TextInput.FilePath(policy.toString()),
+            logInput = null
+        )
+
+        assertEquals("global-state-policy-v1", result.policyId)
+        assertEquals(listOf(2, 3, 4, 5, 6), result.targetedGlobalIndices.take(5))
+        assertTrue(34 in result.targetedGlobalIndices)
+        assertTrue(50 in result.targetedGlobalIndices)
+
+        val requestLimit = result.newPublicGlobals.single { it.export == "request_limit" }
+        assertEquals(34, requestLimit.globalidx)
+        assertTrue(requestLimit.allowed)
+        assertEquals("request_limits", requestLimit.allowedBy)
+        assertEquals("i32.const 2048", requestLimit.initExpr)
+
+        val featureFlag = result.newPublicGlobals.single { it.export == "feature_flag" }
+        assertEquals(50, featureFlag.globalidx)
+        assertFalse(featureFlag.allowed)
+
+        assertTrue(result.allowedPublicGlobals.any { it.export == "abi_version" && it.allowedBy == "baseline" })
+        assertTrue(result.allowedPublicGlobals.any { it.export == "request_limit" && it.allowedBy == "request_limits" })
+
+        val requestLimitFact = result.requestLimits.single()
+        assertEquals("request_limit", requestLimitFact.export)
+        assertEquals(2048, requestLimitFact.value)
+        assertEquals(2048, requestLimitFact.maxValue)
+        assertTrue(requestLimitFact.allowed)
+
+        assertEquals(
+            listOf("mutable_imported_global", "forbidden_public_global"),
+            result.violations.map { it.kind }
+        )
+        val mutableImport = result.violations.single { it.kind == "mutable_imported_global" }
+        assertEquals(2, mutableImport.globalidx)
+        assertEquals("env.clock_offset", mutableImport.importNameQualified)
+
+        val forbiddenGlobal = result.violations.single { it.kind == "forbidden_public_global" }
+        assertEquals(50, forbiddenGlobal.globalidx)
+        assertEquals("feature_flag", forbiddenGlobal.export)
+
+        assertTrue(result.evidence.any { it.globalidx == 34 && it.export == "request_limit" })
+        assertTrue(result.evidence.any { it.globalidx == 2 && it.importNameQualified == "env.clock_offset" })
+    }
+
+    @Test
+    fun auditGlobalStatePolicyReportsRequestLimitViolation() {
+        val baseline = createWasmFile(
+            "global-request-limit-baseline.wasm",
+            """
+            (module
+              (global (export "abi_version") i32 (i32.const 7)))
+            """.trimIndent()
+        )
+        val current = createWasmFile(
+            "global-request-limit-current.wasm",
+            """
+            (module
+              (global (export "abi_version") i32 (i32.const 7))
+              (global (export "request_limit") i32 (i32.const 4096)))
+            """.trimIndent()
+        )
+        val policy = createTextFile(
+            "global-request-limit-policy.json",
+            """{"requestLimits":{"exports":["request_limit"],"maxValue":2048}}"""
+        )
+
+        val result = service.auditGlobalStatePolicy(
+            input = WasmInput.FilePath(current.toString()),
+            baselineInput = WasmInput.FilePath(baseline.toString()),
+            policyInput = TextInput.FilePath(policy.toString()),
+            logInput = null
+        )
+
+        assertEquals(listOf("request_limit_exceeded"), result.violations.map { it.kind })
+        assertEquals(4096, result.requestLimits.single().value)
+        assertEquals(2048, result.requestLimits.single().maxValue)
+    }
+
+    @Test
     fun abiBindingRegenerationComparesCurrentWasmToStalePythonBindings() {
         val wasm = createWasmFile(
             "pricing_plugin.wasm",
@@ -805,6 +917,10 @@ class DefaultHexanaAnalysisServiceTest {
 
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {
         Files.write(it, wat2wasm(wat))
+    }
+
+    private fun createTextFile(name: String, text: String) = temporaryFolder.newFile(name).toPath().also {
+        Files.writeString(it, text)
     }
 
     private fun globalStatePolicyWat(

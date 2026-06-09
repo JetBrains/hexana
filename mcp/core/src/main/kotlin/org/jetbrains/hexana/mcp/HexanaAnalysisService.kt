@@ -19,6 +19,7 @@ import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.ListCodeSectionOffsetsResult
 import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
+import org.jetbrains.hexana.mcp.model.globals.AuditGlobalStatePolicyResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
 import org.jetbrains.hexana.mcp.model.memory.CheckMemoryContractResult
@@ -98,6 +99,14 @@ interface HexanaAnalysisService {
         logInput: TextInput?
     ): CheckMemoryContractResult {
         throw UnsupportedOperationException("checkMemoryContract is not implemented")
+    }
+    fun auditGlobalStatePolicy(
+        input: WasmInput,
+        baselineInput: WasmInput,
+        policyInput: TextInput,
+        logInput: TextInput?
+    ): AuditGlobalStatePolicyResult {
+        throw UnsupportedOperationException("auditGlobalStatePolicy is not implemented")
     }
     fun getGlobalsForIndices(input: WasmInput, indices: List<Int>): ListGlobalsResult
     fun listData(input: WasmInput, entriesRange: IntRange): ListDataSectionsResult
@@ -312,6 +321,23 @@ class DefaultHexanaAnalysisService(
         val policy = loadText(policyInput)
         val log = logInput?.let(::loadText)
         return wasm.provider.checkMemoryContract(
+            baseline = baseline.provider,
+            policyText = policy.text,
+            logText = log?.text
+        )
+    }
+
+    override fun auditGlobalStatePolicy(
+        input: WasmInput,
+        baselineInput: WasmInput,
+        policyInput: TextInput,
+        logInput: TextInput?
+    ): AuditGlobalStatePolicyResult {
+        val wasm = load(input)
+        val baseline = load(baselineInput)
+        val policy = loadText(policyInput)
+        val log = logInput?.let(::loadText)
+        return wasm.provider.auditGlobalStatePolicy(
             baseline = baseline.provider,
             policyText = policy.text,
             logText = log?.text

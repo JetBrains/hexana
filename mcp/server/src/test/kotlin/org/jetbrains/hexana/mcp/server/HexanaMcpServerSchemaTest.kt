@@ -30,6 +30,8 @@ class HexanaMcpServerSchemaTest {
     fun registryExposesGeneratedHexanaTools() {
         assertEquals(
             listOf(
+                "audit_global_state_policy",
+                "check_memory_contract",
                 "check_runtime_compatibility",
                 "diff_required_proposals",
                 "disassemble_function",

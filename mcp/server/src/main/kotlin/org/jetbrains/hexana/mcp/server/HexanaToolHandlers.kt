@@ -193,6 +193,17 @@ class HexanaToolHandlers(
         }
     }
 
+    fun auditGlobalStatePolicy(arguments: JsonObject?): CallToolResult {
+        return execute("audit_global_state_policy") {
+            analysisService.auditGlobalStatePolicy(
+                input = wasmInput(arguments),
+                baselineInput = WasmInput.FilePath(arguments.requireNonBlankString("baselinePath")),
+                policyInput = TextInput.FilePath(arguments.requireNonBlankString("policyPath")),
+                logInput = arguments.optionalNonBlankString("logPath")?.let(TextInput::FilePath)
+            )
+        }
+    }
+
     fun listTypes(arguments: JsonObject?): CallToolResult {
         return execute("list_types") {
             analysisService.listTypes(wasmInput(arguments))

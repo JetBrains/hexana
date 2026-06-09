@@ -199,7 +199,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             code.addStatement("val detail = args.optionalStringArgument(%S) ?: %S", "detail", detail)
             code.addStatement("val maxBytes = args.optionalIntArgument(%S) ?: %L", "maxBytes", maxBytes)
         }
-        ToolInputPattern.MemoryContract -> {
+        ToolInputPattern.PolicyWithBaselineAndLog -> {
             code.addStatement("val baselinePath = args.requireStringArgument(%S)", "baselinePath")
             code.addStatement("val policyPath = args.requireStringArgument(%S)", "policyPath")
             code.addStatement("val logPath = args.optionalStringArgument(%S)", "logPath")
@@ -248,7 +248,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
                 ")",
             handlerMember,
         )
-    } else if (spec.inputPattern == ToolInputPattern.MemoryContract) {
+    } else if (spec.inputPattern == ToolInputPattern.PolicyWithBaselineAndLog) {
         code.addStatement(
             "val baselineProvider = %M(baselinePath).%M()",
             REQUIRE_WASM_FILE,
@@ -283,7 +283,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             is ToolInputPattern.ClosedRange -> "(range)"
             ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
             ToolInputPattern.ArtifactQuery -> error("Handled above")
-            ToolInputPattern.MemoryContract -> error("Handled above")
+            ToolInputPattern.PolicyWithBaselineAndLog -> error("Handled above")
             ToolInputPattern.RuntimeCompatibility -> "(runtime, version)"
         }
         code.addStatement("val result = provider.%M$callArgs", handlerMember)
@@ -363,7 +363,7 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
             inputField(spec.input, "detail"),
             inputField(spec.input, "maxBytes"),
         )
-        ToolInputPattern.MemoryContract -> listOf(
+        ToolInputPattern.PolicyWithBaselineAndLog -> listOf(
             inputField(spec.input, "baselinePath"),
             inputField(spec.input, "policyPath"),
             inputField(spec.input, "logPath"),

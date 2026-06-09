@@ -25,6 +25,7 @@ private val HEXANA_TOOL_ORDER = listOf(
     "get_memory_for_indices",
     "check_memory_contract",
     "list_globals",
+    "audit_global_state_policy",
     "get_globals_for_indices",
     "list_types",
     "list_value_types",

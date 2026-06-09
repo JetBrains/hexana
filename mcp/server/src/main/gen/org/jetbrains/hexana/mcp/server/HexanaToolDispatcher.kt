@@ -69,6 +69,7 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   registerGetMemoryForIndicesTool(handlers)
   registerCheckMemoryContractTool(handlers)
   registerListGlobalsTool(handlers)
+  registerAuditGlobalStatePolicyTool(handlers)
   registerGetGlobalsForIndicesTool(handlers)
   registerListTypesTool(handlers)
   registerListValueTypesTool(handlers)
@@ -4273,6 +4274,509 @@ private fun Server.registerListGlobalsTool(handlers: HexanaToolHandlers) {
     ),
   ))  {
     request: CallToolRequest -> handlers.listGlobals(request.arguments)
+  }
+}
+
+private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "audit_global_state_policy",
+    description = "Audit WebAssembly global state against a baseline and global-state policy.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("baselinePath", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to the baseline `.wasm` file to compare against the current module."))
+        put("maxLength", JsonPrimitive(4_096))
+      })
+      put("policyPath", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a global-state policy JSON file with allowed public globals and request-limit rules."))
+        put("maxLength", JsonPrimitive(4_096))
+      })
+      put("logPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional runtime log path to validate as readable input and attach log-related warnings."))
+        put("maxLength", JsonPrimitive(4_096))
+      })
+    },
+    required = listOf("baselinePath", "policyPath")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("policyId", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Policy identifier from the policy file, when present."))
+      })
+      put("globals", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("export", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Export name when the global is public."))
+            })
+            put("importNameQualified", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Qualified import name such as `env.clock_offset`, when imported."))
+            })
+            put("globalidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Global index in the unified global index space."))
+            })
+            put("type", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Global value type."))
+            })
+            put("mutable", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the global is mutable."))
+            })
+            put("initExpr", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Initialization expression in WAT syntax."))
+            })
+            put("origin", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Global origin: `import` or `local`."))
+            })
+            put("importModule", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import module name when the global is imported."))
+            })
+            put("importName", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import field name when the global is imported."))
+            })
+            put("status", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`."))
+            })
+            put("allowed", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the policy or baseline allows this public global."))
+            })
+            put("allowedBy", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("globalidx"))
+            add(JsonPrimitive("type"))
+            add(JsonPrimitive("mutable"))
+            add(JsonPrimitive("origin"))
+            add(JsonPrimitive("status"))
+            add(JsonPrimitive("allowed"))
+          })
+        })
+        put("description", JsonPrimitive("Targeted globals relevant to the audit."))
+      })
+      put("newPublicGlobals", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("export", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Export name when the global is public."))
+            })
+            put("importNameQualified", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Qualified import name such as `env.clock_offset`, when imported."))
+            })
+            put("globalidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Global index in the unified global index space."))
+            })
+            put("type", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Global value type."))
+            })
+            put("mutable", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the global is mutable."))
+            })
+            put("initExpr", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Initialization expression in WAT syntax."))
+            })
+            put("origin", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Global origin: `import` or `local`."))
+            })
+            put("importModule", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import module name when the global is imported."))
+            })
+            put("importName", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import field name when the global is imported."))
+            })
+            put("status", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`."))
+            })
+            put("allowed", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the policy or baseline allows this public global."))
+            })
+            put("allowedBy", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("globalidx"))
+            add(JsonPrimitive("type"))
+            add(JsonPrimitive("mutable"))
+            add(JsonPrimitive("origin"))
+            add(JsonPrimitive("status"))
+            add(JsonPrimitive("allowed"))
+          })
+        })
+        put("description", JsonPrimitive("Public global exports added relative to the baseline."))
+      })
+      put("allowedPublicGlobals", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("export", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Export name when the global is public."))
+            })
+            put("importNameQualified", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Qualified import name such as `env.clock_offset`, when imported."))
+            })
+            put("globalidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Global index in the unified global index space."))
+            })
+            put("type", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Global value type."))
+            })
+            put("mutable", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the global is mutable."))
+            })
+            put("initExpr", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Initialization expression in WAT syntax."))
+            })
+            put("origin", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Global origin: `import` or `local`."))
+            })
+            put("importModule", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import module name when the global is imported."))
+            })
+            put("importName", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Import field name when the global is imported."))
+            })
+            put("status", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`."))
+            })
+            put("allowed", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the policy or baseline allows this public global."))
+            })
+            put("allowedBy", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("globalidx"))
+            add(JsonPrimitive("type"))
+            add(JsonPrimitive("mutable"))
+            add(JsonPrimitive("origin"))
+            add(JsonPrimitive("status"))
+            add(JsonPrimitive("allowed"))
+          })
+        })
+        put("description", JsonPrimitive("Public global exports allowed by the baseline or policy."))
+      })
+      put("requestLimits", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("export", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Request-limit export name."))
+            })
+            put("globalidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Global index for the request-limit export."))
+            })
+            put("value", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Constant request-limit value, when statically available."))
+            })
+            put("maxValue", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Maximum request-limit value from policy, when configured."))
+            })
+            put("allowed", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the request-limit global satisfies the policy."))
+            })
+            put("violation", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Violation code such as `request_limit_exceeded` or `mutable_request_limit`."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("export"))
+            add(JsonPrimitive("globalidx"))
+            add(JsonPrimitive("allowed"))
+          })
+        })
+        put("description", JsonPrimitive("Request-limit public globals evaluated against policy limits."))
+      })
+      put("violations", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("kind", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Stable violation code."))
+            })
+            put("globalidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Global index involved in the violation."))
+            })
+            put("export", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Export name involved in the violation, when public."))
+            })
+            put("importNameQualified", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Qualified import name involved in the violation, when imported."))
+            })
+            put("field", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Policy field or Wasm property involved in the violation."))
+            })
+            put("observed", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Observed value."))
+            })
+            put("policy", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Policy value or policy concept."))
+            })
+            put("message", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Report-ready explanation of the violation."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("kind"))
+            add(JsonPrimitive("globalidx"))
+            add(JsonPrimitive("field"))
+            add(JsonPrimitive("message"))
+          })
+        })
+        put("description", JsonPrimitive("Report-ready policy violations."))
+      })
+      put("targetedGlobalIndices", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+        })
+        put("description", JsonPrimitive("Stable sorted `globalidx` values relevant to the audit."))
+      })
+      put("evidence", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("kind", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Evidence category."))
+            })
+            put("globalidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Global index for this evidence item."))
+            })
+            put("export", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Export name, when public."))
+            })
+            put("importNameQualified", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Qualified import name, when imported."))
+            })
+            put("type", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Global value type."))
+            })
+            put("mutable", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the global is mutable."))
+            })
+            put("initExpr", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Initialization expression in WAT syntax."))
+            })
+            put("origin", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Global origin: `import` or `local`."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("kind"))
+            add(JsonPrimitive("globalidx"))
+            add(JsonPrimitive("type"))
+            add(JsonPrimitive("mutable"))
+            add(JsonPrimitive("origin"))
+          })
+        })
+        put("description", JsonPrimitive("Relevant global evidence used for the audit report."))
+      })
+      put("warnings", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Non-fatal input or runtime-log warnings."))
+      })
+    },
+    required = listOf("globals", "newPublicGlobals", "allowedPublicGlobals", "requestLimits", "violations", "targetedGlobalIndices", "evidence", "warnings")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.auditGlobalStatePolicy(request.arguments)
   }
 }
 

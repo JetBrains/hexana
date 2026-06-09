@@ -117,7 +117,7 @@ internal val MemoryTools: List<ToolSpec> = tools {
             Returns per-memory declared limits, previous limits, exported memory names, policy limits, structured violations, and minimal compatible limits.
         """
         input = CheckMemoryContractInput
-        inputPattern = ToolInputPattern.MemoryContract
+        inputPattern = ToolInputPattern.PolicyWithBaselineAndLog
         output = CheckMemoryContractResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.checkMemoryContract"
     }

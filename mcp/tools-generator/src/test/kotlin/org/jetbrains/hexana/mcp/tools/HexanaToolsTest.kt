@@ -38,6 +38,7 @@ class HexanaToolsTest {
                 "get_memory_for_indices",
                 "check_memory_contract",
                 "list_globals",
+                "audit_global_state_policy",
                 "get_globals_for_indices",
                 "list_types",
                 "list_value_types",
@@ -142,10 +143,14 @@ class HexanaToolsTest {
     }
 
     @Test
-    fun `check_memory_contract uses the memory contract invocation pattern`() {
+    fun `policy audit tools use the baseline policy invocation pattern`() {
         assertEquals(
-            ToolInputPattern.MemoryContract,
+            ToolInputPattern.PolicyWithBaselineAndLog,
             HexanaTools.single { it.name == "check_memory_contract" }.inputPattern
+        )
+        assertEquals(
+            ToolInputPattern.PolicyWithBaselineAndLog,
+            HexanaTools.single { it.name == "audit_global_state_policy" }.inputPattern
         )
     }
 

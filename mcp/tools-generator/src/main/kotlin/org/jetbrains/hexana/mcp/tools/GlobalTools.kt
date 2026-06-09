@@ -7,6 +7,15 @@ val GetGlobalsForIndicesInput = indicesInput(
     "List of global indices (`globalidx`) to return.",
 )
 
+val AuditGlobalStatePolicyInput = WasmInputClass.with("AuditGlobalStatePolicyInput") {
+    string("baselinePath").describe("Path to the baseline `.wasm` file to compare against the current module.")
+        .maxLength(4096)
+    string("policyPath").describe("Path to a global-state policy JSON file with allowed public globals and request-limit rules.")
+        .maxLength(4096)
+    nullable("logPath", of = string()).describe("Optional runtime log path to validate as readable input and attach log-related warnings.")
+        .maxLength(4096)
+}
+
 val GlobalResultClass = class_("GlobalResult") {
     int("globalIdx").describe("Global index in the unified global index space.")
     nullable("prefix", string()).describe("Import module prefix, when the global is imported.")
@@ -25,6 +34,64 @@ val ListGlobalsResultClass = class_("ListGlobalsResult", kotlinPackage = MODEL_P
     list("globals", of = GlobalResultClass).describe("Globals declared or imported by the module.")
 }
 
+val GlobalStatePolicyGlobalResultClass = class_("GlobalStatePolicyGlobalResult") {
+    nullable("export", string()).describe("Export name when the global is public.")
+    nullable("importNameQualified", string()).describe("Qualified import name such as `env.clock_offset`, when imported.")
+    int("globalidx").describe("Global index in the unified global index space.")
+    string("type").describe("Global value type.")
+    boolean("mutable").describe("True when the global is mutable.")
+    nullable("initExpr", string()).describe("Initialization expression in WAT syntax.")
+    string("origin").describe("Global origin: `import` or `local`.")
+    nullable("importModule", string()).describe("Import module name when the global is imported.")
+    nullable("importName", string()).describe("Import field name when the global is imported.")
+    string("status").describe("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`.")
+    boolean("allowed").describe("True when the policy or baseline allows this public global.")
+    nullable("allowedBy", string()).describe("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`.")
+}
+
+val GlobalStatePolicyRequestLimitResultClass = class_("GlobalStatePolicyRequestLimitResult") {
+    string("export").describe("Request-limit export name.")
+    int("globalidx").describe("Global index for the request-limit export.")
+    nullable("value", long()).describe("Constant request-limit value, when statically available.")
+    nullable("maxValue", long()).describe("Maximum request-limit value from policy, when configured.")
+    boolean("allowed").describe("True when the request-limit global satisfies the policy.")
+    nullable("violation", string()).describe("Violation code such as `request_limit_exceeded` or `mutable_request_limit`.")
+}
+
+val GlobalStatePolicyViolationResultClass = class_("GlobalStatePolicyViolationResult") {
+    string("kind").describe("Stable violation code.")
+    int("globalidx").describe("Global index involved in the violation.")
+    nullable("export", string()).describe("Export name involved in the violation, when public.")
+    nullable("importNameQualified", string()).describe("Qualified import name involved in the violation, when imported.")
+    string("field").describe("Policy field or Wasm property involved in the violation.")
+    nullable("observed", string()).describe("Observed value.")
+    nullable("policy", string()).describe("Policy value or policy concept.")
+    string("message").describe("Report-ready explanation of the violation.")
+}
+
+val GlobalStatePolicyEvidenceResultClass = class_("GlobalStatePolicyEvidenceResult") {
+    string("kind").describe("Evidence category.")
+    int("globalidx").describe("Global index for this evidence item.")
+    nullable("export", string()).describe("Export name, when public.")
+    nullable("importNameQualified", string()).describe("Qualified import name, when imported.")
+    string("type").describe("Global value type.")
+    boolean("mutable").describe("True when the global is mutable.")
+    nullable("initExpr", string()).describe("Initialization expression in WAT syntax.")
+    string("origin").describe("Global origin: `import` or `local`.")
+}
+
+val AuditGlobalStatePolicyResultClass = class_("AuditGlobalStatePolicyResult", kotlinPackage = MODEL_PACKAGE) {
+    nullable("policyId", string()).describe("Policy identifier from the policy file, when present.")
+    list("globals", of = GlobalStatePolicyGlobalResultClass).describe("Targeted globals relevant to the audit.")
+    list("newPublicGlobals", of = GlobalStatePolicyGlobalResultClass).describe("Public global exports added relative to the baseline.")
+    list("allowedPublicGlobals", of = GlobalStatePolicyGlobalResultClass).describe("Public global exports allowed by the baseline or policy.")
+    list("requestLimits", of = GlobalStatePolicyRequestLimitResultClass).describe("Request-limit public globals evaluated against policy limits.")
+    list("violations", of = GlobalStatePolicyViolationResultClass).describe("Report-ready policy violations.")
+    list("targetedGlobalIndices", of = int()).describe("Stable sorted `globalidx` values relevant to the audit.")
+    list("evidence", of = GlobalStatePolicyEvidenceResultClass).describe("Relevant global evidence used for the audit report.")
+    list("warnings", of = string()).describe("Non-fatal input or runtime-log warnings.")
+}
+
 internal val GlobalTools: List<ToolSpec> = tools {
     tool("list_globals") {
         summary = "List imported and defined globals from a `.wasm` module."
@@ -36,6 +103,18 @@ internal val GlobalTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.WasmOnly
         output = ListGlobalsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readGlobals"
+    }
+
+    tool("audit_global_state_policy") {
+        summary = "Audit WebAssembly global state against a baseline and global-state policy."
+        guidance = """
+            Compare current globals with `baselinePath` and apply policy rules from `policyPath`.
+            Returns report-ready violations, added public globals, allowed public globals, request-limit facts, targeted global indices, and supporting evidence.
+        """
+        input = AuditGlobalStatePolicyInput
+        inputPattern = ToolInputPattern.PolicyWithBaselineAndLog
+        output = AuditGlobalStatePolicyResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.auditGlobalStatePolicy"
     }
 
     tool("get_globals_for_indices") {
