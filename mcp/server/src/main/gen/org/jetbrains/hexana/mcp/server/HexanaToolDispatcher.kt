@@ -80,6 +80,7 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   registerListDataTool(handlers)
   registerListDataSegmentsTool(handlers)
   registerPlanAbiBindingRegenerationTool(handlers)
+  registerRepairHostAdapterConfigTool(handlers)
   registerQueryArtifactsTool(handlers)
 }
 
@@ -6953,6 +6954,328 @@ private fun Server.registerPlanAbiBindingRegenerationTool(handlers: HexanaToolHa
     ),
   ))  {
     request: CallToolRequest -> handlers.planAbiBindingRegeneration(request.arguments)
+  }
+}
+
+private fun Server.registerRepairHostAdapterConfigTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "repair_host_adapter_config",
+    description = "Plan a minimal host adapter config repair from current WebAssembly imports.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("configPath", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a stale host adapter JSON config with active `module`, `imports`, and `entrypoint` fields."))
+        put("maxLength", JsonPrimitive(4_096))
+      })
+    },
+    required = listOf("configPath")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("module", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("path", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Current WebAssembly module path label when available."))
+          })
+          put("configPath", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Stale host adapter config path label when available."))
+          })
+          put("staleModule", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Module value parsed from the stale host adapter config."))
+          })
+          put("repairModule", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Module value used in the minimal repair config."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("repairModule"))
+        })
+        put("description", JsonPrimitive("Module and config file identity."))
+      })
+      put("requiredImports", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("additionalProperties", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("params", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Function parameter value types."))
+            })
+            put("results", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Function result value types."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("params"))
+            add(JsonPrimitive("results"))
+          })
+        })
+        put("description", JsonPrimitive("Current WebAssembly function import signature map keyed by qualified import name."))
+      })
+      put("requiredEntrypoint", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
+        })
+        put("properties", buildJsonObject {
+          put("export", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Exported function name selected as the adapter entrypoint."))
+          })
+          put("params", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+            })
+            put("description", JsonPrimitive("Entrypoint parameter value types."))
+          })
+          put("results", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+            })
+            put("description", JsonPrimitive("Entrypoint result value types."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("export"))
+          add(JsonPrimitive("params"))
+          add(JsonPrimitive("results"))
+        })
+        put("description", JsonPrimitive("Selected local exported function entrypoint required by the repair config."))
+      })
+      put("staleImports", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("additionalProperties", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("params", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Function parameter value types."))
+            })
+            put("results", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Function result value types."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("params"))
+            add(JsonPrimitive("results"))
+          })
+        })
+        put("description", JsonPrimitive("Import signature map parsed from the stale config."))
+      })
+      put("staleEntrypoint", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
+        })
+        put("properties", buildJsonObject {
+          put("export", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Exported function name selected as the adapter entrypoint."))
+          })
+          put("params", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+            })
+            put("description", JsonPrimitive("Entrypoint parameter value types."))
+          })
+          put("results", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+            })
+            put("description", JsonPrimitive("Entrypoint result value types."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("export"))
+          add(JsonPrimitive("params"))
+          add(JsonPrimitive("results"))
+        })
+        put("description", JsonPrimitive("Entrypoint parsed from the stale config."))
+      })
+      put("ignoredConfigFields", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Stale top-level config fields excluded from the minimal repair config."))
+      })
+      put("configMismatches", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("field", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Config field path that differs from the current WebAssembly adapter ABI."))
+            })
+            put("expectedJson", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Exact JSON value required by the current WebAssembly adapter ABI."))
+            })
+            put("actualJson", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Exact JSON value found in the stale config, or null when missing."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("field"))
+            add(JsonPrimitive("expectedJson"))
+            add(JsonPrimitive("actualJson"))
+          })
+        })
+        put("description", JsonPrimitive("Exact config mismatches using JSON strings for expected and actual values."))
+      })
+      put("repair_config", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("module", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Current WebAssembly module path for the repaired adapter config."))
+          })
+          put("imports", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("additionalProperties", buildJsonObject {
+              put("type", JsonPrimitive("object"))
+              put("properties", buildJsonObject {
+                put("params", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Function parameter value types."))
+                })
+                put("results", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Function result value types."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("params"))
+                add(JsonPrimitive("results"))
+              })
+            })
+            put("description", JsonPrimitive("Minimal import signature map keyed by qualified import name."))
+          })
+          put("entrypoint", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("object"))
+              add(JsonPrimitive("null"))
+            })
+            put("properties", buildJsonObject {
+              put("export", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Exported function name selected as the adapter entrypoint."))
+              })
+              put("params", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Entrypoint parameter value types."))
+              })
+              put("results", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Entrypoint result value types."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("export"))
+              add(JsonPrimitive("params"))
+              add(JsonPrimitive("results"))
+            })
+            put("description", JsonPrimitive("Selected local exported function entrypoint when one exists."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("module"))
+          add(JsonPrimitive("imports"))
+        })
+        put("description", JsonPrimitive("Minimal replacement host adapter config derived from the current WebAssembly ABI."))
+      })
+      put("warnings", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Non-fatal config parse warnings."))
+      })
+    },
+    required = listOf("module", "requiredImports", "staleImports", "ignoredConfigFields", "configMismatches", "repair_config", "warnings")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.repairHostAdapterConfig(request.arguments)
   }
 }
 

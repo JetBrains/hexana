@@ -8,6 +8,7 @@ import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.entrypoints.EntrypointPolicyResult
 import org.jetbrains.hexana.mcp.model.artifacts.QueryArtifactsResult
 import org.jetbrains.hexana.mcp.model.artifacts.PlanAbiBindingRegenerationResult
+import org.jetbrains.hexana.mcp.model.artifacts.RepairHostAdapterConfigResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
@@ -66,6 +67,13 @@ interface HexanaAnalysisService {
         bindingInput: TextInput
     ): PlanAbiBindingRegenerationResult {
         throw UnsupportedOperationException("planAbiBindingRegeneration is not implemented")
+    }
+
+    fun repairHostAdapterConfig(
+        input: WasmInput,
+        configInput: TextInput
+    ): RepairHostAdapterConfigResult {
+        throw UnsupportedOperationException("repairHostAdapterConfig is not implemented")
     }
 
     fun getEntrypointPolicy(input: WasmInput): EntrypointPolicyResult {
@@ -192,6 +200,19 @@ class DefaultHexanaAnalysisService(
             bindingText = binding.text,
             pathLabel = input.artifactPathLabel(),
             bindingPathLabel = bindingInput.artifactPathLabel()
+        )
+    }
+
+    override fun repairHostAdapterConfig(
+        input: WasmInput,
+        configInput: TextInput
+    ): RepairHostAdapterConfigResult {
+        val wasm = load(input)
+        val config = loadText(configInput)
+        return wasm.provider.repairHostAdapterConfig(
+            configText = config.text,
+            pathLabel = input.artifactPathLabel(),
+            configPathLabel = configInput.artifactPathLabel()
         )
     }
 

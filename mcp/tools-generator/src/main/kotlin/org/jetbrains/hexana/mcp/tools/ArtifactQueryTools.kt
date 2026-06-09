@@ -49,6 +49,12 @@ private val PlanAbiBindingRegenerationInput = WasmInputClass.with("PlanAbiBindin
         .maxLength(4096)
 }
 
+private val RepairHostAdapterConfigInput = WasmInputClass.with("RepairHostAdapterConfigInput") {
+    string("configPath")
+        .describe("Path to a stale host adapter JSON config with active `module`, `imports`, and `entrypoint` fields.")
+        .maxLength(4096)
+}
+
 private val ArtifactModuleResultClass = class_("ArtifactModuleResult", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
     string("source").describe("Module role: `current` or `baseline`.")
     nullable("path", of = string()).describe("Input path label for this module when the caller provided `path` or `baselinePath`.")
@@ -156,6 +162,66 @@ private val PlanAbiBindingRegenerationResultClass = class_(
     list("warnings", of = string()).describe("Non-fatal binding parse warnings.")
 }
 
+private val HostAdapterConfigModuleIdentityClass = class_(
+    "HostAdapterConfigModuleIdentity",
+    kotlinPackage = ARTIFACT_MODEL_PACKAGE,
+) {
+    nullable("path", of = string()).describe("Current WebAssembly module path label when available.")
+    nullable("configPath", of = string()).describe("Stale host adapter config path label when available.")
+    nullable("staleModule", of = string()).describe("Module value parsed from the stale host adapter config.")
+    string("repairModule").describe("Module value used in the minimal repair config.")
+}
+
+private val HostAdapterSignatureClass = class_("HostAdapterSignature", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
+    list("params", of = string()).describe("Function parameter value types.")
+    list("results", of = string()).describe("Function result value types.")
+}
+
+private val HostAdapterEntrypointClass = class_("HostAdapterEntrypoint", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
+    string("export").describe("Exported function name selected as the adapter entrypoint.")
+    list("params", of = string()).describe("Entrypoint parameter value types.")
+    list("results", of = string()).describe("Entrypoint result value types.")
+}
+
+private val HostAdapterConfigMismatchResultClass = class_(
+    "HostAdapterConfigMismatchResult",
+    kotlinPackage = ARTIFACT_MODEL_PACKAGE,
+) {
+    string("field").describe("Config field path that differs from the current WebAssembly adapter ABI.")
+    string("expectedJson").describe("Exact JSON value required by the current WebAssembly adapter ABI.")
+    string("actualJson").describe("Exact JSON value found in the stale config, or null when missing.")
+}
+
+private val HostAdapterRepairConfigClass = class_("HostAdapterRepairConfig", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
+    string("module").describe("Current WebAssembly module path for the repaired adapter config.")
+    map("imports", of = HostAdapterSignatureClass)
+        .describe("Minimal import signature map keyed by qualified import name.")
+    nullable("entrypoint", of = HostAdapterEntrypointClass)
+        .describe("Selected local exported function entrypoint when one exists.")
+}
+
+private val RepairHostAdapterConfigResultClass = class_(
+    "RepairHostAdapterConfigResult",
+    kotlinPackage = ARTIFACT_MODEL_PACKAGE,
+) {
+    embed("module", of = HostAdapterConfigModuleIdentityClass).describe("Module and config file identity.")
+    map("requiredImports", of = HostAdapterSignatureClass)
+        .describe("Current WebAssembly function import signature map keyed by qualified import name.")
+    nullable("requiredEntrypoint", of = HostAdapterEntrypointClass)
+        .describe("Selected local exported function entrypoint required by the repair config.")
+    map("staleImports", of = HostAdapterSignatureClass)
+        .describe("Import signature map parsed from the stale config.")
+    nullable("staleEntrypoint", of = HostAdapterEntrypointClass)
+        .describe("Entrypoint parsed from the stale config.")
+    list("ignoredConfigFields", of = string())
+        .describe("Stale top-level config fields excluded from the minimal repair config.")
+    list("configMismatches", of = HostAdapterConfigMismatchResultClass)
+        .describe("Exact config mismatches using JSON strings for expected and actual values.")
+    embed("repairConfig", of = HostAdapterRepairConfigClass).serialName("repair_config")
+        .describe("Minimal replacement host adapter config derived from the current WebAssembly ABI.")
+    list("warnings", of = string()).describe("Non-fatal config parse warnings.")
+}
+
 val ArtifactQueryTools = tools {
     tool("plan_abi_binding_regeneration") {
         summary = "Plan ABI binding regeneration from current WebAssembly imports and exports."
@@ -168,6 +234,19 @@ val ArtifactQueryTools = tools {
         inputPattern = ToolInputPattern.WasmWithBinding
         output = PlanAbiBindingRegenerationResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.planAbiBindingRegeneration"
+    }
+
+    tool("repair_host_adapter_config") {
+        summary = "Plan a minimal host adapter config repair from current WebAssembly imports."
+        guidance = """
+            Compare the current WebAssembly host adapter ABI against a stale JSON config and return a report-ready repair plan.
+            The result includes current required imports, the selected entrypoint, parsed stale config fields, exact JSON mismatches, ignored stale top-level fields, and a minimal `repair_config` object.
+            Use `repair_config` directly as the replacement adapter config; it intentionally contains only active `module`, `imports`, and `entrypoint` fields.
+        """
+        input = RepairHostAdapterConfigInput
+        inputPattern = ToolInputPattern.WasmWithConfig
+        output = RepairHostAdapterConfigResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.repairHostAdapterConfig"
     }
 
     tool("query_artifacts") {

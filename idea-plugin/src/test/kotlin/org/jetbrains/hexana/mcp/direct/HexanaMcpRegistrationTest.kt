@@ -20,5 +20,6 @@ class HexanaMcpRegistrationTest : HexanaMcpToolsetDirectTestBase() {
         assertTrue("list_types" in names)
         assertTrue("list_element_segments" in names)
         assertTrue("list_data_segments" in names)
+        assertTrue("repair_host_adapter_config" in names)
     }
 }

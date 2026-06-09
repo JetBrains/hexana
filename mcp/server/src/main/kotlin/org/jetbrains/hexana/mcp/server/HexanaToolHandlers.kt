@@ -54,6 +54,15 @@ class HexanaToolHandlers(
         }
     }
 
+    fun repairHostAdapterConfig(arguments: JsonObject?): CallToolResult {
+        return execute("repair_host_adapter_config") {
+            analysisService.repairHostAdapterConfig(
+                input = wasmInput(arguments),
+                configInput = TextInput.FilePath(arguments.requireNonBlankString("configPath"))
+            )
+        }
+    }
+
     fun summarizeModule(arguments: JsonObject?): CallToolResult {
         return execute("summarize_module") {
             analysisService.summarizeModule(wasmInput(arguments))

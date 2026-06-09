@@ -62,6 +62,7 @@ class HexanaMcpServerSchemaTest {
                 "plan_abi_binding_regeneration",
                 "query_artifacts",
                 "repair_entrypoint_policy",
+                "repair_host_adapter_config",
                 "resolve_function_signature",
                 "search_exports",
                 "search_functions_by_name",
@@ -182,6 +183,25 @@ class HexanaMcpServerSchemaTest {
             .getValue("additionalProperties").jsonObject
         assertTrue("results" in replacementExportValue.getValue("properties").jsonObject)
         assertFalse("return" in replacementExportValue.getValue("properties").jsonObject)
+    }
+
+    @Test
+    fun hostAdapterRepairPlannerSchemaUsesRequiredConfigPathAndRepairConfig() {
+        val tool = createHexanaMcpServer()
+            .tools
+            .getValue("repair_host_adapter_config")
+            .tool
+
+        val input = tool.inputSchema.properties?.jsonObject ?: error("Missing host adapter planner input schema properties")
+        assertEquals("string", input.getValue("configPath").jsonObject.getValue("type").jsonPrimitive.content)
+        assertEquals(listOf("configPath"), tool.inputSchema.required)
+
+        val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing host adapter planner output schema properties")
+        val repairConfig = output.getValue("repair_config").jsonObject
+            .getValue("properties").jsonObject
+        assertTrue("module" in repairConfig)
+        assertTrue("imports" in repairConfig)
+        assertTrue("entrypoint" in repairConfig)
     }
 
     private fun queryArtifactsInputSchema(): JsonObject {

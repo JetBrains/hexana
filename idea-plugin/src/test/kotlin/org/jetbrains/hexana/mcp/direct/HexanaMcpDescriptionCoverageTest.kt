@@ -88,6 +88,17 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
         assertFalse(descriptor.description.contains("task"))
     }
 
+    fun testRepairHostAdapterConfigDescriptionContent() {
+        val descriptor = descriptor("repair_host_adapter_config")
+
+        assertContains(descriptor.description, "host adapter config repair")
+        assertContains(descriptor.description, "current WebAssembly host adapter ABI")
+        assertContains(descriptor.description, "repair_config")
+        assertContains(inputFieldDescription(descriptor, "configPath"), "stale host adapter JSON config")
+        assertFalse(descriptor.description.contains("broken_host_adapter"))
+        assertFalse(descriptor.description.contains("task"))
+    }
+
     // TODO(hexana-72): Output-field descriptions are currently missing on the generated schemas
     // (result data classes in mcp/core/model carry no @McpDescription). Once those are populated,
     // mirror the input snapshots here, e.g.:

@@ -479,6 +479,7 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         val mismatches = json.parseToJsonElement(summary.attributeValue("configMismatchesJson")!!).jsonArray
         assertEquals(
             setOf(
+                "module",
                 "entrypoint.export",
                 "entrypoint.params",
                 "imports.host.log_event.params",
@@ -499,6 +500,142 @@ class HexanaMcpArtifactQueryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(listOf("i32"), imports.obj("host.log_event").array("params").map { it.textValue() })
         assertEquals(listOf("i64"), imports.obj("host.read_config").array("results").map { it.textValue() })
         assertEquals(listOf("i32", "i64"), imports.obj("host.reserve_inventory").array("params").map { it.textValue() })
+    }
+
+    fun testRepairHostAdapterConfigReportsRemovedAndRenamedImports() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/artifacts/host-adapter-renamed-import.wasm",
+            """
+            (module
+              (import "host" "current_name" (func ${'$'}current_name (param i32) (result i32)))
+              (import "host" "kept" (func ${'$'}kept (param i64)))
+              (func (export "run") (result i32)
+                i32.const 1))
+            """.trimIndent()
+        )
+        val config = createTextFixture(
+            "fixtures/direct/artifacts/host-adapter-renamed-config.json",
+            """
+            {
+              "module": "${fixture.projectRelativePath}",
+              "imports": {
+                "host.kept": {"params": ["i64"], "results": []},
+                "host.old_name": {"params": ["i32"], "results": ["i32"]}
+              },
+              "entrypoint": {"export": "run", "params": [], "results": ["i32"]}
+            }
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "repair_host_adapter_config",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("configPath", JsonPrimitive(config.projectRelativePath))
+            }
+        )
+
+        assertEquals(fixture.projectRelativePath, result.obj("module").text("repairModule"))
+        val mismatches = result.array("configMismatches")
+        assertEquals(
+            listOf("imports.host.current_name", "imports.host.old_name"),
+            mismatches.map { it.jsonObject.text("field") }
+        )
+        assertEquals("null", mismatches.obj(0).text("actualJson"))
+        assertEquals("null", mismatches.obj(1).text("expectedJson"))
+        val repairConfig = result.obj("repair_config")
+        assertEquals(fixture.projectRelativePath, repairConfig.text("module"))
+        assertEquals(
+            listOf("host.current_name", "host.kept"),
+            repairConfig.obj("imports").keys.sorted()
+        )
+    }
+
+    fun testRepairHostAdapterConfigDropsStaleLegacySections() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/artifacts/host-adapter-legacy-config.wasm",
+            """
+            (module
+              (import "host" "read_config" (func ${'$'}read_config (param i32) (result i64)))
+              (func (export "process_order") (param i32) (result i32)
+                i32.const 1))
+            """.trimIndent()
+        )
+        val config = createTextFixture(
+            "fixtures/direct/artifacts/host-adapter-legacy-config.json",
+            """
+            {
+              "module": "dist/legacy/order_adapter.wasm",
+              "profile": "orders-v1",
+              "imports": {
+                "host.read_config": {"params": [], "results": ["i32"]}
+              },
+              "entrypoint": {"export": "run_order", "params": [], "results": ["i32"]},
+              "rollback_entrypoint": {"export": "rollback_order", "params": [], "results": []},
+              "legacy_profiles": [{"profile": "orders-v0"}],
+              "notes": ["do not copy stale sections"]
+            }
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "repair_host_adapter_config",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("configPath", JsonPrimitive(config.projectRelativePath))
+            }
+        )
+
+        assertEquals(
+            listOf("legacy_profiles", "notes", "profile", "rollback_entrypoint"),
+            result.array("ignoredConfigFields").map { it.textValue() }
+        )
+        val repairConfig = result.obj("repair_config")
+        assertFalse("profile must not be copied into repair_config", "profile" in repairConfig)
+        assertFalse("rollback_entrypoint must not be copied into repair_config", "rollback_entrypoint" in repairConfig)
+        assertFalse("legacy_profiles must not be copied into repair_config", "legacy_profiles" in repairConfig)
+        assertFalse("notes must not be copied into repair_config", "notes" in repairConfig)
+        assertEquals("process_order", repairConfig.obj("entrypoint").text("export"))
+        assertEquals(listOf("i32"), repairConfig.obj("imports").obj("host.read_config").array("params").map { it.textValue() })
+        assertEquals(listOf("i64"), repairConfig.obj("imports").obj("host.read_config").array("results").map { it.textValue() })
+    }
+
+    fun testRepairHostAdapterConfigReturnsNoMismatchesForValidConfig() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/artifacts/host-adapter-valid-config.wasm",
+            """
+            (module
+              (import "host" "log" (func ${'$'}log (param i32)))
+              (func (export "run") (param i32)
+                local.get 0
+                call ${'$'}log))
+            """.trimIndent()
+        )
+        val config = createTextFixture(
+            "fixtures/direct/artifacts/host-adapter-valid-config.json",
+            """
+            {
+              "module": "${fixture.projectRelativePath}",
+              "imports": {
+                "host.log": {"params": ["i32"], "results": []}
+              },
+              "entrypoint": {"export": "run", "params": ["i32"], "results": []}
+            }
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "repair_host_adapter_config",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("configPath", JsonPrimitive(config.projectRelativePath))
+            }
+        )
+
+        assertEquals(0, result.array("configMismatches").size)
+        assertEquals(0, result.array("ignoredConfigFields").size)
+        assertEquals(fixture.projectRelativePath, result.obj("repair_config").text("module"))
+        assertEquals("run", result.obj("repair_config").obj("entrypoint").text("export"))
     }
 
     fun testQueryArtifactsEntrypointEffectsScansExportedMemoryWritesAndHostCalls() {

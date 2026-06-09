@@ -2,17 +2,6 @@ package org.jetbrains.hexana.mcp.query
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.putJsonObject
 import org.jetbrains.hexana.mcp.DataEntry
 import org.jetbrains.hexana.mcp.GeneralFunctionEntry
 import org.jetbrains.hexana.mcp.ParameterSignature
@@ -286,10 +275,6 @@ fun WasmBinaryProvider.readArtifactQuery(
     )
 }
 
-private val hostAdapterConfigJson = Json {
-    ignoreUnknownKeys = true
-}
-
 private fun WasmBinaryProvider.findRecords(
     entityTypes: Set<String>,
     terms: List<String>,
@@ -437,43 +422,14 @@ private fun WasmBinaryProvider.hostAdapterRepairRecords(
     configPathLabel: String?,
     warnings: MutableList<String>
 ): List<ArtifactRecordResult> {
-    val functions = listFunctionEntries()
-    val functionsByIndex = functions.associateBy { it.funcidx }
-    val importFacts = functions
-        .filter { it.import != null }
-        .map { it.toHostAdapterRequiredImport() }
-    val entrypointCandidates = readExports().exports
-        .filter { it.kind.kindName() == "function" }
-        .mapNotNull { export ->
-            val function = functionsByIndex[export.externIndex.toInt()] ?: return@mapNotNull null
-            if (function.import != null) return@mapNotNull null
-            HostAdapterEntrypointFact(
-                export = export.name,
-                params = function.signature?.params.orEmpty(),
-                results = function.signature?.ret.orEmpty()
-            )
-        }
-        .sortedBy { it.export }
-    val config = configText?.let { parseHostAdapterConfig(it, warnings) }
-    if (configText == null) {
-        warnings += "`host_adapter_repair` can compare stale adapter JSON when `configPath` points at the active host adapter config."
-    }
-    val requiredEntrypoint = selectHostAdapterEntrypoint(
-        candidates = entrypointCandidates,
+    val plan = repairHostAdapterConfigOrCurrentOnly(
+        configText = configText,
+        pathLabel = pathLabel,
+        configPathLabel = configPathLabel,
         terms = terms,
-        configured = config?.entrypoint?.export
+        warnings = warnings
     )
-    val mismatches = hostAdapterConfigMismatches(
-        requiredImports = importFacts,
-        requiredEntrypoint = requiredEntrypoint,
-        config = config
-    )
-    val repairConfig = buildHostAdapterRepairConfig(
-        module = pathLabel ?: config?.module.orEmpty(),
-        imports = importFacts,
-        entrypoint = requiredEntrypoint
-    )
-    val mismatchRecords = mismatches.map { mismatch ->
+    val mismatchRecords = plan.configMismatches.map { mismatch ->
         ArtifactRecordResult(
             id = "host-adapter-repair:mismatch:${mismatch.field}",
             entityType = "config_mismatch",
@@ -484,8 +440,8 @@ private fun WasmBinaryProvider.hostAdapterRepairRecords(
             summary = "Host adapter config `${mismatch.field}` differs from the current Wasm ABI.",
             attributes = buildList {
                 add("field", mismatch.field)
-                add("expectedJson", encodeHexanaJson(mismatch.expected))
-                add("actualJson", encodeHexanaJson(mismatch.actual))
+                add("expectedJson", mismatch.expectedJson)
+                add("actualJson", mismatch.actualJson)
             }.toAttributes()
         )
     }
@@ -496,21 +452,22 @@ private fun WasmBinaryProvider.hostAdapterRepairRecords(
             status = "current",
             source = "current",
             kind = "host_adapter_repair",
-            summary = "Host adapter repair has ${importFacts.size} required imports, ${entrypointCandidates.size} local entrypoint candidates, and ${mismatches.size} config mismatches",
+            summary = "Host adapter repair has ${plan.requiredImports.size} required imports, ${plan.requiredEntrypoint?.let { 1 } ?: 0} selected entrypoint, and ${plan.configMismatches.size} config mismatches",
             attributes = buildList {
                 add("repairSchema", "Minimal repair_config contains only `module`, `imports`, and `entrypoint`; stale fields such as `profile`, `rollback_entrypoint`, `legacy_profiles`, and `notes` are not part of the repair output.")
                 pathLabel?.let { add("module", it) }
                 configPathLabel?.let { add("configPath", it) }
-                add("requiredImports", importFacts.size.toString())
-                add("entrypointCandidates", entrypointCandidates.size.toString())
-                requiredEntrypoint?.let { add("requiredEntrypoint", it.export) }
-                config?.ignoredTopLevelFields
+                add("requiredImports", plan.requiredImports.size.toString())
+                plan.requiredEntrypoint?.let { add("requiredEntrypoint", it.export) }
+                plan.ignoredConfigFields
                     ?.takeIf { it.isNotEmpty() }
                     ?.let { add("ignoredConfigFields", it.joinToString(",")) }
-                addJsonFacts("requiredImportsJson", importFacts)
-                add("requiredEntrypointJson", encodeHexanaJson(requiredEntrypoint))
-                add("configMismatchesJson", encodeHexanaJson(mismatches))
-                add("repairConfigJson", encodeHexanaJson(repairConfig))
+                addJsonFacts("requiredImportsJson", plan.requiredImports.map { (name, signature) ->
+                    HostAdapterRequiredImportFact(name, signature.params, signature.results)
+                })
+                add("requiredEntrypointJson", encodeHexanaJson(plan.requiredEntrypoint))
+                add("configMismatchesJson", encodeHexanaJson(plan.configMismatches))
+                add("repairConfigJson", encodeHexanaJson(plan.repairConfig))
             }.toAttributes()
         )
     ) + mismatchRecords
@@ -2004,15 +1961,6 @@ private fun GeneralFunctionEntry.toFunctionImportFact(): FunctionImportFact {
     )
 }
 
-private fun GeneralFunctionEntry.toHostAdapterRequiredImport(): HostAdapterRequiredImport {
-    val import = requireNotNull(import)
-    return HostAdapterRequiredImport(
-        name = "${import.module}.${import.name}",
-        params = signature?.params.orEmpty(),
-        results = signature?.ret.orEmpty()
-    )
-}
-
 private fun GeneralFunctionEntry.toFunctionExportFact(exportName: String): FunctionExportFact {
     return FunctionExportFact(
         export = exportName,
@@ -3136,136 +3084,6 @@ private fun AbiBindingMismatchResult.toAbiBindingMismatchRecord(): ArtifactRecor
     )
 }
 
-private fun parseHostAdapterConfig(text: String, warnings: MutableList<String>): ParsedHostAdapterConfig? {
-    val root = runCatching {
-        hostAdapterConfigJson.parseToJsonElement(text).jsonObject
-    }.getOrElse { error ->
-        warnings += "`configPath` did not contain parseable JSON: ${error.message ?: error::class.simpleName.orEmpty()}."
-        return null
-    }
-    val knownFields = setOf("module", "imports", "entrypoint")
-    val module = root["module"]?.jsonPrimitive?.content
-    val imports = root["imports"]?.jsonObject?.mapValues { (_, value) ->
-        parseHostAdapterSignature(value.jsonObject)
-    }.orEmpty()
-    val entrypoint = root["entrypoint"]?.jsonObject?.let { entrypoint ->
-        HostAdapterEntrypointFact(
-            export = entrypoint["export"]?.jsonPrimitive?.content.orEmpty(),
-            params = entrypoint["params"].stringList(),
-            results = entrypoint["results"].stringList()
-        )
-    }
-    return ParsedHostAdapterConfig(
-        module = module,
-        imports = imports,
-        entrypoint = entrypoint,
-        ignoredTopLevelFields = root.keys.filter { it !in knownFields }.sorted()
-    )
-}
-
-private fun parseHostAdapterSignature(obj: JsonObject): ArtifactFunctionSignature =
-    ArtifactFunctionSignature(
-        params = obj["params"].stringList(),
-        results = obj["results"].stringList()
-    )
-
-private fun JsonElement?.stringList(): List<String> {
-    val array = this as? kotlinx.serialization.json.JsonArray ?: return emptyList()
-    return array.mapNotNull { element ->
-        element.jsonPrimitive.content
-    }
-}
-
-private fun selectHostAdapterEntrypoint(
-    candidates: List<HostAdapterEntrypointFact>,
-    terms: List<String>,
-    configured: String?
-): HostAdapterEntrypointFact? {
-    if (terms.isNotEmpty()) {
-        candidates.firstOrNull { candidate ->
-            terms.any { term -> candidate.export.lowercase().contains(term) }
-        }?.let { return it }
-    }
-    configured?.let { configuredName ->
-        candidates.firstOrNull { it.export == configuredName }?.let { return it }
-    }
-    return candidates.singleOrNull() ?: candidates.firstOrNull()
-}
-
-private fun hostAdapterConfigMismatches(
-    requiredImports: List<HostAdapterRequiredImport>,
-    requiredEntrypoint: HostAdapterEntrypointFact?,
-    config: ParsedHostAdapterConfig?
-): List<HostAdapterConfigMismatch> {
-    if (config == null) return emptyList()
-    val mismatches = mutableListOf<HostAdapterConfigMismatch>()
-    requiredEntrypoint?.let { expected ->
-        val actual = config.entrypoint
-        mismatches.addIfDifferent("entrypoint.export", JsonPrimitive(expected.export), actual?.export.toJsonElement())
-        mismatches.addIfDifferent("entrypoint.params", expected.params.toJsonArray(), actual?.params.toJsonArrayOrNull())
-        mismatches.addIfDifferent("entrypoint.results", expected.results.toJsonArray(), actual?.results.toJsonArrayOrNull())
-    }
-    requiredImports.forEach { expected ->
-        val actual = config.imports[expected.name]
-        mismatches.addIfDifferent("imports.${expected.name}.params", expected.params.toJsonArray(), actual?.params.toJsonArrayOrNull())
-        mismatches.addIfDifferent("imports.${expected.name}.results", expected.results.toJsonArray(), actual?.results.toJsonArrayOrNull())
-    }
-    return mismatches
-}
-
-private fun MutableList<HostAdapterConfigMismatch>.addIfDifferent(
-    field: String,
-    expected: JsonElement,
-    actual: JsonElement?
-) {
-    val actualOrNull = actual ?: JsonNull
-    if (expected != actualOrNull) {
-        add(HostAdapterConfigMismatch(field = field, expected = expected, actual = actualOrNull))
-    }
-}
-
-private fun String?.toJsonElement(): JsonElement =
-    this?.let { JsonPrimitive(it) } ?: JsonNull
-
-private fun List<String>?.toJsonArrayOrNull(): JsonElement =
-    this?.toJsonArray() ?: JsonNull
-
-private fun List<String>.toJsonArray(): JsonElement =
-    kotlinx.serialization.json.buildJsonArray {
-        forEach { add(JsonPrimitive(it)) }
-    }
-
-private fun buildHostAdapterRepairConfig(
-    module: String,
-    imports: List<HostAdapterRequiredImport>,
-    entrypoint: HostAdapterEntrypointFact?
-): JsonObject = buildJsonObject {
-    put("module", module)
-    putJsonObject("imports") {
-        imports.forEach { import ->
-            putJsonObject(import.name) {
-                putJsonArray("params") {
-                    import.params.forEach { add(JsonPrimitive(it)) }
-                }
-                putJsonArray("results") {
-                    import.results.forEach { add(JsonPrimitive(it)) }
-                }
-            }
-        }
-    }
-    entrypoint?.let {
-        putJsonObject("entrypoint") {
-            put("export", it.export)
-            putJsonArray("params") {
-                it.params.forEach { param -> add(JsonPrimitive(param)) }
-            }
-            putJsonArray("results") {
-                it.results.forEach { result -> add(JsonPrimitive(result)) }
-            }
-        }
-    }
-}
-
 private fun AbiBindingSignature?.toArtifactSignature(): ArtifactSignatureResult? =
     this?.let { ArtifactSignatureResult(params = it.params, results = it.results) }
 
@@ -3340,31 +3158,10 @@ private data class ArtifactFunctionSignature(
 )
 
 @Serializable
-private data class HostAdapterRequiredImport(
+private data class HostAdapterRequiredImportFact(
     val name: String,
     val params: List<String>,
     val results: List<String>
-)
-
-@Serializable
-private data class HostAdapterEntrypointFact(
-    val export: String,
-    val params: List<String>,
-    val results: List<String>
-)
-
-@Serializable
-private data class HostAdapterConfigMismatch(
-    val field: String,
-    val expected: JsonElement,
-    val actual: JsonElement
-)
-
-private data class ParsedHostAdapterConfig(
-    val module: String?,
-    val imports: Map<String, ArtifactFunctionSignature>,
-    val entrypoint: HostAdapterEntrypointFact?,
-    val ignoredTopLevelFields: List<String>
 )
 
 @Serializable

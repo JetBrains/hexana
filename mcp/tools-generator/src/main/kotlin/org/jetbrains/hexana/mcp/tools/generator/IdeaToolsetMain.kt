@@ -145,6 +145,8 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             code.addStatement("val baselinePath = args.requireStringArgument(%S)", "baselinePath")
         ToolInputPattern.WasmWithBinding ->
             code.addStatement("val bindingPath = args.requireStringArgument(%S)", "bindingPath")
+        ToolInputPattern.WasmWithConfig ->
+            code.addStatement("val configPath = args.requireStringArgument(%S)", "configPath")
         ToolInputPattern.FunctionPage -> {
             val offset = inputField(spec.input, "offset").defaultOrError<Int>()
             val limit = inputField(spec.input, "limit").defaultOrError<Int>()
@@ -278,12 +280,19 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             "val result = provider.%M(bindingText = bindingText, pathLabel = path, bindingPathLabel = bindingPath)",
             handlerMember,
         )
+    } else if (spec.inputPattern == ToolInputPattern.WasmWithConfig) {
+        code.addStatement("val configText = %M(configPath)", REQUIRE_TEXT_FILE)
+        code.addStatement(
+            "val result = provider.%M(configText = configText, pathLabel = path, configPathLabel = configPath)",
+            handlerMember,
+        )
     } else {
         val callArgs: String = when (spec.inputPattern) {
             ToolInputPattern.WasmOnly -> "()"
             ToolInputPattern.WasmPathLabel -> "(pathLabel = path)"
             ToolInputPattern.WasmWithBaseline -> error("Handled above")
             ToolInputPattern.WasmWithBinding -> error("Handled above")
+            ToolInputPattern.WasmWithConfig -> error("Handled above")
             ToolInputPattern.FunctionPage -> "(offset, limit)"
             ToolInputPattern.Funcidx -> "(funcidx)"
             ToolInputPattern.FunctionNameSearch -> "(query, limit)"
@@ -347,6 +356,7 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
         ToolInputPattern.WasmPathLabel -> emptyList()
         ToolInputPattern.WasmWithBaseline -> listOf(inputField(spec.input, "baselinePath"))
         ToolInputPattern.WasmWithBinding -> listOf(inputField(spec.input, "bindingPath"))
+        ToolInputPattern.WasmWithConfig -> listOf(inputField(spec.input, "configPath"))
         ToolInputPattern.FunctionPage -> listOf(inputField(spec.input, "offset"), inputField(spec.input, "limit"))
         ToolInputPattern.Funcidx -> listOf(inputField(spec.input, "funcidx"))
         ToolInputPattern.FunctionNameSearch -> listOf(inputField(spec.input, "query"), inputField(spec.input, "limit"))

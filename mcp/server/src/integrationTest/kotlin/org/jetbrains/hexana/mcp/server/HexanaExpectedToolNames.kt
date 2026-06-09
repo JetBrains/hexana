@@ -32,6 +32,7 @@ internal val EXPECTED_HEXANA_TOOL_NAMES = listOf(
     "list_value_types",
     "query_artifacts",
     "repair_entrypoint_policy",
+    "repair_host_adapter_config",
     "resolve_function_signature",
     "search_exports",
     "search_functions_by_name",
