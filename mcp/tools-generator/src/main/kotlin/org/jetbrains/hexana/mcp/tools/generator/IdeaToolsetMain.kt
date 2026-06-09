@@ -199,6 +199,11 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             code.addStatement("val detail = args.optionalStringArgument(%S) ?: %S", "detail", detail)
             code.addStatement("val maxBytes = args.optionalIntArgument(%S) ?: %L", "maxBytes", maxBytes)
         }
+        ToolInputPattern.MemoryContract -> {
+            code.addStatement("val baselinePath = args.requireStringArgument(%S)", "baselinePath")
+            code.addStatement("val policyPath = args.requireStringArgument(%S)", "policyPath")
+            code.addStatement("val logPath = args.optionalStringArgument(%S)", "logPath")
+        }
         ToolInputPattern.RuntimeCompatibility -> {
             code.addStatement("val runtime = args.requireStringArgument(%S)", "runtime")
             code.addStatement("val version = args.optionalStringArgument(%S)", "version")
@@ -243,6 +248,18 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
                 ")",
             handlerMember,
         )
+    } else if (spec.inputPattern == ToolInputPattern.MemoryContract) {
+        code.addStatement(
+            "val baselineProvider = %M(baselinePath).%M()",
+            REQUIRE_WASM_FILE,
+            REQUIRE_CORE_WASM_BINARY_PROVIDER,
+        )
+        code.addStatement("val policyText = %M(policyPath)", REQUIRE_TEXT_FILE)
+        code.addStatement("val logText = logPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
+        code.addStatement(
+            "val result = provider.%M(baseline = baselineProvider, policyText = policyText, logText = logText)",
+            handlerMember,
+        )
     } else if (spec.inputPattern == ToolInputPattern.WasmWithBaseline) {
         code.addStatement(
             "val baselineProvider = %M(baselinePath).%M()",
@@ -266,6 +283,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             is ToolInputPattern.ClosedRange -> "(range)"
             ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
             ToolInputPattern.ArtifactQuery -> error("Handled above")
+            ToolInputPattern.MemoryContract -> error("Handled above")
             ToolInputPattern.RuntimeCompatibility -> "(runtime, version)"
         }
         code.addStatement("val result = provider.%M$callArgs", handlerMember)
@@ -344,6 +362,11 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
             inputField(spec.input, "limit"),
             inputField(spec.input, "detail"),
             inputField(spec.input, "maxBytes"),
+        )
+        ToolInputPattern.MemoryContract -> listOf(
+            inputField(spec.input, "baselinePath"),
+            inputField(spec.input, "policyPath"),
+            inputField(spec.input, "logPath"),
         )
         ToolInputPattern.RuntimeCompatibility -> listOf(
             inputField(spec.input, "runtime"),

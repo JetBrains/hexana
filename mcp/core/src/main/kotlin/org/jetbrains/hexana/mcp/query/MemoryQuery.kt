@@ -31,7 +31,8 @@ private fun MemoryRecord.toMemoryResult(): MemoryResult {
         memoryIdx = memoryIdx,
         limit = limit.toMemoryLimitsResult(),
         importInfo = import?.let { MemoryImportResult(module = it.module, name = it.name) },
-        definedIn = definedIn
+        definedIn = definedIn,
+        exportedAs = exportedAs
     )
 }
 

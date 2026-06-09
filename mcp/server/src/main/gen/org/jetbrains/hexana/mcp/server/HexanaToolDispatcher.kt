@@ -67,6 +67,7 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers) {
   registerGetInstructionsForFunctionsTool(handlers)
   registerListMemoryTool(handlers)
   registerGetMemoryForIndicesTool(handlers)
+  registerCheckMemoryContractTool(handlers)
   registerListGlobalsTool(handlers)
   registerGetGlobalsForIndicesTool(handlers)
   registerListTypesTool(handlers)
@@ -3593,11 +3594,19 @@ private fun Server.registerListMemoryTool(handlers: HexanaToolHandlers) {
               put("type", JsonPrimitive("string"))
               put("description", JsonPrimitive("Section the memory is declared in."))
             })
+            put("exportedAs", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Memory export names that point at this memory index."))
+            })
           })
           put("required", buildJsonArray {
             add(JsonPrimitive("memoryIdx"))
             add(JsonPrimitive("limit"))
             add(JsonPrimitive("definedIn"))
+            add(JsonPrimitive("exportedAs"))
           })
         })
         put("description", JsonPrimitive("Imported and defined memories."))
@@ -3736,11 +3745,19 @@ private fun Server.registerGetMemoryForIndicesTool(handlers: HexanaToolHandlers)
               put("type", JsonPrimitive("string"))
               put("description", JsonPrimitive("Section the memory is declared in."))
             })
+            put("exportedAs", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Memory export names that point at this memory index."))
+            })
           })
           put("required", buildJsonArray {
             add(JsonPrimitive("memoryIdx"))
             add(JsonPrimitive("limit"))
             add(JsonPrimitive("definedIn"))
+            add(JsonPrimitive("exportedAs"))
           })
         })
         put("description", JsonPrimitive("Imported and defined memories."))
@@ -3755,6 +3772,376 @@ private fun Server.registerGetMemoryForIndicesTool(handlers: HexanaToolHandlers)
     ),
   ))  {
     request: CallToolRequest -> handlers.getMemoryForIndices(request.arguments)
+  }
+}
+
+private fun Server.registerCheckMemoryContractTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "check_memory_contract",
+    description = "Check current memory declarations against a baseline and memory policy.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("baselinePath", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to the baseline `.wasm` file to compare against the current module."))
+        put("maxLength", JsonPrimitive(4_096))
+      })
+      put("policyPath", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a memory policy JSON file with module-wide limits and optional per-memory overrides."))
+        put("maxLength", JsonPrimitive(4_096))
+      })
+      put("logPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional runtime log path to validate as readable input and attach log-related warnings."))
+        put("maxLength", JsonPrimitive(4_096))
+      })
+    },
+    required = listOf("baselinePath", "policyPath")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("memories", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("memoryIdx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Index in the unified memory index space."))
+            })
+            put("exportedAs", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Memory export names that point at this memory index."))
+            })
+            put("declaredLimits", buildJsonObject {
+              put("type", JsonPrimitive("object"))
+              put("properties", buildJsonObject {
+                put("addressType", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
+                })
+                put("min", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Minimum number of pages."))
+                })
+                put("max", buildJsonObject {
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("integer"))
+                    add(JsonPrimitive("null"))
+                  })
+                  put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
+                })
+                put("hasMax", buildJsonObject {
+                  put("type", JsonPrimitive("boolean"))
+                  put("description", JsonPrimitive("True when an explicit upper bound was declared."))
+                })
+                put("range", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Human-readable range such as `1..ε`."))
+                })
+                put("flag", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Raw limits flag byte as hex (`0x00`, `0x01`, etc.)."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("addressType"))
+                add(JsonPrimitive("min"))
+                add(JsonPrimitive("hasMax"))
+                add(JsonPrimitive("range"))
+                add(JsonPrimitive("flag"))
+              })
+              put("description", JsonPrimitive("Current declared memory limits."))
+            })
+            put("previousLimits", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("addressType", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
+                })
+                put("min", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Minimum number of pages."))
+                })
+                put("max", buildJsonObject {
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("integer"))
+                    add(JsonPrimitive("null"))
+                  })
+                  put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
+                })
+                put("hasMax", buildJsonObject {
+                  put("type", JsonPrimitive("boolean"))
+                  put("description", JsonPrimitive("True when an explicit upper bound was declared."))
+                })
+                put("range", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Human-readable range such as `1..ε`."))
+                })
+                put("flag", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Raw limits flag byte as hex (`0x00`, `0x01`, etc.)."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("addressType"))
+                add(JsonPrimitive("min"))
+                add(JsonPrimitive("hasMax"))
+                add(JsonPrimitive("range"))
+                add(JsonPrimitive("flag"))
+              })
+              put("description", JsonPrimitive("Baseline memory limits for the same index, when available."))
+            })
+            put("policyLimits", buildJsonObject {
+              put("type", JsonPrimitive("object"))
+              put("properties", buildJsonObject {
+                put("maxMin", buildJsonObject {
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("integer"))
+                    add(JsonPrimitive("null"))
+                  })
+                  put("description", JsonPrimitive("Maximum allowed declared minimum pages."))
+                })
+                put("maxMax", buildJsonObject {
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("integer"))
+                    add(JsonPrimitive("null"))
+                  })
+                  put("description", JsonPrimitive("Maximum allowed declared maximum pages."))
+                })
+                put("requireMax", buildJsonObject {
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("boolean"))
+                    add(JsonPrimitive("null"))
+                  })
+                  put("description", JsonPrimitive("True when an explicit maximum must be declared."))
+                })
+              })
+              put("description", JsonPrimitive("Effective policy limits after per-memory overrides."))
+            })
+            put("violations", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("memoryIdx", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Memory index whose contract check produced this violation."))
+                  })
+                  put("exportedAs", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Memory export names that point at this memory index."))
+                  })
+                  put("kind", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Stable violation code, for example `min_increased`, `max_decreased`, or `policy_max_exceeded`."))
+                  })
+                  put("field", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Limit field involved in the violation: `min`, `max`, or `hasMax`."))
+                  })
+                  put("previous", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Previous baseline value for diff violations."))
+                  })
+                  put("declared", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Current declared value."))
+                  })
+                  put("policy", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Policy value involved in the violation."))
+                  })
+                  put("message", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Report-ready explanation of the violation."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("memoryIdx"))
+                  add(JsonPrimitive("exportedAs"))
+                  add(JsonPrimitive("kind"))
+                  add(JsonPrimitive("field"))
+                  add(JsonPrimitive("message"))
+                })
+              })
+              put("description", JsonPrimitive("Limit changes and policy violations for this memory."))
+            })
+            put("minimalCompatibleLimits", buildJsonObject {
+              put("type", JsonPrimitive("object"))
+              put("properties", buildJsonObject {
+                put("addressType", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
+                })
+                put("min", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Minimum pages compatible with current and baseline declarations."))
+                })
+                put("max", buildJsonObject {
+                  put("type", buildJsonArray {
+                    add(JsonPrimitive("integer"))
+                    add(JsonPrimitive("null"))
+                  })
+                  put("description", JsonPrimitive("Maximum pages compatible with current and baseline declarations, when bounded."))
+                })
+                put("hasMax", buildJsonObject {
+                  put("type", JsonPrimitive("boolean"))
+                  put("description", JsonPrimitive("True when the compatible limits include an explicit maximum."))
+                })
+                put("range", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Human-readable compatible range such as `24..48`."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("addressType"))
+                add(JsonPrimitive("min"))
+                add(JsonPrimitive("hasMax"))
+                add(JsonPrimitive("range"))
+              })
+              put("description", JsonPrimitive("Smallest limits compatible with the current and baseline declarations."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("memoryIdx"))
+            add(JsonPrimitive("exportedAs"))
+            add(JsonPrimitive("declaredLimits"))
+            add(JsonPrimitive("policyLimits"))
+            add(JsonPrimitive("violations"))
+            add(JsonPrimitive("minimalCompatibleLimits"))
+          })
+        })
+        put("description", JsonPrimitive("Per-memory contract report entries."))
+      })
+      put("violations", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("memoryIdx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Memory index whose contract check produced this violation."))
+            })
+            put("exportedAs", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Memory export names that point at this memory index."))
+            })
+            put("kind", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Stable violation code, for example `min_increased`, `max_decreased`, or `policy_max_exceeded`."))
+            })
+            put("field", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Limit field involved in the violation: `min`, `max`, or `hasMax`."))
+            })
+            put("previous", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Previous baseline value for diff violations."))
+            })
+            put("declared", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Current declared value."))
+            })
+            put("policy", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Policy value involved in the violation."))
+            })
+            put("message", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Report-ready explanation of the violation."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("memoryIdx"))
+            add(JsonPrimitive("exportedAs"))
+            add(JsonPrimitive("kind"))
+            add(JsonPrimitive("field"))
+            add(JsonPrimitive("message"))
+          })
+        })
+        put("description", JsonPrimitive("Flattened list of all contract violations."))
+      })
+      put("warnings", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Non-fatal input or runtime-log warnings."))
+      })
+    },
+    required = listOf("memories", "violations", "warnings")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.checkMemoryContract(request.arguments)
   }
 }
 

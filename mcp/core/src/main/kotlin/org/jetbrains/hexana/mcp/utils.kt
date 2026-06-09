@@ -122,6 +122,12 @@ data class GlobalRecord(
 
 fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRecord> {
     wasmModule ?: return emptyList()
+    val exportedMemories = listExports(wasmModule)
+        .filter { it.kind == 0x2.toByte() }
+        .groupBy(
+            keySelector = { it.externIndex.toInt() },
+            valueTransform = { it.name }
+        )
     val importMemories = with(wasmModule.importSection) {
         this ?: return@with emptyList()
         getImportRecords().filter { it.type is WasmMemType }
@@ -130,7 +136,8 @@ fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRecord> {
             memoryIdx = index,
             limit = Limits((record.type as WasmMemType).limits),
             import = Import(record.prefix, record.name),
-            definedIn = "import"
+            definedIn = "import",
+            exportedAs = exportedMemories[index].orEmpty()
         )
     }
     val importBase = importMemories.size
@@ -142,7 +149,8 @@ fun CommonByteBuffer.listMemory(wasmModule: WasmModule?): List<MemoryRecord> {
             memoryIdx = importBase + index,
             limit = Limits(record.limits),
             import = null,
-            definedIn = "memory_section"
+            definedIn = "memory_section",
+            exportedAs = exportedMemories[importBase + index].orEmpty()
         )
     }
     return importMemories + memories
@@ -156,7 +164,13 @@ internal fun CommonByteBuffer.listMemoryByIndices(
     return listMemory(wasmModule).filter { indices.contains(it.memoryIdx) }
 }
 
-data class MemoryRecord(val memoryIdx: Int, val limit: Limits<*>, val import: Import?, val definedIn: String)
+data class MemoryRecord(
+    val memoryIdx: Int,
+    val limit: Limits<*>,
+    val import: Import?,
+    val definedIn: String,
+    val exportedAs: List<String>
+)
 
 class Limits<T>(private val internal: WasmLimits<T>) {
     val addressType: String

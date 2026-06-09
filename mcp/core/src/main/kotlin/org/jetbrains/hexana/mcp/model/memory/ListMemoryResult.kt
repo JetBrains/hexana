@@ -14,7 +14,8 @@ data class MemoryResult(
     val limit: MemoryLimitsResult,
     @SerialName("import")
     val importInfo: MemoryImportResult? = null,
-    val definedIn: String
+    val definedIn: String,
+    val exportedAs: List<String> = emptyList()
 )
 
 @Serializable

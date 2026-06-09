@@ -217,6 +217,17 @@ class HexanaToolHandlers(
         }
     }
 
+    fun checkMemoryContract(arguments: JsonObject?): CallToolResult {
+        return execute("check_memory_contract") {
+            analysisService.checkMemoryContract(
+                input = wasmInput(arguments),
+                baselineInput = WasmInput.FilePath(arguments.requireNonBlankString("baselinePath")),
+                policyInput = TextInput.FilePath(arguments.requireNonBlankString("policyPath")),
+                logInput = arguments.optionalNonBlankString("logPath")?.let(TextInput::FilePath)
+            )
+        }
+    }
+
     fun getGlobalsForIndices(arguments: JsonObject?): CallToolResult {
         return execute("get_globals_for_indices") {
             analysisService.getGlobalsForIndices(

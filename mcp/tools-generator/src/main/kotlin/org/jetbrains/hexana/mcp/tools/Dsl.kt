@@ -327,6 +327,7 @@ sealed class ToolInputPattern {
     data class ClosedRange(val parameterName: String) : ToolInputPattern()
     object DataSegments : ToolInputPattern()
     object ArtifactQuery : ToolInputPattern()
+    object MemoryContract : ToolInputPattern()
     object RuntimeCompatibility : ToolInputPattern()
 }
 
@@ -617,6 +618,22 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireNonNullable(maxBytes)
             requireDefault(maxBytes, "Int") { it is Int }
             requireDescribed(maxBytes)
+        }
+        ToolInputPattern.MemoryContract -> {
+            val baselinePath = requireField("baselinePath")
+            requireType(baselinePath, FieldType.StringT)
+            requireNonNullable(baselinePath)
+            requireDescribed(baselinePath)
+
+            val policyPath = requireField("policyPath")
+            requireType(policyPath, FieldType.StringT)
+            requireNonNullable(policyPath)
+            requireDescribed(policyPath)
+
+            val logPath = requireField("logPath")
+            requireType(logPath, FieldType.StringT)
+            requireNullable(logPath)
+            requireDescribed(logPath)
         }
         ToolInputPattern.RuntimeCompatibility -> {
             val runtime = requireField("runtime")

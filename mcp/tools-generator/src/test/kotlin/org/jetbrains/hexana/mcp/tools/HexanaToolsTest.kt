@@ -36,6 +36,7 @@ class HexanaToolsTest {
                 "get_instructions_for_functions",
                 "list_memory",
                 "get_memory_for_indices",
+                "check_memory_contract",
                 "list_globals",
                 "get_globals_for_indices",
                 "list_types",
@@ -137,6 +138,14 @@ class HexanaToolsTest {
         assertEquals(
             ToolInputPattern.WasmWithBaseline,
             HexanaTools.single { it.name == "diff_required_proposals" }.inputPattern
+        )
+    }
+
+    @Test
+    fun `check_memory_contract uses the memory contract invocation pattern`() {
+        assertEquals(
+            ToolInputPattern.MemoryContract,
+            HexanaTools.single { it.name == "check_memory_contract" }.inputPattern
         )
     }
 

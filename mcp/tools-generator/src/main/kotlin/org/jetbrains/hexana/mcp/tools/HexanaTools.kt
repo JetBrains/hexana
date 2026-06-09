@@ -23,6 +23,7 @@ private val HEXANA_TOOL_ORDER = listOf(
     "get_instructions_for_functions",
     "list_memory",
     "get_memory_for_indices",
+    "check_memory_contract",
     "list_globals",
     "get_globals_for_indices",
     "list_types",

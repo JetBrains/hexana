@@ -13,6 +13,7 @@ class HexanaMcpRegistrationTest : HexanaMcpToolsetDirectTestBase() {
         assertTrue("list_exports" in names)
         assertTrue("list_functions" in names)
         assertTrue("list_memory" in names)
+        assertTrue("check_memory_contract" in names)
         assertTrue("list_globals" in names)
         assertTrue("list_types" in names)
         assertTrue("list_element_segments" in names)

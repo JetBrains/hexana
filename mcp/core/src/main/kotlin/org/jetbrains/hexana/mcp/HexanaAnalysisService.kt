@@ -21,6 +21,7 @@ import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSignatureResult
 import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
+import org.jetbrains.hexana.mcp.model.memory.CheckMemoryContractResult
 import org.jetbrains.hexana.mcp.model.memory.ListMemoryResult
 import org.jetbrains.hexana.mcp.model.runtime.CheckRuntimeCompatibilityResult
 import org.jetbrains.hexana.mcp.model.runtime.DiffRequiredProposalsResult
@@ -90,6 +91,14 @@ interface HexanaAnalysisService {
     fun listValueTypes(input: WasmInput): ListValueTypesResult
     fun listReferenceTypes(input: WasmInput): ListReferenceTypesResult
     fun listMemory(input: WasmInput): ListMemoryResult
+    fun checkMemoryContract(
+        input: WasmInput,
+        baselineInput: WasmInput,
+        policyInput: TextInput,
+        logInput: TextInput?
+    ): CheckMemoryContractResult {
+        throw UnsupportedOperationException("checkMemoryContract is not implemented")
+    }
     fun getGlobalsForIndices(input: WasmInput, indices: List<Int>): ListGlobalsResult
     fun listData(input: WasmInput, entriesRange: IntRange): ListDataSectionsResult
     fun listDataSegments(
@@ -290,6 +299,23 @@ class DefaultHexanaAnalysisService(
     override fun listMemory(input: WasmInput): ListMemoryResult {
         val wasm = load(input)
         return wasm.provider.readMemory()
+    }
+
+    override fun checkMemoryContract(
+        input: WasmInput,
+        baselineInput: WasmInput,
+        policyInput: TextInput,
+        logInput: TextInput?
+    ): CheckMemoryContractResult {
+        val wasm = load(input)
+        val baseline = load(baselineInput)
+        val policy = loadText(policyInput)
+        val log = logInput?.let(::loadText)
+        return wasm.provider.checkMemoryContract(
+            baseline = baseline.provider,
+            policyText = policy.text,
+            logText = log?.text
+        )
     }
 
     override fun getGlobalsForIndices(input: WasmInput, indices: List<Int>): ListGlobalsResult {
