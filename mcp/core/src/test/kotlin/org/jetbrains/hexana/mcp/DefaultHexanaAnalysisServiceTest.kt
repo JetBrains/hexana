@@ -647,6 +647,151 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun planAbiBindingRegenerationReportsImportChanges() {
+        val wasm = createWasmFile(
+            "binding_imports.wasm",
+            """
+            (module
+              (import "env" "emit_metric" (func (param i32 i64)))
+              (import "env" "fetch_discount" (func (result i32))))
+            """.trimIndent()
+        )
+        val binding = createBindingFile(
+            "binding_imports.py",
+            """
+            MODULE = 'dist/plugin/pricing_plugin.wasm'
+            IMPORTS = {
+                'env.emit_metric': {'params': ['i32'], 'results': []},
+                'env.legacy': {'params': [], 'results': []},
+            }
+            EXPORTS = {}
+            """.trimIndent()
+        )
+
+        val result = service.planAbiBindingRegeneration(
+            input = WasmInput.FilePath(wasm.toString()),
+            bindingInput = TextInput.FilePath(binding.toString())
+        )
+
+        assertEquals(listOf("env.emit_metric", "env.fetch_discount"), result.imports.keys.toList())
+        assertEquals(
+            setOf("IMPORTS.env.emit_metric", "IMPORTS.env.fetch_discount", "IMPORTS.env.legacy"),
+            result.bindingMismatches.map { it.symbol }.toSet()
+        )
+        assertEquals(listOf("i32", "i64"), result.replacementBindings.imports.getValue("env.emit_metric").params)
+        assertEquals(listOf("i32"), result.replacementBindings.imports.getValue("env.fetch_discount").results)
+    }
+
+    @Test
+    fun planAbiBindingRegenerationReportsExportChanges() {
+        val wasm = createWasmFile(
+            "binding_exports.wasm",
+            """
+            (module
+              (func (export "calculate_total") (param i32 i32) (result i64)
+                i64.const 0)
+              (func (export "adapter_version") (result i32)
+                i32.const 2))
+            """.trimIndent()
+        )
+        val binding = createBindingFile(
+            "binding_exports.py",
+            """
+            MODULE = 'dist/plugin/pricing_plugin.wasm'
+            IMPORTS = {}
+            EXPORTS = {
+                'calculate_total': {'params': ['i32', 'i32'], 'results': ['i64']},
+                'legacy_price': {'params': ['i32'], 'results': ['i32']},
+            }
+            """.trimIndent()
+        )
+
+        val result = service.planAbiBindingRegeneration(
+            input = WasmInput.FilePath(wasm.toString()),
+            bindingInput = TextInput.FilePath(binding.toString())
+        )
+
+        assertEquals(listOf("adapter_version", "calculate_total"), result.exports.keys.toList())
+        assertEquals(
+            setOf("EXPORTS.adapter_version", "EXPORTS.legacy_price"),
+            result.bindingMismatches.map { it.symbol }.toSet()
+        )
+        assertEquals(listOf("i32"), result.replacementBindings.exports.getValue("adapter_version").results)
+    }
+
+    @Test
+    fun planAbiBindingRegenerationReportsFunctionSignatureDriftWithResultsField() {
+        val wasm = createWasmFile(
+            "binding_signature_drift.wasm",
+            """
+            (module
+              (import "env" "fetch_discount" (func (param i32) (result i32)))
+              (func (export "calculate_total") (param i32 i32) (result i64)
+                i64.const 0))
+            """.trimIndent()
+        )
+        val binding = createBindingFile(
+            "binding_signature_drift.py",
+            """
+            MODULE = 'dist/plugin/pricing_plugin.wasm'
+            IMPORTS = {
+                'env.fetch_discount': {'params': ['i64'], 'results': ['i32']},
+            }
+            EXPORTS = {
+                'calculate_total': {'params': ['i32', 'i32'], 'results': ['i32']},
+            }
+            """.trimIndent()
+        )
+
+        val result = service.planAbiBindingRegeneration(
+            input = WasmInput.FilePath(wasm.toString()),
+            bindingInput = TextInput.FilePath(binding.toString())
+        )
+
+        val importMismatch = result.bindingMismatches.single { it.symbol == "IMPORTS.env.fetch_discount" }
+        assertEquals(listOf("i32"), importMismatch.expected!!.params)
+        assertEquals(listOf("i64"), importMismatch.actual!!.params)
+        val exportMismatch = result.bindingMismatches.single { it.symbol == "EXPORTS.calculate_total" }
+        assertEquals(listOf("i64"), exportMismatch.expected!!.results)
+        assertEquals(listOf("i32"), exportMismatch.actual!!.results)
+    }
+
+    @Test
+    fun planAbiBindingRegenerationReturnsNoMismatchesForCompatibleBindings() {
+        val wasm = createWasmFile(
+            "binding_compatible.wasm",
+            """
+            (module
+              (import "env" "emit_metric" (func (param i32 i64)))
+              (func (export "adapter_version") (result i32)
+                i32.const 2))
+            """.trimIndent()
+        )
+        val binding = createBindingFile(
+            "binding_compatible.py",
+            """
+            MODULE = 'dist/plugin/pricing_plugin.wasm'
+            IMPORTS = {
+                'env.emit_metric': {'params': ['i32', 'i64'], 'results': []},
+            }
+            EXPORTS = {
+                'adapter_version': {'params': [], 'results': ['i32']},
+            }
+            """.trimIndent()
+        )
+
+        val result = service.planAbiBindingRegeneration(
+            input = WasmInput.FilePath(wasm.toString()),
+            bindingInput = TextInput.FilePath(binding.toString())
+        )
+
+        assertTrue(result.bindingMismatches.isEmpty())
+        assertEquals(result.imports, result.replacementBindings.imports)
+        assertEquals(result.exports, result.replacementBindings.exports)
+        assertEquals("dist/plugin/pricing_plugin.wasm", result.module.replacementModule)
+    }
+
+    @Test
     fun listDataPaginatesWithoutRepeatingCurrentEntry() {
         val wasm = createWasmFile(
             "data_pagination.wasm",
@@ -917,6 +1062,10 @@ class DefaultHexanaAnalysisServiceTest {
 
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {
         Files.write(it, wat2wasm(wat))
+    }
+
+    private fun createBindingFile(name: String, text: String) = temporaryFolder.newFile(name).toPath().also {
+        Files.writeString(it, text)
     }
 
     private fun createTextFile(name: String, text: String) = temporaryFolder.newFile(name).toPath().also {

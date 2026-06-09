@@ -3,6 +3,7 @@ package org.jetbrains.hexana.mcp.tools
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -48,6 +49,7 @@ class HexanaToolsTest {
                 "list_element_segments",
                 "list_data",
                 "list_data_segments",
+                "plan_abi_binding_regeneration",
                 "query_artifacts",
             ),
             HexanaTools.map { it.name },
@@ -117,6 +119,15 @@ class HexanaToolsTest {
     @Test
     fun `query_artifacts uses the artifact query invocation pattern`() {
         assertEquals(ToolInputPattern.ArtifactQuery, queryArtifacts.inputPattern)
+    }
+
+    @Test
+    fun `plan_abi_binding_regeneration uses the binding file invocation pattern`() {
+        val planner = HexanaTools.single { it.name == "plan_abi_binding_regeneration" }
+
+        assertEquals(ToolInputPattern.WasmWithBinding, planner.inputPattern)
+        assertTrue(planner.guidance.orEmpty().contains("current WebAssembly"))
+        assertFalse(planner.guidance.orEmpty().contains("task"))
     }
 
     @Test

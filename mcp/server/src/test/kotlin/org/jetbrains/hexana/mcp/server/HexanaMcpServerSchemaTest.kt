@@ -59,6 +59,7 @@ class HexanaMcpServerSchemaTest {
                 "list_required_proposals",
                 "list_types",
                 "list_value_types",
+                "plan_abi_binding_regeneration",
                 "query_artifacts",
                 "repair_entrypoint_policy",
                 "resolve_function_signature",
@@ -156,6 +157,31 @@ class HexanaMcpServerSchemaTest {
         assertEquals(100, limit.getValue("maximum").jsonPrimitive.int)
         assertEquals(2_000, maxBytes.getValue("minimum").jsonPrimitive.int)
         assertEquals(60_000, maxBytes.getValue("maximum").jsonPrimitive.int)
+    }
+
+    @Test
+    fun abiBindingPlannerSchemaUsesRequiredBindingPathAndResultsSignatures() {
+        val tool = createHexanaMcpServer()
+            .tools
+            .getValue("plan_abi_binding_regeneration")
+            .tool
+
+        val input = tool.inputSchema.properties?.jsonObject ?: error("Missing planner input schema properties")
+        assertEquals("string", input.getValue("bindingPath").jsonObject.getValue("type").jsonPrimitive.content)
+        assertEquals(listOf("bindingPath"), tool.inputSchema.required)
+
+        val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing planner output schema properties")
+        val importsValue = output.getValue("imports").jsonObject
+            .getValue("additionalProperties").jsonObject
+        assertTrue("results" in importsValue.getValue("properties").jsonObject)
+        assertFalse("return" in importsValue.getValue("properties").jsonObject)
+
+        val replacementExportValue = output.getValue("replacementBindings").jsonObject
+            .getValue("properties").jsonObject
+            .getValue("EXPORTS").jsonObject
+            .getValue("additionalProperties").jsonObject
+        assertTrue("results" in replacementExportValue.getValue("properties").jsonObject)
+        assertFalse("return" in replacementExportValue.getValue("properties").jsonObject)
     }
 
     private fun queryArtifactsInputSchema(): JsonObject {

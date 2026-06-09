@@ -23,6 +23,8 @@ import org.jetbrains.hexana.mcp.model.artifacts.ArtifactModuleResult
 import org.jetbrains.hexana.mcp.model.artifacts.ArtifactOmittedResult
 import org.jetbrains.hexana.mcp.model.artifacts.ArtifactRecordResult
 import org.jetbrains.hexana.mcp.model.artifacts.ArtifactSignatureResult
+import org.jetbrains.hexana.mcp.model.artifacts.AbiBindingMismatchResult
+import org.jetbrains.hexana.mcp.model.artifacts.AbiBindingSignature
 import org.jetbrains.hexana.mcp.model.artifacts.QueryArtifactsResult
 import org.jetbrains.hexana.mcp.model.elements.ElementSegmentResult
 import org.jetbrains.hexana.mcp.model.exports.ExportResult
@@ -350,40 +352,15 @@ private fun WasmBinaryProvider.abiBindingRegenerationRecords(
     bindingPathLabel: String?,
     warnings: MutableList<String>
 ): List<ArtifactRecordResult> {
-    val functions = listFunctionEntries()
-    val functionsByIndex = functions.associateBy { it.funcidx }
-    val currentImports = functions
-        .filter { it.import != null }
-        .associate { function ->
-            val import = requireNotNull(function.import)
-            "${import.module}.${import.name}" to function.signature.toArtifactFunctionSignature()
-        }
-        .toSortedMap()
-    val currentExports = readExports().exports
-        .filter { it.kind.kindName() == "function" }
-        .mapNotNull { export ->
-            val function = functionsByIndex[export.externIndex.toInt()] ?: return@mapNotNull null
-            export.name to function.signature.toArtifactFunctionSignature()
-        }
-        .toMap()
-        .toSortedMap()
-    val binding = bindingText?.let { parseAbiBindingFile(it, warnings) }
-    if (bindingText == null) {
-        warnings += "`abi_binding_regeneration` can compare stale bindings when `bindingPath` points at a common Python binding file with MODULE, IMPORTS, and EXPORTS literals."
-    }
-    val replacement = AbiReplacementBindings(
-        module = binding?.module ?: pathLabel.orEmpty(),
-        imports = currentImports.toMap(),
-        exports = currentExports.toMap()
+    val plan = planAbiBindingRegenerationOrCurrentOnly(
+        bindingText = bindingText,
+        pathLabel = pathLabel,
+        bindingPathLabel = bindingPathLabel,
+        warnings = warnings
     )
-    val mismatches = binding?.let {
-        abiBindingMismatches(
-            currentImports = currentImports,
-            currentExports = currentExports,
-            staleImports = it.imports,
-            staleExports = it.exports
-        )
-    }.orEmpty()
+    val currentImports = plan.imports
+    val currentExports = plan.exports
+    val mismatches = plan.bindingMismatches
     val records = mismatches
         .filter { terms.isEmpty() || terms.any { term -> it.symbol.lowercase().contains(term) } }
         .map { it.toAbiBindingMismatchRecord() }
@@ -400,20 +377,20 @@ private fun WasmBinaryProvider.abiBindingRegenerationRecords(
                 add("direction", "`expected` is the current Wasm signature or null when a stale binding should be removed; `actual` is the stale binding signature or null when a binding is missing.")
                 pathLabel?.let { add("module", it) }
                 bindingPathLabel?.let { add("bindingPath", it) }
-                binding?.module?.let { add("staleModule", it) }
+                plan.module.staleModule?.let { add("staleModule", it) }
                 add("currentImports", currentImports.size.toString())
                 add("currentExports", currentExports.size.toString())
-                add("staleImports", binding?.imports?.size?.toString() ?: "0")
-                add("staleExports", binding?.exports?.size?.toString() ?: "0")
+                add("staleImports", plan.staleImports.size.toString())
+                add("staleExports", plan.staleExports.size.toString())
                 add("mismatches", mismatches.size.toString())
-                add("currentImportsJson", encodeHexanaJson(currentImports.toMap()))
-                add("currentExportsJson", encodeHexanaJson(currentExports.toMap()))
-                binding?.let {
-                    add("staleImportsJson", encodeHexanaJson(it.imports))
-                    add("staleExportsJson", encodeHexanaJson(it.exports))
+                add("currentImportsJson", encodeHexanaJson(currentImports))
+                add("currentExportsJson", encodeHexanaJson(currentExports))
+                if (bindingText != null) {
+                    add("staleImportsJson", encodeHexanaJson(plan.staleImports))
+                    add("staleExportsJson", encodeHexanaJson(plan.staleExports))
                     add("bindingMismatchesJson", encodeHexanaJson(mismatches))
                 }
-                add("replacementBindingsJson", encodeHexanaJson(replacement))
+                add("replacementBindingsJson", encodeHexanaJson(plan.replacementBindings))
             }.toAttributes()
         )
     ) + records
@@ -3126,98 +3103,7 @@ private inline fun <reified T> MutableList<Pair<String, String>>.addJsonFacts(na
     }
 }
 
-private fun parseAbiBindingFile(text: String, warnings: MutableList<String>): ParsedAbiBinding {
-    val module = Regex("""(?m)^\s*MODULE\s*=\s*(['"])(.*?)\1""").find(text)?.groupValues?.getOrNull(2)
-    val imports = parseAbiBindingSignatureMap(text, "IMPORTS", warnings)
-    val exports = parseAbiBindingSignatureMap(text, "EXPORTS", warnings)
-    if (module == null) warnings += "`bindingPath` did not contain a parseable MODULE string."
-    if (imports == null) warnings += "`bindingPath` did not contain a parseable IMPORTS signature map."
-    if (exports == null) warnings += "`bindingPath` did not contain a parseable EXPORTS signature map."
-    return ParsedAbiBinding(
-        module = module,
-        imports = imports.orEmpty().toSortedMap(),
-        exports = exports.orEmpty().toSortedMap()
-    )
-}
-
-private fun parseAbiBindingSignatureMap(
-    text: String,
-    variableName: String,
-    warnings: MutableList<String>
-): Map<String, ArtifactFunctionSignature>? {
-    val body = extractPythonDictLiteral(text, variableName) ?: return null
-    val entryRegex = Regex(
-        """(['"])(.*?)\1\s*:\s*\{\s*(['"])params\3\s*:\s*\[(.*?)\]\s*,\s*(['"])results\5\s*:\s*\[(.*?)\]\s*\}""",
-        setOf(RegexOption.DOT_MATCHES_ALL)
-    )
-    val entries = entryRegex.findAll(body).associate { match ->
-        val name = match.groupValues[2]
-        val params = parsePythonStringList(match.groupValues[4])
-        val results = parsePythonStringList(match.groupValues[6])
-        name to ArtifactFunctionSignature(params = params, results = results)
-    }
-    if (entries.isEmpty() && Regex("""\S""").containsMatchIn(body)) {
-        warnings += "`$variableName` exists but no {'params': [...], 'results': [...]} entries were parsed."
-    }
-    return entries
-}
-
-private fun extractPythonDictLiteral(text: String, variableName: String): String? {
-    val assignment = Regex("""(?m)^\s*$variableName\s*=""").find(text) ?: return null
-    val start = text.indexOf('{', assignment.range.last + 1)
-    if (start < 0) return null
-    var depth = 0
-    var quote: Char? = null
-    var escaped = false
-    for (index in start until text.length) {
-        val ch = text[index]
-        if (quote != null) {
-            if (escaped) {
-                escaped = false
-            } else if (ch == '\\') {
-                escaped = true
-            } else if (ch == quote) {
-                quote = null
-            }
-            continue
-        }
-        when (ch) {
-            '\'', '"' -> quote = ch
-            '{' -> depth++
-            '}' -> {
-                depth--
-                if (depth == 0) {
-                    return text.substring(start + 1, index)
-                }
-            }
-        }
-    }
-    return null
-}
-
-private fun parsePythonStringList(body: String): List<String> =
-    Regex("""(['"])(.*?)\1""").findAll(body).map { it.groupValues[2] }.toList()
-
-private fun abiBindingMismatches(
-    currentImports: Map<String, ArtifactFunctionSignature>,
-    currentExports: Map<String, ArtifactFunctionSignature>,
-    staleImports: Map<String, ArtifactFunctionSignature>,
-    staleExports: Map<String, ArtifactFunctionSignature>
-): List<AbiBindingMismatch> {
-    val exportMismatches = (currentExports.keys + staleExports.keys).sorted().mapNotNull { name ->
-        val expected = currentExports[name]
-        val actual = staleExports[name]
-        if (expected == actual) null else AbiBindingMismatch("EXPORTS.$name", expected, actual)
-    }
-    val importMismatches = (currentImports.keys + staleImports.keys).sorted().mapNotNull { name ->
-        val expected = currentImports[name]
-        val actual = staleImports[name]
-        if (expected == actual) null else AbiBindingMismatch("IMPORTS.$name", expected, actual)
-    }
-    return exportMismatches + importMismatches
-}
-
-private fun AbiBindingMismatch.toAbiBindingMismatchRecord(): ArtifactRecordResult {
+private fun AbiBindingMismatchResult.toAbiBindingMismatchRecord(): ArtifactRecordResult {
     val status = when {
         expected == null -> "removed"
         actual == null -> "added"
@@ -3380,6 +3266,12 @@ private fun buildHostAdapterRepairConfig(
     }
 }
 
+private fun AbiBindingSignature?.toArtifactSignature(): ArtifactSignatureResult? =
+    this?.let { ArtifactSignatureResult(params = it.params, results = it.results) }
+
+private fun AbiBindingSignature.compact(): String =
+    "(${params.joinToString(",")}) -> (${results.joinToString(",")})"
+
 private fun ArtifactFunctionSignature?.toArtifactSignature(): ArtifactSignatureResult? =
     this?.let { ArtifactSignatureResult(params = it.params, results = it.results) }
 
@@ -3473,29 +3365,6 @@ private data class ParsedHostAdapterConfig(
     val imports: Map<String, ArtifactFunctionSignature>,
     val entrypoint: HostAdapterEntrypointFact?,
     val ignoredTopLevelFields: List<String>
-)
-
-private data class ParsedAbiBinding(
-    val module: String?,
-    val imports: Map<String, ArtifactFunctionSignature>,
-    val exports: Map<String, ArtifactFunctionSignature>
-)
-
-@Serializable
-private data class AbiBindingMismatch(
-    val symbol: String,
-    val expected: ArtifactFunctionSignature?,
-    val actual: ArtifactFunctionSignature?
-)
-
-@Serializable
-private data class AbiReplacementBindings(
-    @SerialName("MODULE")
-    val module: String,
-    @SerialName("IMPORTS")
-    val imports: Map<String, ArtifactFunctionSignature>,
-    @SerialName("EXPORTS")
-    val exports: Map<String, ArtifactFunctionSignature>
 )
 
 @Serializable

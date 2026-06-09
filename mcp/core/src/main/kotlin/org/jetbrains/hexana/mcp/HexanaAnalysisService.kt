@@ -7,6 +7,7 @@ import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
 import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.entrypoints.EntrypointPolicyResult
 import org.jetbrains.hexana.mcp.model.artifacts.QueryArtifactsResult
+import org.jetbrains.hexana.mcp.model.artifacts.PlanAbiBindingRegenerationResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
@@ -58,6 +59,13 @@ interface HexanaAnalysisService {
         maxBytes: Int
     ): QueryArtifactsResult {
         throw UnsupportedOperationException("queryArtifacts is not implemented")
+    }
+
+    fun planAbiBindingRegeneration(
+        input: WasmInput,
+        bindingInput: TextInput
+    ): PlanAbiBindingRegenerationResult {
+        throw UnsupportedOperationException("planAbiBindingRegeneration is not implemented")
     }
 
     fun getEntrypointPolicy(input: WasmInput): EntrypointPolicyResult {
@@ -171,6 +179,19 @@ class DefaultHexanaAnalysisService(
             baselinePathLabel = baselineInput?.artifactPathLabel(),
             bindingPathLabel = bindingInput?.artifactPathLabel(),
             configPathLabel = configInput?.artifactPathLabel()
+        )
+    }
+
+    override fun planAbiBindingRegeneration(
+        input: WasmInput,
+        bindingInput: TextInput
+    ): PlanAbiBindingRegenerationResult {
+        val wasm = load(input)
+        val binding = loadText(bindingInput)
+        return wasm.provider.planAbiBindingRegeneration(
+            bindingText = binding.text,
+            pathLabel = input.artifactPathLabel(),
+            bindingPathLabel = bindingInput.artifactPathLabel()
         )
     }
 

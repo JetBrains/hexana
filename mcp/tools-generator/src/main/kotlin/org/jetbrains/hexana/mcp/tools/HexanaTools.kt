@@ -35,6 +35,7 @@ private val HEXANA_TOOL_ORDER = listOf(
     "list_element_segments",
     "list_data",
     "list_data_segments",
+    "plan_abi_binding_regeneration",
     "query_artifacts",
 )
 

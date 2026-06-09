@@ -27,6 +27,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.hexana.mcp.query.auditGlobalStatePolicy
 import org.jetbrains.hexana.mcp.query.checkMemoryContract
 import org.jetbrains.hexana.mcp.query.diffRequiredProposals
+import org.jetbrains.hexana.mcp.query.planAbiBindingRegeneration
 import org.jetbrains.hexana.mcp.query.readArtifactQuery
 import org.jetbrains.hexana.mcp.query.readCodeSectionOffsets
 import org.jetbrains.hexana.mcp.query.readCustomSections
@@ -6243,6 +6244,342 @@ public class HexanaToolset : McpToolsProvider {
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val result = provider.readDataSegmentsByRange(range, includeExports, includeGlobals, minByteLength ?: 0)
+      val text = encodeHexanaJson(result)
+      val structuredContent = encodeHexanaJsonElement(result).jsonObject
+      return McpToolCallResult.text(text, structuredContent)
+    }
+  },
+  object : McpTool {
+    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
+      name = "plan_abi_binding_regeneration",
+      description = """
+      |Plan ABI binding regeneration from current WebAssembly imports and exports.
+      |Compare the current WebAssembly function import/export ABI against a stale binding file and return a report-ready regeneration plan.
+      |The result includes module identity, current import and export signature maps, stale binding maps, binding mismatches, and replacement bindings.
+      |Mismatch `expected` values are current WebAssembly signatures, or null when a stale binding should be removed; `actual` values are stale binding signatures, or null when the binding is missing.
+      """.trimMargin(),
+      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.planAbiBindingRegeneration",
+      inputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path relative to the project root"))
+        })
+        put("bindingPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path to a stale binding source file with MODULE, IMPORTS, and EXPORTS literals."))
+          put("maxLength", JsonPrimitive(4_096))
+        })
+        put("projectPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
+        })
+      },
+      requiredProperties = setOf("path", "bindingPath"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+      outputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("module", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("path", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Current WebAssembly module path label when available."))
+            })
+            put("bindingPath", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Stale binding file path label when available."))
+            })
+            put("staleModule", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("MODULE value parsed from the stale binding file."))
+            })
+            put("replacementModule", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("MODULE value used in regenerated bindings."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("replacementModule"))
+          })
+          put("description", JsonPrimitive("Module and binding file identity."))
+        })
+        put("imports", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("additionalProperties", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("params", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Parameter value types."))
+              })
+              put("results", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Result value types."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("params"))
+              add(JsonPrimitive("results"))
+            })
+          })
+          put("description", JsonPrimitive("Current WebAssembly function import signature map keyed by qualified import name."))
+        })
+        put("exports", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("additionalProperties", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("params", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Parameter value types."))
+              })
+              put("results", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Result value types."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("params"))
+              add(JsonPrimitive("results"))
+            })
+          })
+          put("description", JsonPrimitive("Current WebAssembly function export signature map keyed by export name."))
+        })
+        put("staleImports", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("additionalProperties", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("params", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Parameter value types."))
+              })
+              put("results", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Result value types."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("params"))
+              add(JsonPrimitive("results"))
+            })
+          })
+          put("description", JsonPrimitive("Stale binding IMPORTS signature map parsed from `bindingPath`."))
+        })
+        put("staleExports", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("additionalProperties", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("params", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Parameter value types."))
+              })
+              put("results", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Result value types."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("params"))
+              add(JsonPrimitive("results"))
+            })
+          })
+          put("description", JsonPrimitive("Stale binding EXPORTS signature map parsed from `bindingPath`."))
+        })
+        put("bindingMismatches", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("symbol", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Binding symbol prefixed with `IMPORTS.` or `EXPORTS.`."))
+              })
+              put("expected", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("object"))
+                  add(JsonPrimitive("null"))
+                })
+                put("properties", buildJsonObject {
+                  put("params", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Parameter value types."))
+                  })
+                  put("results", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Result value types."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("params"))
+                  add(JsonPrimitive("results"))
+                })
+                put("description", JsonPrimitive("Current WebAssembly signature, or null when a stale binding should be removed."))
+              })
+              put("actual", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("object"))
+                  add(JsonPrimitive("null"))
+                })
+                put("properties", buildJsonObject {
+                  put("params", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Parameter value types."))
+                  })
+                  put("results", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Result value types."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("params"))
+                  add(JsonPrimitive("results"))
+                })
+                put("description", JsonPrimitive("Stale binding signature, or null when the binding is missing."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("symbol"))
+            })
+          })
+          put("description", JsonPrimitive("Binding mismatches using `expected` for current WebAssembly and `actual` for stale bindings."))
+        })
+        put("replacementBindings", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("MODULE", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("MODULE value for regenerated bindings."))
+            })
+            put("IMPORTS", buildJsonObject {
+              put("type", JsonPrimitive("object"))
+              put("additionalProperties", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("params", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Parameter value types."))
+                  })
+                  put("results", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Result value types."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("params"))
+                  add(JsonPrimitive("results"))
+                })
+              })
+              put("description", JsonPrimitive("Regenerated IMPORTS signature map keyed by qualified import name."))
+            })
+            put("EXPORTS", buildJsonObject {
+              put("type", JsonPrimitive("object"))
+              put("additionalProperties", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("params", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Parameter value types."))
+                  })
+                  put("results", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Result value types."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("params"))
+                  add(JsonPrimitive("results"))
+                })
+              })
+              put("description", JsonPrimitive("Regenerated EXPORTS signature map keyed by export name."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("MODULE"))
+            add(JsonPrimitive("IMPORTS"))
+            add(JsonPrimitive("EXPORTS"))
+          })
+          put("description", JsonPrimitive("Drop-in replacement binding maps derived from the current WebAssembly ABI."))
+        })
+        put("warnings", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+          put("description", JsonPrimitive("Non-fatal binding parse warnings."))
+        })
+      },
+      requiredProperties = setOf("module", "imports", "exports", "staleImports", "staleExports", "bindingMismatches", "replacementBindings", "warnings"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+    )
+    override suspend fun call(args: JsonObject): McpToolCallResult {
+      val path = args.requireStringArgument("path")
+      val bindingPath = args.requireStringArgument("bindingPath")
+      val file = requireWasmFile(path)
+      val provider = file.requireCoreWasmBinaryProvider()
+      val bindingText = requireTextFile(bindingPath)
+      val result = provider.planAbiBindingRegeneration(bindingText = bindingText, pathLabel = path, bindingPathLabel = bindingPath)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)

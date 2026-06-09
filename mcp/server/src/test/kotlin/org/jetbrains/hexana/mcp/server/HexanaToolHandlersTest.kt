@@ -172,6 +172,63 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun planAbiBindingRegenerationReturnsReportReadyStructuredPayload() {
+        val wasm = createWasmFile(
+            "binding_planner.wasm",
+            """
+            (module
+              (import "env" "emit_metric" (func (param i32 i64)))
+              (func (export "adapter_version") (result i32)
+                i32.const 2))
+            """.trimIndent()
+        )
+        val binding = temporaryFolder.newFile("binding_planner.py").toPath().also {
+            Files.writeString(
+                it,
+                """
+                MODULE = 'dist/plugin/pricing_plugin.wasm'
+                IMPORTS = {
+                    'env.emit_metric': {'params': ['i32'], 'results': []},
+                }
+                EXPORTS = {}
+                """.trimIndent()
+            )
+        }
+
+        val result = handlers.planAbiBindingRegeneration(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("bindingPath", JsonPrimitive(binding.toString()))
+            }
+        )
+
+        assertTrue(result.isError != true)
+        val structured = result.structuredContent!!
+        assertEquals(
+            "dist/plugin/pricing_plugin.wasm",
+            structured["module"]!!.jsonObject["replacementModule"]!!.jsonPrimitive.content
+        )
+        assertEquals(
+            "i64",
+            structured["imports"]!!.jsonObject["env.emit_metric"]!!.jsonObject["params"]!!.jsonArray[1].jsonPrimitive.content
+        )
+        assertEquals(
+            "i32",
+            structured["exports"]!!.jsonObject["adapter_version"]!!.jsonObject["results"]!!.jsonArray[0].jsonPrimitive.content
+        )
+        assertFalse("return" in structured["exports"]!!.jsonObject["adapter_version"]!!.jsonObject)
+        val mismatch = structured["bindingMismatches"]!!.jsonArray
+            .map { it.jsonObject }
+            .single { it["symbol"]!!.jsonPrimitive.content == "EXPORTS.adapter_version" }
+        assertEquals("i32", mismatch["expected"]!!.jsonObject["results"]!!.jsonArray[0].jsonPrimitive.content)
+        assertFalse("actual" in mismatch)
+        assertEquals(
+            "i32",
+            structured["replacementBindings"]!!.jsonObject["EXPORTS"]!!.jsonObject["adapter_version"]!!.jsonObject["results"]!!.jsonArray[0].jsonPrimitive.content
+        )
+    }
+
+    @Test
     fun summarizeModuleReturnsStructuredSuccessPayload() {
         val wasm = createWasmFile(
             "summary.wasm",

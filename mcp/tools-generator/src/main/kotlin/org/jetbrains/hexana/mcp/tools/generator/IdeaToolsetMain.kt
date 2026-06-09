@@ -143,6 +143,8 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
         ToolInputPattern.WasmPathLabel -> Unit
         ToolInputPattern.WasmWithBaseline ->
             code.addStatement("val baselinePath = args.requireStringArgument(%S)", "baselinePath")
+        ToolInputPattern.WasmWithBinding ->
+            code.addStatement("val bindingPath = args.requireStringArgument(%S)", "bindingPath")
         ToolInputPattern.FunctionPage -> {
             val offset = inputField(spec.input, "offset").defaultOrError<Int>()
             val limit = inputField(spec.input, "limit").defaultOrError<Int>()
@@ -270,11 +272,18 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             "val result = provider.%M(baseline = baselineProvider, pathLabel = path, baselinePathLabel = baselinePath)",
             handlerMember,
         )
+    } else if (spec.inputPattern == ToolInputPattern.WasmWithBinding) {
+        code.addStatement("val bindingText = %M(bindingPath)", REQUIRE_TEXT_FILE)
+        code.addStatement(
+            "val result = provider.%M(bindingText = bindingText, pathLabel = path, bindingPathLabel = bindingPath)",
+            handlerMember,
+        )
     } else {
         val callArgs: String = when (spec.inputPattern) {
             ToolInputPattern.WasmOnly -> "()"
             ToolInputPattern.WasmPathLabel -> "(pathLabel = path)"
             ToolInputPattern.WasmWithBaseline -> error("Handled above")
+            ToolInputPattern.WasmWithBinding -> error("Handled above")
             ToolInputPattern.FunctionPage -> "(offset, limit)"
             ToolInputPattern.Funcidx -> "(funcidx)"
             ToolInputPattern.FunctionNameSearch -> "(query, limit)"
@@ -337,6 +346,7 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
         ToolInputPattern.WasmOnly -> emptyList()
         ToolInputPattern.WasmPathLabel -> emptyList()
         ToolInputPattern.WasmWithBaseline -> listOf(inputField(spec.input, "baselinePath"))
+        ToolInputPattern.WasmWithBinding -> listOf(inputField(spec.input, "bindingPath"))
         ToolInputPattern.FunctionPage -> listOf(inputField(spec.input, "offset"), inputField(spec.input, "limit"))
         ToolInputPattern.Funcidx -> listOf(inputField(spec.input, "funcidx"))
         ToolInputPattern.FunctionNameSearch -> listOf(inputField(spec.input, "query"), inputField(spec.input, "limit"))
@@ -426,6 +436,12 @@ private fun emitTypeSchema(field: FieldSpec, builder: CodeBlock.Builder, indent:
             }
             builder.add("${indent}})\n")
         }
+        is FieldType.MapOf -> {
+            emitJsonType(builder, indent, "object", nullable = field.nullable)
+            builder.add("${indent}put(%S, %M {\n", "additionalProperties", BUILD_JSON_OBJECT)
+            emitTypeSchema(type.value, builder, indent = "$indent  ")
+            builder.add("${indent}})\n")
+        }
         else -> emitTypeSchema(type, builder, indent, nullable = field.nullable)
     }
 }
@@ -449,6 +465,12 @@ private fun emitTypeSchema(
             emitJsonType(builder, indent, "array", nullable)
             builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
             emitTypeSchema(type.element, builder, indent = "$indent  ")
+            builder.add("${indent}})\n")
+        }
+        is FieldType.MapOf -> {
+            emitJsonType(builder, indent, "object", nullable)
+            builder.add("${indent}put(%S, %M {\n", "additionalProperties", BUILD_JSON_OBJECT)
+            emitTypeSchema(type.value, builder, indent = "$indent  ")
             builder.add("${indent}})\n")
         }
         is FieldType.ClassRef -> {

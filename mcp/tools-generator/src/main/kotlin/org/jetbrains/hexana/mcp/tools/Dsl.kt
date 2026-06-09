@@ -12,6 +12,7 @@ sealed class FieldType {
     object StringT : FieldType()
     object ByteArrayT : FieldType()
     data class ListOf(val element: FieldType) : FieldType()
+    data class MapOf(val value: FieldType) : FieldType()
     data class ClassRef(val clazz: ClassSpec) : FieldType()
 }
 
@@ -29,6 +30,8 @@ fun bytes(): FieldType = FieldType.ByteArrayT
 // (e.g. `nullable("superTypes", of = list(of = uint()))`).
 fun list(of: FieldType): FieldType = FieldType.ListOf(of)
 fun list(of: ClassSpec): FieldType = FieldType.ListOf(FieldType.ClassRef(of))
+fun map(of: FieldType): FieldType = FieldType.MapOf(of)
+fun map(of: ClassSpec): FieldType = FieldType.MapOf(FieldType.ClassRef(of))
 
 // ---------- Field spec ----------
 
@@ -61,6 +64,7 @@ data class FieldSpec(
                 FieldType.StringT -> String::class.java
                 FieldType.ByteArrayT -> ByteArray::class.java
                 is FieldType.ListOf -> List::class.java
+                is FieldType.MapOf -> Map::class.java
                 is FieldType.ClassRef -> error("unreachable — filtered by require above")
             }
             require(expected.isInstance(default)) {
@@ -181,6 +185,12 @@ class ClassBuilder internal constructor(
 
     fun list(name: String, of: ClassSpec): FieldHandle =
         addField(name, FieldType.ListOf(FieldType.ClassRef(of)))
+
+    fun map(name: String, of: FieldType): FieldHandle =
+        addField(name, FieldType.MapOf(of))
+
+    fun map(name: String, of: ClassSpec): FieldHandle =
+        addField(name, FieldType.MapOf(FieldType.ClassRef(of)))
 
     fun embed(name: String, of: ClassSpec): FieldHandle =
         addField(name, FieldType.ClassRef(of))
@@ -319,6 +329,7 @@ sealed class ToolInputPattern {
     object WasmOnly : ToolInputPattern()
     object WasmPathLabel : ToolInputPattern()
     object WasmWithBaseline : ToolInputPattern()
+    object WasmWithBinding : ToolInputPattern()
     object FunctionPage : ToolInputPattern()
     object Funcidx : ToolInputPattern()
     object FunctionNameSearch : ToolInputPattern()
@@ -489,6 +500,12 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireType(baselinePath, FieldType.StringT)
             requireNonNullable(baselinePath)
             requireDescribed(baselinePath)
+        }
+        ToolInputPattern.WasmWithBinding -> {
+            val bindingPath = requireField("bindingPath")
+            requireType(bindingPath, FieldType.StringT)
+            requireNonNullable(bindingPath)
+            requireDescribed(bindingPath)
         }
         ToolInputPattern.FunctionPage -> {
             val offset = requireField("offset")

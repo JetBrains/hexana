@@ -43,6 +43,12 @@ private val QueryArtifactsInput = WasmInputClass.with("QueryArtifactsInput") {
         .maximum(60_000)
 }
 
+private val PlanAbiBindingRegenerationInput = WasmInputClass.with("PlanAbiBindingRegenerationInput") {
+    string("bindingPath")
+        .describe("Path to a stale binding source file with MODULE, IMPORTS, and EXPORTS literals.")
+        .maxLength(4096)
+}
+
 private val ArtifactModuleResultClass = class_("ArtifactModuleResult", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
     string("source").describe("Module role: `current` or `baseline`.")
     nullable("path", of = string()).describe("Input path label for this module when the caller provided `path` or `baselinePath`.")
@@ -99,7 +105,71 @@ private val QueryArtifactsResultClass = class_("QueryArtifactsResult", kotlinPac
     list("warnings", of = string()).describe("Non-fatal query warnings.")
 }
 
+private val AbiBindingSignatureClass = class_("AbiBindingSignature", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
+    list("params", of = string()).describe("Parameter value types.")
+    list("results", of = string()).describe("Result value types.")
+}
+
+private val AbiBindingModuleIdentityClass = class_("AbiBindingModuleIdentity", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
+    nullable("path", of = string()).describe("Current WebAssembly module path label when available.")
+    nullable("bindingPath", of = string()).describe("Stale binding file path label when available.")
+    nullable("staleModule", of = string()).describe("MODULE value parsed from the stale binding file.")
+    string("replacementModule").describe("MODULE value used in regenerated bindings.")
+}
+
+private val AbiBindingMismatchResultClass = class_("AbiBindingMismatchResult", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
+    string("symbol").describe("Binding symbol prefixed with `IMPORTS.` or `EXPORTS.`.")
+    nullable("expected", of = AbiBindingSignatureClass)
+        .describe("Current WebAssembly signature, or null when a stale binding should be removed.")
+    nullable("actual", of = AbiBindingSignatureClass)
+        .describe("Stale binding signature, or null when the binding is missing.")
+}
+
+private val AbiReplacementBindingsResultClass = class_(
+    "AbiReplacementBindingsResult",
+    kotlinPackage = ARTIFACT_MODEL_PACKAGE,
+) {
+    string("module").serialName("MODULE").describe("MODULE value for regenerated bindings.")
+    map("imports", of = AbiBindingSignatureClass).serialName("IMPORTS")
+        .describe("Regenerated IMPORTS signature map keyed by qualified import name.")
+    map("exports", of = AbiBindingSignatureClass).serialName("EXPORTS")
+        .describe("Regenerated EXPORTS signature map keyed by export name.")
+}
+
+private val PlanAbiBindingRegenerationResultClass = class_(
+    "PlanAbiBindingRegenerationResult",
+    kotlinPackage = ARTIFACT_MODEL_PACKAGE,
+) {
+    embed("module", of = AbiBindingModuleIdentityClass).describe("Module and binding file identity.")
+    map("imports", of = AbiBindingSignatureClass)
+        .describe("Current WebAssembly function import signature map keyed by qualified import name.")
+    map("exports", of = AbiBindingSignatureClass)
+        .describe("Current WebAssembly function export signature map keyed by export name.")
+    map("staleImports", of = AbiBindingSignatureClass)
+        .describe("Stale binding IMPORTS signature map parsed from `bindingPath`.")
+    map("staleExports", of = AbiBindingSignatureClass)
+        .describe("Stale binding EXPORTS signature map parsed from `bindingPath`.")
+    list("bindingMismatches", of = AbiBindingMismatchResultClass)
+        .describe("Binding mismatches using `expected` for current WebAssembly and `actual` for stale bindings.")
+    embed("replacementBindings", of = AbiReplacementBindingsResultClass)
+        .describe("Drop-in replacement binding maps derived from the current WebAssembly ABI.")
+    list("warnings", of = string()).describe("Non-fatal binding parse warnings.")
+}
+
 val ArtifactQueryTools = tools {
+    tool("plan_abi_binding_regeneration") {
+        summary = "Plan ABI binding regeneration from current WebAssembly imports and exports."
+        guidance = """
+            Compare the current WebAssembly function import/export ABI against a stale binding file and return a report-ready regeneration plan.
+            The result includes module identity, current import and export signature maps, stale binding maps, binding mismatches, and replacement bindings.
+            Mismatch `expected` values are current WebAssembly signatures, or null when a stale binding should be removed; `actual` values are stale binding signatures, or null when the binding is missing.
+        """
+        input = PlanAbiBindingRegenerationInput
+        inputPattern = ToolInputPattern.WasmWithBinding
+        output = PlanAbiBindingRegenerationResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.planAbiBindingRegeneration"
+    }
+
     tool("query_artifacts") {
         summary = "Query WebAssembly artifact entities, diffs, and function relations with bounded output."
         guidance = """

@@ -45,6 +45,15 @@ class HexanaToolHandlers(
         }
     }
 
+    fun planAbiBindingRegeneration(arguments: JsonObject?): CallToolResult {
+        return execute("plan_abi_binding_regeneration") {
+            analysisService.planAbiBindingRegeneration(
+                input = wasmInput(arguments),
+                bindingInput = TextInput.FilePath(arguments.requireNonBlankString("bindingPath"))
+            )
+        }
+    }
+
     fun summarizeModule(arguments: JsonObject?): CallToolResult {
         return execute("summarize_module") {
             analysisService.summarizeModule(wasmInput(arguments))

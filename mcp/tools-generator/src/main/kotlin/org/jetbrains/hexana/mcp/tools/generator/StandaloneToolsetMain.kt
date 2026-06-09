@@ -202,6 +202,12 @@ private fun emitTypeSchema(field: FieldSpec, builder: CodeBlock.Builder, indent:
             }
             builder.add("${indent}})\n")
         }
+        is FieldType.MapOf -> {
+            emitJsonType(builder, indent, "object", nullable = field.nullable)
+            builder.add("${indent}put(%S, %M {\n", "additionalProperties", BUILD_JSON_OBJECT)
+            emitTypeSchema(type.value, builder, indent = "$indent  ")
+            builder.add("${indent}})\n")
+        }
 
         else -> emitTypeSchema(type, builder, indent, nullable = field.nullable)
     }
@@ -232,6 +238,12 @@ private fun emitTypeSchema(
             emitJsonType(builder, indent, "array", nullable)
             builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
             emitTypeSchema(type.element, builder, indent = "$indent  ")
+            builder.add("${indent}})\n")
+        }
+        is FieldType.MapOf -> {
+            emitJsonType(builder, indent, "object", nullable)
+            builder.add("${indent}put(%S, %M {\n", "additionalProperties", BUILD_JSON_OBJECT)
+            emitTypeSchema(type.value, builder, indent = "$indent  ")
             builder.add("${indent}})\n")
         }
 
