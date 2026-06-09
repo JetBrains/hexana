@@ -9,7 +9,8 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisServices
 
 fun createHexanaMcpServer(
     analysisService: HexanaAnalysisService = HexanaAnalysisServices.default,
-    transport: HexanaEvent.McpTransport = HexanaEvent.McpTransport.STDIO
+    transport: HexanaEvent.McpTransport = HexanaEvent.McpTransport.STDIO,
+    toolProfile: HexanaMcpToolProfile = HexanaMcpToolProfile.PRODUCTION
 ): Server {
     val toolHandlers = HexanaToolHandlers(
         analysisService = analysisService,
@@ -24,7 +25,7 @@ fun createHexanaMcpServer(
             )
         )
     ) {
-        registerHexanaTools(toolHandlers)
+        registerHexanaTools(toolHandlers, toolProfile)
     }
 }
 

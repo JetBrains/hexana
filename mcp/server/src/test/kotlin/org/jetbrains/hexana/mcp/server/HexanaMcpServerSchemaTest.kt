@@ -27,7 +27,39 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
-    fun registryExposesGeneratedHexanaTools() {
+    fun defaultRegistryExposesProductionHexanaTools() {
+        assertEquals(
+            listOf(
+                "audit_global_state_policy",
+                "check_memory_contract",
+                "check_runtime_compatibility",
+                "diff_required_proposals",
+                "disassemble_function",
+                "get_entrypoint_policy",
+                "get_function_call_graph",
+                "list_data_segments",
+                "list_enabled_features",
+                "list_exported_functions",
+                "list_exports",
+                "list_functions",
+                "list_globals",
+                "list_imports",
+                "list_memory",
+                "list_required_proposals",
+                "plan_abi_binding_regeneration",
+                "query_artifacts",
+                "repair_entrypoint_policy",
+                "repair_host_adapter_config",
+                "search_exports",
+                "search_functions_by_name",
+                "summarize_module",
+            ),
+            createHexanaMcpServer().tools.keys.sorted(),
+        )
+    }
+
+    @Test
+    fun advancedRegistryExposesAllGeneratedHexanaTools() {
         assertEquals(
             listOf(
                 "audit_global_state_policy",
@@ -68,7 +100,7 @@ class HexanaMcpServerSchemaTest {
                 "search_functions_by_name",
                 "summarize_module",
             ),
-            createHexanaMcpServer().tools.keys.sorted(),
+            createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED).tools.keys.sorted(),
         )
     }
 

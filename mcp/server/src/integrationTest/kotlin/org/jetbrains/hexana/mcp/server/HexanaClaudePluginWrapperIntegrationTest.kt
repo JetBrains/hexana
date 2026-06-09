@@ -50,13 +50,43 @@ class HexanaClaudePluginWrapperIntegrationTest {
     }
 
     @Test
-    fun assembledClaudePluginExposesAllToolsOverStdio() = runBlocking {
-        assertWrapperExposesAllToolsOverStdio("Claude", StdioLauncher.ClaudePluginWrapper)
+    fun assembledClaudePluginExposesProductionToolsByDefaultOverStdio() = runBlocking {
+        assertWrapperExposesToolsOverStdio(
+            clientLabel = "Claude",
+            launcher = StdioLauncher.ClaudePluginWrapper,
+            expectedToolNames = EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES,
+        )
     }
 
     @Test
-    fun assembledCodexPluginExposesAllToolsOverStdio() = runBlocking {
-        assertWrapperExposesAllToolsOverStdio("Codex", StdioLauncher.CodexPluginWrapper)
+    fun assembledCodexPluginExposesProductionToolsByDefaultOverStdio() = runBlocking {
+        assertWrapperExposesToolsOverStdio(
+            clientLabel = "Codex",
+            launcher = StdioLauncher.CodexPluginWrapper,
+            expectedToolNames = EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES,
+        )
+    }
+
+    @Test
+    fun assembledClaudePluginAdvancedProfileExposesAllToolsOverStdio() = runBlocking {
+        assertWrapperExposesToolsOverStdio(
+            clientLabel = "Claude",
+            launcher = StdioLauncher.ClaudePluginWrapper,
+            expectedToolNames = EXPECTED_ADVANCED_HEXANA_TOOL_NAMES,
+            toolProfile = HexanaMcpToolProfile.ADVANCED,
+            callTool = false,
+        )
+    }
+
+    @Test
+    fun assembledCodexPluginAdvancedProfileExposesAllToolsOverStdio() = runBlocking {
+        assertWrapperExposesToolsOverStdio(
+            clientLabel = "Codex",
+            launcher = StdioLauncher.CodexPluginWrapper,
+            expectedToolNames = EXPECTED_ADVANCED_HEXANA_TOOL_NAMES,
+            toolProfile = HexanaMcpToolProfile.ADVANCED,
+            callTool = false,
+        )
     }
 
     private suspend fun assertVersionCommandExitsPromptly(launcher: StdioLauncher) {
@@ -72,15 +102,25 @@ class HexanaClaudePluginWrapperIntegrationTest {
         )
     }
 
-    private suspend fun assertWrapperExposesAllToolsOverStdio(clientLabel: String, launcher: StdioLauncher) {
+    private suspend fun assertWrapperExposesToolsOverStdio(
+        clientLabel: String,
+        launcher: StdioLauncher,
+        expectedToolNames: List<String>,
+        toolProfile: HexanaMcpToolProfile? = null,
+        callTool: Boolean = true,
+    ) {
         KotlinLoggingConfiguration.logStartupMessage = false
-        withInstalledStdioClient(launcher = launcher) { server ->
+        withInstalledStdioClient(launcher = launcher, toolProfile = toolProfile) { server ->
             logger.info("Connected {} plugin wrapper stdio client", clientLabel)
 
             val tools = server.client.listTools(ListToolsRequest())
             val toolNames = tools.tools.map { it.name }.sorted()
             logger.info("{} wrapper tools: {}", clientLabel, toolNames)
-            assertEquals(EXPECTED_HEXANA_TOOL_NAMES, toolNames)
+            assertEquals(expectedToolNames, toolNames)
+
+            if (!callTool) {
+                return@withInstalledStdioClient
+            }
 
             val wasm = temporaryFolder.newFile("claude-wrapper-summary.wasm").toPath().also {
                 Files.write(it, wat2wasm(

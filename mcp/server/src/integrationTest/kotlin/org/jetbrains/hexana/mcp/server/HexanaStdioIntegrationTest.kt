@@ -50,7 +50,7 @@ class HexanaStdioIntegrationTest {
             logger.info("Requesting tools/list over stdio")
             val tools = server.client.listTools(ListToolsRequest())
             logger.info("Received tools over stdio: {}", tools.tools.map { it.name }.sorted())
-            assertEquals(EXPECTED_HEXANA_TOOL_NAMES, tools.tools.map { it.name }.sorted())
+            assertEquals(EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES, tools.tools.map { it.name }.sorted())
 
             val wasm = createWasmFile(
                 "stdio-summary.wasm",
@@ -124,6 +124,14 @@ class HexanaStdioIntegrationTest {
                 server.stderr.contains("Starting stdio MCP transport"),
                 "STDIO server logs should stay on stderr. stderr was: ${server.stderr}"
             )
+        }
+    }
+
+    @Test
+    fun installedServerAdvancedProfileExposesAllToolsOverStdio() = runBlocking {
+        withInstalledStdioClient(toolProfile = HexanaMcpToolProfile.ADVANCED) { server ->
+            val tools = server.client.listTools(ListToolsRequest())
+            assertEquals(EXPECTED_ADVANCED_HEXANA_TOOL_NAMES, tools.tools.map { it.name }.sorted())
         }
     }
 

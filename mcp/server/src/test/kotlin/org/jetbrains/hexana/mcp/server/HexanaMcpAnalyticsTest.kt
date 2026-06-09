@@ -162,6 +162,7 @@ class HexanaMcpAnalyticsTest {
             logLevel = HexanaLogLevel.QUIET,
             analyticsKey = testApiKey(),
             analyticsEnabled = analyticsEnabled,
+            toolProfile = HexanaMcpToolProfile.PRODUCTION,
         )
     }
 
@@ -174,6 +175,7 @@ class HexanaMcpAnalyticsTest {
             logLevel = HexanaLogLevel.QUIET,
             analyticsKey = testApiKey(),
             analyticsEnabled = analyticsEnabled,
+            toolProfile = HexanaMcpToolProfile.PRODUCTION,
         )
     }
 

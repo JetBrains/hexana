@@ -146,7 +146,10 @@ internal fun initializeMcpAnalytics(analytics: CommandAnalytics) {
 
 private suspend fun runStdio(command: HexanaCommand.Stdio) {
     configureLogging(command.logLevel)
-    val server = createHexanaMcpServer(transport = HexanaEvent.McpTransport.STDIO)
+    val server = createHexanaMcpServer(
+        transport = HexanaEvent.McpTransport.STDIO,
+        toolProfile = command.toolProfile
+    )
     val finished = CompletableDeferred<Unit>()
     val transport = StdioServerTransport(
         inputStream = System.`in`.asSource().buffered(),
@@ -161,7 +164,7 @@ private suspend fun runStdio(command: HexanaCommand.Stdio) {
         finished.complete(Unit)
     }
 
-    logger.info("Starting stdio MCP transport")
+    logger.info("Starting stdio MCP transport with {} tool profile", command.toolProfile.cliValue())
     server.createSession(transport)
     try {
         finished.await()
@@ -172,7 +175,13 @@ private suspend fun runStdio(command: HexanaCommand.Stdio) {
 
 private suspend fun runHttp(command: HexanaCommand.Http) {
     configureLogging(command.logLevel)
-    logger.info("Starting HTTP MCP transport on http://{}:{}{}", command.host, command.port, command.endpoint)
+    logger.info(
+        "Starting HTTP MCP transport on http://{}:{}{} with {} tool profile",
+        command.host,
+        command.port,
+        command.endpoint,
+        command.toolProfile.cliValue()
+    )
     val localOnlyBinding = !command.allowPublicBind
     embeddedServer(CIO, host = command.host, port = command.port) {
         if (localOnlyBinding) {
@@ -190,7 +199,10 @@ private suspend fun runHttp(command: HexanaCommand.Http) {
             allowedOrigins = null,
             eventStore = null
         ) {
-            createHexanaMcpServer(transport = HexanaEvent.McpTransport.HTTP)
+            createHexanaMcpServer(
+                transport = HexanaEvent.McpTransport.HTTP,
+                toolProfile = command.toolProfile
+            )
         }
     }.start(wait = true)
 }

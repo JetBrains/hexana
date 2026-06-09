@@ -18,6 +18,7 @@ class HexanaCliTest {
         assertIs<HexanaCommand.Stdio>(command)
         assertEquals(HexanaLogLevel.INFO, command.logLevel)
         assertTrue(command.analyticsEnabled)
+        assertEquals(HexanaMcpToolProfile.PRODUCTION, command.toolProfile)
     }
 
     @Test
@@ -29,8 +30,28 @@ class HexanaCliTest {
     }
 
     @Test
+    fun parseAcceptsAdvancedToolProfileForStdio() {
+        val command = cli.parse(arrayOf("stdio", "--tool-profile", "advanced"))
+
+        assertIs<HexanaCommand.Stdio>(command)
+        assertEquals(HexanaMcpToolProfile.ADVANCED, command.toolProfile)
+    }
+
+    @Test
     fun parseNormalizesHttpEndpointAndKeepsLoopbackDefaults() {
-        val command = cli.parse(arrayOf("http", "--endpoint", "api", "--log-level", "debug", "--telemetry-enabled", "false"))
+        val command = cli.parse(
+            arrayOf(
+                "http",
+                "--endpoint",
+                "api",
+                "--log-level",
+                "debug",
+                "--telemetry-enabled",
+                "false",
+                "--tool-profile",
+                "full",
+            )
+        )
 
         assertIs<HexanaCommand.Http>(command)
         assertEquals("127.0.0.1", command.host)
@@ -38,6 +59,7 @@ class HexanaCliTest {
         assertEquals("/api", command.endpoint)
         assertEquals(HexanaLogLevel.DEBUG, command.logLevel)
         assertFalse(command.analyticsEnabled)
+        assertEquals(HexanaMcpToolProfile.ADVANCED, command.toolProfile)
     }
 
     @Test
@@ -87,5 +109,15 @@ class HexanaCliTest {
 
         assertTrue(error.message.orEmpty().contains("true"))
         assertTrue(error.message.orEmpty().contains("false"))
+    }
+
+    @Test
+    fun parseRejectsUnsupportedToolProfile() {
+        val error = assertFailsWith<CliktError> {
+            cli.parse(arrayOf("stdio", "--tool-profile", "minimal"))
+        }
+
+        assertTrue(error.message.orEmpty().contains("production"))
+        assertTrue(error.message.orEmpty().contains("advanced"))
     }
 }

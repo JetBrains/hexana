@@ -22,7 +22,8 @@ class HexanaVersionWarningTest {
                 HexanaCommand.Stdio(
                     logLevel = HexanaLogLevel.INFO,
                     analyticsKey = null,
-                    analyticsEnabled = true
+                    analyticsEnabled = true,
+                    toolProfile = HexanaMcpToolProfile.PRODUCTION
                 ),
                 "0.7"
             )
@@ -39,7 +40,8 @@ class HexanaVersionWarningTest {
                 allowPublicBind = false,
                 logLevel = HexanaLogLevel.INFO,
                 analyticsKey = null,
-                analyticsEnabled = true
+                analyticsEnabled = true,
+                toolProfile = HexanaMcpToolProfile.PRODUCTION
             ),
             "dev"
         )

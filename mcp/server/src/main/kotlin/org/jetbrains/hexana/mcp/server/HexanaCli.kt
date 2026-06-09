@@ -9,7 +9,8 @@ sealed interface HexanaCommand {
     data class Stdio(
         val logLevel: HexanaLogLevel,
         val analyticsKey: String?,
-        val analyticsEnabled: Boolean
+        val analyticsEnabled: Boolean,
+        val toolProfile: HexanaMcpToolProfile
     ) : HexanaCommand
 
     data class Http(
@@ -19,7 +20,8 @@ sealed interface HexanaCommand {
         val allowPublicBind: Boolean,
         val logLevel: HexanaLogLevel,
         val analyticsKey: String?,
-        val analyticsEnabled: Boolean
+        val analyticsEnabled: Boolean,
+        val toolProfile: HexanaMcpToolProfile
     ) : HexanaCommand
 
     data object Version : HexanaCommand
@@ -80,12 +82,15 @@ class HexanaCli {
 
         private val analyticsEnabled by analyticsEnabledOption()
 
+        private val toolProfile by toolProfileOption()
+
         override fun run() {
             sink(
                 HexanaCommand.Stdio(
                     logLevel = logLevel,
                     analyticsKey = analyticsKey,
-                    analyticsEnabled = analyticsEnabled
+                    analyticsEnabled = analyticsEnabled,
+                    toolProfile = toolProfile
                 )
             )
         }
@@ -131,6 +136,8 @@ class HexanaCli {
 
         private val analyticsEnabled by analyticsEnabledOption()
 
+        private val toolProfile by toolProfileOption()
+
         override fun run() {
             if (!allowPublicBind && !host.isLoopbackHost()) {
                 throw UsageError("Public HTTP bind requires --allow-public-bind")
@@ -144,7 +151,8 @@ class HexanaCli {
                     allowPublicBind = allowPublicBind,
                     logLevel = logLevel,
                     analyticsKey = analyticsKey,
-                    analyticsEnabled = analyticsEnabled
+                    analyticsEnabled = analyticsEnabled,
+                    toolProfile = toolProfile
                 )
             )
         }
@@ -186,6 +194,20 @@ private fun CliktCommand.analyticsEnabledOption() = option(
     help = "Whether anonymous usage analytics are allowed.",
     envvar = "HEXANA_MCP_TELEMETRY_ENABLED"
 ).convert("true|false") { parseBooleanOption("--telemetry-enabled", it) }.default(true)
+
+private fun CliktCommand.toolProfileOption() = option(
+    "--tool-profile",
+    help = "MCP tool inventory: production is compact, advanced exposes the full investigation surface.",
+    envvar = "HEXANA_MCP_TOOL_PROFILE"
+).convert("production|advanced") { parseToolProfile(it) }.default(HexanaMcpToolProfile.PRODUCTION)
+
+private fun parseToolProfile(value: String): HexanaMcpToolProfile {
+    return try {
+        HexanaMcpToolProfile.parseCliValue(value)
+    } catch (_: IllegalArgumentException) {
+        throw UsageError("Unsupported MCP tool profile: $value. Expected production or advanced.")
+    }
+}
 
 private fun parseBooleanOption(optionName: String, value: String): Boolean {
     return when (value.lowercase()) {

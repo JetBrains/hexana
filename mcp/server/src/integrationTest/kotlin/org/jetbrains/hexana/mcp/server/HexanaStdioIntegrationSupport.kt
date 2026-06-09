@@ -96,12 +96,21 @@ internal class HexanaInstalledStdioClient private constructor(
         suspend fun start(
             logLevel: HexanaLogLevel = HexanaLogLevel.INFO,
             launcher: StdioLauncher = StdioLauncher.Server,
+            toolProfile: HexanaMcpToolProfile? = null,
         ): HexanaInstalledStdioClient {
             val installDir = integrationInstallDir(launcher.installDirSystemProperty)
             val command = buildCommand(
                 installDir = installDir,
                 launcher = launcher,
-                arguments = listOf("stdio", "--log-level", logLevel.cliValue())
+                arguments = buildList {
+                    add("stdio")
+                    add("--log-level")
+                    add(logLevel.cliValue())
+                    if (toolProfile != null) {
+                        add("--tool-profile")
+                        add(toolProfile.cliValue())
+                    }
+                }
             )
             logger.info(
                 "Starting installed stdio server from {} with logLevel={} command={}",
@@ -274,9 +283,14 @@ internal data class InstalledCommandResult(
 internal suspend inline fun <T> withInstalledStdioClient(
     logLevel: HexanaLogLevel = HexanaLogLevel.INFO,
     launcher: StdioLauncher = StdioLauncher.Server,
+    toolProfile: HexanaMcpToolProfile? = null,
     crossinline block: suspend (HexanaInstalledStdioClient) -> T
 ): T {
-    val server = HexanaInstalledStdioClient.start(logLevel = logLevel, launcher = launcher)
+    val server = HexanaInstalledStdioClient.start(
+        logLevel = logLevel,
+        launcher = launcher,
+        toolProfile = toolProfile,
+    )
     return try {
         block(server)
     } finally {

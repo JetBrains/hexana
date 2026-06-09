@@ -60,14 +60,15 @@ internal class HexanaInstalledServer private constructor(
 
         suspend fun start(
             endpoint: String = "/mcp",
-            logLevel: HexanaLogLevel = HexanaLogLevel.QUIET
+            logLevel: HexanaLogLevel = HexanaLogLevel.QUIET,
+            toolProfile: HexanaMcpToolProfile? = null,
         ): HexanaInstalledServer {
             val installDir = integrationInstallDir()
             val port = findFreePort()
             val stdoutBuffer = StringBuffer()
             val stderrBuffer = StringBuffer()
 
-            val command = buildCommand(installDir, port, endpoint, logLevel)
+            val command = buildCommand(installDir, port, endpoint, logLevel, toolProfile)
             logger.info(
                 "Starting installed server from {} on http://127.0.0.1:{}{} with logLevel={} command={}",
                 installDir,
@@ -121,37 +122,33 @@ internal class HexanaInstalledServer private constructor(
             installDir: Path,
             port: Int,
             endpoint: String,
-            logLevel: HexanaLogLevel
+            logLevel: HexanaLogLevel,
+            toolProfile: HexanaMcpToolProfile?,
         ): List<String> {
             val binDir = installDir.resolve("bin")
+            val arguments = buildList {
+                add("http")
+                add("--host")
+                add("127.0.0.1")
+                add("--port")
+                add(port.toString())
+                add("--endpoint")
+                add(endpoint)
+                add("--log-level")
+                add(logLevel.cliValue())
+                if (toolProfile != null) {
+                    add("--tool-profile")
+                    add(toolProfile.cliValue())
+                }
+            }
             return if (isWindows()) {
                 listOf(
                     "cmd.exe",
                     "/c",
                     binDir.resolve("server.bat").toString(),
-                    "http",
-                    "--host",
-                    "127.0.0.1",
-                    "--port",
-                    port.toString(),
-                    "--endpoint",
-                    endpoint,
-                    "--log-level",
-                    logLevel.cliValue()
-                )
+                ) + arguments
             } else {
-                listOf(
-                    binDir.resolve("server").toString(),
-                    "http",
-                    "--host",
-                    "127.0.0.1",
-                    "--port",
-                    port.toString(),
-                    "--endpoint",
-                    endpoint,
-                    "--log-level",
-                    logLevel.cliValue()
-                )
+                listOf(binDir.resolve("server").toString()) + arguments
             }
         }
 
@@ -245,9 +242,14 @@ private suspend fun java.io.InputStream.pumpTo(target: StringBuffer, streamName:
 internal suspend inline fun <T> withInstalledServer(
     endpoint: String = "/mcp",
     logLevel: HexanaLogLevel = HexanaLogLevel.QUIET,
+    toolProfile: HexanaMcpToolProfile? = null,
     crossinline block: suspend (HexanaInstalledServer) -> T
 ): T {
-    val server = HexanaInstalledServer.start(endpoint = endpoint, logLevel = logLevel)
+    val server = HexanaInstalledServer.start(
+        endpoint = endpoint,
+        logLevel = logLevel,
+        toolProfile = toolProfile,
+    )
     return try {
         block(server)
     } finally {

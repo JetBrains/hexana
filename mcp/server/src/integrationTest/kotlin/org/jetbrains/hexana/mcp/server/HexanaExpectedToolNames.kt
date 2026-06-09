@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.mcp.server
 
-internal val EXPECTED_HEXANA_TOOL_NAMES = listOf(
+internal val EXPECTED_ADVANCED_HEXANA_TOOL_NAMES = listOf(
     "audit_global_state_policy",
     "check_memory_contract",
     "check_runtime_compatibility",
@@ -30,10 +30,37 @@ internal val EXPECTED_HEXANA_TOOL_NAMES = listOf(
     "list_required_proposals",
     "list_types",
     "list_value_types",
+    "plan_abi_binding_regeneration",
     "query_artifacts",
     "repair_entrypoint_policy",
     "repair_host_adapter_config",
     "resolve_function_signature",
+    "search_exports",
+    "search_functions_by_name",
+    "summarize_module",
+)
+
+internal val EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES = listOf(
+    "audit_global_state_policy",
+    "check_memory_contract",
+    "check_runtime_compatibility",
+    "diff_required_proposals",
+    "disassemble_function",
+    "get_entrypoint_policy",
+    "get_function_call_graph",
+    "list_data_segments",
+    "list_enabled_features",
+    "list_exported_functions",
+    "list_exports",
+    "list_functions",
+    "list_globals",
+    "list_imports",
+    "list_memory",
+    "list_required_proposals",
+    "plan_abi_binding_regeneration",
+    "query_artifacts",
+    "repair_entrypoint_policy",
+    "repair_host_adapter_config",
     "search_exports",
     "search_functions_by_name",
     "summarize_module",
