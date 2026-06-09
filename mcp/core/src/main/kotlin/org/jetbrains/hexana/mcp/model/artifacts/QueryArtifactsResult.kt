@@ -16,6 +16,8 @@ data class QueryArtifactsResult(
 data class ArtifactModuleResult(
     val source: String,
     val path: String? = null,
+    val artifactPath: String? = null,
+    val artifactName: String? = null,
     val functions: Int,
     val imports: Int,
     val exports: Int,
@@ -36,6 +38,8 @@ data class ArtifactRecordResult(
     val name: String? = null,
     val kind: String? = null,
     val index: Int? = null,
+    val artifactPath: String? = null,
+    val artifactName: String? = null,
     val locationKind: String? = null,
     val module: String? = null,
     val typeidx: Int? = null,

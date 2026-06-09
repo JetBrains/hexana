@@ -255,11 +255,12 @@ fun WasmBinaryProvider.readArtifactQuery(
         add(toArtifactModuleResult("current", pathLabel))
         baseline?.let { add(it.toArtifactModuleResult("baseline", baselinePathLabel)) }
     }
+    val recordsWithArtifactIdentity = records.withArtifactIdentity(modules)
     val budgetedRecords = budgetRecords(
         operation = effectiveOperation,
         detail = effectiveDetail,
         modules = modules,
-        records = records,
+        records = recordsWithArtifactIdentity,
         limit = boundedLimit,
         maxBytes = boundedMaxBytes,
         warnings = warnings
@@ -1006,7 +1007,7 @@ private fun WasmBinaryProvider.crashFrameRecords(
     terms: List<String>,
     limit: Int
 ): List<ArtifactRecordResult> {
-    val startIndices = resolveStartFunctions(startName, startFuncidx, terms, limit)
+    val startIndices = resolveStartFunctions(startName, startFuncidx, terms, limit).sorted()
     if (startIndices.isEmpty()) {
         return listOf(
             ArtifactRecordResult(
@@ -1024,7 +1025,7 @@ private fun WasmBinaryProvider.crashFrameRecords(
         )
     }
 
-    val graph = readFunctionCallGraph(startIndices).functions
+    val graph = readFunctionCallGraph(startIndices).functions.sortedBy { it.funcidx }
     val frameRecords = graph.map { it.toCrashFrameRecord() }
     val suspiciousCalls = graph.flatMap { function ->
         function.directImportedCalls.map { call ->
@@ -1052,7 +1053,12 @@ private fun WasmBinaryProvider.crashFrameRecords(
                 }.toAttributes()
             )
         }
-    }
+    }.sortedWith(
+        compareBy<ArtifactRecordResult> { it.attrValue("callerFuncidx")?.toIntOrNull() ?: Int.MAX_VALUE }
+            .thenBy { it.attrValue("offset")?.toLongOrNull() ?: Long.MAX_VALUE }
+            .thenBy { it.attrValue("targetFuncidx")?.toIntOrNull() ?: Int.MAX_VALUE }
+            .thenBy { it.name ?: it.id }
+    )
 
     return listOf(crashFrameFinding(frameRecords, suspiciousCalls)) + frameRecords + suspiciousCalls
 }
@@ -1259,6 +1265,8 @@ private fun WasmBinaryProvider.toArtifactModuleResult(source: String, path: Stri
     return ArtifactModuleResult(
         source = source,
         path = path,
+        artifactPath = path,
+        artifactName = path?.artifactName(),
         functions = summary.functions,
         imports = summary.imports.functions + summary.imports.memories + summary.imports.tables + summary.imports.globals,
         exports = summary.exports,
@@ -1268,6 +1276,19 @@ private fun WasmBinaryProvider.toArtifactModuleResult(source: String, path: Stri
         types = summary.types,
         moduleSize = summary.moduleSize
     )
+}
+
+private fun List<ArtifactRecordResult>.withArtifactIdentity(
+    modules: List<ArtifactModuleResult>
+): List<ArtifactRecordResult> {
+    val modulesBySource = modules.associateBy { it.source }
+    return map { record ->
+        val module = modulesBySource[record.source] ?: modules.firstOrNull()
+        record.copy(
+            artifactPath = record.artifactPath ?: module?.artifactPath ?: module?.path,
+            artifactName = record.artifactName ?: module?.artifactName
+        )
+    }
 }
 
 private fun ExportResult.toExportEntity(
@@ -2562,6 +2583,10 @@ private fun crashFrameFinding(
     frames: List<ArtifactRecordResult>,
     suspiciousCalls: List<ArtifactRecordResult>
 ): ArtifactRecordResult {
+    val frameFuncidx = frames.mapNotNull { it.index }.distinct().sorted()
+    val callOffsets = suspiciousCalls.mapNotNull { it.attrValue("offset")?.toLongOrNull() }.distinct().sorted()
+    val callerFuncidx = suspiciousCalls.mapNotNull { it.attrValue("callerFuncidx")?.toIntOrNull() }.distinct().sorted()
+    val targetFuncidx = suspiciousCalls.mapNotNull { it.attrValue("targetFuncidx")?.toIntOrNull() }.distinct().sorted()
     return ArtifactRecordResult(
         id = "crash-frames:summary",
         entityType = "finding",
@@ -2569,9 +2594,12 @@ private fun crashFrameFinding(
         source = "current",
         summary = "Crash frame query resolved ${frames.size} functions and ${suspiciousCalls.size} direct imported calls",
         attributes = buildList {
-            if (frames.isNotEmpty()) add("funcidx", frames.mapNotNull { it.index }.joinToString(","))
+            if (frameFuncidx.isNotEmpty()) add("funcidx", frameFuncidx.joinToString(","))
+            if (callOffsets.isNotEmpty()) add("instructionOffsets", callOffsets.joinToString(","))
+            if (callerFuncidx.isNotEmpty()) add("callerFuncidx", callerFuncidx.joinToString(","))
+            if (targetFuncidx.isNotEmpty()) add("targetFuncidx", targetFuncidx.joinToString(","))
             if (suspiciousCalls.isNotEmpty()) {
-                add("directImportedCalls", suspiciousCalls.mapNotNull { it.attrValue("targetImport") ?: it.name }.distinct().joinToString(","))
+                add("directImportedCalls", suspiciousCalls.mapNotNull { it.attrValue("targetImport") ?: it.name }.distinct().sorted().joinToString(","))
             }
         }.toAttributes()
     )
@@ -2843,6 +2871,9 @@ private fun List<String>.activeElementBaseSlot(): Int? {
     val expr = firstOrNull() ?: return null
     return Regex("""i32\.const\s+(-?\d+)""").find(expr)?.groupValues?.getOrNull(1)?.toIntOrNull()
 }
+
+private fun String.artifactName(): String =
+    trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\')
 
 private fun Int?.orZero(): Int = this ?: 0
 

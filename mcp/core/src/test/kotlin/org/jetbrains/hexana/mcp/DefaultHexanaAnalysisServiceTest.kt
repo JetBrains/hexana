@@ -460,6 +460,108 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun queryArtifactsPreservesCanonicalArtifactPathForNestedBasenameCollisions() {
+        val baseline = createWasmFile(
+            "previous/runtime/sync.wasm",
+            """
+            (module
+              (func (export "sync") (result i32)
+                i32.const 1))
+            """.trimIndent()
+        )
+        val current = createWasmFile(
+            "dist/runtime/sync.wasm",
+            """
+            (module
+              (func (export "sync") (result i64)
+                i64.const 1))
+            """.trimIndent()
+        )
+
+        val result = service.queryArtifacts(
+            input = WasmInput.FilePath(current.toString()),
+            baselineInput = WasmInput.FilePath(baseline.toString()),
+            bindingInput = null,
+            configInput = null,
+            operation = "triage",
+            entityTypes = listOf("export"),
+            query = emptyList(),
+            startName = null,
+            startFuncidx = null,
+            relations = emptyList(),
+            limit = 25,
+            detail = "summary",
+            maxBytes = 24_000
+        )
+
+        assertEquals(current.toString(), result.modules.single { it.source == "current" }.artifactPath)
+        assertEquals(baseline.toString(), result.modules.single { it.source == "baseline" }.artifactPath)
+        assertEquals("sync.wasm", result.modules.single { it.source == "current" }.artifactName)
+        assertEquals("sync.wasm", result.modules.single { it.source == "baseline" }.artifactName)
+
+        val changedExport = result.records.single { it.id == "export:function:sync" }
+        assertEquals(current.toString(), changedExport.artifactPath)
+        assertEquals("sync.wasm", changedExport.artifactName)
+        assertTrue(changedExport.artifactPath!!.endsWith("dist/runtime/sync.wasm"))
+    }
+
+    @Test
+    fun queryArtifactsCrashFramesReturnsStableOffsetAndIndexEvidence() {
+        val wasm = createWasmFile(
+            "dist/runtime/crash.wasm",
+            """
+            (module
+              (import "env" "log_error" (func ${'$'}log_error))
+              (import "env" "read_clock" (func ${'$'}read_clock (result i64)))
+              (func ${'$'}handle_checkout (export "handle_checkout") (param i32)
+                local.get 0
+                call ${'$'}apply_discount
+                call ${'$'}log_error)
+              (func ${'$'}validate_cart
+                call ${'$'}read_clock
+                drop)
+              (func ${'$'}apply_discount (export "apply_discount") (param i32) (result i32)
+                call ${'$'}read_clock
+                drop
+                local.get 0))
+            """.trimIndent()
+        )
+
+        val result = service.queryArtifacts(
+            input = WasmInput.FilePath(wasm.toString()),
+            baselineInput = null,
+            bindingInput = null,
+            configInput = null,
+            operation = "crash_frames",
+            entityTypes = emptyList(),
+            query = listOf("4", "2", "0"),
+            startName = null,
+            startFuncidx = null,
+            relations = emptyList(),
+            limit = 25,
+            detail = "summary",
+            maxBytes = 24_000
+        )
+
+        val summary = result.records.single { it.id == "crash-frames:summary" }
+        assertEquals("0,2,4", summary.attributeValue("funcidx"))
+        assertEquals("2,4", summary.attributeValue("callerFuncidx"))
+        assertEquals("0,1", summary.attributeValue("targetFuncidx"))
+        assertEquals("env.log_error,env.read_clock", summary.attributeValue("directImportedCalls"))
+        assertEquals(
+            summary.attributeValue("instructionOffsets")!!.split(",").map { it.toLong() }.sorted(),
+            summary.attributeValue("instructionOffsets")!!.split(",").map { it.toLong() }
+        )
+
+        val hostCalls = result.records.filter { it.entityType == "host_call" }
+        assertEquals(
+            hostCalls.mapNotNull { it.attributeValue("offset")?.toLong() }.sorted(),
+            hostCalls.mapNotNull { it.attributeValue("offset")?.toLong() }
+        )
+        assertTrue(hostCalls.all { it.artifactPath == wasm.toString() })
+    }
+
+    @Test
     fun auditGlobalStatePolicyReportsAllowedForbiddenAndMutableGlobals() {
         val baseline = createWasmFile(
             "global-audit-baseline.wasm",
@@ -1060,16 +1162,20 @@ class DefaultHexanaAnalysisServiceTest {
         assertEquals(HexanaAnalysisErrorCode.OUT_OF_RANGE, negativeMinByteLength.code)
     }
 
-    private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {
+    private fun createWasmFile(name: String, wat: String) = temporaryFile(name).also {
         Files.write(it, wat2wasm(wat))
     }
 
-    private fun createBindingFile(name: String, text: String) = temporaryFolder.newFile(name).toPath().also {
+    private fun createBindingFile(name: String, text: String) = temporaryFile(name).also {
         Files.writeString(it, text)
     }
 
-    private fun createTextFile(name: String, text: String) = temporaryFolder.newFile(name).toPath().also {
+    private fun createTextFile(name: String, text: String) = temporaryFile(name).also {
         Files.writeString(it, text)
+    }
+
+    private fun temporaryFile(name: String) = temporaryFolder.root.toPath().resolve(name).also {
+        Files.createDirectories(it.parent)
     }
 
     private fun globalStatePolicyWat(

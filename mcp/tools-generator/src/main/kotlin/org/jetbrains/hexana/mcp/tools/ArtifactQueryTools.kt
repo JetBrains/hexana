@@ -58,6 +58,8 @@ private val RepairHostAdapterConfigInput = WasmInputClass.with("RepairHostAdapte
 private val ArtifactModuleResultClass = class_("ArtifactModuleResult", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
     string("source").describe("Module role: `current` or `baseline`.")
     nullable("path", of = string()).describe("Input path label for this module when the caller provided `path` or `baselinePath`.")
+    nullable("artifactPath", of = string()).describe("Canonical artifact path echoed from `path` or `baselinePath` for report-ready module identity.")
+    nullable("artifactName", of = string()).describe("Display basename derived from `artifactPath`; use `artifactPath` when paths can collide.")
     int("functions").describe("Function count.")
     int("imports").describe("Total import count across supported import kinds.")
     int("exports").describe("Export count.")
@@ -87,6 +89,8 @@ private val ArtifactRecordResultClass = class_("ArtifactRecordResult", kotlinPac
     nullable("name", of = string()).describe("Entity name when one exists.")
     nullable("kind", of = string()).describe("Entity kind or operation kind.")
     nullable("index", of = int()).describe("Primary numeric index when one exists.")
+    nullable("artifactPath", of = string()).describe("Canonical artifact path that owns this record; prefer it over display names or basenames in reports.")
+    nullable("artifactName", of = string()).describe("Display basename for the owning artifact; use `artifactPath` when paths can collide.")
     nullable("locationKind", of = string()).describe("Structured location kind, for example `import`, when the record points at a specific ABI location.")
     nullable("module", of = string()).describe("Structured module name for import or module-scoped ABI records.")
     nullable("typeidx", of = int()).describe("Structured type index when the record points at a WebAssembly function type.")

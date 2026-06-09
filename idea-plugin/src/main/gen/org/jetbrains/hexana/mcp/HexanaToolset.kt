@@ -7055,6 +7055,20 @@ public class HexanaToolset : McpToolsProvider {
                 })
                 put("description", JsonPrimitive("Input path label for this module when the caller provided `path` or `baselinePath`."))
               })
+              put("artifactPath", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Canonical artifact path echoed from `path` or `baselinePath` for report-ready module identity."))
+              })
+              put("artifactName", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Display basename derived from `artifactPath`; use `artifactPath` when paths can collide."))
+              })
               put("functions", buildJsonObject {
                 put("type", JsonPrimitive("integer"))
                 put("description", JsonPrimitive("Function count."))
@@ -7147,6 +7161,20 @@ public class HexanaToolset : McpToolsProvider {
                   add(JsonPrimitive("null"))
                 })
                 put("description", JsonPrimitive("Primary numeric index when one exists."))
+              })
+              put("artifactPath", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Canonical artifact path that owns this record; prefer it over display names or basenames in reports."))
+              })
+              put("artifactName", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Display basename for the owning artifact; use `artifactPath` when paths can collide."))
               })
               put("locationKind", buildJsonObject {
                 put("type", buildJsonArray {
