@@ -31,6 +31,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.providers.NativeImageInfo
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.run.PopupMode
@@ -201,6 +202,19 @@ internal fun FileDescriptionBar(
             ),
         )
 
+        val nativeImage = remember(binaryProvider) {
+            (binaryProvider as? NativeBinaryProvider)?.nativeImageInfo
+        }
+        if (nativeImage != null) {
+            NativeImageBadges(
+                info = nativeImage,
+                onOpenSbom = {
+                    state.requestSelectTabByDescription("SBOM")
+                    if (state.topFraction > 0.9f) state.setTopFraction(0.5f)
+                },
+            )
+        }
+
         if (parentFileName != null) {
             val linkColor = if (JewelTheme.isDark) Color(0xFF589DF6) else Color(0xFF2470B3)
             Text(
@@ -305,6 +319,56 @@ private fun ToolbarActionButton(
                     color = buttonForeground,
                 ),
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NativeImageBadges(
+    info: NativeImageInfo,
+    onOpenSbom: () -> Unit,
+) {
+    val niBackground = if (JewelTheme.isDark) Color(0xFF3A3357) else Color(0xFFE6E0F5)
+    val niForeground = if (JewelTheme.isDark) Color(0xFFC4B5F0) else Color(0xFF5B3FA6)
+
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (info.isNativeImage) {
+            val tooltipText = buildString {
+                append("GraalVM Native Image")
+                info.version?.let { append('\n').append(it) }
+                val edition = when (info.edition) {
+                    NativeImageInfo.Edition.COMMUNITY -> "Community"
+                    NativeImageInfo.Edition.ENTERPRISE -> "Enterprise"
+                    NativeImageInfo.Edition.UNKNOWN -> null
+                }
+                edition?.let { append('\n').append(it) }
+                info.platform?.let { append('\n').append(it) }
+            }
+            Tooltip(tooltip = { Text(tooltipText) }) {
+                Text(
+                    text = "Native Image",
+                    modifier = Modifier
+                        .background(niBackground, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = TextStyle(fontSize = 11.sp, color = niForeground),
+                )
+            }
+        }
+
+        // SBOM badge: only when the embedded SBOM symbols resolved to a locator.
+        if (info.sbom != null && info.isNativeImage) {
+            Tooltip(tooltip = { Text("Open the CycloneDX SBOM viewer") }) {
+                Text(
+                    text = "SBOM",
+                    modifier = Modifier
+                        .background(niBackground, RoundedCornerShape(4.dp))
+                        .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                        .clickable { onOpenSbom() }
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = TextStyle(fontSize = 11.sp, color = niForeground, fontWeight = FontWeight.SemiBold),
+                )
+            }
         }
     }
 }

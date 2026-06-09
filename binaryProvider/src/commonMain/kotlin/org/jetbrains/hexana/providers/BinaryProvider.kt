@@ -129,6 +129,14 @@ sealed class NativeBinaryProvider(
 
     open val nativeFunctions: List<NativeFunctionRecord>? get() = null
     open val nativeSourceLocationProvider: NativeDwarfSourceLocationProvider? get() = null
+
+    /**
+     * GraalVM Native Image fingerprint for this binary, or `null` when it is not
+     * (or cannot be confirmed to be) a native-image-produced executable. See
+     * [NativeImageDetector]. Format-specific subclasses override this with the
+     * signals available to them (strings, sections, symbols, exports).
+     */
+    open val nativeImageInfo: NativeImageInfo? get() = null
 }
 
 class ElfBinaryProvider(
@@ -177,6 +185,13 @@ class ElfBinaryProvider(
         val sec = sections ?: return@lazy null
         if (sec.none { it.name == ".debug_line" } || sec.none { it.name == ".debug_info" }) return@lazy null
         NativeDwarfSourceLocationProvider(bytes, ElfDwarfAccessor(sec))
+    }
+
+    override val nativeImageInfo: NativeImageInfo? by lazy {
+        val sec = sections ?: return@lazy null
+        val sym = symbols ?: return@lazy null
+        val ph = programHeaders ?: return@lazy null
+        NativeImageDetector.fromElf(strings, sec, sym, ph, bytes).takeIf { it !== NativeImageInfo.NONE }
     }
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
@@ -258,6 +273,12 @@ class MachOBinaryProvider(
         val sec = sections ?: return@lazy null
         if (sec.none { it.name == "__debug_line" } || sec.none { it.name == "__debug_info" }) return@lazy null
         NativeDwarfSourceLocationProvider(bytes, MachODwarfAccessor(sec))
+    }
+
+    override val nativeImageInfo: NativeImageInfo? by lazy {
+        val sec = sections ?: return@lazy null
+        val sym = symbols ?: return@lazy null
+        NativeImageDetector.fromMachO(strings, sec, sym, bytes).takeIf { it !== NativeImageInfo.NONE }
     }
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
@@ -359,6 +380,11 @@ class PeBinaryProvider(
     val coffSymbols: List<PeCoffSymbol>? by lazy {
         val c = coffHeader ?: return@lazy null
         PeParser.parseCoffSymbols(bytes, c)
+    }
+
+    override val nativeImageInfo: NativeImageInfo? by lazy {
+        val sec = sections ?: return@lazy null
+        NativeImageDetector.fromPe(strings, sec, exports, bytes).takeIf { it !== NativeImageInfo.NONE }
     }
 
     override val sizeAnalysis: BinarySizeNode? by lazy {

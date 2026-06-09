@@ -4,6 +4,8 @@
 
 ### Added
 - NodeJS and Browser (for debug - Chrome only) are supported as wasm runtimes for run/debug wasm configurations
+- GraalVM Native Image: native executables and shared libraries produced by `native-image` (ELF, Mach-O, PE) are detected by their SubstrateVM fingerprint — the `com.oracle.svm.core.VM=GraalVM …` identity string, `.svm_*`/`__svm*` sections, and the `__svm_version_info` marker — and tagged with a "Native Image" badge (tooltip shows version, edition, and target platform). Detection survives release stripping because the identity string lives in read-only data
+- GraalVM Native Image SBOM: binaries built with `--enable-sbom` (default-on in Oracle GraalVM for JDK 25+) get a "SBOM" badge and a dedicated SBOM tab that renders the embedded CycloneDX bill of materials — a metadata header (subject, timestamp, generating tool) plus a searchable, sortable table of components (type, group, name, version, licenses, PURL), with a "View raw JSON" action for the decompressed document
 
 ### Changed
 - WASM debugging – better handling of breakpoints on Windows (if it didn't attach for you previously it should now)

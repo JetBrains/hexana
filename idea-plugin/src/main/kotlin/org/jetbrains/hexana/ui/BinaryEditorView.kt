@@ -508,6 +508,7 @@ private fun rebuildProviderFromBytes(original: BinaryProvider, newBytes: ByteArr
 private fun NativeBinaryProvider.commonNativePanels(state: HexViewStateHolder): List<Panel> {
     return listOfNotNull(
         Panel("Top") { PanelSize(this, state) }.takeIf { this.sizeAnalysis != null },
+        Panel("SBOM") { CycloneDxSbomPanel(this, state) }.takeIf { this.nativeImageInfo?.sbom != null },
         Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
         Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) }
     )
