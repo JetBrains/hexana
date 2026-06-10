@@ -20,23 +20,64 @@ data class CycloneDxSbom(
     val mainComponent: CdxComponent?,
     val tools: List<String>,
     val components: List<CdxComponent>,
-    val dependencyCount: Int,
+    val dependencies: List<CdxDependency>,
     val vulnerabilities: List<CdxVulnerability>,
-)
+) {
+    val dependencyCount: Int get() = dependencies.size
 
+    /** Every component flattened, including nested class-level children. */
+    fun allComponents(): List<CdxComponent> = components.flatMap { it.flatten() }
+}
+
+/**
+ * A CycloneDX component. For a default `--enable-sbom=embed` binary this is a flat
+ * library entry. For a `--enable-sbom=class-level` binary the top-level library
+ * carries nested [children] — module → source-file leaves whose [properties] list
+ * the classes/methods that survived native-image's dead-code elimination.
+ */
 data class CdxComponent(
     val type: String?,
     val group: String?,
     val name: String?,
     val version: String?,
     val purl: String?,
+    val bomRef: String?,
     val licenses: List<String>,
-)
+    val properties: List<CdxProperty>,
+    val children: List<CdxComponent>,
+) {
+    val kind: CdxComponentKind
+        get() = if (type.equals("file", ignoreCase = true)) CdxComponentKind.SourceFile else CdxComponentKind.Library
+
+    fun propertyValue(name: String): String? =
+        properties.firstOrNull { it.name.equals(name, ignoreCase = true) }?.value
+
+    /** Class names from the `Classes` property of a class-level leaf (best-effort split). */
+    fun classes(): List<String> = splitNames(propertyValue("Classes"))
+
+    /** Method descriptors from the `Methods` property of a class-level leaf (best-effort split). */
+    fun methods(): List<String> = splitNames(propertyValue("Methods"))
+
+    /** Classes in this component and all nested children (the post-DCE class set). */
+    fun allClasses(): List<String> = classes() + children.flatMap { it.allClasses() }
+
+    fun flatten(): List<CdxComponent> = listOf(this) + children.flatMap { it.flatten() }
+}
+
+enum class CdxComponentKind { Library, SourceFile }
+
+data class CdxProperty(val name: String, val value: String)
+
+/** A CycloneDX dependency-graph edge: [ref] dependsOn the listed bom-refs. */
+data class CdxDependency(val ref: String, val dependsOn: List<String>)
 
 data class CdxVulnerability(
     val id: String?,
     val severity: String?,
 )
+
+private fun splitNames(value: String?): List<String> =
+    value?.split('\n', ',', ';')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
 
 /**
  * Parses CycloneDX JSON (the format GraalVM Native Image embeds) into a
@@ -75,7 +116,7 @@ object CycloneDxParser {
             mainComponent = metadata?.obj("component")?.let(::parseComponent),
             tools = parseTools(metadata),
             components = components,
-            dependencyCount = root.array("dependencies")?.size() ?: 0,
+            dependencies = parseDependencies(root.array("dependencies")),
             vulnerabilities = parseVulnerabilities(root.array("vulnerabilities")),
         )
     }
@@ -86,8 +127,33 @@ object CycloneDxParser {
         name = o.string("name"),
         version = o.string("version"),
         purl = o.string("purl"),
+        bomRef = o.string("bom-ref"),
         licenses = parseLicenses(o.array("licenses")),
+        properties = parseProperties(o.array("properties")),
+        children = o.array("components")?.mapNotNull { (it as? JsonObject)?.let(::parseComponent) }.orEmpty(),
     )
+
+    private fun parseProperties(arr: JsonArray?): List<CdxProperty> {
+        if (arr == null) return emptyList()
+        return arr.mapNotNull { element ->
+            val o = element as? JsonObject ?: return@mapNotNull null
+            val name = o.string("name") ?: return@mapNotNull null
+            CdxProperty(name, o.string("value") ?: "")
+        }
+    }
+
+    /** `dependencies[]` entries: `{ "ref": "<bom-ref>", "dependsOn": ["<bom-ref>", …] }`. */
+    private fun parseDependencies(arr: JsonArray?): List<CdxDependency> {
+        if (arr == null) return emptyList()
+        return arr.mapNotNull { element ->
+            val o = element as? JsonObject ?: return@mapNotNull null
+            val ref = o.string("ref") ?: return@mapNotNull null
+            val dependsOn = o.array("dependsOn")
+                ?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive }?.asString }
+                .orEmpty()
+            CdxDependency(ref, dependsOn)
+        }
+    }
 
     /** `licenses` entries are `{license:{id|name}}` or `{expression:"…"}`. */
     private fun parseLicenses(arr: JsonArray?): List<String> {

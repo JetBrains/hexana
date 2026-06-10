@@ -14,6 +14,7 @@ import com.intellij.ui.dsl.builder.AlignY
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.dsl.builder.selected
 import com.intellij.ui.dsl.builder.toNonNullableProperty
 import org.jetbrains.annotations.NonNls
 
@@ -57,6 +58,20 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
             state.sendAnalytics = value
         }
 
+    /** Enables SBOM vulnerability matching against a locally downloaded OSV database. */
+    var lookupVulnerabilities: Boolean
+        get() = state.lookupVulnerabilities
+        set(value) {
+            state.lookupVulnerabilities = value
+        }
+
+    /** Opt-in: also query api.osv.dev online (sends the component list). Requires [lookupVulnerabilities]. */
+    var vulnerabilitiesOnline: Boolean
+        get() = state.vulnerabilitiesOnline
+        set(value) {
+            state.vulnerabilitiesOnline = value
+        }
+
     val wasmToolsPath: String
         get() = wasmToolsPathInUi ?: "wasm-tools"
 
@@ -71,6 +86,8 @@ class HexanaSettingsState : BaseState() {
     var useBuiltInWasmTools: Boolean by property(false)
     var showOffsets: Boolean by property(false)
     var sendAnalytics: Boolean by property(true)
+    var lookupVulnerabilities: Boolean by property(false)
+    var vulnerabilitiesOnline: Boolean by property(false)
 }
 
 class HexanaConfigurableProvider : ConfigurableProvider() {
@@ -130,6 +147,23 @@ class HexanaConfigurable : DslConfigurableBase(), SearchableConfigurable {
                     .align(AlignX.FILL)
                     .comment(HexanaBundle.message("hexana.settings.sendAnalyticsComment"))
                     .bindSelected(settings::sendAnalytics)
+            }
+            separator()
+            lateinit var lookupCheckbox: com.intellij.ui.dsl.builder.Cell<com.intellij.ui.components.JBCheckBox>
+            row {
+                lookupCheckbox = checkBox(HexanaBundle.message("hexana.settings.lookupVulnerabilities"))
+                    .align(AlignY.TOP)
+                    .align(AlignX.FILL)
+                    .comment(HexanaBundle.message("hexana.settings.lookupVulnerabilitiesComment"))
+                    .bindSelected(settings::lookupVulnerabilities)
+            }
+            row {
+                checkBox(HexanaBundle.message("hexana.settings.vulnerabilitiesOnline"))
+                    .align(AlignY.TOP)
+                    .align(AlignX.FILL)
+                    .comment(HexanaBundle.message("hexana.settings.vulnerabilitiesOnlineComment"))
+                    .bindSelected(settings::vulnerabilitiesOnline)
+                    .enabledIf(lookupCheckbox.selected)
             }
         }
     }
