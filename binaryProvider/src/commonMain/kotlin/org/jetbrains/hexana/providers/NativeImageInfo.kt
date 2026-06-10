@@ -206,16 +206,18 @@ object NativeImageDetector {
     )
 
     private fun parseVmIdentity(strings: List<NativeStringRecord>): VmIdentity? {
+        // The value is "GraalVM 23+37.1 Java 23", "GraalVM CE 21.0.1 Java 21",
+        // or — for the commercial distribution — "Oracle GraalVM 24.0.2+11.1".
         val versionValue = strings.firstNotNullOfOrNull { record ->
-            valueAfter(record.value, VM_IDENTITY_KEY)?.takeIf { it.startsWith("GraalVM") }
+            valueAfter(record.value, VM_IDENTITY_KEY)?.takeIf { it.contains("GraalVM") }
         } ?: return null
         val platform = strings.firstNotNullOfOrNull { record ->
             valueAfter(record.value, VM_PLATFORM_KEY)
         }?.let(::platformLeaf)
 
         val edition = when {
-            // Enterprise builds carry an explicit "EE"; CE carries "CE". Newer
-            // Oracle GraalVM may carry neither, so default to UNKNOWN.
+            // "Oracle GraalVM" is the commercial distribution (the former "EE").
+            versionValue.contains("Oracle GraalVM") -> NativeImageInfo.Edition.ENTERPRISE
             versionValue.endsWith(" EE") || versionValue.contains(" EE ") -> NativeImageInfo.Edition.ENTERPRISE
             versionValue.contains("CE") -> NativeImageInfo.Edition.COMMUNITY
             else -> NativeImageInfo.Edition.UNKNOWN

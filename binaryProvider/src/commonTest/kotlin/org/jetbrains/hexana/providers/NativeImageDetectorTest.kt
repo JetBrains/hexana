@@ -78,6 +78,21 @@ class NativeImageDetectorTest {
     }
 
     @Test
+    fun `oracle graalvm identity string is recognized as enterprise`() {
+        // Real form emitted by Oracle GraalVM 24: "Oracle GraalVM 24.0.2+11.1".
+        val info = NativeImageDetector.fromElf(
+            strings = listOf(str("com.oracle.svm.core.VM=Oracle GraalVM 24.0.2+11.1")),
+            sections = emptyList(),
+            symbols = emptyList(),
+            programHeaders = emptyList(),
+            bytes = ByteArray(0).toCommonByteBuffer(),
+        )
+        assertTrue(info.isNativeImage)
+        assertEquals("Oracle GraalVM 24.0.2+11.1", info.version)
+        assertEquals(NativeImageInfo.Edition.ENTERPRISE, info.edition)
+    }
+
+    @Test
     fun `svm sentinel symbol alone confirms a stripped native image`() {
         // No identity string, no svm sections — only the marker symbol survived.
         val info = NativeImageDetector.fromElf(
