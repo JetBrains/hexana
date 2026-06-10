@@ -73,7 +73,7 @@ public class HexanaToolset : McpToolsProvider {
       |Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types.
       |Summarize a WebAssembly (.wasm) module with high-level counts for its major sections and declarations.
       |Includes the nested import breakdown and total module size, making it a low-cost overview before calling heavier tools.
-      |For Wasm analysis tasks, this is usually the best first MCP call before choosing more specific import, export, or instruction tools.
+      |For broad Wasm analysis requests, this is usually the best first MCP call before choosing more specific import, export, or instruction tools.
       |After this overview, prefer `list_imports` for import/link analysis, `list_exported_functions` for export analysis, and `get_instructions_for_functions` for body analysis.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.summarizeModule",
@@ -294,155 +294,6 @@ public class HexanaToolset : McpToolsProvider {
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val result = provider.readEnabledFeatures()
-      val text = encodeHexanaJson(result)
-      val structuredContent = encodeHexanaJsonElement(result).jsonObject
-      return McpToolCallResult.text(text, structuredContent)
-    }
-  },
-  object : McpTool {
-    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
-      name = "repair_entrypoint_policy",
-      description = """
-      |Build policy-ready entrypoint host-call facts for exported WebAssembly entrypoints.
-      |Use this when building, repairing, or validating entrypoint host-call policy JSON from the current WebAssembly binary.
-      |It computes exported local entrypoints whose own function bodies directly call imported host functions, plus exported entrypoints excluded because their host calls are only transitive through local helpers.
-      |The top-level `policy_id`, `module`, `direct_host_entrypoints`, and `excluded_transitive_exports` fields are ready to copy into policy files that use the entrypoint-host-call-policy-v2 contract.
-      """.trimMargin(),
-      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.repairEntrypointPolicy",
-      inputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("path", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path relative to the project root"))
-        })
-        put("projectPath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
-        })
-      },
-      requiredProperties = setOf("path"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-      outputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("policy_id", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Entrypoint host-call policy identifier."))
-        })
-        put("module", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Module path label echoed from the tool input path."))
-        })
-        put("direct_host_entrypoints", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("export", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Export name of the local entrypoint."))
-              })
-              put("funcidx", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Unified function index of the exported local function."))
-              })
-              put("signature", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("params", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Exported function parameter types."))
-                  })
-                  put("results", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Exported function result types."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("params"))
-                  add(JsonPrimitive("results"))
-                })
-                put("description", JsonPrimitive("Exported entrypoint function signature."))
-              })
-              put("called_imports", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("object"))
-                  put("properties", buildJsonObject {
-                    put("module", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                      put("description", JsonPrimitive("Imported module name."))
-                    })
-                    put("name", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                      put("description", JsonPrimitive("Imported field name."))
-                    })
-                    put("signature", buildJsonObject {
-                      put("type", JsonPrimitive("object"))
-                      put("properties", buildJsonObject {
-                        put("params", buildJsonObject {
-                          put("type", JsonPrimitive("array"))
-                          put("items", buildJsonObject {
-                            put("type", JsonPrimitive("string"))
-                          })
-                          put("description", JsonPrimitive("Imported function parameter types."))
-                        })
-                        put("return", buildJsonObject {
-                          put("type", JsonPrimitive("array"))
-                          put("items", buildJsonObject {
-                            put("type", JsonPrimitive("string"))
-                          })
-                          put("description", JsonPrimitive("Imported function return types."))
-                        })
-                      })
-                      put("required", buildJsonArray {
-                        add(JsonPrimitive("params"))
-                        add(JsonPrimitive("return"))
-                      })
-                      put("description", JsonPrimitive("Imported function signature."))
-                    })
-                  })
-                  put("required", buildJsonArray {
-                    add(JsonPrimitive("module"))
-                    add(JsonPrimitive("name"))
-                    add(JsonPrimitive("signature"))
-                  })
-                })
-                put("description", JsonPrimitive("Unique imports directly called by this entrypoint body, sorted by module then name."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("export"))
-              add(JsonPrimitive("funcidx"))
-              add(JsonPrimitive("signature"))
-              add(JsonPrimitive("called_imports"))
-            })
-          })
-          put("description", JsonPrimitive("Policy-ready entries for exported local functions whose own body directly calls imported functions."))
-        })
-        put("excluded_transitive_exports", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-          })
-          put("description", JsonPrimitive("Exports that reach imported functions only through local helper calls and should stay out of the direct policy."))
-        })
-      },
-      requiredProperties = setOf("policy_id", "module", "direct_host_entrypoints", "excluded_transitive_exports"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-    )
-    override suspend fun call(args: JsonObject): McpToolCallResult {
-      val path = args.requireStringArgument("path")
-      val file = requireWasmFile(path)
-      val provider = file.requireCoreWasmBinaryProvider()
-      val result = provider.readEntrypointPolicy(pathLabel = path)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)
@@ -731,7 +582,7 @@ public class HexanaToolset : McpToolsProvider {
       description = """
       |Diff required WebAssembly proposals between a current and baseline module.
       |Compare the current module against `baselinePath` and return both full required-proposal name lists plus the compact newly-required and no-longer-required subsets.
-      |Prefer this over calling `list_required_proposals` twice when the task needs current-versus-baseline proposal changes.
+      |Prefer this over calling `list_required_proposals` twice when the request needs current-versus-baseline proposal changes.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.diffRequiredProposals",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -2405,7 +2256,7 @@ public class HexanaToolset : McpToolsProvider {
       |Disassemble one function by unified function index.
       |Disassemble one WebAssembly function by `funcidx`, returning signature, import/export metadata, locals, decoded instruction records, WAT-style text, and raw code bytes when the function has a body.
       |Imported functions return metadata with empty body fields because imports have no code entry.
-      |Use this when a task has narrowed the search to one function and needs a compact, production-oriented body snapshot.
+      |Use this when the request has narrowed the search to one function and needs a compact, production-oriented body snapshot.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.disassembleFunction",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -6905,14 +6756,14 @@ public class HexanaToolset : McpToolsProvider {
       description = """
       |Query WebAssembly artifact entities, diffs, and function relations with bounded output.
       |Use this as the default Hexana MCP entry point for WebAssembly artifact facts.
-      |`overview` returns module counts; skip it when the task already names a focused production fact.
-      |Choose a focused operation first when the task names a production fact: `api_diff` for old/new public function ABI diffs, changed signatures, public type indices, and current reference-type import ABI risks; `public_surface` for single-module exported ABI surface; `abi_surface` for compact function imports plus exports in one module; `abi_binding_regeneration` for current Wasm import/export signature maps, stale Python binding maps from `bindingPath`, mismatch JSON, and `replacementBindingsJson`; `host_adapter_repair` for host adapter config repair reports with required imports, required entrypoint, config mismatches, and minimal `repairConfigJson` from current Wasm ABI plus active config fields only; `import_surface` for host manifest/link checks, including compact `functionImportsJson` and exported function candidates on the summary; `memory_contract` for memory declarations and baseline limit changes; `global_state_policy` for mutable imported globals and new exported globals, including `targetedGlobalIndices`, `mutableImportedGlobalsJson`, `newPublicGlobalsJson`, and allowed public global exports on the summary; `data_payload_audit` for raw data segment payload string confirmation after reading policy strings; `local_budget` for exported-function declared local counts; `entrypoint_effects` for exported local functions whose own body directly writes memory or directly calls host imports, including policy-ready direct-host-entry JSON and transitive-host exclusions; `crash_frames` for crash reports after reading all numeric stack funcidx values into `query`; `dispatch_table_diff` for element-table slot target changes; and `host_call_diff` for direct imported-call regressions from `startName` or `startFuncidx`.
+      |`overview` returns module counts; skip it when the request already names a focused production fact.
+      |Choose a focused operation first when the requested artifact fact matches one: `api_diff` for old/new public function ABI diffs, changed signatures, public type indices, and current reference-type import ABI risks; `public_surface` for single-module exported ABI surface; `abi_surface` for compact function imports plus exports in one module; `abi_binding_regeneration` for current Wasm import/export signature maps, stale Python binding maps from `bindingPath`, mismatch JSON, and `replacementBindingsJson`; `host_adapter_repair` for host adapter config repair reports with required imports, required entrypoint, config mismatches, and minimal `repairConfigJson` from current Wasm ABI plus active config fields only; `import_surface` for host manifest/link checks, including compact `functionImportsJson` and exported function candidates on the summary; `memory_contract` for memory declarations and baseline limit changes; `global_state_policy` for mutable imported globals and new exported globals, including `targetedGlobalIndices`, `mutableImportedGlobalsJson`, `newPublicGlobalsJson`, and allowed public global exports on the summary; `data_payload_audit` for raw data segment payload string confirmation after reading policy strings; `local_budget` for exported-function declared local counts; `entrypoint_effects` for exported local functions whose own body directly writes memory or directly calls host imports, including policy-ready direct-host-entry JSON and transitive-host exclusions; `crash_frames` for crash reports after reading all numeric stack funcidx values into `query`; `dispatch_table_diff` for element-table slot target changes; and `host_call_diff` for direct imported-call regressions from `startName` or `startFuncidx`.
       |For `data_payload_audit`, read the policy first and pass all forbidden strings in one call; an empty `query` only returns a small reminder. For `crash_frames`, read the crash report first and pass all stack funcidx values in one call; avoid probing a single frame and then repeating.
       |For `abi_binding_regeneration`, pass the stale binding file as `bindingPath` when one exists. Its mismatch records and `bindingMismatchesJson` use `expected` for the current Wasm signature, or null when a stale binding should be removed; `actual` is the stale binding signature, or null when the binding is missing.
       |For `host_adapter_repair`, pass the stale adapter JSON as `configPath` when one exists. Use `repairConfigJson` directly for `repair_config`; it intentionally excludes stale top-level fields such as `profile`, `rollback_entrypoint`, `legacy_profiles`, and `notes`.
-      |Use generic `find`, `diff`, or `trace` only when no focused operation matches, or when a focused response is missing a required output field. Use `triage` only for ambiguous tasks where no production fact is named.
+      |Use generic `find`, `diff`, or `trace` only when no focused operation matches, or when a focused response is missing a required output field. Use `triage` only for ambiguous requests where no production fact is named.
       |Stop after a focused operation when its response contains the required names, signatures, type indices, `functionImportsJson`, `functionExportsJson`, `replacementBindingsJson`, `bindingMismatchesJson`, `requiredImportsJson`, `requiredEntrypointJson`, `configMismatchesJson`, `repairConfigJson`, memory limits, `targetedGlobalIndices`, `newPublicGlobalsJson`, `mutableImportedGlobalsJson`, matched data segments, local counts, entrypoint direct memory writes, `directHostEntryPointsJson`, `excludedTransitiveExportsJson`, frame metadata, table slots, or call relations. Do not follow `api_diff` with generic `find` or `diff`, `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, or `import_surface` with generic `find`, `global_state_policy` with generic `list_globals` or `list_exports`, `data_payload_audit` with generic `find`, `local_budget` with per-function `trace`, `entrypoint_effects` with per-export `trace`, `host_call_diff` with generic `trace`, or `crash_frames` with per-frame `trace`, unless a required output field is absent.
-      |If an output field asks for a module path, use the exact task path or the `modules[].path` value echoed from input `path`/`baselinePath`; do not write `local`, `current`, or `baseline` into path fields. For binding regeneration replacement objects, use `replacementBindingsJson` directly.
+      |If an output field asks for a module path, use the exact artifact path or the `modules[].path` value echoed from input `path`/`baselinePath`; do not write `local`, `current`, or `baseline` into path fields. For binding regeneration replacement objects, use `replacementBindingsJson` directly.
       |Keep `limit` and `maxBytes` small; for `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, or `import_surface`, use `limit=1` when summary JSON arrays are sufficient. Use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets, locals, element lists, or instruction text.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.queryArtifacts",
@@ -6924,7 +6775,7 @@ public class HexanaToolset : McpToolsProvider {
         })
         put("operation", buildJsonObject {
           put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, `import_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `entrypoint_effects`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the task; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details."))
+          put("description", JsonPrimitive("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, `import_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `entrypoint_effects`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the requested artifact fact; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details."))
           put("default", JsonPrimitive("overview"))
           put("maxLength", JsonPrimitive(32))
         })

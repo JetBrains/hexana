@@ -47,7 +47,6 @@ internal object HexanaToolInputDefaults {
 public fun Server.registerHexanaTools(handlers: HexanaToolHandlers, profile: HexanaMcpToolProfile = HexanaMcpToolProfile.ADVANCED) {
   if (profile.includesTool("summarize_module")) registerSummarizeModuleTool(handlers)
   if (profile.includesTool("list_enabled_features")) registerListEnabledFeaturesTool(handlers)
-  if (profile.includesTool("repair_entrypoint_policy")) registerRepairEntrypointPolicyTool(handlers)
   if (profile.includesTool("get_entrypoint_policy")) registerGetEntrypointPolicyTool(handlers)
   if (profile.includesTool("list_required_proposals")) registerListRequiredProposalsTool(handlers)
   if (profile.includesTool("diff_required_proposals")) registerDiffRequiredProposalsTool(handlers)
@@ -336,166 +335,6 @@ private fun Server.registerListEnabledFeaturesTool(handlers: HexanaToolHandlers)
     ),
   ))  {
     request: CallToolRequest -> handlers.listEnabledFeatures(request.arguments)
-  }
-}
-
-private fun Server.registerRepairEntrypointPolicyTool(handlers: HexanaToolHandlers) {
-  addTool(tool = Tool(
-    name = "repair_entrypoint_policy",
-    description = "Build policy-ready entrypoint host-call facts for exported WebAssembly entrypoints.",
-    inputSchema = ToolSchema(
-    properties = buildJsonObject {
-      put("path", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
-      })
-      put("bytesBase64", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
-        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
-      })
-      put("bytes", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("array"))
-          add(JsonPrimitive("null"))
-        })
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("integer"))
-          put("minimum", JsonPrimitive(0))
-          put("maximum", JsonPrimitive(255))
-        })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
-        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
-      })
-    },
-    required = listOf()
-  ),
-    outputSchema = ToolSchema(
-    properties = buildJsonObject {
-      put("policy_id", buildJsonObject {
-        put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Entrypoint host-call policy identifier."))
-      })
-      put("module", buildJsonObject {
-        put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Module path label echoed from the tool input path."))
-      })
-      put("direct_host_entrypoints", buildJsonObject {
-        put("type", JsonPrimitive("array"))
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("export", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Export name of the local entrypoint."))
-            })
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Unified function index of the exported local function."))
-            })
-            put("signature", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Exported function parameter types."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Exported function result types."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-              })
-              put("description", JsonPrimitive("Exported entrypoint function signature."))
-            })
-            put("called_imports", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("module", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Imported module name."))
-                  })
-                  put("name", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Imported field name."))
-                  })
-                  put("signature", buildJsonObject {
-                    put("type", JsonPrimitive("object"))
-                    put("properties", buildJsonObject {
-                      put("params", buildJsonObject {
-                        put("type", JsonPrimitive("array"))
-                        put("items", buildJsonObject {
-                          put("type", JsonPrimitive("string"))
-                        })
-                        put("description", JsonPrimitive("Imported function parameter types."))
-                      })
-                      put("return", buildJsonObject {
-                        put("type", JsonPrimitive("array"))
-                        put("items", buildJsonObject {
-                          put("type", JsonPrimitive("string"))
-                        })
-                        put("description", JsonPrimitive("Imported function return types."))
-                      })
-                    })
-                    put("required", buildJsonArray {
-                      add(JsonPrimitive("params"))
-                      add(JsonPrimitive("return"))
-                    })
-                    put("description", JsonPrimitive("Imported function signature."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("module"))
-                  add(JsonPrimitive("name"))
-                  add(JsonPrimitive("signature"))
-                })
-              })
-              put("description", JsonPrimitive("Unique imports directly called by this entrypoint body, sorted by module then name."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("export"))
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("signature"))
-            add(JsonPrimitive("called_imports"))
-          })
-        })
-        put("description", JsonPrimitive("Policy-ready entries for exported local functions whose own body directly calls imported functions."))
-      })
-      put("excluded_transitive_exports", buildJsonObject {
-        put("type", JsonPrimitive("array"))
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-        })
-        put("description", JsonPrimitive("Exports that reach imported functions only through local helper calls and should stay out of the direct policy."))
-      })
-    },
-    required = listOf("policy_id", "module", "direct_host_entrypoints", "excluded_transitive_exports")
-  ),
-    annotations = ToolAnnotations(
-      readOnlyHint = true,
-      destructiveHint = false,
-      idempotentHint = true,
-    ),
-  ))  {
-    request: CallToolRequest -> handlers.repairEntrypointPolicy(request.arguments)
   }
 }
 
@@ -7339,7 +7178,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
       })
       put("operation", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, `import_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `entrypoint_effects`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the task; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details."))
+        put("description", JsonPrimitive("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, `import_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `entrypoint_effects`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the requested artifact fact; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details."))
         put("default", JsonPrimitive("overview"))
         put("maxLength", JsonPrimitive(32))
       })

@@ -104,7 +104,7 @@ internal val RuntimeTools: List<ToolSpec> = tools {
         summary = "Diff required WebAssembly proposals between a current and baseline module."
         guidance = """
             Compare the current module against `baselinePath` and return both full required-proposal name lists plus the compact newly-required and no-longer-required subsets.
-            Prefer this over calling `list_required_proposals` twice when the task needs current-versus-baseline proposal changes.
+            Prefer this over calling `list_required_proposals` twice when the request needs current-versus-baseline proposal changes.
         """
         input = ProposalDiffInputClass
         inputPattern = ToolInputPattern.WasmWithBaseline

@@ -321,7 +321,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         guidance = """
             Disassemble one WebAssembly function by `funcidx`, returning signature, import/export metadata, locals, decoded instruction records, WAT-style text, and raw code bytes when the function has a body.
             Imported functions return metadata with empty body fields because imports have no code entry.
-            Use this when a task has narrowed the search to one function and needs a compact, production-oriented body snapshot.
+            Use this when the request has narrowed the search to one function and needs a compact, production-oriented body snapshot.
         """
         input = DisassembleFunctionInput
         inputPattern = ToolInputPattern.Funcidx

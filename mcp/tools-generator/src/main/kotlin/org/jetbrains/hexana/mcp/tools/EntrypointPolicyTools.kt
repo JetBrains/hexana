@@ -39,19 +39,6 @@ private val EntrypointPolicyResultClass = class_("EntrypointPolicyResult", kotli
 }
 
 internal val EntrypointPolicyTools: List<ToolSpec> = tools {
-    tool("repair_entrypoint_policy") {
-        summary = "Build policy-ready entrypoint host-call facts for exported WebAssembly entrypoints."
-        guidance = """
-            Use this when building, repairing, or validating entrypoint host-call policy JSON from the current WebAssembly binary.
-            It computes exported local entrypoints whose own function bodies directly call imported host functions, plus exported entrypoints excluded because their host calls are only transitive through local helpers.
-            The top-level `policy_id`, `module`, `direct_host_entrypoints`, and `excluded_transitive_exports` fields are ready to copy into policy files that use the entrypoint-host-call-policy-v2 contract.
-        """
-        input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmPathLabel
-        output = EntrypointPolicyResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readEntrypointPolicy"
-    }
-
     tool("get_entrypoint_policy") {
         summary = "Return policy-ready direct host-call facts for exported WebAssembly entrypoints."
         guidance = """

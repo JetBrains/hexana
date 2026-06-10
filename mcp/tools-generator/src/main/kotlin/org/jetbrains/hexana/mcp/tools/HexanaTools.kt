@@ -3,7 +3,6 @@ package org.jetbrains.hexana.mcp.tools
 private val HEXANA_TOOL_ORDER = listOf(
     "summarize_module",
     "list_enabled_features",
-    "repair_entrypoint_policy",
     "get_entrypoint_policy",
     "list_required_proposals",
     "diff_required_proposals",

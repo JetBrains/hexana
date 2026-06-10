@@ -77,12 +77,12 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
         assertContains(inputFieldDescription(descriptor, "limit"), "Maximum records")
     }
 
-    fun testRepairEntrypointPolicyDescriptionContent() {
-        val descriptor = descriptor("repair_entrypoint_policy")
+    fun testGetEntrypointPolicyDescriptionContent() {
+        val descriptor = descriptor("get_entrypoint_policy")
 
-        assertContains(descriptor.description, "Build policy-ready entrypoint host-call facts")
+        assertContains(descriptor.description, "Return policy-ready direct host-call facts")
         assertContains(descriptor.description, "entrypoint host-call policy JSON")
-        assertContains(descriptor.description, "directly call imported host functions")
+        assertContains(descriptor.description, "imports called directly")
         assertContains(descriptor.description, "direct_host_entrypoints")
         assertFalse(descriptor.description.contains("entrypoint_policy_repair"))
         assertFalse(descriptor.description.contains("task"))
