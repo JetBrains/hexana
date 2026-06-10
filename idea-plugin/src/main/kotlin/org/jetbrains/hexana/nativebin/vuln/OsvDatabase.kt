@@ -36,6 +36,9 @@ class OsvDatabase {
     private var cachedMatcher: VulnerabilityMatcher? = null
 
     @Volatile
+    private var cachedRecords: List<OsvRecord>? = null
+
+    @Volatile
     private var cachedRecordCount: Int = 0
 
     fun isPresent(): Boolean = zipFile.exists()
@@ -56,16 +59,25 @@ class OsvDatabase {
         Files.write(tmp, bytes)
         Files.move(tmp, zipFile, StandardCopyOption.REPLACE_EXISTING)
         cachedMatcher = null
+        cachedRecords = null
         cachedRecordCount = 0
+    }
+
+    /** Loads + caches the parsed records from the on-disk zip, or null if absent/unreadable. Blocking; off-EDT. */
+    fun loadRecords(indicator: ProgressIndicator? = null): List<OsvRecord>? {
+        cachedRecords?.let { return it }
+        if (!zipFile.exists()) return null
+        indicator?.text = "Indexing OSV vulnerability database…"
+        val records = readRecords() ?: return null
+        cachedRecordCount = records.size
+        cachedRecords = records
+        return records
     }
 
     /** Loads + caches a matcher from the on-disk zip, or null if absent/unreadable. Blocking; off-EDT. */
     fun loadMatcher(indicator: ProgressIndicator? = null): VulnerabilityMatcher? {
         cachedMatcher?.let { return it }
-        if (!zipFile.exists()) return null
-        indicator?.text = "Indexing OSV vulnerability database…"
-        val records = readRecords() ?: return null
-        cachedRecordCount = records.size
+        val records = loadRecords(indicator) ?: return null
         return VulnerabilityMatcher(VulnerabilityMatcher.indexByMavenPackage(records)).also { cachedMatcher = it }
     }
 
