@@ -19,7 +19,7 @@
 
 ### Security
 
-## 0.10.2 - 2025-06-03
+## 0.10.2 - 2026-06-03
 
 ### Added
 - GraalVM Web Image: `.wasm` modules compiled from Java via Web Image (`native-image --tool:svm-wasm`) are detected by their `interop`/`jsbody`/`compat` import fingerprint. Functions whose names demangle to a Java method get a "Java" badge — in the Functions tab and inline on each code-section entry in the WAT (virtualized) view — that opens the corresponding method's bytecode. Available when the module retained function names (built with debug names); stripped/minified and Graal-internal functions are left unbadged
@@ -39,14 +39,14 @@
 - Top (size analysis): restoring a Top tab on startup no longer freezes the IDE on large modules — the size tree's depth metrics were still computed during composition on the EDT even though the tree data was already built off-thread; they now compute off-thread together with the tree
 - WAT: the WAT text conversion was rebuilt on every recomposition and its background coroutine was never cancelled when leaving the tab; it is now created once and cancelled on tab switch
 
-## 0.10.1 - 2025-05-29
+## 0.10.1 - 2026-05-29
 
 ### Fixed
 - Now we list entries for regular ZIP files instead of showing "no classes"
 - Added a missing scrollbar to the classes/entries list for JAR/ZIP files
 - Fixed problems with JIT binaries
 
-## 0.10 - 2025-05-27
+## 0.10 - 2026-05-27
 
 ### Added
 - Goto Symbol / Search Everywhere → Symbols now surfaces `.wit` declarations, component-model exports, and regular `.wasm` exports; picking a `.wasm` export opens the file and selects the matching row in the Exports tab
