@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 class HexanaMcpServerSchemaTest {
     @Test
     fun generatedToolsAreMarkedReadOnly() {
-        val annotations = createHexanaMcpServer()
+        val annotations = createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED)
             .tools
             .getValue("query_artifacts")
             .tool
@@ -48,7 +48,6 @@ class HexanaMcpServerSchemaTest {
                 "list_memory",
                 "list_required_proposals",
                 "plan_abi_binding_regeneration",
-                "query_artifacts",
                 "repair_host_adapter_config",
                 "resolve_function_signature",
                 "search_exports",
@@ -293,7 +292,7 @@ class HexanaMcpServerSchemaTest {
     }
 
     private fun queryArtifactsInputSchema(): JsonObject {
-        return createHexanaMcpServer()
+        return createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED)
             .tools
             .getValue("query_artifacts")
             .tool

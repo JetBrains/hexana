@@ -48,7 +48,6 @@ private val PRODUCTION_TOOL_NAMES = setOf(
     "list_memory",
     "list_required_proposals",
     "plan_abi_binding_regeneration",
-    "query_artifacts",
     "repair_host_adapter_config",
     "resolve_function_signature",
     "search_exports",
