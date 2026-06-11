@@ -1,3 +1,8 @@
+# 0.3.0 - 11.06.2026
+
+- added NodeJS and browser as a wasm runtime in run configurations (no debug yet)
+- improved debugging on Windows (better breakpoint detection and overall stability)
+
 # 0.2.1 - 28.05.2026
 
 - fix mcp downloading archive problem
