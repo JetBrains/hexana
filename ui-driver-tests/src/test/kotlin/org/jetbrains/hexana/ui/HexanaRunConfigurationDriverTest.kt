@@ -24,15 +24,18 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * UI driver tests for Wasm run configurations using the Wasmtime engine.
+ * UI driver tests for Wasm run configurations using the Wasmtime and Node.js engines.
  *
  * Covers:
  * - Running a core module (with `_start`) from the hex view Run button
  * - Running an exported function from a core module
  * - Running a component model module (with `wasi:cli/run`) from the hex view Run button
- * - Debugging a core module (with `_start`) via the Debug executor
+ * - Debugging a core module (with `_start`) via the Debug executor (Wasmtime)
+ * - Debugging a core module via the Debug executor (Node.js / CDP)
+ * - Debugging with DWARF breakpoints and variable inspection (Wasmtime and Node.js)
  *
  * Wasmtime is downloaded automatically if not present.
+ * Node.js must be pre-installed on the system.
  */
 @Tag("hexana")
 class HexanaRunConfigurationDriverTest {
@@ -47,10 +50,16 @@ class HexanaRunConfigurationDriverTest {
         private const val BREAKPOINT_LINE = 10 // `let sum = a + b;`
 
         private lateinit var wasmtimePathForTests: String
+        private lateinit var nodePathForTests: String
 
         @JvmStatic
         @BeforeAll
-        fun ensureWasmtime() {
+        fun ensureRuntimes() {
+            ensureWasmtime()
+            ensureNodeJs()
+        }
+
+        private fun ensureWasmtime() {
             val wasmtimePath = resolveWasmtimePath()
             if (wasmtimePath != null) {
                 logOutput("Wasmtime already available at: $wasmtimePath")
@@ -63,6 +72,38 @@ class HexanaRunConfigurationDriverTest {
                 ?: error("Wasmtime installation failed: not found after download")
             logOutput("Wasmtime installed at: $verifiedPath")
             wasmtimePathForTests = verifiedPath
+        }
+
+        private fun ensureNodeJs() {
+            val nodePath = resolveNodePath()
+            if (nodePath != null) {
+                logOutput("Node.js already available at: $nodePath")
+                nodePathForTests = nodePath
+                return
+            }
+            error("Node.js not found. Please install Node.js to run Node.js debug tests.")
+        }
+
+        private fun resolveNodePath(): String? {
+            val candidates = listOf(
+                "/usr/local/bin/node",
+                "/usr/bin/node",
+            )
+            for (candidate in candidates) {
+                if (File(candidate).exists()) return candidate
+            }
+            return try {
+                val lookupCommand = if (isWindows()) "where" else "which"
+                val process = ProcessBuilder(lookupCommand, "node")
+                    .redirectErrorStream(true)
+                    .start()
+                val output = process.inputStream.bufferedReader().readText().trim()
+                process.waitFor()
+                val firstPath = output.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
+                if (process.exitValue() == 0 && firstPath != null && File(firstPath).exists()) firstPath else null
+            } catch (_: Exception) {
+                null
+            }
         }
 
         private fun resolveWasmtimePath(): String? {
@@ -319,6 +360,130 @@ class HexanaRunConfigurationDriverTest {
     }
 
     @Test
+    fun debugCoreModuleWithNodeJs() {
+        val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-core-module-nodejs")
+
+        context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
+            .useDriverAndCloseIde {
+                waitForIndicators(5.minutes)
+
+                openFile(ADD_MODULE_FILE, waitForCodeAnalysis = false, isTextEditor = false)
+                ideFrame {
+                    editorTabs {
+                        tab(ADD_MODULE_FILE, fullMatch = false).waitFound()
+                    }
+                }
+                Thread.sleep(3_000)
+
+                launchNodeJsDebugConfig(
+                    driver = this,
+                    wasmFileName = ADD_MODULE_FILE,
+                    engine = "NODE_JS",
+                    exportName = "add",
+                    programArgs = "2 3",
+                )
+                waitForProcessTermination(this, 5.minutes)
+
+                val output = readConsoleOutput()
+                logOutput("Node.js core module debug output: $output")
+
+                assertTrue(
+                    output.contains("5"),
+                    "Expected '5' in Node.js debug output for add(2,3), got: $output"
+                )
+            }
+    }
+
+    @Test
+    fun debugDwarfWasmBreakpointAndInspectVariablesWithNodeJs() {
+        val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-dwarf-breakpoint-nodejs")
+
+        context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
+            .useDriverAndCloseIde {
+                waitForIndicators(5.minutes)
+
+                // Open the DWARF wasm file first so the editor is ready
+                openFile(DEBUG_DWARF_WASM_FILE, waitForCodeAnalysis = false, isTextEditor = false)
+                ideFrame {
+                    editorTabs {
+                        tab(DEBUG_DWARF_WASM_FILE, fullMatch = false).waitFound()
+                    }
+                }
+                Thread.sleep(3_000)
+
+                // Call the helper that sets a breakpoint in the Rust source,
+                // launches debug via Node.js CDP, waits for the breakpoint hit,
+                // collects variables, and resumes.
+                val project = singleProject()
+                val helper = utility(NodeJsDebugTestHelperRef::class)
+                val result = helper.debugNodeJsWithBreakpointAndInspectVariables(
+                    project,
+                    wasmFileName = DEBUG_DWARF_WASM_FILE,
+                    sourceFileName = DEBUG_RUST_SOURCE_FILE,
+                    breakpointLine = BREAKPOINT_LINE,
+                    engine = "NODE_JS",
+                    nodeOptions = "",
+                    exportName = "add",
+                    programArgs = "3 7",
+                    nodePath = nodePathForTests,
+                )
+
+                logOutput("Node.js DWARF breakpoint debug result:\n$result")
+
+                // Verify the session paused at the breakpoint
+                assertTrue(
+                    result.startsWith("PAUSED"),
+                    "Expected debug session to pause at breakpoint, got: $result"
+                )
+
+                // Parse variable lines (format: name=value)
+                val variableLines = result.lines()
+                    .filter { it.contains("=") && it != "PAUSED" && it != "RESUMED" }
+                val variableMap = variableLines.associate {
+                    val eqIndex = it.indexOf('=')
+                    it.substring(0, eqIndex) to it.substring(eqIndex + 1)
+                }
+
+                logOutput("Parsed variables: $variableMap")
+
+                // Filter out runtime-injected variables
+                val userVariables = variableMap.filterKeys { it != "__vmctx" && it != "memory" }
+
+                // We expect function parameters 'a' and 'b' to be visible
+                assertTrue(
+                    userVariables.containsKey("a"),
+                    "Expected variable 'a' to be visible. Found: ${userVariables.keys}"
+                )
+                assertTrue(
+                    userVariables.containsKey("b"),
+                    "Expected variable 'b' to be visible. Found: ${userVariables.keys}"
+                )
+
+                // Verify values if available (we passed a=3, b=7)
+                val aValue = userVariables["a"]
+                if (aValue != null && aValue.isNotBlank()) {
+                    assertTrue(
+                        aValue.contains("3"),
+                        "Expected variable 'a' to have value 3, got: $aValue"
+                    )
+                }
+                val bValue = userVariables["b"]
+                if (bValue != null && bValue.isNotBlank()) {
+                    assertTrue(
+                        bValue.contains("7"),
+                        "Expected variable 'b' to have value 7, got: $bValue"
+                    )
+                }
+
+                // Verify execution was resumed
+                assertTrue(
+                    result.contains("RESUMED"),
+                    "Expected debug session to be resumed after inspection"
+                )
+            }
+    }
+
+    @Test
     fun debugDwarfWasmBreakpointAndInspectVariables() {
         val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-dwarf-breakpoint")
 
@@ -428,6 +593,48 @@ class HexanaRunConfigurationDriverTest {
         )
     }
 
+    private fun launchNodeJsConfig(
+        driver: Driver,
+        wasmFileName: String,
+        engine: String,
+        nodeOptions: String = "",
+        exportName: String = "",
+        programArgs: String = "",
+    ) {
+        val project = driver.singleProject()
+        val helper = driver.utility(NodeJsRunConfigHelperRef::class)
+        helper.createAndRunNodeJs(
+            project,
+            wasmFileName,
+            engine,
+            nodeOptions,
+            exportName,
+            programArgs,
+            nodePathForTests,
+        )
+    }
+
+    private fun launchNodeJsDebugConfig(
+        driver: Driver,
+        wasmFileName: String,
+        engine: String,
+        nodeOptions: String = "",
+        exportName: String = "",
+        programArgs: String = "",
+    ) {
+        val project = driver.singleProject()
+        val helper = driver.utility(NodeJsRunConfigHelperRef::class)
+        helper.createAndDebugNodeJs(
+            project,
+            wasmFileName,
+            engine,
+            nodeOptions,
+            exportName,
+            programArgs,
+            nodePathForTests,
+        )
+    }
+
     private fun launchWasmtimeDebugConfig(
         driver: Driver,
         wasmFileName: String,
@@ -498,6 +705,50 @@ class HexanaRunConfigurationDriverTest {
             programArgs: String,
             wasmtimePath: String,
         )
+    }
+
+    @Remote(
+        "org.jetbrains.hexana.run.WasmRunConfigTestHelper",
+        plugin = HEXANA_PLUGIN_ID,
+    )
+    interface NodeJsRunConfigHelperRef {
+        fun createAndRunNodeJs(
+            project: com.intellij.driver.sdk.Project,
+            wasmFileName: String,
+            engine: String,
+            nodeOptions: String,
+            exportName: String,
+            programArgs: String,
+            nodePath: String,
+        )
+
+        fun createAndDebugNodeJs(
+            project: com.intellij.driver.sdk.Project,
+            wasmFileName: String,
+            engine: String,
+            nodeOptions: String,
+            exportName: String,
+            programArgs: String,
+            nodePath: String,
+        )
+    }
+
+    @Remote(
+        "org.jetbrains.hexana.run.WasmRunConfigTestHelper",
+        plugin = HEXANA_PLUGIN_ID,
+    )
+    interface NodeJsDebugTestHelperRef {
+        fun debugNodeJsWithBreakpointAndInspectVariables(
+            project: com.intellij.driver.sdk.Project,
+            wasmFileName: String,
+            sourceFileName: String,
+            breakpointLine: Int,
+            engine: String,
+            nodeOptions: String,
+            exportName: String,
+            programArgs: String,
+            nodePath: String,
+        ): String
     }
 
     @Remote(
