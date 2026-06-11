@@ -2,6 +2,7 @@
 
 - added NodeJS and browser as a wasm runtime in run configurations (no debug yet)
 - improved debugging on Windows (better breakpoint detection and overall stability)
+- added support for JAR/ZIP files
 
 # 0.2.1 - 28.05.2026
 
