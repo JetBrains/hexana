@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class AuditGlobalStatePolicyResult(
+    val module: GlobalStatePolicyModuleIdentity,
     val policyId: String? = null,
     val globals: List<GlobalStatePolicyGlobalResult>,
     val newPublicGlobals: List<GlobalStatePolicyGlobalResult>,
@@ -13,6 +14,14 @@ data class AuditGlobalStatePolicyResult(
     val targetedGlobalIndices: List<Int>,
     val evidence: List<GlobalStatePolicyEvidenceResult>,
     val warnings: List<String>
+)
+
+@Serializable
+data class GlobalStatePolicyModuleIdentity(
+    val path: String? = null,
+    val baselinePath: String? = null,
+    val policyPath: String? = null,
+    val logPath: String? = null
 )
 
 @Serializable

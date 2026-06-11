@@ -121,8 +121,8 @@ private val AbiBindingSignatureClass = class_("AbiBindingSignature", kotlinPacka
 }
 
 private val AbiBindingModuleIdentityClass = class_("AbiBindingModuleIdentity", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
-    nullable("path", of = string()).describe("Current WebAssembly module path label when available.")
-    nullable("bindingPath", of = string()).describe("Stale binding file path label when available.")
+    nullable("path", of = string()).describe("Exact current WebAssembly module path echoed from input `path`, when available.")
+    nullable("bindingPath", of = string()).describe("Exact stale binding file path echoed from input `bindingPath`, when available.")
     nullable("staleModule", of = string()).describe("MODULE value parsed from the stale binding file.")
     string("replacementModule").describe("MODULE value used in regenerated bindings.")
 }
@@ -152,15 +152,15 @@ private val PlanAbiBindingRegenerationResultClass = class_(
 ) {
     embed("module", of = AbiBindingModuleIdentityClass).describe("Module and binding file identity.")
     map("imports", of = AbiBindingSignatureClass)
-        .describe("Current WebAssembly function import signature map keyed by qualified import name.")
+        .describe("Current WebAssembly function import signature map keyed by qualified import name in stable sorted order.")
     map("exports", of = AbiBindingSignatureClass)
-        .describe("Current WebAssembly function export signature map keyed by export name.")
+        .describe("Current WebAssembly function export signature map keyed by export name in stable sorted order.")
     map("staleImports", of = AbiBindingSignatureClass)
-        .describe("Stale binding IMPORTS signature map parsed from `bindingPath`.")
+        .describe("Stale binding IMPORTS signature map parsed from `bindingPath` in stable sorted order.")
     map("staleExports", of = AbiBindingSignatureClass)
-        .describe("Stale binding EXPORTS signature map parsed from `bindingPath`.")
+        .describe("Stale binding EXPORTS signature map parsed from `bindingPath` in stable sorted order.")
     list("bindingMismatches", of = AbiBindingMismatchResultClass)
-        .describe("Binding mismatches using `expected` for current WebAssembly and `actual` for stale bindings.")
+        .describe("Binding mismatches in stable symbol order using `expected` for current WebAssembly and `actual` for stale bindings.")
     embed("replacementBindings", of = AbiReplacementBindingsResultClass)
         .describe("Drop-in replacement binding maps derived from the current WebAssembly ABI.")
     list("warnings", of = string()).describe("Non-fatal binding parse warnings.")
@@ -170,8 +170,8 @@ private val HostAdapterConfigModuleIdentityClass = class_(
     "HostAdapterConfigModuleIdentity",
     kotlinPackage = ARTIFACT_MODEL_PACKAGE,
 ) {
-    nullable("path", of = string()).describe("Current WebAssembly module path label when available.")
-    nullable("configPath", of = string()).describe("Stale host adapter config path label when available.")
+    nullable("path", of = string()).describe("Exact current WebAssembly module path echoed from input `path`, when available.")
+    nullable("configPath", of = string()).describe("Exact stale host adapter config path echoed from input `configPath`, when available.")
     nullable("staleModule", of = string()).describe("Module value parsed from the stale host adapter config.")
     string("repairModule").describe("Module value used in the minimal repair config.")
 }
@@ -193,7 +193,7 @@ private val HostAdapterConfigMismatchResultClass = class_(
 ) {
     string("field").describe("Config field path that differs from the current WebAssembly adapter ABI.")
     string("expectedJson").describe("Exact JSON value required by the current WebAssembly adapter ABI.")
-    string("actualJson").describe("Exact JSON value found in the stale config, or null when missing.")
+    string("actualJson").describe("Exact JSON value found in the stale config, or the literal JSON `null` string when missing.")
 }
 
 private val HostAdapterRepairConfigClass = class_("HostAdapterRepairConfig", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
@@ -210,17 +210,17 @@ private val RepairHostAdapterConfigResultClass = class_(
 ) {
     embed("module", of = HostAdapterConfigModuleIdentityClass).describe("Module and config file identity.")
     map("requiredImports", of = HostAdapterSignatureClass)
-        .describe("Current WebAssembly function import signature map keyed by qualified import name.")
+        .describe("Current WebAssembly function import signature map keyed by qualified import name in stable sorted order.")
     nullable("requiredEntrypoint", of = HostAdapterEntrypointClass)
         .describe("Selected local exported function entrypoint required by the repair config.")
     map("staleImports", of = HostAdapterSignatureClass)
-        .describe("Import signature map parsed from the stale config.")
+        .describe("Import signature map parsed from the stale config in stable sorted order.")
     nullable("staleEntrypoint", of = HostAdapterEntrypointClass)
         .describe("Entrypoint parsed from the stale config.")
     list("ignoredConfigFields", of = string())
-        .describe("Stale top-level config fields excluded from the minimal repair config.")
+        .describe("Stale top-level config fields excluded from the minimal repair config in stable sorted order.")
     list("configMismatches", of = HostAdapterConfigMismatchResultClass)
-        .describe("Exact config mismatches using JSON strings for expected and actual values.")
+        .describe("Exact config mismatches in stable field order using JSON strings for expected and actual values.")
     embed("repairConfig", of = HostAdapterRepairConfigClass).serialName("repair_config")
         .describe("Minimal replacement host adapter config derived from the current WebAssembly ABI.")
     list("warnings", of = string()).describe("Non-fatal config parse warnings.")
@@ -228,10 +228,11 @@ private val RepairHostAdapterConfigResultClass = class_(
 
 val ArtifactQueryTools = tools {
     tool("plan_abi_binding_regeneration") {
-        summary = "Plan ABI binding regeneration from current WebAssembly imports and exports."
+        summary = "Plan report-ready ABI binding regeneration from current Wasm plus a stale binding file."
         guidance = """
-            Compare the current WebAssembly function import/export ABI against a stale binding file and return a report-ready regeneration plan.
-            The result includes module identity, current import and export signature maps, stale binding maps, binding mismatches, and replacement bindings.
+            Use this as the shortest path for regenerating host bindings when a current module and stale `bindingPath` are available.
+            Compare the current WebAssembly function import/export ABI against a stale binding file and return a report-ready regeneration plan with exact input path echoes.
+            The result includes stable current import and export signature maps, stale binding maps, binding mismatches, and ready-to-copy replacement bindings.
             Mismatch `expected` values are current WebAssembly signatures, or null when a stale binding should be removed; `actual` values are stale binding signatures, or null when the binding is missing.
         """
         input = PlanAbiBindingRegenerationInput
@@ -241,10 +242,11 @@ val ArtifactQueryTools = tools {
     }
 
     tool("repair_host_adapter_config") {
-        summary = "Plan a minimal host adapter config repair from current WebAssembly imports."
+        summary = "Plan report-ready host adapter config repair from current Wasm plus a stale JSON config."
         guidance = """
-            Compare the current WebAssembly host adapter ABI against a stale JSON config and return a report-ready repair plan.
-            The result includes current required imports, the selected entrypoint, parsed stale config fields, exact JSON mismatches, ignored stale top-level fields, and a minimal `repair_config` object.
+            Use this as the shortest path for repairing host adapter configs when a current module and stale `configPath` are available.
+            Compare the current WebAssembly host adapter ABI against a stale JSON config and return a report-ready repair plan with exact input path echoes.
+            The result includes stable current required imports, the selected entrypoint, parsed stale config fields, exact JSON mismatches, ignored stale top-level fields, and a minimal `repair_config` object.
             Use `repair_config` directly as the replacement adapter config; it intentionally contains only active `module`, `imports`, and `entrypoint` fields.
         """
         input = RepairHostAdapterConfigInput
@@ -258,6 +260,7 @@ val ArtifactQueryTools = tools {
         guidance = """
             Use this as the default Hexana MCP entry point for WebAssembly artifact facts.
             `overview` returns module counts; skip it when the request already names a focused production fact.
+            Prefer dedicated focused tools before this broad query when their inputs are available: `plan_abi_binding_regeneration` for stale binding regeneration, `repair_host_adapter_config` for stale host adapter config repair, `check_memory_contract` for baseline-plus-policy memory audits, and `audit_global_state_policy` for baseline-plus-policy global-state audits.
             Choose a focused operation first when the requested artifact fact matches one: `api_diff` for old/new public function ABI diffs, changed signatures, public type indices, and current reference-type import ABI risks; `public_surface` for single-module exported ABI surface; `abi_surface` for compact function imports plus exports in one module; `abi_binding_regeneration` for current Wasm import/export signature maps, stale Python binding maps from `bindingPath`, mismatch JSON, and `replacementBindingsJson`; `host_adapter_repair` for host adapter config repair reports with required imports, required entrypoint, config mismatches, and minimal `repairConfigJson` from current Wasm ABI plus active config fields only; `import_surface` for host manifest/link checks, including compact `functionImportsJson` and exported function candidates on the summary; `memory_contract` for memory declarations and baseline limit changes; `global_state_policy` for mutable imported globals and new exported globals, including `targetedGlobalIndices`, `mutableImportedGlobalsJson`, `newPublicGlobalsJson`, and allowed public global exports on the summary; `data_payload_audit` for raw data segment payload string confirmation after reading policy strings; `local_budget` for exported-function declared local counts; `entrypoint_effects` for exported local functions whose own body directly writes memory or directly calls host imports, including policy-ready direct-host-entry JSON and transitive-host exclusions; `crash_frames` for crash reports after reading all numeric stack funcidx values into `query`; `dispatch_table_diff` for element-table slot target changes; and `host_call_diff` for direct imported-call regressions from `startName` or `startFuncidx`.
             For `data_payload_audit`, read the policy first and pass all forbidden strings in one call; an empty `query` only returns a small reminder. For `crash_frames`, read the crash report first and pass all stack funcidx values in one call; avoid probing a single frame and then repeating.
             For `abi_binding_regeneration`, pass the stale binding file as `bindingPath` when one exists. Its mismatch records and `bindingMismatchesJson` use `expected` for the current Wasm signature, or null when a stale binding should be removed; `actual` is the stale binding signature, or null when the binding is missing.

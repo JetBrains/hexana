@@ -56,6 +56,10 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
         assertContains(descriptor.description, "modules[].path")
         assertContains(descriptor.description, "generic `trace`")
         assertContains(descriptor.description, "public_surface")
+        assertContains(descriptor.description, "plan_abi_binding_regeneration")
+        assertContains(descriptor.description, "repair_host_adapter_config")
+        assertContains(descriptor.description, "check_memory_contract")
+        assertContains(descriptor.description, "audit_global_state_policy")
         assertContains(inputFieldDescription(descriptor, "path"), "relative")
         assertContains(inputFieldDescription(descriptor, "operation"), "overview")
         assertContains(inputFieldDescription(descriptor, "operation"), "triage")
@@ -93,10 +97,37 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
 
         assertContains(descriptor.description, "host adapter config repair")
         assertContains(descriptor.description, "current WebAssembly host adapter ABI")
+        assertContains(descriptor.description, "exact input path echoes")
         assertContains(descriptor.description, "repair_config")
         assertContains(inputFieldDescription(descriptor, "configPath"), "stale host adapter JSON config")
         assertFalse(descriptor.description.contains("broken_host_adapter"))
         assertFalse(descriptor.description.contains("task"))
+    }
+
+    fun testFocusedRepairAndAuditDescriptionContent() {
+        val binding = descriptor("plan_abi_binding_regeneration")
+        assertContains(binding.description, "report-ready ABI binding regeneration")
+        assertContains(binding.description, "stale `bindingPath`")
+        assertContains(binding.description, "expected")
+        assertContains(binding.description, "actual")
+
+        val memory = descriptor("check_memory_contract")
+        assertContains(memory.description, "memory contract")
+        assertContains(memory.description, "`baselinePath`")
+        assertContains(memory.description, "`policyPath`")
+        assertContains(memory.description, "exact input path echoes")
+
+        val globals = descriptor("audit_global_state_policy")
+        assertContains(globals.description, "global-state audits")
+        assertContains(globals.description, "`baselinePath`")
+        assertContains(globals.description, "`policyPath`")
+        assertContains(globals.description, "targeted global indices")
+    }
+
+    fun testGenericDescriptionsRedirectPolicyAuditsToFocusedTools() {
+        assertContains(descriptor("list_memory").description, "`check_memory_contract`")
+        assertContains(descriptor("list_globals").description, "`audit_global_state_policy`")
+        assertContains(descriptor("list_exports").description, "`audit_global_state_policy`")
     }
 
     // TODO(hexana-72): Output-field descriptions are currently missing on the generated schemas

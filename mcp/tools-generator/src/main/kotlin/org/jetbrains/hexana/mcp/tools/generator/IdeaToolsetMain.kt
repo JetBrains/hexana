@@ -261,7 +261,15 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
         code.addStatement("val policyText = %M(policyPath)", REQUIRE_TEXT_FILE)
         code.addStatement("val logText = logPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
         code.addStatement(
-            "val result = provider.%M(baseline = baselineProvider, policyText = policyText, logText = logText)",
+            "val result = provider.%M(" +
+                "baseline = baselineProvider, " +
+                "policyText = policyText, " +
+                "logText = logText, " +
+                "pathLabel = path, " +
+                "baselinePathLabel = baselinePath, " +
+                "policyPathLabel = policyPath, " +
+                "logPathLabel = logPath" +
+                ")",
             handlerMember,
         )
     } else if (spec.inputPattern == ToolInputPattern.WasmWithBaseline) {

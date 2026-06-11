@@ -599,6 +599,10 @@ class DefaultHexanaAnalysisServiceTest {
             logInput = null
         )
 
+        assertEquals(current.toString(), result.module.path)
+        assertEquals(baseline.toString(), result.module.baselinePath)
+        assertEquals(policy.toString(), result.module.policyPath)
+
         assertEquals("global-state-policy-v1", result.policyId)
         assertEquals(listOf(2, 3, 4, 5, 6), result.targetedGlobalIndices.take(5))
         assertTrue(34 in result.targetedGlobalIndices)

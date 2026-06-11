@@ -15,6 +15,7 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.model.exports.ExportResult
 import org.jetbrains.hexana.mcp.model.globals.AuditGlobalStatePolicyResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalResult
+import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyModuleIdentity
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyEvidenceResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyGlobalResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyRequestLimitResult
@@ -28,7 +29,11 @@ private val globalStatePolicyJson = Json {
 fun WasmBinaryProvider.auditGlobalStatePolicy(
     baseline: WasmBinaryProvider,
     policyText: String,
-    logText: String? = null
+    logText: String? = null,
+    pathLabel: String? = null,
+    baselinePathLabel: String? = null,
+    policyPathLabel: String? = null,
+    logPathLabel: String? = null
 ): AuditGlobalStatePolicyResult {
     val policy = parseGlobalStatePolicy(policyText)
     val currentExports = globalExports()
@@ -128,6 +133,12 @@ fun WasmBinaryProvider.auditGlobalStatePolicy(
     }
 
     return AuditGlobalStatePolicyResult(
+        module = GlobalStatePolicyModuleIdentity(
+            path = pathLabel,
+            baselinePath = baselinePathLabel,
+            policyPath = policyPathLabel,
+            logPath = logPathLabel
+        ),
         policyId = policy.policyId,
         globals = globals,
         newPublicGlobals = newPublicGlobals,

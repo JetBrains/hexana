@@ -4,9 +4,18 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class CheckMemoryContractResult(
+    val module: MemoryContractModuleIdentity,
     val memories: List<MemoryContractEntryResult>,
     val violations: List<MemoryContractViolationResult>,
     val warnings: List<String> = emptyList()
+)
+
+@Serializable
+data class MemoryContractModuleIdentity(
+    val path: String? = null,
+    val baselinePath: String? = null,
+    val policyPath: String? = null,
+    val logPath: String? = null
 )
 
 @Serializable

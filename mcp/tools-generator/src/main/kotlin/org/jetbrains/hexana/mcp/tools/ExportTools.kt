@@ -93,6 +93,7 @@ internal val ExportTools: List<ToolSpec> = tools {
             This is the light name-and-kind view of exports.
             Use this when you only need exported names, kinds, or raw external indices.
             If you need function signatures or origins, skip directly to `list_exported_functions`.
+            For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not identify new or policy-allowed public globals.
         """
         input = WasmInputClass
         inputPattern = ToolInputPattern.WasmOnly

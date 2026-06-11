@@ -58,6 +58,13 @@ val GlobalStatePolicyRequestLimitResultClass = class_("GlobalStatePolicyRequestL
     nullable("violation", string()).describe("Violation code such as `request_limit_exceeded` or `mutable_request_limit`.")
 }
 
+val GlobalStatePolicyModuleIdentityClass = class_("GlobalStatePolicyModuleIdentity") {
+    nullable("path", of = string()).describe("Exact current module path echoed from input `path`, when available.")
+    nullable("baselinePath", of = string()).describe("Exact baseline module path echoed from input `baselinePath`, when available.")
+    nullable("policyPath", of = string()).describe("Exact global-state policy path echoed from input `policyPath`, when available.")
+    nullable("logPath", of = string()).describe("Exact runtime log path echoed from input `logPath`, when provided.")
+}
+
 val GlobalStatePolicyViolationResultClass = class_("GlobalStatePolicyViolationResult") {
     string("kind").describe("Stable violation code.")
     int("globalidx").describe("Global index involved in the violation.")
@@ -81,12 +88,13 @@ val GlobalStatePolicyEvidenceResultClass = class_("GlobalStatePolicyEvidenceResu
 }
 
 val AuditGlobalStatePolicyResultClass = class_("AuditGlobalStatePolicyResult", kotlinPackage = MODEL_PACKAGE) {
+    embed("module", of = GlobalStatePolicyModuleIdentityClass).describe("Exact input path identity for report-ready global-state policy output.")
     nullable("policyId", string()).describe("Policy identifier from the policy file, when present.")
-    list("globals", of = GlobalStatePolicyGlobalResultClass).describe("Targeted globals relevant to the audit.")
-    list("newPublicGlobals", of = GlobalStatePolicyGlobalResultClass).describe("Public global exports added relative to the baseline.")
-    list("allowedPublicGlobals", of = GlobalStatePolicyGlobalResultClass).describe("Public global exports allowed by the baseline or policy.")
-    list("requestLimits", of = GlobalStatePolicyRequestLimitResultClass).describe("Request-limit public globals evaluated against policy limits.")
-    list("violations", of = GlobalStatePolicyViolationResultClass).describe("Report-ready policy violations.")
+    list("globals", of = GlobalStatePolicyGlobalResultClass).describe("Targeted globals relevant to the audit in stable `globalidx` order.")
+    list("newPublicGlobals", of = GlobalStatePolicyGlobalResultClass).describe("Public global exports added relative to the baseline in stable `globalidx` order.")
+    list("allowedPublicGlobals", of = GlobalStatePolicyGlobalResultClass).describe("Public global exports allowed by the baseline or policy in stable `globalidx` order.")
+    list("requestLimits", of = GlobalStatePolicyRequestLimitResultClass).describe("Request-limit public globals evaluated against policy limits in stable `globalidx` order.")
+    list("violations", of = GlobalStatePolicyViolationResultClass).describe("Report-ready policy violations in stable `globalidx` and violation order.")
     list("targetedGlobalIndices", of = int()).describe("Stable sorted `globalidx` values relevant to the audit.")
     list("evidence", of = GlobalStatePolicyEvidenceResultClass).describe("Relevant global evidence used for the audit report.")
     list("warnings", of = string()).describe("Non-fatal input or runtime-log warnings.")
@@ -94,10 +102,11 @@ val AuditGlobalStatePolicyResultClass = class_("AuditGlobalStatePolicyResult", k
 
 internal val GlobalTools: List<ToolSpec> = tools {
     tool("list_globals") {
-        summary = "List imported and defined globals from a `.wasm` module."
+        summary = "Low-level list of imported and defined globals from a `.wasm` module."
         guidance = """
             List imported and defined globals declared by a WebAssembly (.wasm) module.
             Returns each global with its value type, mutability, normalized initializer expression, import identity, and export names pointing at the global.
+            For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not compare baseline public globals or policy rules.
         """
         input = WasmInputClass
         inputPattern = ToolInputPattern.WasmOnly
@@ -106,10 +115,11 @@ internal val GlobalTools: List<ToolSpec> = tools {
     }
 
     tool("audit_global_state_policy") {
-        summary = "Audit WebAssembly global state against a baseline and global-state policy."
+        summary = "Audit global-state policy with current/baseline Wasm and policy JSON; returns report-ready violations."
         guidance = """
-            Compare current globals with `baselinePath` and apply policy rules from `policyPath`.
-            Returns report-ready violations, added public globals, allowed public globals, request-limit facts, targeted global indices, and supporting evidence.
+            Use this as the shortest path for global-state audits that have a current module, `baselinePath`, and `policyPath`.
+            Compares current globals with baseline public globals, applies policy rules, and returns exact input path echoes.
+            The result includes report-ready violations, added public globals, allowed public globals, request-limit facts, targeted global indices, and supporting evidence.
         """
         input = AuditGlobalStatePolicyInput
         inputPattern = ToolInputPattern.PolicyWithBaselineAndLog

@@ -125,6 +125,11 @@ class HexanaMcpGlobalsToolTest : HexanaMcpToolsetDirectTestBase() {
         val structuredContent = result.requireStructuredObject()
         assertEquals(textJson, structuredContent)
 
+        val module = structuredContent.obj("module")
+        assertEquals(current.projectRelativePath, module.text("path"))
+        assertEquals(baseline.projectRelativePath, module.text("baselinePath"))
+        assertEquals(policy.projectRelativePath, module.text("policyPath"))
+
         val newPublicGlobals = structuredContent.array("newPublicGlobals")
         assertEquals(listOf("request_limit", "feature_flag"), newPublicGlobals.map { it.jsonObject.text("export") })
         assertTrue(newPublicGlobals.obj(0).getValue("allowed").jsonPrimitive.boolean)

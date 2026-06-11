@@ -57,6 +57,13 @@ val MemoryContractCompatibleLimitsResultClass = class_("MemoryContractCompatible
     string("range").describe("Human-readable compatible range such as `24..48`.")
 }
 
+val MemoryContractModuleIdentityClass = class_("MemoryContractModuleIdentity") {
+    nullable("path", of = string()).describe("Exact current module path echoed from input `path`, when available.")
+    nullable("baselinePath", of = string()).describe("Exact baseline module path echoed from input `baselinePath`, when available.")
+    nullable("policyPath", of = string()).describe("Exact memory policy path echoed from input `policyPath`, when available.")
+    nullable("logPath", of = string()).describe("Exact runtime log path echoed from input `logPath`, when provided.")
+}
+
 val MemoryContractViolationResultClass = class_("MemoryContractViolationResult") {
     int("memoryIdx").describe("Memory index whose contract check produced this violation.")
     list("exportedAs", of = string()).describe("Memory export names that point at this memory index.")
@@ -80,17 +87,21 @@ val MemoryContractEntryResultClass = class_("MemoryContractEntryResult") {
 }
 
 val CheckMemoryContractResultClass = class_("CheckMemoryContractResult", kotlinPackage = MODEL_PACKAGE) {
-    list("memories", of = MemoryContractEntryResultClass).describe("Per-memory contract report entries.")
-    list("violations", of = MemoryContractViolationResultClass).describe("Flattened list of all contract violations.")
+    embed("module", of = MemoryContractModuleIdentityClass).describe("Exact input path identity for report-ready memory contract output.")
+    list("memories", of = MemoryContractEntryResultClass)
+        .describe("Per-memory contract report entries in stable `memoryIdx` order.")
+    list("violations", of = MemoryContractViolationResultClass)
+        .describe("Flattened contract violations in stable `memoryIdx` and violation order.")
     list("warnings", of = string()).describe("Non-fatal input or runtime-log warnings.")
 }
 
 internal val MemoryTools: List<ToolSpec> = tools {
     tool("list_memory") {
-        summary = "List imported and defined memories from a `.wasm` module."
+        summary = "Low-level list of imported and defined memories from a `.wasm` module."
         guidance = """
             List imported and defined memories declared by a WebAssembly (.wasm) module.
             Returns memory indices together with decoded WebAssembly limits.
+            For baseline-plus-policy memory contract audits, use `check_memory_contract`; this low-level view does not compare baseline declarations or policy limits.
         """
         input = WasmInputClass
         inputPattern = ToolInputPattern.WasmOnly
@@ -111,10 +122,11 @@ internal val MemoryTools: List<ToolSpec> = tools {
     }
 
     tool("check_memory_contract") {
-        summary = "Check current memory declarations against a baseline and memory policy."
+        summary = "Check a memory contract with current/baseline Wasm and policy JSON; returns report-ready violations."
         guidance = """
-            Compare current memory declarations with `baselinePath` and apply policy limits from `policyPath`.
-            Returns per-memory declared limits, previous limits, exported memory names, policy limits, structured violations, and minimal compatible limits.
+            Use this as the shortest path for memory contract audits that have a current module, `baselinePath`, and `policyPath`.
+            Compares current declarations with baseline declarations, applies policy limits, and returns exact input path echoes.
+            The result includes per-memory declared limits, previous limits, exported memory names, policy limits, stable structured violations, and minimal compatible limits.
         """
         input = CheckMemoryContractInput
         inputPattern = ToolInputPattern.PolicyWithBaselineAndLog

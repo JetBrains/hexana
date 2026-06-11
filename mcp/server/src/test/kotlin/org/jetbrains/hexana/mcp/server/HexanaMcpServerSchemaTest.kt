@@ -105,6 +105,17 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
+    fun productionRegistryPresentsFocusedRepairAndAuditToolsBeforeGenericViews() {
+        val names = createHexanaMcpServer().tools.keys.toList()
+
+        assertBefore(names, "plan_abi_binding_regeneration", "list_exports")
+        assertBefore(names, "repair_host_adapter_config", "list_imports")
+        assertBefore(names, "check_memory_contract", "list_memory")
+        assertBefore(names, "audit_global_state_policy", "list_globals")
+        assertBefore(names, "audit_global_state_policy", "list_exports")
+    }
+
+    @Test
     fun getEntrypointPolicyDescriptorDescribesDomainBehavior() {
         val tool = createHexanaMcpServer()
             .tools
@@ -236,6 +247,51 @@ class HexanaMcpServerSchemaTest {
         assertTrue("entrypoint" in repairConfig)
     }
 
+    @Test
+    fun memoryContractSchemaEchoesInputPathsAndReportFields() {
+        val tool = createHexanaMcpServer()
+            .tools
+            .getValue("check_memory_contract")
+            .tool
+
+        val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing memory contract output schema")
+        val module = output.getValue("module").jsonObject
+            .getValue("properties").jsonObject
+        assertTrue("path" in module)
+        assertTrue("baselinePath" in module)
+        assertTrue("policyPath" in module)
+        assertTrue("logPath" in module)
+
+        val memories = output.getValue("memories").jsonObject
+            .getValue("items").jsonObject
+            .getValue("properties").jsonObject
+        assertTrue("declaredLimits" in memories)
+        assertTrue("previousLimits" in memories)
+        assertTrue("policyLimits" in memories)
+        assertTrue("minimalCompatibleLimits" in memories)
+    }
+
+    @Test
+    fun globalStatePolicySchemaEchoesInputPathsAndReportFields() {
+        val tool = createHexanaMcpServer()
+            .tools
+            .getValue("audit_global_state_policy")
+            .tool
+
+        val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing global-state output schema")
+        val module = output.getValue("module").jsonObject
+            .getValue("properties").jsonObject
+        assertTrue("path" in module)
+        assertTrue("baselinePath" in module)
+        assertTrue("policyPath" in module)
+        assertTrue("logPath" in module)
+
+        assertTrue("newPublicGlobals" in output)
+        assertTrue("allowedPublicGlobals" in output)
+        assertTrue("targetedGlobalIndices" in output)
+        assertTrue("violations" in output)
+    }
+
     private fun queryArtifactsInputSchema(): JsonObject {
         return createHexanaMcpServer()
             .tools
@@ -249,5 +305,14 @@ class HexanaMcpServerSchemaTest {
 
     private fun schemaTypes(schema: JsonObject): List<String> {
         return schema.getValue("type").jsonArray.map { it.jsonPrimitive.content }
+    }
+
+    private fun assertBefore(names: List<String>, earlier: String, later: String) {
+        assertTrue(names.indexOf(earlier) >= 0, "Missing `$earlier` in $names")
+        assertTrue(names.indexOf(later) >= 0, "Missing `$later` in $names")
+        assertTrue(
+            names.indexOf(earlier) < names.indexOf(later),
+            "`$earlier` should be registered before `$later`: $names"
+        )
     }
 }

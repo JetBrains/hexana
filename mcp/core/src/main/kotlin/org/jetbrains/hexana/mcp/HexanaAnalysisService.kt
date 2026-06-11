@@ -365,7 +365,11 @@ class DefaultHexanaAnalysisService(
         return wasm.provider.checkMemoryContract(
             baseline = baseline.provider,
             policyText = policy.text,
-            logText = log?.text
+            logText = log?.text,
+            pathLabel = input.artifactPathLabel(),
+            baselinePathLabel = baselineInput.artifactPathLabel(),
+            policyPathLabel = policyInput.artifactPathLabel(),
+            logPathLabel = logInput?.artifactPathLabel()
         )
     }
 
@@ -382,7 +386,11 @@ class DefaultHexanaAnalysisService(
         return wasm.provider.auditGlobalStatePolicy(
             baseline = baseline.provider,
             policyText = policy.text,
-            logText = log?.text
+            logText = log?.text,
+            pathLabel = input.artifactPathLabel(),
+            baselinePathLabel = baselineInput.artifactPathLabel(),
+            policyPathLabel = policyInput.artifactPathLabel(),
+            logPathLabel = logInput?.artifactPathLabel()
         )
     }
 

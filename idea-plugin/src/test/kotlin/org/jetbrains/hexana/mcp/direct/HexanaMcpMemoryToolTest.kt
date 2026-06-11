@@ -117,6 +117,11 @@ class HexanaMcpMemoryToolTest : HexanaMcpToolsetDirectTestBase() {
             memoryContractPayload(current.projectRelativePath, baseline.projectRelativePath, policy.projectRelativePath)
         )
 
+        val module = result.obj("module")
+        assertEquals(current.projectRelativePath, module.text("path"))
+        assertEquals(baseline.projectRelativePath, module.text("baselinePath"))
+        assertEquals(policy.projectRelativePath, module.text("policyPath"))
+
         val memory = result.array("memories").obj(0)
         assertEquals(0, memory.int("memoryIdx"))
         assertEquals(listOf("checkout_memory"), memory.stringArray("exportedAs"))

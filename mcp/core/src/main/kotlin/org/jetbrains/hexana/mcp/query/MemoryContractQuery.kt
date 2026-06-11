@@ -15,6 +15,7 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.model.memory.CheckMemoryContractResult
 import org.jetbrains.hexana.mcp.model.memory.MemoryContractCompatibleLimitsResult
 import org.jetbrains.hexana.mcp.model.memory.MemoryContractEntryResult
+import org.jetbrains.hexana.mcp.model.memory.MemoryContractModuleIdentity
 import org.jetbrains.hexana.mcp.model.memory.MemoryContractPolicyLimitsResult
 import org.jetbrains.hexana.mcp.model.memory.MemoryContractViolationResult
 import org.jetbrains.hexana.mcp.model.memory.MemoryResult
@@ -27,7 +28,11 @@ private val memoryContractPolicyJson = Json {
 fun WasmBinaryProvider.checkMemoryContract(
     baseline: WasmBinaryProvider,
     policyText: String,
-    logText: String? = null
+    logText: String? = null,
+    pathLabel: String? = null,
+    baselinePathLabel: String? = null,
+    policyPathLabel: String? = null,
+    logPathLabel: String? = null
 ): CheckMemoryContractResult {
     val policy = parseMemoryContractPolicy(policyText)
     val previousByIndex = baseline.readMemory().memories.associateBy { it.memoryIdx }
@@ -44,6 +49,12 @@ fun WasmBinaryProvider.checkMemoryContract(
         }
     }
     return CheckMemoryContractResult(
+        module = MemoryContractModuleIdentity(
+            path = pathLabel,
+            baselinePath = baselinePathLabel,
+            policyPath = policyPathLabel,
+            logPath = logPathLabel
+        ),
         memories = entries,
         violations = violations,
         warnings = warnings

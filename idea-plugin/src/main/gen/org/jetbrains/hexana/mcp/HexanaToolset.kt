@@ -1063,6 +1063,1588 @@ public class HexanaToolset : McpToolsProvider {
   },
   object : McpTool {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
+      name = "plan_abi_binding_regeneration",
+      description = """
+      |Plan report-ready ABI binding regeneration from current Wasm plus a stale binding file.
+      |Use this as the shortest path for regenerating host bindings when a current module and stale `bindingPath` are available.
+      |Compare the current WebAssembly function import/export ABI against a stale binding file and return a report-ready regeneration plan with exact input path echoes.
+      |The result includes stable current import and export signature maps, stale binding maps, binding mismatches, and ready-to-copy replacement bindings.
+      |Mismatch `expected` values are current WebAssembly signatures, or null when a stale binding should be removed; `actual` values are stale binding signatures, or null when the binding is missing.
+      """.trimMargin(),
+      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.planAbiBindingRegeneration",
+      inputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path relative to the project root"))
+        })
+        put("bindingPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path to a stale binding source file with MODULE, IMPORTS, and EXPORTS literals."))
+          put("maxLength", JsonPrimitive(4_096))
+        })
+        put("projectPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
+        })
+      },
+      requiredProperties = setOf("path", "bindingPath"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+      outputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("module", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("path", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Exact current WebAssembly module path echoed from input `path`, when available."))
+            })
+            put("bindingPath", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Exact stale binding file path echoed from input `bindingPath`, when available."))
+            })
+            put("staleModule", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("MODULE value parsed from the stale binding file."))
+            })
+            put("replacementModule", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("MODULE value used in regenerated bindings."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("replacementModule"))
+          })
+          put("description", JsonPrimitive("Module and binding file identity."))
+        })
+        put("imports", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("additionalProperties", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("params", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Parameter value types."))
+              })
+              put("results", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Result value types."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("params"))
+              add(JsonPrimitive("results"))
+            })
+          })
+          put("description", JsonPrimitive("Current WebAssembly function import signature map keyed by qualified import name in stable sorted order."))
+        })
+        put("exports", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("additionalProperties", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("params", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Parameter value types."))
+              })
+              put("results", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Result value types."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("params"))
+              add(JsonPrimitive("results"))
+            })
+          })
+          put("description", JsonPrimitive("Current WebAssembly function export signature map keyed by export name in stable sorted order."))
+        })
+        put("staleImports", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("additionalProperties", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("params", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Parameter value types."))
+              })
+              put("results", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Result value types."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("params"))
+              add(JsonPrimitive("results"))
+            })
+          })
+          put("description", JsonPrimitive("Stale binding IMPORTS signature map parsed from `bindingPath` in stable sorted order."))
+        })
+        put("staleExports", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("additionalProperties", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("params", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Parameter value types."))
+              })
+              put("results", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Result value types."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("params"))
+              add(JsonPrimitive("results"))
+            })
+          })
+          put("description", JsonPrimitive("Stale binding EXPORTS signature map parsed from `bindingPath` in stable sorted order."))
+        })
+        put("bindingMismatches", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("symbol", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Binding symbol prefixed with `IMPORTS.` or `EXPORTS.`."))
+              })
+              put("expected", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("object"))
+                  add(JsonPrimitive("null"))
+                })
+                put("properties", buildJsonObject {
+                  put("params", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Parameter value types."))
+                  })
+                  put("results", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Result value types."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("params"))
+                  add(JsonPrimitive("results"))
+                })
+                put("description", JsonPrimitive("Current WebAssembly signature, or null when a stale binding should be removed."))
+              })
+              put("actual", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("object"))
+                  add(JsonPrimitive("null"))
+                })
+                put("properties", buildJsonObject {
+                  put("params", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Parameter value types."))
+                  })
+                  put("results", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Result value types."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("params"))
+                  add(JsonPrimitive("results"))
+                })
+                put("description", JsonPrimitive("Stale binding signature, or null when the binding is missing."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("symbol"))
+            })
+          })
+          put("description", JsonPrimitive("Binding mismatches in stable symbol order using `expected` for current WebAssembly and `actual` for stale bindings."))
+        })
+        put("replacementBindings", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("MODULE", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("MODULE value for regenerated bindings."))
+            })
+            put("IMPORTS", buildJsonObject {
+              put("type", JsonPrimitive("object"))
+              put("additionalProperties", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("params", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Parameter value types."))
+                  })
+                  put("results", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Result value types."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("params"))
+                  add(JsonPrimitive("results"))
+                })
+              })
+              put("description", JsonPrimitive("Regenerated IMPORTS signature map keyed by qualified import name."))
+            })
+            put("EXPORTS", buildJsonObject {
+              put("type", JsonPrimitive("object"))
+              put("additionalProperties", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("params", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Parameter value types."))
+                  })
+                  put("results", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Result value types."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("params"))
+                  add(JsonPrimitive("results"))
+                })
+              })
+              put("description", JsonPrimitive("Regenerated EXPORTS signature map keyed by export name."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("MODULE"))
+            add(JsonPrimitive("IMPORTS"))
+            add(JsonPrimitive("EXPORTS"))
+          })
+          put("description", JsonPrimitive("Drop-in replacement binding maps derived from the current WebAssembly ABI."))
+        })
+        put("warnings", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+          put("description", JsonPrimitive("Non-fatal binding parse warnings."))
+        })
+      },
+      requiredProperties = setOf("module", "imports", "exports", "staleImports", "staleExports", "bindingMismatches", "replacementBindings", "warnings"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+    )
+    override suspend fun call(args: JsonObject): McpToolCallResult {
+      val path = args.requireStringArgument("path")
+      val bindingPath = args.requireStringArgument("bindingPath")
+      val file = requireWasmFile(path)
+      val provider = file.requireCoreWasmBinaryProvider()
+      val bindingText = requireTextFile(bindingPath)
+      val result = provider.planAbiBindingRegeneration(bindingText = bindingText, pathLabel = path, bindingPathLabel = bindingPath)
+      val text = encodeHexanaJson(result)
+      val structuredContent = encodeHexanaJsonElement(result).jsonObject
+      return McpToolCallResult.text(text, structuredContent)
+    }
+  },
+  object : McpTool {
+    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
+      name = "repair_host_adapter_config",
+      description = """
+      |Plan report-ready host adapter config repair from current Wasm plus a stale JSON config.
+      |Use this as the shortest path for repairing host adapter configs when a current module and stale `configPath` are available.
+      |Compare the current WebAssembly host adapter ABI against a stale JSON config and return a report-ready repair plan with exact input path echoes.
+      |The result includes stable current required imports, the selected entrypoint, parsed stale config fields, exact JSON mismatches, ignored stale top-level fields, and a minimal `repair_config` object.
+      |Use `repair_config` directly as the replacement adapter config; it intentionally contains only active `module`, `imports`, and `entrypoint` fields.
+      """.trimMargin(),
+      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.repairHostAdapterConfig",
+      inputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path relative to the project root"))
+        })
+        put("configPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path to a stale host adapter JSON config with active `module`, `imports`, and `entrypoint` fields."))
+          put("maxLength", JsonPrimitive(4_096))
+        })
+        put("projectPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
+        })
+      },
+      requiredProperties = setOf("path", "configPath"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+      outputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("module", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("path", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Exact current WebAssembly module path echoed from input `path`, when available."))
+            })
+            put("configPath", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Exact stale host adapter config path echoed from input `configPath`, when available."))
+            })
+            put("staleModule", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Module value parsed from the stale host adapter config."))
+            })
+            put("repairModule", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Module value used in the minimal repair config."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("repairModule"))
+          })
+          put("description", JsonPrimitive("Module and config file identity."))
+        })
+        put("requiredImports", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("additionalProperties", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("params", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Function parameter value types."))
+              })
+              put("results", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Function result value types."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("params"))
+              add(JsonPrimitive("results"))
+            })
+          })
+          put("description", JsonPrimitive("Current WebAssembly function import signature map keyed by qualified import name in stable sorted order."))
+        })
+        put("requiredEntrypoint", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("object"))
+            add(JsonPrimitive("null"))
+          })
+          put("properties", buildJsonObject {
+            put("export", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Exported function name selected as the adapter entrypoint."))
+            })
+            put("params", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Entrypoint parameter value types."))
+            })
+            put("results", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Entrypoint result value types."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("export"))
+            add(JsonPrimitive("params"))
+            add(JsonPrimitive("results"))
+          })
+          put("description", JsonPrimitive("Selected local exported function entrypoint required by the repair config."))
+        })
+        put("staleImports", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("additionalProperties", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("params", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Function parameter value types."))
+              })
+              put("results", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Function result value types."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("params"))
+              add(JsonPrimitive("results"))
+            })
+          })
+          put("description", JsonPrimitive("Import signature map parsed from the stale config in stable sorted order."))
+        })
+        put("staleEntrypoint", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("object"))
+            add(JsonPrimitive("null"))
+          })
+          put("properties", buildJsonObject {
+            put("export", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Exported function name selected as the adapter entrypoint."))
+            })
+            put("params", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Entrypoint parameter value types."))
+            })
+            put("results", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Entrypoint result value types."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("export"))
+            add(JsonPrimitive("params"))
+            add(JsonPrimitive("results"))
+          })
+          put("description", JsonPrimitive("Entrypoint parsed from the stale config."))
+        })
+        put("ignoredConfigFields", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+          put("description", JsonPrimitive("Stale top-level config fields excluded from the minimal repair config in stable sorted order."))
+        })
+        put("configMismatches", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("field", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Config field path that differs from the current WebAssembly adapter ABI."))
+              })
+              put("expectedJson", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Exact JSON value required by the current WebAssembly adapter ABI."))
+              })
+              put("actualJson", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Exact JSON value found in the stale config, or the literal JSON `null` string when missing."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("field"))
+              add(JsonPrimitive("expectedJson"))
+              add(JsonPrimitive("actualJson"))
+            })
+          })
+          put("description", JsonPrimitive("Exact config mismatches in stable field order using JSON strings for expected and actual values."))
+        })
+        put("repair_config", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("module", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Current WebAssembly module path for the repaired adapter config."))
+            })
+            put("imports", buildJsonObject {
+              put("type", JsonPrimitive("object"))
+              put("additionalProperties", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("params", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Function parameter value types."))
+                  })
+                  put("results", buildJsonObject {
+                    put("type", JsonPrimitive("array"))
+                    put("items", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                    })
+                    put("description", JsonPrimitive("Function result value types."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("params"))
+                  add(JsonPrimitive("results"))
+                })
+              })
+              put("description", JsonPrimitive("Minimal import signature map keyed by qualified import name."))
+            })
+            put("entrypoint", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("export", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Exported function name selected as the adapter entrypoint."))
+                })
+                put("params", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Entrypoint parameter value types."))
+                })
+                put("results", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Entrypoint result value types."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("export"))
+                add(JsonPrimitive("params"))
+                add(JsonPrimitive("results"))
+              })
+              put("description", JsonPrimitive("Selected local exported function entrypoint when one exists."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("module"))
+            add(JsonPrimitive("imports"))
+          })
+          put("description", JsonPrimitive("Minimal replacement host adapter config derived from the current WebAssembly ABI."))
+        })
+        put("warnings", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+          put("description", JsonPrimitive("Non-fatal config parse warnings."))
+        })
+      },
+      requiredProperties = setOf("module", "requiredImports", "staleImports", "ignoredConfigFields", "configMismatches", "repair_config", "warnings"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+    )
+    override suspend fun call(args: JsonObject): McpToolCallResult {
+      val path = args.requireStringArgument("path")
+      val configPath = args.requireStringArgument("configPath")
+      val file = requireWasmFile(path)
+      val provider = file.requireCoreWasmBinaryProvider()
+      val configText = requireTextFile(configPath)
+      val result = provider.repairHostAdapterConfig(configText = configText, pathLabel = path, configPathLabel = configPath)
+      val text = encodeHexanaJson(result)
+      val structuredContent = encodeHexanaJsonElement(result).jsonObject
+      return McpToolCallResult.text(text, structuredContent)
+    }
+  },
+  object : McpTool {
+    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
+      name = "check_memory_contract",
+      description = """
+      |Check a memory contract with current/baseline Wasm and policy JSON; returns report-ready violations.
+      |Use this as the shortest path for memory contract audits that have a current module, `baselinePath`, and `policyPath`.
+      |Compares current declarations with baseline declarations, applies policy limits, and returns exact input path echoes.
+      |The result includes per-memory declared limits, previous limits, exported memory names, policy limits, stable structured violations, and minimal compatible limits.
+      """.trimMargin(),
+      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.checkMemoryContract",
+      inputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path relative to the project root"))
+        })
+        put("baselinePath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path to the baseline `.wasm` file to compare against the current module."))
+          put("maxLength", JsonPrimitive(4_096))
+        })
+        put("policyPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path to a memory policy JSON file with module-wide limits and optional per-memory overrides."))
+          put("maxLength", JsonPrimitive(4_096))
+        })
+        put("logPath", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Optional runtime log path to validate as readable input and attach log-related warnings."))
+          put("maxLength", JsonPrimitive(4_096))
+        })
+        put("projectPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
+        })
+      },
+      requiredProperties = setOf("path", "baselinePath", "policyPath"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+      outputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("module", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("path", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Exact current module path echoed from input `path`, when available."))
+            })
+            put("baselinePath", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Exact baseline module path echoed from input `baselinePath`, when available."))
+            })
+            put("policyPath", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Exact memory policy path echoed from input `policyPath`, when available."))
+            })
+            put("logPath", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Exact runtime log path echoed from input `logPath`, when provided."))
+            })
+          })
+          put("description", JsonPrimitive("Exact input path identity for report-ready memory contract output."))
+        })
+        put("memories", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("memoryIdx", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Index in the unified memory index space."))
+              })
+              put("exportedAs", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Memory export names that point at this memory index."))
+              })
+              put("declaredLimits", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("addressType", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
+                  })
+                  put("min", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Minimum number of pages."))
+                  })
+                  put("max", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
+                  })
+                  put("hasMax", buildJsonObject {
+                    put("type", JsonPrimitive("boolean"))
+                    put("description", JsonPrimitive("True when an explicit upper bound was declared."))
+                  })
+                  put("range", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Human-readable range such as `1..ε`."))
+                  })
+                  put("flag", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Raw limits flag byte as hex (`0x00`, `0x01`, etc.)."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("addressType"))
+                  add(JsonPrimitive("min"))
+                  add(JsonPrimitive("hasMax"))
+                  add(JsonPrimitive("range"))
+                  add(JsonPrimitive("flag"))
+                })
+                put("description", JsonPrimitive("Current declared memory limits."))
+              })
+              put("previousLimits", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("object"))
+                  add(JsonPrimitive("null"))
+                })
+                put("properties", buildJsonObject {
+                  put("addressType", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
+                  })
+                  put("min", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Minimum number of pages."))
+                  })
+                  put("max", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
+                  })
+                  put("hasMax", buildJsonObject {
+                    put("type", JsonPrimitive("boolean"))
+                    put("description", JsonPrimitive("True when an explicit upper bound was declared."))
+                  })
+                  put("range", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Human-readable range such as `1..ε`."))
+                  })
+                  put("flag", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Raw limits flag byte as hex (`0x00`, `0x01`, etc.)."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("addressType"))
+                  add(JsonPrimitive("min"))
+                  add(JsonPrimitive("hasMax"))
+                  add(JsonPrimitive("range"))
+                  add(JsonPrimitive("flag"))
+                })
+                put("description", JsonPrimitive("Baseline memory limits for the same index, when available."))
+              })
+              put("policyLimits", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("maxMin", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Maximum allowed declared minimum pages."))
+                  })
+                  put("maxMax", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Maximum allowed declared maximum pages."))
+                  })
+                  put("requireMax", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("boolean"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("True when an explicit maximum must be declared."))
+                  })
+                })
+                put("description", JsonPrimitive("Effective policy limits after per-memory overrides."))
+              })
+              put("violations", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("object"))
+                  put("properties", buildJsonObject {
+                    put("memoryIdx", buildJsonObject {
+                      put("type", JsonPrimitive("integer"))
+                      put("description", JsonPrimitive("Memory index whose contract check produced this violation."))
+                    })
+                    put("exportedAs", buildJsonObject {
+                      put("type", JsonPrimitive("array"))
+                      put("items", buildJsonObject {
+                        put("type", JsonPrimitive("string"))
+                      })
+                      put("description", JsonPrimitive("Memory export names that point at this memory index."))
+                    })
+                    put("kind", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Stable violation code, for example `min_increased`, `max_decreased`, or `policy_max_exceeded`."))
+                    })
+                    put("field", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Limit field involved in the violation: `min`, `max`, or `hasMax`."))
+                    })
+                    put("previous", buildJsonObject {
+                      put("type", buildJsonArray {
+                        add(JsonPrimitive("integer"))
+                        add(JsonPrimitive("null"))
+                      })
+                      put("description", JsonPrimitive("Previous baseline value for diff violations."))
+                    })
+                    put("declared", buildJsonObject {
+                      put("type", buildJsonArray {
+                        add(JsonPrimitive("integer"))
+                        add(JsonPrimitive("null"))
+                      })
+                      put("description", JsonPrimitive("Current declared value."))
+                    })
+                    put("policy", buildJsonObject {
+                      put("type", buildJsonArray {
+                        add(JsonPrimitive("integer"))
+                        add(JsonPrimitive("null"))
+                      })
+                      put("description", JsonPrimitive("Policy value involved in the violation."))
+                    })
+                    put("message", buildJsonObject {
+                      put("type", JsonPrimitive("string"))
+                      put("description", JsonPrimitive("Report-ready explanation of the violation."))
+                    })
+                  })
+                  put("required", buildJsonArray {
+                    add(JsonPrimitive("memoryIdx"))
+                    add(JsonPrimitive("exportedAs"))
+                    add(JsonPrimitive("kind"))
+                    add(JsonPrimitive("field"))
+                    add(JsonPrimitive("message"))
+                  })
+                })
+                put("description", JsonPrimitive("Limit changes and policy violations for this memory."))
+              })
+              put("minimalCompatibleLimits", buildJsonObject {
+                put("type", JsonPrimitive("object"))
+                put("properties", buildJsonObject {
+                  put("addressType", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
+                  })
+                  put("min", buildJsonObject {
+                    put("type", JsonPrimitive("integer"))
+                    put("description", JsonPrimitive("Minimum pages compatible with current and baseline declarations."))
+                  })
+                  put("max", buildJsonObject {
+                    put("type", buildJsonArray {
+                      add(JsonPrimitive("integer"))
+                      add(JsonPrimitive("null"))
+                    })
+                    put("description", JsonPrimitive("Maximum pages compatible with current and baseline declarations, when bounded."))
+                  })
+                  put("hasMax", buildJsonObject {
+                    put("type", JsonPrimitive("boolean"))
+                    put("description", JsonPrimitive("True when the compatible limits include an explicit maximum."))
+                  })
+                  put("range", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("Human-readable compatible range such as `24..48`."))
+                  })
+                })
+                put("required", buildJsonArray {
+                  add(JsonPrimitive("addressType"))
+                  add(JsonPrimitive("min"))
+                  add(JsonPrimitive("hasMax"))
+                  add(JsonPrimitive("range"))
+                })
+                put("description", JsonPrimitive("Smallest limits compatible with the current and baseline declarations."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("memoryIdx"))
+              add(JsonPrimitive("exportedAs"))
+              add(JsonPrimitive("declaredLimits"))
+              add(JsonPrimitive("policyLimits"))
+              add(JsonPrimitive("violations"))
+              add(JsonPrimitive("minimalCompatibleLimits"))
+            })
+          })
+          put("description", JsonPrimitive("Per-memory contract report entries in stable `memoryIdx` order."))
+        })
+        put("violations", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("memoryIdx", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Memory index whose contract check produced this violation."))
+              })
+              put("exportedAs", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Memory export names that point at this memory index."))
+              })
+              put("kind", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Stable violation code, for example `min_increased`, `max_decreased`, or `policy_max_exceeded`."))
+              })
+              put("field", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Limit field involved in the violation: `min`, `max`, or `hasMax`."))
+              })
+              put("previous", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("integer"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Previous baseline value for diff violations."))
+              })
+              put("declared", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("integer"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Current declared value."))
+              })
+              put("policy", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("integer"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Policy value involved in the violation."))
+              })
+              put("message", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Report-ready explanation of the violation."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("memoryIdx"))
+              add(JsonPrimitive("exportedAs"))
+              add(JsonPrimitive("kind"))
+              add(JsonPrimitive("field"))
+              add(JsonPrimitive("message"))
+            })
+          })
+          put("description", JsonPrimitive("Flattened contract violations in stable `memoryIdx` and violation order."))
+        })
+        put("warnings", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+          put("description", JsonPrimitive("Non-fatal input or runtime-log warnings."))
+        })
+      },
+      requiredProperties = setOf("module", "memories", "violations", "warnings"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+    )
+    override suspend fun call(args: JsonObject): McpToolCallResult {
+      val path = args.requireStringArgument("path")
+      val baselinePath = args.requireStringArgument("baselinePath")
+      val policyPath = args.requireStringArgument("policyPath")
+      val logPath = args.optionalStringArgument("logPath")
+      val file = requireWasmFile(path)
+      val provider = file.requireCoreWasmBinaryProvider()
+      val baselineProvider = requireWasmFile(baselinePath).requireCoreWasmBinaryProvider()
+      val policyText = requireTextFile(policyPath)
+      val logText = logPath?.let { requireTextFile(it) }
+      val result = provider.checkMemoryContract(baseline = baselineProvider, policyText = policyText, logText = logText, pathLabel = path, baselinePathLabel = baselinePath, policyPathLabel = policyPath, logPathLabel = logPath)
+      val text = encodeHexanaJson(result)
+      val structuredContent = encodeHexanaJsonElement(result).jsonObject
+      return McpToolCallResult.text(text, structuredContent)
+    }
+  },
+  object : McpTool {
+    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
+      name = "audit_global_state_policy",
+      description = """
+      |Audit global-state policy with current/baseline Wasm and policy JSON; returns report-ready violations.
+      |Use this as the shortest path for global-state audits that have a current module, `baselinePath`, and `policyPath`.
+      |Compares current globals with baseline public globals, applies policy rules, and returns exact input path echoes.
+      |The result includes report-ready violations, added public globals, allowed public globals, request-limit facts, targeted global indices, and supporting evidence.
+      """.trimMargin(),
+      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.auditGlobalStatePolicy",
+      inputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path relative to the project root"))
+        })
+        put("baselinePath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path to the baseline `.wasm` file to compare against the current module."))
+          put("maxLength", JsonPrimitive(4_096))
+        })
+        put("policyPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path to a global-state policy JSON file with allowed public globals and request-limit rules."))
+          put("maxLength", JsonPrimitive(4_096))
+        })
+        put("logPath", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Optional runtime log path to validate as readable input and attach log-related warnings."))
+          put("maxLength", JsonPrimitive(4_096))
+        })
+        put("projectPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
+        })
+      },
+      requiredProperties = setOf("path", "baselinePath", "policyPath"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+      outputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("module", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("path", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Exact current module path echoed from input `path`, when available."))
+            })
+            put("baselinePath", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Exact baseline module path echoed from input `baselinePath`, when available."))
+            })
+            put("policyPath", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Exact global-state policy path echoed from input `policyPath`, when available."))
+            })
+            put("logPath", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Exact runtime log path echoed from input `logPath`, when provided."))
+            })
+          })
+          put("description", JsonPrimitive("Exact input path identity for report-ready global-state policy output."))
+        })
+        put("policyId", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Policy identifier from the policy file, when present."))
+        })
+        put("globals", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("export", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Export name when the global is public."))
+              })
+              put("importNameQualified", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Qualified import name such as `env.clock_offset`, when imported."))
+              })
+              put("globalidx", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Global index in the unified global index space."))
+              })
+              put("type", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Global value type."))
+              })
+              put("mutable", buildJsonObject {
+                put("type", JsonPrimitive("boolean"))
+                put("description", JsonPrimitive("True when the global is mutable."))
+              })
+              put("initExpr", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Initialization expression in WAT syntax."))
+              })
+              put("origin", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Global origin: `import` or `local`."))
+              })
+              put("importModule", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Import module name when the global is imported."))
+              })
+              put("importName", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Import field name when the global is imported."))
+              })
+              put("status", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`."))
+              })
+              put("allowed", buildJsonObject {
+                put("type", JsonPrimitive("boolean"))
+                put("description", JsonPrimitive("True when the policy or baseline allows this public global."))
+              })
+              put("allowedBy", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("globalidx"))
+              add(JsonPrimitive("type"))
+              add(JsonPrimitive("mutable"))
+              add(JsonPrimitive("origin"))
+              add(JsonPrimitive("status"))
+              add(JsonPrimitive("allowed"))
+            })
+          })
+          put("description", JsonPrimitive("Targeted globals relevant to the audit in stable `globalidx` order."))
+        })
+        put("newPublicGlobals", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("export", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Export name when the global is public."))
+              })
+              put("importNameQualified", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Qualified import name such as `env.clock_offset`, when imported."))
+              })
+              put("globalidx", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Global index in the unified global index space."))
+              })
+              put("type", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Global value type."))
+              })
+              put("mutable", buildJsonObject {
+                put("type", JsonPrimitive("boolean"))
+                put("description", JsonPrimitive("True when the global is mutable."))
+              })
+              put("initExpr", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Initialization expression in WAT syntax."))
+              })
+              put("origin", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Global origin: `import` or `local`."))
+              })
+              put("importModule", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Import module name when the global is imported."))
+              })
+              put("importName", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Import field name when the global is imported."))
+              })
+              put("status", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`."))
+              })
+              put("allowed", buildJsonObject {
+                put("type", JsonPrimitive("boolean"))
+                put("description", JsonPrimitive("True when the policy or baseline allows this public global."))
+              })
+              put("allowedBy", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("globalidx"))
+              add(JsonPrimitive("type"))
+              add(JsonPrimitive("mutable"))
+              add(JsonPrimitive("origin"))
+              add(JsonPrimitive("status"))
+              add(JsonPrimitive("allowed"))
+            })
+          })
+          put("description", JsonPrimitive("Public global exports added relative to the baseline in stable `globalidx` order."))
+        })
+        put("allowedPublicGlobals", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("export", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Export name when the global is public."))
+              })
+              put("importNameQualified", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Qualified import name such as `env.clock_offset`, when imported."))
+              })
+              put("globalidx", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Global index in the unified global index space."))
+              })
+              put("type", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Global value type."))
+              })
+              put("mutable", buildJsonObject {
+                put("type", JsonPrimitive("boolean"))
+                put("description", JsonPrimitive("True when the global is mutable."))
+              })
+              put("initExpr", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Initialization expression in WAT syntax."))
+              })
+              put("origin", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Global origin: `import` or `local`."))
+              })
+              put("importModule", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Import module name when the global is imported."))
+              })
+              put("importName", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Import field name when the global is imported."))
+              })
+              put("status", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`."))
+              })
+              put("allowed", buildJsonObject {
+                put("type", JsonPrimitive("boolean"))
+                put("description", JsonPrimitive("True when the policy or baseline allows this public global."))
+              })
+              put("allowedBy", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("globalidx"))
+              add(JsonPrimitive("type"))
+              add(JsonPrimitive("mutable"))
+              add(JsonPrimitive("origin"))
+              add(JsonPrimitive("status"))
+              add(JsonPrimitive("allowed"))
+            })
+          })
+          put("description", JsonPrimitive("Public global exports allowed by the baseline or policy in stable `globalidx` order."))
+        })
+        put("requestLimits", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("export", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Request-limit export name."))
+              })
+              put("globalidx", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Global index for the request-limit export."))
+              })
+              put("value", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("integer"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Constant request-limit value, when statically available."))
+              })
+              put("maxValue", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("integer"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Maximum request-limit value from policy, when configured."))
+              })
+              put("allowed", buildJsonObject {
+                put("type", JsonPrimitive("boolean"))
+                put("description", JsonPrimitive("True when the request-limit global satisfies the policy."))
+              })
+              put("violation", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Violation code such as `request_limit_exceeded` or `mutable_request_limit`."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("export"))
+              add(JsonPrimitive("globalidx"))
+              add(JsonPrimitive("allowed"))
+            })
+          })
+          put("description", JsonPrimitive("Request-limit public globals evaluated against policy limits in stable `globalidx` order."))
+        })
+        put("violations", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("kind", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Stable violation code."))
+              })
+              put("globalidx", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Global index involved in the violation."))
+              })
+              put("export", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Export name involved in the violation, when public."))
+              })
+              put("importNameQualified", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Qualified import name involved in the violation, when imported."))
+              })
+              put("field", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Policy field or Wasm property involved in the violation."))
+              })
+              put("observed", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Observed value."))
+              })
+              put("policy", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Policy value or policy concept."))
+              })
+              put("message", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Report-ready explanation of the violation."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("kind"))
+              add(JsonPrimitive("globalidx"))
+              add(JsonPrimitive("field"))
+              add(JsonPrimitive("message"))
+            })
+          })
+          put("description", JsonPrimitive("Report-ready policy violations in stable `globalidx` and violation order."))
+        })
+        put("targetedGlobalIndices", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+          })
+          put("description", JsonPrimitive("Stable sorted `globalidx` values relevant to the audit."))
+        })
+        put("evidence", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("kind", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Evidence category."))
+              })
+              put("globalidx", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Global index for this evidence item."))
+              })
+              put("export", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Export name, when public."))
+              })
+              put("importNameQualified", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Qualified import name, when imported."))
+              })
+              put("type", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Global value type."))
+              })
+              put("mutable", buildJsonObject {
+                put("type", JsonPrimitive("boolean"))
+                put("description", JsonPrimitive("True when the global is mutable."))
+              })
+              put("initExpr", buildJsonObject {
+                put("type", buildJsonArray {
+                  add(JsonPrimitive("string"))
+                  add(JsonPrimitive("null"))
+                })
+                put("description", JsonPrimitive("Initialization expression in WAT syntax."))
+              })
+              put("origin", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Global origin: `import` or `local`."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("kind"))
+              add(JsonPrimitive("globalidx"))
+              add(JsonPrimitive("type"))
+              add(JsonPrimitive("mutable"))
+              add(JsonPrimitive("origin"))
+            })
+          })
+          put("description", JsonPrimitive("Relevant global evidence used for the audit report."))
+        })
+        put("warnings", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+          put("description", JsonPrimitive("Non-fatal input or runtime-log warnings."))
+        })
+      },
+      requiredProperties = setOf("module", "globals", "newPublicGlobals", "allowedPublicGlobals", "requestLimits", "violations", "targetedGlobalIndices", "evidence", "warnings"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+    )
+    override suspend fun call(args: JsonObject): McpToolCallResult {
+      val path = args.requireStringArgument("path")
+      val baselinePath = args.requireStringArgument("baselinePath")
+      val policyPath = args.requireStringArgument("policyPath")
+      val logPath = args.optionalStringArgument("logPath")
+      val file = requireWasmFile(path)
+      val provider = file.requireCoreWasmBinaryProvider()
+      val baselineProvider = requireWasmFile(baselinePath).requireCoreWasmBinaryProvider()
+      val policyText = requireTextFile(policyPath)
+      val logText = logPath?.let { requireTextFile(it) }
+      val result = provider.auditGlobalStatePolicy(baseline = baselineProvider, policyText = policyText, logText = logText, pathLabel = path, baselinePathLabel = baselinePath, policyPathLabel = policyPath, logPathLabel = logPath)
+      val text = encodeHexanaJson(result)
+      val structuredContent = encodeHexanaJsonElement(result).jsonObject
+      return McpToolCallResult.text(text, structuredContent)
+    }
+  },
+  object : McpTool {
+    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "list_custom_sections",
       description = """
       |List WebAssembly custom sections with offsets, sizes, and small content previews.
@@ -1260,6 +2842,7 @@ public class HexanaToolset : McpToolsProvider {
       |This is the light name-and-kind view of exports.
       |Use this when you only need exported names, kinds, or raw external indices.
       |If you need function signatures or origins, skip directly to `list_exported_functions`.
+      |For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not identify new or policy-allowed public globals.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.listExports",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -3271,9 +4854,10 @@ public class HexanaToolset : McpToolsProvider {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "list_memory",
       description = """
-      |List imported and defined memories from a `.wasm` module.
+      |Low-level list of imported and defined memories from a `.wasm` module.
       |List imported and defined memories declared by a WebAssembly (.wasm) module.
       |Returns memory indices together with decoded WebAssembly limits.
+      |For baseline-plus-policy memory contract audits, use `check_memory_contract`; this low-level view does not compare baseline declarations or policy limits.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.listMemory",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -3540,375 +5124,12 @@ public class HexanaToolset : McpToolsProvider {
   },
   object : McpTool {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
-      name = "check_memory_contract",
-      description = """
-      |Check current memory declarations against a baseline and memory policy.
-      |Compare current memory declarations with `baselinePath` and apply policy limits from `policyPath`.
-      |Returns per-memory declared limits, previous limits, exported memory names, policy limits, structured violations, and minimal compatible limits.
-      """.trimMargin(),
-      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.checkMemoryContract",
-      inputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("path", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path relative to the project root"))
-        })
-        put("baselinePath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path to the baseline `.wasm` file to compare against the current module."))
-          put("maxLength", JsonPrimitive(4_096))
-        })
-        put("policyPath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path to a memory policy JSON file with module-wide limits and optional per-memory overrides."))
-          put("maxLength", JsonPrimitive(4_096))
-        })
-        put("logPath", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("string"))
-            add(JsonPrimitive("null"))
-          })
-          put("description", JsonPrimitive("Optional runtime log path to validate as readable input and attach log-related warnings."))
-          put("maxLength", JsonPrimitive(4_096))
-        })
-        put("projectPath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
-        })
-      },
-      requiredProperties = setOf("path", "baselinePath", "policyPath"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-      outputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("memories", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("memoryIdx", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Index in the unified memory index space."))
-              })
-              put("exportedAs", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Memory export names that point at this memory index."))
-              })
-              put("declaredLimits", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("addressType", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
-                  })
-                  put("min", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Minimum number of pages."))
-                  })
-                  put("max", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
-                  })
-                  put("hasMax", buildJsonObject {
-                    put("type", JsonPrimitive("boolean"))
-                    put("description", JsonPrimitive("True when an explicit upper bound was declared."))
-                  })
-                  put("range", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Human-readable range such as `1..ε`."))
-                  })
-                  put("flag", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Raw limits flag byte as hex (`0x00`, `0x01`, etc.)."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("addressType"))
-                  add(JsonPrimitive("min"))
-                  add(JsonPrimitive("hasMax"))
-                  add(JsonPrimitive("range"))
-                  add(JsonPrimitive("flag"))
-                })
-                put("description", JsonPrimitive("Current declared memory limits."))
-              })
-              put("previousLimits", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("object"))
-                  add(JsonPrimitive("null"))
-                })
-                put("properties", buildJsonObject {
-                  put("addressType", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
-                  })
-                  put("min", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Minimum number of pages."))
-                  })
-                  put("max", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
-                  })
-                  put("hasMax", buildJsonObject {
-                    put("type", JsonPrimitive("boolean"))
-                    put("description", JsonPrimitive("True when an explicit upper bound was declared."))
-                  })
-                  put("range", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Human-readable range such as `1..ε`."))
-                  })
-                  put("flag", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Raw limits flag byte as hex (`0x00`, `0x01`, etc.)."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("addressType"))
-                  add(JsonPrimitive("min"))
-                  add(JsonPrimitive("hasMax"))
-                  add(JsonPrimitive("range"))
-                  add(JsonPrimitive("flag"))
-                })
-                put("description", JsonPrimitive("Baseline memory limits for the same index, when available."))
-              })
-              put("policyLimits", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("maxMin", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Maximum allowed declared minimum pages."))
-                  })
-                  put("maxMax", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Maximum allowed declared maximum pages."))
-                  })
-                  put("requireMax", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("boolean"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("True when an explicit maximum must be declared."))
-                  })
-                })
-                put("description", JsonPrimitive("Effective policy limits after per-memory overrides."))
-              })
-              put("violations", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("object"))
-                  put("properties", buildJsonObject {
-                    put("memoryIdx", buildJsonObject {
-                      put("type", JsonPrimitive("integer"))
-                      put("description", JsonPrimitive("Memory index whose contract check produced this violation."))
-                    })
-                    put("exportedAs", buildJsonObject {
-                      put("type", JsonPrimitive("array"))
-                      put("items", buildJsonObject {
-                        put("type", JsonPrimitive("string"))
-                      })
-                      put("description", JsonPrimitive("Memory export names that point at this memory index."))
-                    })
-                    put("kind", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                      put("description", JsonPrimitive("Stable violation code, for example `min_increased`, `max_decreased`, or `policy_max_exceeded`."))
-                    })
-                    put("field", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                      put("description", JsonPrimitive("Limit field involved in the violation: `min`, `max`, or `hasMax`."))
-                    })
-                    put("previous", buildJsonObject {
-                      put("type", buildJsonArray {
-                        add(JsonPrimitive("integer"))
-                        add(JsonPrimitive("null"))
-                      })
-                      put("description", JsonPrimitive("Previous baseline value for diff violations."))
-                    })
-                    put("declared", buildJsonObject {
-                      put("type", buildJsonArray {
-                        add(JsonPrimitive("integer"))
-                        add(JsonPrimitive("null"))
-                      })
-                      put("description", JsonPrimitive("Current declared value."))
-                    })
-                    put("policy", buildJsonObject {
-                      put("type", buildJsonArray {
-                        add(JsonPrimitive("integer"))
-                        add(JsonPrimitive("null"))
-                      })
-                      put("description", JsonPrimitive("Policy value involved in the violation."))
-                    })
-                    put("message", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                      put("description", JsonPrimitive("Report-ready explanation of the violation."))
-                    })
-                  })
-                  put("required", buildJsonArray {
-                    add(JsonPrimitive("memoryIdx"))
-                    add(JsonPrimitive("exportedAs"))
-                    add(JsonPrimitive("kind"))
-                    add(JsonPrimitive("field"))
-                    add(JsonPrimitive("message"))
-                  })
-                })
-                put("description", JsonPrimitive("Limit changes and policy violations for this memory."))
-              })
-              put("minimalCompatibleLimits", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("addressType", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
-                  })
-                  put("min", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Minimum pages compatible with current and baseline declarations."))
-                  })
-                  put("max", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Maximum pages compatible with current and baseline declarations, when bounded."))
-                  })
-                  put("hasMax", buildJsonObject {
-                    put("type", JsonPrimitive("boolean"))
-                    put("description", JsonPrimitive("True when the compatible limits include an explicit maximum."))
-                  })
-                  put("range", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Human-readable compatible range such as `24..48`."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("addressType"))
-                  add(JsonPrimitive("min"))
-                  add(JsonPrimitive("hasMax"))
-                  add(JsonPrimitive("range"))
-                })
-                put("description", JsonPrimitive("Smallest limits compatible with the current and baseline declarations."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("memoryIdx"))
-              add(JsonPrimitive("exportedAs"))
-              add(JsonPrimitive("declaredLimits"))
-              add(JsonPrimitive("policyLimits"))
-              add(JsonPrimitive("violations"))
-              add(JsonPrimitive("minimalCompatibleLimits"))
-            })
-          })
-          put("description", JsonPrimitive("Per-memory contract report entries."))
-        })
-        put("violations", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("memoryIdx", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Memory index whose contract check produced this violation."))
-              })
-              put("exportedAs", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Memory export names that point at this memory index."))
-              })
-              put("kind", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Stable violation code, for example `min_increased`, `max_decreased`, or `policy_max_exceeded`."))
-              })
-              put("field", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Limit field involved in the violation: `min`, `max`, or `hasMax`."))
-              })
-              put("previous", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("integer"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Previous baseline value for diff violations."))
-              })
-              put("declared", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("integer"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Current declared value."))
-              })
-              put("policy", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("integer"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Policy value involved in the violation."))
-              })
-              put("message", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Report-ready explanation of the violation."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("memoryIdx"))
-              add(JsonPrimitive("exportedAs"))
-              add(JsonPrimitive("kind"))
-              add(JsonPrimitive("field"))
-              add(JsonPrimitive("message"))
-            })
-          })
-          put("description", JsonPrimitive("Flattened list of all contract violations."))
-        })
-        put("warnings", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-          })
-          put("description", JsonPrimitive("Non-fatal input or runtime-log warnings."))
-        })
-      },
-      requiredProperties = setOf("memories", "violations", "warnings"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-    )
-    override suspend fun call(args: JsonObject): McpToolCallResult {
-      val path = args.requireStringArgument("path")
-      val baselinePath = args.requireStringArgument("baselinePath")
-      val policyPath = args.requireStringArgument("policyPath")
-      val logPath = args.optionalStringArgument("logPath")
-      val file = requireWasmFile(path)
-      val provider = file.requireCoreWasmBinaryProvider()
-      val baselineProvider = requireWasmFile(baselinePath).requireCoreWasmBinaryProvider()
-      val policyText = requireTextFile(policyPath)
-      val logText = logPath?.let { requireTextFile(it) }
-      val result = provider.checkMemoryContract(baseline = baselineProvider, policyText = policyText, logText = logText)
-      val text = encodeHexanaJson(result)
-      val structuredContent = encodeHexanaJsonElement(result).jsonObject
-      return McpToolCallResult.text(text, structuredContent)
-    }
-  },
-  object : McpTool {
-    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "list_globals",
       description = """
-      |List imported and defined globals from a `.wasm` module.
+      |Low-level list of imported and defined globals from a `.wasm` module.
       |List imported and defined globals declared by a WebAssembly (.wasm) module.
       |Returns each global with its value type, mutability, normalized initializer expression, import identity, and export names pointing at the global.
+      |For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not compare baseline public globals or policy rules.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.listGlobals",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -4016,503 +5237,6 @@ public class HexanaToolset : McpToolsProvider {
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val result = provider.readGlobals()
-      val text = encodeHexanaJson(result)
-      val structuredContent = encodeHexanaJsonElement(result).jsonObject
-      return McpToolCallResult.text(text, structuredContent)
-    }
-  },
-  object : McpTool {
-    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
-      name = "audit_global_state_policy",
-      description = """
-      |Audit WebAssembly global state against a baseline and global-state policy.
-      |Compare current globals with `baselinePath` and apply policy rules from `policyPath`.
-      |Returns report-ready violations, added public globals, allowed public globals, request-limit facts, targeted global indices, and supporting evidence.
-      """.trimMargin(),
-      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.auditGlobalStatePolicy",
-      inputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("path", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path relative to the project root"))
-        })
-        put("baselinePath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path to the baseline `.wasm` file to compare against the current module."))
-          put("maxLength", JsonPrimitive(4_096))
-        })
-        put("policyPath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path to a global-state policy JSON file with allowed public globals and request-limit rules."))
-          put("maxLength", JsonPrimitive(4_096))
-        })
-        put("logPath", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("string"))
-            add(JsonPrimitive("null"))
-          })
-          put("description", JsonPrimitive("Optional runtime log path to validate as readable input and attach log-related warnings."))
-          put("maxLength", JsonPrimitive(4_096))
-        })
-        put("projectPath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
-        })
-      },
-      requiredProperties = setOf("path", "baselinePath", "policyPath"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-      outputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("policyId", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("string"))
-            add(JsonPrimitive("null"))
-          })
-          put("description", JsonPrimitive("Policy identifier from the policy file, when present."))
-        })
-        put("globals", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("export", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Export name when the global is public."))
-              })
-              put("importNameQualified", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Qualified import name such as `env.clock_offset`, when imported."))
-              })
-              put("globalidx", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Global index in the unified global index space."))
-              })
-              put("type", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Global value type."))
-              })
-              put("mutable", buildJsonObject {
-                put("type", JsonPrimitive("boolean"))
-                put("description", JsonPrimitive("True when the global is mutable."))
-              })
-              put("initExpr", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Initialization expression in WAT syntax."))
-              })
-              put("origin", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Global origin: `import` or `local`."))
-              })
-              put("importModule", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Import module name when the global is imported."))
-              })
-              put("importName", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Import field name when the global is imported."))
-              })
-              put("status", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`."))
-              })
-              put("allowed", buildJsonObject {
-                put("type", JsonPrimitive("boolean"))
-                put("description", JsonPrimitive("True when the policy or baseline allows this public global."))
-              })
-              put("allowedBy", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("globalidx"))
-              add(JsonPrimitive("type"))
-              add(JsonPrimitive("mutable"))
-              add(JsonPrimitive("origin"))
-              add(JsonPrimitive("status"))
-              add(JsonPrimitive("allowed"))
-            })
-          })
-          put("description", JsonPrimitive("Targeted globals relevant to the audit."))
-        })
-        put("newPublicGlobals", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("export", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Export name when the global is public."))
-              })
-              put("importNameQualified", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Qualified import name such as `env.clock_offset`, when imported."))
-              })
-              put("globalidx", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Global index in the unified global index space."))
-              })
-              put("type", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Global value type."))
-              })
-              put("mutable", buildJsonObject {
-                put("type", JsonPrimitive("boolean"))
-                put("description", JsonPrimitive("True when the global is mutable."))
-              })
-              put("initExpr", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Initialization expression in WAT syntax."))
-              })
-              put("origin", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Global origin: `import` or `local`."))
-              })
-              put("importModule", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Import module name when the global is imported."))
-              })
-              put("importName", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Import field name when the global is imported."))
-              })
-              put("status", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`."))
-              })
-              put("allowed", buildJsonObject {
-                put("type", JsonPrimitive("boolean"))
-                put("description", JsonPrimitive("True when the policy or baseline allows this public global."))
-              })
-              put("allowedBy", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("globalidx"))
-              add(JsonPrimitive("type"))
-              add(JsonPrimitive("mutable"))
-              add(JsonPrimitive("origin"))
-              add(JsonPrimitive("status"))
-              add(JsonPrimitive("allowed"))
-            })
-          })
-          put("description", JsonPrimitive("Public global exports added relative to the baseline."))
-        })
-        put("allowedPublicGlobals", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("export", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Export name when the global is public."))
-              })
-              put("importNameQualified", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Qualified import name such as `env.clock_offset`, when imported."))
-              })
-              put("globalidx", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Global index in the unified global index space."))
-              })
-              put("type", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Global value type."))
-              })
-              put("mutable", buildJsonObject {
-                put("type", JsonPrimitive("boolean"))
-                put("description", JsonPrimitive("True when the global is mutable."))
-              })
-              put("initExpr", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Initialization expression in WAT syntax."))
-              })
-              put("origin", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Global origin: `import` or `local`."))
-              })
-              put("importModule", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Import module name when the global is imported."))
-              })
-              put("importName", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Import field name when the global is imported."))
-              })
-              put("status", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`."))
-              })
-              put("allowed", buildJsonObject {
-                put("type", JsonPrimitive("boolean"))
-                put("description", JsonPrimitive("True when the policy or baseline allows this public global."))
-              })
-              put("allowedBy", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("globalidx"))
-              add(JsonPrimitive("type"))
-              add(JsonPrimitive("mutable"))
-              add(JsonPrimitive("origin"))
-              add(JsonPrimitive("status"))
-              add(JsonPrimitive("allowed"))
-            })
-          })
-          put("description", JsonPrimitive("Public global exports allowed by the baseline or policy."))
-        })
-        put("requestLimits", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("export", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Request-limit export name."))
-              })
-              put("globalidx", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Global index for the request-limit export."))
-              })
-              put("value", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("integer"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Constant request-limit value, when statically available."))
-              })
-              put("maxValue", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("integer"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Maximum request-limit value from policy, when configured."))
-              })
-              put("allowed", buildJsonObject {
-                put("type", JsonPrimitive("boolean"))
-                put("description", JsonPrimitive("True when the request-limit global satisfies the policy."))
-              })
-              put("violation", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Violation code such as `request_limit_exceeded` or `mutable_request_limit`."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("export"))
-              add(JsonPrimitive("globalidx"))
-              add(JsonPrimitive("allowed"))
-            })
-          })
-          put("description", JsonPrimitive("Request-limit public globals evaluated against policy limits."))
-        })
-        put("violations", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("kind", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Stable violation code."))
-              })
-              put("globalidx", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Global index involved in the violation."))
-              })
-              put("export", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Export name involved in the violation, when public."))
-              })
-              put("importNameQualified", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Qualified import name involved in the violation, when imported."))
-              })
-              put("field", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Policy field or Wasm property involved in the violation."))
-              })
-              put("observed", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Observed value."))
-              })
-              put("policy", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Policy value or policy concept."))
-              })
-              put("message", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Report-ready explanation of the violation."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("kind"))
-              add(JsonPrimitive("globalidx"))
-              add(JsonPrimitive("field"))
-              add(JsonPrimitive("message"))
-            })
-          })
-          put("description", JsonPrimitive("Report-ready policy violations."))
-        })
-        put("targetedGlobalIndices", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-          })
-          put("description", JsonPrimitive("Stable sorted `globalidx` values relevant to the audit."))
-        })
-        put("evidence", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("kind", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Evidence category."))
-              })
-              put("globalidx", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Global index for this evidence item."))
-              })
-              put("export", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Export name, when public."))
-              })
-              put("importNameQualified", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Qualified import name, when imported."))
-              })
-              put("type", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Global value type."))
-              })
-              put("mutable", buildJsonObject {
-                put("type", JsonPrimitive("boolean"))
-                put("description", JsonPrimitive("True when the global is mutable."))
-              })
-              put("initExpr", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("string"))
-                  add(JsonPrimitive("null"))
-                })
-                put("description", JsonPrimitive("Initialization expression in WAT syntax."))
-              })
-              put("origin", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Global origin: `import` or `local`."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("kind"))
-              add(JsonPrimitive("globalidx"))
-              add(JsonPrimitive("type"))
-              add(JsonPrimitive("mutable"))
-              add(JsonPrimitive("origin"))
-            })
-          })
-          put("description", JsonPrimitive("Relevant global evidence used for the audit report."))
-        })
-        put("warnings", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-          })
-          put("description", JsonPrimitive("Non-fatal input or runtime-log warnings."))
-        })
-      },
-      requiredProperties = setOf("globals", "newPublicGlobals", "allowedPublicGlobals", "requestLimits", "violations", "targetedGlobalIndices", "evidence", "warnings"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-    )
-    override suspend fun call(args: JsonObject): McpToolCallResult {
-      val path = args.requireStringArgument("path")
-      val baselinePath = args.requireStringArgument("baselinePath")
-      val policyPath = args.requireStringArgument("policyPath")
-      val logPath = args.optionalStringArgument("logPath")
-      val file = requireWasmFile(path)
-      val provider = file.requireCoreWasmBinaryProvider()
-      val baselineProvider = requireWasmFile(baselinePath).requireCoreWasmBinaryProvider()
-      val policyText = requireTextFile(policyPath)
-      val logText = logPath?.let { requireTextFile(it) }
-      val result = provider.auditGlobalStatePolicy(baseline = baselineProvider, policyText = policyText, logText = logText)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)
@@ -6103,660 +6827,12 @@ public class HexanaToolset : McpToolsProvider {
   },
   object : McpTool {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
-      name = "plan_abi_binding_regeneration",
-      description = """
-      |Plan ABI binding regeneration from current WebAssembly imports and exports.
-      |Compare the current WebAssembly function import/export ABI against a stale binding file and return a report-ready regeneration plan.
-      |The result includes module identity, current import and export signature maps, stale binding maps, binding mismatches, and replacement bindings.
-      |Mismatch `expected` values are current WebAssembly signatures, or null when a stale binding should be removed; `actual` values are stale binding signatures, or null when the binding is missing.
-      """.trimMargin(),
-      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.planAbiBindingRegeneration",
-      inputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("path", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path relative to the project root"))
-        })
-        put("bindingPath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path to a stale binding source file with MODULE, IMPORTS, and EXPORTS literals."))
-          put("maxLength", JsonPrimitive(4_096))
-        })
-        put("projectPath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
-        })
-      },
-      requiredProperties = setOf("path", "bindingPath"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-      outputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("module", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("path", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Current WebAssembly module path label when available."))
-            })
-            put("bindingPath", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Stale binding file path label when available."))
-            })
-            put("staleModule", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("MODULE value parsed from the stale binding file."))
-            })
-            put("replacementModule", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("MODULE value used in regenerated bindings."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("replacementModule"))
-          })
-          put("description", JsonPrimitive("Module and binding file identity."))
-        })
-        put("imports", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-          put("additionalProperties", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("params", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Parameter value types."))
-              })
-              put("results", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Result value types."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("params"))
-              add(JsonPrimitive("results"))
-            })
-          })
-          put("description", JsonPrimitive("Current WebAssembly function import signature map keyed by qualified import name."))
-        })
-        put("exports", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-          put("additionalProperties", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("params", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Parameter value types."))
-              })
-              put("results", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Result value types."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("params"))
-              add(JsonPrimitive("results"))
-            })
-          })
-          put("description", JsonPrimitive("Current WebAssembly function export signature map keyed by export name."))
-        })
-        put("staleImports", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-          put("additionalProperties", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("params", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Parameter value types."))
-              })
-              put("results", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Result value types."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("params"))
-              add(JsonPrimitive("results"))
-            })
-          })
-          put("description", JsonPrimitive("Stale binding IMPORTS signature map parsed from `bindingPath`."))
-        })
-        put("staleExports", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-          put("additionalProperties", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("params", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Parameter value types."))
-              })
-              put("results", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Result value types."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("params"))
-              add(JsonPrimitive("results"))
-            })
-          })
-          put("description", JsonPrimitive("Stale binding EXPORTS signature map parsed from `bindingPath`."))
-        })
-        put("bindingMismatches", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("symbol", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Binding symbol prefixed with `IMPORTS.` or `EXPORTS.`."))
-              })
-              put("expected", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("object"))
-                  add(JsonPrimitive("null"))
-                })
-                put("properties", buildJsonObject {
-                  put("params", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Parameter value types."))
-                  })
-                  put("results", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Result value types."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("params"))
-                  add(JsonPrimitive("results"))
-                })
-                put("description", JsonPrimitive("Current WebAssembly signature, or null when a stale binding should be removed."))
-              })
-              put("actual", buildJsonObject {
-                put("type", buildJsonArray {
-                  add(JsonPrimitive("object"))
-                  add(JsonPrimitive("null"))
-                })
-                put("properties", buildJsonObject {
-                  put("params", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Parameter value types."))
-                  })
-                  put("results", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Result value types."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("params"))
-                  add(JsonPrimitive("results"))
-                })
-                put("description", JsonPrimitive("Stale binding signature, or null when the binding is missing."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("symbol"))
-            })
-          })
-          put("description", JsonPrimitive("Binding mismatches using `expected` for current WebAssembly and `actual` for stale bindings."))
-        })
-        put("replacementBindings", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("MODULE", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("MODULE value for regenerated bindings."))
-            })
-            put("IMPORTS", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("additionalProperties", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("params", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Parameter value types."))
-                  })
-                  put("results", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Result value types."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("params"))
-                  add(JsonPrimitive("results"))
-                })
-              })
-              put("description", JsonPrimitive("Regenerated IMPORTS signature map keyed by qualified import name."))
-            })
-            put("EXPORTS", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("additionalProperties", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("params", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Parameter value types."))
-                  })
-                  put("results", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Result value types."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("params"))
-                  add(JsonPrimitive("results"))
-                })
-              })
-              put("description", JsonPrimitive("Regenerated EXPORTS signature map keyed by export name."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("MODULE"))
-            add(JsonPrimitive("IMPORTS"))
-            add(JsonPrimitive("EXPORTS"))
-          })
-          put("description", JsonPrimitive("Drop-in replacement binding maps derived from the current WebAssembly ABI."))
-        })
-        put("warnings", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-          })
-          put("description", JsonPrimitive("Non-fatal binding parse warnings."))
-        })
-      },
-      requiredProperties = setOf("module", "imports", "exports", "staleImports", "staleExports", "bindingMismatches", "replacementBindings", "warnings"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-    )
-    override suspend fun call(args: JsonObject): McpToolCallResult {
-      val path = args.requireStringArgument("path")
-      val bindingPath = args.requireStringArgument("bindingPath")
-      val file = requireWasmFile(path)
-      val provider = file.requireCoreWasmBinaryProvider()
-      val bindingText = requireTextFile(bindingPath)
-      val result = provider.planAbiBindingRegeneration(bindingText = bindingText, pathLabel = path, bindingPathLabel = bindingPath)
-      val text = encodeHexanaJson(result)
-      val structuredContent = encodeHexanaJsonElement(result).jsonObject
-      return McpToolCallResult.text(text, structuredContent)
-    }
-  },
-  object : McpTool {
-    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
-      name = "repair_host_adapter_config",
-      description = """
-      |Plan a minimal host adapter config repair from current WebAssembly imports.
-      |Compare the current WebAssembly host adapter ABI against a stale JSON config and return a report-ready repair plan.
-      |The result includes current required imports, the selected entrypoint, parsed stale config fields, exact JSON mismatches, ignored stale top-level fields, and a minimal `repair_config` object.
-      |Use `repair_config` directly as the replacement adapter config; it intentionally contains only active `module`, `imports`, and `entrypoint` fields.
-      """.trimMargin(),
-      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.repairHostAdapterConfig",
-      inputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("path", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path relative to the project root"))
-        })
-        put("configPath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path to a stale host adapter JSON config with active `module`, `imports`, and `entrypoint` fields."))
-          put("maxLength", JsonPrimitive(4_096))
-        })
-        put("projectPath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
-        })
-      },
-      requiredProperties = setOf("path", "configPath"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-      outputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("module", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("path", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Current WebAssembly module path label when available."))
-            })
-            put("configPath", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Stale host adapter config path label when available."))
-            })
-            put("staleModule", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Module value parsed from the stale host adapter config."))
-            })
-            put("repairModule", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Module value used in the minimal repair config."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("repairModule"))
-          })
-          put("description", JsonPrimitive("Module and config file identity."))
-        })
-        put("requiredImports", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-          put("additionalProperties", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("params", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Function parameter value types."))
-              })
-              put("results", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Function result value types."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("params"))
-              add(JsonPrimitive("results"))
-            })
-          })
-          put("description", JsonPrimitive("Current WebAssembly function import signature map keyed by qualified import name."))
-        })
-        put("requiredEntrypoint", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("object"))
-            add(JsonPrimitive("null"))
-          })
-          put("properties", buildJsonObject {
-            put("export", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Exported function name selected as the adapter entrypoint."))
-            })
-            put("params", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Entrypoint parameter value types."))
-            })
-            put("results", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Entrypoint result value types."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("export"))
-            add(JsonPrimitive("params"))
-            add(JsonPrimitive("results"))
-          })
-          put("description", JsonPrimitive("Selected local exported function entrypoint required by the repair config."))
-        })
-        put("staleImports", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-          put("additionalProperties", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("params", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Function parameter value types."))
-              })
-              put("results", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Function result value types."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("params"))
-              add(JsonPrimitive("results"))
-            })
-          })
-          put("description", JsonPrimitive("Import signature map parsed from the stale config."))
-        })
-        put("staleEntrypoint", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("object"))
-            add(JsonPrimitive("null"))
-          })
-          put("properties", buildJsonObject {
-            put("export", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Exported function name selected as the adapter entrypoint."))
-            })
-            put("params", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Entrypoint parameter value types."))
-            })
-            put("results", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Entrypoint result value types."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("export"))
-            add(JsonPrimitive("params"))
-            add(JsonPrimitive("results"))
-          })
-          put("description", JsonPrimitive("Entrypoint parsed from the stale config."))
-        })
-        put("ignoredConfigFields", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-          })
-          put("description", JsonPrimitive("Stale top-level config fields excluded from the minimal repair config."))
-        })
-        put("configMismatches", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("field", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Config field path that differs from the current WebAssembly adapter ABI."))
-              })
-              put("expectedJson", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Exact JSON value required by the current WebAssembly adapter ABI."))
-              })
-              put("actualJson", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Exact JSON value found in the stale config, or null when missing."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("field"))
-              add(JsonPrimitive("expectedJson"))
-              add(JsonPrimitive("actualJson"))
-            })
-          })
-          put("description", JsonPrimitive("Exact config mismatches using JSON strings for expected and actual values."))
-        })
-        put("repair_config", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("module", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Current WebAssembly module path for the repaired adapter config."))
-            })
-            put("imports", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("additionalProperties", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("params", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Function parameter value types."))
-                  })
-                  put("results", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Function result value types."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("params"))
-                  add(JsonPrimitive("results"))
-                })
-              })
-              put("description", JsonPrimitive("Minimal import signature map keyed by qualified import name."))
-            })
-            put("entrypoint", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("export", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Exported function name selected as the adapter entrypoint."))
-                })
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Entrypoint parameter value types."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Entrypoint result value types."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("export"))
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-              })
-              put("description", JsonPrimitive("Selected local exported function entrypoint when one exists."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("module"))
-            add(JsonPrimitive("imports"))
-          })
-          put("description", JsonPrimitive("Minimal replacement host adapter config derived from the current WebAssembly ABI."))
-        })
-        put("warnings", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-          })
-          put("description", JsonPrimitive("Non-fatal config parse warnings."))
-        })
-      },
-      requiredProperties = setOf("module", "requiredImports", "staleImports", "ignoredConfigFields", "configMismatches", "repair_config", "warnings"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-    )
-    override suspend fun call(args: JsonObject): McpToolCallResult {
-      val path = args.requireStringArgument("path")
-      val configPath = args.requireStringArgument("configPath")
-      val file = requireWasmFile(path)
-      val provider = file.requireCoreWasmBinaryProvider()
-      val configText = requireTextFile(configPath)
-      val result = provider.repairHostAdapterConfig(configText = configText, pathLabel = path, configPathLabel = configPath)
-      val text = encodeHexanaJson(result)
-      val structuredContent = encodeHexanaJsonElement(result).jsonObject
-      return McpToolCallResult.text(text, structuredContent)
-    }
-  },
-  object : McpTool {
-    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "query_artifacts",
       description = """
       |Query WebAssembly artifact entities, diffs, and function relations with bounded output.
       |Use this as the default Hexana MCP entry point for WebAssembly artifact facts.
       |`overview` returns module counts; skip it when the request already names a focused production fact.
+      |Prefer dedicated focused tools before this broad query when their inputs are available: `plan_abi_binding_regeneration` for stale binding regeneration, `repair_host_adapter_config` for stale host adapter config repair, `check_memory_contract` for baseline-plus-policy memory audits, and `audit_global_state_policy` for baseline-plus-policy global-state audits.
       |Choose a focused operation first when the requested artifact fact matches one: `api_diff` for old/new public function ABI diffs, changed signatures, public type indices, and current reference-type import ABI risks; `public_surface` for single-module exported ABI surface; `abi_surface` for compact function imports plus exports in one module; `abi_binding_regeneration` for current Wasm import/export signature maps, stale Python binding maps from `bindingPath`, mismatch JSON, and `replacementBindingsJson`; `host_adapter_repair` for host adapter config repair reports with required imports, required entrypoint, config mismatches, and minimal `repairConfigJson` from current Wasm ABI plus active config fields only; `import_surface` for host manifest/link checks, including compact `functionImportsJson` and exported function candidates on the summary; `memory_contract` for memory declarations and baseline limit changes; `global_state_policy` for mutable imported globals and new exported globals, including `targetedGlobalIndices`, `mutableImportedGlobalsJson`, `newPublicGlobalsJson`, and allowed public global exports on the summary; `data_payload_audit` for raw data segment payload string confirmation after reading policy strings; `local_budget` for exported-function declared local counts; `entrypoint_effects` for exported local functions whose own body directly writes memory or directly calls host imports, including policy-ready direct-host-entry JSON and transitive-host exclusions; `crash_frames` for crash reports after reading all numeric stack funcidx values into `query`; `dispatch_table_diff` for element-table slot target changes; and `host_call_diff` for direct imported-call regressions from `startName` or `startFuncidx`.
       |For `data_payload_audit`, read the policy first and pass all forbidden strings in one call; an empty `query` only returns a small reminder. For `crash_frames`, read the crash report first and pass all stack funcidx values in one call; avoid probing a single frame and then repeating.
       |For `abi_binding_regeneration`, pass the stale binding file as `bindingPath` when one exists. Its mismatch records and `bindingMismatchesJson` use `expected` for the current Wasm signature, or null when a stale binding should be removed; `actual` is the stale binding signature, or null when the binding is missing.
