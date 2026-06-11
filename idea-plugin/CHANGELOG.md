@@ -25,6 +25,19 @@
 ### Changed
 - WASM debugging – better handling of breakpoints on Windows (if it didn't attach for you previously it should now)
 
+## 0.10.3 - 2026-06-10
+
+### Fixed
+
+- Problems with statistics
+
+## 0.8.3 - 2026-06-10
+
+### Fixed
+
+- Fixed the problem with the directory whose name is ended on .wasm
+- Tabs UX improvements
+
 ## 0.10.2 - 2026-06-03
 
 ### Added
