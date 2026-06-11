@@ -9,6 +9,9 @@ import org.jetbrains.hexana.mcp.model.entrypoints.EntrypointPolicyResult
 import org.jetbrains.hexana.mcp.model.artifacts.QueryArtifactsResult
 import org.jetbrains.hexana.mcp.model.artifacts.PlanAbiBindingRegenerationResult
 import org.jetbrains.hexana.mcp.model.artifacts.RepairHostAdapterConfigResult
+import org.jetbrains.hexana.mcp.model.components.CheckComponentCompatibilityResult
+import org.jetbrains.hexana.mcp.model.components.ListComponentSurfaceResult
+import org.jetbrains.hexana.mcp.model.components.ResolveComponentDependenciesResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
@@ -38,6 +41,7 @@ import org.jetbrains.hexana.mcp.query.*
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.*
@@ -90,6 +94,23 @@ interface HexanaAnalysisService {
     }
     fun checkRuntimeCompatibility(input: WasmInput, runtime: String, version: String?): CheckRuntimeCompatibilityResult {
         throw UnsupportedOperationException("checkRuntimeCompatibility is not implemented")
+    }
+    fun listComponentSurface(input: WasmInput): ListComponentSurfaceResult {
+        throw UnsupportedOperationException("listComponentSurface is not implemented")
+    }
+    fun resolveComponentDependencies(
+        input: WasmInput,
+        projectRoot: String?,
+        scanRoots: List<String>
+    ): ResolveComponentDependenciesResult {
+        throw UnsupportedOperationException("resolveComponentDependencies is not implemented")
+    }
+    fun checkComponentCompatibility(
+        input: WasmInput,
+        dependencyPaths: List<String>,
+        projectRoot: String?
+    ): CheckComponentCompatibilityResult {
+        throw UnsupportedOperationException("checkComponentCompatibility is not implemented")
     }
     fun listCustomSections(input: WasmInput): ListCustomSectionsResult
     fun listImports(input: WasmInput): ListImportsResult
@@ -254,6 +275,55 @@ class DefaultHexanaAnalysisService(
         requireNonBlank(runtime, "Runtime")
         val wasm = load(input)
         return wasm.provider.readRuntimeCompatibility(runtime, version)
+    }
+
+    override fun listComponentSurface(input: WasmInput): ListComponentSurfaceResult {
+        val wasm = try {
+            loadComponent(input)
+        } catch (error: HexanaAnalysisException) {
+            if (error.code != HexanaAnalysisErrorCode.WASM_PARSE_FAILED) throw error
+            return ListComponentSurfaceResult(
+                path = input.artifactPathLabel(),
+                isComponent = false,
+                imports = emptyList(),
+                exports = emptyList(),
+                summary = org.jetbrains.hexana.mcp.model.components.ComponentSurfaceSummaryResult(
+                    importCount = 0,
+                    exportCount = 0,
+                    nonRuntimeImportCount = 0,
+                    runtimeImportCount = 0,
+                ),
+            )
+        }
+        return wasm.provider.readComponentSurface(input.artifactPathLabel())
+    }
+
+    override fun resolveComponentDependencies(
+        input: WasmInput,
+        projectRoot: String?,
+        scanRoots: List<String>
+    ): ResolveComponentDependenciesResult {
+        requireStringList(scanRoots, "Scan roots")
+        val wasm = loadComponent(input)
+        return wasm.provider.resolveComponentDependencies(
+            path = input.artifactPathLabel(),
+            projectRoot = projectRoot,
+            scanRoots = scanRoots,
+        )
+    }
+
+    override fun checkComponentCompatibility(
+        input: WasmInput,
+        dependencyPaths: List<String>,
+        projectRoot: String?
+    ): CheckComponentCompatibilityResult {
+        requireStringList(dependencyPaths, "Dependency paths")
+        val wasm = loadComponent(input)
+        return wasm.provider.checkComponentCompatibility(
+            path = input.artifactPathLabel(),
+            dependencyPaths = dependencyPaths,
+            projectRoot = projectRoot,
+        )
     }
 
     override fun listCustomSections(input: WasmInput): ListCustomSectionsResult {
@@ -468,6 +538,19 @@ class DefaultHexanaAnalysisService(
         }
     }
 
+    private fun loadComponent(input: WasmInput): LoadedComponentWasm {
+        return when (input) {
+            is WasmInput.FilePath -> loadComponentFromPath(input.path)
+            is WasmInput.Uri -> throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.UNSUPPORTED_INPUT_KIND,
+                "Unsupported input kind: uri"
+            )
+
+            is WasmInput.InlineBytes -> loadComponentFromInlineBytes(input.base64)
+            is WasmInput.RawBytes -> loadComponentFromRawBytes(input.bytes)
+        }
+    }
+
     private fun loadText(input: TextInput): LoadedText {
         return when (input) {
             is TextInput.FilePath -> loadTextFromPath(input.path)
@@ -539,6 +622,33 @@ class DefaultHexanaAnalysisService(
         return loadFromBytes(bytes)
     }
 
+    private fun loadComponentFromPath(rawPath: String): LoadedComponentWasm {
+        if (rawPath.isBlank()) {
+            throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Path must not be blank")
+        }
+
+        val path = Path.of(rawPath)
+        if (!Files.exists(path) || !Files.isRegularFile(path)) {
+            throw HexanaAnalysisException(HexanaAnalysisErrorCode.FILE_NOT_FOUND, "File not found")
+        }
+        if (path.extension.lowercase() != "wasm") {
+            throw HexanaAnalysisException(HexanaAnalysisErrorCode.NOT_WASM, "Not a .wasm file")
+        }
+        requireFileByteCount(path)
+
+        val bytes = try {
+            Files.readAllBytes(path)
+        } catch (error: Exception) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INTERNAL_ERROR,
+                "Failed to read .wasm file",
+                error
+            )
+        }
+
+        return loadComponentFromBytes(bytes)
+    }
+
     private fun loadFromInlineBytes(base64: String): LoadedWasm {
         if (base64.isBlank()) {
             throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Inline bytes must not be blank")
@@ -558,13 +668,41 @@ class DefaultHexanaAnalysisService(
         return loadFromBytes(bytes)
     }
 
+    private fun loadComponentFromInlineBytes(base64: String): LoadedComponentWasm {
+        if (base64.isBlank()) {
+            throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Inline bytes must not be blank")
+        }
+        requireInlineBase64Size(base64)
+
+        val bytes = try {
+            Base64.getDecoder().decode(base64)
+        } catch (_: IllegalArgumentException) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INVALID_INPUT,
+                "Inline bytes must be valid base64"
+            )
+        }
+
+        requireInlineByteCount(bytes.size)
+        return loadComponentFromBytes(bytes)
+    }
+
     private fun loadFromRawBytes(bytes: ByteArray): LoadedWasm {
         requireInlineByteCount(bytes.size)
         return loadFromBytes(bytes)
     }
 
+    private fun loadComponentFromRawBytes(bytes: ByteArray): LoadedComponentWasm {
+        requireInlineByteCount(bytes.size)
+        return loadComponentFromBytes(bytes)
+    }
+
     private fun loadFromBytes(bytes: ByteArray): LoadedWasm {
         return LoadedWasm(bytes.toCommonByteBuffer().loadCoreProviderOrThrow())
+    }
+
+    private fun loadComponentFromBytes(bytes: ByteArray): LoadedComponentWasm {
+        return LoadedComponentWasm(bytes.toCommonByteBuffer().loadComponentProviderOrThrow())
     }
 
     private fun requireInlineBase64Size(base64: String) {
@@ -649,6 +787,15 @@ class DefaultHexanaAnalysisService(
         }
     }
 
+    private fun requireStringList(values: List<String>, label: String) {
+        if (values.any { it.isBlank() }) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INVALID_INPUT,
+                "$label values must not be blank"
+            )
+        }
+    }
+
     private fun requireClosedRange(range: IntRange) {
         if (range.first < 0) {
             throw HexanaAnalysisException(
@@ -716,6 +863,7 @@ class DefaultHexanaAnalysisService(
         (this as? TextInput.FilePath)?.path
 
     private data class LoadedWasm(val provider: WasmBinaryProvider)
+    private data class LoadedComponentWasm(val provider: WasmComponentBinaryProvider)
     private data class LoadedText(val text: String)
 
     private fun CommonByteBuffer.loadCoreProviderOrThrow(): WasmBinaryProvider {
@@ -724,6 +872,15 @@ class DefaultHexanaAnalysisService(
         }
 
         return WasmBinaryProvider(this).takeIf(WasmBinaryProvider::canProvideWasmModule)
+            ?: throw wasmParseFailed()
+    }
+
+    private fun CommonByteBuffer.loadComponentProviderOrThrow(): WasmComponentBinaryProvider {
+        if (WasmBinaryProviderSelector.select(this) != BinaryProviderType.WasmComponent) {
+            throw wasmParseFailed()
+        }
+
+        return WasmComponentBinaryProvider(this).takeIf(WasmComponentBinaryProvider::canProvideWasmModule)
             ?: throw wasmParseFailed()
     }
 

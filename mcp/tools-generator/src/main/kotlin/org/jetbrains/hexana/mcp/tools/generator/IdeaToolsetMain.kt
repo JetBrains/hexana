@@ -212,9 +212,22 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             code.addStatement("val runtime = args.requireStringArgument(%S)", "runtime")
             code.addStatement("val version = args.optionalStringArgument(%S)", "version")
         }
+        ToolInputPattern.ComponentSurface -> Unit
+        ToolInputPattern.ComponentDependencies -> {
+            code.addStatement("val projectRoot = args.optionalStringArgument(%S)", "projectRoot")
+            code.addStatement("val scanRoots = args.optionalStringListArgument(%S)", "scanRoots")
+        }
+        ToolInputPattern.ComponentCompatibility -> {
+            code.addStatement("val dependencyPaths = args.optionalStringListArgument(%S)", "dependencyPaths")
+            code.addStatement("val projectRoot = args.optionalStringArgument(%S)", "projectRoot")
+        }
     }
     code.addStatement("val file = %M(path)", REQUIRE_WASM_FILE)
-    code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
+    if (spec.inputPattern.isComponentPattern()) {
+        code.addStatement("val provider = file.%M()", REQUIRE_COMPONENT_WASM_BINARY_PROVIDER)
+    } else {
+        code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
+    }
 
     val handlerMember = spec.handlerMemberName()
     if (spec.inputPattern == ToolInputPattern.ArtifactQuery) {
@@ -311,6 +324,11 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             ToolInputPattern.ArtifactQuery -> error("Handled above")
             ToolInputPattern.PolicyWithBaselineAndLog -> error("Handled above")
             ToolInputPattern.RuntimeCompatibility -> "(runtime, version)"
+            ToolInputPattern.ComponentSurface -> "(pathLabel = path)"
+            ToolInputPattern.ComponentDependencies ->
+                "(path = file.path, projectRoot = projectRoot, scanRoots = scanRoots.orEmpty())"
+            ToolInputPattern.ComponentCompatibility ->
+                "(path = file.path, dependencyPaths = dependencyPaths.orEmpty(), projectRoot = projectRoot)"
         }
         code.addStatement("val result = provider.%M$callArgs", handlerMember)
     }
@@ -400,8 +418,22 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
             inputField(spec.input, "runtime"),
             inputField(spec.input, "version"),
         )
+        ToolInputPattern.ComponentSurface -> emptyList()
+        ToolInputPattern.ComponentDependencies -> listOf(
+            inputField(spec.input, "projectRoot"),
+            inputField(spec.input, "scanRoots"),
+        )
+        ToolInputPattern.ComponentCompatibility -> listOf(
+            inputField(spec.input, "dependencyPaths"),
+            inputField(spec.input, "projectRoot"),
+        )
     }
 }
+
+private fun ToolInputPattern.isComponentPattern(): Boolean =
+    this == ToolInputPattern.ComponentSurface ||
+        this == ToolInputPattern.ComponentDependencies ||
+        this == ToolInputPattern.ComponentCompatibility
 
 private fun buildToolSchema(cls: ClassSpec): CodeBlock {
     val builder = CodeBlock.builder()
@@ -867,3 +899,4 @@ private val REQUIRE_TEXT_FILE = MemberName(IDEA_PACKAGE, "requireTextFile")
 private val REQUIRE_CLOSED_RANGE = MemberName(IDEA_PACKAGE, "requireClosedRange")
 private val REQUIRE_HALF_OPEN_RANGE = MemberName(IDEA_PACKAGE, "requireHalfOpenSegmentRange")
 private val REQUIRE_CORE_WASM_BINARY_PROVIDER = MemberName(IDEA_PACKAGE, "requireCoreWasmBinaryProvider")
+private val REQUIRE_COMPONENT_WASM_BINARY_PROVIDER = MemberName(IDEA_PACKAGE, "requireComponentWasmBinaryProvider")

@@ -6,6 +6,7 @@ plugins {
 dependencies {
     implementation(project(":binaryProvider"))
     implementation(project(":encdec"))
+    implementation(project(":plugins-shared"))
     implementation(project(":wasmParser"))
     compileOnly(libs.kotlinx.serialization.json)
 

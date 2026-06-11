@@ -32,6 +32,7 @@ enum class HexanaMcpToolProfile {
 private val PRODUCTION_TOOL_NAMES = setOf(
     "audit_global_state_policy",
     "check_memory_contract",
+    "check_component_compatibility",
     "check_runtime_compatibility",
     "diff_required_proposals",
     "disassemble_function",
@@ -40,6 +41,7 @@ private val PRODUCTION_TOOL_NAMES = setOf(
     "list_data_segments",
     "list_element_segments",
     "list_enabled_features",
+    "list_component_surface",
     "list_exported_functions",
     "list_exports",
     "list_functions",
@@ -49,6 +51,7 @@ private val PRODUCTION_TOOL_NAMES = setOf(
     "list_required_proposals",
     "plan_abi_binding_regeneration",
     "repair_host_adapter_config",
+    "resolve_component_dependencies",
     "resolve_function_signature",
     "search_exports",
     "search_functions_by_name",

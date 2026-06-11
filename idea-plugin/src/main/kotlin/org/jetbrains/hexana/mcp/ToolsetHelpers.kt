@@ -15,6 +15,7 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 
 /**
  * Shared helpers consumed by [HexanaToolset]. Kept hand-written because
@@ -27,6 +28,15 @@ internal fun VirtualFile.requireCoreWasmBinaryProvider(): WasmBinaryProvider {
         mcpFail("Failed to parse .wasm file")
     }
     return WasmBinaryProvider(buffer).takeIf(WasmBinaryProvider::canProvideWasmModule)
+        ?: mcpFail("Failed to parse .wasm file")
+}
+
+internal fun VirtualFile.requireComponentWasmBinaryProvider(): WasmComponentBinaryProvider {
+    val buffer = contentsToByteArray().toCommonByteBuffer()
+    if (WasmBinaryProviderSelector.select(buffer) != BinaryProviderType.WasmComponent) {
+        mcpFail("Failed to parse .wasm file")
+    }
+    return WasmComponentBinaryProvider(buffer).takeIf(WasmComponentBinaryProvider::canProvideWasmModule)
         ?: mcpFail("Failed to parse .wasm file")
 }
 

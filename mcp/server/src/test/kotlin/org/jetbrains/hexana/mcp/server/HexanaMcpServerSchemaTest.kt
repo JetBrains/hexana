@@ -31,12 +31,14 @@ class HexanaMcpServerSchemaTest {
         assertEquals(
             listOf(
                 "audit_global_state_policy",
+                "check_component_compatibility",
                 "check_memory_contract",
                 "check_runtime_compatibility",
                 "diff_required_proposals",
                 "disassemble_function",
                 "get_entrypoint_policy",
                 "get_function_call_graph",
+                "list_component_surface",
                 "list_data_segments",
                 "list_element_segments",
                 "list_enabled_features",
@@ -49,6 +51,7 @@ class HexanaMcpServerSchemaTest {
                 "list_required_proposals",
                 "plan_abi_binding_regeneration",
                 "repair_host_adapter_config",
+                "resolve_component_dependencies",
                 "resolve_function_signature",
                 "search_exports",
                 "search_functions_by_name",
@@ -63,6 +66,7 @@ class HexanaMcpServerSchemaTest {
         assertEquals(
             listOf(
                 "audit_global_state_policy",
+                "check_component_compatibility",
                 "check_memory_contract",
                 "check_runtime_compatibility",
                 "diff_required_proposals",
@@ -76,6 +80,7 @@ class HexanaMcpServerSchemaTest {
                 "get_memory_for_indices",
                 "get_types_for_indices",
                 "list_code_section_offsets",
+                "list_component_surface",
                 "list_custom_sections",
                 "list_data",
                 "list_data_segments",
@@ -94,6 +99,7 @@ class HexanaMcpServerSchemaTest {
                 "plan_abi_binding_regeneration",
                 "query_artifacts",
                 "repair_host_adapter_config",
+                "resolve_component_dependencies",
                 "resolve_function_signature",
                 "search_exports",
                 "search_functions_by_name",
@@ -110,6 +116,8 @@ class HexanaMcpServerSchemaTest {
         assertBefore(names, "plan_abi_binding_regeneration", "list_exports")
         assertBefore(names, "repair_host_adapter_config", "list_imports")
         assertBefore(names, "check_memory_contract", "list_memory")
+        assertBefore(names, "resolve_component_dependencies", "list_imports")
+        assertBefore(names, "check_component_compatibility", "list_exports")
         assertBefore(names, "audit_global_state_policy", "list_globals")
         assertBefore(names, "audit_global_state_policy", "list_exports")
     }

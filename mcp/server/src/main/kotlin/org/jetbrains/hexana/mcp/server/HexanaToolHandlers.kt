@@ -106,6 +106,32 @@ class HexanaToolHandlers(
         }
     }
 
+    fun listComponentSurface(arguments: JsonObject?): CallToolResult {
+        return execute("list_component_surface") {
+            analysisService.listComponentSurface(wasmInput(arguments))
+        }
+    }
+
+    fun resolveComponentDependencies(arguments: JsonObject?): CallToolResult {
+        return execute("resolve_component_dependencies") {
+            analysisService.resolveComponentDependencies(
+                input = wasmInput(arguments),
+                projectRoot = arguments.optionalNonBlankString("projectRoot"),
+                scanRoots = arguments.optionalStringList("scanRoots").orEmpty()
+            )
+        }
+    }
+
+    fun checkComponentCompatibility(arguments: JsonObject?): CallToolResult {
+        return execute("check_component_compatibility") {
+            analysisService.checkComponentCompatibility(
+                input = wasmInput(arguments),
+                dependencyPaths = arguments.optionalStringList("dependencyPaths").orEmpty(),
+                projectRoot = arguments.optionalNonBlankString("projectRoot")
+            )
+        }
+    }
+
     fun listCustomSections(arguments: JsonObject?): CallToolResult {
         return execute("list_custom_sections") {
             analysisService.listCustomSections(wasmInput(arguments))

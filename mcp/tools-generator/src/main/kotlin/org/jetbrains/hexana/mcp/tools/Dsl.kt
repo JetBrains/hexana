@@ -341,6 +341,9 @@ sealed class ToolInputPattern {
     object ArtifactQuery : ToolInputPattern()
     object PolicyWithBaselineAndLog : ToolInputPattern()
     object RuntimeCompatibility : ToolInputPattern()
+    object ComponentSurface : ToolInputPattern()
+    object ComponentDependencies : ToolInputPattern()
+    object ComponentCompatibility : ToolInputPattern()
 }
 
 @HexanaToolsDsl
@@ -669,6 +672,29 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireType(version, FieldType.StringT)
             requireNullable(version)
             requireDescribed(version)
+        }
+        ToolInputPattern.ComponentSurface -> Unit
+        ToolInputPattern.ComponentDependencies -> {
+            val projectRoot = requireField("projectRoot")
+            requireType(projectRoot, FieldType.StringT)
+            requireNullable(projectRoot)
+            requireDescribed(projectRoot)
+
+            val scanRoots = requireField("scanRoots")
+            requireListOf(scanRoots, FieldType.StringT)
+            requireNullable(scanRoots)
+            requireDescribed(scanRoots)
+        }
+        ToolInputPattern.ComponentCompatibility -> {
+            val dependencyPaths = requireField("dependencyPaths")
+            requireListOf(dependencyPaths, FieldType.StringT)
+            requireNullable(dependencyPaths)
+            requireDescribed(dependencyPaths)
+
+            val projectRoot = requireField("projectRoot")
+            requireType(projectRoot, FieldType.StringT)
+            requireNullable(projectRoot)
+            requireDescribed(projectRoot)
         }
     }
 }

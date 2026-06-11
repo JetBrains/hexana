@@ -21,6 +21,9 @@ class HexanaToolsTest {
                 "list_required_proposals",
                 "diff_required_proposals",
                 "check_runtime_compatibility",
+                "list_component_surface",
+                "resolve_component_dependencies",
+                "check_component_compatibility",
                 "plan_abi_binding_regeneration",
                 "repair_host_adapter_config",
                 "check_memory_contract",
@@ -168,6 +171,22 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `component tools use component invocation patterns`() {
+        assertEquals(
+            ToolInputPattern.ComponentSurface,
+            HexanaTools.single { it.name == "list_component_surface" }.inputPattern
+        )
+        assertEquals(
+            ToolInputPattern.ComponentDependencies,
+            HexanaTools.single { it.name == "resolve_component_dependencies" }.inputPattern
+        )
+        assertEquals(
+            ToolInputPattern.ComponentCompatibility,
+            HexanaTools.single { it.name == "check_component_compatibility" }.inputPattern
+        )
+    }
+
+    @Test
     fun `policy audit tools use the baseline policy invocation pattern`() {
         assertEquals(
             ToolInputPattern.PolicyWithBaselineAndLog,
@@ -210,6 +229,17 @@ class HexanaToolsTest {
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("entityTypes").maxItems)
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("query").maxItems)
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("relations").maxItems)
+    }
+
+    @Test
+    fun `component inputs carry bounded list schemas`() {
+        val dependencyFields = HexanaTools.single { it.name == "resolve_component_dependencies" }
+            .input.fields.associateBy { it.name }
+        assertEquals(SchemaIntValue.Literal(8), dependencyFields.getValue("scanRoots").maxItems)
+
+        val compatibilityFields = HexanaTools.single { it.name == "check_component_compatibility" }
+            .input.fields.associateBy { it.name }
+        assertEquals(SchemaIntValue.Literal(64), compatibilityFields.getValue("dependencyPaths").maxItems)
     }
 
     @Test

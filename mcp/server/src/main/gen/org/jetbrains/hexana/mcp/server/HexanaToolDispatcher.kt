@@ -51,6 +51,9 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers, profile: Hex
   if (profile.includesTool("list_required_proposals")) registerListRequiredProposalsTool(handlers)
   if (profile.includesTool("diff_required_proposals")) registerDiffRequiredProposalsTool(handlers)
   if (profile.includesTool("check_runtime_compatibility")) registerCheckRuntimeCompatibilityTool(handlers)
+  if (profile.includesTool("list_component_surface")) registerListComponentSurfaceTool(handlers)
+  if (profile.includesTool("resolve_component_dependencies")) registerResolveComponentDependenciesTool(handlers)
+  if (profile.includesTool("check_component_compatibility")) registerCheckComponentCompatibilityTool(handlers)
   if (profile.includesTool("plan_abi_binding_regeneration")) registerPlanAbiBindingRegenerationTool(handlers)
   if (profile.includesTool("repair_host_adapter_config")) registerRepairHostAdapterConfigTool(handlers)
   if (profile.includesTool("check_memory_contract")) registerCheckMemoryContractTool(handlers)
@@ -1140,6 +1143,704 @@ private fun Server.registerCheckRuntimeCompatibilityTool(handlers: HexanaToolHan
     ),
   ))  {
     request: CallToolRequest -> handlers.checkRuntimeCompatibility(request.arguments)
+  }
+}
+
+private fun Server.registerListComponentSurfaceTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "list_component_surface",
+    description = "List WebAssembly component imports and exports with WIT-style names and runtime-import flags.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Input path label when the caller provided `path`."))
+      })
+      put("isComponent", buildJsonObject {
+        put("type", JsonPrimitive("boolean"))
+        put("description", JsonPrimitive("True when the input parsed as a WebAssembly component."))
+      })
+      put("imports", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("name", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Full WIT/component name, including version when present."))
+            })
+            put("baseName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Name without the version suffix."))
+            })
+            put("version", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Version suffix without `@`, or empty when absent."))
+            })
+            put("sort", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Component sort/index label for exports when available."))
+            })
+            put("externDescription", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Compact component extern description when available."))
+            })
+            put("runtimeProvided", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when this import is provided by a known runtime namespace."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("name"))
+            add(JsonPrimitive("baseName"))
+            add(JsonPrimitive("version"))
+            add(JsonPrimitive("runtimeProvided"))
+          })
+        })
+        put("description", JsonPrimitive("Component import surface."))
+      })
+      put("exports", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("name", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Full WIT/component name, including version when present."))
+            })
+            put("baseName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Name without the version suffix."))
+            })
+            put("version", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Version suffix without `@`, or empty when absent."))
+            })
+            put("sort", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Component sort/index label for exports when available."))
+            })
+            put("externDescription", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Compact component extern description when available."))
+            })
+            put("runtimeProvided", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when this import is provided by a known runtime namespace."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("name"))
+            add(JsonPrimitive("baseName"))
+            add(JsonPrimitive("version"))
+            add(JsonPrimitive("runtimeProvided"))
+          })
+        })
+        put("description", JsonPrimitive("Component export surface."))
+      })
+      put("summary", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("importCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Total component import count before response truncation."))
+          })
+          put("exportCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Total component export count before response truncation."))
+          })
+          put("nonRuntimeImportCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Imports that require component dependencies."))
+          })
+          put("runtimeImportCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Imports supplied by known runtime namespaces."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("importCount"))
+          add(JsonPrimitive("exportCount"))
+          add(JsonPrimitive("nonRuntimeImportCount"))
+          add(JsonPrimitive("runtimeImportCount"))
+        })
+        put("description", JsonPrimitive("Compact surface counts."))
+      })
+    },
+    required = listOf("isComponent", "imports", "exports", "summary")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.listComponentSurface(request.arguments)
+  }
+}
+
+private fun Server.registerResolveComponentDependenciesTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "resolve_component_dependencies",
+    description = "Resolve component dependencies by matching non-runtime imports to component exports in bounded scan roots.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("projectRoot", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional project root used as a bounded dependency scan root."))
+      })
+      put("scanRoots", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Optional directory roots to scan for dependency `.wasm` components."))
+        put("maxItems", JsonPrimitive(8))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Input path label when the caller provided `path`."))
+      })
+      put("scanRoots", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Directory roots used for bounded component scanning."))
+      })
+      put("directDependencies", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("importName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Required import name."))
+            })
+            put("importBaseName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Required import base name without version."))
+            })
+            put("importVersion", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Required import version without `@`, or empty when absent."))
+            })
+            put("dependencyPath", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Component file that provides a matching export."))
+            })
+            put("exportName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Matched export name."))
+            })
+            put("exportVersion", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Matched export version without `@`, or empty when absent."))
+            })
+            put("exactVersionMatch", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when versions are absent or equal."))
+            })
+            put("transitive", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the dependency was required by another resolved dependency."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("importName"))
+            add(JsonPrimitive("importBaseName"))
+            add(JsonPrimitive("importVersion"))
+            add(JsonPrimitive("dependencyPath"))
+            add(JsonPrimitive("exportName"))
+            add(JsonPrimitive("exportVersion"))
+            add(JsonPrimitive("exactVersionMatch"))
+            add(JsonPrimitive("transitive"))
+          })
+        })
+        put("description", JsonPrimitive("Resolved direct dependencies."))
+      })
+      put("transitiveDependencies", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("importName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Required import name."))
+            })
+            put("importBaseName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Required import base name without version."))
+            })
+            put("importVersion", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Required import version without `@`, or empty when absent."))
+            })
+            put("dependencyPath", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Component file that provides a matching export."))
+            })
+            put("exportName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Matched export name."))
+            })
+            put("exportVersion", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Matched export version without `@`, or empty when absent."))
+            })
+            put("exactVersionMatch", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when versions are absent or equal."))
+            })
+            put("transitive", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the dependency was required by another resolved dependency."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("importName"))
+            add(JsonPrimitive("importBaseName"))
+            add(JsonPrimitive("importVersion"))
+            add(JsonPrimitive("dependencyPath"))
+            add(JsonPrimitive("exportName"))
+            add(JsonPrimitive("exportVersion"))
+            add(JsonPrimitive("exactVersionMatch"))
+            add(JsonPrimitive("transitive"))
+          })
+        })
+        put("description", JsonPrimitive("Resolved transitive dependencies."))
+      })
+      put("unresolvedImports", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("importName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Unresolved import name."))
+            })
+            put("baseName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Unresolved import base name without version."))
+            })
+            put("version", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Unresolved import version without `@`, or empty when absent."))
+            })
+            put("runtimeProvided", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the import is known to be runtime-provided."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("importName"))
+            add(JsonPrimitive("baseName"))
+            add(JsonPrimitive("version"))
+            add(JsonPrimitive("runtimeProvided"))
+          })
+        })
+        put("description", JsonPrimitive("Non-runtime imports without a provider."))
+      })
+      put("candidateConflicts", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("importName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Import name with more than one matching candidate."))
+            })
+            put("baseName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Import base name used for matching."))
+            })
+            put("candidatePaths", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Candidate component files, capped for compactness."))
+            })
+            put("reason", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Short conflict reason."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("importName"))
+            add(JsonPrimitive("baseName"))
+            add(JsonPrimitive("candidatePaths"))
+            add(JsonPrimitive("reason"))
+          })
+        })
+        put("description", JsonPrimitive("Ambiguous provider candidates."))
+      })
+      put("summary", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("directResolvedCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Direct dependency matches."))
+          })
+          put("transitiveResolvedCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Transitive dependency matches."))
+          })
+          put("unresolvedCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Unresolved non-runtime imports."))
+          })
+          put("ambiguousCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Imports with multiple candidate providers."))
+          })
+          put("scannedFileCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of `.wasm` files inspected."))
+          })
+          put("truncated", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when bounded scanning stopped before exhausting all files."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("directResolvedCount"))
+          add(JsonPrimitive("transitiveResolvedCount"))
+          add(JsonPrimitive("unresolvedCount"))
+          add(JsonPrimitive("ambiguousCount"))
+          add(JsonPrimitive("scannedFileCount"))
+          add(JsonPrimitive("truncated"))
+        })
+        put("description", JsonPrimitive("Compact dependency-resolution counts."))
+      })
+    },
+    required = listOf("scanRoots", "directDependencies", "transitiveDependencies", "unresolvedImports", "candidateConflicts", "summary")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.resolveComponentDependencies(request.arguments)
+  }
+}
+
+private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "check_component_compatibility",
+    description = "Check required component imports against explicit or resolved dependency component exports.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("dependencyPaths", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Optional explicit component dependency files. When omitted, `projectRoot` is scanned."))
+        put("maxItems", JsonPrimitive(64))
+      })
+      put("projectRoot", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional project root used for compatibility resolution when `dependencyPaths` is omitted."))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Input path label when the caller provided `path`."))
+      })
+      put("compatible", buildJsonObject {
+        put("type", JsonPrimitive("boolean"))
+        put("description", JsonPrimitive("True when no compatibility errors were found."))
+      })
+      put("matches", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("importName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Required import name."))
+            })
+            put("dependencyPath", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Dependency file that provided the import."))
+            })
+            put("exportName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Matched export name."))
+            })
+            put("exactVersionMatch", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when versions are absent or equal."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("importName"))
+            add(JsonPrimitive("dependencyPath"))
+            add(JsonPrimitive("exportName"))
+            add(JsonPrimitive("exactVersionMatch"))
+          })
+        })
+        put("description", JsonPrimitive("Matched imports and provider files."))
+      })
+      put("missingImports", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("importName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Unresolved import name."))
+            })
+            put("baseName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Unresolved import base name without version."))
+            })
+            put("version", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Unresolved import version without `@`, or empty when absent."))
+            })
+            put("runtimeProvided", buildJsonObject {
+              put("type", JsonPrimitive("boolean"))
+              put("description", JsonPrimitive("True when the import is known to be runtime-provided."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("importName"))
+            add(JsonPrimitive("baseName"))
+            add(JsonPrimitive("version"))
+            add(JsonPrimitive("runtimeProvided"))
+          })
+        })
+        put("description", JsonPrimitive("Required imports without a provider."))
+      })
+      put("issues", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("importName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Import involved in the compatibility issue."))
+            })
+            put("dependencyPath", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Dependency file involved, when there is one."))
+            })
+            put("severity", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Issue severity: `error` or `warning`."))
+            })
+            put("reason", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Stable reason such as `missing_import`, `version_drift`, or `ambiguous_provider`."))
+            })
+            put("expected", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Expected version or extern description when available."))
+            })
+            put("actual", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Actual version, provider list, or extern description when available."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("importName"))
+            add(JsonPrimitive("severity"))
+            add(JsonPrimitive("reason"))
+          })
+        })
+        put("description", JsonPrimitive("Compatibility issues and warnings."))
+      })
+      put("summary", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+          put("compatible", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when no compatibility errors were found."))
+          })
+          put("matchedCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of matched imports."))
+          })
+          put("missingCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of missing imports."))
+          })
+          put("versionDriftCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of matches with version drift."))
+          })
+          put("ambiguousCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of imports with ambiguous providers."))
+          })
+          put("incompatibleDescriptionCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of incompatible extern-description matches."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("compatible"))
+          add(JsonPrimitive("matchedCount"))
+          add(JsonPrimitive("missingCount"))
+          add(JsonPrimitive("versionDriftCount"))
+          add(JsonPrimitive("ambiguousCount"))
+          add(JsonPrimitive("incompatibleDescriptionCount"))
+        })
+        put("description", JsonPrimitive("Compact compatibility counts."))
+      })
+    },
+    required = listOf("compatible", "matches", "missingImports", "issues", "summary")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.checkComponentCompatibility(request.arguments)
   }
 }
 
