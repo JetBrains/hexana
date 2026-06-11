@@ -85,9 +85,19 @@
               },
               "runtime": {
                 "type": "string",
-                "enum": ["wasmtime", "wamr"],
+                "enum": ["wasmtime", "wamr", "nodejs", "browser"],
                 "default": "wasmtime",
                 "description": "Wasm runtime to use for debugging."
+              },
+              "nodePath": {
+                "type": "string",
+                "default": "",
+                "description": "Custom path to the Node.js executable (for nodejs runtime)."
+              },
+              "chromePath": {
+                "type": "string",
+                "default": "",
+                "description": "Custom path to the Chrome/Chromium executable (for browser runtime)."
               },
               "programArgs": {
                 "type": "string",
@@ -123,6 +133,28 @@
               "name": "Debug Wasm (WAMR)",
               "wasmFile": "${workspaceFolder}/${1:path/to/module.wasm}",
               "runtime": "wamr"
+            }
+          },
+          {
+            "label": "WebAssembly: Debug with Node.js (CDP)",
+            "description": "Launch a Wasm module under Node.js with Chrome DevTools Protocol debugging.",
+            "body": {
+              "type": "wasm",
+              "request": "launch",
+              "name": "Debug Wasm (Node.js)",
+              "wasmFile": "${workspaceFolder}/${1:path/to/module.wasm}",
+              "runtime": "nodejs"
+            }
+          },
+          {
+            "label": "WebAssembly: Debug with Chrome (CDP)",
+            "description": "Launch a Wasm module in Chrome with Chrome DevTools Protocol debugging.",
+            "body": {
+              "type": "wasm",
+              "request": "launch",
+              "name": "Debug Wasm (Chrome)",
+              "wasmFile": "${workspaceFolder}/${1:path/to/module.wasm}",
+              "runtime": "browser"
             }
           }
         ]

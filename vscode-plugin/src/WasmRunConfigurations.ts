@@ -210,6 +210,7 @@ export async function showRuntimePicker(
 
     // Debug options — Wasmtime supports debugging for both core and
     // component modules; WAMR only supports core modules.
+    // Node.js and Browser use CDP (Chrome DevTools Protocol) debugging.
     items.push({
         label: "$(bug) Debug with Wasmtime",
         runtime: "wasmtime",
@@ -221,7 +222,17 @@ export async function showRuntimePicker(
             runtime: "wamr",
             action: "debug",
         });
+        items.push({
+            label: "$(bug) Debug with Node.js (CDP)",
+            runtime: "nodejs",
+            action: "debug",
+        });
     }
+    items.push({
+        label: "$(bug) Debug with Chrome (CDP)",
+        runtime: "browser",
+        action: "debug",
+    });
 
     // If there is only one applicable item, use it directly
     if (items.length === 1) {
@@ -790,12 +801,6 @@ export async function runExport(
         return;
     }
 
-    // Browser runtime — serve the module over a local HTTP server and open the default browser
-    if (runtime === "browser") {
-        await runInBrowser(filePath, message.exportName ?? "", message.programArgs ?? "");
-        return;
-    }
-
     // Launch a debug session instead of a terminal when the user chose debug
     if (action === "debug") {
         await launchDebugSession(
@@ -805,6 +810,12 @@ export async function runExport(
             message.exportName ?? "",
             message.invokeArgs ?? "",
         );
+        return;
+    }
+
+    // Browser runtime (run only) — serve the module over a local HTTP server and open the default browser
+    if (runtime === "browser") {
+        await runInBrowser(filePath, message.exportName ?? "", message.programArgs ?? "");
         return;
     }
 
@@ -888,8 +899,9 @@ export async function runExport(
  * `WasmDebugAdapter` infrastructure (configuration provider, adapter
  * factory, and tracker) already registered in `extension.ts`.
  *
- * Only Wasmtime and WAMR are supported for debugging. If the caller
- * passes a different runtime, an error is shown and no session starts.
+ * Wasmtime, WAMR, Node.js, and Browser are supported for debugging.
+ * If the caller passes a different runtime, an error is shown and no
+ * session starts.
  */
 async function launchDebugSession(
     wasmFilePath: string,
@@ -899,17 +911,25 @@ async function launchDebugSession(
     invokeArgs: string = "",
     effectiveWasmPath?: string,
 ): Promise<void> {
-    if (runtime !== "wasmtime" && runtime !== "wamr") {
+    const supportedRuntimes = ["wasmtime", "wamr", "nodejs", "browser"];
+    if (!supportedRuntimes.includes(runtime)) {
         vscode.window.showErrorMessage(
-            `Debugging is only supported for Wasmtime and WAMR runtimes, not '${runtime}'.`,
+            `Debugging is only supported for Wasmtime, WAMR, Node.js, and Browser runtimes, not '${runtime}'.`,
         );
         return;
     }
 
+    const runtimeLabels: Record<string, string> = {
+        wasmtime: "Wasmtime",
+        wamr: "WAMR",
+        nodejs: "Node.js",
+        browser: "Chrome",
+    };
+
     const debugConfig: vscode.DebugConfiguration = {
         type: "wasm",
         request: "launch",
-        name: `Debug Wasm (${runtime === "wasmtime" ? "Wasmtime" : "WAMR"})`,
+        name: `Debug Wasm (${runtimeLabels[runtime] || runtime})`,
         wasmFile: wasmFilePath,
         runtime,
         programArgs,
