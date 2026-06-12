@@ -20,8 +20,19 @@ import org.jetbrains.hexana.wasm.opcodes.numeric.I64
  * Output is the *right-hand* portion of a rendered line — the offset gutter
  * and hex-bytes column are added by the renderer.
  */
+/**
+ * Resolves a symbolic name for a function index, for symbolic operand rendering.
+ * Returns null to fall back to the numeric index.
+ */
+internal fun interface WatSymbolNames {
+    fun function(funcIdx: Int): String?
+}
+
+private fun callOperand(funcIdx: UInt, symbols: WatSymbolNames?): String =
+    symbols?.function(funcIdx.toInt())?.let { "\$$it" } ?: funcIdx.toString()
+
 @Suppress("CyclomaticComplexMethod", "LongMethod")
-internal fun watFor(op: OpCode): String {
+internal fun watFor(op: OpCode, symbols: WatSymbolNames? = null): String {
     return when (op) {
         // -- Parametric -----------------------------------------------------
         is OpCodes.ParametricInstructions.Unreachable -> "unreachable"
@@ -36,8 +47,8 @@ internal fun watFor(op: OpCode): String {
         is OpCodes.Flow.Loop -> "loop"
         is OpCodes.Flow.If -> "if"
         is OpCodes.Flow.Block -> "block"
-        is OpCodes.Flow.Call -> "call ${op.value}"
-        is OpCodes.Flow.ReturnCall -> "return_call ${op.value}"
+        is OpCodes.Flow.Call -> "call ${callOperand(op.value, symbols)}"
+        is OpCodes.Flow.ReturnCall -> "return_call ${callOperand(op.value, symbols)}"
         is OpCodes.Flow.CallRef -> "call_ref ${op.value}"
         is OpCodes.Flow.ReturnCallRef -> "return_call_ref ${op.value}"
         is OpCodes.Flow.CallIndirect -> "call_indirect (type ${op.value0}) ${op.value1}"

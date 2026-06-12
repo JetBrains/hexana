@@ -110,6 +110,16 @@ public class WasmHexanaWatRenderer(
     private val resolver = parsed.symbolResolver
     private val importFuncCount = provider.importFuncCount
 
+    /**
+     * When true, `call`/`return_call` operands render as symbolic `$name` (when a
+     * name resolves) instead of the numeric index. Off by default so the single-file
+     * WAT panel is unchanged; the WAT-diff path enables it so unchanged callers of a
+     * renumbered function render identically. Set on a dedicated renderer instance.
+     */
+    public var symbolicOperands: Boolean = false
+
+    private val watSymbols = WatSymbolNames { funcIdx -> resolver.resolve(SymbolKind.FUNCTION, funcIdx) }
+
     private val memoryRecords: List<WasmMemoryRecord> by lazy {
         provider.wasmModule?.memorySection?.let { section ->
             with(section) { provider.bytes.scan() }
@@ -500,6 +510,15 @@ public class WasmHexanaWatRenderer(
      * string. Trims surrounding whitespace so a `BasicTextField` shows
      * `"i32.const 5"` rather than `"  i32.const 5  "`.
      */
+    /**
+     * Clean WAT content lines for a chunk — mnemonic + operands only, with the
+     * offset gutter, hex column, and comments (incl. the `(; funcidx N ;)` header
+     * comment) stripped. Blank lines are dropped. With [symbolicOperands] enabled
+     * these are renumber-stable, which is what the WAT diff aligns and line-diffs.
+     */
+    public fun watContentLines(snapshot: BinaryDocumentSnapshot, chunk: BinaryChunk): List<String> =
+        renderRows(snapshot, chunk).map { extractWatText(it.tokens) }.filter { it.isNotBlank() }
+
     private fun extractWatText(rowTokens: List<RenderToken>): String {
         val sb = StringBuilder()
         for (t in rowTokens) {
@@ -1860,7 +1879,7 @@ public class WasmHexanaWatRenderer(
     }
 
     private fun splitMnemonic(op: OpCode): Pair<String, String> {
-        val full = watFor(op)
+        val full = watFor(op, if (symbolicOperands) watSymbols else null)
         val space = full.indexOf(' ')
         return if (space < 0) full to "" else full.substring(0, space) to full.substring(space)
     }

@@ -36,4 +36,24 @@ object HexanaTheme {
     val garbageHighlightColor: Color
         @Composable
         get() = if (JewelTheme.isDark) Color(255, 96, 96, 48) else Color(255, 60, 60, 40)
+
+    /** Standard-diff line background for added lines (translucent green, theme-aware). */
+    val diffAddedColor: Color
+        @Composable
+        get() = if (JewelTheme.isDark) Color(46, 160, 67, 70) else Color(46, 160, 67, 55)
+
+    /** Standard-diff line background for removed lines (translucent red, theme-aware). */
+    val diffRemovedColor: Color
+        @Composable
+        get() = if (JewelTheme.isDark) Color(248, 81, 73, 70) else Color(248, 81, 73, 55)
+
+    /** Diff row tint for modified entities (translucent amber, theme-aware). */
+    val diffModifiedColor: Color
+        @Composable
+        get() = if (JewelTheme.isDark) Color(210, 153, 34, 70) else Color(212, 167, 44, 60)
+
+    /** Diff row tint for moved entities (translucent blue, theme-aware). */
+    val diffMovedColor: Color
+        @Composable
+        get() = if (JewelTheme.isDark) Color(56, 139, 253, 70) else Color(56, 139, 253, 55)
 }

@@ -32,6 +32,30 @@ fun VerticalSplitPanel(
     northPanel: @Composable () -> Unit,
     southPanel: @Composable () -> Unit
 ) {
+    // Delegate to the stateless core; the state holder is read live inside the
+    // delta callback so divider drags stay correct across recomposition.
+    VerticalSplitPanel(
+        topFraction = state.topFraction,
+        onDragFraction = { delta -> state.setTopFraction(state.topFraction + delta) },
+        northPanel = northPanel,
+        southPanel = southPanel,
+    )
+}
+
+/**
+ * State-hoisted vertical split. [topFraction] is the north pane's height fraction;
+ * [onDragFraction] receives the incremental fraction change from a divider drag —
+ * the caller adds it to its own live state (avoids stale-capture in the remembered
+ * drag lambda). Lets surfaces without a [HexViewStateHolder] (e.g. the WASM diff
+ * editor) use the same split.
+ */
+@Composable
+fun VerticalSplitPanel(
+    topFraction: Float,
+    onDragFraction: (deltaFraction: Float) -> Unit,
+    northPanel: @Composable () -> Unit,
+    southPanel: @Composable () -> Unit,
+) {
     var containerHeightPx by remember { mutableFloatStateOf(0f) }
 
     val weightRange = 0.0001f..0.9999f
@@ -41,15 +65,14 @@ fun VerticalSplitPanel(
             .fillMaxSize()
             .onSizeChanged { containerHeightPx = it.height.toFloat() }
     ) {
-        Box(modifier = Modifier.fillMaxWidth().weight(state.topFraction.coerceIn(weightRange))) {
+        Box(modifier = Modifier.fillMaxWidth().weight(topFraction.coerceIn(weightRange))) {
             northPanel()
         }
 
         HorizontalDraggableDivider(
             onDrag = { deltaY ->
                 if (containerHeightPx > 0) {
-                    val deltaRatio = deltaY / containerHeightPx
-                    state.setTopFraction(state.topFraction + deltaRatio)
+                    onDragFraction(deltaY / containerHeightPx)
                 }
             }
         )
@@ -57,7 +80,7 @@ fun VerticalSplitPanel(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight((1f - state.topFraction).coerceIn(weightRange))
+                .weight((1f - topFraction).coerceIn(weightRange))
                 .background(HexanaTheme.backgroundColor),
             contentAlignment = Alignment.TopStart
         ) {

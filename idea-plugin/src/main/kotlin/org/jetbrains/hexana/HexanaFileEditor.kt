@@ -36,6 +36,7 @@ import org.jetbrains.hexana.ui.HexSearchField
 import org.jetbrains.hexana.ui.WASM_FUNCTION_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import org.jetbrains.hexana.ui.createComposePanel
+import org.jetbrains.hexana.ui.panel.WasmDiffEditorView
 import org.jetbrains.hexana.ui.setupSearchActions
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 import org.jetbrains.hexana.wat.WatFileset
@@ -120,6 +121,14 @@ class HexanaFileEditor(
     var binaryProvider: BinaryProvider? = null
 
     fun initPanel() {
+        // A WASM size-diff compares two modules; it has no single-file hex/edit
+        // surface, so it short-circuits the normal binary-editor wiring.
+        val diffFile = myFile as? HexanaWasmDiffVirtualFile
+        if (diffFile != null) {
+            initWasmDiffPanel(diffFile)
+            return
+        }
+
         val inMemoryBuffer = myFile.getUserData(HexanaBinaryVirtualFile.BUFFER_KEY)
         val commonBuffer = if (inMemoryBuffer != null) {
             stateHolder.displayBaseOffset = myFile.getUserData(HexanaBinaryVirtualFile.BASE_OFFSET_KEY) ?: 0
@@ -249,6 +258,18 @@ class HexanaFileEditor(
         panel.add(hexView)
 
         setupSearchActions(hexView, stateHolder)
+    }
+
+    private fun initWasmDiffPanel(file: HexanaWasmDiffVirtualFile) {
+        val view = createComposePanel {
+            WasmDiffEditorView(
+                leftBuffer = file.leftBuffer,
+                rightBuffer = file.rightBuffer,
+                leftName = file.leftName,
+                rightName = file.rightName,
+            )
+        }
+        panel.add(view)
     }
 
     override fun getComponent(): JComponent {

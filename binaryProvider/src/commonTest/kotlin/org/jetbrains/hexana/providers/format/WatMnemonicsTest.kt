@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.providers.format
 
+import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.opcodes.numeric.F32
 import org.jetbrains.hexana.wasm.opcodes.numeric.F64
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
@@ -17,6 +18,17 @@ class WatMnemonicsTest {
 
     @Test
     fun i32Add() = assertEquals("i32.add", watFor(I32.Add))
+
+    @Test
+    fun callNumericByDefault() = assertEquals("call 7", watFor(OpCodes.Flow.Call(7u)))
+
+    @Test
+    fun callSymbolicWhenResolved() =
+        assertEquals("call \$foo", watFor(OpCodes.Flow.Call(7u), WatSymbolNames { if (it == 7) "foo" else null }))
+
+    @Test
+    fun callFallsBackToNumericWhenUnresolved() =
+        assertEquals("call 7", watFor(OpCodes.Flow.Call(7u), WatSymbolNames { null }))
 
     @Test
     fun i32ShrU() = assertEquals("i32.shr_u", watFor(I32.ShrU))

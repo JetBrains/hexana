@@ -275,6 +275,15 @@
                     description="Open this archive in Hexana's Java library viewer"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="first"/>
         </group>
+
+        <!-- "Compare WASM With…" — size-impact diff of two .wasm modules. -->
+        <action id="hexana.compareWasm"
+                class="org.jetbrains.hexana.actions.CompareWasmAction"
+                text="Compare WASM With…"
+                description="Compare two .wasm modules by size impact">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="hexana.openInGroup"/>
+            <add-to-group group-id="RevealGroup" anchor="last"/>
+        </action>
     </actions>
 
 </idea-plugin>

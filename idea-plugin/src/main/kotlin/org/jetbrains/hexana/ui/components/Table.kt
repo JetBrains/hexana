@@ -52,6 +52,7 @@ fun Table(
     actionColumnWidth: Dp = 0.dp,
     defaultSortColumn: Int = -1,
     defaultSortAscending: Boolean = true,
+    rowColor: (id: Int) -> Color? = { null },
     onRow: (id: Int) -> Unit = {},
 ) {
     val tableData = remember(columns, dataCount) {
@@ -393,7 +394,7 @@ fun Table(
                     } else if (selectedOriginalIndex == id) {
                         HexanaTheme.hexCellHoverActiveColor
                     } else {
-                        Color.Unspecified
+                        rowColor(id) ?: Color.Unspecified
                     }
 
 
