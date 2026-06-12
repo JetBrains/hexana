@@ -64,10 +64,10 @@ class HexanaHttpIntegrationTest {
                     logger.info("Created wasm fixture at {}", wasm)
                     val wasmBytes = Files.readAllBytes(wasm).map { it.toInt() and 0xFF }
 
-                    logger.info("Requesting tools/call query_artifacts overview")
+                    logger.info("Requesting tools/call summarize_module")
                     val result = client.callTool(
-                        name = "query_artifacts",
-                        arguments = mapOf("path" to wasm.toString(), "operation" to "overview"),
+                        name = "summarize_module",
+                        arguments = mapOf("path" to wasm.toString()),
                         meta = emptyMap<String, Any?>()
                     )
                     logger.info(
@@ -84,19 +84,15 @@ class HexanaHttpIntegrationTest {
                     assertEquals(
                         1,
                         result.structuredContent
-                            ?.get("modules")
-                            ?.jsonArray
-                            ?.first()
-                            ?.jsonObject
                             ?.get("functions")
                             ?.jsonPrimitive
                             ?.int
                     )
 
-                    logger.info("Requesting tools/call query_artifacts with inline bytes")
+                    logger.info("Requesting tools/call summarize_module with inline bytes")
                     val inlineResult = client.callTool(
-                        name = "query_artifacts",
-                        arguments = mapOf("bytes" to wasmBytes, "operation" to "overview"),
+                        name = "summarize_module",
+                        arguments = mapOf("bytes" to wasmBytes),
                         meta = emptyMap<String, Any?>()
                     )
                     logger.info(
@@ -111,43 +107,34 @@ class HexanaHttpIntegrationTest {
                     assertEquals(
                         1,
                         inlineResult.structuredContent
-                            ?.get("modules")
-                            ?.jsonArray
-                            ?.first()
-                            ?.jsonObject
                             ?.get("functions")
                             ?.jsonPrimitive
                             ?.int
                     )
 
-                    logger.info("Requesting tools/call query_artifacts memory find")
+                    logger.info("Requesting tools/call list_memory")
                     val memoryResult = client.callTool(
-                        name = "query_artifacts",
-                        arguments = mapOf(
-                            "path" to wasm.toString(),
-                            "operation" to "find",
-                            "entityTypes" to listOf("memory"),
-                            "limit" to 5,
-                        ),
+                        name = "list_memory",
+                        arguments = mapOf("path" to wasm.toString()),
                         meta = emptyMap<String, Any?>()
                     )
                     logger.info(
-                        "Received query_artifacts memory result isError={}, contentBlocks={}",
+                        "Received list_memory result isError={}, contentBlocks={}",
                         memoryResult.isError,
                         memoryResult.content.size
                     )
                     assertFalse(memoryResult.isError == true)
                     val memoryText = memoryResult.content.single() as TextContent
-                    logger.info("Query artifacts memory text payload: {}", memoryText.text)
+                    logger.info("List memory text payload: {}", memoryText.text)
                     assertJsonTextMatchesStructured(memoryResult)
                     assertEquals(
                         0,
                         memoryResult.structuredContent
-                            ?.get("records")
+                            ?.get("memories")
                             ?.jsonArray
                             ?.first()
                             ?.jsonObject
-                            ?.get("index")
+                            ?.get("memoryIdx")
                             ?.jsonPrimitive
                             ?.int
                     )

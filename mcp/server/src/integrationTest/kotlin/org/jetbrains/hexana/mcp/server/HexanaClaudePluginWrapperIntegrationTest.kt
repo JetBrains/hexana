@@ -5,6 +5,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.ListToolsRequest
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -133,20 +134,16 @@ class HexanaClaudePluginWrapperIntegrationTest {
             }
 
             val summary = server.client.callTool(
-                name = "query_artifacts",
-                arguments = mapOf("path" to wasm.toString(), "operation" to "overview"),
+                name = "summarize_module",
+                arguments = mapOf("path" to wasm.toString()),
                 meta = emptyMap()
             )
             assertFalse(summary.isError == true)
             val summaryText = summary.content.single() as TextContent
-            logger.info("{} wrapper query_artifacts payload: {}", clientLabel, summaryText.text)
+            logger.info("{} wrapper summarize_module payload: {}", clientLabel, summaryText.text)
             assertEquals(
                 1,
                 summary.structuredContent
-                    ?.get("modules")
-                    ?.jsonArray
-                    ?.first()
-                    ?.jsonObject
                     ?.get("functions")
                     ?.jsonPrimitive
                     ?.int
@@ -156,6 +153,131 @@ class HexanaClaudePluginWrapperIntegrationTest {
                 server.stderr.contains("Starting stdio MCP transport"),
                 "$clientLabel plugin wrapper should proxy stdio server logs on stderr. stderr was: ${server.stderr}"
             )
+
+            assertComponentToolsOverStdio(clientLabel, server)
         }
     }
+
+    private suspend fun assertComponentToolsOverStdio(
+        clientLabel: String,
+        server: HexanaInstalledStdioClient,
+    ) {
+        val projectRoot = temporaryFolder.newFolder("${clientLabel.lowercase()}-component-project").toPath()
+        val calculator = copyComponentFixture("calculator.wasm", projectRoot.resolve("calculator.wasm"))
+        val adder = copyComponentFixture("add.component.wasm", projectRoot.resolve("deps/add.component.wasm"))
+
+        val surface = server.client.callTool(
+            name = "list_component_surface",
+            arguments = mapOf("path" to calculator.toString()),
+            meta = emptyMap()
+        )
+        assertFalse(surface.isError == true, "$clientLabel list_component_surface failed: ${surfaceText(surface)}")
+        assertTrue(
+            surface.structuredContent
+                ?.get("imports")
+                ?.jsonArray
+                ?.any {
+                    it.jsonObject.getValue("baseName").jsonPrimitive.content.contains("component:adder/add")
+                } == true,
+            "$clientLabel list_component_surface did not report the expected imports: ${surfaceText(surface)}"
+        )
+        assertTrue(
+            surface.structuredContent
+                ?.get("exports")
+                ?.jsonArray
+                ?.any {
+                    it.jsonObject.getValue("baseName").jsonPrimitive.content.contains("component:calculator/calculate")
+                } == true,
+            "$clientLabel list_component_surface did not report the expected exports: ${surfaceText(surface)}"
+        )
+
+        val dependencies = server.client.callTool(
+            name = "resolve_component_dependencies",
+            arguments = mapOf(
+                "path" to calculator.toString(),
+                "projectRoot" to projectRoot.toString(),
+            ),
+            meta = emptyMap()
+        )
+        assertFalse(
+            dependencies.isError == true,
+            "$clientLabel resolve_component_dependencies failed: ${surfaceText(dependencies)}"
+        )
+        assertTrue(
+            dependencies.structuredContent
+                ?.get("directDependencies")
+                ?.jsonArray
+                ?.any {
+                    it.jsonObject.getValue("importBaseName").jsonPrimitive.content.contains("component:adder/add")
+                } == true,
+            "$clientLabel resolve_component_dependencies did not report adder provider: ${surfaceText(dependencies)}"
+        )
+        assertTrue(
+            dependencies.structuredContent
+                ?.get("unresolvedImports")
+                ?.jsonArray
+                ?.any {
+                    it.jsonObject.getValue("baseName").jsonPrimitive.content.contains("component:subtractor/subtract")
+                } == true,
+            "$clientLabel resolve_component_dependencies did not report subtractor unresolved: ${surfaceText(dependencies)}"
+        )
+
+        val compatibility = server.client.callTool(
+            name = "check_component_compatibility",
+            arguments = mapOf(
+                "path" to calculator.toString(),
+                "dependencyPaths" to listOf(adder.toString()),
+            ),
+            meta = emptyMap()
+        )
+        assertFalse(
+            compatibility.isError == true,
+            "$clientLabel check_component_compatibility failed: ${surfaceText(compatibility)}"
+        )
+        assertEquals(
+            false,
+            compatibility.structuredContent?.get("compatible")?.jsonPrimitive?.boolean,
+            "$clientLabel check_component_compatibility should report the missing subtractor import"
+        )
+        assertTrue(
+            compatibility.structuredContent
+                ?.get("matches")
+                ?.jsonArray
+                ?.any {
+                    it.jsonObject.getValue("importName").jsonPrimitive.content.contains("component:adder/add")
+                } == true,
+            "$clientLabel check_component_compatibility did not report adder match: ${surfaceText(compatibility)}"
+        )
+        assertTrue(
+            compatibility.structuredContent
+                ?.get("missingImports")
+                ?.jsonArray
+                ?.any {
+                    it.jsonObject.getValue("baseName").jsonPrimitive.content.contains("component:subtractor/subtract")
+                } == true,
+            "$clientLabel check_component_compatibility did not report missing subtractor: ${surfaceText(compatibility)}"
+        )
+    }
+
+    private fun copyComponentFixture(name: String, target: Path): Path {
+        Files.createDirectories(target.parent)
+        return Files.copy(componentFixture(name), target)
+    }
+
+    private fun componentFixture(name: String): Path =
+        repoRoot().resolve("wasmParser/src/commonTest/resources/component/$name")
+
+    private fun repoRoot(): Path {
+        var dir = Path.of("").toAbsolutePath()
+        while (dir.parent != null) {
+            if (Files.exists(dir.resolve("settings.gradle.kts")) && Files.exists(dir.resolve("wasmParser"))) {
+                return dir
+            }
+            dir = dir.parent
+        }
+        error("Repository root not found")
+    }
+
+    private fun surfaceText(result: io.modelcontextprotocol.kotlin.sdk.types.CallToolResult): String =
+        result.content.filterIsInstance<TextContent>().joinToString("\n") { it.text }
 }

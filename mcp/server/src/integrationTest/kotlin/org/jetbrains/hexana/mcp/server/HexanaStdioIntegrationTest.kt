@@ -62,61 +62,52 @@ class HexanaStdioIntegrationTest {
             )
             logger.info("Created stdio wasm fixture at {}", wasm)
 
-            logger.info("Requesting query_artifacts overview over stdio")
+            logger.info("Requesting summarize_module over stdio")
             val overviewResult = server.client.callTool(
-                name = "query_artifacts",
-                arguments = mapOf("path" to wasm.toString(), "operation" to "overview"),
+                name = "summarize_module",
+                arguments = mapOf("path" to wasm.toString()),
                 meta = emptyMap<String, Any?>()
             )
             logger.info(
-                "Received query_artifacts overview result over stdio isError={}, contentBlocks={}",
+                "Received summarize_module result over stdio isError={}, contentBlocks={}",
                 overviewResult.isError,
                 overviewResult.content.size
             )
             assertFalse(overviewResult.isError == true)
             val overviewText = overviewResult.content.single() as TextContent
-            logger.info("Query artifacts overview text payload over stdio: {}", overviewText.text)
+            logger.info("Summarize module text payload over stdio: {}", overviewText.text)
             assertJsonTextMatchesStructured(overviewResult)
             assertEquals(
                 1,
                 overviewResult.structuredContent
-                    ?.get("modules")
-                    ?.jsonArray
-                    ?.first()
-                    ?.jsonObject
                     ?.get("functions")
                     ?.jsonPrimitive
                     ?.int
             )
 
-            logger.info("Requesting query_artifacts memory find over stdio")
+            logger.info("Requesting list_memory over stdio")
             val memoryResult = server.client.callTool(
-                name = "query_artifacts",
-                arguments = mapOf(
-                    "path" to wasm.toString(),
-                    "operation" to "find",
-                    "entityTypes" to listOf("memory"),
-                    "limit" to 5,
-                ),
+                name = "list_memory",
+                arguments = mapOf("path" to wasm.toString()),
                 meta = emptyMap<String, Any?>()
             )
             logger.info(
-                "Received query_artifacts memory result over stdio isError={}, contentBlocks={}",
+                "Received list_memory result over stdio isError={}, contentBlocks={}",
                 memoryResult.isError,
                 memoryResult.content.size
             )
             assertFalse(memoryResult.isError == true)
             val memoryText = memoryResult.content.single() as TextContent
-            logger.info("Query artifacts memory text payload over stdio: {}", memoryText.text)
+            logger.info("List memory text payload over stdio: {}", memoryText.text)
             assertJsonTextMatchesStructured(memoryResult)
             assertEquals(
                 0,
                 memoryResult.structuredContent
-                    ?.get("records")
+                    ?.get("memories")
                     ?.jsonArray
                     ?.first()
                     ?.jsonObject
-                    ?.get("index")
+                    ?.get("memoryIdx")
                     ?.jsonPrimitive
                     ?.int
             )

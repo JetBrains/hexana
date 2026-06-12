@@ -58,6 +58,7 @@ val r8OwnedJarNames = setOf(
     "dwarf-jvm.jar",
     "encdec-jvm.jar",
     "hexanaDocument-jvm.jar",
+    "plugins-shared-jvm.jar",
     "server-$mcpServerVersion.jar",
     "wasmParser-jvm.jar",
 )

@@ -12,4 +12,6 @@
 -keep,allowoptimization class org.jetbrains.hexana.mcp.model.**$Companion { *; }
 -keep,allowoptimization class org.jetbrains.hexana.mcp.model.data.Base64ByteArraySerializer { *; }
 
+-keep,allowoptimization class org.jetbrains.hexana.wasm.components.** { *; }
+
 -keepattributes Signature,InnerClasses,EnclosingMethod
