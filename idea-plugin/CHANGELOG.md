@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Compare two `.wasm` modules: **Compare WASM With…** (project-view context menu or Tools menu) opens a diff editor. The **Size Impact** tab shows per-section and per-function byte deltas sorted by impact; the **Entities** tab classifies every entity kind (imports, exports, functions, globals, tables, memories, types, data and element segments) as added / removed / modified / moved, with a supply-chain banner that highlights newly-introduced imports (host namespaces such as `env` / `wasi_*` are flagged). Functions are matched structurally (content hash + call graph), so renaming or renumbering does not show up as spurious churn. Selecting a function opens an on-demand side-by-side WAT comparison rendered with symbolic names — so an unchanged caller of a renumbered function reads identically — with standard red/green line-level highlighting. Table rows are colour-coded by change kind, with aligned columns
 
 ### Changed
 
