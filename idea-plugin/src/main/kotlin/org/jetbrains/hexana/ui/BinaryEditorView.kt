@@ -12,6 +12,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.actionSystem.IdeActions
@@ -283,26 +284,21 @@ internal fun BinaryEditorView(
                     }},
                     parentFileName = parentFileName,
                     onNavigateToParent = onNavigateToParent,
-                )
-                EditModeToolbar(
-                    doc = editableDoc,
-                    stampKey = editableDoc.modificationStamp,
-                    binaryProvider = binaryProvider,
-                    overwriteShadowRanges = overwriteShadowRanges,
-                    onOverwriteShadowRangesChanged = { overwriteShadowRanges = it },
-                    onReparseAfterOverwrite = {
-                        // After overwrite / undo-overwrite the on-disk bytes
-                        // are now the source of truth. Reset the hex-edit
-                        // demotion flag so the full panel set comes back, and
-                        // rebuild liveProvider from the current doc bytes so
-                        // the UI shows the correct format immediately.
-                        hexEditedSinceOpen = false
-                        val currentBytes = editableDoc.read(0L, editableDoc.length.toInt())
-                        try {
-                            val rebuilt = rebuildProviderFromBytes(binaryProvider, currentBytes)
-                            if (rebuilt != null) liveProvider = rebuilt
-                        } catch (_: Throwable) { /* keep current */ }
-                    },
+                    editModeContent = editModeToolbarContent(
+                        doc = editableDoc,
+                        stampKey = editableDoc.modificationStamp,
+                        binaryProvider = binaryProvider,
+                        overwriteShadowRanges = overwriteShadowRanges,
+                        onOverwriteShadowRangesChanged = { overwriteShadowRanges = it },
+                        onReparseAfterOverwrite = {
+                            hexEditedSinceOpen = false
+                            val currentBytes = editableDoc.read(0L, editableDoc.length.toInt())
+                            try {
+                                val rebuilt = rebuildProviderFromBytes(binaryProvider, currentBytes)
+                                if (rebuilt != null) liveProvider = rebuilt
+                            } catch (_: Throwable) { /* keep current */ }
+                        },
+                    ),
                 )
                 Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     HexViewer(
@@ -340,95 +336,69 @@ internal fun BinaryEditorView(
 }
 
 /**
- * Edit-mode toolbar shown above the hex view. Displays contextual controls
- * depending on the current editing state:
- * - **No edits**: a hint label "Start typing to edit".
- * - **Edits applied**: "Discard", "Overwrite" (writes to the source file
- *   after saving only the modified ranges of the original bytes), and
- *   "Save a copy" (writes to `<name>.edited.<ext>`).
- * - **After overwrite**: an "Undo overwrite" button that restores the
- *   original bytes by rewinding the undo stack and falling back to the
- *   saved modified ranges if needed.
+ * Returns a composable lambda for the edit-mode controls to embed in the
+ * [FileDescriptionBar], or `null` when no editing UI should be shown
+ * (i.e. no edits and no post-overwrite state).
  */
 @Composable
-private fun EditModeToolbar(
+private fun editModeToolbarContent(
     doc: EditableBinaryDocument,
     stampKey: Long,
     binaryProvider: BinaryProvider,
     overwriteShadowRanges: OverwriteShadowRanges?,
     onOverwriteShadowRangesChanged: (OverwriteShadowRanges?) -> Unit,
     onReparseAfterOverwrite: () -> Unit = {},
-) {
+): (@Composable () -> Unit)? {
     @Suppress("UNUSED_PARAMETER") val unused = stampKey
     val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
     val finalizedName = sourceFile?.name?.let { computeFinalizedName(it) }
     val hasEdits = doc.canUndo()
     val canOverwrite = hasEdits && sourceFile != null
     val canSaveCopy = hasEdits && sourceFile != null
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(HexanaTheme.backgroundColor)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (overwriteShadowRanges != null && sourceFile != null) {
-            // Post-overwrite state: offer to undo the overwrite.
+
+    val isPostOverwrite = overwriteShadowRanges != null && sourceFile != null
+
+    if (!hasEdits && !isPostOverwrite) return null
+
+    return {
+        val compactTextStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp)
+        if (isPostOverwrite && sourceFile != null) {
             OutlinedButton(
+                modifier = Modifier.height(20.dp),
                 onClick = {
-                    // Reconstruct the original file content from the
-                    // current (overwritten) file bytes + shadow ranges
-                    // and write it to disk FIRST, so the file is always
-                    // restored even if the undo stack can't fully rewind.
-                    val restoredOriginal = overwriteShadowRanges.applyTo(
+                    val restoredOriginal = overwriteShadowRanges!!.applyTo(
                         sourceFile.contentsToByteArray(),
                     )
                     overwriteSourceFile(sourceFile, restoredOriginal)
-                    // Rewind the in-memory document's undo stack so the
-                    // editor state matches the restored file.
                     while (doc.canUndo()) doc.undo()
-                    // Safety net: if the undo stack didn't fully restore
-                    // the original content, force-replace the document
-                    // so the editor always matches the file on disk.
                     val currentBytes = doc.read(0L, doc.length.toInt())
                     if (!currentBytes.contentEquals(restoredOriginal)) {
                         doc.edit().use { tx ->
                             tx.replace(0L, doc.length, restoredOriginal)
                             tx.commit()
                         }
-                        // Clean up the synthetic undo entry.
                         while (doc.canUndo()) doc.undo()
                     }
                     doc.clearPersistedJournal()
                     onOverwriteShadowRangesChanged(null)
                     onReparseAfterOverwrite()
                 },
-            ) { Text("Undo overwrite") }
-        } else if (!hasEdits) {
-            Text(
-                "Start typing to edit",
-                color = HexanaTheme.hexTextColor,
-            )
+            ) { Text("Undo overwrite", style = compactTextStyle) }
         } else {
-            // Discard: rewind all edits and clear the sidecar.
             OutlinedButton(
+                modifier = Modifier.height(20.dp),
                 onClick = {
                     while (doc.canUndo()) doc.undo()
                     doc.clearPersistedJournal()
                     onReparseAfterOverwrite()
                 },
                 enabled = hasEdits,
-            ) { Text("Discard") }
-            Spacer(modifier = Modifier.width(8.dp))
-            // Overwrite: save a shadow copy of the original, then write
-            // the edited bytes directly to the source file.
+            ) { Text("Discard", style = compactTextStyle) }
             DefaultButton(
+                modifier = Modifier.height(20.dp),
                 onClick = {
                     if (sourceFile != null) {
                         val editedBytes = doc.read(0L, doc.length.toInt())
-                        // Check whether the edited bytes can still be parsed
-                        // by the original provider's format. If not, warn the
-                        // user that overwriting will damage the file's format.
                         val canReparse = try {
                             val rebuilt = rebuildProviderFromBytes(binaryProvider, editedBytes)
                             when (rebuilt) {
@@ -450,30 +420,20 @@ private fun EditModeToolbar(
                             )
                             if (answer != Messages.OK) return@DefaultButton
                         }
-                        // Capture only the modified ranges' original bytes
-                        // BEFORE writing so we can restore them on "Undo
-                        // overwrite". This avoids copying the entire file.
                         val shadow = OverwriteShadowRanges.capture(
                             sourceFile.contentsToByteArray(),
                             doc.modifiedRanges(),
                         )
                         onOverwriteShadowRangesChanged(shadow)
                         overwriteSourceFile(sourceFile, editedBytes)
-                        // Keep the undo stack intact so "Undo overwrite"
-                        // can rewind it to restore the original bytes.
-                        // Only clear the on-disk sidecar — the journal
-                        // persister must not re-save stale entries.
                         doc.clearPersistedJournal()
                         onReparseAfterOverwrite()
                     }
                 },
                 enabled = canOverwrite,
-            ) { Text("Overwrite") }
-            Spacer(modifier = Modifier.width(8.dp))
-            // Save a copy: writes to <name>.edited.<ext> next to the original.
-            // The sidecar is intentionally kept — edits are still pending
-            // against the original file and should survive an IDE restart.
+            ) { Text("Overwrite", style = compactTextStyle) }
             OutlinedButton(
+                modifier = Modifier.height(20.dp),
                 onClick = {
                     if (sourceFile != null && finalizedName != null) {
                         val bytes = doc.read(0L, doc.length.toInt())
@@ -481,9 +441,8 @@ private fun EditModeToolbar(
                     }
                 },
                 enabled = canSaveCopy,
-            ) { Text(if (finalizedName != null) "Save a copy → $finalizedName" else "Save a copy") }
+            ) { Text(if (finalizedName != null) "Save a copy → $finalizedName" else "Save a copy", style = compactTextStyle) }
         }
-        Spacer(modifier = Modifier.weight(1f))
     }
 }
 

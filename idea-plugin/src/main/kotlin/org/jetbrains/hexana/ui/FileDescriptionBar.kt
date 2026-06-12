@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -61,8 +63,127 @@ internal fun FileDescriptionBar(
     onSizeClick: (() -> Unit)? = null,
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
+    editModeContent: (@Composable () -> Unit)? = null,
 ) {
     val size = binaryProvider.bytes.limit()
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .background(HexanaTheme.backgroundColor)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = fileName,
+            style = TextStyle(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = HexanaTheme.textColor,
+            ),
+        )
+
+        SizeLabel(size = size, binaryProvider = binaryProvider, onSizeClick = onSizeClick)
+
+        if (editModeContent != null) {
+            val editBg = if (JewelTheme.isDark) Color(0xFF3D3223) else Color(0xFFFFF3E0)
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .background(editBg, RoundedCornerShape(4.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    editModeContent()
+                }
+            }
+        } else {
+            NormalModeContent(
+                binaryProvider = binaryProvider,
+                state = state,
+                parentFileName = parentFileName,
+                onNavigateToParent = onNavigateToParent,
+            )
+        }
+    }
+
+    Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SizeLabel(
+    size: Int,
+    binaryProvider: BinaryProvider,
+    onSizeClick: (() -> Unit)?,
+) {
+    val sizeTooltip = remember(binaryProvider) {
+        try {
+            buildSizeTooltip(binaryProvider)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    val sizeText = formatSize(size)
+    val sizeModifier = if (onSizeClick != null) {
+        Modifier
+            .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+            .clickable { onSizeClick() }
+    } else {
+        Modifier
+    }
+    val sizeStyle = TextStyle(fontSize = 12.sp, color = HexanaTheme.hexTextColor)
+
+    if (sizeTooltip != null) {
+        Tooltip(tooltip = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "Click to see the full analysis in the \"Top\" tab below",
+                    style = TextStyle(fontSize = 12.sp),
+                    modifier = Modifier.padding(bottom = 2.dp),
+                )
+                Column(
+                    modifier = Modifier.padding(top = 4.dp).width(IntrinsicSize.Max),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                ) {
+                    sizeTooltip.forEach { (label, sz) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(text = label, style = TextStyle(fontSize = 12.sp))
+                            Text(
+                                text = sz,
+                                style = TextStyle(fontSize = 12.sp),
+                                modifier = Modifier.padding(start = 16.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }) {
+            Text(text = sizeText, modifier = sizeModifier, style = sizeStyle)
+        }
+    } else {
+        Text(text = sizeText, modifier = sizeModifier, style = sizeStyle)
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NormalModeContent(
+    binaryProvider: BinaryProvider,
+    state: HexViewStateHolder,
+    parentFileName: String?,
+    onNavigateToParent: (() -> Unit)?,
+) {
     val moduleType = when (binaryProvider) {
         is WasmBinaryProvider -> "Core Wasm"
         is WasmComponentBinaryProvider -> "Component Model"
@@ -70,12 +191,39 @@ internal fun FileDescriptionBar(
         is GenericBinaryProvider -> binaryProvider.nativeFormat?.displayName ?: "Binary"
     }
 
-    val sizeTooltip = remember(binaryProvider) {
-        try {
-            buildSizeTooltip(binaryProvider)
-        } catch (_: Exception) {
-            null
-        }
+    val badgeBackground = if (JewelTheme.isDark) Color(0xFF4D4D4D) else Color(0xFFE0E0E0)
+    val badgeForeground = if (JewelTheme.isDark) Color.White else Color.Black
+
+    Text(
+        text = moduleType,
+        modifier = Modifier
+            .background(badgeBackground, RoundedCornerShape(4.dp))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        style = TextStyle(fontSize = 11.sp, color = badgeForeground),
+    )
+
+    val nativeImage = remember(binaryProvider) {
+        (binaryProvider as? NativeBinaryProvider)?.nativeImageInfo
+    }
+    if (nativeImage != null) {
+        NativeImageBadges(
+            info = nativeImage,
+            onOpenSbom = {
+                state.requestSelectTabByDescription("SBOM")
+                if (state.topFraction > 0.9f) state.setTopFraction(0.5f)
+            },
+        )
+    }
+
+    if (parentFileName != null) {
+        val linkColor = if (JewelTheme.isDark) Color(0xFF589DF6) else Color(0xFF2470B3)
+        Text(
+            text = "Submodule of $parentFileName",
+            modifier = Modifier
+                .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                .clickable { onNavigateToParent?.invoke() },
+            style = TextStyle(fontSize = 11.sp, color = linkColor),
+        )
     }
 
     val isSubmodule = parentFileName != null
@@ -112,176 +260,44 @@ internal fun FileDescriptionBar(
         engines.any { it.supportsDebug }
     }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(HexanaTheme.backgroundColor)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = fileName,
-            style = TextStyle(
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = HexanaTheme.textColor,
-            ),
-        )
-
-        if (sizeTooltip != null) {
-            Tooltip(tooltip = {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "Click to see the full analysis in the \"Top\" tab below",
-                        style = TextStyle(fontSize = 12.sp),
-                        modifier = Modifier.padding(bottom = 2.dp),
-                    )
-                    Column(
-                        modifier = Modifier.padding(top = 4.dp).width(IntrinsicSize.Max),
-                        verticalArrangement = Arrangement.spacedBy(1.dp),
-                    ) {
-                        sizeTooltip.forEach { (label, size) ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Text(
-                                    text = label,
-                                    style = TextStyle(fontSize = 12.sp),
-                                )
-                                Text(
-                                    text = size,
-                                    style = TextStyle(fontSize = 12.sp),
-                                    modifier = Modifier.padding(start = 16.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-            }) {
-                Text(
-                    text = formatSize(size),
-                    modifier = if (onSizeClick != null) {
-                        Modifier
-                            .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
-                            .clickable { onSizeClick() }
-                    } else {
-                        Modifier
-                    },
-                    style = TextStyle(
-                        fontSize = 12.sp,
-                        color = HexanaTheme.hexTextColor,
-                    ),
-                )
-            }
-        } else {
-            Text(
-                text = formatSize(size),
-                modifier = if (onSizeClick != null) {
-                    Modifier
-                        .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
-                        .clickable { onSizeClick() }
-                } else {
-                    Modifier
-                },
-                style = TextStyle(
-                    fontSize = 12.sp,
-                    color = HexanaTheme.hexTextColor,
-                ),
+    if (isRunnable) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            ToolbarActionButton(
+                state = state,
+                binaryProvider = binaryProvider,
+                isComponentCliRun = isComponentCliRun,
+                popupMode = if (isDebuggable) PopupMode.RUN_ONLY else PopupMode.RUN_AND_DEBUG,
+                icon = AllIconsKeys.Actions.Execute,
+                label = "Run",
+                tooltip = "Run Wasm module",
+                buttonBackground = if (JewelTheme.isDark) Color(0xFF0E639C) else Color(0xFF007ACC),
             )
-        }
-
-        val badgeBackground = if (JewelTheme.isDark) {
-            Color(0xFF4D4D4D)
-        } else {
-            Color(0xFFE0E0E0)
-        }
-        val badgeForeground = if (JewelTheme.isDark) {
-            Color.White
-        } else {
-            Color.Black
-        }
-
-        Text(
-            text = moduleType,
-            modifier = Modifier
-                .background(badgeBackground, RoundedCornerShape(4.dp))
-                .padding(horizontal = 8.dp, vertical = 2.dp),
-            style = TextStyle(
-                fontSize = 11.sp,
-                color = badgeForeground,
-            ),
-        )
-
-        val nativeImage = remember(binaryProvider) {
-            (binaryProvider as? NativeBinaryProvider)?.nativeImageInfo
-        }
-        if (nativeImage != null) {
-            NativeImageBadges(
-                info = nativeImage,
-                onOpenSbom = {
-                    state.requestSelectTabByDescription("SBOM")
-                    if (state.topFraction > 0.9f) state.setTopFraction(0.5f)
-                },
-            )
-        }
-
-        if (parentFileName != null) {
-            val linkColor = if (JewelTheme.isDark) Color(0xFF589DF6) else Color(0xFF2470B3)
-            Text(
-                text = "Submodule of $parentFileName",
-                modifier = Modifier
-                    .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
-                    .clickable { onNavigateToParent?.invoke() },
-                style = TextStyle(
-                    fontSize = 11.sp,
-                    color = linkColor,
-                ),
-            )
-        }
-
-        if (isRunnable) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (isDebuggable) {
                 ToolbarActionButton(
                     state = state,
                     binaryProvider = binaryProvider,
                     isComponentCliRun = isComponentCliRun,
-                    popupMode = if (isDebuggable) PopupMode.RUN_ONLY else PopupMode.RUN_AND_DEBUG,
-                    icon = AllIconsKeys.Actions.Execute,
-                    label = "Run",
-                    tooltip = "Run Wasm module",
-                    buttonBackground = if (JewelTheme.isDark) Color(0xFF0E639C) else Color(0xFF007ACC),
+                    popupMode = PopupMode.DEBUG_ONLY,
+                    icon = AllIconsKeys.Actions.StartDebugger,
+                    label = "Debug",
+                    tooltip = "Debug Wasm module",
+                    buttonBackground = if (JewelTheme.isDark) Color(0xFF6C3B2A) else Color(0xFFCC6633),
                 )
-                if (isDebuggable) {
-                    ToolbarActionButton(
-                        state = state,
-                        binaryProvider = binaryProvider,
-                        isComponentCliRun = isComponentCliRun,
-                        popupMode = PopupMode.DEBUG_ONLY,
-                        icon = AllIconsKeys.Actions.StartDebugger,
-                        label = "Debug",
-                        tooltip = "Debug Wasm module",
-                        buttonBackground = if (JewelTheme.isDark) Color(0xFF6C3B2A) else Color(0xFFCC6633),
-                    )
-                }
             }
-        }
-
-        val proposals = remember(binaryProvider) {
-            try {
-                (binaryProvider as? WasmBinaryProvider)?.usedProposals?.sorted() ?: emptyList()
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
-
-        if (proposals.isNotEmpty()) {
-            ProposalBadges(proposals)
         }
     }
 
-    Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
+    val proposals = remember(binaryProvider) {
+        try {
+            (binaryProvider as? WasmBinaryProvider)?.usedProposals?.sorted() ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    if (proposals.isNotEmpty()) {
+        ProposalBadges(proposals)
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
