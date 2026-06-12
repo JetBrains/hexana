@@ -45,6 +45,7 @@ This module compiles sources from three locations:
 - `src/main/kotlin`
 - `src/main/java`
 - `src/main/gen`
+- `src/ui-tests-framework/kotlin` for packaged Driver `@Remote` probes that are not registered as product extensions
 
 ## Authoritative Registration Points
 

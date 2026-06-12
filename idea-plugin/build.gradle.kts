@@ -338,5 +338,9 @@ sourceSets {
             srcDir("src/main/java")
             srcDir("src/main/gen")
         }
+        kotlin {
+            // Packaged for Driver @Remote UI tests; intentionally not registered as a plugin extension.
+            srcDir("src/ui-tests-framework/kotlin")
+        }
     }
 }
