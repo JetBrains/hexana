@@ -5,12 +5,9 @@ import com.intellij.driver.sdk.ui.components.common.IdeaFrameUI
 import com.intellij.driver.sdk.ui.components.common.ideFrame
 import com.intellij.driver.sdk.ui.components.elements.JCheckBoxUi
 import com.intellij.driver.sdk.ui.components.elements.checkBox
-import com.intellij.driver.sdk.ui.components.elements.waitSelected
 import com.intellij.driver.sdk.ui.components.settings.SettingsDialogUiComponent
 import com.intellij.driver.sdk.ui.components.settings.settingsDialog
 import com.intellij.driver.sdk.ui.should
-import com.intellij.driver.sdk.waitFor
-import org.junit.jupiter.api.Assertions.assertEquals
 import kotlin.time.Duration.Companion.seconds
 
 private const val TOOLS_SETTINGS_GROUP = "Tools"
@@ -47,52 +44,9 @@ internal class HexanaSettingsDsl internal constructor(
         checkBox(SEND_ANALYTICS_CHECKBOX).waitFound(30.seconds)
     }
 
-    fun toggleShowOffsetsAndVerifyPersists() {
-        val original = showOffsetsSelected()
-        val changed = !original
-
-        setShowOffsets(changed)
-        apply()
-        reopen()
-        assertEquals(changed, showOffsetsSelected(), "Show offsets did not persist after applying Hexana settings")
-
-        setShowOffsets(original)
-        apply()
-        reopen()
-        assertEquals(original, showOffsetsSelected(), "Show offsets was not restored to its original state")
-    }
-
     internal fun close() {
         runCatching {
             dialog.closeDialog()
-        }
-    }
-
-    private fun reopen() {
-        dialog.closeDialog()
-        dialog = ideFrame.openHexanaSettingsDialog()
-    }
-
-    private fun showOffsetsSelected(): Boolean =
-        checkBox(SHOW_OFFSETS_CHECKBOX).isSelected()
-
-    private fun setShowOffsets(selected: Boolean) {
-        val checkbox = checkBox(SHOW_OFFSETS_CHECKBOX)
-        if (selected) {
-            checkbox.check()
-        } else {
-            checkbox.uncheck()
-        }
-        checkbox.waitSelected(selected)
-    }
-
-    private fun apply() {
-        waitFor("Hexana settings Apply button is enabled", timeout = 10.seconds) {
-            dialog.applyButton.isEnabled()
-        }
-        dialog.applyButton.click()
-        waitFor("Hexana settings Apply button is disabled", timeout = 10.seconds) {
-            !dialog.applyButton.isEnabled()
         }
     }
 
