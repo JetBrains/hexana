@@ -588,6 +588,7 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
         ToolInputPattern.WasmFrames -> {
             val frames = requireField("frames")
             requireDescribed(frames)
+            requireNullable(frames)
             val frameClass = requireListOfClass(frames)
             val funcidx = requireField("funcidx", owner = frameClass)
             requireType(funcidx, FieldType.Int32)
@@ -605,6 +606,10 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireType(label, FieldType.StringT)
             requireNullable(label)
             requireDescribed(label)
+            val crashReportPath = requireField("crashReportPath")
+            requireType(crashReportPath, FieldType.StringT)
+            requireNullable(crashReportPath)
+            requireDescribed(crashReportPath)
             val sourceMapPath = requireField("sourceMapPath")
             requireType(sourceMapPath, FieldType.StringT)
             requireNullable(sourceMapPath)

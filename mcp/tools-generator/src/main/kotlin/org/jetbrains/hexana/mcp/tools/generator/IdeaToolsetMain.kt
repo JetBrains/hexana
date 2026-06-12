@@ -91,6 +91,7 @@ private fun buildToolsetFile(tools: List<ToolSpec>): FileSpec {
         .addFunction(optionalStringListArgumentFunction())
         .addFunction(requireIntListArgumentFunction())
         .addFunction(requireWasmFrameListArgumentFunction())
+        .addFunction(optionalWasmFrameListArgumentFunction())
         .addFunction(requireSourceLocationListArgumentFunction())
         .addFunction(requireIntMapArgumentFunction())
         .addFunction(hexanaToolCategoryFunction())
@@ -177,7 +178,8 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             code.addStatement("val sourceMapPath = args.optionalStringArgument(%S)", "sourceMapPath")
         }
         ToolInputPattern.WasmFrames -> {
-            code.addStatement("val frames = args.requireWasmFrameListArgument(%S)", "frames")
+            code.addStatement("val frames = args.optionalWasmFrameListArgument(%S).orEmpty()", "frames")
+            code.addStatement("val crashReportPath = args.optionalStringArgument(%S)", "crashReportPath")
             code.addStatement("val sourceMapPath = args.optionalStringArgument(%S)", "sourceMapPath")
         }
         ToolInputPattern.SourceLocations -> {
@@ -247,6 +249,10 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
     }
     if (spec.inputPattern.usesOptionalSourceMap()) {
         code.addStatement("val sourceMapText = sourceMapPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
+    }
+    if (spec.inputPattern == ToolInputPattern.WasmFrames) {
+        code.addStatement("if (frames.isEmpty() && crashReportPath == null) %M(%S)", MCP_FAIL, "Either frames or crashReportPath must be provided")
+        code.addStatement("val crashReportText = crashReportPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
     }
 
     val handlerMember = spec.handlerMemberName()
@@ -340,7 +346,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             ToolInputPattern.ExportNameSearch -> "(query, limit)"
             ToolInputPattern.Indices -> "(indices)"
             ToolInputPattern.SourceMappedIndices -> "(indices, sourceMapText, sourceMapPath)"
-            ToolInputPattern.WasmFrames -> "(frames, sourceMapText, sourceMapPath)"
+            ToolInputPattern.WasmFrames -> "(frames, sourceMapText, sourceMapPath, crashReportText, crashReportPath)"
             ToolInputPattern.SourceLocations -> "(locations, sourceMapText, sourceMapPath)"
             is ToolInputPattern.ClosedRange -> "(range)"
             ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
@@ -417,6 +423,7 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
         )
         ToolInputPattern.WasmFrames -> listOf(
             inputField(spec.input, "frames"),
+            inputField(spec.input, "crashReportPath"),
             inputField(spec.input, "sourceMapPath"),
         )
         ToolInputPattern.SourceLocations -> listOf(
@@ -761,6 +768,32 @@ private fun requireWasmFrameListArgumentFunction(): FunSpec {
             }
             """.trimIndent(),
             MCP_FAIL,
+            WASM_FRAME_INPUT,
+            MCP_FAIL,
+        )
+        .build()
+}
+
+private fun optionalWasmFrameListArgumentFunction(): FunSpec {
+    return FunSpec.builder("optionalWasmFrameListArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .returns(LIST.parameterizedBy(WASM_FRAME_INPUT).copy(nullable = true))
+        .addCode(
+            """
+            val array = this[name]?.jsonArray ?: return null
+            return array.mapIndexed { index, element ->
+                val value = element.jsonObject
+                %T(
+                    funcidx = value["funcidx"]?.jsonPrimitive?.int
+                        ?: %M("Invalid `${'$'}name[${'$'}index].funcidx`: expected integer"),
+                    codeOffset = value["codeOffset"]?.jsonPrimitive?.longOrNull,
+                    module = value["module"]?.jsonPrimitive?.content,
+                    label = value["label"]?.jsonPrimitive?.content,
+                )
+            }
+            """.trimIndent(),
             WASM_FRAME_INPUT,
             MCP_FAIL,
         )

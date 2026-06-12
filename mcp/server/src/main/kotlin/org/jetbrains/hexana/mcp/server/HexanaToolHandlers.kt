@@ -219,8 +219,9 @@ class HexanaToolHandlers(
         return execute("resolve_wasm_frames") {
             analysisService.resolveWasmFrames(
                 input = wasmInput(arguments),
-                frames = arguments.requireFrameInputs("frames"),
-                sourceMapInput = arguments.optionalNonBlankString("sourceMapPath")?.let(TextInput::FilePath)
+                frames = arguments.optionalFrameInputs("frames"),
+                sourceMapInput = arguments.optionalNonBlankString("sourceMapPath")?.let(TextInput::FilePath),
+                crashReportInput = arguments.optionalNonBlankString("crashReportPath")?.let(TextInput::FilePath),
             )
         }
     }
@@ -609,8 +610,12 @@ class HexanaToolHandlers(
         }
     }
 
-    private fun JsonObject?.requireFrameInputs(name: String): List<WasmFrameInput> {
-        val array = requireObjectArray(name)
+    private fun JsonObject?.optionalFrameInputs(name: String): List<WasmFrameInput> {
+        val array = optionalObjectArray(name) ?: return emptyList()
+        return parseFrameInputs(name, array)
+    }
+
+    private fun parseFrameInputs(name: String, array: List<JsonObject>): List<WasmFrameInput> {
         return array.mapIndexed { index, value ->
             WasmFrameInput(
                 funcidx = value.requireInt("$name[$index]", "funcidx"),
@@ -633,6 +638,15 @@ class HexanaToolHandlers(
 
     private fun JsonObject?.requireObjectArray(name: String): List<JsonObject> {
         val element = this?.get(name) ?: throw ToolInputException("`$name` is required")
+        val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
+        return array.mapIndexed { index, value ->
+            value as? JsonObject ?: throw ToolInputException("`$name[$index]` must be an object")
+        }
+    }
+
+    private fun JsonObject?.optionalObjectArray(name: String): List<JsonObject>? {
+        val element = this?.get(name) ?: return null
+        if (element == JsonNull) return null
         val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
         return array.mapIndexed { index, value ->
             value as? JsonObject ?: throw ToolInputException("`$name[$index]` must be an object")

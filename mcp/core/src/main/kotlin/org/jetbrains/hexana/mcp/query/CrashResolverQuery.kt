@@ -1,13 +1,19 @@
 package org.jetbrains.hexana.mcp.query
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import org.jetbrains.hexana.mcp.GeneralFunctionEntry
 import org.jetbrains.hexana.mcp.Import
 import org.jetbrains.hexana.mcp.ParameterSignature
+import org.jetbrains.hexana.mcp.model.functions.CrashReportMetadataResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionCodeRangeResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionImportResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionSignatureResult
@@ -18,6 +24,7 @@ import org.jetbrains.hexana.mcp.model.functions.ResolveWasmFramesResult
 import org.jetbrains.hexana.mcp.model.functions.ResolvedFunctionSymbolResult
 import org.jetbrains.hexana.mcp.model.functions.ResolvedSourceLocationResult
 import org.jetbrains.hexana.mcp.model.functions.ResolvedWasmFrameResult
+import org.jetbrains.hexana.mcp.model.functions.SkippedWasmFrameResult
 import org.jetbrains.hexana.mcp.model.functions.SourceLocationInput
 import org.jetbrains.hexana.mcp.model.functions.WasmFrameInput
 import org.jetbrains.hexana.providers.HexanaSourceLocation
@@ -39,38 +46,48 @@ fun WasmBinaryProvider.resolveWasmFrames(
     frames: List<WasmFrameInput>,
     sourceMapText: String? = null,
     sourceMapPath: String? = null,
+    crashReportText: String? = null,
+    crashReportPath: String? = null,
 ): ResolveWasmFramesResult {
     val context = CrashResolverContext(this, sourceMapText, sourceMapPath)
-    return ResolveWasmFramesResult(
-        frames = frames.mapIndexed { index, frame ->
-            val symbol = context.resolveFunction(frame.funcidx)
-            val warnings = buildList {
-                addAll(symbol.warnings)
-                addAll(context.validateCodeOffset(frame.funcidx, frame.codeOffset))
-            }
-            val sourceLocation = context.resolveLocation(
-                funcidx = frame.funcidx,
-                codeOffset = frame.codeOffset,
-                warnings = warnings,
-                warnWhenMissing = false,
-            )
-            ResolvedWasmFrameResult(
-                frameIndex = index,
-                funcidx = frame.funcidx,
-                inputCodeOffset = frame.codeOffset,
-                module = frame.module,
-                rawLabel = frame.label,
-                origin = symbol.origin,
-                symbol = symbol.symbol,
-                symbolSource = symbol.symbolSource,
-                signature = symbol.signature,
-                importInfo = symbol.importInfo,
-                exportedAs = symbol.exportedAs,
-                codeRange = symbol.codeRange,
-                sourceLocation = sourceLocation?.location,
-                warnings = warnings + sourceLocation?.warnings.orEmpty(),
-            )
+    val crashReport = crashReportText?.let { parseCrashReport(it, crashReportPath) }
+    val allFrames = frames + crashReport?.frames.orEmpty()
+    val resolvedFrames = allFrames.mapIndexed { index, frame ->
+        val symbol = context.resolveFunction(frame.funcidx)
+        val warnings = buildList {
+            addAll(symbol.warnings)
+            addAll(context.validateCodeOffset(frame.funcidx, frame.codeOffset))
         }
+        val sourceLocation = context.resolveLocation(
+            funcidx = frame.funcidx,
+            codeOffset = frame.codeOffset,
+            warnings = warnings,
+            warnWhenMissing = false,
+        )
+        ResolvedWasmFrameResult(
+            frameIndex = index,
+            funcidx = frame.funcidx,
+            inputCodeOffset = frame.codeOffset,
+            module = frame.module,
+            rawLabel = frame.label,
+            origin = symbol.origin,
+            symbol = symbol.symbol,
+            symbolSource = symbol.symbolSource,
+            signature = symbol.signature,
+            importInfo = symbol.importInfo,
+            exportedAs = symbol.exportedAs,
+            codeRange = symbol.codeRange,
+            sourceLocation = sourceLocation?.location,
+            sourceFallbackReason = sourceFallbackReason(symbol, sourceLocation),
+            warnings = warnings + sourceLocation?.warnings.orEmpty(),
+        )
+    }
+    return ResolveWasmFramesResult(
+        frames = resolvedFrames,
+        crashReport = crashReport?.metadata,
+        sourceMapPath = sourceMapPath,
+        topApplicationFrame = resolvedFrames.firstOrNull { it.origin == "local" && it.sourceLocation != null },
+        skippedFrames = resolvedFrames.mapNotNull(::skippedFrame),
     )
 }
 
@@ -293,6 +310,95 @@ private data class ResolvedLocation(
     val source: String?,
     val warnings: List<String> = emptyList(),
 )
+
+private data class ParsedCrashReport(
+    val metadata: CrashReportMetadataResult,
+    val frames: List<WasmFrameInput>,
+)
+
+private fun parseCrashReport(text: String, path: String?): ParsedCrashReport {
+    val root = Json.parseToJsonElement(text).jsonObject
+    val rootModule = root.stringOrNull("module")
+    val frames = root["frames"]
+        ?.jsonArray
+        ?.mapNotNull { it as? JsonObject }
+        ?.sortedWith(compareBy(nullsLast()) { it.intOrNull("depth") })
+        ?.mapNotNull { frame ->
+            val funcidx = frame.intOrNull("funcidx")
+                ?: frame.intOrNull("functionIndex")
+                ?: frame.intOrNull("function_index")
+                ?: return@mapNotNull null
+            WasmFrameInput(
+                funcidx = funcidx,
+                codeOffset = frame.longOrNull("codeOffset")
+                    ?: frame.longOrNull("code_offset")
+                    ?: frame.longOrNull("offset")
+                    ?: frame.hexLongOrNull("instruction_offset"),
+                module = frame.stringOrNull("module") ?: rootModule,
+                label = frame.stringOrNull("rawLabel")
+                    ?: frame.stringOrNull("raw_label")
+                    ?: frame.stringOrNull("label"),
+            )
+        }
+        .orEmpty()
+    return ParsedCrashReport(
+        metadata = CrashReportMetadataResult(
+            path = path,
+            incidentId = root.stringOrNull("incidentId") ?: root.stringOrNull("incident_id"),
+            crashEventId = root.stringOrNull("crashEventId") ?: root.stringOrNull("crash_event_id"),
+            buildId = root.stringOrNull("buildId") ?: root.stringOrNull("build_id"),
+            module = rootModule,
+            frameCount = frames.size,
+        ),
+        frames = frames,
+    )
+}
+
+private fun sourceFallbackReason(symbol: ResolvedSymbol, location: ResolvedLocation?): String? {
+    if (location?.location != null) return null
+    return when {
+        symbol.origin == "import" -> "import_has_no_code_offset"
+        symbol.origin == "unknown" -> "invalid_funcidx"
+        location?.warnings?.isNotEmpty() == true -> location.warnings.first()
+        symbol.codeRange == null -> "code_offset_not_found"
+        else -> "source_location_not_found"
+    }
+}
+
+private fun skippedFrame(frame: ResolvedWasmFrameResult): SkippedWasmFrameResult? {
+    val reason = when (frame.origin) {
+        "import" -> "imported_frame"
+        "unknown" -> "unknown_funcidx"
+        else -> if (frame.sourceLocation == null) "missing_source_location" else null
+    } ?: return null
+    return SkippedWasmFrameResult(
+        frameIndex = frame.frameIndex,
+        funcidx = frame.funcidx,
+        origin = frame.origin,
+        reason = reason,
+    )
+}
+
+private fun JsonObject.stringOrNull(name: String): String? =
+    valueOrNull(name)?.jsonPrimitive?.contentOrNull
+
+private fun JsonObject.intOrNull(name: String): Int? =
+    valueOrNull(name)?.jsonPrimitive?.intOrNull
+
+private fun JsonObject.longOrNull(name: String): Long? =
+    valueOrNull(name)?.jsonPrimitive?.longOrNull
+
+private fun JsonObject.hexLongOrNull(name: String): Long? {
+    val value = stringOrNull(name) ?: return null
+    return if (value.startsWith("0x", ignoreCase = true)) {
+        value.drop(2).toLongOrNull(16)
+    } else {
+        value.toLongOrNull()
+    }
+}
+
+private fun JsonObject.valueOrNull(name: String): JsonElement? =
+    get(name)?.takeUnless { it is JsonNull }
 
 private fun ParameterSignature.toFunctionSignatureResult(): FunctionSignatureResult =
     FunctionSignatureResult(params = params, ret = ret)

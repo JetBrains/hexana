@@ -130,7 +130,8 @@ interface HexanaAnalysisService {
     fun resolveWasmFrames(
         input: WasmInput,
         frames: List<WasmFrameInput>,
-        sourceMapInput: TextInput?
+        sourceMapInput: TextInput?,
+        crashReportInput: TextInput?,
     ): ResolveWasmFramesResult {
         throw UnsupportedOperationException("resolveWasmFrames is not implemented")
     }
@@ -414,15 +415,25 @@ class DefaultHexanaAnalysisService(
     override fun resolveWasmFrames(
         input: WasmInput,
         frames: List<WasmFrameInput>,
-        sourceMapInput: TextInput?
+        sourceMapInput: TextInput?,
+        crashReportInput: TextInput?,
     ): ResolveWasmFramesResult {
+        if (frames.isEmpty() && crashReportInput == null) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INVALID_INPUT,
+                "Either frames or crashReportPath must be provided"
+            )
+        }
         requireFrameInputs(frames)
         val wasm = load(input)
-        val sourceMap = sourceMapInput?.let(::loadText)
+        val sourceMap = loadSourceMapText(input, sourceMapInput)
+        val crashReport = crashReportInput?.let(::loadText)
         return wasm.provider.resolveWasmFrames(
             frames = frames,
             sourceMapText = sourceMap?.text,
-            sourceMapPath = sourceMapInput?.artifactPathLabel(),
+            sourceMapPath = sourceMap?.path,
+            crashReportText = crashReport?.text,
+            crashReportPath = crashReportInput?.artifactPathLabel(),
         )
     }
 
@@ -624,11 +635,11 @@ class DefaultHexanaAnalysisService(
 
     private fun loadText(input: TextInput): LoadedText {
         return when (input) {
-            is TextInput.FilePath -> loadTextFromPath(input.path)
+            is TextInput.FilePath -> loadTextFromPath(input.path, input.path)
         }
     }
 
-    private fun loadTextFromPath(rawPath: String): LoadedText {
+    private fun loadTextFromPath(rawPath: String, pathLabel: String? = rawPath): LoadedText {
         if (rawPath.isBlank()) {
             throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Path must not be blank")
         }
@@ -660,7 +671,19 @@ class DefaultHexanaAnalysisService(
                 error
             )
         }
-        return LoadedText(text)
+        return LoadedText(text, pathLabel)
+    }
+
+    private fun loadSourceMapText(input: WasmInput, explicitInput: TextInput?): LoadedText? {
+        if (explicitInput != null) return loadText(explicitInput)
+        val wasmPath = (input as? WasmInput.FilePath)?.path ?: return null
+        val sourceMapPath = try {
+            Path.of("$wasmPath.map")
+        } catch (_: Exception) {
+            return null
+        }
+        if (!Files.isRegularFile(sourceMapPath)) return null
+        return loadTextFromPath(sourceMapPath.toString(), sourceMapPath.toString())
     }
 
     private fun loadFromPath(rawPath: String): LoadedWasm {
@@ -965,7 +988,7 @@ class DefaultHexanaAnalysisService(
 
     private data class LoadedWasm(val provider: WasmBinaryProvider)
     private data class LoadedComponentWasm(val provider: WasmComponentBinaryProvider)
-    private data class LoadedText(val text: String)
+    private data class LoadedText(val text: String, val path: String? = null)
 
     private fun CommonByteBuffer.loadCoreProviderOrThrow(): WasmBinaryProvider {
         if (WasmBinaryProviderSelector.select(this) !is BinaryProviderType.Wasm) {

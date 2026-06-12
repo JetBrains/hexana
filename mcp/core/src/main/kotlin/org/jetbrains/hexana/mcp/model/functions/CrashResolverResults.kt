@@ -20,6 +20,28 @@ data class SourceLocationInput(
 @Serializable
 data class ResolveWasmFramesResult(
     val frames: List<ResolvedWasmFrameResult>,
+    val crashReport: CrashReportMetadataResult? = null,
+    val sourceMapPath: String? = null,
+    val topApplicationFrame: ResolvedWasmFrameResult? = null,
+    val skippedFrames: List<SkippedWasmFrameResult> = emptyList(),
+)
+
+@Serializable
+data class CrashReportMetadataResult(
+    val path: String? = null,
+    val incidentId: String? = null,
+    val crashEventId: String? = null,
+    val buildId: String? = null,
+    val module: String? = null,
+    val frameCount: Int,
+)
+
+@Serializable
+data class SkippedWasmFrameResult(
+    val frameIndex: Int,
+    val funcidx: Int,
+    val origin: String,
+    val reason: String,
 )
 
 @Serializable
@@ -38,6 +60,7 @@ data class ResolvedWasmFrameResult(
     val exportedAs: List<String> = emptyList(),
     val codeRange: FunctionCodeRangeResult? = null,
     val sourceLocation: FunctionSourceLocationResult? = null,
+    val sourceFallbackReason: String? = null,
     val warnings: List<String> = emptyList(),
 )
 

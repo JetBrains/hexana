@@ -8,6 +8,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.nio.file.Files
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CrashResolverServiceTest {
@@ -135,6 +136,7 @@ class CrashResolverServiceTest {
                 WasmFrameInput(funcidx = 0, codeOffset = codeRange.offset + codeRange.size + 1),
             ),
             sourceMapInput = TextInput.FilePath(sourceMap.toString()),
+            crashReportInput = null,
         )
 
         val resolved = result.frames[0]
@@ -150,6 +152,94 @@ class CrashResolverServiceTest {
 
         val mismatched = result.frames[1]
         assertTrue("code_offset_outside_function_range" in mismatched.warnings)
+    }
+
+    @Test
+    fun resolveWasmFramesLoadsCrashReportFramesAndDiscoversAdjacentSourceMap() {
+        val wasm = createWasmFile(
+            "report-frames.wasm",
+            """
+            (module
+              (type ${'$'}log_type (func (param i32)))
+              (import "env" "host_log" (func ${'$'}host_log (type ${'$'}log_type)))
+              (func ${'$'}mapped_export (export "mapped_export") (result i32)
+                i32.const 42)
+              (func ${'$'}tail_frame (result i32)
+                i32.const 7))
+            """.trimIndent()
+        )
+        val mappedRange = service.listCodeSectionOffsets(WasmInput.FilePath(wasm.toString()))
+            .functions
+            .single { it.funcidx == 1 }
+        val sourceMap = createSourceMapFile(
+            "report-frames.wasm.map",
+            source = "src/report.rs",
+            offset = mappedRange.offset.toInt(),
+            line = 19,
+            column = 3,
+        )
+        val crashReport = temporaryFolder.newFile("crash_report.json").toPath().also {
+            Files.writeString(
+                it,
+                """
+                {
+                  "incident_id": "incident-1",
+                  "crash_event_id": "event-1",
+                  "build_id": "build-1",
+                  "module": "dist/runtime/report-frames.wasm",
+                  "frames": [
+                    {"depth": 0, "funcidx": 0, "raw_label": "imported function 0"},
+                    {"depth": 1, "funcidx": 1, "raw_label": "wasm-function[1]+0x04", "code_offset": ${mappedRange.offset}},
+                    {"depth": 2, "funcidx": 99, "raw_label": "wasm-function[99]"}
+                  ]
+                }
+                """.trimIndent(),
+            )
+        }
+
+        val result = service.resolveWasmFrames(
+            input = WasmInput.FilePath(wasm.toString()),
+            frames = emptyList(),
+            sourceMapInput = null,
+            crashReportInput = TextInput.FilePath(crashReport.toString()),
+        )
+
+        assertEquals(crashReport.toString(), result.crashReport?.path)
+        assertEquals("incident-1", result.crashReport?.incidentId)
+        assertEquals("event-1", result.crashReport?.crashEventId)
+        assertEquals("build-1", result.crashReport?.buildId)
+        assertEquals("dist/runtime/report-frames.wasm", result.crashReport?.module)
+        assertEquals(3, result.crashReport?.frameCount)
+        assertEquals(sourceMap.toString(), result.sourceMapPath)
+
+        val imported = result.frames[0]
+        assertEquals("import", imported.origin)
+        assertEquals("host_log", imported.symbol)
+        assertEquals("import", imported.symbolSource)
+        assertEquals("env", imported.importInfo?.module)
+        assertEquals("imported function 0", imported.rawLabel)
+        assertEquals("import_has_no_code_offset", imported.sourceFallbackReason)
+
+        val mapped = result.frames[1]
+        assertEquals("local", mapped.origin)
+        assertEquals("mapped_export", mapped.symbol)
+        assertEquals("name_section", mapped.symbolSource)
+        assertEquals(listOf("mapped_export"), mapped.exportedAs)
+        assertEquals(listOf(), mapped.signature?.params)
+        assertEquals(listOf("i32"), mapped.signature?.ret)
+        assertEquals(mappedRange.offset, mapped.codeRange?.offset)
+        assertEquals(sourceMap.resolveSibling("src/report.rs").toString(), mapped.sourceLocation?.file)
+        assertNull(mapped.sourceFallbackReason)
+
+        val invalid = result.frames[2]
+        assertEquals("unknown", invalid.origin)
+        assertEquals("func99", invalid.symbol)
+        assertEquals("funcidx_fallback", invalid.symbolSource)
+        assertTrue("invalid_funcidx" in invalid.warnings)
+
+        assertEquals(mapped, result.topApplicationFrame)
+        assertEquals(listOf(0, 2), result.skippedFrames.map { it.frameIndex })
+        assertEquals(listOf("imported_frame", "unknown_funcidx"), result.skippedFrames.map { it.reason })
     }
 
     @Test

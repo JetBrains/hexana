@@ -58,9 +58,12 @@ val WasmFrameInputClass = class_("WasmFrameInput", kotlinPackage = MODEL_PACKAGE
 }
 
 val ResolveWasmFramesInput = WasmInputClass.with("ResolveWasmFramesInput") {
-    list("frames", of = WasmFrameInputClass)
-        .describe("Crash frames to resolve. Each frame is keyed by `funcidx` and may include an absolute `codeOffset`.")
+    nullable("frames", of = list(of = WasmFrameInputClass))
+        .describe("Optional crash frames to resolve. Each frame is keyed by `funcidx` and may include an absolute `codeOffset`.")
         .maxItems(200)
+    nullable("crashReportPath", of = string())
+        .describe("Optional path to a crash report JSON file containing stack frames with `funcidx`, code offsets, and raw labels.")
+        .maxLength(1000)
     nullable("sourceMapPath", of = string())
         .describe("Optional path to a WebAssembly source map for source-location resolution.")
         .maxLength(1000)
@@ -312,12 +315,38 @@ val ResolvedWasmFrameResultClass = class_("ResolvedWasmFrameResult") {
     nullable("codeRange", of = FunctionCodeRangeResultClass).describe("Function body byte range for local functions.")
     nullable("sourceLocation", of = FunctionSourceLocationResultClass)
         .describe("Resolved source-map or DWARF source location when available.")
+    nullable("sourceFallbackReason", of = string())
+        .describe("Machine-readable reason when source location could not be resolved.")
     list("warnings", of = string()).describe("Non-fatal resolution warnings for this frame.")
+}
+
+val CrashReportMetadataResultClass = class_("CrashReportMetadataResult") {
+    nullable("path", of = string()).describe("Crash report path used as input.")
+    nullable("incidentId", of = string()).describe("Incident identifier from the crash report, when present.")
+    nullable("crashEventId", of = string()).describe("Crash event identifier from the crash report, when present.")
+    nullable("buildId", of = string()).describe("Build identifier from the crash report, when present.")
+    nullable("module", of = string()).describe("Module path or label from the crash report, when present.")
+    int("frameCount").describe("Number of frames read from the crash report.")
+}
+
+val SkippedWasmFrameResultClass = class_("SkippedWasmFrameResult") {
+    int("frameIndex").describe("Zero-based position in the resolved frame list.")
+    int("funcidx").describe("Unified function index for the skipped frame.")
+    string("origin").describe("Function origin: `import`, `local`, or `unknown`.")
+    string("reason").describe("Machine-readable reason this frame was skipped for top-application-frame selection.")
 }
 
 val ResolveWasmFramesResultClass = class_("ResolveWasmFramesResult", kotlinPackage = MODEL_PACKAGE) {
     list("frames", of = ResolvedWasmFrameResultClass)
         .describe("Resolved crash frame records.")
+    nullable("crashReport", of = CrashReportMetadataResultClass)
+        .describe("Crash report metadata when frames were loaded from `crashReportPath`.")
+    nullable("sourceMapPath", of = string())
+        .describe("Source map path used for source-location resolution, including auto-discovered adjacent maps.")
+    nullable("topApplicationFrame", of = ResolvedWasmFrameResultClass)
+        .describe("First local frame in stack order with a resolved source location.")
+    list("skippedFrames", of = SkippedWasmFrameResultClass)
+        .describe("Imported, unknown, or otherwise non-source-resolved frames skipped when choosing the top application frame.")
 }
 
 val ResolvedFunctionSymbolResultClass = class_("ResolvedFunctionSymbolResult") {

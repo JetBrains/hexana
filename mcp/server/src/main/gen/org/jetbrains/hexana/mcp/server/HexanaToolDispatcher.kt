@@ -5649,7 +5649,10 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("frames", buildJsonObject {
-        put("type", JsonPrimitive("array"))
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
           put("properties", buildJsonObject {
@@ -5686,8 +5689,16 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
             add(JsonPrimitive("funcidx"))
           })
         })
-        put("description", JsonPrimitive("Crash frames to resolve. Each frame is keyed by `funcidx` and may include an absolute `codeOffset`."))
+        put("description", JsonPrimitive("Optional crash frames to resolve. Each frame is keyed by `funcidx` and may include an absolute `codeOffset`."))
         put("maxItems", JsonPrimitive(200))
+      })
+      put("crashReportPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional path to a crash report JSON file containing stack frames with `funcidx`, code offsets, and raw labels."))
+        put("maxLength", JsonPrimitive(1_000))
       })
       put("sourceMapPath", buildJsonObject {
         put("type", buildJsonArray {
@@ -5698,7 +5709,7 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
         put("maxLength", JsonPrimitive(1_000))
       })
     },
-    required = listOf("frames")
+    required = listOf()
   ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -5850,6 +5861,13 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
               })
               put("description", JsonPrimitive("Resolved source-map or DWARF source location when available."))
             })
+            put("sourceFallbackReason", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Machine-readable reason when source location could not be resolved."))
+            })
             put("warnings", buildJsonObject {
               put("type", JsonPrimitive("array"))
               put("items", buildJsonObject {
@@ -5870,8 +5888,272 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
         })
         put("description", JsonPrimitive("Resolved crash frame records."))
       })
+      put("crashReport", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
+        })
+        put("properties", buildJsonObject {
+          put("path", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Crash report path used as input."))
+          })
+          put("incidentId", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Incident identifier from the crash report, when present."))
+          })
+          put("crashEventId", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Crash event identifier from the crash report, when present."))
+          })
+          put("buildId", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Build identifier from the crash report, when present."))
+          })
+          put("module", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Module path or label from the crash report, when present."))
+          })
+          put("frameCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of frames read from the crash report."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("frameCount"))
+        })
+        put("description", JsonPrimitive("Crash report metadata when frames were loaded from `crashReportPath`."))
+      })
+      put("sourceMapPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Source map path used for source-location resolution, including auto-discovered adjacent maps."))
+      })
+      put("topApplicationFrame", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
+        })
+        put("properties", buildJsonObject {
+          put("frameIndex", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Zero-based position of the input frame in the request."))
+          })
+          put("funcidx", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Unified function index from the input frame."))
+          })
+          put("inputCodeOffset", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("integer"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Absolute code offset supplied for the input frame."))
+          })
+          put("module", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Original frame module path or runtime module label, when supplied."))
+          })
+          put("rawLabel", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Original raw frame label, when supplied."))
+          })
+          put("origin", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Function origin: `import`, `local`, or `unknown`."))
+          })
+          put("symbol", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Best resolved symbol name or the `funcidx` fallback."))
+          })
+          put("symbolSource", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Symbol source: `import`, `name_section`, `dwarf_name`, `dwarf_linkage_name`, `export`, or `funcidx_fallback`."))
+          })
+          put("signature", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("object"))
+              add(JsonPrimitive("null"))
+            })
+            put("properties", buildJsonObject {
+              put("params", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Parameter types, in declaration order."))
+              })
+              put("return", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Return types, in declaration order."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("params"))
+              add(JsonPrimitive("return"))
+            })
+            put("description", JsonPrimitive("Parsed function signature when available."))
+          })
+          put("import", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("object"))
+              add(JsonPrimitive("null"))
+            })
+            put("properties", buildJsonObject {
+              put("module", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Import module name."))
+              })
+              put("name", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Import field name."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("module"))
+              add(JsonPrimitive("name"))
+            })
+            put("description", JsonPrimitive("Import descriptor when the function is imported."))
+          })
+          put("exportedAs", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+            })
+            put("description", JsonPrimitive("Export names pointing at this function."))
+          })
+          put("codeRange", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("object"))
+              add(JsonPrimitive("null"))
+            })
+            put("properties", buildJsonObject {
+              put("offset", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Absolute byte offset of the function body in the module."))
+              })
+              put("size", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Size of the function body in bytes."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("offset"))
+              add(JsonPrimitive("size"))
+            })
+            put("description", JsonPrimitive("Function body byte range for local functions."))
+          })
+          put("sourceLocation", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("object"))
+              add(JsonPrimitive("null"))
+            })
+            put("properties", buildJsonObject {
+              put("file", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Resolved source file path."))
+              })
+              put("line", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Resolved source line."))
+              })
+              put("column", buildJsonObject {
+                put("type", JsonPrimitive("integer"))
+                put("description", JsonPrimitive("Resolved source column."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("file"))
+              add(JsonPrimitive("line"))
+              add(JsonPrimitive("column"))
+            })
+            put("description", JsonPrimitive("Resolved source-map or DWARF source location when available."))
+          })
+          put("sourceFallbackReason", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Machine-readable reason when source location could not be resolved."))
+          })
+          put("warnings", buildJsonObject {
+            put("type", JsonPrimitive("array"))
+            put("items", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+            })
+            put("description", JsonPrimitive("Non-fatal resolution warnings for this frame."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("frameIndex"))
+          add(JsonPrimitive("funcidx"))
+          add(JsonPrimitive("origin"))
+          add(JsonPrimitive("symbol"))
+          add(JsonPrimitive("symbolSource"))
+          add(JsonPrimitive("exportedAs"))
+          add(JsonPrimitive("warnings"))
+        })
+        put("description", JsonPrimitive("First local frame in stack order with a resolved source location."))
+      })
+      put("skippedFrames", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("frameIndex", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Zero-based position in the resolved frame list."))
+            })
+            put("funcidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Unified function index for the skipped frame."))
+            })
+            put("origin", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Function origin: `import`, `local`, or `unknown`."))
+            })
+            put("reason", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Machine-readable reason this frame was skipped for top-application-frame selection."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("frameIndex"))
+            add(JsonPrimitive("funcidx"))
+            add(JsonPrimitive("origin"))
+            add(JsonPrimitive("reason"))
+          })
+        })
+        put("description", JsonPrimitive("Imported, unknown, or otherwise non-source-resolved frames skipped when choosing the top application frame."))
+      })
     },
-    required = listOf("frames")
+    required = listOf("frames", "skippedFrames")
   ),
     annotations = ToolAnnotations(
       readOnlyHint = true,
