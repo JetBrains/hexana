@@ -9,31 +9,15 @@ import com.intellij.ide.starter.models.IdeInfo
 import com.intellij.ide.starter.project.LocalProjectInfo
 import com.intellij.ide.starter.runner.Starter
 import com.intellij.tools.ide.util.common.logOutput
-import io.ktor.client.*
-import io.ktor.client.engine.cio.*
-import io.ktor.client.plugins.sse.*
-import io.ktor.client.request.*
-import io.modelcontextprotocol.kotlin.sdk.client.Client
-import io.modelcontextprotocol.kotlin.sdk.client.SseClientTransport
-import io.modelcontextprotocol.kotlin.sdk.client.StreamableHttpClientTransport
-import io.modelcontextprotocol.kotlin.sdk.shared.Transport
-import io.modelcontextprotocol.kotlin.sdk.types.Implementation
-import io.modelcontextprotocol.kotlin.sdk.types.ListToolsRequest
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.writeText
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeSource
 
 internal object HexanaUiDriverTestSupport {
     const val projectName = "hexana_wasm_project"
     const val wasmFileName = "hello.wasm"
     const val defaultMcpPort = 64342
-    private const val projectPathHeader = "IJ_MCP_SERVER_PROJECT_PATH"
 
     private const val localPluginZipEnv = "HEXANA_LOCAL_PLUGIN_ZIP"
     private const val useLocalPluginEnv = "HEXANA_USE_LOCAL_PLUGIN"
@@ -93,45 +77,6 @@ internal object HexanaUiDriverTestSupport {
       """.trimIndent()
         )
         return context
-    }
-
-    fun <T> withGlobalMcpClient(projectDir: Path, serverUrl: String, action: suspend (Client) -> T): T =
-        runBlocking {
-            val deadline = TimeSource.Monotonic.markNow() + 2.minutes
-            var lastFailure: Throwable? = null
-
-            while (deadline.hasNotPassedNow()) {
-                val httpClient = HttpClient(CIO) {
-                    install(SSE)
-                }
-                val transport = createTransport(httpClient, serverUrl, projectDir)
-                val client = Client(Implementation(name = "hexana-ui-driver-mcp-client", version = "1.0"))
-
-                try {
-                    client.connect(transport)
-                    client.listTools(ListToolsRequest())
-                    return@runBlocking action(client)
-                } catch (t: Throwable) {
-                    lastFailure = t
-                    delay(1.seconds)
-                } finally {
-                    transport.close()
-                    httpClient.close()
-                }
-            }
-
-            error("Failed to connect to IDE MCP server at $serverUrl for project $projectDir: ${lastFailure?.message}")
-        }
-
-    private fun createTransport(httpClient: HttpClient, serverUrl: String, projectDir: Path): Transport {
-        val requestBuilder: HttpRequestBuilder.() -> Unit = {
-            header(projectPathHeader, projectDir.toString())
-        }
-        return if (serverUrl.substringBefore('?').endsWith("/sse")) {
-            SseClientTransport(httpClient, serverUrl, requestBuilder = requestBuilder)
-        } else {
-            StreamableHttpClientTransport(httpClient, serverUrl, requestBuilder = requestBuilder)
-        }
     }
 
     private fun resolveProjectDir(): Path =

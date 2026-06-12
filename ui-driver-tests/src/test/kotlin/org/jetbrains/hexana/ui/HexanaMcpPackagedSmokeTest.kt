@@ -1,14 +1,8 @@
 package org.jetbrains.hexana.ui
 
-import com.intellij.driver.client.Remote
-import com.intellij.driver.client.impl.DriverCallException
-import com.intellij.driver.sdk.waitForIndicators
-import com.intellij.ide.starter.driver.engine.runIdeWithDriver
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequestParams
-import io.modelcontextprotocol.kotlin.sdk.types.ListToolsRequest
-import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.serialization.json.*
+import org.jetbrains.hexana.ui.framework.hexanaIde
+import org.jetbrains.hexana.ui.framework.withGlobalMcpClient
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -16,90 +10,59 @@ import kotlin.time.Duration.Companion.minutes
 
 @Tag("hexana")
 class HexanaMcpPackagedSmokeTest {
-    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-
     @Test
     fun packagedPluginExposesHexanaToolsOverGlobalMcp() {
-        val context = HexanaUiDriverTestSupport
-            .newContext(testName = "hexana-packaged-mcp-smoke")
-            .let { HexanaUiDriverTestSupport.enableGlobalMcpServer(it) }
+        hexanaIde(
+            testName = "hexana-packaged-mcp-smoke",
+            configure = {
+                runTimeout(20.minutes)
+                enableGlobalMcp()
+            },
+        ) {
+            withGlobalMcpClient { mcp ->
+                val toolNames = mcp.toolNames()
+                assertTrue(
+                    toolNames.containsAll(EXPECTED_TOOL_NAMES),
+                    "Missing expected packaged MCP tools ${EXPECTED_TOOL_NAMES - toolNames}; got $toolNames"
+                )
 
-        context.runIdeWithDriver(runTimeout = 20.minutes) { withScreenRecording() }
-            .useDriverAndCloseIde {
-                waitForIndicators(5.minutes)
-                val serverUrl = service(McpServerServiceRef::class).resolveServerUrl()
+                val artifactOverview = mcp.callStructuredTool(
+                    name = "query_artifacts",
+                    arguments = wasmPath(HexanaUiDriverTestSupport.wasmFileName) {
+                        put("operation", JsonPrimitive("overview"))
+                    },
+                )
+                val module = artifactOverview.array("modules").single().jsonObject
+                assertTrue(
+                    module.fieldAsInt("moduleSize") > 0,
+                    "Expected query_artifacts moduleSize > 0, got $artifactOverview"
+                )
+                assertTrue(
+                    module.fieldAsInt("functions") > 0,
+                    "Expected query_artifacts functions > 0, got $artifactOverview"
+                )
 
-                HexanaUiDriverTestSupport.withGlobalMcpClient(context.resolvedProjectHome, serverUrl) { client ->
-                    val toolNames = client.listTools(ListToolsRequest()).tools.map { it.name }.toSet()
-                    assertTrue(
-                        toolNames.contains("query_artifacts"),
-                        "Expected query_artifacts in packaged MCP tools, got $toolNames"
-                    )
-
-                    val result = client.callTool(
-                        CallToolRequest(
-                            CallToolRequestParams(
-                                name = "query_artifacts",
-                                arguments = buildJsonObject {
-                                    put("path", JsonPrimitive(HexanaUiDriverTestSupport.wasmFileName))
-                                    put("operation", JsonPrimitive("overview"))
-                                }
-                            )
-                        )
-                    )
-
-                    assertFalse(
-                        result.isError == true,
-                        "query_artifacts returned MCP error in packaged smoke: $result"
-                    )
-                    val textJson = json.parseToJsonElement(result.requireSingleText()).jsonObject
-                    val structuredContent = result.structuredContent
-                        ?: error("Expected structuredContent in packaged smoke result: $result")
-                    val module = structuredContent
-                        .getValue("modules")
-                        .jsonArray
-                        .single()
-                        .jsonObject
-
-                    assertEquals(textJson, structuredContent)
-                    assertTrue(
-                        module.fieldAsInt("moduleSize") > 0,
-                        "Expected moduleSize > 0, got $structuredContent"
-                    )
-                    assertTrue(
-                        module.fieldAsInt("functions") > 0,
-                        "Expected functions > 0, got $structuredContent"
-                    )
-                }
             }
+        }
     }
 
-    private fun io.modelcontextprotocol.kotlin.sdk.types.CallToolResult.requireSingleText(): String {
-        val textContent = content.singleOrNull() as? TextContent
-            ?: error("Expected a single text payload but got $content")
-        return textContent.text
+    private fun wasmPath(path: String, configure: JsonObjectBuilder.() -> Unit = {}): JsonObject =
+        buildJsonObject {
+            put("path", JsonPrimitive(path))
+            configure()
+        }
+
+    private fun JsonObject.array(name: String): JsonArray {
+        return getValue(name).jsonArray
     }
 
     private fun JsonObject.fieldAsInt(name: String): Int {
         return getValue(name).jsonPrimitive.int
     }
 
-    private fun McpServerServiceRef.resolveServerUrl(): String {
-        return try {
-            serverStreamUrl
-        } catch (streamFailure: DriverCallException) {
-            try {
-                serverSseUrl
-            } catch (sseFailure: DriverCallException) {
-                streamFailure.addSuppressed(sseFailure)
-                throw streamFailure
-            }
-        }
-    }
-
-    @Remote("com.intellij.mcpserver.impl.McpServerService", plugin = "com.intellij.mcpServer")
-    interface McpServerServiceRef {
-        val serverStreamUrl: String
-        val serverSseUrl: String
+    private companion object {
+        val EXPECTED_TOOL_NAMES = setOf(
+            "query_artifacts",
+        )
     }
 }

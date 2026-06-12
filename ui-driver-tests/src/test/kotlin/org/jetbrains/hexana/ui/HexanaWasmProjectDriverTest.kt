@@ -1,33 +1,27 @@
 package org.jetbrains.hexana.ui
 
-import com.intellij.driver.sdk.openFile
-import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
-import com.intellij.driver.sdk.ui.components.common.editorTabs
-import com.intellij.driver.sdk.ui.components.common.ideFrame
-import com.intellij.driver.sdk.waitForIndicators
-import com.intellij.ide.starter.driver.engine.runIdeWithDriver
-import com.intellij.ide.starter.ide.IDETestContext
+import org.jetbrains.hexana.ui.framework.hexanaIde
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import java.time.Duration
-import kotlin.time.Duration.Companion.minutes
 
 @Tag("hexana")
 class HexanaWasmProjectDriverTest {
   @Test
   fun openWasmProject() {
-    val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-open-wasm-project")
-    context.openWasmProjectAndWaitForEditor()
+    hexanaIde(testName = "hexana-open-wasm-project") {
+      hexanaEditor(HexanaUiDriverTestSupport.wasmFileName)
+    }
   }
 
   @Test
   fun openWasmProjectSendsAnalyticsWhenEnabled() {
     FakePostHogServer.start().use { server ->
-      val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-open-wasm-project-analytics-enabled")
-        .let { HexanaUiDriverTestSupport.configurePostHog(it, server) }
-        .let { HexanaUiDriverTestSupport.configureSendAnalytics(it, enabled = true) }
-
-      context.openWasmProjectAndWaitForEditor {
+      hexanaIde(
+        testName = "hexana-open-wasm-project-analytics-enabled",
+        configure = { analytics(server, enabled = true) },
+      ) {
+        hexanaEditor(HexanaUiDriverTestSupport.wasmFileName)
         server.awaitEvent("binary_opened")
           .requireDistinctId()
           .assertProperty("format", "wasm")
@@ -40,29 +34,13 @@ class HexanaWasmProjectDriverTest {
   @Test
   fun openWasmProjectDoesNotSendAnalyticsWhenDisabled() {
     FakePostHogServer.start().use { server ->
-      val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-open-wasm-project-analytics-disabled")
-        .let { HexanaUiDriverTestSupport.configurePostHog(it, server) }
-        .let { HexanaUiDriverTestSupport.configureSendAnalytics(it, enabled = false) }
-
-      context.openWasmProjectAndWaitForEditor {
+      hexanaIde(
+        testName = "hexana-open-wasm-project-analytics-disabled",
+        configure = { analytics(server, enabled = false) },
+      ) {
+        hexanaEditor(HexanaUiDriverTestSupport.wasmFileName)
         server.assertNoEvents(Duration.ofSeconds(3))
       }
     }
-  }
-
-  private fun IDETestContext.openWasmProjectAndWaitForEditor(afterOpen: () -> Unit = {}) {
-    runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
-      .useDriverAndCloseIde {
-        waitForIndicators(5.minutes)
-        openFile(HexanaUiDriverTestSupport.wasmFileName, waitForCodeAnalysis = false, isTextEditor = false)
-
-        ideFrame {
-          editorTabs {
-            tab(HexanaUiDriverTestSupport.wasmFileName, fullMatch = false).waitFound()
-          }
-        }
-
-        afterOpen()
-      }
   }
 }
