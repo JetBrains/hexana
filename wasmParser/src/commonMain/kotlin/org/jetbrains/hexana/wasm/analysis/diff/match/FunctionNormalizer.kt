@@ -42,7 +42,11 @@ public data class NormalizedFunction(val hash: Long, val fingerprint: FunctionFi
  * functions, globals, types) and by local-slot reordering hash equal; functions
  * that differ in opcodes, constants, control structure, or call targets do not.
  *
- * Hold one instance per matching run (it memoizes per-opcode-class tags).
+ * Hold one instance per matching run (it memoizes per-opcode-class tags). Hashes
+ * are only comparable when produced by the same instance: opcode-class tags are
+ * assigned in first-encounter order, so two separate instances may number the same
+ * classes differently. Both sides of a diff must be normalized by one instance
+ * (see `WasmFunctionMatchProvider`).
  */
 public class FunctionNormalizer {
 
@@ -123,10 +127,21 @@ public class FunctionNormalizer {
         }
     }
 
-    private fun classTag(op: OpCode): Long {
-        val k = op::class
-        return tagMemo.getOrPut(k) { FnvHash().update(k.qualifiedName ?: k.simpleName ?: "?").value() }
-    }
+    /**
+     * Stable per-opcode-class tag, keyed on the opcode's [KClass] identity.
+     *
+     * We deliberately do NOT derive the tag from the class name: `qualifiedName`
+     * is unsupported on Kotlin/JS and Kotlin/Wasm, and `simpleName` is not unique
+     * for nested opcodes (`I32.Add`, `I64.Add`, `F32.Add`, vector `Add`, … all
+     * share the simple name `"Add"` and most carry no value to disambiguate them,
+     * so a name-based tag would alias distinct instructions). [KClass] equality is
+     * the only per-class discriminator available on every target, so tags are
+     * assigned in first-encounter order and memoized. They are therefore stable
+     * and unique only within a single [FunctionNormalizer] instance — which is the
+     * documented contract (one instance per matching run, used for both sides).
+     */
+    private fun classTag(op: OpCode): Long =
+        tagMemo.getOrPut(op::class) { FnvHash().update(tagMemo.size.toLong()).value() }
 
     /** Params keep their indices; declared locals are renumbered in first-use order. */
     private class LocalRenumber(private val paramCount: Int) {

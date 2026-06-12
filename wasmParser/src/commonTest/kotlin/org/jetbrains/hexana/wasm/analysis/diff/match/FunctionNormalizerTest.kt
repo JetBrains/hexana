@@ -9,13 +9,18 @@ import kotlin.test.assertNotEquals
 
 class FunctionNormalizerTest {
 
+    // One instance per test method: opcode-class tags are assigned in first-encounter
+    // order and are only comparable within a single normalizer (see FunctionNormalizer
+    // KDoc), so every hash() call in a given test must share the same instance.
+    private val normalizer = FunctionNormalizer()
+
     private fun hash(
         ops: List<OpCode>,
         params: Int = 0,
         results: Int = 0,
         seed: Long = 0L,
         ctx: NormalizerContext = NormalizerContext.EMPTY,
-    ): Long = FunctionNormalizer().normalize(ops, params, results, seed, ctx).hash
+    ): Long = normalizer.normalize(ops, params, results, seed, ctx).hash
 
     private fun localGet(i: Int) = OpCodes.Local.Get(i.toUInt())
     private fun localSet(i: Int) = OpCodes.Local.Set(i.toUInt())
