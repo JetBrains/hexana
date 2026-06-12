@@ -43,6 +43,55 @@ val SearchFunctionsByNameInput = WasmInputClass.with("SearchFunctionsByNameInput
         .maximum(200)
 }
 
+val WasmFrameInputClass = class_("WasmFrameInput", kotlinPackage = MODEL_PACKAGE) {
+    int("funcidx")
+        .describe("Unified function index from a stack frame or crash report.")
+        .minimum(0)
+    nullable("codeOffset", of = long())
+        .describe("Optional absolute byte offset inside the `.wasm` file for this frame instruction.")
+    nullable("module", of = string())
+        .describe("Optional module path or runtime module label from the original frame.")
+        .maxLength(500)
+    nullable("label", of = string())
+        .describe("Optional raw frame label preserved from the original crash report.")
+        .maxLength(500)
+}
+
+val ResolveWasmFramesInput = WasmInputClass.with("ResolveWasmFramesInput") {
+    list("frames", of = WasmFrameInputClass)
+        .describe("Crash frames to resolve. Each frame is keyed by `funcidx` and may include an absolute `codeOffset`.")
+        .maxItems(200)
+    nullable("sourceMapPath", of = string())
+        .describe("Optional path to a WebAssembly source map for source-location resolution.")
+        .maxLength(1000)
+}
+
+val ResolveFunctionSymbolsInput = indicesInput(
+    "ResolveFunctionSymbolsInput",
+    "List of unified function indices (`funcidx`) to resolve to compact symbols and metadata.",
+).with("ResolveFunctionSymbolsInput") {
+    nullable("sourceMapPath", of = string())
+        .describe("Optional path to a WebAssembly source map for source-location resolution.")
+        .maxLength(1000)
+}
+
+val SourceLocationInputClass = class_("SourceLocationInput", kotlinPackage = MODEL_PACKAGE) {
+    nullable("funcidx", of = int())
+        .describe("Optional unified function index used to choose the function body start offset.")
+        .minimum(0)
+    nullable("codeOffset", of = long())
+        .describe("Optional absolute byte offset inside the `.wasm` file.")
+}
+
+val ResolveSourceLocationsInput = WasmInputClass.with("ResolveSourceLocationsInput") {
+    list("locations", of = SourceLocationInputClass)
+        .describe("Source-location queries keyed by `funcidx`, absolute `codeOffset`, or both.")
+        .maxItems(200)
+    nullable("sourceMapPath", of = string())
+        .describe("Optional path to a WebAssembly source map. DWARF locations are used when no source-map hit exists.")
+        .maxLength(1000)
+}
+
 val GetLocalsForFunctionsInput = indicesInput(
     "GetLocalsForFunctionsInput",
     "List of unified function indices (`funcidx`) whose locals should be returned.",
@@ -235,6 +284,80 @@ val SearchFunctionsByNameResultClass = class_("SearchFunctionsByNameResult", kot
         .describe("Matching function name entries.")
 }
 
+val FunctionCodeRangeResultClass = class_("FunctionCodeRangeResult") {
+    long("offset").describe("Absolute byte offset of the function body in the module.")
+    long("size").describe("Size of the function body in bytes.")
+}
+
+val FunctionSourceLocationResultClass = class_("FunctionSourceLocationResult") {
+    string("file").describe("Resolved source file path.")
+    int("line").describe("Resolved source line.")
+    int("column").describe("Resolved source column.")
+}
+
+val ResolvedWasmFrameResultClass = class_("ResolvedWasmFrameResult") {
+    int("frameIndex").describe("Zero-based position of the input frame in the request.")
+    int("funcidx").describe("Unified function index from the input frame.")
+    nullable("inputCodeOffset", of = long()).describe("Absolute code offset supplied for the input frame.")
+    nullable("module", of = string()).describe("Original frame module path or runtime module label, when supplied.")
+    nullable("rawLabel", of = string()).describe("Original raw frame label, when supplied.")
+    string("origin").describe("Function origin: `import`, `local`, or `unknown`.")
+    string("symbol").describe("Best resolved symbol name or the `funcidx` fallback.")
+    string("symbolSource")
+        .describe("Symbol source: `import`, `name_section`, `dwarf_name`, `dwarf_linkage_name`, `export`, or `funcidx_fallback`.")
+    nullable("signature", of = FunctionSignatureResultClass).describe("Parsed function signature when available.")
+    nullable("importInfo", of = FunctionImportResultClass).serialName("import")
+        .describe("Import descriptor when the function is imported.")
+    list("exportedAs", of = string()).describe("Export names pointing at this function.")
+    nullable("codeRange", of = FunctionCodeRangeResultClass).describe("Function body byte range for local functions.")
+    nullable("sourceLocation", of = FunctionSourceLocationResultClass)
+        .describe("Resolved source-map or DWARF source location when available.")
+    list("warnings", of = string()).describe("Non-fatal resolution warnings for this frame.")
+}
+
+val ResolveWasmFramesResultClass = class_("ResolveWasmFramesResult", kotlinPackage = MODEL_PACKAGE) {
+    list("frames", of = ResolvedWasmFrameResultClass)
+        .describe("Resolved crash frame records.")
+}
+
+val ResolvedFunctionSymbolResultClass = class_("ResolvedFunctionSymbolResult") {
+    int("funcidx").describe("Unified function index from the input request.")
+    string("origin").describe("Function origin: `import`, `local`, or `unknown`.")
+    string("symbol").describe("Best resolved symbol name or the `funcidx` fallback.")
+    string("symbolSource")
+        .describe("Symbol source: `import`, `name_section`, `dwarf_name`, `dwarf_linkage_name`, `export`, or `funcidx_fallback`.")
+    nullable("typeidx", of = int()).describe("Function type index, when resolved.")
+    nullable("signature", of = FunctionSignatureResultClass).describe("Parsed function signature when available.")
+    nullable("importInfo", of = FunctionImportResultClass).serialName("import")
+        .describe("Import descriptor when the function is imported.")
+    list("exportedAs", of = string()).describe("Export names pointing at this function.")
+    nullable("codeRange", of = FunctionCodeRangeResultClass).describe("Function body byte range for local functions.")
+    nullable("sourceLocation", of = FunctionSourceLocationResultClass)
+        .describe("Resolved source-map or DWARF source location when available.")
+    list("warnings", of = string()).describe("Non-fatal resolution warnings for this function.")
+}
+
+val ResolveFunctionSymbolsResultClass = class_("ResolveFunctionSymbolsResult", kotlinPackage = MODEL_PACKAGE) {
+    list("symbols", of = ResolvedFunctionSymbolResultClass)
+        .describe("Resolved function symbol records.")
+}
+
+val ResolvedSourceLocationResultClass = class_("ResolvedSourceLocationResult") {
+    int("queryIndex").describe("Zero-based position of the input location query.")
+    nullable("funcidx", of = int()).describe("Resolved or supplied unified function index.")
+    nullable("codeOffset", of = long()).describe("Resolved or supplied absolute code offset.")
+    nullable("codeRange", of = FunctionCodeRangeResultClass).describe("Function body byte range when known.")
+    nullable("sourceLocation", of = FunctionSourceLocationResultClass)
+        .describe("Resolved source-map or DWARF source location when available.")
+    nullable("source", of = string()).describe("Location source: `source_map` or `dwarf`.")
+    list("warnings", of = string()).describe("Non-fatal resolution warnings for this query.")
+}
+
+val ResolveSourceLocationsResultClass = class_("ResolveSourceLocationsResult", kotlinPackage = MODEL_PACKAGE) {
+    list("locations", of = ResolvedSourceLocationResultClass)
+        .describe("Resolved source-location records.")
+}
+
 val FunctionInstructionsResultClass = class_("FunctionInstructionsResult") {
     int("funcidx").describe("Funcidx whose body was decoded.")
     list("instructions", of = string()).describe("Decoded instruction text, one entry per instruction.")
@@ -352,6 +475,45 @@ internal val FunctionTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.FunctionNameSearch
         output = SearchFunctionsByNameResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionsByName"
+    }
+
+    tool("resolve_wasm_frames") {
+        summary = "Resolve Wasm crash frames to compact symbols and source locations."
+        guidance = """
+            Resolve WebAssembly stack or crash frames from `funcidx` values and optional absolute code offsets.
+            The result reports import/local origin, best symbol with its source, signature, export names, code range, source-map or DWARF source location when available, and per-frame warnings.
+            Use this for crash triage when logs contain function indices or instruction offsets and you need useful names without requesting full disassembly.
+        """
+        input = ResolveWasmFramesInput
+        inputPattern = ToolInputPattern.WasmFrames
+        output = ResolveWasmFramesResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.resolveWasmFrames"
+    }
+
+    tool("resolve_function_symbols") {
+        summary = "Resolve function indices to symbols, signatures, and metadata."
+        guidance = """
+            Batch-resolve unified WebAssembly function indices to compact symbol records.
+            Symbol resolution prefers name-section entries, then DWARF names, DWARF linkage names, export names, and finally an explicit `funcidx_fallback`.
+            Use this when you already have `funcidx` values and need stable names, signatures, imports, exports, code ranges, or debug source locations.
+        """
+        input = ResolveFunctionSymbolsInput
+        inputPattern = ToolInputPattern.SourceMappedIndices
+        output = ResolveFunctionSymbolsResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.resolveFunctionSymbols"
+    }
+
+    tool("resolve_source_locations") {
+        summary = "Resolve Wasm code offsets or function indices to source locations."
+        guidance = """
+            Map absolute WebAssembly code offsets or unified `funcidx` values to source-map or DWARF source locations.
+            When only `funcidx` is supplied, the function body start offset is used; when only `codeOffset` is supplied, the containing local function is inferred when possible.
+            Use this for focused source/debug lookup without disassembling function bodies.
+        """
+        input = ResolveSourceLocationsInput
+        inputPattern = ToolInputPattern.SourceLocations
+        output = ResolveSourceLocationsResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.resolveSourceLocations"
     }
 
     tool("get_locals_for_functions") {

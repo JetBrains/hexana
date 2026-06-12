@@ -23,7 +23,12 @@ import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResul
 import org.jetbrains.hexana.mcp.model.functions.GetLocalsForFunctionsResult
 import org.jetbrains.hexana.mcp.model.functions.ListCodeSectionOffsetsResult
 import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSignatureResult
+import org.jetbrains.hexana.mcp.model.functions.ResolveFunctionSymbolsResult
+import org.jetbrains.hexana.mcp.model.functions.ResolveSourceLocationsResult
+import org.jetbrains.hexana.mcp.model.functions.ResolveWasmFramesResult
 import org.jetbrains.hexana.mcp.model.functions.SearchFunctionsByNameResult
+import org.jetbrains.hexana.mcp.model.functions.SourceLocationInput
+import org.jetbrains.hexana.mcp.model.functions.WasmFrameInput
 import org.jetbrains.hexana.mcp.model.globals.AuditGlobalStatePolicyResult
 import org.jetbrains.hexana.mcp.model.globals.ListGlobalsResult
 import org.jetbrains.hexana.mcp.model.imports.ListImportsResult
@@ -122,6 +127,27 @@ interface HexanaAnalysisService {
     fun disassembleFunction(input: WasmInput, funcidx: Int): DisassembleFunctionResult
     fun getFunctionCallGraph(input: WasmInput, indices: List<Int>): GetFunctionCallGraphResult
     fun searchFunctionsByName(input: WasmInput, query: String, limit: Int): SearchFunctionsByNameResult
+    fun resolveWasmFrames(
+        input: WasmInput,
+        frames: List<WasmFrameInput>,
+        sourceMapInput: TextInput?
+    ): ResolveWasmFramesResult {
+        throw UnsupportedOperationException("resolveWasmFrames is not implemented")
+    }
+    fun resolveFunctionSymbols(
+        input: WasmInput,
+        indices: List<Int>,
+        sourceMapInput: TextInput?
+    ): ResolveFunctionSymbolsResult {
+        throw UnsupportedOperationException("resolveFunctionSymbols is not implemented")
+    }
+    fun resolveSourceLocations(
+        input: WasmInput,
+        locations: List<SourceLocationInput>,
+        sourceMapInput: TextInput?
+    ): ResolveSourceLocationsResult {
+        throw UnsupportedOperationException("resolveSourceLocations is not implemented")
+    }
     fun listExportedFunctions(input: WasmInput, entriesRange: IntRange): ListExportedFunctionsResult
     fun functionsForIndices(input: WasmInput, indices: List<Int>): FunctionsResult
     fun listGlobals(input: WasmInput): ListGlobalsResult
@@ -383,6 +409,51 @@ class DefaultHexanaAnalysisService(
         requireLimit(limit)
         val wasm = load(input)
         return wasm.provider.readFunctionsByName(query, limit)
+    }
+
+    override fun resolveWasmFrames(
+        input: WasmInput,
+        frames: List<WasmFrameInput>,
+        sourceMapInput: TextInput?
+    ): ResolveWasmFramesResult {
+        requireFrameInputs(frames)
+        val wasm = load(input)
+        val sourceMap = sourceMapInput?.let(::loadText)
+        return wasm.provider.resolveWasmFrames(
+            frames = frames,
+            sourceMapText = sourceMap?.text,
+            sourceMapPath = sourceMapInput?.artifactPathLabel(),
+        )
+    }
+
+    override fun resolveFunctionSymbols(
+        input: WasmInput,
+        indices: List<Int>,
+        sourceMapInput: TextInput?
+    ): ResolveFunctionSymbolsResult {
+        requireIndices(indices)
+        val wasm = load(input)
+        val sourceMap = sourceMapInput?.let(::loadText)
+        return wasm.provider.resolveFunctionSymbols(
+            indices = indices,
+            sourceMapText = sourceMap?.text,
+            sourceMapPath = sourceMapInput?.artifactPathLabel(),
+        )
+    }
+
+    override fun resolveSourceLocations(
+        input: WasmInput,
+        locations: List<SourceLocationInput>,
+        sourceMapInput: TextInput?
+    ): ResolveSourceLocationsResult {
+        requireSourceLocationInputs(locations)
+        val wasm = load(input)
+        val sourceMap = sourceMapInput?.let(::loadText)
+        return wasm.provider.resolveSourceLocations(
+            locations = locations,
+            sourceMapText = sourceMap?.text,
+            sourceMapPath = sourceMapInput?.artifactPathLabel(),
+        )
     }
 
     override fun listExportedFunctions(input: WasmInput, entriesRange: IntRange): ListExportedFunctionsResult {
@@ -843,6 +914,36 @@ class DefaultHexanaAnalysisService(
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.OUT_OF_RANGE,
                 "Indices must be greater than or equal to 0"
+            )
+        }
+    }
+
+    private fun requireFrameInputs(frames: List<WasmFrameInput>) {
+        if (frames.any { it.funcidx < 0 }) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "Frame funcidx values must be greater than or equal to 0"
+            )
+        }
+        if (frames.any { it.codeOffset != null && it.codeOffset < 0 }) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "Frame code offsets must be greater than or equal to 0"
+            )
+        }
+    }
+
+    private fun requireSourceLocationInputs(locations: List<SourceLocationInput>) {
+        if (locations.any { it.funcidx != null && it.funcidx < 0 }) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "Location funcidx values must be greater than or equal to 0"
+            )
+        }
+        if (locations.any { it.codeOffset != null && it.codeOffset < 0 }) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "Location code offsets must be greater than or equal to 0"
             )
         }
     }

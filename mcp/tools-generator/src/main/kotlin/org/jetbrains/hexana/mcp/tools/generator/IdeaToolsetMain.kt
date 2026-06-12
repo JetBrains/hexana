@@ -43,6 +43,8 @@ private val HEXANA_ANALYSIS_LIMITS = ClassName("org.jetbrains.hexana.mcp", "Hexa
 private val JSON_ELEMENT = ClassName("kotlinx.serialization.json", "JsonElement")
 private val JSON_OBJECT = ClassName("kotlinx.serialization.json", "JsonObject")
 private val JSON_PRIMITIVE = ClassName("kotlinx.serialization.json", "JsonPrimitive")
+private val WASM_FRAME_INPUT = ClassName("org.jetbrains.hexana.mcp.model.functions", "WasmFrameInput")
+private val SOURCE_LOCATION_INPUT = ClassName("org.jetbrains.hexana.mcp.model.functions", "SourceLocationInput")
 private val BUILD_JSON_OBJECT = MemberName("kotlinx.serialization.json", "buildJsonObject")
 private val BUILD_JSON_ARRAY = MemberName("kotlinx.serialization.json", "buildJsonArray")
 private val ENCODE_HEXANA_JSON = MemberName("org.jetbrains.hexana.mcp", "encodeHexanaJson")
@@ -77,6 +79,7 @@ private fun buildToolsetFile(tools: List<ToolSpec>): FileSpec {
             "jsonArray",
             "jsonObject",
             "jsonPrimitive",
+            "longOrNull",
         )
         .addType(cls)
         .addFunction(requireStringArgumentFunction())
@@ -87,6 +90,8 @@ private fun buildToolsetFile(tools: List<ToolSpec>): FileSpec {
         .addFunction(requireStringListArgumentFunction())
         .addFunction(optionalStringListArgumentFunction())
         .addFunction(requireIntListArgumentFunction())
+        .addFunction(requireWasmFrameListArgumentFunction())
+        .addFunction(requireSourceLocationListArgumentFunction())
         .addFunction(requireIntMapArgumentFunction())
         .addFunction(hexanaToolCategoryFunction())
         .addFunction(hexanaToolDescriptorFunction())
@@ -167,6 +172,18 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
         }
         ToolInputPattern.Indices ->
             code.addStatement("val indices = args.requireIntListArgument(%S)", "indices")
+        ToolInputPattern.SourceMappedIndices -> {
+            code.addStatement("val indices = args.requireIntListArgument(%S)", "indices")
+            code.addStatement("val sourceMapPath = args.optionalStringArgument(%S)", "sourceMapPath")
+        }
+        ToolInputPattern.WasmFrames -> {
+            code.addStatement("val frames = args.requireWasmFrameListArgument(%S)", "frames")
+            code.addStatement("val sourceMapPath = args.optionalStringArgument(%S)", "sourceMapPath")
+        }
+        ToolInputPattern.SourceLocations -> {
+            code.addStatement("val locations = args.requireSourceLocationListArgument(%S)", "locations")
+            code.addStatement("val sourceMapPath = args.optionalStringArgument(%S)", "sourceMapPath")
+        }
         is ToolInputPattern.ClosedRange -> {
             code.addStatement("val %N = args.requireIntMapArgument(%S)", pattern.parameterName, pattern.parameterName)
             code.addStatement(
@@ -227,6 +244,9 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
         code.addStatement("val provider = file.%M()", REQUIRE_COMPONENT_WASM_BINARY_PROVIDER)
     } else {
         code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
+    }
+    if (spec.inputPattern.usesOptionalSourceMap()) {
+        code.addStatement("val sourceMapText = sourceMapPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
     }
 
     val handlerMember = spec.handlerMemberName()
@@ -319,6 +339,9 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             ToolInputPattern.FunctionNameSearch -> "(query, limit)"
             ToolInputPattern.ExportNameSearch -> "(query, limit)"
             ToolInputPattern.Indices -> "(indices)"
+            ToolInputPattern.SourceMappedIndices -> "(indices, sourceMapText, sourceMapPath)"
+            ToolInputPattern.WasmFrames -> "(frames, sourceMapText, sourceMapPath)"
+            ToolInputPattern.SourceLocations -> "(locations, sourceMapText, sourceMapPath)"
             is ToolInputPattern.ClosedRange -> "(range)"
             ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
             ToolInputPattern.ArtifactQuery -> error("Handled above")
@@ -388,6 +411,18 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
         ToolInputPattern.FunctionNameSearch -> listOf(inputField(spec.input, "query"), inputField(spec.input, "limit"))
         ToolInputPattern.ExportNameSearch -> listOf(inputField(spec.input, "query"), inputField(spec.input, "limit"))
         ToolInputPattern.Indices -> listOf(inputField(spec.input, "indices"))
+        ToolInputPattern.SourceMappedIndices -> listOf(
+            inputField(spec.input, "indices"),
+            inputField(spec.input, "sourceMapPath"),
+        )
+        ToolInputPattern.WasmFrames -> listOf(
+            inputField(spec.input, "frames"),
+            inputField(spec.input, "sourceMapPath"),
+        )
+        ToolInputPattern.SourceLocations -> listOf(
+            inputField(spec.input, "locations"),
+            inputField(spec.input, "sourceMapPath"),
+        )
         is ToolInputPattern.ClosedRange -> listOf(inputField(spec.input, pattern.parameterName))
         ToolInputPattern.DataSegments -> listOf(
             inputField(spec.input, "segmentRange"),
@@ -434,6 +469,11 @@ private fun ToolInputPattern.isComponentPattern(): Boolean =
     this == ToolInputPattern.ComponentSurface ||
         this == ToolInputPattern.ComponentDependencies ||
         this == ToolInputPattern.ComponentCompatibility
+
+private fun ToolInputPattern.usesOptionalSourceMap(): Boolean =
+    this == ToolInputPattern.SourceMappedIndices ||
+        this == ToolInputPattern.WasmFrames ||
+        this == ToolInputPattern.SourceLocations
 
 private fun buildToolSchema(cls: ClassSpec): CodeBlock {
     val builder = CodeBlock.builder()
@@ -696,6 +736,56 @@ private fun requireIntListArgumentFunction(): FunSpec {
                 ?: %M("Missing required argument `${'$'}name`")
             """.trimIndent(),
             MCP_FAIL,
+        )
+        .build()
+}
+
+private fun requireWasmFrameListArgumentFunction(): FunSpec {
+    return FunSpec.builder("requireWasmFrameListArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .returns(LIST.parameterizedBy(WASM_FRAME_INPUT))
+        .addCode(
+            """
+            val array = this[name]?.jsonArray ?: %M("Missing required argument `${'$'}name`")
+            return array.mapIndexed { index, element ->
+                val value = element.jsonObject
+                %T(
+                    funcidx = value["funcidx"]?.jsonPrimitive?.int
+                        ?: %M("Invalid `${'$'}name[${'$'}index].funcidx`: expected integer"),
+                    codeOffset = value["codeOffset"]?.jsonPrimitive?.longOrNull,
+                    module = value["module"]?.jsonPrimitive?.content,
+                    label = value["label"]?.jsonPrimitive?.content,
+                )
+            }
+            """.trimIndent(),
+            MCP_FAIL,
+            WASM_FRAME_INPUT,
+            MCP_FAIL,
+        )
+        .build()
+}
+
+private fun requireSourceLocationListArgumentFunction(): FunSpec {
+    return FunSpec.builder("requireSourceLocationListArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .returns(LIST.parameterizedBy(SOURCE_LOCATION_INPUT))
+        .addCode(
+            """
+            val array = this[name]?.jsonArray ?: %M("Missing required argument `${'$'}name`")
+            return array.map { element ->
+                val value = element.jsonObject
+                %T(
+                    funcidx = value["funcidx"]?.jsonPrimitive?.intOrNull,
+                    codeOffset = value["codeOffset"]?.jsonPrimitive?.longOrNull,
+                )
+            }
+            """.trimIndent(),
+            MCP_FAIL,
+            SOURCE_LOCATION_INPUT,
         )
         .build()
 }

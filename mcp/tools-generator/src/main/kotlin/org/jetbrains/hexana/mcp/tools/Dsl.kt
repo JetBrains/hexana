@@ -336,6 +336,9 @@ sealed class ToolInputPattern {
     object FunctionNameSearch : ToolInputPattern()
     object ExportNameSearch : ToolInputPattern()
     object Indices : ToolInputPattern()
+    object SourceMappedIndices : ToolInputPattern()
+    object WasmFrames : ToolInputPattern()
+    object SourceLocations : ToolInputPattern()
     data class ClosedRange(val parameterName: String) : ToolInputPattern()
     object DataSegments : ToolInputPattern()
     object ArtifactQuery : ToolInputPattern()
@@ -439,6 +442,15 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
         require(listType.element == expectedElement) {
             "Tool '$toolName' input field `${field.name}` must list $expectedElement, got ${listType.element}."
         }
+    }
+
+    fun requireListOfClass(field: FieldSpec): ClassSpec {
+        val listType = field.type as? FieldType.ListOf ?: throw IllegalArgumentException(
+            "Tool '$toolName' input field `${field.name}` must be a list, got ${field.type}."
+        )
+        return (listType.element as? FieldType.ClassRef)?.clazz ?: throw IllegalArgumentException(
+            "Tool '$toolName' input field `${field.name}` must list embedded classes, got ${listType.element}."
+        )
     }
 
     fun requireClassRef(field: FieldSpec): ClassSpec {
@@ -562,6 +574,58 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireListOf(indices, FieldType.Int32)
             requireNonNullable(indices)
             requireDescribed(indices)
+        }
+        ToolInputPattern.SourceMappedIndices -> {
+            val indices = requireField("indices")
+            requireListOf(indices, FieldType.Int32)
+            requireNonNullable(indices)
+            requireDescribed(indices)
+            val sourceMapPath = requireField("sourceMapPath")
+            requireType(sourceMapPath, FieldType.StringT)
+            requireNullable(sourceMapPath)
+            requireDescribed(sourceMapPath)
+        }
+        ToolInputPattern.WasmFrames -> {
+            val frames = requireField("frames")
+            requireDescribed(frames)
+            val frameClass = requireListOfClass(frames)
+            val funcidx = requireField("funcidx", owner = frameClass)
+            requireType(funcidx, FieldType.Int32)
+            requireNonNullable(funcidx)
+            requireDescribed(funcidx)
+            val codeOffset = requireField("codeOffset", owner = frameClass)
+            requireType(codeOffset, FieldType.Int64)
+            requireNullable(codeOffset)
+            requireDescribed(codeOffset)
+            val module = requireField("module", owner = frameClass)
+            requireType(module, FieldType.StringT)
+            requireNullable(module)
+            requireDescribed(module)
+            val label = requireField("label", owner = frameClass)
+            requireType(label, FieldType.StringT)
+            requireNullable(label)
+            requireDescribed(label)
+            val sourceMapPath = requireField("sourceMapPath")
+            requireType(sourceMapPath, FieldType.StringT)
+            requireNullable(sourceMapPath)
+            requireDescribed(sourceMapPath)
+        }
+        ToolInputPattern.SourceLocations -> {
+            val locations = requireField("locations")
+            requireDescribed(locations)
+            val locationClass = requireListOfClass(locations)
+            val funcidx = requireField("funcidx", owner = locationClass)
+            requireType(funcidx, FieldType.Int32)
+            requireNullable(funcidx)
+            requireDescribed(funcidx)
+            val codeOffset = requireField("codeOffset", owner = locationClass)
+            requireType(codeOffset, FieldType.Int64)
+            requireNullable(codeOffset)
+            requireDescribed(codeOffset)
+            val sourceMapPath = requireField("sourceMapPath")
+            requireType(sourceMapPath, FieldType.StringT)
+            requireNullable(sourceMapPath)
+            requireDescribed(sourceMapPath)
         }
         is ToolInputPattern.ClosedRange -> requireClosedRange(requireField(pattern.parameterName))
         ToolInputPattern.DataSegments -> {

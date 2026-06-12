@@ -70,6 +70,9 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers, profile: Hex
   if (profile.includesTool("disassemble_function")) registerDisassembleFunctionTool(handlers)
   if (profile.includesTool("get_function_call_graph")) registerGetFunctionCallGraphTool(handlers)
   if (profile.includesTool("search_functions_by_name")) registerSearchFunctionsByNameTool(handlers)
+  if (profile.includesTool("resolve_wasm_frames")) registerResolveWasmFramesTool(handlers)
+  if (profile.includesTool("resolve_function_symbols")) registerResolveFunctionSymbolsTool(handlers)
+  if (profile.includesTool("resolve_source_locations")) registerResolveSourceLocationsTool(handlers)
   if (profile.includesTool("get_locals_for_functions")) registerGetLocalsForFunctionsTool(handlers)
   if (profile.includesTool("get_instructions_for_functions")) registerGetInstructionsForFunctionsTool(handlers)
   if (profile.includesTool("list_memory")) registerListMemoryTool(handlers)
@@ -5608,6 +5611,669 @@ private fun Server.registerSearchFunctionsByNameTool(handlers: HexanaToolHandler
     ),
   ))  {
     request: CallToolRequest -> handlers.searchFunctionsByName(request.arguments)
+  }
+}
+
+private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "resolve_wasm_frames",
+    description = "Resolve Wasm crash frames to compact symbols and source locations.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("frames", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("funcidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Unified function index from a stack frame or crash report."))
+              put("minimum", JsonPrimitive(0))
+            })
+            put("codeOffset", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Optional absolute byte offset inside the `.wasm` file for this frame instruction."))
+            })
+            put("module", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Optional module path or runtime module label from the original frame."))
+              put("maxLength", JsonPrimitive(500))
+            })
+            put("label", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Optional raw frame label preserved from the original crash report."))
+              put("maxLength", JsonPrimitive(500))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("funcidx"))
+          })
+        })
+        put("description", JsonPrimitive("Crash frames to resolve. Each frame is keyed by `funcidx` and may include an absolute `codeOffset`."))
+        put("maxItems", JsonPrimitive(200))
+      })
+      put("sourceMapPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional path to a WebAssembly source map for source-location resolution."))
+        put("maxLength", JsonPrimitive(1_000))
+      })
+    },
+    required = listOf("frames")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("frames", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("frameIndex", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Zero-based position of the input frame in the request."))
+            })
+            put("funcidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Unified function index from the input frame."))
+            })
+            put("inputCodeOffset", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Absolute code offset supplied for the input frame."))
+            })
+            put("module", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Original frame module path or runtime module label, when supplied."))
+            })
+            put("rawLabel", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Original raw frame label, when supplied."))
+            })
+            put("origin", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Function origin: `import`, `local`, or `unknown`."))
+            })
+            put("symbol", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Best resolved symbol name or the `funcidx` fallback."))
+            })
+            put("symbolSource", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Symbol source: `import`, `name_section`, `dwarf_name`, `dwarf_linkage_name`, `export`, or `funcidx_fallback`."))
+            })
+            put("signature", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("params", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Parameter types, in declaration order."))
+                })
+                put("return", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Return types, in declaration order."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("params"))
+                add(JsonPrimitive("return"))
+              })
+              put("description", JsonPrimitive("Parsed function signature when available."))
+            })
+            put("import", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("module", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Import module name."))
+                })
+                put("name", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Import field name."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("module"))
+                add(JsonPrimitive("name"))
+              })
+              put("description", JsonPrimitive("Import descriptor when the function is imported."))
+            })
+            put("exportedAs", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Export names pointing at this function."))
+            })
+            put("codeRange", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("offset", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Absolute byte offset of the function body in the module."))
+                })
+                put("size", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Size of the function body in bytes."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("offset"))
+                add(JsonPrimitive("size"))
+              })
+              put("description", JsonPrimitive("Function body byte range for local functions."))
+            })
+            put("sourceLocation", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("file", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Resolved source file path."))
+                })
+                put("line", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Resolved source line."))
+                })
+                put("column", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Resolved source column."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("file"))
+                add(JsonPrimitive("line"))
+                add(JsonPrimitive("column"))
+              })
+              put("description", JsonPrimitive("Resolved source-map or DWARF source location when available."))
+            })
+            put("warnings", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Non-fatal resolution warnings for this frame."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("frameIndex"))
+            add(JsonPrimitive("funcidx"))
+            add(JsonPrimitive("origin"))
+            add(JsonPrimitive("symbol"))
+            add(JsonPrimitive("symbolSource"))
+            add(JsonPrimitive("exportedAs"))
+            add(JsonPrimitive("warnings"))
+          })
+        })
+        put("description", JsonPrimitive("Resolved crash frame records."))
+      })
+    },
+    required = listOf("frames")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.resolveWasmFrames(request.arguments)
+  }
+}
+
+private fun Server.registerResolveFunctionSymbolsTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "resolve_function_symbols",
+    description = "Resolve function indices to symbols, signatures, and metadata.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("indices", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+        })
+        put("description", JsonPrimitive("List of unified function indices (`funcidx`) to resolve to compact symbols and metadata."))
+      })
+      put("sourceMapPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional path to a WebAssembly source map for source-location resolution."))
+        put("maxLength", JsonPrimitive(1_000))
+      })
+    },
+    required = listOf("indices")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("symbols", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("funcidx", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Unified function index from the input request."))
+            })
+            put("origin", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Function origin: `import`, `local`, or `unknown`."))
+            })
+            put("symbol", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Best resolved symbol name or the `funcidx` fallback."))
+            })
+            put("symbolSource", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Symbol source: `import`, `name_section`, `dwarf_name`, `dwarf_linkage_name`, `export`, or `funcidx_fallback`."))
+            })
+            put("typeidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Function type index, when resolved."))
+            })
+            put("signature", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("params", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Parameter types, in declaration order."))
+                })
+                put("return", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Return types, in declaration order."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("params"))
+                add(JsonPrimitive("return"))
+              })
+              put("description", JsonPrimitive("Parsed function signature when available."))
+            })
+            put("import", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("module", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Import module name."))
+                })
+                put("name", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Import field name."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("module"))
+                add(JsonPrimitive("name"))
+              })
+              put("description", JsonPrimitive("Import descriptor when the function is imported."))
+            })
+            put("exportedAs", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Export names pointing at this function."))
+            })
+            put("codeRange", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("offset", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Absolute byte offset of the function body in the module."))
+                })
+                put("size", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Size of the function body in bytes."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("offset"))
+                add(JsonPrimitive("size"))
+              })
+              put("description", JsonPrimitive("Function body byte range for local functions."))
+            })
+            put("sourceLocation", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("file", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Resolved source file path."))
+                })
+                put("line", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Resolved source line."))
+                })
+                put("column", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Resolved source column."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("file"))
+                add(JsonPrimitive("line"))
+                add(JsonPrimitive("column"))
+              })
+              put("description", JsonPrimitive("Resolved source-map or DWARF source location when available."))
+            })
+            put("warnings", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Non-fatal resolution warnings for this function."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("funcidx"))
+            add(JsonPrimitive("origin"))
+            add(JsonPrimitive("symbol"))
+            add(JsonPrimitive("symbolSource"))
+            add(JsonPrimitive("exportedAs"))
+            add(JsonPrimitive("warnings"))
+          })
+        })
+        put("description", JsonPrimitive("Resolved function symbol records."))
+      })
+    },
+    required = listOf("symbols")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.resolveFunctionSymbols(request.arguments)
+  }
+}
+
+private fun Server.registerResolveSourceLocationsTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "resolve_source_locations",
+    description = "Resolve Wasm code offsets or function indices to source locations.",
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("locations", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("funcidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Optional unified function index used to choose the function body start offset."))
+              put("minimum", JsonPrimitive(0))
+            })
+            put("codeOffset", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Optional absolute byte offset inside the `.wasm` file."))
+            })
+          })
+        })
+        put("description", JsonPrimitive("Source-location queries keyed by `funcidx`, absolute `codeOffset`, or both."))
+        put("maxItems", JsonPrimitive(200))
+      })
+      put("sourceMapPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional path to a WebAssembly source map. DWARF locations are used when no source-map hit exists."))
+        put("maxLength", JsonPrimitive(1_000))
+      })
+    },
+    required = listOf("locations")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("locations", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("queryIndex", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Zero-based position of the input location query."))
+            })
+            put("funcidx", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Resolved or supplied unified function index."))
+            })
+            put("codeOffset", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("integer"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Resolved or supplied absolute code offset."))
+            })
+            put("codeRange", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("offset", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Absolute byte offset of the function body in the module."))
+                })
+                put("size", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Size of the function body in bytes."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("offset"))
+                add(JsonPrimitive("size"))
+              })
+              put("description", JsonPrimitive("Function body byte range when known."))
+            })
+            put("sourceLocation", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("object"))
+                add(JsonPrimitive("null"))
+              })
+              put("properties", buildJsonObject {
+                put("file", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                  put("description", JsonPrimitive("Resolved source file path."))
+                })
+                put("line", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Resolved source line."))
+                })
+                put("column", buildJsonObject {
+                  put("type", JsonPrimitive("integer"))
+                  put("description", JsonPrimitive("Resolved source column."))
+                })
+              })
+              put("required", buildJsonArray {
+                add(JsonPrimitive("file"))
+                add(JsonPrimitive("line"))
+                add(JsonPrimitive("column"))
+              })
+              put("description", JsonPrimitive("Resolved source-map or DWARF source location when available."))
+            })
+            put("source", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Location source: `source_map` or `dwarf`."))
+            })
+            put("warnings", buildJsonObject {
+              put("type", JsonPrimitive("array"))
+              put("items", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+              })
+              put("description", JsonPrimitive("Non-fatal resolution warnings for this query."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("queryIndex"))
+            add(JsonPrimitive("warnings"))
+          })
+        })
+        put("description", JsonPrimitive("Resolved source-location records."))
+      })
+    },
+    required = listOf("locations")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.resolveSourceLocations(request.arguments)
   }
 }
 

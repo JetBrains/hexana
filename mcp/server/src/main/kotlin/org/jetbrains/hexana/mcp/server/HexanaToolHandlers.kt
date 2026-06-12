@@ -6,6 +6,8 @@ import kotlinx.serialization.json.*
 import org.jetbrains.hexana.analytics.HexanaAnalytics
 import org.jetbrains.hexana.analytics.HexanaEvent
 import org.jetbrains.hexana.mcp.*
+import org.jetbrains.hexana.mcp.model.functions.SourceLocationInput
+import org.jetbrains.hexana.mcp.model.functions.WasmFrameInput
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -209,6 +211,36 @@ class HexanaToolHandlers(
                 input = wasmInput(arguments),
                 query = arguments.requireNonBlankString("query"),
                 limit = arguments.intOrDefault("limit", LEGACY_SEARCH_FUNCTIONS_BY_NAME_LIMIT)
+            )
+        }
+    }
+
+    fun resolveWasmFrames(arguments: JsonObject?): CallToolResult {
+        return execute("resolve_wasm_frames") {
+            analysisService.resolveWasmFrames(
+                input = wasmInput(arguments),
+                frames = arguments.requireFrameInputs("frames"),
+                sourceMapInput = arguments.optionalNonBlankString("sourceMapPath")?.let(TextInput::FilePath)
+            )
+        }
+    }
+
+    fun resolveFunctionSymbols(arguments: JsonObject?): CallToolResult {
+        return execute("resolve_function_symbols") {
+            analysisService.resolveFunctionSymbols(
+                input = wasmInput(arguments),
+                indices = arguments.requireIntList("indices"),
+                sourceMapInput = arguments.optionalNonBlankString("sourceMapPath")?.let(TextInput::FilePath)
+            )
+        }
+    }
+
+    fun resolveSourceLocations(arguments: JsonObject?): CallToolResult {
+        return execute("resolve_source_locations") {
+            analysisService.resolveSourceLocations(
+                input = wasmInput(arguments),
+                locations = arguments.requireSourceLocationInputs("locations"),
+                sourceMapInput = arguments.optionalNonBlankString("sourceMapPath")?.let(TextInput::FilePath)
             )
         }
     }
@@ -575,6 +607,63 @@ class HexanaToolHandlers(
             value.jsonPrimitive.contentOrNull
                 ?: throw ToolInputException("`$name[$index]` must be a string")
         }
+    }
+
+    private fun JsonObject?.requireFrameInputs(name: String): List<WasmFrameInput> {
+        val array = requireObjectArray(name)
+        return array.mapIndexed { index, value ->
+            WasmFrameInput(
+                funcidx = value.requireInt("$name[$index]", "funcidx"),
+                codeOffset = value.optionalLong("$name[$index]", "codeOffset"),
+                module = value.optionalString("$name[$index]", "module"),
+                label = value.optionalString("$name[$index]", "label"),
+            )
+        }
+    }
+
+    private fun JsonObject?.requireSourceLocationInputs(name: String): List<SourceLocationInput> {
+        val array = requireObjectArray(name)
+        return array.mapIndexed { index, value ->
+            SourceLocationInput(
+                funcidx = value.optionalInt("$name[$index]", "funcidx"),
+                codeOffset = value.optionalLong("$name[$index]", "codeOffset"),
+            )
+        }
+    }
+
+    private fun JsonObject?.requireObjectArray(name: String): List<JsonObject> {
+        val element = this?.get(name) ?: throw ToolInputException("`$name` is required")
+        val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
+        return array.mapIndexed { index, value ->
+            value as? JsonObject ?: throw ToolInputException("`$name[$index]` must be an object")
+        }
+    }
+
+    private fun JsonObject.requireInt(owner: String, name: String): Int {
+        val element = get(name) ?: throw ToolInputException("`$owner.$name` is required")
+        return element.jsonPrimitive.intOrNull
+            ?: throw ToolInputException("`$owner.$name` must be an integer")
+    }
+
+    private fun JsonObject.optionalInt(owner: String, name: String): Int? {
+        val element = get(name) ?: return null
+        if (element == JsonNull) return null
+        return element.jsonPrimitive.intOrNull
+            ?: throw ToolInputException("`$owner.$name` must be an integer")
+    }
+
+    private fun JsonObject.optionalLong(owner: String, name: String): Long? {
+        val element = get(name) ?: return null
+        if (element == JsonNull) return null
+        return element.jsonPrimitive.longOrNull
+            ?: throw ToolInputException("`$owner.$name` must be an integer")
+    }
+
+    private fun JsonObject.optionalString(owner: String, name: String): String? {
+        val element = get(name) ?: return null
+        if (element == JsonNull) return null
+        return element.jsonPrimitive.contentOrNull
+            ?: throw ToolInputException("`$owner.$name` must be a string")
     }
 
     private fun JsonObject?.optionalStringList(name: String): List<String>? {
