@@ -73,7 +73,19 @@ internal class IdeaJournalPersister(
             return
         }
         if (journal == null) {
-            parent.findChild(sidecarName)?.delete(this)
+            // Try VFS first; fall back to NIO delete for the case where a
+            // preceding save(journal) wrote the sidecar via atomicWrite
+            // (NIO) and the async VFS refresh hasn't completed yet, so
+            // findChild returns null even though the file exists on disk.
+            val vfsChild = parent.findChild(sidecarName)
+            if (vfsChild != null) {
+                vfsChild.delete(this)
+            } else {
+                try {
+                    val nioPath = Paths.get(parent.path).resolve(sidecarName)
+                    Files.deleteIfExists(nioPath)
+                } catch (_: InvalidPathException) { /* non-local fs, nothing to clean */ }
+            }
             return
         }
         val json: String = JournalCodec.encode(journal)

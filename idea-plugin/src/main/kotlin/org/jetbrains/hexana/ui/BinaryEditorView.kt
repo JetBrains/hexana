@@ -195,6 +195,10 @@ internal fun BinaryEditorView(
             else -> false
         }
     }
+    // Shadow copy of the original bytes saved before an overwrite, so the
+    // user can undo the overwrite and restore the file to its pre-overwrite
+    // state. Cleared after a successful undo-overwrite.
+    var overwriteShadowCopy by remember(binaryProvider) { mutableStateOf<ByteArray?>(null) }
     BoxWithConstraints(modifier = Modifier
         .fillMaxSize()
         .background(HexanaTheme.backgroundColor)
@@ -278,10 +282,12 @@ internal fun BinaryEditorView(
                     parentFileName = parentFileName,
                     onNavigateToParent = onNavigateToParent,
                 )
-                EditingDemoBar(
+                EditModeToolbar(
                     doc = editableDoc,
                     stampKey = editableDoc.modificationStamp,
                     binaryProvider = binaryProvider,
+                    overwriteShadowCopy = overwriteShadowCopy,
+                    onOverwriteShadowCopyChanged = { overwriteShadowCopy = it },
                 )
                 Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     HexViewer(
@@ -318,27 +324,29 @@ internal fun BinaryEditorView(
 }
 
 /**
- * Demo strip: button that flips byte 0 to 0xFF, plus Undo / Redo, plus a
- * live readout of byte 0 and the modification stamp. Wired to the shared
- * [EditableBinaryDocument]; the [stampKey] parameter (the document's
- * `modificationStamp` at the time of recomposition) is the recomposition
- * trigger that keeps the readout fresh — recomposition is driven from the
- * parent, which reads the stamp after the live provider rebuild.
- *
- * This strip is a placeholder for the eventual hex-cell edit affordance in
- * [HexViewer]. Once that lands, the demo strip can be removed.
+ * Edit-mode toolbar shown above the hex view. Displays contextual controls
+ * depending on the current editing state:
+ * - **No edits**: a hint label "Start typing to edit".
+ * - **Edits applied**: "Discard", "Overwrite" (writes to the source file
+ *   after saving a shadow copy of the original bytes), and "Save a copy"
+ *   (writes to `<name>.edited.<ext>`).
+ * - **After overwrite**: an "Undo overwrite" button that restores the
+ *   original bytes from the shadow copy.
  */
 @Composable
-private fun EditingDemoBar(
+private fun EditModeToolbar(
     doc: EditableBinaryDocument,
     stampKey: Long,
     binaryProvider: BinaryProvider,
+    overwriteShadowCopy: ByteArray?,
+    onOverwriteShadowCopyChanged: (ByteArray?) -> Unit,
 ) {
     @Suppress("UNUSED_PARAMETER") val unused = stampKey
     val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
     val finalizedName = sourceFile?.name?.let { computeFinalizedName(it) }
     val hasEdits = doc.canUndo()
-    val canFinalize = hasEdits && sourceFile != null
+    val canOverwrite = hasEdits && sourceFile != null
+    val canSaveCopy = hasEdits && sourceFile != null
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -346,36 +354,113 @@ private fun EditingDemoBar(
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Discard: walks the undo journal back to its origin then deletes
-        // the on-disk sidecar via `clearPersistedJournal()`. The end state
-        // is the original bytes with no journal entries — equivalent to
-        // re-opening the file fresh. Undo / Redo themselves now ride the
-        // user's IDE keymap (Cmd+Z / Cmd+Shift+Z by default) — they're
-        // handled at the BinaryEditorView root via `KeymapShortcuts`.
-        OutlinedButton(
-            onClick = {
-                while (doc.canUndo()) doc.undo()
-                doc.clearPersistedJournal()
-            },
-            enabled = hasEdits,
-        ) { Text("Discard") }
-        Spacer(modifier = Modifier.width(8.dp))
-        DefaultButton(
-            onClick = {
-                if (sourceFile != null && finalizedName != null) {
-                    val bytes = doc.read(0L, doc.length.toInt())
-                    finalizeWriteToSibling(sourceFile, finalizedName, bytes)
-                    // Clear the on-disk sidecar — the user has captured the
-                    // current state in <source>.edited.<ext>, so the journal
-                    // bound to the original file is no longer needed. The
-                    // doc keeps its in-memory undo history, so the user can
-                    // keep editing; the next commit will recreate the sidecar.
+        if (overwriteShadowCopy != null && sourceFile != null) {
+            // Post-overwrite state: offer to undo the overwrite.
+            OutlinedButton(
+                onClick = {
+                    overwriteSourceFile(sourceFile, overwriteShadowCopy)
+                    // Restore the in-memory document to the original bytes
+                    // by rewinding the undo stack (which Overwrite left
+                    // intact for exactly this purpose).
+                    while (doc.canUndo()) doc.undo()
+                    // Safety net: if the undo stack didn't fully restore
+                    // the original content, force-replace so the editor
+                    // always matches the file we just wrote to disk.
+                    val currentBytes = doc.read(0L, doc.length.toInt())
+                    if (!currentBytes.contentEquals(overwriteShadowCopy)) {
+                        doc.edit().use { tx ->
+                            tx.replace(0L, doc.length, overwriteShadowCopy)
+                            tx.commit()
+                        }
+                        // Clean up the synthetic undo entry.
+                        while (doc.canUndo()) doc.undo()
+                    }
                     doc.clearPersistedJournal()
-                }
-            },
-            enabled = canFinalize,
-        ) { Text(if (finalizedName != null) "Finalize → $finalizedName" else "Finalize") }
+                    onOverwriteShadowCopyChanged(null)
+                },
+            ) { Text("Undo overwrite") }
+        } else if (!hasEdits) {
+            Text(
+                "Start typing to edit",
+                color = HexanaTheme.hexTextColor,
+            )
+        } else {
+            // Discard: rewind all edits and clear the sidecar.
+            OutlinedButton(
+                onClick = {
+                    while (doc.canUndo()) doc.undo()
+                    doc.clearPersistedJournal()
+                },
+                enabled = hasEdits,
+            ) { Text("Discard") }
+            Spacer(modifier = Modifier.width(8.dp))
+            // Overwrite: save a shadow copy of the original, then write
+            // the edited bytes directly to the source file.
+            DefaultButton(
+                onClick = {
+                    if (sourceFile != null) {
+                        // Capture the original bytes BEFORE writing so we
+                        // can restore them on "Undo overwrite".
+                        val originalBytes = sourceFile.contentsToByteArray()
+                        onOverwriteShadowCopyChanged(originalBytes)
+                        val editedBytes = doc.read(0L, doc.length.toInt())
+                        overwriteSourceFile(sourceFile, editedBytes)
+                        // Keep the undo stack intact so "Undo overwrite"
+                        // can rewind it to restore the original bytes.
+                        // Only clear the on-disk sidecar — the journal
+                        // persister must not re-save stale entries.
+                        doc.clearPersistedJournal()
+                    }
+                },
+                enabled = canOverwrite,
+            ) { Text("Overwrite") }
+            Spacer(modifier = Modifier.width(8.dp))
+            // Save a copy: writes to <name>.edited.<ext> next to the original.
+            // The sidecar is intentionally kept — edits are still pending
+            // against the original file and should survive an IDE restart.
+            OutlinedButton(
+                onClick = {
+                    if (sourceFile != null && finalizedName != null) {
+                        val bytes = doc.read(0L, doc.length.toInt())
+                        finalizeWriteToSibling(sourceFile, finalizedName, bytes)
+                    }
+                },
+                enabled = canSaveCopy,
+            ) { Text(if (finalizedName != null) "Save a copy → $finalizedName" else "Save a copy") }
+        }
         Spacer(modifier = Modifier.weight(1f))
+    }
+}
+
+/**
+ * Overwrites the [target] file with [bytes] via a VFS write action.
+ * Runs synchronously when already on the EDT (button click handlers in
+ * Compose/Jewel), otherwise schedules via `invokeLater`.  Synchronous
+ * execution is critical so that callers can safely manipulate the
+ * document state immediately after the file write without racing a
+ * deferred VFS reload.
+ */
+private fun overwriteSourceFile(
+    target: com.intellij.openapi.vfs.VirtualFile,
+    bytes: ByteArray,
+) {
+    val app = com.intellij.openapi.application.ApplicationManager.getApplication()
+    if (app.isDispatchThread) {
+        com.intellij.openapi.application.WriteAction.run<Throwable> {
+            target.setBinaryContent(bytes)
+            org.jetbrains.hexana.HexanaLog.LOG.info(
+                "Overwrite ${bytes.size} bytes → ${target.path}",
+            )
+        }
+    } else {
+        app.invokeAndWait {
+            com.intellij.openapi.application.WriteAction.run<Throwable> {
+                target.setBinaryContent(bytes)
+                org.jetbrains.hexana.HexanaLog.LOG.info(
+                    "Overwrite ${bytes.size} bytes → ${target.path}",
+                )
+            }
+        }
     }
 }
 
