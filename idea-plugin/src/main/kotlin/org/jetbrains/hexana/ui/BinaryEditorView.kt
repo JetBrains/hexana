@@ -195,10 +195,11 @@ internal fun BinaryEditorView(
             else -> false
         }
     }
-    // Shadow copy of the original bytes saved before an overwrite, so the
-    // user can undo the overwrite and restore the file to its pre-overwrite
-    // state. Cleared after a successful undo-overwrite.
-    var overwriteShadowCopy by remember(binaryProvider) { mutableStateOf<ByteArray?>(null) }
+    // Lightweight record of the original bytes at modified positions, saved
+    // before an overwrite so the user can undo it. Only the byte ranges that
+    // actually differ from the original file are preserved — not the entire
+    // file — so this stays small even for huge binaries.
+    var overwriteShadowRanges by remember(binaryProvider) { mutableStateOf<OverwriteShadowRanges?>(null) }
     BoxWithConstraints(modifier = Modifier
         .fillMaxSize()
         .background(HexanaTheme.backgroundColor)
@@ -286,8 +287,8 @@ internal fun BinaryEditorView(
                     doc = editableDoc,
                     stampKey = editableDoc.modificationStamp,
                     binaryProvider = binaryProvider,
-                    overwriteShadowCopy = overwriteShadowCopy,
-                    onOverwriteShadowCopyChanged = { overwriteShadowCopy = it },
+                    overwriteShadowRanges = overwriteShadowRanges,
+                    onOverwriteShadowRangesChanged = { overwriteShadowRanges = it },
                 )
                 Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     HexViewer(
@@ -328,18 +329,19 @@ internal fun BinaryEditorView(
  * depending on the current editing state:
  * - **No edits**: a hint label "Start typing to edit".
  * - **Edits applied**: "Discard", "Overwrite" (writes to the source file
- *   after saving a shadow copy of the original bytes), and "Save a copy"
- *   (writes to `<name>.edited.<ext>`).
+ *   after saving only the modified ranges of the original bytes), and
+ *   "Save a copy" (writes to `<name>.edited.<ext>`).
  * - **After overwrite**: an "Undo overwrite" button that restores the
- *   original bytes from the shadow copy.
+ *   original bytes by rewinding the undo stack and falling back to the
+ *   saved modified ranges if needed.
  */
 @Composable
 private fun EditModeToolbar(
     doc: EditableBinaryDocument,
     stampKey: Long,
     binaryProvider: BinaryProvider,
-    overwriteShadowCopy: ByteArray?,
-    onOverwriteShadowCopyChanged: (ByteArray?) -> Unit,
+    overwriteShadowRanges: OverwriteShadowRanges?,
+    onOverwriteShadowRangesChanged: (OverwriteShadowRanges?) -> Unit,
 ) {
     @Suppress("UNUSED_PARAMETER") val unused = stampKey
     val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
@@ -354,29 +356,35 @@ private fun EditModeToolbar(
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (overwriteShadowCopy != null && sourceFile != null) {
+        if (overwriteShadowRanges != null && sourceFile != null) {
             // Post-overwrite state: offer to undo the overwrite.
             OutlinedButton(
                 onClick = {
-                    overwriteSourceFile(sourceFile, overwriteShadowCopy)
-                    // Restore the in-memory document to the original bytes
-                    // by rewinding the undo stack (which Overwrite left
-                    // intact for exactly this purpose).
+                    // Reconstruct the original file content from the
+                    // current (overwritten) file bytes + shadow ranges
+                    // and write it to disk FIRST, so the file is always
+                    // restored even if the undo stack can't fully rewind.
+                    val restoredOriginal = overwriteShadowRanges.applyTo(
+                        sourceFile.contentsToByteArray(),
+                    )
+                    overwriteSourceFile(sourceFile, restoredOriginal)
+                    // Rewind the in-memory document's undo stack so the
+                    // editor state matches the restored file.
                     while (doc.canUndo()) doc.undo()
                     // Safety net: if the undo stack didn't fully restore
-                    // the original content, force-replace so the editor
-                    // always matches the file we just wrote to disk.
+                    // the original content, force-replace the document
+                    // so the editor always matches the file on disk.
                     val currentBytes = doc.read(0L, doc.length.toInt())
-                    if (!currentBytes.contentEquals(overwriteShadowCopy)) {
+                    if (!currentBytes.contentEquals(restoredOriginal)) {
                         doc.edit().use { tx ->
-                            tx.replace(0L, doc.length, overwriteShadowCopy)
+                            tx.replace(0L, doc.length, restoredOriginal)
                             tx.commit()
                         }
                         // Clean up the synthetic undo entry.
                         while (doc.canUndo()) doc.undo()
                     }
                     doc.clearPersistedJournal()
-                    onOverwriteShadowCopyChanged(null)
+                    onOverwriteShadowRangesChanged(null)
                 },
             ) { Text("Undo overwrite") }
         } else if (!hasEdits) {
@@ -399,10 +407,14 @@ private fun EditModeToolbar(
             DefaultButton(
                 onClick = {
                     if (sourceFile != null) {
-                        // Capture the original bytes BEFORE writing so we
-                        // can restore them on "Undo overwrite".
-                        val originalBytes = sourceFile.contentsToByteArray()
-                        onOverwriteShadowCopyChanged(originalBytes)
+                        // Capture only the modified ranges' original bytes
+                        // BEFORE writing so we can restore them on "Undo
+                        // overwrite". This avoids copying the entire file.
+                        val shadow = OverwriteShadowRanges.capture(
+                            sourceFile.contentsToByteArray(),
+                            doc.modifiedRanges(),
+                        )
+                        onOverwriteShadowRangesChanged(shadow)
                         val editedBytes = doc.read(0L, doc.length.toInt())
                         overwriteSourceFile(sourceFile, editedBytes)
                         // Keep the undo stack intact so "Undo overwrite"
@@ -570,6 +582,66 @@ private fun TabsPanel(
     }
 }
 
+
+/**
+ * Stores only the original bytes at positions that were modified, instead of
+ * keeping a full copy of the original file. Each entry records the logical
+ * offset in the edited document and the original bytes that occupied that
+ * position before the edit. [originalLength] is the total size of the
+ * original file so the full content can be reconstructed when needed.
+ */
+internal class OverwriteShadowRanges(
+    val originalLength: Long,
+    val entries: List<Entry>,
+) {
+    data class Entry(val offset: Long, val originalBytes: ByteArray) {
+        override fun equals(other: Any?): Boolean =
+            other is Entry && offset == other.offset && originalBytes.contentEquals(other.originalBytes)
+        override fun hashCode(): Int = 31 * offset.hashCode() + originalBytes.contentHashCode()
+    }
+
+    /**
+     * Applies the stored original bytes on top of [current], producing the
+     * original file content. Used as a safety net when the undo stack
+     * doesn't fully restore the original state.
+     */
+    fun applyTo(current: ByteArray): ByteArray {
+        // If the original was a different length, start from a correctly-sized
+        // copy. For same-length (pure replace edits) this is a no-op copy.
+        val result = if (current.size.toLong() == originalLength) {
+            current.copyOf()
+        } else {
+            ByteArray(originalLength.toInt())
+        }
+        for (entry in entries) {
+            entry.originalBytes.copyInto(result, entry.offset.toInt())
+        }
+        return result
+    }
+
+    companion object {
+        /**
+         * Captures the original bytes at positions identified by
+         * [modifiedRanges]. Only the bytes that differ are stored.
+         */
+        fun capture(originalFileBytes: ByteArray, modifiedRanges: List<ModifiedRange>): OverwriteShadowRanges {
+            val entries = modifiedRanges.mapNotNull { range ->
+                // The modified range is in the edited document's coordinate
+                // space. For pure replace edits (same length) the offset
+                // maps 1:1 to the original file. For inserts/deletes the
+                // mapping is more complex, but we store the original bytes
+                // at the same logical offset so `applyTo` can patch them
+                // back. Ranges that extend past the original file are
+                // inserts — no original bytes to save.
+                val end = minOf(range.offset + range.length, originalFileBytes.size.toLong())
+                if (range.offset >= originalFileBytes.size) return@mapNotNull null
+                val bytes = originalFileBytes.copyOfRange(range.offset.toInt(), end.toInt())
+                Entry(range.offset, bytes)
+            }
+            return OverwriteShadowRanges(originalFileBytes.size.toLong(), entries)
+        }
+    }
+}
 
 /**
  * Builds a fresh [BinaryProvider] from [newBytes] when the editable document

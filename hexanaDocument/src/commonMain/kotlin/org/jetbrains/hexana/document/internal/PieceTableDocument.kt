@@ -107,6 +107,34 @@ internal class PieceTableDocument(
         persister.save(null)
     }
 
+    override fun modifiedRanges(): List<org.jetbrains.hexana.document.ModifiedRange> {
+        val result = mutableListOf<org.jetbrains.hexana.document.ModifiedRange>()
+        var logicalOffset = 0L
+        var pendingStart = -1L
+        var pendingLength = 0L
+        for (p in current.pieces) {
+            if (p.source == Source.ADDED) {
+                if (pendingStart < 0L) {
+                    pendingStart = logicalOffset
+                    pendingLength = p.length
+                } else {
+                    pendingLength += p.length
+                }
+            } else {
+                if (pendingStart >= 0L) {
+                    result.add(org.jetbrains.hexana.document.ModifiedRange(pendingStart, pendingLength))
+                    pendingStart = -1L
+                    pendingLength = 0L
+                }
+            }
+            logicalOffset += p.length
+        }
+        if (pendingStart >= 0L) {
+            result.add(org.jetbrains.hexana.document.ModifiedRange(pendingStart, pendingLength))
+        }
+        return result
+    }
+
     override fun loadJournal(journal: Journal) {
         check(cursor == -1) {
             "loadJournal must be called on a fresh document; current cursor=$cursor"

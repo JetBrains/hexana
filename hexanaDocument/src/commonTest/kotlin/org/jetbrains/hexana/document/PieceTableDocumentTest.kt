@@ -287,6 +287,53 @@ class PieceTableDocumentTest {
     }
 
     @Test
+    fun modifiedRanges_empty_for_unmodified_document() {
+        val doc = docOf(byteArrayOf(0x10, 0x20, 0x30))
+        assertTrue(doc.modifiedRanges().isEmpty())
+    }
+
+    @Test
+    fun modifiedRanges_single_replace() {
+        val doc = docOf(byteArrayOf(0x10, 0x20, 0x30))
+        doc.edit().apply { replace(1L, 2L, byteArrayOf(0xFF.toByte())); commit() }
+        val ranges = doc.modifiedRanges()
+        assertEquals(1, ranges.size)
+        assertEquals(ModifiedRange(1L, 1L), ranges[0])
+    }
+
+    @Test
+    fun modifiedRanges_insert_produces_range() {
+        val doc = docOf(byteArrayOf(0x10, 0x20))
+        doc.edit().apply { insert(1L, byteArrayOf(0xAA.toByte(), 0xBB.toByte())); commit() }
+        val ranges = doc.modifiedRanges()
+        assertEquals(1, ranges.size)
+        assertEquals(ModifiedRange(1L, 2L), ranges[0])
+    }
+
+    @Test
+    fun modifiedRanges_cleared_after_undo() {
+        val doc = docOf(byteArrayOf(0x10, 0x20))
+        doc.edit().apply { replace(0L, 1L, byteArrayOf(0xFF.toByte())); commit() }
+        assertEquals(1, doc.modifiedRanges().size)
+        doc.undo()
+        assertTrue(doc.modifiedRanges().isEmpty())
+    }
+
+    @Test
+    fun modifiedRanges_multiple_disjoint_edits() {
+        val doc = docOf(byteArrayOf(0x10, 0x20, 0x30, 0x40, 0x50))
+        doc.edit().apply {
+            replace(0L, 1L, byteArrayOf(0xFF.toByte()))
+            replace(3L, 4L, byteArrayOf(0xEE.toByte()))
+            commit()
+        }
+        val ranges = doc.modifiedRanges()
+        assertEquals(2, ranges.size)
+        assertEquals(ModifiedRange(0L, 1L), ranges[0])
+        assertEquals(ModifiedRange(3L, 1L), ranges[1])
+    }
+
+    @Test
     fun modificationStamp_advances_on_commit_and_undo() {
         val doc = docOf(byteArrayOf(0x10))
         val s0 = doc.modificationStamp

@@ -70,4 +70,19 @@ public interface EditableBinaryDocument : BinaryDocument {
      * before invoking this.
      */
     public fun loadJournal(journal: org.jetbrains.hexana.document.journal.Journal)
+
+    /**
+     * Returns the list of [ModifiedRange]s — contiguous byte spans in the
+     * current document state that come from the added buffer (i.e. were
+     * inserted or replaced by the user) rather than from the original file.
+     *
+     * An unmodified document returns an empty list. Adjacent added pieces
+     * are coalesced into a single range.
+     *
+     * This is useful for:
+     * - Building a lightweight overwrite shadow that stores only the
+     *   original bytes at modified positions instead of the entire file.
+     * - Highlighting modified regions in the hex editor.
+     */
+    public fun modifiedRanges(): List<ModifiedRange>
 }
