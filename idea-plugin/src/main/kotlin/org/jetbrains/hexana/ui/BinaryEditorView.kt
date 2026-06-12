@@ -290,6 +290,19 @@ internal fun BinaryEditorView(
                     binaryProvider = binaryProvider,
                     overwriteShadowRanges = overwriteShadowRanges,
                     onOverwriteShadowRangesChanged = { overwriteShadowRanges = it },
+                    onReparseAfterOverwrite = {
+                        // After overwrite / undo-overwrite the on-disk bytes
+                        // are now the source of truth. Reset the hex-edit
+                        // demotion flag so the full panel set comes back, and
+                        // rebuild liveProvider from the current doc bytes so
+                        // the UI shows the correct format immediately.
+                        hexEditedSinceOpen = false
+                        val currentBytes = editableDoc.read(0L, editableDoc.length.toInt())
+                        try {
+                            val rebuilt = rebuildProviderFromBytes(binaryProvider, currentBytes)
+                            if (rebuilt != null) liveProvider = rebuilt
+                        } catch (_: Throwable) { /* keep current */ }
+                    },
                 )
                 Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     HexViewer(
@@ -344,6 +357,7 @@ private fun EditModeToolbar(
     binaryProvider: BinaryProvider,
     overwriteShadowRanges: OverwriteShadowRanges?,
     onOverwriteShadowRangesChanged: (OverwriteShadowRanges?) -> Unit,
+    onReparseAfterOverwrite: () -> Unit = {},
 ) {
     @Suppress("UNUSED_PARAMETER") val unused = stampKey
     val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
@@ -387,6 +401,7 @@ private fun EditModeToolbar(
                     }
                     doc.clearPersistedJournal()
                     onOverwriteShadowRangesChanged(null)
+                    onReparseAfterOverwrite()
                 },
             ) { Text("Undo overwrite") }
         } else if (!hasEdits) {
@@ -400,6 +415,7 @@ private fun EditModeToolbar(
                 onClick = {
                     while (doc.canUndo()) doc.undo()
                     doc.clearPersistedJournal()
+                    onReparseAfterOverwrite()
                 },
                 enabled = hasEdits,
             ) { Text("Discard") }
@@ -448,6 +464,7 @@ private fun EditModeToolbar(
                         // Only clear the on-disk sidecar — the journal
                         // persister must not re-save stale entries.
                         doc.clearPersistedJournal()
+                        onReparseAfterOverwrite()
                     }
                 },
                 enabled = canOverwrite,
