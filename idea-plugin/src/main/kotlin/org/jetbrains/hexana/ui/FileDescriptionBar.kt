@@ -71,27 +71,39 @@ internal fun FileDescriptionBar(
     }
 
     val sizeTooltip = remember(binaryProvider) {
-        buildSizeTooltip(binaryProvider)
+        try {
+            buildSizeTooltip(binaryProvider)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     val isSubmodule = parentFileName != null
 
     val isRunnable = remember(binaryProvider, isSubmodule) {
         if (isSubmodule) return@remember false
-        if (binaryProvider is WasmBinaryProvider) {
-            binaryProvider.exports.any { export ->
-                export is WasmFunctionExportRecordEntry &&
-                    (export.name == "_start" || export.name == "_initialize")
+        try {
+            if (binaryProvider is WasmBinaryProvider) {
+                binaryProvider.exports.any { export ->
+                    export is WasmFunctionExportRecordEntry &&
+                        (export.name == "_start" || export.name == "_initialize")
+                }
+            } else if (binaryProvider is WasmComponentBinaryProvider) {
+                hasWasiCliRunExport(binaryProvider)
+            } else {
+                false
             }
-        } else if (binaryProvider is WasmComponentBinaryProvider) {
-            hasWasiCliRunExport(binaryProvider)
-        } else {
+        } catch (_: Exception) {
             false
         }
     }
 
     val isComponentCliRun = remember(binaryProvider) {
-        binaryProvider is WasmComponentBinaryProvider && hasWasiCliRunExport(binaryProvider)
+        try {
+            binaryProvider is WasmComponentBinaryProvider && hasWasiCliRunExport(binaryProvider)
+        } catch (_: Exception) {
+            false
+        }
     }
 
     val isDebuggable = remember(binaryProvider) {
@@ -257,7 +269,11 @@ internal fun FileDescriptionBar(
         }
 
         val proposals = remember(binaryProvider) {
-            (binaryProvider as? WasmBinaryProvider)?.usedProposals?.sorted() ?: emptyList()
+            try {
+                (binaryProvider as? WasmBinaryProvider)?.usedProposals?.sorted() ?: emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
         }
 
         if (proposals.isNotEmpty()) {
