@@ -22,6 +22,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -565,8 +566,6 @@ internal fun HexViewer(
                                                 HexanaTheme.hexCellHoverColor
                                             } else if (highlightRange != null) {
                                                 highlightRange.color
-                                            } else if (isEdited) {
-                                                HexanaTheme.editedByteColor
                                             } else {
                                                 Color.Unspecified
                                             }
@@ -595,7 +594,8 @@ internal fun HexViewer(
                                                     maxLines = 1,
                                                     style = TextStyle(
                                                         fontFamily = FontFamily.Monospace,
-                                                        color = HexanaTheme.hexTextColor
+                                                        color = if (isEdited) HexanaTheme.editedByteForegroundColor else HexanaTheme.hexTextColor,
+                                                        fontWeight = if (isEdited) FontWeight.Bold else FontWeight.Normal
                                                     )
                                                 )
                                             }
@@ -681,8 +681,6 @@ internal fun HexViewer(
                                             HexanaTheme.hexCellHoverColor
                                         } else if (highlightRange != null) {
                                             highlightRange.color
-                                        } else if (isEdited) {
-                                            HexanaTheme.editedByteColor
                                         } else {
                                             Color.Unspecified
                                         }
@@ -701,14 +699,24 @@ internal fun HexViewer(
                                         } else {
                                             getUtf8CharacterAtIndex(buf, start + byteIndex)
                                         }
+
+                                        val textForeground = if (isEdited) {
+                                            HexanaTheme.editedByteForegroundColor
+                                        } else if (text != null) {
+                                            HexanaTheme.textColor
+                                        } else {
+                                            HexanaTheme.hexTextColor
+                                        }
+
                                         Text(
                                             text ?: ".",
                                             modifier = Modifier.background(selectionBackgroundColor),
                                             softWrap = false,
                                             maxLines = 1,
                                             style = TextStyle(
-                                                color = if (text != null) HexanaTheme.textColor else HexanaTheme.hexTextColor,
-                                                fontFamily = FontFamily.Monospace
+                                                color = textForeground,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = if (isEdited) FontWeight.Bold else FontWeight.Normal
                                             )
                                         )
                                     }
