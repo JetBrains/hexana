@@ -108,7 +108,7 @@ sealed class BinaryProviderType {
     object Generic : BinaryProviderType()
 }
 
-class GenericBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvider {
+open class GenericBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvider {
     override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
 
     val nativeFormat: NativeBinaryFormat? by lazy {

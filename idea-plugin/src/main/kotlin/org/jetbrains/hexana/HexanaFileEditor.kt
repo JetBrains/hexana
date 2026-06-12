@@ -229,7 +229,7 @@ class HexanaFileEditor(
                             }
                         }
 
-                        BinaryProviderType.Generic -> nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
+                        BinaryProviderType.Generic -> GenericBinaryVirtualFileProvider(myFile)
                     }
                 }
             }

@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.actionSystem.IdeActions
+import com.intellij.openapi.ui.Messages
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
@@ -408,6 +409,31 @@ private fun EditModeToolbar(
             DefaultButton(
                 onClick = {
                     if (sourceFile != null) {
+                        val editedBytes = doc.read(0L, doc.length.toInt())
+                        // Check whether the edited bytes can still be parsed
+                        // by the original provider's format. If not, warn the
+                        // user that overwriting will damage the file's format.
+                        val canReparse = try {
+                            val rebuilt = rebuildProviderFromBytes(binaryProvider, editedBytes)
+                            when (rebuilt) {
+                                is GenericBinaryProvider -> false
+                                is WasmBinaryProvider -> rebuilt.canProvideWasmModule()
+                                is WasmComponentBinaryProvider -> rebuilt.canProvideWasmModule()
+                                else -> rebuilt != null
+                            }
+                        } catch (_: Throwable) { false }
+                        val isGenericOriginal = binaryProvider is GenericBinaryProvider
+                        if (!canReparse && !isGenericOriginal) {
+                            val answer = Messages.showOkCancelDialog(
+                                "The edited bytes can no longer be parsed as the original format. " +
+                                    "Overwriting will damage the file's structure.",
+                                "Overwrite Damaged Binary?",
+                                "Overwrite Anyway",
+                                Messages.getCancelButton(),
+                                Messages.getWarningIcon(),
+                            )
+                            if (answer != Messages.OK) return@DefaultButton
+                        }
                         // Capture only the modified ranges' original bytes
                         // BEFORE writing so we can restore them on "Undo
                         // overwrite". This avoids copying the entire file.
@@ -416,7 +442,6 @@ private fun EditModeToolbar(
                             doc.modifiedRanges(),
                         )
                         onOverwriteShadowRangesChanged(shadow)
-                        val editedBytes = doc.read(0L, doc.length.toInt())
                         overwriteSourceFile(sourceFile, editedBytes)
                         // Keep the undo stack intact so "Undo overwrite"
                         // can rewind it to restore the original bytes.
@@ -658,7 +683,7 @@ private fun rebuildProviderFromBytes(original: BinaryProvider, newBytes: ByteArr
     return when (original) {
         is WasmBinaryVirtualFileProvider, is WasmBinaryProvider -> WasmBinaryProvider(buf)
         is WasmComponentBinaryVirtualFileProvider, is WasmComponentBinaryProvider -> WasmComponentBinaryProvider(buf)
-        is GenericBinaryProvider -> GenericBinaryProvider(buf)
+        is GenericBinaryVirtualFileProvider, is GenericBinaryProvider -> GenericBinaryProvider(buf)
         else -> null
     }
 }

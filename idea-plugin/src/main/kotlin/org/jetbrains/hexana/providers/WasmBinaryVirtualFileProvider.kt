@@ -16,3 +16,18 @@ internal abstract class WasmBinaryVirtualFileProvider(override val file: Virtual
 internal abstract class WasmComponentBinaryVirtualFileProvider(override val file: VirtualFile) : WasmComponentBinaryProvider(file.toCommonByteBuffer()!!), BinaryVirtualFileProvider {
     abstract override suspend fun createTextEditor(file: VirtualFile): TextEditor
 }
+
+/**
+ * A [GenericBinaryProvider] that retains a reference to the backing [VirtualFile].
+ * Used when a `.wasm` (or other known-extension) file cannot be parsed by the
+ * format-specific provider (e.g. the magic bytes were corrupted by a previous
+ * overwrite). Keeping the file reference ensures the edit toolbar's Overwrite /
+ * Save-a-copy buttons remain functional even for damaged binaries.
+ */
+internal class GenericBinaryVirtualFileProvider(
+    override val file: VirtualFile,
+) : GenericBinaryProvider(file.toCommonByteBuffer()!!), BinaryVirtualFileProvider {
+    override suspend fun createTextEditor(file: VirtualFile): TextEditor {
+        throw UnsupportedOperationException("GenericBinaryVirtualFileProvider does not support text editors")
+    }
+}
