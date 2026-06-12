@@ -178,6 +178,13 @@ internal fun HexViewer(
 
         SyncLazyListStates(offsetListState, hexDataListState, textDataListState)
 
+        // Request focus when the hex viewer first composes so that key
+        // events (hex-digit typing, arrow navigation) work immediately —
+        // including after an IDE restart that auto-reopens the editor.
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+        }
+
         val bytesPerRow by remember { state.bytesPerRow }
         val spacing = 8.dp
 
