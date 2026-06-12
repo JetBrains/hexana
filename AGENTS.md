@@ -4,6 +4,16 @@ Read this file first, then read the nearest nested `AGENTS.md` for the module yo
 
 This repository is a JetBrains IntelliJ plugin workspace for WebAssembly analysis. The main product is the `idea-plugin` module. Most binary decoding logic lives in `wasmParser`, with small shared support modules around it.
 
+## Persistent Storage — Knowledge Wiki (`kb/wiki/`)
+
+All agents — the main session and every subagent it dispatches — MUST treat `kb/wiki/` as the durable, cross-session knowledge store, per `kb/CLAUDE.md` (the wiki schema + ingest/query workflow). This is persistent storage that survives across sessions, distinct from per-session memory.
+
+- **Consult first.** Before substantive knowledge work (design, research, cross-module analysis, decisions), read `kb/wiki/index.md` to find and reuse relevant pages, then read those pages and their cited `(raw/…)` sources. Skip only for trivial mechanical edits with nothing relevant in the wiki.
+- **Write back.** When you produce durable knowledge (a design, decision, source summary, or reusable finding), file it as `kb/wiki/sources/<slug>.md` or `kb/wiki/entities/<slug>.md`, update `kb/wiki/index.md`, and append one line to `kb/wiki/log.md`. Cross-link `[[entities/x]]`; cite raw inputs as `(raw/<file>)`.
+- **Never modify `kb/raw/`** — those are read-only sources.
+- Persist what is reusable across sessions; keep conversation-only scratch out of the wiki.
+- When you dispatch a subagent, include this directive in its prompt so it consults and writes back to `kb/wiki/` too.
+
 ## Read Order
 
 - Start here for repo-wide rules and commands.
