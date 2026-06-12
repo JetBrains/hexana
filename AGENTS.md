@@ -103,7 +103,9 @@ Run the narrowest command that proves your change.
 - Run WasmJS browser parser tests: `./gradlew :wasmParser:wasmJsBrowserTest`
 - Build shared module: `./gradlew :plugins-shared:build`
 - Run buffer abstraction tests: `./gradlew :encdec:test`
-- Run UI-driver test module: `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaWasmProjectDriverTest`
+- Compile UI-driver tests: `./gradlew :ui-driver-tests:compileTestKotlin`
+- Run UI-driver test module through the TeamCity aggregator:
+  `./gradlew :ui-driver-tests:teamcityUiDriverTests`
 
 Existing IDE run configurations currently include:
 

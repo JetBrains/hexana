@@ -10,16 +10,52 @@ This module contains expensive end-to-end UI tests for the plugin using JetBrain
 - Open a sample project from `testData/projects/hexana_wasm_project`.
 - Verify that `hello.wasm` can be opened successfully.
 - Run Wasm configurations with Wasmtime (core modules, exported functions, component models).
+- Exercise Hexana's Compose editor through a hybrid Driver plus plugin-side `@Remote` probe approach.
+- Run a packaged-plugin MCP smoke against the IDE MCP server and Hexana MCP tools.
 
 Main test entry points:
 
 - `src/test/kotlin/org/jetbrains/hexana/ui/HexanaWasmProjectDriverTest.kt`
 - `src/test/kotlin/org/jetbrains/hexana/ui/HexanaRunConfigurationDriverTest.kt`
+- `src/test/kotlin/org/jetbrains/hexana/ui/HexanaEditorSurfaceSmokeTest.kt`
+- `src/test/kotlin/org/jetbrains/hexana/ui/HexanaSettingsSmokeTest.kt`
+- `src/test/kotlin/org/jetbrains/hexana/ui/HexanaMcpPackagedSmokeTest.kt`
 
 Support code:
 
+- `src/test/kotlin/org/jetbrains/hexana/ui/framework/HexanaUiDriverFramework.kt`
+- `idea-plugin/src/ui-tests-framework/kotlin/org/jetbrains/hexana/uitestframework/HexanaEditorUiTestProbe.kt`
 - `HexanaTeamCityArtifacts.kt`
 - `HexanaTeamCityIdeDownloader.kt`
+
+## Framework Rules
+
+- Use Driver workflow helpers for IDE-level actions: launching Starter contexts, opening files, waiting for editor tabs,
+  reading standard IDE UI such as console output, and closing the IDE.
+- Use the Hexana-domain DSL entry points from `framework/` in tests:
+  - lifecycle and context setup through `hexanaIde(...)`, `HexanaIdeConfiguration`, and `HexanaUiDriverTestSupport`;
+  - editor workflows through `HexanaIde.hexanaEditor(...)`, `HexanaEditor`, and `HexanaEditorExpectations`;
+  - settings workflows through `HexanaIde.hexanaSettings(...)`;
+  - packaged MCP workflows through `HexanaIde.withGlobalMcpClient { ... }`.
+- Keep `HexanaRunConfigurationDriverTest` on its existing direct Driver/helper path in this branch. Do not migrate
+  run/debug tests into the new DSL until that work is explicitly scoped.
+- Use plugin-side `@Remote` probes for Hexana Compose editor state that Driver cannot observe through stable Swing
+  selectors. The packaged `HexanaEditorUiTestProbe` reports provider kind, Hexana tabs, search state, cursor offset, and
+  WAT conversion state.
+- Keep Hexana-specific remote helpers in the packaged UI-test framework boundary.
+- Do not call `driver.utility(...)`, framework `@Remote` interfaces, `singleProject()`, IDE services, Run Content Manager,
+  or MCP transport plumbing directly from normal tests. Put that logic behind a focused helper in
+  `src/test/kotlin/org/jetbrains/hexana/ui/framework/`.
+- Keep the UI-first boundary clear: Driver owns user workflows when stable controls exist; probes observe product state
+  or perform narrow unavoidable setup for flows such as MCP that cannot be driven reliably through UI.
+- Packaged probes intentionally live under `idea-plugin/src/ui-tests-framework/kotlin` and ship in the plugin ZIP used by
+  these tests. Keep them tiny, assertion-oriented, and meaningful as product state rather than test-only behavior.
+- Add Compose accessibility names only for durable user-facing controls that Driver must locate or activate. Do not add
+  names for internal layout nodes or virtualized table content just to make assertions possible.
+- Do not test behavior with fixed coordinates, pixel colors, screenshots, row heights, font metrics, or exact scroll
+  positions. Prefer standard Driver selectors, accessibility names for stable controls, and plugin probes for product
+  state.
+- Keep new probes small and assertion-oriented; avoid implementing new runtime behavior for tests.
 
 ## When To Touch This Module
 
@@ -33,8 +69,21 @@ Do not use this module as the default validation path for normal parser or edito
 
 ## Run Command
 
-- `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaWasmProjectDriverTest`
-- `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaRunConfigurationDriverTest`
+- Compile without launching an IDE: `./gradlew :ui-driver-tests:compileTestKotlin`
+- Full UI-driver suite, matching TeamCity aggregation:
+  `HEXANA_USE_LOCAL_PLUGIN=true HEXANA_LOCAL_PLUGIN_ZIP=/path/to/hexana.zip ./gradlew :ui-driver-tests:teamcityUiDriverTests`
+- Focused local runs:
+  - `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaWasmProjectDriverTest`
+  - `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaRunConfigurationDriverTest`
+  - `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaEditorSurfaceSmokeTest`
+  - `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaSettingsSmokeTest`
+  - `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaMcpPackagedSmokeTest`
+
+## TeamCity Pickup
+
+`teamcityUiDriverTests` in `ui-driver-tests/build.gradle.kts` depends on the normal Gradle `test` task. A new JUnit 5
+test class under `ui-driver-tests/src/test/kotlin` is picked up by the aggregator automatically, so no TeamCity DSL
+change is needed unless the build needs new inputs.
 
 ## Required Environment Configuration
 
@@ -59,4 +108,9 @@ Other inputs:
 - Treat these tests as networked integration tests, not unit tests.
 - Expect slow execution and external failure modes.
 - Prefer running them only after narrower module tests are already green.
+- Use `./gradlew :ui-driver-tests:compileTestKotlin` as the baseline validation for framework or documentation-adjacent
+  changes that include code examples or API references.
+- Run focused or full UI-driver tests only when the change affects packaged IDE behavior and exactly one plugin source
+  mode is configured. Full `teamcityUiDriverTests` is appropriate for plugin packaging, IDE startup, installation flow,
+  MCP packaging, or end-to-end UI behavior changes.
 - If you change the plugin ZIP source logic, update the README in this module too.
