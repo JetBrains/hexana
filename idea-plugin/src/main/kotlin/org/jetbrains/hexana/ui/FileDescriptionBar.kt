@@ -64,6 +64,7 @@ internal fun FileDescriptionBar(
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
     editModeContent: (@Composable () -> Unit)? = null,
+    showNormalContentWithEditMode: Boolean = false,
 ) {
     val size = binaryProvider.bytes.limit()
 
@@ -102,6 +103,14 @@ internal fun FileDescriptionBar(
                 ) {
                     editModeContent()
                 }
+            }
+            if (showNormalContentWithEditMode) {
+                NormalModeContent(
+                    binaryProvider = binaryProvider,
+                    state = state,
+                    parentFileName = parentFileName,
+                    onNavigateToParent = onNavigateToParent,
+                )
             }
         } else {
             NormalModeContent(

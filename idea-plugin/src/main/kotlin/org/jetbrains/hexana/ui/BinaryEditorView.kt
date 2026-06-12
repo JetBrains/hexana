@@ -299,6 +299,7 @@ internal fun BinaryEditorView(
                             } catch (_: Throwable) { /* keep current */ }
                         },
                     ),
+                    showNormalContentWithEditMode = overwriteShadowRanges != null,
                 )
                 Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     HexViewer(
