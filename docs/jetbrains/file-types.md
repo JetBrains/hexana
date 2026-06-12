@@ -1,7 +1,7 @@
 ---
 title: File Types Registered by Hexana
 description: File types Hexana registers in the IntelliJ Platform — .wasm, .wat, .wit, native binaries (ELF/Mach-O/PE), JVM artifacts (.class, .jar, .war, .apk), and JIT dumps.
-version: "0.10"
+version: "0.11"
 ---
 
 # File Types
@@ -72,6 +72,8 @@ When opened, a native binary uses the same multi-tab layout as a `.wasm` file:
 - **Disassembly** tab — multi-architecture decoding via the bundled Capstone WASM module: x86, x86-64, ARM, AArch64, RISC-V 32 / 64. Virtualised by instruction window, so multi-MB `.text` sections render incrementally.
 
 The disassembly tab has a switchable execution backend (bytecode AOT or Cranelift native). See [`disassembler-backends.md`](disassembler-backends.md).
+
+**GraalVM Native Image** (0.11): native binaries produced by `native-image` are recognised by their SubstrateVM fingerprint and carry a **Native Image** badge. When they embed a CycloneDX SBOM (`--enable-sbom`), an additional **SBOM** tab lists the retained components and can overlay OSV vulnerabilities. See [`features.md`](features.md#graalvm-native-image-011).
 
 ## JVM `.class` files
 

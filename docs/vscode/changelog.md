@@ -1,12 +1,25 @@
 ---
 title: Hexana for VS Code — Release Notes
 description: Release notes for the Hexana VS Code extension.
-version: "0.2.0"
+version: "0.3.0"
 ---
 
 # Release Notes — Hexana for VS Code
 
 This page tracks releases of the VS Code extension.
+
+## 0.3.0
+
+Released **2026-06-11**.
+
+### Added
+
+- **Node.js and browser runtimes.** The Run picker can now target **Node.js** and the **browser** in addition to Wasmtime, WAMR, and GraalVM. These are **run-only** in VS Code — debugging is not yet wired for the Node.js or browser paths.
+- **JAR / ZIP support.** `.jar`, `.zip`, `.war`, and `.apk` archives open in the Hexana editor with the hex viewer on top and a sortable, searchable entry list below. Click an entry that is itself a recognised binary (`.wasm`, `.class`, a nested archive, a native binary) to open it in a new editor tab.
+
+### Changed
+
+- **More reliable Windows debugging.** Better breakpoint detection and overall stability for the `lldb`-backed Wasmtime / WAMR debug path on Windows.
 
 ## 0.2.0
 

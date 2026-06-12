@@ -1,12 +1,12 @@
 ---
 title: Hexana Feature Reference
 description: Complete capability reference for the Hexana IntelliJ plugin, grouped by surface.
-version: "0.10"
+version: "0.11"
 ---
 
 # Hexana Feature Reference
 
-This page enumerates every user-visible capability Hexana ships. Capabilities are grouped by *surface* (file type or interaction point), not by chronological release. For per-release changes, see [`changelog-0.10.md`](changelog-0.10.md) and the prior [`changelog-0.9.md`](changelog-0.9.md).
+This page enumerates every user-visible capability Hexana ships. Capabilities are grouped by *surface* (file type or interaction point), not by chronological release. For per-release changes, see [`changelog-0.11.md`](changelog-0.11.md), [`changelog-0.10.md`](changelog-0.10.md), and the prior [`changelog-0.9.md`](changelog-0.9.md).
 
 ![Hexana opens a `.wasm` file with the structure tabs visible](../images/idea/01-wasm-overview.png)
 
@@ -92,6 +92,7 @@ When Hexana opens a `.wasm` file, it presents a structured editor with the follo
 - **Proposal pills** showing which WebAssembly proposals the binary uses — Threads, SIMD, GC, Tail Call, Reference Types, Bulk Memory, and so on. Hexana detects them and propagates the matching `--wasm-features` (or runtime-equivalent) flags to run / debug commands automatically.
 - Run and Debug buttons when a runtime is configured.
 - Backreference link to a parent component when applicable.
+- Format badges where applicable — e.g. **Native Image** and **SBOM** on GraalVM Native Image binaries (see [GraalVM Native Image](#graalvm-native-image-011)).
 
 ## WIT language support
 
@@ -140,6 +141,25 @@ Hexana detects ELF, Mach-O, and PE binaries from their magic bytes regardless of
 - **Symbol-driven function discovery first**, with a fallback to per-executable-section ranges when symbols are stripped.
 - **Switchable disassembler backend** — by default the bundled Capstone module runs as compiled JVM bytecode; an experimental Cranelift-native path is available via a Registry toggle. See [`disassembler-backends.md`](disassembler-backends.md).
 
+### GraalVM Native Image (0.11)
+
+![Information bar with the Native Image and SBOM badges](../images/idea/14-native-image-badge.png)
+
+Native executables and shared libraries produced by `native-image` are a recognised sub-kind of native binary.
+
+- **Detection** — Hexana fingerprints the SubstrateVM build: the `com.oracle.svm.core.VM=GraalVM …` identity string, `.svm_*` / `__svm*` sections, and the `__svm_version_info` marker. Matching binaries get a **Native Image** badge whose tooltip reports the GraalVM version, edition, and target platform. Because the identity string lives in read-only data, detection survives release stripping.
+- **Embedded SBOM** — binaries built with `--enable-sbom` (default-on in Oracle GraalVM for JDK 25+) get an **SBOM** badge and a dedicated **SBOM** tab: a metadata header (subject, timestamp, generating tool) over a searchable, sortable component table (type, group, name, version, licences, PURL), with a **View raw JSON** action for the decompressed CycloneDX document.
+
+#### SBOM vulnerability reachability
+
+![SBOM tab with the OSV vulnerability overlay](../images/idea/13-sbom-tab.png)
+
+The SBOM tab can match components against the **OSV** database and overlay known CVEs with CVSS severity, the fixed version, and an advisory link.
+
+- A component only appears in the SBOM if `native-image` retained it, so every CVE shown is for code that actually survived dead-code elimination.
+- With `--enable-sbom=class-level`, Hexana uses the compiled-in class/method tree to refine the verdict to **"vulnerable class retained"** vs **"eliminated by DCE"**.
+- Matching is **offline by default** (the OSV database is downloaded once; the component list never leaves your machine), with an opt-in online `api.osv.dev` query. Both toggles are off until enabled in **Settings → Tools → Hexana** — see [`settings.md`](settings.md#sbom-vulnerability-matching).
+
 ## JVM artifacts
 
 Hexana opens Java archives, class files, and Hotspot JIT dumps as structured documents.
@@ -172,7 +192,9 @@ Hexana ships a `WasmRunConfigurationType` with a producer that creates a run con
 
 - **Wasmtime** — run and debug (debug requires LLVM 22.1+).
 - **WAMR** — run and debug.
-- **GraalVM** (built-in or custom installation) — run only. Builds of GraalVM without the embedded WASM runner are detected and supported.
+- **GraalWasm** (built-in or custom GraalVM installation) — run only. Builds of GraalVM without the embedded WASM runner are detected and supported.
+- **Node.js** — run and debug (0.11). Debugging uses Node's built-in inspector.
+- **Browser** — run and debug (0.11). Debugging drives **Chrome** via the Chrome DevTools Protocol.
 
 The runtime is selected per-project in **Settings → Build, Execution, Deployment → WASM Runtime**. The configuration also accepts a custom GraalVM home directory. See [`run-and-debug.md`](run-and-debug.md).
 

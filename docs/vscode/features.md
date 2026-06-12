@@ -1,7 +1,7 @@
 ---
 title: Hexana for VS Code — Feature Reference
 description: Complete capability reference for the Hexana VS Code extension.
-version: "0.2.0"
+version: "0.3.0"
 ---
 
 # Hexana for VS Code — Feature Reference
@@ -48,6 +48,17 @@ Hexana detects **ELF**, **Mach-O**, and **PE** files by magic bytes and opens th
 
 Common extensions are recognised (`.elf`, `.so`, `.dylib`, `.bundle`, `.exe`, `.dll`, `.sys`); extensionless binaries with matching magic bytes also open through the Hexana editor. Run and Debug are not applicable for native binaries.
 
+## JVM archives (0.3.0+)
+
+![JAR archive in VS Code](../images/vscode/08-jar-class-list.png)
+
+`.jar`, `.zip`, `.war`, and `.apk` archives open in the Hexana editor with the hex viewer on top and a **sortable, searchable entry list** below.
+
+- Click an entry that is itself a recognised binary — `.wasm`, `.class`, a native binary, or a nested archive — to open it in a new Hexana editor tab.
+- Decompression happens in the extension host; entries are read on demand, so large archives open without unpacking everything up front.
+
+The decoded three-tab `.class` view (header / methods / constant pool) remains JetBrains-only — in VS Code a `.class` entry opens in the hex viewer. See [What this version does not do](#what-this-version-does-not-do-yet).
+
 ## Analysis tabs
 
 Up to 11 tabs inside the same editor, surfaced by binary kind. All tables are **sortable** and **searchable**. See [`analysis-tabs.md`](analysis-tabs.md) for the per-tab reference.
@@ -70,7 +81,7 @@ Up to 11 tabs inside the same editor, surfaced by binary kind. All tables are **
 
 A **Run** button and a separate **Debug** button in the editor toolbar, present when at least one runtime is discoverable.
 
-- **Runtime picker** — Wasmtime, WAMR, or GraalVM. Unavailable runtimes are greyed out with a tooltip explaining why.
+- **Runtime picker** — Wasmtime, WAMR, GraalVM, Node.js, or the browser (Node.js and browser added in 0.3.0, run-only). Unavailable runtimes are greyed out with a tooltip explaining why.
 - **Core modules**: pick an export, the runtime, and supply arguments. Hexana invokes the chosen runtime in a VS Code terminal with auto-generated import stubs and the runtime's equivalent of `--preload` for data segments.
 - **Component Model binaries**: Hexana resolves imports by scanning workspace directories for matching `.wasm` files (transitively), composes the result through `wasm-tools compose` or `wac plug`, then invokes the chosen runtime on the composed component.
 
@@ -78,7 +89,7 @@ See [`run-support.md`](run-support.md) for the full reference.
 
 ## Debugging (experimental)
 
-A **Debug** button alongside Run launches the module under `lldb` for **Wasmtime** or **WAMR** runtimes (not yet GraalVM). Requires LLVM 22.1 or newer.
+A **Debug** button alongside Run launches the module under `lldb` for **Wasmtime** or **WAMR** runtimes (not GraalVM, Node.js, or the browser — those are run-only in VS Code). Requires LLVM 22.1 or newer.
 
 - Set breakpoints in source files associated with the module (PC ↔ source mapping via DWARF).
 - Step over, into, out; continue past hit breakpoints.
@@ -146,9 +157,9 @@ Compared to the JetBrains IntelliJ plugin, the VS Code extension does **not** sh
 - Editable WAT view.
 - Java-side completion / inspections for GraalWasm or Chicory.
 - JS / TS-side type inference for `WebAssembly.instantiate`.
-- GraalVM debug (debug works on Wasmtime + WAMR only).
+- GraalVM, Node.js, and browser debug (debug works on Wasmtime + WAMR only; Node.js and the browser are run-only).
 - Goto Symbol contribution scoped to `.wit` declarations and `.wasm` exports.
-- JVM artifact viewers (`.class`, `.jar`, `.jit`) and the switchable AOT / Cranelift disassembler backend.
+- Decoded JVM artifact views — the three-tab `.class` view and the `.jit` viewer — and the switchable AOT / Cranelift disassembler backend. (Archives `.jar` / `.zip` / `.war` / `.apk` *do* open with a hex + entry list since 0.3.0; nested `.class` entries open in the hex viewer, not the decoded class view.)
 
 These are tracked for future versions; some are JetBrains-only by design (where they depend on IntelliJ Platform APIs without a VS Code equivalent).
 

@@ -1,13 +1,13 @@
 ---
 title: Hexana VS Code Extension — Documentation
 description: User and contributor documentation for the Hexana VS Code extension.
-version: "0.2.0"
+version: "0.3.0"
 audience: [users]
 ---
 
 # Hexana — VS Code Extension Documentation
 
-**Hexana** is a Visual Studio Code extension by JetBrains for inspecting and running WebAssembly binaries — and, as of 0.2.0, native binaries (ELF, Mach-O, PE) as well. Open any `.wasm` file and Hexana replaces the default editor with a Compose-for-Web webview: a virtual-scrolling hex viewer alongside up to **11 structural-analysis tabs** (Summary, Exports, Imports, Functions, Data, Custom, Top, Monos, Garbage, Modules, WAT). Native binaries open with the same hex + structure layout. Run modules through **Wasmtime**, **WAMR**, or **GraalVM**, **debug** them (experimental, LLVM 22.1+), resolve Component Model dependencies automatically, and drive analysis from an AI tool over the on-demand-downloaded **MCP server**.
+**Hexana** is a Visual Studio Code extension by JetBrains for inspecting and running WebAssembly binaries — and, since 0.2.0, native binaries (ELF, Mach-O, PE); since 0.3.0, JVM archives (`.jar`, `.zip`, `.war`, `.apk`) as well. Open any `.wasm` file and Hexana replaces the default editor with a Compose-for-Web webview: a virtual-scrolling hex viewer alongside up to **11 structural-analysis tabs** (Summary, Exports, Imports, Functions, Data, Custom, Top, Monos, Garbage, Modules, WAT). Native binaries and archives open with the same hex + structure layout. Run modules through **Wasmtime**, **WAMR**, **GraalVM**, **Node.js**, or the **browser**, **debug** them (experimental, LLVM 22.1+, Wasmtime / WAMR only), resolve Component Model dependencies automatically, and drive analysis from an AI tool over the on-demand-downloaded **MCP server**.
 
 > Looking for the IntelliJ Platform plugin? See the [JetBrains IDEs section](../jetbrains/index.md). The VS Code and JetBrains products share the same WASM parser core but differ in language-support depth, run integrations, and target audience.
 
@@ -26,7 +26,7 @@ audience: [users]
 
 ## Version and compatibility
 
-- **Extension version**: 0.2.0.
+- **Extension version**: 0.3.0.
 - **VS Code requirement**: `^1.102.0` — required for the MCP-server registration API used by the on-demand MCP integration. Older 0.0.x releases ran on 1.85+.
 - **Optional Java**: 21 or newer for the MCP server. The server is downloaded on demand on first MCP use; set `hexana.mcp.javaHome` to point at a specific JDK if `JAVA_HOME` / `PATH` do not surface one.
 - **Optional LLVM**: 22.1 or newer for the experimental debug path (Wasmtime + WAMR, `lldb` under the hood).

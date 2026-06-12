@@ -1,12 +1,12 @@
 ---
 title: Running and Debugging WebAssembly from Hexana for VS Code
-description: How to run and debug .wasm modules through Wasmtime, WAMR, or GraalVM — core modules with auto-generated import stubs and Component Model binaries with dependency composition.
-version: "0.2.0"
+description: How to run and debug .wasm modules through Wasmtime, WAMR, GraalVM, Node.js, or the browser — core modules with auto-generated import stubs and Component Model binaries with dependency composition.
+version: "0.3.0"
 ---
 
 # Running and Debugging WebAssembly from Hexana for VS Code
 
-Hexana ships **Run** and **Debug** buttons in the editor toolbar. You can invoke a module through one of three runtimes — **Wasmtime**, **WAMR**, or **GraalVM** — and (experimental) attach an `lldb`-backed debugger when running on Wasmtime or WAMR. Both core WebAssembly modules and Component Model binaries are supported, with different orchestration for each.
+Hexana ships **Run** and **Debug** buttons in the editor toolbar. You can invoke a module through one of five runtimes — **Wasmtime**, **WAMR**, **GraalVM**, **Node.js**, or the **browser** — and (experimental) attach an `lldb`-backed debugger when running on Wasmtime or WAMR. Node.js and the browser were added in 0.3.0 and are **run-only** in VS Code. Both core WebAssembly modules and Component Model binaries are supported, with different orchestration for each.
 
 ## Requirements
 
@@ -26,7 +26,7 @@ At least one runtime must be on `PATH` (or pointed at via the corresponding sett
 ### How the Run flow works
 
 1. Click **Run** in the editor toolbar of an open `.wasm`.
-2. A dialog opens listing all exported functions and a **runtime picker** (Wasmtime / WAMR / GraalVM). Pick an entry point and the runtime.
+2. A dialog opens listing all exported functions and a **runtime picker** (Wasmtime / WAMR / GraalVM / Node.js / browser). Pick an entry point and the runtime.
 3. Optionally supply program arguments. Hexana parses the argument string using a shell-aware splitter (quoted strings are preserved as single arguments).
 4. Hexana checks for unresolved imports:
    - **All imports resolved**: invokes the chosen runtime directly.
@@ -66,7 +66,7 @@ You can install only one — Hexana adapts. If neither is installed and your bin
 
 The dialog has four sections:
 
-- **Runtime** — dropdown of detected runtimes (Wasmtime / WAMR / GraalVM). Unavailable runtimes are greyed out with a tooltip explaining why.
+- **Runtime** — dropdown of detected runtimes (Wasmtime / WAMR / GraalVM / Node.js / browser). Unavailable runtimes are greyed out with a tooltip explaining why. Node.js and the browser are run-only.
 - **Export** — dropdown of all exported functions (core modules) or the component's primary entry interface (components).
 - **Arguments** — free-text field. Shell-style quoting is supported via Hexana's `splitShellArgs` Kotlin/JS utility. Backslash escapes work for spaces; single and double quotes group arguments.
 - **Environment** (implicit) — Hexana passes through your current shell environment to the chosen runtime.
@@ -104,7 +104,7 @@ There is no setting to override `wasm-tools`, `wac`, WAMR, or GraalVM paths — 
 
 ## What this version does not do
 
-- **GraalVM debug is not yet wired.** Debug works on Wasmtime and WAMR only.
+- **GraalVM, Node.js, and browser debug are not wired.** Debug works on Wasmtime and WAMR only; GraalVM, Node.js, and the browser are run-only in VS Code.
 - **No proposal-flag selection UI.** Hexana detects which proposals the binary uses and passes the appropriate `--wasm-features` flags automatically, but there is no UI to override.
 - **No run-configuration persistence.** Each Run is ad-hoc; arguments are not saved between runs. The dialog remembers the last set within the editor session but discards them on close.
 - **No host-function injection.** You cannot supply your own implementations for unresolved imports; you get auto-generated stubs or nothing.
