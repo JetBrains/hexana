@@ -1,7 +1,7 @@
 ---
 title: Hexana Settings Pages
 description: The Settings pages and Registry keys Hexana exposes — Tools → Hexana, Build/Execution → WASM Runtime, and disassembler-backend toggles in the Registry.
-version: "0.10"
+version: "0.11"
 ---
 
 # Settings
@@ -14,13 +14,26 @@ Hexana registers two `applicationConfigurable` entries (IDE-wide, not per-projec
 - **Provider**: `HexanaConfigurableProvider`
 - **Title**: bundled key `hexana.settings.displayName`
 
-General Hexana plugin settings. Surfaces include:
+General Hexana plugin settings. Fields include:
 
-- File-type associations (managed by the platform, surfaced for visibility).
-- Hex view appearance.
-- Diagnostic / logging toggles for the plugin.
+- **`wasm-tools` path** and **Use built-in `wasm-tools`** — the binary toolchain Hexana shells out to for some WAT/component operations.
+- **`llvm-objdump` path** — the executable used by the experimental llvm-objdump disassembly source.
+- **Show offsets** — toggle offset gutters in the structured views.
+- **Send usage statistics** — the analytics opt-out (subject to the IDE's statistics consent).
+- **SBOM vulnerability matching** — see below.
 
 The exact field set is the responsibility of `HexanaConfigurableProvider`; consult that class for the source of truth.
+
+### SBOM vulnerability matching
+
+For GraalVM Native Image binaries that carry an embedded CycloneDX SBOM (see [`features.md`](features.md#graalvm-native-image-011)), two checkboxes control vulnerability lookup. Both are **off by default**.
+
+| Setting | Default | Effect |
+|---|---|---|
+| **Look up vulnerabilities** (`lookupVulnerabilities`) | `false` | Match SBOM components against a **locally downloaded** OSV database. The database is fetched once; the component list never leaves your machine. |
+| **Also query osv.dev online** (`vulnerabilitiesOnline`) | `false` | Additionally query `api.osv.dev` over the network. **This sends the component coordinate list to osv.dev.** Enabled only when *Look up vulnerabilities* is on. |
+
+When matching is on, the **SBOM** tab overlays known CVEs with CVSS severity, the fixed version, and an advisory link. See the [0.11 release notes](changelog-0.11.md#sbom-vulnerability-reachability).
 
 ## Settings → Build, Execution, Deployment → WASM Runtime
 
@@ -31,10 +44,11 @@ The exact field set is the responsibility of `HexanaConfigurableProvider`; consu
 
 Configures runtimes for the WASM run/debug configurations covered in [`run-and-debug.md`](run-and-debug.md). Fields:
 
-- **Default runtime** — Wasmtime, WAMR, or GraalVM. Used when a run configuration does not override it.
+- **Default runtime** — Wasmtime, WAMR, GraalWasm, Node.js, or Browser. Used when a run configuration does not override it.
 - **Wasmtime path** — absolute path to the `wasmtime` executable.
 - **WAMR path** — absolute path to `iwasm` (or the WAMR binary you ship).
 - **GraalVM home** — absolute path to a GraalVM installation that includes the GraalWasm component. Empty means use Hexana's built-in GraalVM image.
+- **Node.js path** — absolute path to the `node` executable. Empty resolves `node` from `PATH` and common install locations. (Browser runs need no path — Hexana opens the IDE's configured browser; browser *debug* requires Chrome. See [`run-and-debug.md`](run-and-debug.md).)
 
 These values persist into the IDE's options storage and survive restarts.
 
