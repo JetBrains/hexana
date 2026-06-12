@@ -25,8 +25,9 @@ Rust/WASM module that needs no host toolchain.
 - Size profiler tab showing where the bytes go — by function, by
   data segment, by section — with sorting and scrolling for
   multi-megabyte modules.
-- Run configurations launching modules under Wasmtime, WAMR, or
-  GraalVM. Per-export Run / Debug arrows on the Exports tab.
+- Run configurations launching modules under Wasmtime, WAMR,
+  GraalWasm, Node.js, or the browser (Chrome). Per-export
+  Run / Debug arrows on the Exports tab.
 - Source-level debugging (experimental, requires LLVM 22.1 or
   newer): line breakpoints, local variable inspection backed by
   DWARF, and continue / step controls via wasmtime or WAMR.
@@ -41,6 +42,11 @@ Rust/WASM module that needs no host toolchain.
   Rust / WebAssembly module — no host `objdump`, Capstone, or
   similar toolchain required. Virtualised rendering keeps the
   view responsive on multi-MB `.text` sections.
+- GraalVM Native Image executables and shared libraries (anything
+  produced by `native-image`) are recognised by their SubstrateVM
+  fingerprint and tagged with a **Native Image** badge — the
+  tooltip reports the GraalVM version, edition, and target
+  platform. Detection survives release stripping.
 
 #### Disassembler backend: AOT (default) and Redline (experimental)
 
@@ -73,6 +79,27 @@ The Capstone backend itself is non-thread-safe, so calls are
 serialised through a single-slot dispatcher inside the plugin —
 the in-flight count is surfaced as a `Disassembling: N` widget in
 the IDE status bar.
+
+#### GraalVM Native Image SBOM and vulnerability reachability
+
+Native Image binaries built with `--enable-sbom` (default-on in
+Oracle GraalVM for JDK 25+) carry an embedded CycloneDX software
+bill of materials. Hexana shows an **SBOM** badge and a dedicated
+**SBOM** tab: a metadata header (subject, timestamp, generating
+tool) over a searchable, sortable component table — type, group,
+name, version, licence, PURL — with a **View raw JSON** action for
+the decompressed document.
+
+The tab can match those components against the OSV vulnerability
+database and overlay known CVEs with CVSS severity, the fixed
+version, and an advisory link. Because a component only appears in
+the SBOM if `native-image` retained it, every CVE shown is for code
+that actually survived dead-code elimination; binaries built with
+`--enable-sbom=class-level` refine this to "vulnerable class
+retained" vs "eliminated by DCE". Matching is offline by default —
+the OSV database is downloaded once and the component list never
+leaves your machine — with an opt-in toggle to also query osv.dev
+online. Off until enabled under **Settings → Tools → Hexana**.
 
 ### JVM artifacts
 
@@ -166,6 +193,22 @@ executable section's raw bytes when symbols are stripped. The
 disassembly view virtualises by instruction window, so even
 multi-megabyte `.text` sections render incrementally.
 
+### GraalVM Native Image
+
+![Information bar with the Native Image and SBOM badges](doc/images/idea/14-native-image-badge.png)
+
+Executables and shared libraries produced by `native-image` are
+recognised by their SubstrateVM fingerprint and tagged with a
+**Native Image** badge. When the binary embeds a CycloneDX SBOM
+(`--enable-sbom`), an **SBOM** tab lists every retained component
+and can overlay known CVEs from the OSV database:
+
+![SBOM tab with the vulnerability overlay](doc/images/idea/13-sbom-tab.png)
+
+Severity, the fixed version, and an advisory link sit next to each
+affected component. Matching is offline by default; enable online
+osv.dev lookups under **Settings → Tools → Hexana**.
+
 ### Java archives and class files
 
 ![JAR file: hex on top, searchable class list below](doc/images/idea/07-jar-class-list.png)
@@ -224,6 +267,15 @@ DWARF-backed debugging shows source locals at every paused frame:
 Native binaries open with the same hex + structure layout:
 
 ![Native binary in VS Code](doc/images/vscode/06-native-binary.png)
+
+`.jar` and `.zip` archives open with the same hex-plus-entry-list
+layout:
+
+![JAR archive in VS Code](doc/images/vscode/08-jar-class-list.png)
+
+Run configurations can target Node.js and the browser in addition
+to Wasmtime, WAMR, and GraalWasm — running only; Node.js and
+browser debugging is not yet wired up in VS Code.
 
 ## Documentation
 
