@@ -56,4 +56,8 @@ object HexanaTheme {
     val diffMovedColor: Color
         @Composable
         get() = if (JewelTheme.isDark) Color(56, 139, 253, 70) else Color(56, 139, 253, 55)
+
+    val editedByteColor: Color
+        @Composable
+        get() = if (JewelTheme.isDark) Color(255, 140, 0, 90) else Color(255, 120, 0, 70)
 }

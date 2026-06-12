@@ -106,9 +106,18 @@ internal fun HexViewer(
      * can no longer trust the file's shape.
      */
     onHexCommit: (() -> Unit)? = null,
+    suppressEditHighlight: Boolean = false,
 ) {
     val buf = binaryProvider.bytes
 
+    // Snapshot of modified byte ranges from the editable document, used to
+    // highlight edited cells. Recomputed whenever the live provider changes
+    // (which happens on every commit via the DocumentListener in
+    // BinaryEditorView). The list is small — only contiguous edited spans.
+    val modifiedRanges = remember(binaryProvider, suppressEditHighlight) {
+        if (suppressEditHighlight) emptyList()
+        else editableDoc?.modifiedRanges() ?: emptyList()
+    }
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -539,12 +548,18 @@ internal fun HexViewer(
                                                 absoluteIndex.toLong() in range.offset until (range.offset + range.size)
                                             }
 
+                                            val isEdited = modifiedRanges.any { range ->
+                                                absoluteIndex.toLong() in range.offset until (range.offset + range.length)
+                                            }
+
                                             val backgroundColor = if (isUnderCursor) {
                                                 HexanaTheme.hexCellActiveColor
                                             } else if (isHover) {
                                                 HexanaTheme.hexCellHoverColor
                                             } else if (highlightRange != null) {
                                                 highlightRange.color
+                                            } else if (isEdited) {
+                                                HexanaTheme.editedByteColor
                                             } else {
                                                 Color.Unspecified
                                             }
@@ -648,12 +663,19 @@ internal fun HexViewer(
                                             (rowIndex * bytesPerRow + byteIndex).toLong() in range.offset until (range.offset + range.size)
                                         }
 
+                                        val absoluteIndex = rowIndex * bytesPerRow + byteIndex
+                                        val isEdited = modifiedRanges.any { range ->
+                                            absoluteIndex.toLong() in range.offset until (range.offset + range.length)
+                                        }
+
                                         val backgroundColor = if (isUnderCursor) {
                                             HexanaTheme.hexCellActiveColor
                                         } else if (isHover) {
                                             HexanaTheme.hexCellHoverColor
                                         } else if (highlightRange != null) {
                                             highlightRange.color
+                                        } else if (isEdited) {
+                                            HexanaTheme.editedByteColor
                                         } else {
                                             Color.Unspecified
                                         }

@@ -297,6 +297,7 @@ internal fun BinaryEditorView(
                         focusRequester = hexFocusRequester,
                         editableDoc = editableDoc,
                         onHexCommit = { hexEditedSinceOpen = true },
+                        suppressEditHighlight = overwriteShadowRanges != null,
                     )
                 }
                 HexViewStatusBar(state = state, totalBytes = liveProvider.bytes.limit())
