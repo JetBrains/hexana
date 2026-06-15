@@ -28,7 +28,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.ui.Messages
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.document.EditableBinaryDocument
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
@@ -48,8 +50,10 @@ import org.jetbrains.hexana.wasm.analysis.SizeNode
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.jewel.foundation.theme.JewelTheme
+import org.jetbrains.jewel.ui.component.DefaultButton
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.Icon
+import org.jetbrains.jewel.ui.component.OutlinedButton
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.Tooltip
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -63,10 +67,27 @@ internal fun FileDescriptionBar(
     onSizeClick: (() -> Unit)? = null,
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
-    editModeContent: (@Composable () -> Unit)? = null,
-    showNormalContentWithEditMode: Boolean = false,
+    editableDoc: EditableBinaryDocument? = null,
+    originalBinaryProvider: BinaryProvider? = null,
+    overwriteShadowRanges: OverwriteShadowRanges? = null,
+    onOverwriteShadowRangesChanged: ((OverwriteShadowRanges?) -> Unit)? = null,
+    onReparseAfterOverwrite: () -> Unit = {},
 ) {
     val size = binaryProvider.bytes.limit()
+
+    val editModeContent = if (editableDoc != null && originalBinaryProvider != null && onOverwriteShadowRangesChanged != null) {
+        editModeToolbarContent(
+            doc = editableDoc,
+            stampKey = editableDoc.modificationStamp,
+            binaryProvider = originalBinaryProvider,
+            overwriteShadowRanges = overwriteShadowRanges,
+            onOverwriteShadowRangesChanged = onOverwriteShadowRangesChanged,
+            onReparseAfterOverwrite = onReparseAfterOverwrite,
+        )
+    } else {
+        null
+    }
+    val showNormalContentWithEditMode = overwriteShadowRanges != null
 
     Row(
         modifier = Modifier
@@ -489,5 +510,183 @@ private fun formatSize(bytes: Int): String = when {
         val mb = bytes.toDouble() / (1024 * 1024)
         val rounded = (mb * 10).toLong() / 10.0
         "$rounded MB"
+    }
+}
+
+/**
+ * Returns a composable lambda for the edit-mode controls to embed in the
+ * [FileDescriptionBar], or `null` when no editing UI should be shown
+ * (i.e. no edits and no post-overwrite state).
+ */
+@Composable
+private fun editModeToolbarContent(
+    doc: EditableBinaryDocument,
+    stampKey: Long,
+    binaryProvider: BinaryProvider,
+    overwriteShadowRanges: OverwriteShadowRanges?,
+    onOverwriteShadowRangesChanged: (OverwriteShadowRanges?) -> Unit,
+    onReparseAfterOverwrite: () -> Unit = {},
+): (@Composable () -> Unit)? {
+    @Suppress("UNUSED_PARAMETER") val unused = stampKey
+    val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
+    val finalizedName = sourceFile?.name?.let { computeFinalizedName(it) }
+    val hasEdits = doc.canUndo()
+    val canOverwrite = hasEdits && sourceFile != null
+    val canSaveCopy = hasEdits && sourceFile != null
+
+    val isPostOverwrite = overwriteShadowRanges != null && sourceFile != null
+
+    if (!hasEdits && !isPostOverwrite) return null
+
+    return {
+        val compactTextStyle = TextStyle(fontSize = 11.sp)
+        if (isPostOverwrite && sourceFile != null) {
+            OutlinedButton(
+                modifier = Modifier.height(20.dp),
+                onClick = {
+                    val restoredOriginal = overwriteShadowRanges!!.applyTo(
+                        sourceFile.contentsToByteArray(),
+                    )
+                    overwriteSourceFile(sourceFile, restoredOriginal)
+                    while (doc.canUndo()) doc.undo()
+                    val currentBytes = doc.read(0L, doc.length.toInt())
+                    if (!currentBytes.contentEquals(restoredOriginal)) {
+                        doc.edit().use { tx ->
+                            tx.replace(0L, doc.length, restoredOriginal)
+                            tx.commit()
+                        }
+                        while (doc.canUndo()) doc.undo()
+                    }
+                    doc.clearPersistedJournal()
+                    onOverwriteShadowRangesChanged(null)
+                    onReparseAfterOverwrite()
+                },
+            ) { Text("Undo overwrite", style = compactTextStyle) }
+        } else {
+            OutlinedButton(
+                modifier = Modifier.height(20.dp),
+                onClick = {
+                    while (doc.canUndo()) doc.undo()
+                    doc.clearPersistedJournal()
+                    onReparseAfterOverwrite()
+                },
+                enabled = hasEdits,
+            ) { Text("Discard", style = compactTextStyle) }
+            DefaultButton(
+                modifier = Modifier.height(20.dp),
+                onClick = {
+                    if (sourceFile != null) {
+                        val editedBytes = doc.read(0L, doc.length.toInt())
+                        val canReparse = try {
+                            val rebuilt = rebuildProviderFromBytes(binaryProvider, editedBytes)
+                            when (rebuilt) {
+                                is GenericBinaryProvider -> false
+                                is WasmBinaryProvider -> rebuilt.canProvideWasmModule()
+                                is WasmComponentBinaryProvider -> rebuilt.canProvideWasmModule()
+                                else -> rebuilt != null
+                            }
+                        } catch (_: Throwable) { false }
+                        val isGenericOriginal = binaryProvider is GenericBinaryProvider
+                        if (!canReparse && !isGenericOriginal) {
+                            val answer = Messages.showOkCancelDialog(
+                                "The edited bytes can no longer be parsed as the original format. " +
+                                    "Overwriting will damage the file's structure.",
+                                "Overwrite Damaged Binary?",
+                                "Overwrite Anyway",
+                                Messages.getCancelButton(),
+                                Messages.getWarningIcon(),
+                            )
+                            if (answer != Messages.OK) return@DefaultButton
+                        }
+                        val shadow = OverwriteShadowRanges.capture(
+                            sourceFile.contentsToByteArray(),
+                            doc.modifiedRanges(),
+                        )
+                        onOverwriteShadowRangesChanged(shadow)
+                        overwriteSourceFile(sourceFile, editedBytes)
+                        doc.clearPersistedJournal()
+                        onReparseAfterOverwrite()
+                    }
+                },
+                enabled = canOverwrite,
+            ) { Text("Overwrite", style = compactTextStyle) }
+            OutlinedButton(
+                modifier = Modifier.height(20.dp),
+                onClick = {
+                    if (sourceFile != null && finalizedName != null) {
+                        val bytes = doc.read(0L, doc.length.toInt())
+                        finalizeWriteToSibling(sourceFile, finalizedName, bytes)
+                    }
+                },
+                enabled = canSaveCopy,
+            ) { Text(if (finalizedName != null) "Save a copy \u2192 $finalizedName" else "Save a copy", style = compactTextStyle) }
+        }
+    }
+}
+
+/**
+ * Overwrites the [target] file with [bytes] via a VFS write action.
+ * Runs synchronously when already on the EDT (button click handlers in
+ * Compose/Jewel), otherwise schedules via `invokeLater`.  Synchronous
+ * execution is critical so that callers can safely manipulate the
+ * document state immediately after the file write without racing a
+ * deferred VFS reload.
+ */
+private fun overwriteSourceFile(
+    target: com.intellij.openapi.vfs.VirtualFile,
+    bytes: ByteArray,
+) {
+    val app = com.intellij.openapi.application.ApplicationManager.getApplication()
+    if (app.isDispatchThread) {
+        com.intellij.openapi.application.WriteAction.run<Throwable> {
+            target.setBinaryContent(bytes)
+            org.jetbrains.hexana.HexanaLog.LOG.info(
+                "Overwrite ${bytes.size} bytes \u2192 ${target.path}",
+            )
+        }
+    } else {
+        app.invokeAndWait {
+            com.intellij.openapi.application.WriteAction.run<Throwable> {
+                target.setBinaryContent(bytes)
+                org.jetbrains.hexana.HexanaLog.LOG.info(
+                    "Overwrite ${bytes.size} bytes \u2192 ${target.path}",
+                )
+            }
+        }
+    }
+}
+
+/**
+ * `<base>.edited.<ext>` next to the original. Plain `<name>.edited` if there
+ * is no extension. Subsequent finalizes overwrite the same target \u2014 the user
+ * can clone it before re-finalizing if they want history.
+ */
+private fun computeFinalizedName(originalName: String): String {
+    val dot = originalName.lastIndexOf('.')
+    return if (dot < 0) "$originalName.edited"
+    else originalName.substring(0, dot) + ".edited" + originalName.substring(dot)
+}
+
+/**
+ * Writes [bytes] to a sibling of [source] named [outputName]. Creates the
+ * file on first finalize; overwrites on subsequent ones. Runs on the EDT
+ * inside a write action \u2014 required by the IntelliJ VFS contract.
+ */
+private fun finalizeWriteToSibling(
+    source: com.intellij.openapi.vfs.VirtualFile,
+    outputName: String,
+    bytes: ByteArray,
+) {
+    com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+        com.intellij.openapi.application.WriteAction.run<Throwable> {
+            val parent = source.parent
+                ?: error("source file has no parent directory: ${source.path}")
+            val existing = parent.findChild(outputName)
+            val target = existing ?: parent.createChildData(parent, outputName)
+            target.setBinaryContent(bytes)
+            org.jetbrains.hexana.HexanaLog.LOG.info(
+                "Finalized ${bytes.size} bytes \u2192 ${target.path}",
+            )
+        }
     }
 }
