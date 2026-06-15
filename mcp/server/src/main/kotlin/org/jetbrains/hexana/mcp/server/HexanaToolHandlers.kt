@@ -129,7 +129,9 @@ class HexanaToolHandlers(
             analysisService.checkComponentCompatibility(
                 input = wasmInput(arguments),
                 dependencyPaths = arguments.optionalStringList("dependencyPaths").orEmpty(),
-                projectRoot = arguments.optionalNonBlankString("projectRoot")
+                projectRoot = arguments.optionalNonBlankString("projectRoot"),
+                previousPath = arguments.optionalNonBlankString("previousPath"),
+                dependencyLockPath = arguments.optionalNonBlankString("dependencyLockPath")
             )
         }
     }

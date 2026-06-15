@@ -767,6 +767,16 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireType(projectRoot, FieldType.StringT)
             requireNullable(projectRoot)
             requireDescribed(projectRoot)
+
+            val previousPath = requireField("previousPath")
+            requireType(previousPath, FieldType.StringT)
+            requireNullable(previousPath)
+            requireDescribed(previousPath)
+
+            val dependencyLockPath = requireField("dependencyLockPath")
+            requireType(dependencyLockPath, FieldType.StringT)
+            requireNullable(dependencyLockPath)
+            requireDescribed(dependencyLockPath)
         }
     }
 }

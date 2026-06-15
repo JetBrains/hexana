@@ -1795,9 +1795,10 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
     name = "check_component_compatibility",
     description = """
   |Compute component-provider compatibility verdicts against explicit or resolved dependency exports.
-  |Compare non-runtime imports with `dependencyPaths` or with dependencies resolved from `projectRoot`.
+  |Compare non-runtime imports with `dependencyPaths` or with providers discovered from `projectRoot`.
   |Reports matched provider files, missing imports, version drift, ambiguous providers, and extern-description or sort mismatches when available.
-  |Use this aggregate compatibility workflow when you need provider verdicts rather than raw component surface listings.
+  |Optional `previousPath` and `dependencyLockPath` add import-drift context, configured providers, candidate verdicts, selected incompatibility reason, involved provider paths, and a minimal lock/config fix.
+  |Use this aggregate compatibility workflow when you need provider verdicts and remediation context rather than raw component surface listings.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -1847,6 +1848,20 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
         })
         put("description", JsonPrimitive("Optional project root used for compatibility resolution when `dependencyPaths` is omitted."))
       })
+      put("previousPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional previous component path used to explain import drift."))
+      })
+      put("dependencyLockPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional dependency lock/config JSON path used to report configured providers and lock fixes."))
+      })
     },
     required = listOf()
   ),
@@ -1858,6 +1873,20 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
           add(JsonPrimitive("null"))
         })
         put("description", JsonPrimitive("Input path label when the caller provided `path`."))
+      })
+      put("previousPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Previous component path label when provided."))
+      })
+      put("dependencyLockPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Dependency lock/config path label when provided."))
       })
       put("compatible", buildJsonObject {
         put("type", JsonPrimitive("boolean"))
@@ -1972,6 +2001,214 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
         })
         put("description", JsonPrimitive("Compatibility issues and warnings."))
       })
+      put("failingImport", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
+        })
+        put("properties", buildJsonObject {
+          put("importName", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Current import selected as the root compatibility failure."))
+          })
+          put("baseName", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Current import base name without version."))
+          })
+          put("requiredVersion", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Current required version without `@`, or empty when absent."))
+          })
+          put("sort", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Expected provider export sort inferred from the import shape when available."))
+          })
+          put("externDescription", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Current import extern description when available."))
+          })
+          put("previousImportName", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Previous import name for the same base interface when available."))
+          })
+          put("previousBaseName", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Previous import base name when available."))
+          })
+          put("previousVersion", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Previous import version without `@` when available."))
+          })
+          put("changedSincePrevious", buildJsonObject {
+            put("type", JsonPrimitive("boolean"))
+            put("description", JsonPrimitive("True when the current import differs from the previous component import."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("importName"))
+          add(JsonPrimitive("baseName"))
+          add(JsonPrimitive("requiredVersion"))
+          add(JsonPrimitive("changedSincePrevious"))
+        })
+        put("description", JsonPrimitive("Selected root failing import with previous-build drift context."))
+      })
+      put("configuredProviders", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("interfaceName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Provider interface/base name from dependency metadata."))
+            })
+            put("version", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Configured provider version without `@`, or empty when absent."))
+            })
+            put("path", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Configured provider path from dependency metadata."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("interfaceName"))
+            add(JsonPrimitive("version"))
+            add(JsonPrimitive("path"))
+          })
+        })
+        put("description", JsonPrimitive("Provider entries read from optional dependency metadata."))
+      })
+      put("candidateProviders", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+          put("properties", buildJsonObject {
+            put("dependencyPath", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Scanned provider component file."))
+            })
+            put("exportName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Provider export name."))
+            })
+            put("baseName", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Provider export base name without version."))
+            })
+            put("version", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Provider export version without `@`, or empty when absent."))
+            })
+            put("sort", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Provider export sort label."))
+            })
+            put("externDescription", buildJsonObject {
+              put("type", buildJsonArray {
+                add(JsonPrimitive("string"))
+                add(JsonPrimitive("null"))
+              })
+              put("description", JsonPrimitive("Provider export extern description when available."))
+            })
+            put("verdict", buildJsonObject {
+              put("type", JsonPrimitive("string"))
+              put("description", JsonPrimitive("Provider verdict: `compatible`, `version_drift`, `sort_mismatch`, `extern_description_mismatch`, or `wrong_interface`."))
+            })
+          })
+          put("required", buildJsonArray {
+            add(JsonPrimitive("dependencyPath"))
+            add(JsonPrimitive("exportName"))
+            add(JsonPrimitive("baseName"))
+            add(JsonPrimitive("version"))
+            add(JsonPrimitive("sort"))
+            add(JsonPrimitive("verdict"))
+          })
+        })
+        put("description", JsonPrimitive("Provider candidates inspected with compatibility verdicts."))
+      })
+      put("selectedIncompatibilityReason", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Selected root incompatibility reason when one is present."))
+      })
+      put("providerPathsInvolved", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Provider paths relevant to the selected fix."))
+      })
+      put("minimalDependencyLockFix", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
+        })
+        put("properties", buildJsonObject {
+          put("dependencyLockPath", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Dependency lock/config path to update when provided."))
+          })
+          put("replaceProviderPath", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Configured provider path that should be replaced when known."))
+          })
+          put("requiredInterface", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Required provider interface/base name."))
+          })
+          put("requiredVersion", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Required provider version without `@`, or empty when absent."))
+          })
+          put("requiredShape", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive("Required provider export shape."))
+          })
+          put("rejectProviderPath", buildJsonObject {
+            put("type", buildJsonArray {
+              add(JsonPrimitive("string"))
+              add(JsonPrimitive("null"))
+            })
+            put("description", JsonPrimitive("Candidate provider path that has the wrong version or shape when known."))
+          })
+        })
+        put("required", buildJsonArray {
+          add(JsonPrimitive("requiredInterface"))
+          add(JsonPrimitive("requiredVersion"))
+          add(JsonPrimitive("requiredShape"))
+        })
+        put("description", JsonPrimitive("Minimal dependency lock/config fix when enough context is available."))
+      })
+      put("recommendation", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Concise production-oriented remediation recommendation when available."))
+      })
       put("summary", buildJsonObject {
         put("type", JsonPrimitive("object"))
         put("properties", buildJsonObject {
@@ -1991,6 +2228,14 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
             put("type", JsonPrimitive("integer"))
             put("description", JsonPrimitive("Number of matches with version drift."))
           })
+          put("sortMismatchCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of providers with sort or shape mismatches."))
+          })
+          put("wrongInterfaceCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of scanned providers exporting unrelated interfaces."))
+          })
           put("ambiguousCount", buildJsonObject {
             put("type", JsonPrimitive("integer"))
             put("description", JsonPrimitive("Number of imports with ambiguous providers."))
@@ -1999,19 +2244,26 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
             put("type", JsonPrimitive("integer"))
             put("description", JsonPrimitive("Number of incompatible extern-description matches."))
           })
+          put("candidateProviderCount", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("description", JsonPrimitive("Number of candidate provider exports inspected."))
+          })
         })
         put("required", buildJsonArray {
           add(JsonPrimitive("compatible"))
           add(JsonPrimitive("matchedCount"))
           add(JsonPrimitive("missingCount"))
           add(JsonPrimitive("versionDriftCount"))
+          add(JsonPrimitive("sortMismatchCount"))
+          add(JsonPrimitive("wrongInterfaceCount"))
           add(JsonPrimitive("ambiguousCount"))
           add(JsonPrimitive("incompatibleDescriptionCount"))
+          add(JsonPrimitive("candidateProviderCount"))
         })
         put("description", JsonPrimitive("Compact compatibility counts."))
       })
     },
-    required = listOf("compatible", "matches", "missingImports", "issues", "summary")
+    required = listOf("compatible", "matches", "missingImports", "issues", "configuredProviders", "candidateProviders", "providerPathsInvolved", "summary")
   ),
     annotations = ToolAnnotations(
       readOnlyHint = true,

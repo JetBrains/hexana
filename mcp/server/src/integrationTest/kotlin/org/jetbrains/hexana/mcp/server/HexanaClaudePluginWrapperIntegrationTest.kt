@@ -277,6 +277,21 @@ class HexanaClaudePluginWrapperIntegrationTest {
                 } == true,
             "$clientLabel check_component_compatibility did not report missing subtractor: ${surfaceText(compatibility)}"
         )
+        assertEquals(
+            "missing_provider",
+            compatibility.structuredContent?.get("selectedIncompatibilityReason")?.jsonPrimitive?.content,
+            "$clientLabel check_component_compatibility should select the missing provider reason"
+        )
+        assertTrue(
+            compatibility.structuredContent
+                ?.get("candidateProviders")
+                ?.jsonArray
+                ?.any {
+                    it.jsonObject.getValue("dependencyPath").jsonPrimitive.content == adder.toString() &&
+                        it.jsonObject.getValue("verdict").jsonPrimitive.content == "compatible"
+                } == true,
+            "$clientLabel check_component_compatibility did not report candidate provider verdicts: ${surfaceText(compatibility)}"
+        )
     }
 
     private fun copyComponentFixture(name: String, target: Path): Path {

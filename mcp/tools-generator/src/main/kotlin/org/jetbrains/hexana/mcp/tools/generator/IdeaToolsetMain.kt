@@ -240,6 +240,8 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
         ToolInputPattern.ComponentCompatibility -> {
             code.addStatement("val dependencyPaths = args.optionalStringListArgument(%S)", "dependencyPaths")
             code.addStatement("val projectRoot = args.optionalStringArgument(%S)", "projectRoot")
+            code.addStatement("val previousPath = args.optionalStringArgument(%S)", "previousPath")
+            code.addStatement("val dependencyLockPath = args.optionalStringArgument(%S)", "dependencyLockPath")
         }
     }
     code.addStatement("val file = %M(path)", REQUIRE_WASM_FILE)
@@ -358,7 +360,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             ToolInputPattern.ComponentDependencies ->
                 "(path = file.path, projectRoot = projectRoot, scanRoots = scanRoots.orEmpty())"
             ToolInputPattern.ComponentCompatibility ->
-                "(path = file.path, dependencyPaths = dependencyPaths.orEmpty(), projectRoot = projectRoot)"
+                "(path = file.path, dependencyPaths = dependencyPaths.orEmpty(), projectRoot = projectRoot, previousPath = previousPath, dependencyLockPath = dependencyLockPath)"
         }
         code.addStatement("val result = provider.%M$callArgs", handlerMember)
     }
@@ -460,6 +462,8 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
         ToolInputPattern.ComponentCompatibility -> listOf(
             inputField(spec.input, "dependencyPaths"),
             inputField(spec.input, "projectRoot"),
+            inputField(spec.input, "previousPath"),
+            inputField(spec.input, "dependencyLockPath"),
         )
     }
 }

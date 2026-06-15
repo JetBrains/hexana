@@ -135,21 +135,74 @@ data class ComponentCompatibilityMatchResult(
 )
 
 @Serializable
+data class ComponentCompatibilityFailingImportResult(
+    val importName: String,
+    val baseName: String,
+    val requiredVersion: String,
+    val sort: String?,
+    val externDescription: String?,
+    val previousImportName: String?,
+    val previousBaseName: String?,
+    val previousVersion: String?,
+    val changedSincePrevious: Boolean,
+)
+
+@Serializable
+data class ComponentConfiguredProviderResult(
+    val interfaceName: String,
+    val version: String,
+    val path: String,
+)
+
+@Serializable
+data class ComponentProviderVerdictResult(
+    val dependencyPath: String,
+    val exportName: String,
+    val baseName: String,
+    val version: String,
+    val sort: String,
+    val externDescription: String?,
+    val verdict: String,
+)
+
+@Serializable
+data class ComponentDependencyLockFixResult(
+    val dependencyLockPath: String?,
+    val replaceProviderPath: String?,
+    val requiredInterface: String,
+    val requiredVersion: String,
+    val requiredShape: String,
+    val rejectProviderPath: String?,
+)
+
+@Serializable
 data class ComponentCompatibilitySummaryResult(
     val compatible: Boolean,
     val matchedCount: Int,
     val missingCount: Int,
     val versionDriftCount: Int,
+    val sortMismatchCount: Int,
+    val wrongInterfaceCount: Int,
     val ambiguousCount: Int,
     val incompatibleDescriptionCount: Int,
+    val candidateProviderCount: Int,
 )
 
 @Serializable
 data class CheckComponentCompatibilityResult(
     val path: String?,
+    val previousPath: String?,
+    val dependencyLockPath: String?,
     val compatible: Boolean,
     val matches: List<ComponentCompatibilityMatchResult>,
     val missingImports: List<ComponentUnresolvedImportResult>,
     val issues: List<ComponentCompatibilityIssueResult>,
+    val failingImport: ComponentCompatibilityFailingImportResult?,
+    val configuredProviders: List<ComponentConfiguredProviderResult>,
+    val candidateProviders: List<ComponentProviderVerdictResult>,
+    val selectedIncompatibilityReason: String?,
+    val providerPathsInvolved: List<String>,
+    val minimalDependencyLockFix: ComponentDependencyLockFixResult?,
+    val recommendation: String?,
     val summary: ComponentCompatibilitySummaryResult,
 )

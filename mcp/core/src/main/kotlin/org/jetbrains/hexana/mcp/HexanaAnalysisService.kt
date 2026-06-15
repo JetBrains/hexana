@@ -113,7 +113,9 @@ interface HexanaAnalysisService {
     fun checkComponentCompatibility(
         input: WasmInput,
         dependencyPaths: List<String>,
-        projectRoot: String?
+        projectRoot: String?,
+        previousPath: String?,
+        dependencyLockPath: String?
     ): CheckComponentCompatibilityResult {
         throw UnsupportedOperationException("checkComponentCompatibility is not implemented")
     }
@@ -342,7 +344,9 @@ class DefaultHexanaAnalysisService(
     override fun checkComponentCompatibility(
         input: WasmInput,
         dependencyPaths: List<String>,
-        projectRoot: String?
+        projectRoot: String?,
+        previousPath: String?,
+        dependencyLockPath: String?
     ): CheckComponentCompatibilityResult {
         requireStringList(dependencyPaths, "Dependency paths")
         val wasm = loadComponent(input)
@@ -350,6 +354,8 @@ class DefaultHexanaAnalysisService(
             path = input.artifactPathLabel(),
             dependencyPaths = dependencyPaths,
             projectRoot = projectRoot,
+            previousPath = previousPath,
+            dependencyLockPath = dependencyLockPath,
         )
     }
 

@@ -189,12 +189,112 @@ class ComponentAnalysisServiceTest {
             input = WasmInput.FilePath(calculator.toString()),
             dependencyPaths = listOf(adder.toString()),
             projectRoot = null,
+            previousPath = null,
+            dependencyLockPath = null,
         )
 
         assertFalse(result.compatible)
         assertTrue(result.matches.any { it.importName.contains("component:adder/add") })
         assertTrue(result.missingImports.any { it.baseName.contains("component:subtractor/subtract") })
         assertEquals(result.compatible, result.summary.compatible)
+    }
+
+    @Test
+    fun checkComponentCompatibilityExplainsDriftAndLockFixes() {
+        val root = temporaryFolder.newFolder("reporting").toPath()
+        val current = writeComponentEntries(
+            root.resolve("dist/components/reporting.component.wasm"),
+            imports = listOf(componentImport("acme:reporting/sink@2.0.0")),
+            exports = listOf(componentExport("acme:reporting/run@2.0.0")),
+        )
+        val previous = writeComponentEntries(
+            root.resolve("previous_build/dist/components/reporting.component.wasm"),
+            imports = listOf(componentImport("acme:reporting/sink@1.4.0")),
+            exports = listOf(componentExport("acme:reporting/run@1.4.0")),
+        )
+        writeComponentEntries(
+            root.resolve("components/reporting_sink_legacy.component.wasm"),
+            imports = emptyList(),
+            exports = listOf(componentExport("acme:reporting/sink@1.4.0")),
+        )
+        val wrongShape = writeComponentEntries(
+            root.resolve("components/reporting_sink_v2_wrong_shape.component.wasm"),
+            imports = emptyList(),
+            exports = listOf(
+                componentExport(
+                    "acme:reporting/sink@2.0.0",
+                    sortKind = "instance",
+                    externKind = "instance",
+                )
+            ),
+        )
+        writeComponentEntries(
+            root.resolve("third_party/components/telemetry_sink.component.wasm"),
+            imports = emptyList(),
+            exports = listOf(componentExport("acme:telemetry/sink@2.0.0")),
+        )
+        val lockPath = root.resolve("config/component-lock.json")
+        Files.createDirectories(lockPath.parent)
+        Files.writeString(
+            lockPath,
+            """
+            {
+              "providers": [
+                {
+                  "interface": "acme:reporting/sink",
+                  "version": "1.4.0",
+                  "path": "components/reporting_sink_legacy.component.wasm"
+                },
+                {
+                  "interface": "acme:telemetry/sink",
+                  "version": "2.0.0",
+                  "path": "third_party/components/telemetry_sink.component.wasm"
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val result = service.checkComponentCompatibility(
+            input = WasmInput.FilePath(current.toString()),
+            dependencyPaths = emptyList(),
+            projectRoot = root.toString(),
+            previousPath = previous.toString(),
+            dependencyLockPath = "config/component-lock.json",
+        )
+
+        assertFalse(result.compatible)
+        assertEquals("sort_mismatch", result.selectedIncompatibilityReason)
+        assertEquals("acme:reporting/sink@2.0.0", result.failingImport?.importName)
+        assertEquals("acme:reporting/sink@1.4.0", result.failingImport?.previousImportName)
+        assertEquals(true, result.failingImport?.changedSincePrevious)
+        assertTrue(result.configuredProviders.any {
+            it.interfaceName == "acme:reporting/sink" &&
+                it.path == "components/reporting_sink_legacy.component.wasm"
+        })
+        assertTrue(result.candidateProviders.any {
+            it.dependencyPath.endsWith("reporting_sink_legacy.component.wasm") &&
+                it.verdict == "version_drift"
+        })
+        assertTrue(result.candidateProviders.any {
+            it.dependencyPath == wrongShape.toString() &&
+                it.verdict == "sort_mismatch"
+        })
+        assertTrue(result.candidateProviders.any {
+            it.dependencyPath.endsWith("telemetry_sink.component.wasm") &&
+                it.verdict == "wrong_interface"
+        })
+        assertTrue(result.providerPathsInvolved.any { it == "components/reporting_sink_legacy.component.wasm" })
+        assertTrue(result.providerPathsInvolved.any { it.endsWith("reporting_sink_v2_wrong_shape.component.wasm") })
+        assertEquals("config/component-lock.json", result.minimalDependencyLockFix?.dependencyLockPath)
+        assertEquals("components/reporting_sink_legacy.component.wasm", result.minimalDependencyLockFix?.replaceProviderPath)
+        assertEquals("acme:reporting/sink", result.minimalDependencyLockFix?.requiredInterface)
+        assertEquals("2.0.0", result.minimalDependencyLockFix?.requiredVersion)
+        assertEquals(wrongShape.toString(), result.minimalDependencyLockFix?.rejectProviderPath)
+        assertTrue(result.minimalDependencyLockFix?.requiredShape.orEmpty().contains("Func export"))
+        assertTrue(result.recommendation.orEmpty().contains("config/component-lock.json"))
+        assertTrue(result.summary.sortMismatchCount >= 1)
+        assertTrue(result.summary.wrongInterfaceCount >= 1)
     }
 
     private fun componentFixture(name: String): Path =
@@ -205,12 +305,35 @@ class ComponentAnalysisServiceTest {
         return Files.copy(componentFixture(name), target)
     }
 
-    private fun writeComponent(target: Path, imports: List<String>, exports: List<String>): Path {
+    private data class TestComponentEntry(
+        val name: String,
+        val sortKind: String = "func",
+        val externKind: String = "type",
+    )
+
+    private fun componentImport(name: String, externKind: String = "type"): TestComponentEntry =
+        TestComponentEntry(name = name, externKind = externKind)
+
+    private fun componentExport(
+        name: String,
+        sortKind: String = "func",
+        externKind: String = "type",
+    ): TestComponentEntry =
+        TestComponentEntry(name = name, sortKind = sortKind, externKind = externKind)
+
+    private fun writeComponent(target: Path, imports: List<String>, exports: List<String>): Path =
+        writeComponentEntries(
+            target = target,
+            imports = imports.map(::componentImport),
+            exports = exports.map(::componentExport),
+        )
+
+    private fun writeComponentEntries(target: Path, imports: List<TestComponentEntry>, exports: List<TestComponentEntry>): Path {
         Files.createDirectories(target.parent)
         return Files.write(target, buildComponent(imports, exports))
     }
 
-    private fun buildComponent(imports: List<String>, exports: List<String>): ByteArray {
+    private fun buildComponent(imports: List<TestComponentEntry>, exports: List<TestComponentEntry>): ByteArray {
         val sections = buildList {
             add(encodeComponentTypeSection())
             if (imports.isNotEmpty()) {
@@ -228,9 +351,9 @@ class ComponentAnalysisServiceTest {
         return encodeSection(7, encodeVector(listOf(functionType)))
     }
 
-    private fun encodeComponentImport(name: String): ByteArray {
-        val (baseName, version) = splitVersionedName(name)
-        val externType = encodeExternType()
+    private fun encodeComponentImport(entry: TestComponentEntry): ByteArray {
+        val (baseName, version) = splitVersionedName(entry.name)
+        val externType = encodeExternType(entry.externKind)
         return if (version.isBlank()) {
             byteArrayOf(0x00) + encodeName(baseName) + externType
         } else {
@@ -238,10 +361,10 @@ class ComponentAnalysisServiceTest {
         }
     }
 
-    private fun encodeComponentExport(name: String): ByteArray {
-        val (baseName, version) = splitVersionedName(name)
-        val sortIndex = byteArrayOf(0x01) + encodeU32(0)
-        val externDescription = byteArrayOf(0x01) + encodeExternType()
+    private fun encodeComponentExport(entry: TestComponentEntry): ByteArray {
+        val (baseName, version) = splitVersionedName(entry.name)
+        val sortIndex = encodeSortIndex(entry.sortKind)
+        val externDescription = byteArrayOf(0x01) + encodeExternType(entry.externKind)
         return if (version.isBlank()) {
             byteArrayOf(0x00) + encodeName(baseName) + sortIndex + externDescription
         } else {
@@ -249,8 +372,27 @@ class ComponentAnalysisServiceTest {
         }
     }
 
-    private fun encodeExternType(index: Int = 0): ByteArray =
-        byteArrayOf(0x01) + encodeU32(index)
+    private fun encodeSortIndex(kind: String, index: Int = 0): ByteArray =
+        byteArrayOf(componentSortKindTag(kind)) + encodeU32(index)
+
+    private fun encodeExternType(kind: String = "type", index: Int = 0): ByteArray =
+        byteArrayOf(componentExternKindTag(kind)) + encodeU32(index)
+
+    private fun componentSortKindTag(kind: String): Byte = when (kind) {
+        "func" -> 0x01
+        "value" -> 0x02
+        "type" -> 0x03
+        "component" -> 0x04
+        "instance" -> 0x05
+        else -> error("Unsupported component sort kind: $kind")
+    }.toByte()
+
+    private fun componentExternKindTag(kind: String): Byte = when (kind) {
+        "type" -> 0x01
+        "component" -> 0x04
+        "instance" -> 0x05
+        else -> error("Unsupported component extern kind: $kind")
+    }.toByte()
 
     private fun encodeSection(sectionId: Int, payload: ByteArray): ByteArray =
         byteArrayOf(sectionId.toByte()) + encodeU32(payload.size) + payload

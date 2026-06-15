@@ -130,13 +130,53 @@ val ComponentCompatibilityMatchResultClass = class_("ComponentCompatibilityMatch
     boolean("exactVersionMatch").describe("True when versions are absent or equal.")
 }
 
+val ComponentCompatibilityFailingImportResultClass = class_("ComponentCompatibilityFailingImportResult") {
+    string("importName").describe("Current import selected as the root compatibility failure.")
+    string("baseName").describe("Current import base name without version.")
+    string("requiredVersion").describe("Current required version without `@`, or empty when absent.")
+    nullable("sort", of = string()).describe("Expected provider export sort inferred from the import shape when available.")
+    nullable("externDescription", of = string()).describe("Current import extern description when available.")
+    nullable("previousImportName", of = string()).describe("Previous import name for the same base interface when available.")
+    nullable("previousBaseName", of = string()).describe("Previous import base name when available.")
+    nullable("previousVersion", of = string()).describe("Previous import version without `@` when available.")
+    boolean("changedSincePrevious").describe("True when the current import differs from the previous component import.")
+}
+
+val ComponentConfiguredProviderResultClass = class_("ComponentConfiguredProviderResult") {
+    string("interfaceName").describe("Provider interface/base name from dependency metadata.")
+    string("version").describe("Configured provider version without `@`, or empty when absent.")
+    string("path").describe("Configured provider path from dependency metadata.")
+}
+
+val ComponentProviderVerdictResultClass = class_("ComponentProviderVerdictResult") {
+    string("dependencyPath").describe("Scanned provider component file.")
+    string("exportName").describe("Provider export name.")
+    string("baseName").describe("Provider export base name without version.")
+    string("version").describe("Provider export version without `@`, or empty when absent.")
+    string("sort").describe("Provider export sort label.")
+    nullable("externDescription", of = string()).describe("Provider export extern description when available.")
+    string("verdict").describe("Provider verdict: `compatible`, `version_drift`, `sort_mismatch`, `extern_description_mismatch`, or `wrong_interface`.")
+}
+
+val ComponentDependencyLockFixResultClass = class_("ComponentDependencyLockFixResult") {
+    nullable("dependencyLockPath", of = string()).describe("Dependency lock/config path to update when provided.")
+    nullable("replaceProviderPath", of = string()).describe("Configured provider path that should be replaced when known.")
+    string("requiredInterface").describe("Required provider interface/base name.")
+    string("requiredVersion").describe("Required provider version without `@`, or empty when absent.")
+    string("requiredShape").describe("Required provider export shape.")
+    nullable("rejectProviderPath", of = string()).describe("Candidate provider path that has the wrong version or shape when known.")
+}
+
 val ComponentCompatibilitySummaryResultClass = class_("ComponentCompatibilitySummaryResult") {
     boolean("compatible").describe("True when no compatibility errors were found.")
     int("matchedCount").describe("Number of matched imports.")
     int("missingCount").describe("Number of missing imports.")
     int("versionDriftCount").describe("Number of matches with version drift.")
+    int("sortMismatchCount").describe("Number of providers with sort or shape mismatches.")
+    int("wrongInterfaceCount").describe("Number of scanned providers exporting unrelated interfaces.")
     int("ambiguousCount").describe("Number of imports with ambiguous providers.")
     int("incompatibleDescriptionCount").describe("Number of incompatible extern-description matches.")
+    int("candidateProviderCount").describe("Number of candidate provider exports inspected.")
 }
 
 val CheckComponentCompatibilityResultClass = class_(
@@ -144,10 +184,19 @@ val CheckComponentCompatibilityResultClass = class_(
     kotlinPackage = COMPONENT_MODEL_PACKAGE,
 ) {
     nullable("path", of = string()).describe("Input path label when the caller provided `path`.")
+    nullable("previousPath", of = string()).describe("Previous component path label when provided.")
+    nullable("dependencyLockPath", of = string()).describe("Dependency lock/config path label when provided.")
     boolean("compatible").describe("True when no compatibility errors were found.")
     list("matches", of = ComponentCompatibilityMatchResultClass).describe("Matched imports and provider files.")
     list("missingImports", of = ComponentUnresolvedImportResultClass).describe("Required imports without a provider.")
     list("issues", of = ComponentCompatibilityIssueResultClass).describe("Compatibility issues and warnings.")
+    nullable("failingImport", of = ComponentCompatibilityFailingImportResultClass).describe("Selected root failing import with previous-build drift context.")
+    list("configuredProviders", of = ComponentConfiguredProviderResultClass).describe("Provider entries read from optional dependency metadata.")
+    list("candidateProviders", of = ComponentProviderVerdictResultClass).describe("Provider candidates inspected with compatibility verdicts.")
+    nullable("selectedIncompatibilityReason", of = string()).describe("Selected root incompatibility reason when one is present.")
+    list("providerPathsInvolved", of = string()).describe("Provider paths relevant to the selected fix.")
+    nullable("minimalDependencyLockFix", of = ComponentDependencyLockFixResultClass).describe("Minimal dependency lock/config fix when enough context is available.")
+    nullable("recommendation", of = string()).describe("Concise production-oriented remediation recommendation when available.")
     embed("summary", of = ComponentCompatibilitySummaryResultClass).describe("Compact compatibility counts.")
 }
 
@@ -165,6 +214,10 @@ val ComponentCompatibilityInputClass = WasmInputClass.with("ComponentCompatibili
         .maxItems(SchemaIntValue.Literal(64))
     nullable("projectRoot", of = string())
         .describe("Optional project root used for compatibility resolution when `dependencyPaths` is omitted.")
+    nullable("previousPath", of = string())
+        .describe("Optional previous component path used to explain import drift.")
+    nullable("dependencyLockPath", of = string())
+        .describe("Optional dependency lock/config JSON path used to report configured providers and lock fixes.")
 }
 
 internal val ComponentTools: List<ToolSpec> = tools {
@@ -197,9 +250,10 @@ internal val ComponentTools: List<ToolSpec> = tools {
     tool("check_component_compatibility") {
         summary = "Compute component-provider compatibility verdicts against explicit or resolved dependency exports."
         guidance = """
-            Compare non-runtime imports with `dependencyPaths` or with dependencies resolved from `projectRoot`.
+            Compare non-runtime imports with `dependencyPaths` or with providers discovered from `projectRoot`.
             Reports matched provider files, missing imports, version drift, ambiguous providers, and extern-description or sort mismatches when available.
-            Use this aggregate compatibility workflow when you need provider verdicts rather than raw component surface listings.
+            Optional `previousPath` and `dependencyLockPath` add import-drift context, configured providers, candidate verdicts, selected incompatibility reason, involved provider paths, and a minimal lock/config fix.
+            Use this aggregate compatibility workflow when you need provider verdicts and remediation context rather than raw component surface listings.
         """
         input = ComponentCompatibilityInputClass
         inputPattern = ToolInputPattern.ComponentCompatibility
