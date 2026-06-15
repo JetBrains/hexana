@@ -179,6 +179,17 @@ private class DragState {
 }
 
 /**
+ * Maps a keyboard key string to its hex-digit value `[0..15]`, or null
+ * if the key is not a hex digit.
+ */
+private fun hexDigitValue(key: String): Int? = when (key.lowercase()) {
+    "0" -> 0; "1" -> 1; "2" -> 2; "3" -> 3; "4" -> 4
+    "5" -> 5; "6" -> 6; "7" -> 7; "8" -> 8; "9" -> 9
+    "a" -> 0xA; "b" -> 0xB; "c" -> 0xC; "d" -> 0xD; "e" -> 0xE; "f" -> 0xF
+    else -> null
+}
+
+/**
  * Compose for Web hex viewer panel with virtual scrolling and byte selection.
  *
  * Renders the raw binary content in a classic hex-dump layout:
@@ -186,9 +197,15 @@ private class DragState {
  *
  * Only rows visible in the viewport (plus a small overscan) are rendered.
  * Selection is supported via click, shift-click, drag, and keyboard navigation.
+ * When [editState] is provided, hex digits typed on the cursor cell are
+ * committed as byte edits (high nibble first, then low nibble).
  */
 @Composable
-fun HexViewerPanel(bytes: CommonByteBuffer, selection: HexSelectionState = remember { HexSelectionState() }) {
+fun HexViewerPanel(
+    bytes: CommonByteBuffer,
+    selection: HexSelectionState = remember { HexSelectionState() },
+    editState: HexEditState? = null,
+) {
     val totalRows = (bytes.size + BYTES_PER_ROW - 1) / BYTES_PER_ROW
     val totalHeight = totalRows * ROW_HEIGHT_PX
 
@@ -199,6 +216,12 @@ fun HexViewerPanel(bytes: CommonByteBuffer, selection: HexSelectionState = remem
     // recomposition-driven DisposableEffect teardown/rebuild cycles that would lose the
     // auto-scroll timer and create runaway scrolling feedback loops.
     val dragState = remember { DragState() }
+
+    // --- Hex edit state ---
+    // Pending hex digit for in-cell editing: when non-null, the cursor cell
+    // shows `<digit>_` and the next hex digit typed combines into a byte and
+    // commits via editState.replaceByte(). Cleared on Escape or cursor move.
+    var pendingDigit by remember(editState) { mutableStateOf<Int?>(null) }
 
     // --- Hex search state ---
     var hexSearchVisible by remember { mutableStateOf(false) }
@@ -276,6 +299,37 @@ fun HexViewerPanel(bytes: CommonByteBuffer, selection: HexSelectionState = remem
                 return@handler
             }
 
+            // Escape clears pending hex digit.
+            if (key == "Escape" && pendingDigit != null) {
+                ke.preventDefault()
+                pendingDigit = null
+                return@handler
+            }
+
+            // Hex digit input for editing.
+            if (editState != null) {
+                val digit = hexDigitValue(key)
+                if (digit != null && !ke.ctrlKey && !ke.metaKey && !ke.altKey) {
+                    ke.preventDefault()
+                    val cursorIdx = selection.cursorIndex
+                    if (cursorIdx < 0 || cursorIdx >= editState.size) return@handler
+                    val pd = pendingDigit
+                    if (pd == null) {
+                        pendingDigit = digit
+                    } else {
+                        val byte = ((pd and 0xF) shl 4) or (digit and 0xF)
+                        editState.replaceByte(cursorIdx, byte.toByte())
+                        pendingDigit = null
+                        // Advance cursor to next cell.
+                        val nextIdx = cursorIdx + 1
+                        if (nextIdx < editState.size) {
+                            selection.startSelection(nextIdx)
+                        }
+                    }
+                    return@handler
+                }
+            }
+
             if (key !in listOf("ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight")) return@handler
 
             // Skip ArrowUp/Down when focus is inside a panel table so that row navigation
@@ -284,6 +338,7 @@ fun HexViewerPanel(bytes: CommonByteBuffer, selection: HexSelectionState = remem
             if (target?.closest(".hexana-panel-table") != null && (key == "ArrowUp" || key == "ArrowDown")) return@handler
 
             ke.preventDefault()
+            pendingDigit = null
             val cur = if (selection.cursorIndex >= 0) selection.cursorIndex else 0
             val totalBytes = bytes.size
 
@@ -536,7 +591,7 @@ fun HexViewerPanel(bytes: CommonByteBuffer, selection: HexSelectionState = remem
                 }
             }) {
                 for (row in firstVisibleRow..lastVisibleRow) {
-                    HexRow(bytes, row, selection, hexSearchState) { ox, oy ->
+                    HexRow(bytes, row, selection, hexSearchState, editState, pendingDigit) { ox, oy ->
                         dragState.pendingOriginX = ox
                         dragState.pendingOriginY = oy
                     }
@@ -718,6 +773,8 @@ private fun HexRow(
     row: Int,
     selection: HexSelectionState,
     searchState: HexSearchState,
+    editState: HexEditState?,
+    pendingDigit: Int?,
     onPendingDrag: (Double, Double) -> Unit,
 ) {
     val offset = row * BYTES_PER_ROW
@@ -754,23 +811,26 @@ private fun HexRow(
         }) {
             for (i in offset until end) {
                 val byteIndex = i
-                val byteVal = bytes[i].toUByte()
+                val byteVal = if (editState != null) editState.getByte(i).toUByte() else bytes[i].toUByte()
                 val isSelected = selection.contains(byteIndex)
                 val isCursor = selection.cursorIndex == byteIndex
                 val isSearchMatch = searchState.matchIndices.contains(byteIndex)
                 val isCurrentMatch = isSearchMatch && searchState.isInCurrentMatch(byteIndex)
+                val isEdited = editState?.modifiedOffsets?.contains(byteIndex) == true
+                val hasPendingDigit = isCursor && pendingDigit != null
 
                 Span({
                     classes("hex-byte")
                     if (isCurrentMatch) classes("hex-search-current")
                     else if (isSearchMatch) classes("hex-search-match")
+                    if (isEdited) classes("hex-edited")
                     style {
                         property("width", "28px")
                         property("text-align", "center")
                         if (!isSelected && !isSearchMatch) {
                             property("border-radius", "2px")
                         }
-                        if (isSelected && !isSearchMatch) {
+                        if (isSelected && !isSearchMatch && !isEdited) {
                             property("background", "var(--hexana-selection, rgba(156, 183, 255, 0.4))")
                         }
                         if (isCursor) {
@@ -780,9 +840,6 @@ private fun HexRow(
                     onMouseDown { event ->
                         if (event.button.toInt() != 0) return@onMouseDown
                         event.preventDefault()
-                        // Move focus to the hex viewer container so that any
-                        // focused panel-table row loses focus and stops
-                        // capturing arrow-key events.
                         (document.querySelector(".hex-viewer-scroll") as? HTMLElement)?.focus()
                         val nativeMouseEvent = event.nativeEvent as? MouseEvent
 
@@ -800,7 +857,11 @@ private fun HexRow(
                         }
                     }
                 }) {
-                    Text(byteVal.toString(16).padStart(2, '0'))
+                    if (hasPendingDigit) {
+                        Text(pendingDigit!!.toString(16) + "_")
+                    } else {
+                        Text(byteVal.toString(16).padStart(2, '0'))
+                    }
                 }
             }
             // Pad incomplete last row
@@ -830,17 +891,20 @@ private fun HexRow(
         }) {
             for (i in offset until end) {
                 val byteIndex = i
-                val c = bytes[i].toInt().and(0xFF).toChar()
+                val rawByte = if (editState != null) editState.getByte(i) else bytes[i]
+                val c = rawByte.toInt().and(0xFF).toChar()
                 val display = if (c in ' '..'~') c.toString() else "."
                 val isSelected = selection.contains(byteIndex)
                 val isCursor = selection.cursorIndex == byteIndex
                 val isSearchMatch = searchState.matchIndices.contains(byteIndex)
                 val isCurrentMatch = isSearchMatch && searchState.isInCurrentMatch(byteIndex)
+                val isEdited = editState?.modifiedOffsets?.contains(byteIndex) == true
 
                 Span({
                     classes("hex-ascii-char")
                     if (isCurrentMatch) classes("hex-search-current")
                     else if (isSearchMatch) classes("hex-search-match")
+                    if (isEdited) classes("hex-edited")
                     style {
                         property("width", "8.5px")
                         property("text-align", "center")
@@ -848,7 +912,7 @@ private fun HexRow(
                         if (!isSelected && !isSearchMatch) {
                             property("border-radius", "1px")
                         }
-                        if (isSelected && !isSearchMatch) {
+                        if (isSelected && !isSearchMatch && !isEdited) {
                             property("background", "var(--hexana-selection, rgba(156, 183, 255, 0.4))")
                         }
                         if (isCursor) {

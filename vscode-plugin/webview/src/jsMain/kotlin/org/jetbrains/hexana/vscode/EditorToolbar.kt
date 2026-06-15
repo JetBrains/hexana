@@ -16,7 +16,9 @@ import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 
 /**
  * Top toolbar that shows the file name, size, detected binary kind,
- * and an optional run button for runnable modules.
+ * an optional run button for runnable modules, and edit-mode controls
+ * (Discard / Overwrite / Save a copy / Undo overwrite) when [editState]
+ * is provided.
  */
 @Composable
 fun EditorToolbar(
@@ -24,6 +26,10 @@ fun EditorToolbar(
     size: Int,
     provider: BinaryProvider,
     onSizeClick: (() -> Unit)? = null,
+    editState: HexEditState? = null,
+    overwriteShadow: OverwriteShadow? = null,
+    onOverwriteShadowChanged: ((OverwriteShadow?) -> Unit)? = null,
+    onReparseAfterOverwrite: () -> Unit = {},
 ) {
     val isSubmodule = isSubmoduleFileName(fileName)
 
@@ -164,58 +170,129 @@ fun EditorToolbar(
             }
         }
 
-        Span({
-            classes("hexana-badge")
-            style {
-                property("padding", "2px 8px")
-                property("border-radius", "4px")
-                property("font-size", "11px")
-                property("background", "var(--vscode-badge-background, #4D4D4D)")
-                property("color", "var(--vscode-badge-foreground, #FFF)")
-            }
-        }) {
-            Text(
-                when (provider) {
-                    is WasmBinaryProvider -> "Core Wasm"
-                    is WasmComponentBinaryProvider -> "Component Model"
-                    else -> "Binary"
+        // --- Edit mode controls ---
+        // Reading modificationStamp subscribes this composable to edit changes.
+        val hasEdits = editState?.let { @Suppress("UNUSED_VARIABLE") val s = it.modificationStamp; it.hasEdits } ?: false
+        val isPostOverwrite = overwriteShadow != null
+        val showEditControls = (editState != null && onOverwriteShadowChanged != null) && (hasEdits || isPostOverwrite)
+        val showNormalContent = !showEditControls || isPostOverwrite
+
+        if (showEditControls && editState != null && onOverwriteShadowChanged != null) {
+            val isFileScheme = !isSubmodule
+
+                Div({
+                    classes("hexana-edit-controls")
+                    style {
+                        property("display", "inline-flex")
+                        property("align-items", "center")
+                        property("gap", "8px")
+                        property("padding", "2px 8px")
+                        property("border-radius", "4px")
+                        property("background", "var(--hexana-edit-bg, rgba(61, 50, 35, 0.8))")
+                    }
+                }) {
+                    if (isPostOverwrite) {
+                        EditToolbarButton(
+                            label = "Undo overwrite",
+                            enabled = true,
+                            primary = false,
+                        ) {
+                            val restoredBytes = overwriteShadow!!.applyTo(editState.getEditedBytes())
+                            postOverwriteFileToHost(restoredBytes)
+                            editState.discardAll()
+                            onOverwriteShadowChanged(null)
+                            onReparseAfterOverwrite()
+                        }
+                    } else {
+                        EditToolbarButton(
+                            label = "Discard",
+                            enabled = hasEdits,
+                            primary = false,
+                        ) {
+                            editState.discardAll()
+                            onReparseAfterOverwrite()
+                        }
+                        EditToolbarButton(
+                            label = "Overwrite",
+                            enabled = hasEdits && isFileScheme,
+                            primary = true,
+                        ) {
+                            val shadow = editState.captureOverwriteShadow()
+                            val editedBytes = editState.getEditedBytes()
+                            postOverwriteFileToHost(editedBytes)
+                            onOverwriteShadowChanged(shadow)
+                            editState.markSaved()
+                            onReparseAfterOverwrite()
+                        }
+                        val finalizedName = computeFinalizedName(
+                            fileName.substringAfterLast('/').substringAfterLast('\\'),
+                        )
+                        EditToolbarButton(
+                            label = "Save a copy \u2192 $finalizedName",
+                            enabled = hasEdits && isFileScheme,
+                            primary = false,
+                        ) {
+                            val editedBytes = editState.getEditedBytes()
+                            postSaveCopyToHost(finalizedName, editedBytes)
+                        }
+                    }
                 }
-            )
         }
 
-        if (isSubmodule) {
-            val parentName = parentFileNameOf(fileName) ?: "component"
+        if (showNormalContent) {
             Span({
+                classes("hexana-badge")
                 style {
-                    property("cursor", "pointer")
+                    property("padding", "2px 8px")
+                    property("border-radius", "4px")
                     property("font-size", "11px")
-                    color(Color("var(--vscode-textLink-foreground, #3794FF)"))
+                    property("background", "var(--vscode-badge-background, #4D4D4D)")
+                    property("color", "var(--vscode-badge-foreground, #FFF)")
                 }
-                onClick { postNavigateToParent() }
             }) {
-                Text("Submodule of $parentName")
+                Text(
+                    when (provider) {
+                        is WasmBinaryProvider -> "Core Wasm"
+                        is WasmComponentBinaryProvider -> "Component Model"
+                        else -> "Binary"
+                    }
+                )
             }
-        }
 
-        if (isRunnable) {
-            ToolbarRunButton(
-                tooltip = "Run Wasm module",
-                onClick = { toolbarAction = "run" }
-            )
-            ToolbarDebugButton(
-                tooltip = "Debug Wasm module",
-                onClick = { toolbarAction = "debug" }
-            )
-        }
+            if (isSubmodule) {
+                val parentName = parentFileNameOf(fileName) ?: "component"
+                Span({
+                    style {
+                        property("cursor", "pointer")
+                        property("font-size", "11px")
+                        color(Color("var(--vscode-textLink-foreground, #3794FF)"))
+                    }
+                    onClick { postNavigateToParent() }
+                }) {
+                    Text("Submodule of $parentName")
+                }
+            }
 
-        val proposals = remember(provider) {
-            if (provider !is WasmBinaryProvider) return@remember emptyList()
-            if (!provider.canProvideWasmModule()) return@remember emptyList()
-            provider.usedProposals.sorted()
-        }
+            if (isRunnable) {
+                ToolbarRunButton(
+                    tooltip = "Run Wasm module",
+                    onClick = { toolbarAction = "run" }
+                )
+                ToolbarDebugButton(
+                    tooltip = "Debug Wasm module",
+                    onClick = { toolbarAction = "debug" }
+                )
+            }
 
-        if (proposals.isNotEmpty()) {
-            ProposalBadges(proposals)
+            val proposals = remember(provider) {
+                if (provider !is WasmBinaryProvider) return@remember emptyList()
+                if (!provider.canProvideWasmModule()) return@remember emptyList()
+                provider.usedProposals.sorted()
+            }
+
+            if (proposals.isNotEmpty()) {
+                ProposalBadges(proposals)
+            }
         }
     }
 }
@@ -348,5 +425,61 @@ private fun formatSize(bytes: Int): String = when {
         val mb = bytes.toDouble() / (1024 * 1024)
         val rounded = (mb * 10).toLong() / 10.0
         "$rounded MB"
+    }
+}
+
+/**
+ * `<base>.edited.<ext>` next to the original. Plain `<name>.edited` if there
+ * is no extension.
+ */
+private fun computeFinalizedName(originalName: String): String {
+    val dot = originalName.lastIndexOf('.')
+    return if (dot < 0) "$originalName.edited"
+    else originalName.substring(0, dot) + ".edited" + originalName.substring(dot)
+}
+
+/**
+ * Small button for the edit-mode toolbar strip.
+ */
+@Composable
+private fun EditToolbarButton(
+    label: String,
+    enabled: Boolean,
+    primary: Boolean,
+    onClick: () -> Unit,
+) {
+    Span({
+        classes("hexana-edit-btn")
+        if (primary) classes("hexana-edit-btn-primary")
+        if (!enabled) classes("hexana-edit-btn-disabled")
+        style {
+            property("display", "inline-flex")
+            property("align-items", "center")
+            property("padding", "2px 8px")
+            property("border-radius", "4px")
+            property("font-size", "11px")
+            property("cursor", if (enabled) "pointer" else "default")
+            property("user-select", "none")
+            property("white-space", "nowrap")
+            if (primary) {
+                property("background", "var(--vscode-button-background, #0e639c)")
+                property("color", "var(--vscode-button-foreground, #fff)")
+            } else {
+                property("background", "var(--vscode-button-secondaryBackground, #3a3d41)")
+                property("color", "var(--vscode-button-secondaryForeground, #ccc)")
+            }
+            if (!enabled) {
+                property("opacity", "0.5")
+                property("pointer-events", "none")
+            }
+        }
+        if (enabled) {
+            onClick { event ->
+                event.stopPropagation()
+                onClick()
+            }
+        }
+    }) {
+        Text(label)
     }
 }

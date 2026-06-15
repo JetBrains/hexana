@@ -185,6 +185,36 @@ fun postOpenZipEntryToHost(
 }
 
 /**
+ * Asks the extension host to overwrite the original file with [bytes].
+ */
+fun postOverwriteFileToHost(bytes: ByteArray) {
+    val msg = js("{}")
+    msg.type = "overwrite-file"
+    val jsArray = js("[]").unsafeCast<dynamic>()
+    for (i in bytes.indices) {
+        jsArray.push(bytes[i].toInt() and 0xFF)
+    }
+    msg.data = jsArray
+    vscodeApi.postMessage(msg)
+}
+
+/**
+ * Asks the extension host to save [bytes] as a sibling copy of the
+ * original file with the given [outputName].
+ */
+fun postSaveCopyToHost(outputName: String, bytes: ByteArray) {
+    val msg = js("{}")
+    msg.type = "save-copy"
+    msg.outputName = outputName
+    val jsArray = js("[]").unsafeCast<dynamic>()
+    for (i in bytes.indices) {
+        jsArray.push(bytes[i].toInt() and 0xFF)
+    }
+    msg.data = jsArray
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open a nested module in a new editor tab.
  *
  * [moduleIndex] is the zero-based index of the module inside the component,

@@ -514,6 +514,22 @@ html, body {
     background: rgba(255, 255, 255, 0.1);
 }
 
+/* Hex edited cell highlighting */
+.hex-edited {
+    background: var(--hexana-edit-highlight, rgba(255, 167, 38, 0.3)) !important;
+    border-radius: 1px;
+}
+
+/* Edit controls strip background */
+.hexana-edit-controls {
+    background: var(--hexana-edit-bg, rgba(61, 50, 35, 0.8));
+}
+
+/* Edit toolbar button hover */
+.hexana-edit-btn:hover:not(.hexana-edit-btn-disabled) {
+    filter: brightness(1.2);
+}
+
 /* Hex search match highlighting */
 .hex-search-match {
     background: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33)) !important;

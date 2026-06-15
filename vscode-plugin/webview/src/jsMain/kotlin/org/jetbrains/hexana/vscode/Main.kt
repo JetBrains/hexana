@@ -83,6 +83,32 @@ fun WasmEditorContent(
         provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider
     }
 
+    // Edit state: tracks in-memory byte modifications.
+    val editState = remember(provider) {
+        HexEditState(buffer.toByteArray())
+    }
+    var overwriteShadow by remember { mutableStateOf<OverwriteShadow?>(null) }
+
+    // Reparse counter: incremented after overwrite/discard to rebuild the provider.
+    var reparseCounter by remember { mutableStateOf(0) }
+
+    // Live provider rebuilt from edited bytes when reparseCounter changes.
+    val liveProvider = remember(reparseCounter) {
+        if (reparseCounter == 0) provider
+        else {
+            val liveBuffer = editState.toBuffer()
+            try {
+                when (provider) {
+                    is WasmBinaryProvider -> WasmBinaryProvider(liveBuffer)
+                    is WasmComponentBinaryProvider -> WasmComponentBinaryProvider(liveBuffer)
+                    else -> GenericBinaryProvider(liveBuffer)
+                }
+            } catch (_: Throwable) {
+                GenericBinaryProvider(liveBuffer)
+            }
+        }
+    }
+
     Div({
         classes("hexana-editor")
         style {
@@ -98,15 +124,19 @@ fun WasmEditorContent(
             size = buffer.size,
             provider = provider,
             onSizeClick = if (hasTopTab) {{ activeTab = "Top" }} else null,
+            editState = editState,
+            overwriteShadow = overwriteShadow,
+            onOverwriteShadowChanged = { overwriteShadow = it },
+            onReparseAfterOverwrite = { reparseCounter++ },
         )
-        HexViewerPanel(bytes = buffer, selection = selection)
+        HexViewerPanel(bytes = buffer, selection = selection, editState = editState)
         SelectionStatusBar(selection = selection, totalBytes = buffer.size)
         ResizeDivider { deltaY ->
             // Dragging down → shrink the panel (panel is below the divider)
             panelHeight = (panelHeight - deltaY).coerceAtLeast(MIN_PANEL_HEIGHT)
         }
         HexanaPanel(
-            provider = provider,
+            provider = liveProvider,
             selection = selection,
             fileName = fileName,
             heightPx = panelHeight,

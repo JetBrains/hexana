@@ -206,6 +206,10 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                         vscode.ConfigurationTarget.Global,
                     );
                 }
+            } else if (message.type === "overwrite-file") {
+                this.overwriteFile(document, message);
+            } else if (message.type === "save-copy") {
+                this.saveCopy(document, message);
             }
         });
     }
@@ -336,6 +340,48 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             const content = new TextDecoder("utf-8").decode(bytes);
             const doc = await vscode.workspace.openTextDocument({ content, language: ext || undefined });
             await vscode.window.showTextDocument(doc, { preview: true });
+        }
+    }
+
+    /**
+     * Overwrites the original file with the edited bytes sent from the webview.
+     */
+    private async overwriteFile(
+        document: WasmDocument,
+        message: { data: number[] },
+    ): Promise<void> {
+        // In-memory modules (nested/submodules) cannot be overwritten.
+        if (document.uri.scheme !== "file") {
+            vscode.window.showWarningMessage("Cannot overwrite a virtual or in-memory document.");
+            return;
+        }
+        try {
+            const bytes = new Uint8Array(message.data);
+            await vscode.workspace.fs.writeFile(document.uri, bytes);
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to overwrite file: ${err}`);
+        }
+    }
+
+    /**
+     * Saves a copy of the edited bytes as a sibling file next to the original.
+     */
+    private async saveCopy(
+        document: WasmDocument,
+        message: { outputName: string; data: number[] },
+    ): Promise<void> {
+        if (document.uri.scheme !== "file") {
+            vscode.window.showWarningMessage("Cannot save a copy for a virtual document.");
+            return;
+        }
+        try {
+            const bytes = new Uint8Array(message.data);
+            const parentUri = vscode.Uri.joinPath(document.uri, "..");
+            const targetUri = vscode.Uri.joinPath(parentUri, message.outputName);
+            await vscode.workspace.fs.writeFile(targetUri, bytes);
+            vscode.window.showInformationMessage(`Saved copy to ${message.outputName}`);
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to save copy: ${err}`);
         }
     }
 
