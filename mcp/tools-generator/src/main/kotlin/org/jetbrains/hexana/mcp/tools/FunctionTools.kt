@@ -507,11 +507,11 @@ internal val FunctionTools: List<ToolSpec> = tools {
     }
 
     tool("resolve_wasm_frames") {
-        summary = "Resolve Wasm crash frames to compact symbols and source locations."
+        summary = "Aggregate WebAssembly stack and crash-frame triage from function indices, labels, and offsets."
         guidance = """
-            Resolve WebAssembly stack or crash frames from `funcidx` values and optional absolute code offsets.
+            Resolve WebAssembly stack or crash frames from `funcidx` values, raw function labels, and optional absolute code offsets.
             The result reports import/local origin, best symbol with its source, signature, export names, code range, source-map or DWARF source location when available, and per-frame warnings.
-            Use this for crash triage when logs contain function indices or instruction offsets and you need useful names without requesting full disassembly.
+            Use this aggregate workflow for crash triage when logs or reports contain mixed frame identifiers and you need symbols, signatures, ranges, and source locations without requesting full disassembly.
         """
         input = ResolveWasmFramesInput
         inputPattern = ToolInputPattern.WasmFrames
@@ -520,11 +520,11 @@ internal val FunctionTools: List<ToolSpec> = tools {
     }
 
     tool("resolve_function_symbols") {
-        summary = "Resolve function indices to symbols, signatures, and metadata."
+        summary = "Focused lookup for function indices, symbols, signatures, and metadata."
         guidance = """
             Batch-resolve unified WebAssembly function indices to compact symbol records.
             Symbol resolution prefers name-section entries, then DWARF names, DWARF linkage names, export names, and finally an explicit `funcidx_fallback`.
-            Use this when you already have `funcidx` values and need stable names, signatures, imports, exports, code ranges, or debug source locations.
+            Use this focused lookup when you already have `funcidx` values and need stable names, signatures, imports, exports, code ranges, or debug source locations.
         """
         input = ResolveFunctionSymbolsInput
         inputPattern = ToolInputPattern.SourceMappedIndices
@@ -533,11 +533,11 @@ internal val FunctionTools: List<ToolSpec> = tools {
     }
 
     tool("resolve_source_locations") {
-        summary = "Resolve Wasm code offsets or function indices to source locations."
+        summary = "Focused source lookup for WebAssembly code offsets or function indices."
         guidance = """
             Map absolute WebAssembly code offsets or unified `funcidx` values to source-map or DWARF source locations.
             When only `funcidx` is supplied, the function body start offset is used; when only `codeOffset` is supplied, the containing local function is inferred when possible.
-            Use this for focused source/debug lookup without disassembling function bodies.
+            This is source-location lookup only; it does not perform full frame triage or enrich results with symbol fallback ranking, signatures, exports, and code ranges.
         """
         input = ResolveSourceLocationsInput
         inputPattern = ToolInputPattern.SourceLocations

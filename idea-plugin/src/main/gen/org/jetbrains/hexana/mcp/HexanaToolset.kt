@@ -1074,8 +1074,9 @@ public class HexanaToolset : McpToolsProvider {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "list_component_surface",
       description = """
-      |List WebAssembly component imports and exports with WIT-style names and runtime-import flags.
+      |Inspect WebAssembly component imports and exports with WIT-style names and runtime-import flags.
       |Use this for compact component-model surface inspection before dependency or compatibility reasoning.
+      |This is an inspection lookup only; it does not select provider files or compute compatibility verdicts.
       |Imports and exports include base names, versions, sort or extern descriptions when available, and known runtime-provided imports.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.listComponentSurface",
@@ -1243,9 +1244,10 @@ public class HexanaToolset : McpToolsProvider {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "resolve_component_dependencies",
       description = """
-      |Resolve component dependencies by matching non-runtime imports to component exports in bounded scan roots.
-      |Search `scanRoots`, `projectRoot`, and the input component directory for `.wasm` components whose exports satisfy imports.
+      |Resolve direct and transitive component dependencies from scan roots and project roots.
+      |Search `scanRoots`, `projectRoot`, and the input component directory for `.wasm` components whose exports satisfy non-runtime imports.
       |The result separates direct and transitive dependencies, unresolved imports, and ambiguous provider candidates.
+      |Use this aggregate dependency-resolution workflow when provider files may need to be discovered rather than supplied explicitly.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.resolveComponentDependencies",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -1522,9 +1524,10 @@ public class HexanaToolset : McpToolsProvider {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "check_component_compatibility",
       description = """
-      |Check required component imports against explicit or resolved dependency component exports.
+      |Compute component-provider compatibility verdicts against explicit or resolved dependency exports.
       |Compare non-runtime imports with `dependencyPaths` or with dependencies resolved from `projectRoot`.
-      |Reports matched provider files, missing imports, version drift, ambiguous providers, and extern-description mismatches when available.
+      |Reports matched provider files, missing imports, version drift, ambiguous providers, and extern-description or sort mismatches when available.
+      |Use this aggregate compatibility workflow when you need provider verdicts rather than raw component surface listings.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.checkComponentCompatibility",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -5367,10 +5370,10 @@ public class HexanaToolset : McpToolsProvider {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "resolve_wasm_frames",
       description = """
-      |Resolve Wasm crash frames to compact symbols and source locations.
-      |Resolve WebAssembly stack or crash frames from `funcidx` values and optional absolute code offsets.
+      |Aggregate WebAssembly stack and crash-frame triage from function indices, labels, and offsets.
+      |Resolve WebAssembly stack or crash frames from `funcidx` values, raw function labels, and optional absolute code offsets.
       |The result reports import/local origin, best symbol with its source, signature, export names, code range, source-map or DWARF source location when available, and per-frame warnings.
-      |Use this for crash triage when logs contain function indices or instruction offsets and you need useful names without requesting full disassembly.
+      |Use this aggregate workflow for crash triage when logs or reports contain mixed frame identifiers and you need symbols, signatures, ranges, and source locations without requesting full disassembly.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.resolveWasmFrames",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -5913,10 +5916,10 @@ public class HexanaToolset : McpToolsProvider {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "resolve_function_symbols",
       description = """
-      |Resolve function indices to symbols, signatures, and metadata.
+      |Focused lookup for function indices, symbols, signatures, and metadata.
       |Batch-resolve unified WebAssembly function indices to compact symbol records.
       |Symbol resolution prefers name-section entries, then DWARF names, DWARF linkage names, export names, and finally an explicit `funcidx_fallback`.
-      |Use this when you already have `funcidx` values and need stable names, signatures, imports, exports, code ranges, or debug source locations.
+      |Use this focused lookup when you already have `funcidx` values and need stable names, signatures, imports, exports, code ranges, or debug source locations.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.resolveFunctionSymbols",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -6122,10 +6125,10 @@ public class HexanaToolset : McpToolsProvider {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "resolve_source_locations",
       description = """
-      |Resolve Wasm code offsets or function indices to source locations.
+      |Focused source lookup for WebAssembly code offsets or function indices.
       |Map absolute WebAssembly code offsets or unified `funcidx` values to source-map or DWARF source locations.
       |When only `funcidx` is supplied, the function body start offset is used; when only `codeOffset` is supplied, the containing local function is inferred when possible.
-      |Use this for focused source/debug lookup without disassembling function bodies.
+      |This is source-location lookup only; it does not perform full frame triage or enrich results with symbol fallback ranking, signatures, exports, and code ranges.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.resolveSourceLocations",
       inputSchema = McpToolSchema.ofPropertiesSchema(

@@ -42,17 +42,44 @@ class ToolDescriptionGenerationTest {
     }
 
     private fun assertAggregateToolGuidance(source: String) {
-        assertTrue(
-            source.contains("Resolve WebAssembly stack or crash frames from `funcidx` values"),
-            "resolve_wasm_frames guidance is missing",
+        assertBoundaryPhrase(
+            source,
+            "Use this aggregate workflow for crash triage when logs or reports contain mixed frame identifiers",
+            "resolve_wasm_frames should be described as aggregate frame triage",
         )
-        assertTrue(
-            source.contains("Search `scanRoots`, `projectRoot`, and the input component directory"),
-            "resolve_component_dependencies guidance is missing",
+        assertBoundaryPhrase(
+            source,
+            "Use this focused lookup when you already have `funcidx` values",
+            "resolve_function_symbols should be described as focused lookup",
         )
-        assertTrue(
-            source.contains("Compare non-runtime imports with `dependencyPaths`"),
-            "check_component_compatibility guidance is missing",
+        assertBoundaryPhrase(
+            source,
+            "This is source-location lookup only; it does not perform full frame triage",
+            "resolve_source_locations should not look like full frame triage",
         )
+        assertBoundaryPhrase(
+            source,
+            "direct and transitive dependencies",
+            "resolve_component_dependencies should mention transitive resolution",
+        )
+        assertBoundaryPhrase(
+            source,
+            "Use this aggregate dependency-resolution workflow when provider files may need to be discovered",
+            "resolve_component_dependencies should be described as provider discovery",
+        )
+        assertBoundaryPhrase(
+            source,
+            "extern-description or sort mismatches",
+            "check_component_compatibility should mention compatibility mismatch classes",
+        )
+        assertBoundaryPhrase(
+            source,
+            "This is an inspection lookup only; it does not select provider files or compute compatibility verdicts",
+            "list_component_surface should stay separate from resolution workflows",
+        )
+    }
+
+    private fun assertBoundaryPhrase(source: String, phrase: String, message: String) {
+        assertTrue(source.contains(phrase), message)
     }
 }

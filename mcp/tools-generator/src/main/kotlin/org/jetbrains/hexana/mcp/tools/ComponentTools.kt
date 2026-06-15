@@ -131,9 +131,10 @@ val ComponentCompatibilityInputClass = WasmInputClass.with("ComponentCompatibili
 
 internal val ComponentTools: List<ToolSpec> = tools {
     tool("list_component_surface") {
-        summary = "List WebAssembly component imports and exports with WIT-style names and runtime-import flags."
+        summary = "Inspect WebAssembly component imports and exports with WIT-style names and runtime-import flags."
         guidance = """
             Use this for compact component-model surface inspection before dependency or compatibility reasoning.
+            This is an inspection lookup only; it does not select provider files or compute compatibility verdicts.
             Imports and exports include base names, versions, sort or extern descriptions when available, and known runtime-provided imports.
         """
         input = WasmInputClass
@@ -143,10 +144,11 @@ internal val ComponentTools: List<ToolSpec> = tools {
     }
 
     tool("resolve_component_dependencies") {
-        summary = "Resolve component dependencies by matching non-runtime imports to component exports in bounded scan roots."
+        summary = "Resolve direct and transitive component dependencies from scan roots and project roots."
         guidance = """
-            Search `scanRoots`, `projectRoot`, and the input component directory for `.wasm` components whose exports satisfy imports.
+            Search `scanRoots`, `projectRoot`, and the input component directory for `.wasm` components whose exports satisfy non-runtime imports.
             The result separates direct and transitive dependencies, unresolved imports, and ambiguous provider candidates.
+            Use this aggregate dependency-resolution workflow when provider files may need to be discovered rather than supplied explicitly.
         """
         input = ComponentDependencyInputClass
         inputPattern = ToolInputPattern.ComponentDependencies
@@ -155,10 +157,11 @@ internal val ComponentTools: List<ToolSpec> = tools {
     }
 
     tool("check_component_compatibility") {
-        summary = "Check required component imports against explicit or resolved dependency component exports."
+        summary = "Compute component-provider compatibility verdicts against explicit or resolved dependency exports."
         guidance = """
             Compare non-runtime imports with `dependencyPaths` or with dependencies resolved from `projectRoot`.
-            Reports matched provider files, missing imports, version drift, ambiguous providers, and extern-description mismatches when available.
+            Reports matched provider files, missing imports, version drift, ambiguous providers, and extern-description or sort mismatches when available.
+            Use this aggregate compatibility workflow when you need provider verdicts rather than raw component surface listings.
         """
         input = ComponentCompatibilityInputClass
         inputPattern = ToolInputPattern.ComponentCompatibility
