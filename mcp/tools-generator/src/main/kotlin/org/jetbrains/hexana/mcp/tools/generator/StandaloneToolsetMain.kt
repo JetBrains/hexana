@@ -15,6 +15,7 @@ import org.jetbrains.hexana.mcp.tools.FieldType
 import org.jetbrains.hexana.mcp.tools.HexanaTools
 import org.jetbrains.hexana.mcp.tools.SchemaIntValue
 import org.jetbrains.hexana.mcp.tools.ToolSpec
+import org.jetbrains.hexana.mcp.tools.mcpDescription
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.system.exitProcess
@@ -141,7 +142,7 @@ private fun renderAddToolCall(spec: ToolSpec): CodeBlock {
                 "    idempotentHint = true,\n" +
                 "  ),\n" +
                 "))",
-            TOOL_CLASS, spec.name, spec.summary, inputSchema, outputSchema, TOOL_ANNOTATIONS,
+            TOOL_CLASS, spec.name, spec.mcpDescription, inputSchema, outputSchema, TOOL_ANNOTATIONS,
         )
         .beginControlFlow(" ")
         .addStatement("request: %T -> handlers.%N(request.arguments)", CALL_TOOL_REQUEST, handlerMethod)

@@ -92,7 +92,13 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers, profile: Hex
 private fun Server.registerSummarizeModuleTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "summarize_module",
-    description = "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types.",
+    description = """
+  |Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types.
+  |Summarize a WebAssembly (.wasm) module with high-level counts for its major sections and declarations.
+  |Includes the nested import breakdown and total module size, making it a low-cost overview before calling heavier tools.
+  |For broad Wasm analysis requests, this is usually the best first MCP call before choosing more specific import, export, or instruction tools.
+  |After this overview, prefer `list_imports` for import/link analysis, `list_exported_functions` for export analysis, and `get_instructions_for_functions` for body analysis.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -200,7 +206,11 @@ private fun Server.registerSummarizeModuleTool(handlers: HexanaToolHandlers) {
 private fun Server.registerListEnabledFeaturesTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_enabled_features",
-    description = "List enabled or inferred WebAssembly feature flags for a `.wasm` module.",
+    description = """
+  |List enabled or inferred WebAssembly feature flags for a `.wasm` module.
+  |Infer WebAssembly feature usage from type declarations, section presence, instructions, and feature-related custom sections.
+  |Use this before choosing specialized tools when syntax or semantics depend on proposals such as reference types, bulk memory, SIMD, threads, memory64, GC, or function references.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -347,7 +357,12 @@ private fun Server.registerListEnabledFeaturesTool(handlers: HexanaToolHandlers)
 private fun Server.registerGetEntrypointPolicyTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "get_entrypoint_policy",
-    description = "Return policy-ready direct host-call facts for exported WebAssembly entrypoints.",
+    description = """
+  |Return policy-ready direct host-call facts for exported WebAssembly entrypoints.
+  |Use this when repairing or validating entrypoint host-call policy JSON.
+  |It scans exported local functions and returns only imports called directly by each entrypoint body; exports that only reach host imports through local helper calls are listed separately in `excluded_transitive_exports`.
+  |The top-level `policy_id`, `module`, `direct_host_entrypoints`, and `excluded_transitive_exports` fields are ready to copy into policy files that use the entrypoint-host-call-policy-v2 contract.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -507,7 +522,11 @@ private fun Server.registerGetEntrypointPolicyTool(handlers: HexanaToolHandlers)
 private fun Server.registerListRequiredProposalsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_required_proposals",
-    description = "List required WebAssembly proposals inferred from detected module features.",
+    description = """
+  |List required WebAssembly proposals inferred from detected module features.
+  |Derive compact required WebAssembly proposals from the same detector used by `list_enabled_features`.
+  |Each required proposal includes the source feature flag plus section, instruction, and custom-section evidence when available.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -647,7 +666,11 @@ private fun Server.registerListRequiredProposalsTool(handlers: HexanaToolHandler
 private fun Server.registerDiffRequiredProposalsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "diff_required_proposals",
-    description = "Diff required WebAssembly proposals between a current and baseline module.",
+    description = """
+  |Diff required WebAssembly proposals between a current and baseline module.
+  |Compare the current module against `baselinePath` and return both full required-proposal name lists plus the compact newly-required and no-longer-required subsets.
+  |Prefer this over calling `list_required_proposals` twice when the request needs current-versus-baseline proposal changes.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -907,7 +930,11 @@ private fun Server.registerDiffRequiredProposalsTool(handlers: HexanaToolHandler
 private fun Server.registerCheckRuntimeCompatibilityTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "check_runtime_compatibility",
-    description = "Check a WebAssembly module's required proposals against a conservative runtime support profile.",
+    description = """
+  |Check a WebAssembly module's required proposals against a conservative runtime support profile.
+  |Compare required proposals against a small conservative support matrix for `graalwasm`, `wasmtime`, `v8`, `node`, and `browser`.
+  |Treat `unknown` as not confirmed compatible; exact runtime version parsing and external support lookups are intentionally avoided.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -1152,7 +1179,11 @@ private fun Server.registerCheckRuntimeCompatibilityTool(handlers: HexanaToolHan
 private fun Server.registerListComponentSurfaceTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_component_surface",
-    description = "List WebAssembly component imports and exports with WIT-style names and runtime-import flags.",
+    description = """
+  |List WebAssembly component imports and exports with WIT-style names and runtime-import flags.
+  |Use this for compact component-model surface inspection before dependency or compatibility reasoning.
+  |Imports and exports include base names, versions, sort or extern descriptions when available, and known runtime-provided imports.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -1333,7 +1364,11 @@ private fun Server.registerListComponentSurfaceTool(handlers: HexanaToolHandlers
 private fun Server.registerResolveComponentDependenciesTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "resolve_component_dependencies",
-    description = "Resolve component dependencies by matching non-runtime imports to component exports in bounded scan roots.",
+    description = """
+  |Resolve component dependencies by matching non-runtime imports to component exports in bounded scan roots.
+  |Search `scanRoots`, `projectRoot`, and the input component directory for `.wasm` components whose exports satisfy imports.
+  |The result separates direct and transitive dependencies, unresolved imports, and ambiguous provider candidates.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -1622,7 +1657,11 @@ private fun Server.registerResolveComponentDependenciesTool(handlers: HexanaTool
 private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "check_component_compatibility",
-    description = "Check required component imports against explicit or resolved dependency component exports.",
+    description = """
+  |Check required component imports against explicit or resolved dependency component exports.
+  |Compare non-runtime imports with `dependencyPaths` or with dependencies resolved from `projectRoot`.
+  |Reports matched provider files, missing imports, version drift, ambiguous providers, and extern-description mismatches when available.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -1850,7 +1889,13 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
 private fun Server.registerPlanAbiBindingRegenerationTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "plan_abi_binding_regeneration",
-    description = "Plan report-ready ABI binding regeneration from current Wasm plus a stale binding file.",
+    description = """
+  |Plan report-ready ABI binding regeneration from current Wasm plus a stale binding file.
+  |Use this as the shortest path for regenerating host bindings when a current module and stale `bindingPath` are available.
+  |Compare the current WebAssembly function import/export ABI against a stale binding file and return a report-ready regeneration plan with exact input path echoes.
+  |The result includes stable current import and export signature maps, stale binding maps, binding mismatches, and ready-to-copy replacement bindings.
+  |Mismatch `expected` values are current WebAssembly signatures, or null when a stale binding should be removed; `actual` values are stale binding signatures, or null when the binding is missing.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -2195,7 +2240,13 @@ private fun Server.registerPlanAbiBindingRegenerationTool(handlers: HexanaToolHa
 private fun Server.registerRepairHostAdapterConfigTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "repair_host_adapter_config",
-    description = "Plan report-ready host adapter config repair from current Wasm plus a stale JSON config.",
+    description = """
+  |Plan report-ready host adapter config repair from current Wasm plus a stale JSON config.
+  |Use this as the shortest path for repairing host adapter configs when a current module and stale `configPath` are available.
+  |Compare the current WebAssembly host adapter ABI against a stale JSON config and return a report-ready repair plan with exact input path echoes.
+  |The result includes stable current required imports, the selected entrypoint, parsed stale config fields, exact JSON mismatches, ignored stale top-level fields, and a minimal `repair_config` object.
+  |Use `repair_config` directly as the replacement adapter config; it intentionally contains only active `module`, `imports`, and `entrypoint` fields.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -2517,7 +2568,12 @@ private fun Server.registerRepairHostAdapterConfigTool(handlers: HexanaToolHandl
 private fun Server.registerCheckMemoryContractTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "check_memory_contract",
-    description = "Check a memory contract with current/baseline Wasm and policy JSON; returns report-ready violations.",
+    description = """
+  |Check a memory contract with current/baseline Wasm and policy JSON; returns report-ready violations.
+  |Use this as the shortest path for memory contract audits that have a current module, `baselinePath`, and `policyPath`.
+  |Compares current declarations with baseline declarations, applies policy limits, and returns exact input path echoes.
+  |The result includes per-memory declared limits, previous limits, exported memory names, policy limits, stable structured violations, and minimal compatible limits.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -2921,7 +2977,12 @@ private fun Server.registerCheckMemoryContractTool(handlers: HexanaToolHandlers)
 private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "audit_global_state_policy",
-    description = "Audit global-state policy with current/baseline Wasm and policy JSON; returns report-ready violations.",
+    description = """
+  |Audit global-state policy with current/baseline Wasm and policy JSON; returns report-ready violations.
+  |Use this as the shortest path for global-state audits that have a current module, `baselinePath`, and `policyPath`.
+  |Compares current globals with baseline public globals, applies policy rules, and returns exact input path echoes.
+  |The result includes report-ready violations, added public globals, allowed public globals, request-limit facts, targeted global indices, and supporting evidence.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -3458,7 +3519,12 @@ private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandle
 private fun Server.registerListCustomSectionsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_custom_sections",
-    description = "List WebAssembly custom sections with offsets, sizes, and small content previews.",
+    description = """
+  |List WebAssembly custom sections with offsets, sizes, and small content previews.
+  |List custom sections from a WebAssembly module, including names, full-section byte ranges, and a capped content preview.
+  |The preview excludes the encoded section name; `encoding` is `utf8` for printable UTF-8 content prefixes and `binary` for hex-rendered byte prefixes.
+  |Use this before deeper debug, producer, source-map, or CTF-style metadata investigation.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -3546,7 +3612,14 @@ private fun Server.registerListCustomSectionsTool(handlers: HexanaToolHandlers) 
 private fun Server.registerListImportsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_imports",
-    description = "List imported functions declared by a `.wasm` module.",
+    description = """
+  |List imported functions declared by a `.wasm` module.
+  |List imported functions declared by a WebAssembly (.wasm) module.
+  |This is the primary MCP tool for import inventories, link-mismatch analysis, and mapping direct host calls to imported functions.
+  |Returns only function imports from the unified function index space, including the `funcidx` values needed to map direct `call` targets back to imports.
+  |Each import includes structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
+  |For direct host-call analysis, pair these `funcidx` values with `get_instructions_for_functions` to resolve `call N` back to `module.name` imports.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -3668,7 +3741,14 @@ private fun Server.registerListImportsTool(handlers: HexanaToolHandlers) {
 private fun Server.registerListExportsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_exports",
-    description = "List exports declared by a `.wasm` module.",
+    description = """
+  |List exports declared by a `.wasm` module.
+  |Includes exported functions, tables, memories, and globals; `kind` uses the standard tags 0=function, 1=table, 2=memory, 3=global.
+  |This is the light name-and-kind view of exports.
+  |Use this when you only need exported names, kinds, or raw external indices.
+  |If you need function signatures or origins, skip directly to `list_exported_functions`.
+  |For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not identify new or policy-allowed public globals.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -3746,7 +3826,12 @@ private fun Server.registerListExportsTool(handlers: HexanaToolHandlers) {
 private fun Server.registerSearchExportsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "search_exports",
-    description = "Search exports by name and resolve common export metadata.",
+    description = """
+  |Search exports by name and resolve common export metadata.
+  |Search exported functions, tables, memories, globals, and tags by case-insensitive export-name substrings.
+  |Function matches include resolved signatures, and memory matches include decoded page limits.
+  |Use this when logs, host code, or expected API names identify exports symbolically and you need the exact exported index.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -3954,7 +4039,15 @@ private fun Server.registerSearchExportsTool(handlers: HexanaToolHandlers) {
 private fun Server.registerListExportedFunctionsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_exported_functions",
-    description = "List exported functions within a closed range of the export section.",
+    description = """
+  |List exported functions within a closed range of the export section.
+  |List exported functions from a WebAssembly (.wasm) module using a closed export-range slice.
+  |Pass `entriesRange = { from, to }` with inclusive export-list positions; do not use `offset/limit` or `start/end`.
+  |The range applies to export-list order, not to `funcidx`, and each result resolves to either an imported or a defined function entry.
+  |This is the primary MCP tool for export inventories, export diffs, function-signature extraction, and import-vs-local origin checks.
+  |Prefer this over `list_exports` for export diffs or signature extraction, because each result already includes the resolved function entry, signature, and origin.
+  |The signature strings are usually ready to use as-is, so `list_types` is often unnecessary unless you need raw type definitions.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -4156,7 +4249,14 @@ private fun Server.registerListExportedFunctionsTool(handlers: HexanaToolHandler
 private fun Server.registerListFunctionsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_functions",
-    description = "List imported and defined functions with offset/limit pagination.",
+    description = """
+  |List imported and defined functions with offset/limit pagination.
+  |List imported and defined functions from a WebAssembly (.wasm) module using offset/limit pagination.
+  |The offset is in the unified function index space, so imports appear before defined bodies.
+  |Use this when you need one mixed index space over both imports and defined bodies; for import-only analysis, prefer `list_imports`.
+  |Imported entries include structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
+  |Use this to map or inspect `funcidx` ranges before targeted body lookup with `get_instructions_for_functions`.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -4353,7 +4453,12 @@ private fun Server.registerListFunctionsTool(handlers: HexanaToolHandlers) {
 private fun Server.registerListCodeSectionOffsetsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_code_section_offsets",
-    description = "List byte offsets and sizes for defined function bodies.",
+    description = """
+  |List byte offsets and sizes for defined function bodies.
+  |List code-section byte ranges for all defined WebAssembly function bodies.
+  |The returned `funcidx` values are in the unified function index space, so imported functions are skipped and defined functions keep their import-offset-adjusted indices.
+  |Use this to connect disassembly, binary offsets, source locations, and body-level triage.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -4431,7 +4536,11 @@ private fun Server.registerListCodeSectionOffsetsTool(handlers: HexanaToolHandle
 private fun Server.registerFunctionsForIndicesTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "functions_for_indices",
-    description = "Resolve function entries for the given unified function indices.",
+    description = """
+  |Resolve function entries for the given unified function indices.
+  |Resolve imported and defined function entries for the requested unified function indices.
+  |Use this as a targeted follow-up when you already know the exact `funcidx` values you need.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -4624,7 +4733,11 @@ private fun Server.registerFunctionsForIndicesTool(handlers: HexanaToolHandlers)
 private fun Server.registerResolveFunctionSignatureTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "resolve_function_signature",
-    description = "Resolve the type index and signature for one function index.",
+    description = """
+  |Resolve the type index and signature for one function index.
+  |Resolve the type index and signature for one unified WebAssembly function index.
+  |Use this as a targeted lookup when logs, stack traces, exports, or other tools already identify the `funcidx`.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -4731,7 +4844,12 @@ private fun Server.registerResolveFunctionSignatureTool(handlers: HexanaToolHand
 private fun Server.registerDisassembleFunctionTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "disassemble_function",
-    description = "Disassemble one function by unified function index.",
+    description = """
+  |Disassemble one function by unified function index.
+  |Disassemble one WebAssembly function by `funcidx`, returning signature, import/export metadata, locals, decoded instruction records, WAT-style text, and raw code bytes when the function has a body.
+  |Imported functions return metadata with empty body fields because imports have no code entry.
+  |Use this when the request has narrowed the search to one function and needs a compact, production-oriented body snapshot.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -4954,7 +5072,12 @@ private fun Server.registerDisassembleFunctionTool(handlers: HexanaToolHandlers)
 private fun Server.registerGetFunctionCallGraphTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "get_function_call_graph",
-    description = "Return resolved direct calls and memory write sites for function indices.",
+    description = """
+  |Return resolved direct calls and memory write sites for function indices.
+  |Return a compact per-function call graph for requested unified WebAssembly `funcidx` values.
+  |The result resolves direct `call` and `return_call` targets to import/export/signature metadata, separates imported callees, reports `call_indirect` sites, preserves grouped local counts, and lists direct memory-writing instructions.
+  |Use this when a stack trace, export, log, or previous lookup identifies one or more function indices and you need production-oriented dependency/effect context without reading full disassembly.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -5459,7 +5582,11 @@ private fun Server.registerGetFunctionCallGraphTool(handlers: HexanaToolHandlers
 private fun Server.registerSearchFunctionsByNameTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "search_functions_by_name",
-    description = "Search function names across imports, exports, and debug names.",
+    description = """
+  |Search function names across imports, exports, and debug names.
+  |Search import names, export names, and WebAssembly name-section function names with a case-insensitive substring query.
+  |Use this before targeted lookups when you know a symbolic name from logs, host bindings, exports, or source-level debugging.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -5617,7 +5744,12 @@ private fun Server.registerSearchFunctionsByNameTool(handlers: HexanaToolHandler
 private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "resolve_wasm_frames",
-    description = "Resolve Wasm crash frames to compact symbols and source locations.",
+    description = """
+  |Resolve Wasm crash frames to compact symbols and source locations.
+  |Resolve WebAssembly stack or crash frames from `funcidx` values and optional absolute code offsets.
+  |The result reports import/local origin, best symbol with its source, signature, export names, code range, source-map or DWARF source location when available, and per-frame warnings.
+  |Use this for crash triage when logs contain function indices or instruction offsets and you need useful names without requesting full disassembly.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -6168,7 +6300,12 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
 private fun Server.registerResolveFunctionSymbolsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "resolve_function_symbols",
-    description = "Resolve function indices to symbols, signatures, and metadata.",
+    description = """
+  |Resolve function indices to symbols, signatures, and metadata.
+  |Batch-resolve unified WebAssembly function indices to compact symbol records.
+  |Symbol resolution prefers name-section entries, then DWARF names, DWARF linkage names, export names, and finally an explicit `funcidx_fallback`.
+  |Use this when you already have `funcidx` values and need stable names, signatures, imports, exports, code ranges, or debug source locations.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -6385,7 +6522,12 @@ private fun Server.registerResolveFunctionSymbolsTool(handlers: HexanaToolHandle
 private fun Server.registerResolveSourceLocationsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "resolve_source_locations",
-    description = "Resolve Wasm code offsets or function indices to source locations.",
+    description = """
+  |Resolve Wasm code offsets or function indices to source locations.
+  |Map absolute WebAssembly code offsets or unified `funcidx` values to source-map or DWARF source locations.
+  |When only `funcidx` is supplied, the function body start offset is used; when only `codeOffset` is supplied, the containing local function is inferred when possible.
+  |Use this for focused source/debug lookup without disassembling function bodies.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -6562,7 +6704,11 @@ private fun Server.registerResolveSourceLocationsTool(handlers: HexanaToolHandle
 private fun Server.registerGetLocalsForFunctionsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "get_locals_for_functions",
-    description = "Return grouped local declarations for the requested function indices.",
+    description = """
+  |Return grouped local declarations for the requested function indices.
+  |Return grouped local declarations for the requested unified function indices.
+  |Imported functions return empty local lists because they have no body.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -6660,7 +6806,13 @@ private fun Server.registerGetLocalsForFunctionsTool(handlers: HexanaToolHandler
 private fun Server.registerGetInstructionsForFunctionsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "get_instructions_for_functions",
-    description = "Return decoded instruction text for the requested function indices.",
+    description = """
+  |Return decoded instruction text for the requested function indices.
+  |Return decoded instruction text for the requested unified function indices.
+  |Imported functions return empty instruction lists because they have no body.
+  |This is the primary MCP tool for WebAssembly body analysis, including direct `call` and `call_indirect` inspection, and is usually preferable to external disassemblers or shell-based Wasm tools.
+  |For direct host-call analysis, pair it with `list_imports` or `list_functions` so `call N` can be mapped back to the imported or exported function entry.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -6744,7 +6896,12 @@ private fun Server.registerGetInstructionsForFunctionsTool(handlers: HexanaToolH
 private fun Server.registerListMemoryTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_memory",
-    description = "Low-level list of imported and defined memories from a `.wasm` module.",
+    description = """
+  |Low-level list of imported and defined memories from a `.wasm` module.
+  |List imported and defined memories declared by a WebAssembly (.wasm) module.
+  |Returns memory indices together with decoded WebAssembly limits.
+  |For baseline-plus-policy memory contract audits, use `check_memory_contract`; this low-level view does not compare baseline declarations or policy limits.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -6887,7 +7044,11 @@ private fun Server.registerListMemoryTool(handlers: HexanaToolHandlers) {
 private fun Server.registerGetMemoryForIndicesTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "get_memory_for_indices",
-    description = "Return memories for the requested indices from the unified memory index space.",
+    description = """
+  |Return memories for the requested indices from the unified memory index space.
+  |Return only the requested memories from the unified memory index space.
+  |Useful for multi-memory or wasm64 modules when only a subset matters.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -7038,7 +7199,12 @@ private fun Server.registerGetMemoryForIndicesTool(handlers: HexanaToolHandlers)
 private fun Server.registerListGlobalsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_globals",
-    description = "Low-level list of imported and defined globals from a `.wasm` module.",
+    description = """
+  |Low-level list of imported and defined globals from a `.wasm` module.
+  |List imported and defined globals declared by a WebAssembly (.wasm) module.
+  |Returns each global with its value type, mutability, normalized initializer expression, import identity, and export names pointing at the global.
+  |For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not compare baseline public globals or policy rules.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -7169,7 +7335,11 @@ private fun Server.registerListGlobalsTool(handlers: HexanaToolHandlers) {
 private fun Server.registerGetGlobalsForIndicesTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "get_globals_for_indices",
-    description = "Return globals for the requested indices from the unified global index space.",
+    description = """
+  |Return globals for the requested indices from the unified global index space.
+  |Return only the requested globals from the unified global index space.
+  |Use this for targeted analysis when `list_globals` would return more data than needed.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -7308,7 +7478,12 @@ private fun Server.registerGetGlobalsForIndicesTool(handlers: HexanaToolHandlers
 private fun Server.registerListTypesTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_types",
-    description = "List type entries declared by a `.wasm` module.",
+    description = """
+  |List type entries declared by a `.wasm` module.
+  |List type entries declared by a WebAssembly (.wasm) module.
+  |Includes function types and GC-related composite types when present.
+  |Function types include `importLocations` for imported functions that use the type, including a stable `locationDisplay` string.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -7508,7 +7683,11 @@ private fun Server.registerListTypesTool(handlers: HexanaToolHandlers) {
 private fun Server.registerListValueTypesTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_value_types",
-    description = "List value types used by a `.wasm` module with counts and feature flags.",
+    description = """
+  |List value types used by a `.wasm` module with counts and feature flags.
+  |List scalar, vector, packed, and reference value types observed across declarations, globals, tables, locals, and typed instructions.
+  |Use this before deeper type or body inspection when you need the module's type vocabulary and a quick signal for GC, SIMD, packed storage, or reference-type usage.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -7767,7 +7946,11 @@ private fun Server.registerListValueTypesTool(handlers: HexanaToolHandlers) {
 private fun Server.registerListReferenceTypesTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_reference_types",
-    description = "List reference value types used by a `.wasm` module.",
+    description = """
+  |List reference value types used by a `.wasm` module.
+  |List reference value types grouped by function, external, GC, primitive, top-like, and bottom/null families.
+  |Use this when the agent needs exact reference syntax and feature signals before writing WAT, diagnosing host interop, or deciding whether GC/reference-type semantics matter.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -8063,7 +8246,11 @@ private fun Server.registerListReferenceTypesTool(handlers: HexanaToolHandlers) 
 private fun Server.registerGetTypesForIndicesTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "get_types_for_indices",
-    description = "Return type entries for the requested indices from the type index space.",
+    description = """
+  |Return type entries for the requested indices from the type index space.
+  |Return only the requested type entries from the type index space.
+  |Use this when you need the types referenced by specific functions, globals, or tables.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -8271,7 +8458,11 @@ private fun Server.registerGetTypesForIndicesTool(handlers: HexanaToolHandlers) 
 private fun Server.registerListElementSegmentsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_element_segments",
-    description = "List element segments declared by a `.wasm` module.",
+    description = """
+  |List element segments declared by a `.wasm` module.
+  |List element segments declared by a WebAssembly (.wasm) module.
+  |Covers active, passive, and declarative segments, including function-index and expression-based initializers.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -8381,7 +8572,11 @@ private fun Server.registerListElementSegmentsTool(handlers: HexanaToolHandlers)
 private fun Server.registerListDataTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_data",
-    description = "Return raw data-section entries for a closed data-segment range.",
+    description = """
+  |Return raw data-section entries for a closed data-segment range.
+  |Range `entriesRange` is closed: both `from` and `to` are inclusive zero-based segment indices.
+  |This is the high-volume raw-bytes view; the `data` field is base64-encoded, and `list_data_segments` is usually cheaper when previews and metadata are sufficient.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -8521,7 +8716,11 @@ private fun Server.registerListDataTool(handlers: HexanaToolHandlers) {
 private fun Server.registerListDataSegmentsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "list_data_segments",
-    description = "Return data-segment metadata with range slicing and optional export/global context.",
+    description = """
+  |Return data-segment metadata with range slicing and optional export/global context.
+  |Range `segmentRange` is half-open: `from` is inclusive, `to` is exclusive (omit `to` to read to the end).
+  |Prefer this over `list_data` when previews, sizes, and offset context are enough.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {
@@ -8838,7 +9037,20 @@ private fun Server.registerListDataSegmentsTool(handlers: HexanaToolHandlers) {
 private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "query_artifacts",
-    description = "Query WebAssembly artifact entities, diffs, and function relations with bounded output.",
+    description = """
+  |Query WebAssembly artifact entities, diffs, and function relations with bounded output.
+  |Use this as the default Hexana MCP entry point for WebAssembly artifact facts.
+  |`overview` returns module counts; skip it when the request already names a focused production fact.
+  |Prefer dedicated focused tools before this broad query when their inputs are available: `plan_abi_binding_regeneration` for stale binding regeneration, `repair_host_adapter_config` for stale host adapter config repair, `check_memory_contract` for baseline-plus-policy memory audits, and `audit_global_state_policy` for baseline-plus-policy global-state audits.
+  |Choose a focused operation first when the requested artifact fact matches one: `api_diff` for old/new public function ABI diffs, changed signatures, public type indices, and current reference-type import ABI risks; `public_surface` for single-module exported ABI surface; `abi_surface` for compact function imports plus exports in one module; `abi_binding_regeneration` for current Wasm import/export signature maps, stale Python binding maps from `bindingPath`, mismatch JSON, and `replacementBindingsJson`; `host_adapter_repair` for host adapter config repair reports with required imports, required entrypoint, config mismatches, and minimal `repairConfigJson` from current Wasm ABI plus active config fields only; `import_surface` for host manifest/link checks, including compact `functionImportsJson` and exported function candidates on the summary; `memory_contract` for memory declarations and baseline limit changes; `global_state_policy` for mutable imported globals and new exported globals, including `targetedGlobalIndices`, `mutableImportedGlobalsJson`, `newPublicGlobalsJson`, and allowed public global exports on the summary; `data_payload_audit` for raw data segment payload string confirmation after reading policy strings; `local_budget` for exported-function declared local counts; `entrypoint_effects` for exported local functions whose own body directly writes memory or directly calls host imports, including policy-ready direct-host-entry JSON and transitive-host exclusions; `crash_frames` for crash reports after reading all numeric stack funcidx values into `query`; `dispatch_table_diff` for element-table slot target changes; and `host_call_diff` for direct imported-call regressions from `startName` or `startFuncidx`.
+  |For `data_payload_audit`, read the policy first and pass all forbidden strings in one call; an empty `query` only returns a small reminder. For `crash_frames`, read the crash report first and pass all stack funcidx values in one call; avoid probing a single frame and then repeating.
+  |For `abi_binding_regeneration`, pass the stale binding file as `bindingPath` when one exists. Its mismatch records and `bindingMismatchesJson` use `expected` for the current Wasm signature, or null when a stale binding should be removed; `actual` is the stale binding signature, or null when the binding is missing.
+  |For `host_adapter_repair`, pass the stale adapter JSON as `configPath` when one exists. Use `repairConfigJson` directly for `repair_config`; it intentionally excludes stale top-level fields such as `profile`, `rollback_entrypoint`, `legacy_profiles`, and `notes`.
+  |Use generic `find`, `diff`, or `trace` only when no focused operation matches, or when a focused response is missing a required output field. Use `triage` only for ambiguous requests where no production fact is named.
+  |Stop after a focused operation when its response contains the required names, signatures, type indices, `functionImportsJson`, `functionExportsJson`, `replacementBindingsJson`, `bindingMismatchesJson`, `requiredImportsJson`, `requiredEntrypointJson`, `configMismatchesJson`, `repairConfigJson`, memory limits, `targetedGlobalIndices`, `newPublicGlobalsJson`, `mutableImportedGlobalsJson`, matched data segments, local counts, entrypoint direct memory writes, `directHostEntryPointsJson`, `excludedTransitiveExportsJson`, frame metadata, table slots, or call relations. Do not follow `api_diff` with generic `find` or `diff`, `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, or `import_surface` with generic `find`, `global_state_policy` with generic `list_globals` or `list_exports`, `data_payload_audit` with generic `find`, `local_budget` with per-function `trace`, `entrypoint_effects` with per-export `trace`, `host_call_diff` with generic `trace`, or `crash_frames` with per-frame `trace`, unless a required output field is absent.
+  |If an output field asks for a module path, use the exact artifact path or the `modules[].path` value echoed from input `path`/`baselinePath`; do not write `local`, `current`, or `baseline` into path fields. For binding regeneration replacement objects, use `replacementBindingsJson` directly.
+  |Keep `limit` and `maxBytes` small; for `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, or `import_surface`, use `limit=1` when summary JSON arrays are sufficient. Use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets, locals, element lists, or instruction text.
+  """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
       put("path", buildJsonObject {

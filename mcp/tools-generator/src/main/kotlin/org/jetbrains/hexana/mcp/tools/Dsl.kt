@@ -325,6 +325,9 @@ data class ToolSpec(
     val handlerFqn: String,
 )
 
+val ToolSpec.mcpDescription: String
+    get() = guidance?.trim()?.takeIf { it.isNotBlank() }?.let { "${summary.trim()}\n$it" } ?: summary.trim()
+
 sealed class ToolInputPattern {
     object WasmOnly : ToolInputPattern()
     object WasmPathLabel : ToolInputPattern()

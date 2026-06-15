@@ -16,6 +16,7 @@ import org.jetbrains.hexana.mcp.tools.HexanaTools
 import org.jetbrains.hexana.mcp.tools.SchemaIntValue
 import org.jetbrains.hexana.mcp.tools.ToolInputPattern
 import org.jetbrains.hexana.mcp.tools.ToolSpec
+import org.jetbrains.hexana.mcp.tools.mcpDescription
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.system.exitProcess
@@ -125,7 +126,7 @@ private fun buildToolObject(spec: ToolSpec): CodeBlock {
         .add("override val descriptor: %T = hexanaToolDescriptor(\n", MCP_TOOL_DESCRIPTOR)
         .indent()
         .add("name = %S,\n", spec.name)
-        .add("description = %S,\n", buildDescription(spec))
+        .add("description = %S,\n", spec.mcpDescription)
         .add("fullyQualifiedName = %S,\n", "$IDEA_PACKAGE.HexanaToolset.${spec.name.toToolsetMethodName()}")
         .add("inputSchema = %L,\n", buildIdeaInputSchema(spec))
         .add("outputSchema = %L,\n", buildToolSchema(spec.output))
@@ -365,15 +366,6 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
     code.addStatement("val structuredContent = %M(result).jsonObject", ENCODE_HEXANA_JSON_ELEMENT)
     code.addStatement("return %T.text(text, structuredContent)", MCP_TOOL_CALL_RESULT)
     return code.build()
-}
-
-private fun buildDescription(spec: ToolSpec): String {
-    val guidance = spec.guidance
-    return if (guidance.isNullOrBlank()) {
-        spec.summary
-    } else {
-        "${spec.summary}\n${guidance.trim()}"
-    }
 }
 
 private fun buildIdeaInputSchema(spec: ToolSpec): CodeBlock {

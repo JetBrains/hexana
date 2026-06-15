@@ -50,6 +50,9 @@ reviewed with the DSL change.
 
 ## Guidance prose conventions
 
+- Generated MCP tool descriptions are the tool `summary` followed by the
+  optional `guidance` text. Keep both production-safe and neutral because model
+  clients see the combined text in `tools/list`.
 - Reference tool names with backticks in summaries and guidance: `` `query_artifacts` ``.
 - Same convention for field names the caller has to pass: `` `operation` ``, `` `entityTypes` ``, `` `query` ``,
   `` `baselinePath` ``, and `` `startFuncidx` ``.
