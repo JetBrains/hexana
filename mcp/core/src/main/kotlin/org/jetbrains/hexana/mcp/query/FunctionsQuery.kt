@@ -71,7 +71,7 @@ private fun FunctionEntry.toFunctionSummaryResult(): FunctionSummaryResult {
 private fun ParameterSignature.toFunctionSignatureResult(): FunctionSignatureResult {
     return FunctionSignatureResult(
         params = params,
-        ret = ret
+        results = ret
     )
 }
 

@@ -59,10 +59,10 @@ val WasmFrameInputClass = class_("WasmFrameInput", kotlinPackage = MODEL_PACKAGE
 
 val ResolveWasmFramesInput = WasmInputClass.with("ResolveWasmFramesInput") {
     nullable("frames", of = list(of = WasmFrameInputClass))
-        .describe("Optional crash frames to resolve. Each frame is keyed by `funcidx` and may include an absolute `codeOffset`.")
+        .describe("Optional crash frames to resolve. Each frame must come from the original stack or crash report and is keyed by `funcidx`; include the report's absolute `codeOffset` when present.")
         .maxItems(200)
     nullable("crashReportPath", of = string())
-        .describe("Optional path to a crash report JSON file containing stack frames with `funcidx`, code offsets, and raw labels.")
+        .describe("Optional path to a crash report JSON file containing stack frames with `funcidx`, code offsets, and raw labels. Prefer this over manually constructing `frames` when a report file exists.")
         .maxLength(1000)
     nullable("sourceMapPath", of = string())
         .describe("Optional path to a WebAssembly source map for source-location resolution.")
@@ -112,7 +112,9 @@ val FunctionImportResultClass = class_("FunctionImportResult") {
 
 val FunctionSignatureResultClass = class_("FunctionSignatureResult") {
     list("params", of = string()).describe("Parameter types, in declaration order.")
-    list("ret", of = string()).serialName("return").describe("Return types, in declaration order.")
+    list("results", of = string()).describe("Result types, in declaration order.")
+    list("ret", of = string()).serialName("return")
+        .describe("Legacy alias for `results`; prefer `results` for new report shapes.")
 }
 
 val FunctionSummaryResultClass = class_("FunctionSummaryResult") {
@@ -308,7 +310,8 @@ val ResolvedWasmFrameResultClass = class_("ResolvedWasmFrameResult") {
     string("symbol").describe("Best resolved symbol name or the `funcidx` fallback.")
     string("symbolSource")
         .describe("Symbol source: `import`, `name_section`, `dwarf_name`, `dwarf_linkage_name`, `export`, or `funcidx_fallback`.")
-    nullable("signature", of = FunctionSignatureResultClass).describe("Parsed function signature when available.")
+    nullable("signature", of = FunctionSignatureResultClass)
+        .describe("Parsed function signature when available. Uses `params` and `results`, with `return` retained as a legacy alias.")
     nullable("importInfo", of = FunctionImportResultClass).serialName("import")
         .describe("Import descriptor when the function is imported.")
     list("exportedAs", of = string()).describe("Export names pointing at this function.")
@@ -316,7 +319,7 @@ val ResolvedWasmFrameResultClass = class_("ResolvedWasmFrameResult") {
     nullable("sourceLocation", of = FunctionSourceLocationResultClass)
         .describe("Resolved source-map or DWARF source location when available.")
     nullable("sourceFallbackReason", of = string())
-        .describe("Machine-readable reason when source location could not be resolved.")
+        .describe("Machine-readable reason when source location could not be resolved, for example `import_has_no_code_range` or `invalid_funcidx`.")
     list("warnings", of = string()).describe("Non-fatal resolution warnings for this frame.")
 }
 
@@ -511,6 +514,8 @@ internal val FunctionTools: List<ToolSpec> = tools {
         guidance = """
             Resolve WebAssembly stack or crash frames from `funcidx` values, raw function labels, and optional absolute code offsets.
             The result reports import/local origin, best symbol with its source, signature, export names, code range, source-map or DWARF source location when available, and per-frame warnings.
+            Imported frames keep import module/name metadata, empty export names, a signature with `params` and `results`, and `import_has_no_code_range` when no source location can exist.
+            When the bundle contains a crash report JSON file, pass it as `crashReportPath` with the matching `sourceMapPath`; do not synthesize placeholder frame arrays from function-list indices.
             Use this aggregate workflow for crash triage when logs or reports contain mixed frame identifiers and you need symbols, signatures, ranges, and source locations without requesting full disassembly.
         """
         input = ResolveWasmFramesInput

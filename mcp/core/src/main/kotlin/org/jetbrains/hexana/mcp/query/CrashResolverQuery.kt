@@ -357,7 +357,7 @@ private fun parseCrashReport(text: String, path: String?): ParsedCrashReport {
 private fun sourceFallbackReason(symbol: ResolvedSymbol, location: ResolvedLocation?): String? {
     if (location?.location != null) return null
     return when {
-        symbol.origin == "import" -> "import_has_no_code_offset"
+        symbol.origin == "import" -> "import_has_no_code_range"
         symbol.origin == "unknown" -> "invalid_funcidx"
         location?.warnings?.isNotEmpty() == true -> location.warnings.first()
         symbol.codeRange == null -> "code_offset_not_found"
@@ -401,7 +401,7 @@ private fun JsonObject.valueOrNull(name: String): JsonElement? =
     get(name)?.takeUnless { it is JsonNull }
 
 private fun ParameterSignature.toFunctionSignatureResult(): FunctionSignatureResult =
-    FunctionSignatureResult(params = params, ret = ret)
+    FunctionSignatureResult(params = params, results = ret)
 
 private fun Import.toFunctionImportResult(): FunctionImportResult =
     FunctionImportResult(module = module, name = name)

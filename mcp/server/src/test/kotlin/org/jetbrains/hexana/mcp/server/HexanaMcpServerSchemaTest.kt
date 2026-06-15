@@ -242,6 +242,46 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
+    fun wasmFrameResolverSchemaExposesResultsSignatureAlias() {
+        val tool = createHexanaMcpServer()
+            .tools
+            .getValue("resolve_wasm_frames")
+            .tool
+
+        val description = tool.description ?: error("Missing frame resolver description")
+        assertTrue(description.contains("pass it as `crashReportPath`"))
+        assertTrue(description.contains("do not synthesize placeholder frame arrays"))
+
+        val input = tool.inputSchema.properties?.jsonObject ?: error("Missing frame resolver input schema")
+        assertTrue(
+            input.getValue("crashReportPath")
+                .jsonObject
+                .getValue("description")
+                .jsonPrimitive
+                .content
+                .contains("Prefer this over manually constructing `frames`")
+        )
+
+        val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing frame resolver output schema")
+        val frameProperties = output.getValue("frames").jsonObject
+            .getValue("items").jsonObject
+            .getValue("properties").jsonObject
+        val signatureProperties = frameProperties.getValue("signature").jsonObject
+            .getValue("properties").jsonObject
+
+        assertTrue("results" in signatureProperties)
+        assertTrue("return" in signatureProperties)
+        assertTrue(
+            frameProperties.getValue("sourceFallbackReason")
+                .jsonObject
+                .getValue("description")
+                .jsonPrimitive
+                .content
+                .contains("import_has_no_code_range")
+        )
+    }
+
+    @Test
     fun hostAdapterRepairPlannerSchemaUsesRequiredConfigPathAndRepairConfig() {
         val tool = createHexanaMcpServer()
             .tools

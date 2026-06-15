@@ -35,6 +35,7 @@ data class FunctionImportResult(
 @Serializable
 data class FunctionSignatureResult(
     val params: List<String>,
+    val results: List<String>,
     @SerialName("return")
-    val ret: List<String>
+    val ret: List<String> = results
 )

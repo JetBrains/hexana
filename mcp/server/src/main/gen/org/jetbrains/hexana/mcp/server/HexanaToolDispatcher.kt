@@ -4722,16 +4722,24 @@ private fun Server.registerListFunctionsTool(handlers: HexanaToolHandlers) {
                   })
                   put("description", JsonPrimitive("Parameter types, in declaration order."))
                 })
+                put("results", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Result types, in declaration order."))
+                })
                 put("return", buildJsonObject {
                   put("type", JsonPrimitive("array"))
                   put("items", buildJsonObject {
                     put("type", JsonPrimitive("string"))
                   })
-                  put("description", JsonPrimitive("Return types, in declaration order."))
+                  put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
                 })
               })
               put("required", buildJsonArray {
                 add(JsonPrimitive("params"))
+                add(JsonPrimitive("results"))
                 add(JsonPrimitive("return"))
               })
               put("description", JsonPrimitive("Parsed signature when available."))
@@ -5002,16 +5010,24 @@ private fun Server.registerFunctionsForIndicesTool(handlers: HexanaToolHandlers)
                   })
                   put("description", JsonPrimitive("Parameter types, in declaration order."))
                 })
+                put("results", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Result types, in declaration order."))
+                })
                 put("return", buildJsonObject {
                   put("type", JsonPrimitive("array"))
                   put("items", buildJsonObject {
                     put("type", JsonPrimitive("string"))
                   })
-                  put("description", JsonPrimitive("Return types, in declaration order."))
+                  put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
                 })
               })
               put("required", buildJsonArray {
                 add(JsonPrimitive("params"))
+                add(JsonPrimitive("results"))
                 add(JsonPrimitive("return"))
               })
               put("description", JsonPrimitive("Parsed signature when available."))
@@ -5543,16 +5559,24 @@ private fun Server.registerGetFunctionCallGraphTool(handlers: HexanaToolHandlers
                   })
                   put("description", JsonPrimitive("Parameter types, in declaration order."))
                 })
+                put("results", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Result types, in declaration order."))
+                })
                 put("return", buildJsonObject {
                   put("type", JsonPrimitive("array"))
                   put("items", buildJsonObject {
                     put("type", JsonPrimitive("string"))
                   })
-                  put("description", JsonPrimitive("Return types, in declaration order."))
+                  put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
                 })
               })
               put("required", buildJsonArray {
                 add(JsonPrimitive("params"))
+                add(JsonPrimitive("results"))
                 add(JsonPrimitive("return"))
               })
               put("description", JsonPrimitive("Parsed signature when available."))
@@ -5685,16 +5709,24 @@ private fun Server.registerGetFunctionCallGraphTool(handlers: HexanaToolHandlers
                             })
                             put("description", JsonPrimitive("Parameter types, in declaration order."))
                           })
+                          put("results", buildJsonObject {
+                            put("type", JsonPrimitive("array"))
+                            put("items", buildJsonObject {
+                              put("type", JsonPrimitive("string"))
+                            })
+                            put("description", JsonPrimitive("Result types, in declaration order."))
+                          })
                           put("return", buildJsonObject {
                             put("type", JsonPrimitive("array"))
                             put("items", buildJsonObject {
                               put("type", JsonPrimitive("string"))
                             })
-                            put("description", JsonPrimitive("Return types, in declaration order."))
+                            put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
                           })
                         })
                         put("required", buildJsonArray {
                           add(JsonPrimitive("params"))
+                          add(JsonPrimitive("results"))
                           add(JsonPrimitive("return"))
                         })
                         put("description", JsonPrimitive("Parsed signature when available."))
@@ -5802,16 +5834,24 @@ private fun Server.registerGetFunctionCallGraphTool(handlers: HexanaToolHandlers
                             })
                             put("description", JsonPrimitive("Parameter types, in declaration order."))
                           })
+                          put("results", buildJsonObject {
+                            put("type", JsonPrimitive("array"))
+                            put("items", buildJsonObject {
+                              put("type", JsonPrimitive("string"))
+                            })
+                            put("description", JsonPrimitive("Result types, in declaration order."))
+                          })
                           put("return", buildJsonObject {
                             put("type", JsonPrimitive("array"))
                             put("items", buildJsonObject {
                               put("type", JsonPrimitive("string"))
                             })
-                            put("description", JsonPrimitive("Return types, in declaration order."))
+                            put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
                           })
                         })
                         put("required", buildJsonArray {
                           add(JsonPrimitive("params"))
+                          add(JsonPrimitive("results"))
                           add(JsonPrimitive("return"))
                         })
                         put("description", JsonPrimitive("Parsed signature when available."))
@@ -6137,6 +6177,8 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
   |Aggregate WebAssembly stack and crash-frame triage from function indices, labels, and offsets.
   |Resolve WebAssembly stack or crash frames from `funcidx` values, raw function labels, and optional absolute code offsets.
   |The result reports import/local origin, best symbol with its source, signature, export names, code range, source-map or DWARF source location when available, and per-frame warnings.
+  |Imported frames keep import module/name metadata, empty export names, a signature with `params` and `results`, and `import_has_no_code_range` when no source location can exist.
+  |When the bundle contains a crash report JSON file, pass it as `crashReportPath` with the matching `sourceMapPath`; do not synthesize placeholder frame arrays from function-list indices.
   |Use this aggregate workflow for crash triage when logs or reports contain mixed frame identifiers and you need symbols, signatures, ranges, and source locations without requesting full disassembly.
   """.trimMargin(),
     inputSchema = ToolSchema(
@@ -6210,7 +6252,7 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
             add(JsonPrimitive("funcidx"))
           })
         })
-        put("description", JsonPrimitive("Optional crash frames to resolve. Each frame is keyed by `funcidx` and may include an absolute `codeOffset`."))
+        put("description", JsonPrimitive("Optional crash frames to resolve. Each frame must come from the original stack or crash report and is keyed by `funcidx`; include the report's absolute `codeOffset` when present."))
         put("maxItems", JsonPrimitive(200))
       })
       put("crashReportPath", buildJsonObject {
@@ -6218,7 +6260,7 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Optional path to a crash report JSON file containing stack frames with `funcidx`, code offsets, and raw labels."))
+        put("description", JsonPrimitive("Optional path to a crash report JSON file containing stack frames with `funcidx`, code offsets, and raw labels. Prefer this over manually constructing `frames` when a report file exists."))
         put("maxLength", JsonPrimitive(1_000))
       })
       put("sourceMapPath", buildJsonObject {
@@ -6293,19 +6335,27 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
                   })
                   put("description", JsonPrimitive("Parameter types, in declaration order."))
                 })
+                put("results", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Result types, in declaration order."))
+                })
                 put("return", buildJsonObject {
                   put("type", JsonPrimitive("array"))
                   put("items", buildJsonObject {
                     put("type", JsonPrimitive("string"))
                   })
-                  put("description", JsonPrimitive("Return types, in declaration order."))
+                  put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
                 })
               })
               put("required", buildJsonArray {
                 add(JsonPrimitive("params"))
+                add(JsonPrimitive("results"))
                 add(JsonPrimitive("return"))
               })
-              put("description", JsonPrimitive("Parsed function signature when available."))
+              put("description", JsonPrimitive("Parsed function signature when available. Uses `params` and `results`, with `return` retained as a legacy alias."))
             })
             put("import", buildJsonObject {
               put("type", buildJsonArray {
@@ -6387,7 +6437,7 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
                 add(JsonPrimitive("string"))
                 add(JsonPrimitive("null"))
               })
-              put("description", JsonPrimitive("Machine-readable reason when source location could not be resolved."))
+              put("description", JsonPrimitive("Machine-readable reason when source location could not be resolved, for example `import_has_no_code_range` or `invalid_funcidx`."))
             })
             put("warnings", buildJsonObject {
               put("type", JsonPrimitive("array"))
@@ -6527,19 +6577,27 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
                 })
                 put("description", JsonPrimitive("Parameter types, in declaration order."))
               })
+              put("results", buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                put("items", buildJsonObject {
+                  put("type", JsonPrimitive("string"))
+                })
+                put("description", JsonPrimitive("Result types, in declaration order."))
+              })
               put("return", buildJsonObject {
                 put("type", JsonPrimitive("array"))
                 put("items", buildJsonObject {
                   put("type", JsonPrimitive("string"))
                 })
-                put("description", JsonPrimitive("Return types, in declaration order."))
+                put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
               })
             })
             put("required", buildJsonArray {
               add(JsonPrimitive("params"))
+              add(JsonPrimitive("results"))
               add(JsonPrimitive("return"))
             })
-            put("description", JsonPrimitive("Parsed function signature when available."))
+            put("description", JsonPrimitive("Parsed function signature when available. Uses `params` and `results`, with `return` retained as a legacy alias."))
           })
           put("import", buildJsonObject {
             put("type", buildJsonArray {
@@ -6621,7 +6679,7 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
               add(JsonPrimitive("string"))
               add(JsonPrimitive("null"))
             })
-            put("description", JsonPrimitive("Machine-readable reason when source location could not be resolved."))
+            put("description", JsonPrimitive("Machine-readable reason when source location could not be resolved, for example `import_has_no_code_range` or `invalid_funcidx`."))
           })
           put("warnings", buildJsonObject {
             put("type", JsonPrimitive("array"))
@@ -6787,16 +6845,24 @@ private fun Server.registerResolveFunctionSymbolsTool(handlers: HexanaToolHandle
                   })
                   put("description", JsonPrimitive("Parameter types, in declaration order."))
                 })
+                put("results", buildJsonObject {
+                  put("type", JsonPrimitive("array"))
+                  put("items", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                  })
+                  put("description", JsonPrimitive("Result types, in declaration order."))
+                })
                 put("return", buildJsonObject {
                   put("type", JsonPrimitive("array"))
                   put("items", buildJsonObject {
                     put("type", JsonPrimitive("string"))
                   })
-                  put("description", JsonPrimitive("Return types, in declaration order."))
+                  put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
                 })
               })
               put("required", buildJsonArray {
                 add(JsonPrimitive("params"))
+                add(JsonPrimitive("results"))
                 add(JsonPrimitive("return"))
               })
               put("description", JsonPrimitive("Parsed function signature when available."))

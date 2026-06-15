@@ -219,7 +219,7 @@ private fun GeneralFunctionEntry.functionKind(): String {
 private fun ParameterSignature.toFunctionSignatureResult(): FunctionSignatureResult {
     return FunctionSignatureResult(
         params = params,
-        ret = ret
+        results = ret
     )
 }
 

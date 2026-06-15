@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.mcp
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.jetbrains.hexana.mcp.model.functions.SourceLocationInput
 import org.jetbrains.hexana.mcp.model.functions.WasmFrameInput
@@ -218,7 +222,13 @@ class CrashResolverServiceTest {
         assertEquals("import", imported.symbolSource)
         assertEquals("env", imported.importInfo?.module)
         assertEquals("imported function 0", imported.rawLabel)
-        assertEquals("import_has_no_code_offset", imported.sourceFallbackReason)
+        assertEquals(emptyList(), imported.exportedAs)
+        assertEquals(listOf("i32"), imported.signature?.params)
+        assertEquals(emptyList(), imported.signature?.results)
+        assertEquals(emptyList(), imported.signature?.ret)
+        assertNull(imported.codeRange)
+        assertNull(imported.sourceLocation)
+        assertEquals("import_has_no_code_range", imported.sourceFallbackReason)
 
         val mapped = result.frames[1]
         assertEquals("local", mapped.origin)
@@ -226,6 +236,7 @@ class CrashResolverServiceTest {
         assertEquals("name_section", mapped.symbolSource)
         assertEquals(listOf("mapped_export"), mapped.exportedAs)
         assertEquals(listOf(), mapped.signature?.params)
+        assertEquals(listOf("i32"), mapped.signature?.results)
         assertEquals(listOf("i32"), mapped.signature?.ret)
         assertEquals(mappedRange.offset, mapped.codeRange?.offset)
         assertEquals(sourceMap.resolveSibling("src/report.rs").toString(), mapped.sourceLocation?.file)
@@ -240,6 +251,22 @@ class CrashResolverServiceTest {
         assertEquals(mapped, result.topApplicationFrame)
         assertEquals(listOf(0, 2), result.skippedFrames.map { it.frameIndex })
         assertEquals(listOf("imported_frame", "unknown_funcidx"), result.skippedFrames.map { it.reason })
+
+        val serializedFrames = encodeHexanaJsonElement(result)
+            .jsonObject
+            .getValue("frames")
+            .jsonArray
+            .map { it.jsonObject }
+        val serializedImported = serializedFrames[0]
+        val importedSignature = serializedImported.getValue("signature").jsonObject
+        assertEquals(listOf("i32"), importedSignature.stringArray("params"))
+        assertEquals(emptyList(), importedSignature.stringArray("results"))
+        assertEquals(emptyList(), importedSignature.stringArray("return"))
+        assertEquals("import_has_no_code_range", serializedImported.getValue("sourceFallbackReason").jsonPrimitive.content)
+
+        val serializedMappedSignature = serializedFrames[1].getValue("signature").jsonObject
+        assertEquals(listOf("i32"), serializedMappedSignature.stringArray("results"))
+        assertEquals(listOf("i32"), serializedMappedSignature.stringArray("return"))
     }
 
     @Test
@@ -303,3 +330,6 @@ class CrashResolverServiceTest {
         private const val BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     }
 }
+
+private fun JsonObject.stringArray(name: String): List<String> =
+    getValue(name).jsonArray.map { it.jsonPrimitive.content }
