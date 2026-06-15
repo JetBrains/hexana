@@ -42,6 +42,30 @@ data class ComponentDependencyProviderResult(
 )
 
 @Serializable
+data class ComponentDependencyImportResult(
+    val importName: String,
+    val baseName: String,
+    val version: String,
+    val classification: String,
+)
+
+@Serializable
+data class ComponentIgnoredRuntimeImportResult(
+    val importName: String,
+    val baseName: String,
+    val version: String,
+    val classification: String,
+    val reason: String,
+)
+
+@Serializable
+data class ComponentResolvedDependencyPathResult(
+    val importName: String,
+    val dependencyPath: String,
+    val classification: String,
+)
+
+@Serializable
 data class ComponentUnresolvedImportResult(
     val importName: String,
     val baseName: String,
@@ -58,11 +82,21 @@ data class ComponentCandidateConflictResult(
 )
 
 @Serializable
+data class ComponentRejectedCandidateResult(
+    val candidatePath: String,
+    val reason: String,
+)
+
+@Serializable
 data class ComponentDependencySummaryResult(
+    val directRequiredImportCount: Int,
+    val transitiveRequiredImportCount: Int,
+    val ignoredRuntimeImportCount: Int,
     val directResolvedCount: Int,
     val transitiveResolvedCount: Int,
     val unresolvedCount: Int,
     val ambiguousCount: Int,
+    val rejectedCandidateCount: Int,
     val scannedFileCount: Int,
     val truncated: Boolean,
 )
@@ -71,10 +105,14 @@ data class ComponentDependencySummaryResult(
 data class ResolveComponentDependenciesResult(
     val path: String?,
     val scanRoots: List<String>,
+    val requiredNonRuntimeImports: List<ComponentDependencyImportResult>,
+    val ignoredRuntimeImports: List<ComponentIgnoredRuntimeImportResult>,
+    val resolvedDependencyPaths: List<ComponentResolvedDependencyPathResult>,
     val directDependencies: List<ComponentDependencyProviderResult>,
     val transitiveDependencies: List<ComponentDependencyProviderResult>,
     val unresolvedImports: List<ComponentUnresolvedImportResult>,
     val candidateConflicts: List<ComponentCandidateConflictResult>,
+    val rejectedCandidates: List<ComponentRejectedCandidateResult>,
     val summary: ComponentDependencySummaryResult,
 )
 

@@ -53,24 +53,37 @@ fun WasmComponentBinaryProvider.resolveComponentDependencies(
 ): ResolveComponentDependenciesResult {
     val roots = componentScanRoots(path, projectRoot, scanRoots)
     val index = ComponentScanIndex.scan(roots, excludedPath = path)
-    val direct = imports
-        .filterNot { isRuntimeImport(it.fullName()) }
-        .map { it.importRef() }
+    val directImports = imports.map { it.importRef() }
+    val directRuntimeImports = directImports
+        .filter { isRuntimeImport(it.fullName) }
+        .map { it.toIgnoredRuntimeImportResult(classification = "direct") }
+    val direct = directImports
+        .filterNot { isRuntimeImport(it.fullName) }
     val directMatches = resolveImports(direct, index)
     val directDeps = directMatches.matches.map { it.toProviderResult(transitive = false) }
 
     val transitiveImports = linkedSetOf<ComponentImportRef>()
+    val transitiveRuntimeImports = linkedMapOf<String, ComponentIgnoredRuntimeImportResult>()
     val visitedDependencies = mutableSetOf<String>()
     val queue = ArrayDeque(directDeps.map { it.dependencyPath }.distinct())
     while (queue.isNotEmpty()) {
         val depPath = queue.removeFirst()
         if (!visitedDependencies.add(depPath)) continue
         val provider = readComponentProvider(Path.of(depPath)) ?: continue
-        val depImports = provider.imports
-            .filterNot { isRuntimeImport(it.fullName()) }
-            .map { it.importRef() }
+        val depImports = provider.imports.map { it.importRef() }
+        depImports
+            .filter { isRuntimeImport(it.fullName) }
+            .filter { candidate -> directImports.none { it.fullName == candidate.fullName } }
+            .forEach { importRef ->
+                transitiveRuntimeImports.putIfAbsent(
+                    importRef.fullName,
+                    importRef.toIgnoredRuntimeImportResult(classification = "transitive")
+                )
+            }
+        val nonRuntimeDepImports = depImports
+            .filterNot { isRuntimeImport(it.fullName) }
             .filter { candidate -> direct.none { it.fullName == candidate.fullName } }
-        for (depImport in depImports) {
+        for (depImport in nonRuntimeDepImports) {
             if (transitiveImports.add(depImport)) {
                 val matches = resolveImports(listOf(depImport), index).matches
                 matches.firstOrNull()?.dependency?.path?.toString()?.let { queue.add(it) }
@@ -81,19 +94,48 @@ fun WasmComponentBinaryProvider.resolveComponentDependencies(
     val transitiveDeps = transitiveMatches.matches.map { it.toProviderResult(transitive = true) }
     val allUnresolved = (directMatches.unresolved + transitiveMatches.unresolved).distinctBy { it.importRef.fullName }
     val allConflicts = (directMatches.conflicts + transitiveMatches.conflicts).distinctBy { it.importRef.fullName }
+    val requiredImports = direct.map { it.toDependencyImportResult(classification = "direct") } +
+        transitiveImports.map { it.toDependencyImportResult(classification = "transitive") }
+    val ignoredRuntimeImports = (directRuntimeImports + transitiveRuntimeImports.values).distinctBy {
+        it.classification + "\u0000" + it.importName
+    }
+    val resolvedDependencyPaths = (directDeps.map { it.toDependencyPathResult(classification = "direct") } +
+        transitiveDeps.map { it.toDependencyPathResult(classification = "transitive") })
+        .distinctBy { it.classification + "\u0000" + it.importName + "\u0000" + it.dependencyPath }
+    val excludedRejectedPaths = (directDeps + transitiveDeps)
+        .map { Path.of(it.dependencyPath).normalize() }
+        .toMutableSet()
+    allConflicts.flatMap { conflict -> conflict.candidates }
+        .mapTo(excludedRejectedPaths) { it.dependency.path.normalize() }
+    val rejectedCandidates = index.rejectedCandidates + buildRejectedComponentCandidates(
+        index = index,
+        requiredImports = direct + transitiveImports,
+        excludedPaths = excludedRejectedPaths,
+    )
 
     return ResolveComponentDependenciesResult(
         path = path,
         scanRoots = roots.map(Path::toString),
+        requiredNonRuntimeImports = requiredImports.take(MAX_RESULT_ITEMS),
+        ignoredRuntimeImports = ignoredRuntimeImports.take(MAX_RESULT_ITEMS),
+        resolvedDependencyPaths = resolvedDependencyPaths.take(MAX_RESULT_ITEMS),
         directDependencies = directDeps.take(MAX_RESULT_ITEMS),
         transitiveDependencies = transitiveDeps.take(MAX_RESULT_ITEMS),
         unresolvedImports = allUnresolved.map { it.importRef.toUnresolvedResult() }.take(MAX_RESULT_ITEMS),
         candidateConflicts = allConflicts.map { it.toResult() }.take(MAX_RESULT_ITEMS),
+        rejectedCandidates = rejectedCandidates
+            .map { it.toResult() }
+            .sortedBy { it.candidatePath }
+            .take(MAX_RESULT_ITEMS),
         summary = ComponentDependencySummaryResult(
+            directRequiredImportCount = direct.size,
+            transitiveRequiredImportCount = transitiveImports.size,
+            ignoredRuntimeImportCount = ignoredRuntimeImports.size,
             directResolvedCount = directDeps.size,
             transitiveResolvedCount = transitiveDeps.size,
             unresolvedCount = allUnresolved.size,
             ambiguousCount = allConflicts.size,
+            rejectedCandidateCount = rejectedCandidates.size,
             scannedFileCount = index.scannedFileCount,
             truncated = index.truncated,
         ),
@@ -113,7 +155,12 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
     val resolvedIndex = if (explicitProviders.isEmpty()) {
         ComponentScanIndex.scan(componentScanRoots(path, projectRoot, emptyList()), excludedPath = path)
     } else {
-        ComponentScanIndex(explicitProviders, scannedFileCount = explicitProviders.size, truncated = false)
+        ComponentScanIndex(
+            explicitProviders,
+            rejectedCandidates = emptyList(),
+            scannedFileCount = explicitProviders.size,
+            truncated = false
+        )
     }
 
     val required = imports
@@ -284,8 +331,20 @@ private data class ScannedComponent(
     val exports: List<ComponentExportRef>,
 )
 
+private data class RejectedScannedCandidate(
+    val path: Path,
+    val reason: String,
+) {
+    fun toResult(): ComponentRejectedCandidateResult =
+        ComponentRejectedCandidateResult(
+            candidatePath = path.toString(),
+            reason = reason,
+        )
+}
+
 private data class ComponentScanIndex(
     val components: List<ScannedComponent>,
+    val rejectedCandidates: List<RejectedScannedCandidate>,
     val scannedFileCount: Int,
     val truncated: Boolean,
 ) {
@@ -293,6 +352,7 @@ private data class ComponentScanIndex(
         fun scan(roots: List<Path>, excludedPath: String?): ComponentScanIndex {
             val excluded = excludedPath?.let { Path.of(it).normalize() }
             val components = mutableListOf<ScannedComponent>()
+            val rejectedCandidates = mutableListOf<RejectedScannedCandidate>()
             var scanned = 0
             var truncated = false
             for (root in roots.take(MAX_SCAN_ROOTS)) {
@@ -310,7 +370,14 @@ private data class ComponentScanIndex(
                         val normalized = path.normalize()
                         if (excluded != null && normalized == excluded) continue
                         scanned += 1
-                        val provider = readComponentProvider(path) ?: continue
+                        val provider = readComponentProvider(path)
+                        if (provider == null) {
+                            rejectedCandidates += RejectedScannedCandidate(
+                                normalized,
+                                "not a WebAssembly component and exports no component interface"
+                            )
+                            continue
+                        }
                         components += ScannedComponent(
                             normalized,
                             provider.exports.map { it.exportRef(normalized.toString()) },
@@ -318,7 +385,7 @@ private data class ComponentScanIndex(
                     }
                 }
             }
-            return ComponentScanIndex(components, scanned, truncated)
+            return ComponentScanIndex(components, rejectedCandidates, scanned, truncated)
         }
     }
 }
@@ -391,6 +458,32 @@ private fun resolveImports(imports: List<ComponentImportRef>, index: ComponentSc
     return ResolveResult(matches, unresolved, conflicts)
 }
 
+private fun ComponentImportRef.toDependencyImportResult(classification: String): ComponentDependencyImportResult =
+    ComponentDependencyImportResult(
+        importName = fullName,
+        baseName = baseName,
+        version = version,
+        classification = classification,
+    )
+
+private fun ComponentImportRef.toIgnoredRuntimeImportResult(classification: String): ComponentIgnoredRuntimeImportResult =
+    ComponentIgnoredRuntimeImportResult(
+        importName = fullName,
+        baseName = baseName,
+        version = version,
+        classification = classification,
+        reason = "provided by the WebAssembly runtime",
+    )
+
+private fun ComponentDependencyProviderResult.toDependencyPathResult(
+    classification: String,
+): ComponentResolvedDependencyPathResult =
+    ComponentResolvedDependencyPathResult(
+        importName = importName,
+        dependencyPath = dependencyPath,
+        classification = classification,
+    )
+
 private fun ComponentImportRef.toUnresolvedResult(): ComponentUnresolvedImportResult =
     ComponentUnresolvedImportResult(
         importName = fullName,
@@ -398,6 +491,51 @@ private fun ComponentImportRef.toUnresolvedResult(): ComponentUnresolvedImportRe
         version = version,
         runtimeProvided = isRuntimeImport(fullName),
     )
+
+private fun buildRejectedComponentCandidates(
+    index: ComponentScanIndex,
+    requiredImports: Collection<ComponentImportRef>,
+    excludedPaths: Set<Path>,
+): List<RejectedScannedCandidate> {
+    if (requiredImports.isEmpty()) {
+        return emptyList()
+    }
+    return index.components
+        .filterNot { it.path.normalize() in excludedPaths }
+        .map { component ->
+            RejectedScannedCandidate(
+                path = component.path,
+                reason = rejectedComponentReason(component, requiredImports),
+            )
+        }
+}
+
+private fun rejectedComponentReason(
+    component: ScannedComponent,
+    requiredImports: Collection<ComponentImportRef>,
+): String {
+    if (component.exports.isEmpty()) {
+        return "exports no component interface"
+    }
+    for (required in requiredImports) {
+        val versionMismatch = component.exports.firstOrNull { export ->
+            export.matchKey == required.matchKey &&
+                export.version.isNotBlank() &&
+                required.version.isNotBlank() &&
+                export.version != required.version
+        }
+        if (versionMismatch != null) {
+            return "exports ${versionMismatch.fullName}, but required version is ${required.version}"
+        }
+    }
+    val exports = component.exports.map { it.fullName }.distinct().take(3)
+    val suffix = if (component.exports.size > exports.size) ", ..." else ""
+    return if (exports.size == 1) {
+        "exports ${exports.single()}$suffix, which does not match any required import"
+    } else {
+        "exports ${exports.joinToString()}$suffix, which do not match any required import"
+    }
+}
 
 private fun componentScanRoots(path: String?, projectRoot: String?, scanRoots: List<String>): List<Path> {
     val roots = linkedSetOf<Path>()

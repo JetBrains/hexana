@@ -40,6 +40,27 @@ val ComponentDependencyProviderResultClass = class_("ComponentDependencyProvider
     boolean("transitive").describe("True when the dependency was required by another resolved dependency.")
 }
 
+val ComponentDependencyImportResultClass = class_("ComponentDependencyImportResult") {
+    string("importName").describe("Required import name.")
+    string("baseName").describe("Required import base name without version.")
+    string("version").describe("Required import version without `@`, or empty when absent.")
+    string("classification").describe("Dependency classification: `direct` or `transitive`.")
+}
+
+val ComponentIgnoredRuntimeImportResultClass = class_("ComponentIgnoredRuntimeImportResult") {
+    string("importName").describe("Ignored runtime import name.")
+    string("baseName").describe("Ignored runtime import base name without version.")
+    string("version").describe("Ignored runtime import version without `@`, or empty when absent.")
+    string("classification").describe("Import classification: `direct` or `transitive`.")
+    string("reason").describe("Concise reason the import was ignored for dependency resolution.")
+}
+
+val ComponentResolvedDependencyPathResultClass = class_("ComponentResolvedDependencyPathResult") {
+    string("importName").describe("Required import name resolved by the dependency file.")
+    string("dependencyPath").describe("Dependency file that provided the import.")
+    string("classification").describe("Dependency classification: `direct` or `transitive`.")
+}
+
 val ComponentUnresolvedImportResultClass = class_("ComponentUnresolvedImportResult") {
     string("importName").describe("Unresolved import name.")
     string("baseName").describe("Unresolved import base name without version.")
@@ -54,11 +75,20 @@ val ComponentCandidateConflictResultClass = class_("ComponentCandidateConflictRe
     string("reason").describe("Short conflict reason.")
 }
 
+val ComponentRejectedCandidateResultClass = class_("ComponentRejectedCandidateResult") {
+    string("candidatePath").describe("Scanned candidate file that was not selected as a dependency.")
+    string("reason").describe("Concise rejection reason.")
+}
+
 val ComponentDependencySummaryResultClass = class_("ComponentDependencySummaryResult") {
+    int("directRequiredImportCount").describe("Direct non-runtime imports required by the root component.")
+    int("transitiveRequiredImportCount").describe("Non-runtime imports required only by resolved dependencies.")
+    int("ignoredRuntimeImportCount").describe("Runtime-provided imports ignored for dependency resolution.")
     int("directResolvedCount").describe("Direct dependency matches.")
     int("transitiveResolvedCount").describe("Transitive dependency matches.")
     int("unresolvedCount").describe("Unresolved non-runtime imports.")
     int("ambiguousCount").describe("Imports with multiple candidate providers.")
+    int("rejectedCandidateCount").describe("Scanned candidates rejected from the resolved dependency set.")
     int("scannedFileCount").describe("Number of `.wasm` files inspected.")
     boolean("truncated").describe("True when bounded scanning stopped before exhausting all files.")
 }
@@ -69,10 +99,18 @@ val ResolveComponentDependenciesResultClass = class_(
 ) {
     nullable("path", of = string()).describe("Input path label when the caller provided `path`.")
     list("scanRoots", of = string()).describe("Directory roots used for bounded component scanning.")
+    list("requiredNonRuntimeImports", of = ComponentDependencyImportResultClass)
+        .describe("Non-runtime imports required by the root component or resolved dependencies.")
+    list("ignoredRuntimeImports", of = ComponentIgnoredRuntimeImportResultClass)
+        .describe("Runtime-provided imports ignored during dependency resolution.")
+    list("resolvedDependencyPaths", of = ComponentResolvedDependencyPathResultClass)
+        .describe("Resolved dependency files with direct/transitive classification.")
     list("directDependencies", of = ComponentDependencyProviderResultClass).describe("Resolved direct dependencies.")
     list("transitiveDependencies", of = ComponentDependencyProviderResultClass).describe("Resolved transitive dependencies.")
     list("unresolvedImports", of = ComponentUnresolvedImportResultClass).describe("Non-runtime imports without a provider.")
     list("candidateConflicts", of = ComponentCandidateConflictResultClass).describe("Ambiguous provider candidates.")
+    list("rejectedCandidates", of = ComponentRejectedCandidateResultClass)
+        .describe("Scanned candidates rejected from the resolved dependency set.")
     embed("summary", of = ComponentDependencySummaryResultClass).describe("Compact dependency-resolution counts.")
 }
 
@@ -147,7 +185,7 @@ internal val ComponentTools: List<ToolSpec> = tools {
         summary = "Resolve direct and transitive component dependencies from scan roots and project roots."
         guidance = """
             Search `scanRoots`, `projectRoot`, and the input component directory for `.wasm` components whose exports satisfy non-runtime imports.
-            The result separates direct and transitive dependencies, unresolved imports, and ambiguous provider candidates.
+            The result separates direct and transitive dependencies, required non-runtime imports, ignored runtime imports, unresolved imports, rejected candidates, and ambiguous provider candidates.
             Use this aggregate dependency-resolution workflow when provider files may need to be discovered rather than supplied explicitly.
         """
         input = ComponentDependencyInputClass

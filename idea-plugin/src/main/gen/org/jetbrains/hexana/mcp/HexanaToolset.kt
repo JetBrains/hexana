@@ -1246,7 +1246,7 @@ public class HexanaToolset : McpToolsProvider {
       description = """
       |Resolve direct and transitive component dependencies from scan roots and project roots.
       |Search `scanRoots`, `projectRoot`, and the input component directory for `.wasm` components whose exports satisfy non-runtime imports.
-      |The result separates direct and transitive dependencies, unresolved imports, and ambiguous provider candidates.
+      |The result separates direct and transitive dependencies, required non-runtime imports, ignored runtime imports, unresolved imports, rejected candidates, and ambiguous provider candidates.
       |Use this aggregate dependency-resolution workflow when provider files may need to be discovered rather than supplied explicitly.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.resolveComponentDependencies",
@@ -1297,6 +1297,99 @@ public class HexanaToolset : McpToolsProvider {
             put("type", JsonPrimitive("string"))
           })
           put("description", JsonPrimitive("Directory roots used for bounded component scanning."))
+        })
+        put("requiredNonRuntimeImports", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("importName", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Required import name."))
+              })
+              put("baseName", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Required import base name without version."))
+              })
+              put("version", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Required import version without `@`, or empty when absent."))
+              })
+              put("classification", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Dependency classification: `direct` or `transitive`."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("importName"))
+              add(JsonPrimitive("baseName"))
+              add(JsonPrimitive("version"))
+              add(JsonPrimitive("classification"))
+            })
+          })
+          put("description", JsonPrimitive("Non-runtime imports required by the root component or resolved dependencies."))
+        })
+        put("ignoredRuntimeImports", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("importName", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Ignored runtime import name."))
+              })
+              put("baseName", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Ignored runtime import base name without version."))
+              })
+              put("version", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Ignored runtime import version without `@`, or empty when absent."))
+              })
+              put("classification", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Import classification: `direct` or `transitive`."))
+              })
+              put("reason", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Concise reason the import was ignored for dependency resolution."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("importName"))
+              add(JsonPrimitive("baseName"))
+              add(JsonPrimitive("version"))
+              add(JsonPrimitive("classification"))
+              add(JsonPrimitive("reason"))
+            })
+          })
+          put("description", JsonPrimitive("Runtime-provided imports ignored during dependency resolution."))
+        })
+        put("resolvedDependencyPaths", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("importName", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Required import name resolved by the dependency file."))
+              })
+              put("dependencyPath", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Dependency file that provided the import."))
+              })
+              put("classification", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Dependency classification: `direct` or `transitive`."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("importName"))
+              add(JsonPrimitive("dependencyPath"))
+              add(JsonPrimitive("classification"))
+            })
+          })
+          put("description", JsonPrimitive("Resolved dependency files with direct/transitive classification."))
         })
         put("directDependencies", buildJsonObject {
           put("type", JsonPrimitive("array"))
@@ -1465,9 +1558,42 @@ public class HexanaToolset : McpToolsProvider {
           })
           put("description", JsonPrimitive("Ambiguous provider candidates."))
         })
+        put("rejectedCandidates", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("properties", buildJsonObject {
+              put("candidatePath", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Scanned candidate file that was not selected as a dependency."))
+              })
+              put("reason", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Concise rejection reason."))
+              })
+            })
+            put("required", buildJsonArray {
+              add(JsonPrimitive("candidatePath"))
+              add(JsonPrimitive("reason"))
+            })
+          })
+          put("description", JsonPrimitive("Scanned candidates rejected from the resolved dependency set."))
+        })
         put("summary", buildJsonObject {
           put("type", JsonPrimitive("object"))
           put("properties", buildJsonObject {
+            put("directRequiredImportCount", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Direct non-runtime imports required by the root component."))
+            })
+            put("transitiveRequiredImportCount", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Non-runtime imports required only by resolved dependencies."))
+            })
+            put("ignoredRuntimeImportCount", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Runtime-provided imports ignored for dependency resolution."))
+            })
             put("directResolvedCount", buildJsonObject {
               put("type", JsonPrimitive("integer"))
               put("description", JsonPrimitive("Direct dependency matches."))
@@ -1484,6 +1610,10 @@ public class HexanaToolset : McpToolsProvider {
               put("type", JsonPrimitive("integer"))
               put("description", JsonPrimitive("Imports with multiple candidate providers."))
             })
+            put("rejectedCandidateCount", buildJsonObject {
+              put("type", JsonPrimitive("integer"))
+              put("description", JsonPrimitive("Scanned candidates rejected from the resolved dependency set."))
+            })
             put("scannedFileCount", buildJsonObject {
               put("type", JsonPrimitive("integer"))
               put("description", JsonPrimitive("Number of `.wasm` files inspected."))
@@ -1494,17 +1624,21 @@ public class HexanaToolset : McpToolsProvider {
             })
           })
           put("required", buildJsonArray {
+            add(JsonPrimitive("directRequiredImportCount"))
+            add(JsonPrimitive("transitiveRequiredImportCount"))
+            add(JsonPrimitive("ignoredRuntimeImportCount"))
             add(JsonPrimitive("directResolvedCount"))
             add(JsonPrimitive("transitiveResolvedCount"))
             add(JsonPrimitive("unresolvedCount"))
             add(JsonPrimitive("ambiguousCount"))
+            add(JsonPrimitive("rejectedCandidateCount"))
             add(JsonPrimitive("scannedFileCount"))
             add(JsonPrimitive("truncated"))
           })
           put("description", JsonPrimitive("Compact dependency-resolution counts."))
         })
       },
-      requiredProperties = setOf("scanRoots", "directDependencies", "transitiveDependencies", "unresolvedImports", "candidateConflicts", "summary"),
+      requiredProperties = setOf("scanRoots", "requiredNonRuntimeImports", "ignoredRuntimeImports", "resolvedDependencyPaths", "directDependencies", "transitiveDependencies", "unresolvedImports", "candidateConflicts", "rejectedCandidates", "summary"),
       definitions = emptyMap<String, JsonElement>(),
       ),
     )

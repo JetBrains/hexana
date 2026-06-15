@@ -214,6 +214,26 @@ class HexanaClaudePluginWrapperIntegrationTest {
         )
         assertTrue(
             dependencies.structuredContent
+                ?.get("requiredNonRuntimeImports")
+                ?.jsonArray
+                ?.any {
+                    it.jsonObject.getValue("importName").jsonPrimitive.content.contains("component:adder/add") &&
+                        it.jsonObject.getValue("classification").jsonPrimitive.content == "direct"
+                } == true,
+            "$clientLabel resolve_component_dependencies did not report direct required imports: ${surfaceText(dependencies)}"
+        )
+        assertTrue(
+            dependencies.structuredContent
+                ?.get("resolvedDependencyPaths")
+                ?.jsonArray
+                ?.any {
+                    it.jsonObject.getValue("dependencyPath").jsonPrimitive.content == adder.toString() &&
+                        it.jsonObject.getValue("classification").jsonPrimitive.content == "direct"
+                } == true,
+            "$clientLabel resolve_component_dependencies did not report resolved dependency paths: ${surfaceText(dependencies)}"
+        )
+        assertTrue(
+            dependencies.structuredContent
                 ?.get("unresolvedImports")
                 ?.jsonArray
                 ?.any {
