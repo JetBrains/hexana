@@ -268,6 +268,11 @@ fun HexViewerPanel(
         }
     }
 
+    // Modification stamp used as a key to force the hex grid to recompose
+    // when editState bytes change (e.g. after discard or undo-overwrite)
+    // even when modifiedOffsets stays the same empty set.
+    val editStamp = editState?.modificationStamp ?: 0L
+
     val firstVisibleRow = (scrollTop / ROW_HEIGHT_PX - OVERSCAN_ROWS).coerceAtLeast(0)
     val lastVisibleRow = ((scrollTop + viewportHeight) / ROW_HEIGHT_PX + OVERSCAN_ROWS).coerceAtMost(totalRows - 1)
     val topSpacerHeight = firstVisibleRow * ROW_HEIGHT_PX
@@ -590,10 +595,12 @@ fun HexViewerPanel(
                     property("transform", "translateY(${topSpacerHeight}px)")
                 }
             }) {
-                for (row in firstVisibleRow..lastVisibleRow) {
-                    HexRow(bytes, row, selection, hexSearchState, editState, pendingDigit) { ox, oy ->
-                        dragState.pendingOriginX = ox
-                        dragState.pendingOriginY = oy
+                key(editStamp) {
+                    for (row in firstVisibleRow..lastVisibleRow) {
+                        HexRow(bytes, row, selection, hexSearchState, editState, editStamp, pendingDigit) { ox, oy ->
+                            dragState.pendingOriginX = ox
+                            dragState.pendingOriginY = oy
+                        }
                     }
                 }
             }
@@ -774,6 +781,7 @@ private fun HexRow(
     selection: HexSelectionState,
     searchState: HexSearchState,
     editState: HexEditState?,
+    editStamp: Long,
     pendingDigit: Int?,
     onPendingDrag: (Double, Double) -> Unit,
 ) {
