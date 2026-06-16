@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.ui
 
 import com.intellij.ide.starter.ci.teamcity.TeamCityClient
+import com.intellij.ide.starter.models.IdeInfo
 import com.intellij.ide.starter.path.GlobalPaths
 import com.intellij.ide.starter.utils.HttpClient
 import com.intellij.tools.ide.util.common.logOutput
@@ -21,6 +22,12 @@ import kotlin.io.path.outputStream
 
 object HexanaTeamCityArtifacts {
   private const val DEFAULT_IDE_BUILD_TYPE = "IdeInstallers_Idea_Installers"
+  private val DEFAULT_IDE_BUILD_TYPES_BY_PRODUCT_CODE = mapOf(
+    "IU" to DEFAULT_IDE_BUILD_TYPE,
+    "WS" to "IdeInstallers_WebStorm_Installers",
+    "PY" to "IdeInstallers_PyCharm_Installers",
+    "CL" to "IdeInstallers_CIDR_CLion_Installers",
+  )
   private const val IDE_BUILD_TYPE_ENV = "HEXANA_IDE_BUILD_TYPE"
   private const val TEAMCITY_USERNAME_ENV = "TEAMCITY_USERNAME"
   private const val TEAMCITY_PASSWORD_ENV = "TEAMCITY_PASSWORD"
@@ -60,8 +67,16 @@ object HexanaTeamCityArtifacts {
     val children: JsonElement? = null
   )
 
-  fun resolveIdeBuildType(): String {
-    return System.getenv(IDE_BUILD_TYPE_ENV).orEmpty().ifBlank { DEFAULT_IDE_BUILD_TYPE }
+  fun resolveIdeBuildType(ideInfo: IdeInfo? = null): String {
+    val explicitBuildType = System.getenv(IDE_BUILD_TYPE_ENV).orEmpty().ifBlank { null }
+    if (explicitBuildType != null) return explicitBuildType
+
+    val productCode = ideInfo?.productCode ?: "IU"
+    return DEFAULT_IDE_BUILD_TYPES_BY_PRODUCT_CODE[productCode]
+      ?: error(
+        "No default TeamCity IDE installer build type is configured for product code '$productCode'. " +
+            "Set $IDE_BUILD_TYPE_ENV explicitly."
+      )
   }
 
   fun resolveLatestSuccessfulBuild(buildTypeId: String, buildNumber: String? = null): BuildRef {

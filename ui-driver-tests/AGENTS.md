@@ -97,7 +97,15 @@ If both are enabled or neither is enabled, the test is expected to fail fast.
 Other inputs:
 
 - `HEXANA_PLUGIN_BUILD_NUMBER`: optional TeamCity build number when downloading a plugin
-- `HEXANA_IDE_BUILD_TYPE`: IDE build type, defaults to `IdeInstallers_Idea_Installers`
+- `-PtestIdeType=<type>` or `HEXANA_IDE_TYPE`: IDE product to launch. Supported values include
+  `IntellijIdea`, `WebStorm`, `CLion`, and `PyCharm`. Defaults to `IntellijIdea`.
+- `-PtestIdeVersion=<version>` or `HEXANA_IDE_VERSION`: public IDE version to download.
+- `HEXANA_IDE_BUILD_NUMBER`: public IDE build number to download. Set only one of `HEXANA_IDE_VERSION` or
+  `HEXANA_IDE_BUILD_NUMBER`.
+- `HEXANA_IDE_BUILD_TYPE`: TeamCity IDE installer build type used when neither public IDE version nor public build
+  number is set. Defaults by selected IDE product:
+  `IdeInstallers_Idea_Installers`, `IdeInstallers_WebStorm_Installers`,
+  `IdeInstallers_PyCharm_Installers`, or `IdeInstallers_CIDR_CLion_Installers`.
 - TeamCity auth if guest access is insufficient:
   - `TEAMCITY_USERNAME` and `TEAMCITY_PASSWORD`
   - or JVM properties `teamcity.user` and `teamcity.token`

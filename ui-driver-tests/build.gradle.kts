@@ -41,6 +41,12 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    providers.gradleProperty("testIdeType").orNull?.let {
+        systemProperty("hexana.testIdeType", it)
+    }
+    providers.gradleProperty("testIdeVersion").orNull?.let {
+        systemProperty("hexana.testIdeVersion", it)
+    }
 }
 
 // Aggregator task driven by ci-configuration's `UI Driver Tests` build.

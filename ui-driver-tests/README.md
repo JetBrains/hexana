@@ -165,7 +165,15 @@ HEXANA_DOWNLOAD_PLUGIN=true HEXANA_PLUGIN_BUILD_NUMBER=123 \
 
 ### Other environment variables
 
-- `HEXANA_IDE_BUILD_TYPE` (default: `IdeInstallers_Idea_Installers`)
+- `-PtestIdeType=<type>` or `HEXANA_IDE_TYPE`: IDE product to launch. Supported values include
+  `IntellijIdea`, `WebStorm`, `CLion`, and `PyCharm`. Defaults to `IntellijIdea`.
+- `-PtestIdeVersion=<version>` or `HEXANA_IDE_VERSION`: public IDE version to download.
+- `HEXANA_IDE_BUILD_NUMBER`: public IDE build number to download. Set only one of `HEXANA_IDE_VERSION` or
+  `HEXANA_IDE_BUILD_NUMBER`.
+- `HEXANA_IDE_BUILD_TYPE`: TeamCity IDE installer build type used when neither public IDE version nor public build
+  number is set. Defaults by selected IDE product:
+  `IdeInstallers_Idea_Installers`, `IdeInstallers_WebStorm_Installers`,
+  `IdeInstallers_PyCharm_Installers`, or `IdeInstallers_CIDR_CLion_Installers`.
 - TeamCity credentials (used when guest auth cannot access a private build configuration):
   - `TEAMCITY_USERNAME` + `TEAMCITY_PASSWORD`
   - or Java system properties `teamcity.user` + `teamcity.token`

@@ -3,6 +3,7 @@ package org.jetbrains.hexana.ui
 import com.intellij.ide.starter.community.PublicIdeDownloader
 import com.intellij.ide.starter.community.model.BuildType
 import com.intellij.ide.starter.ide.IDETestContext
+import com.intellij.ide.starter.ide.IdeProductProvider
 import com.intellij.ide.starter.ide.installer.StandardInstaller
 import com.intellij.ide.starter.junit5.newContext
 import com.intellij.ide.starter.models.IdeInfo
@@ -23,13 +24,17 @@ internal object HexanaUiDriverTestSupport {
     private const val useLocalPluginEnv = "HEXANA_USE_LOCAL_PLUGIN"
     private const val downloadPluginEnv = "HEXANA_DOWNLOAD_PLUGIN"
     private const val pluginBuildNumberEnv = "HEXANA_PLUGIN_BUILD_NUMBER"
+    private const val ideTypeSystemProperty = "hexana.testIdeType"
+    private const val ideTypeEnv = "HEXANA_IDE_TYPE"
+    private const val ideVersionSystemProperty = "hexana.testIdeVersion"
     private const val ideVersionEnv = "HEXANA_IDE_VERSION"
     private const val ideBuildNumberEnv = "HEXANA_IDE_BUILD_NUMBER"
     private const val postHogHostSystemProperty = "hexana.posthog.host"
     private const val postHogFlushAtSystemProperty = "hexana.posthog.flushAt"
     private const val postHogFlushIntervalMsSystemProperty = "hexana.posthog.flushIntervalMs"
 
-    private val ideVersion = System.getenv(ideVersionEnv)?.trim()?.ifBlank { null }
+    private val ideProduct = resolveIdeProduct()
+    private val ideVersion = resolveConfigValue(ideVersionSystemProperty, ideVersionEnv)
     private val ideBuildNumber = System.getenv(ideBuildNumberEnv)?.trim()?.ifBlank { null }
 
     fun newContext(testName: String): IDETestContext {
@@ -125,7 +130,7 @@ internal object HexanaUiDriverTestSupport {
         }
 
         ideVersion != null -> {
-            ideaUltimateIdeInfo(
+            ideInfo(
                 buildType = BuildType.RELEASE.type,
                 buildNumber = "",
                 version = ideVersion,
@@ -134,7 +139,7 @@ internal object HexanaUiDriverTestSupport {
         }
 
         ideBuildNumber != null -> {
-            ideaUltimateIdeInfo(
+            ideInfo(
                 buildType = "",
                 buildNumber = ideBuildNumber,
                 version = "",
@@ -143,8 +148,8 @@ internal object HexanaUiDriverTestSupport {
         }
 
         else -> {
-            ideaUltimateIdeInfo(
-                buildType = HexanaTeamCityArtifacts.resolveIdeBuildType(),
+            ideInfo(
+                buildType = HexanaTeamCityArtifacts.resolveIdeBuildType(ideProduct),
                 buildNumber = "",
                 version = "",
                 getInstaller = { StandardInstaller(HexanaTeamCityIdeDownloader) }
@@ -152,21 +157,37 @@ internal object HexanaUiDriverTestSupport {
         }
     }
 
-    private fun ideaUltimateIdeInfo(
+    private fun ideInfo(
         buildType: String,
         buildNumber: String,
         version: String,
         getInstaller: (IdeInfo) -> StandardInstaller,
-    ): IdeInfo = IdeInfo(
-        productCode = "IU",
-        platformPrefix = "idea",
-        executableFileName = "idea",
+    ): IdeInfo = ideProduct.copy(
         buildType = buildType,
         buildNumber = buildNumber,
         version = version,
         tag = null,
-        qodanaProductCode = "QDJVM",
-        fullName = "IDEA",
         getInstaller = getInstaller
     )
+
+    private fun resolveIdeProduct(): IdeInfo {
+        val ideType = resolveConfigValue(ideTypeSystemProperty, ideTypeEnv) ?: "IntellijIdea"
+        return when (ideType.normalizedIdeType()) {
+            "intellijidea", "intellijideaultimate", "idea", "iu" -> IdeProductProvider.IU
+            "webstorm", "ws" -> IdeProductProvider.WS
+            "clion", "cl" -> IdeProductProvider.CL
+            "pycharm", "pycharmprofessional", "python", "py" -> IdeProductProvider.PY
+            else -> error(
+                "Unsupported IDE type '$ideType'. Set $ideTypeSystemProperty or $ideTypeEnv to one of: " +
+                        "IntellijIdea, WebStorm, CLion, PyCharm."
+            )
+        }
+    }
+
+    private fun resolveConfigValue(systemPropertyName: String, environmentVariableName: String): String? =
+        System.getProperty(systemPropertyName)?.trim()?.ifBlank { null }
+            ?: System.getenv(environmentVariableName)?.trim()?.ifBlank { null }
+
+    private fun String.normalizedIdeType(): String =
+        filter { it.isLetterOrDigit() }.lowercase()
 }
