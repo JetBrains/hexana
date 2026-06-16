@@ -132,9 +132,269 @@ private fun VirtualizedWatContent(state: WatPanelState) {
         return
     }
 
+    // Build section info for the shortcut bar: (displayLabel, chunkIndex) pairs.
+    // Duplicate section names get numbered suffixes like "custom#1", "custom#2".
+    val sectionEntries: List<Pair<String, Int>> = remember(chunkTree) {
+        val raw = buildList {
+            for (i in 0 until chunkTree.totalChunks) {
+                val c = chunkTree.chunkAt(i)
+                if (c is BinaryChunk.SectionHeader) {
+                    add(WasmSectionKinds.displayName(c.kind) to i)
+                }
+            }
+        }
+        // Count occurrences of each name
+        val counts = HashMap<String, Int>()
+        for ((name, _) in raw) counts[name] = (counts[name] ?: 0) + 1
+        // Assign numbered suffixes for duplicates
+        val seen = HashMap<String, Int>()
+        raw.map { (name, idx) ->
+            if ((counts[name] ?: 0) > 1) {
+                val n = (seen[name] ?: 0) + 1
+                seen[name] = n
+                "$name#$n" to idx
+            } else {
+                name to idx
+            }
+        }
+    }
+
+    // Ref to the scrollable ancestor so the shortcut bar can scroll to sections
+    val scrollContainerRef = remember { mutableStateOf<HTMLElement?>(null) }
+    // Ref to the inner wrapper div — used to compute its offset within the scroll parent
+    val innerWrapperRef = remember { mutableStateOf<HTMLElement?>(null) }
+    // Ref to the sticky shortcut bar — used to subtract its height when scrolling to sections
+    val shortcutBarRef = remember { mutableStateOf<HTMLElement?>(null) }
+    // Refs for scroll-to-section: updated each recomposition so the click handler
+    // (which is created once in SectionShortcutBar) always sees current values.
+    val visibleItemsRef = remember { mutableStateOf<List<VisibleItem>>(emptyList()) }
+    val prefixHeightsRef = remember { mutableStateOf(IntArray(0)) }
+    // Direct references to wrapper DOM elements by item index — shared with the
+    // SideEffect that builds the DOM so onSectionClick can read actual positions.
+    val wrapperElements = remember { HashMap<Int, HTMLElement>() }
+    // Flag to suppress the scroll handler during programmatic scrolling so the
+    // virtualizer doesn't fight with the refinement loop.
+    val suppressScrollHandler = remember { mutableStateOf(false) }
+    // Refs so onSectionClick can directly update virtualizer scroll state
+    // without going through the scroll handler (which would trigger
+    // recomposition with stale padding and cause scroll-to-end jumps).
+    val scrollTopSetter = remember { mutableStateOf<((Int) -> Unit)?>(null) }
+    val viewportHeightSetter = remember { mutableStateOf<((Int) -> Unit)?>(null) }
+    // Ref to the content div.
+    val contentElRef = remember { mutableStateOf<HTMLElement?>(null) }
+
     // Section shortcut bar + "Open in Editor" button
     val openInEditorScope = rememberCoroutineScope()
-    SectionShortcutBar(chunkTree) {
+    SectionShortcutBar(sectionEntries, barRef = shortcutBarRef, onSectionClick = { chunkIndex ->
+        val container = scrollContainerRef.value ?: return@SectionShortcutBar
+        val items = visibleItemsRef.value
+        val heights = prefixHeightsRef.value
+        val wrapper = innerWrapperRef.value
+        val listIdx = items.indexOfFirst { it.index == chunkIndex }
+        if (listIdx < 0) return@SectionShortcutBar
+
+        val barHeight = shortcutBarRef.value?.offsetHeight?.toDouble() ?: 0.0
+
+        // Suppress the scroll handler so the virtualizer doesn't recompose
+        // mid-jump and shift the DOM out from under us.
+        suppressScrollHandler.value = true
+
+        // Iterative scroll: do a coarse jump using estimated prefix heights,
+        // wait for Compose to recompose + SideEffect to flush the DOM, then
+        // check whether the target wrapper element is now in the DOM.  If it
+        // is, refine to its actual offset.  If not, repeat (the virtualizer
+        // may need another pass to render the right region).  Cap iterations
+        // to avoid infinite loops.
+        var remaining = 4
+
+        fun refineScroll() {
+            if (remaining-- <= 0) {
+                // Re-enable scroll handler and force a sync by dispatching
+                // a synthetic scroll event so the handler updates state.
+                suppressScrollHandler.value = false
+                container.dispatchEvent(org.w3c.dom.events.Event("scroll"))
+                return
+            }
+            val wrapperEl = wrapperElements[chunkIndex]
+            if (wrapperEl != null) {
+                // Use getBoundingClientRect to avoid accumulated estimation
+                // errors from the topPad placeholder div.
+                val elRect = wrapperEl.getBoundingClientRect()
+                val containerRect = container.getBoundingClientRect()
+                val currentOffset = elRect.top - containerRect.top + container.scrollTop
+                container.scrollTop = currentOffset - barHeight - 4.0
+
+                // Directly sync the virtualizer's Compose state so it
+                // recomposes with the correct render range.  The content
+                // div already has min-height: ${totalHeight}px (set by
+                // Compose) which prevents the browser from clamping
+                // scrollTop when topPad/bottomPad change.
+                fun syncVirtualizer() {
+                    val wOff = innerWrapperRef.value?.let { w ->
+                        var off = 0.0
+                        var e: HTMLElement? = w
+                        while (e != null && e !== container) {
+                            off += e.offsetTop.toDouble()
+                            @Suppress("UNCHECKED_CAST_TO_EXTERNAL_INTERFACE")
+                            e = e.offsetParent as? HTMLElement
+                        }
+                        off
+                    } ?: 0.0
+                    scrollTopSetter.value?.invoke((container.scrollTop - wOff).toInt().coerceAtLeast(0))
+                    viewportHeightSetter.value?.invoke(container.clientHeight)
+                }
+                syncVirtualizer()
+
+                // Stabilization loop: after each syncVirtualizer the
+                // recomposition may shift topPad/bottomPad, which can
+                // push the target element out of the render range.  We
+                // wait two rAF frames (for Compose + SideEffect), then
+                // check whether the element is still in the DOM.  If it
+                // is, we do a final position correction; if not, we
+                // re-set scrollTop from the estimated prefix height and
+                // re-sync.  Cap iterations to avoid infinite loops.
+                var settleRemaining = 4
+
+                fun settleAndUnsuppress() {
+                    kotlinx.browser.window.requestAnimationFrame {
+                        kotlinx.browser.window.requestAnimationFrame {
+                            settleRemaining--
+                            val elS = wrapperElements[chunkIndex]
+                            if (elS != null) {
+                                // Element is in the DOM — do final position correction
+                                val rS = elS.getBoundingClientRect()
+                                val crS = container.getBoundingClientRect()
+                                val offS = rS.top - crS.top + container.scrollTop
+                                container.scrollTop = offS - barHeight - 4.0
+                                syncVirtualizer()
+                                // Wait for this final sync to settle, then unsuppress.
+                                // We loop up to 3 additional settle rounds: each
+                                // round waits 2 rAF frames for Compose to
+                                // recompose, then checks if the element is still
+                                // visible and corrects scrollTop if needed.  Only
+                                // unsuppress once scrollTop is stable across a
+                                // round (delta < 1px).
+                                var finalSettleRemaining = 3
+                                var lastSettleScrollTop = container.scrollTop
+
+                                fun finalSettle() {
+                                    kotlinx.browser.window.requestAnimationFrame {
+                                        kotlinx.browser.window.requestAnimationFrame {
+                                            val elF = wrapperElements[chunkIndex]
+                                            if (elF != null) {
+                                                val rF = elF.getBoundingClientRect()
+                                                val crF = container.getBoundingClientRect()
+                                                val offF = rF.top - crF.top + container.scrollTop
+                                                val targetF = offF - barHeight - 4.0
+                                                container.scrollTop = targetF
+                                            }
+                                            val currentST = container.scrollTop
+                                            val delta = kotlin.math.abs(currentST - lastSettleScrollTop)
+                                            finalSettleRemaining--
+                                            if (delta > 1.0 && finalSettleRemaining > 0) {
+                                                // Position still shifting — re-sync and retry
+                                                lastSettleScrollTop = currentST
+                                                syncVirtualizer()
+                                                finalSettle()
+                                            } else {
+                                                // Stable — unsuppress after waiting for any
+                                                // pending recomposition to settle.  We do NOT
+                                                // call syncVirtualizer here because that would
+                                                // trigger another recomposition whose layout
+                                                // shift moves scrollTop before the scroll
+                                                // handler can read it.  Instead we wait 2 rAF
+                                                // frames, re-correct scrollTop from the element
+                                                // position, and only then unsuppress.
+                                                kotlinx.browser.window.requestAnimationFrame {
+                                                    kotlinx.browser.window.requestAnimationFrame {
+                                                        val elU = wrapperElements[chunkIndex]
+                                                        if (elU != null) {
+                                                            val rU = elU.getBoundingClientRect()
+                                                            val crU = container.getBoundingClientRect()
+                                                            val offU = rU.top - crU.top + container.scrollTop
+                                                            container.scrollTop = offU - barHeight - 4.0
+                                                        }
+                                                        // Sync Compose state to match the final scrollTop
+                                                        // so the scroll handler doesn't immediately
+                                                        // recompose to a different region.
+                                                        syncVirtualizer()
+                                                        suppressScrollHandler.value = false
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                finalSettle()
+                            } else if (settleRemaining > 0) {
+                                // Element gone — re-sync virtualizer to bring it back
+                                // Re-set scrollTop from estimated prefix height
+                                val wOff2 = innerWrapperRef.value?.let { w ->
+                                    var off = 0.0
+                                    var e: HTMLElement? = w
+                                    while (e != null && e !== container) {
+                                        off += e.offsetTop.toDouble()
+                                        @Suppress("UNCHECKED_CAST_TO_EXTERNAL_INTERFACE")
+                                        e = e.offsetParent as? HTMLElement
+                                    }
+                                    off
+                                } ?: 0.0
+                                val targetST = wOff2 + heights[listIdx].toDouble() - barHeight
+                                container.scrollTop = targetST
+                                syncVirtualizer()
+                                // Retry after recomposition
+                                settleAndUnsuppress()
+                            } else {
+                                suppressScrollHandler.value = false
+                            }
+                        }
+                    }
+                }
+
+                settleAndUnsuppress()
+            } else {
+                // Element not yet rendered — directly update the virtualizer's
+                // scroll state so it recomposes with the correct render range
+                // for the current scrollTop.  We keep the scroll handler
+                // suppressed to avoid the stale-padding scroll-to-end issue.
+                val wrapperTopOff2 = innerWrapperRef.value?.let { w ->
+                    var off = 0.0
+                    var e: HTMLElement? = w
+                    while (e != null && e !== container) {
+                        off += e.offsetTop.toDouble()
+                        @Suppress("UNCHECKED_CAST_TO_EXTERNAL_INTERFACE")
+                        e = e.offsetParent as? HTMLElement
+                    }
+                    off
+                } ?: 0.0
+                scrollTopSetter.value?.invoke((container.scrollTop - wrapperTopOff2).toInt().coerceAtLeast(0))
+                viewportHeightSetter.value?.invoke(container.clientHeight)
+                kotlinx.browser.window.requestAnimationFrame {
+                    kotlinx.browser.window.requestAnimationFrame { refineScroll() }
+                }
+            }
+        }
+
+        // Coarse scroll using estimated prefix heights
+        if (listIdx < heights.size) {
+            val wrapperOffset = if (wrapper != null && wrapper !== container) {
+                var offset = 0.0
+                var el: HTMLElement? = wrapper
+                while (el != null && el !== container) {
+                    offset += el.offsetTop.toDouble()
+                    el = el.offsetParent as? HTMLElement
+                }
+                offset
+            } else 0.0
+            val coarseTarget = wrapperOffset + heights[listIdx].toDouble() - barHeight
+            container.scrollTop = coarseTarget
+        }
+
+        // Let Compose recompose + SideEffect run, then refine
+        kotlinx.browser.window.requestAnimationFrame {
+            kotlinx.browser.window.requestAnimationFrame { refineScroll() }
+        }
+    }) {
         openInEditorScope.launch {
             try {
                 WasmPrinterJs.ensureInitialized()
@@ -225,9 +485,16 @@ private fun VirtualizedWatContent(state: WatPanelState) {
     }
     val totalHeight = prefixHeights.lastOrNull() ?: 0
 
+    // Keep refs up-to-date for the scroll-to-section callback
+    visibleItemsRef.value = visibleItems
+    prefixHeightsRef.value = prefixHeights
+
     // Current scroll position and viewport height, updated on scroll.
     var scrollTop by remember { mutableStateOf(0) }
     var viewportHeight by remember { mutableStateOf(800) }
+    // Wire up setters so onSectionClick can directly poke these values.
+    scrollTopSetter.value = { scrollTop = it }
+    viewportHeightSetter.value = { viewportHeight = it }
 
     // Binary-search for the first item whose bottom edge is past
     // (scrollTop - OVERSCAN_PX) and the last item whose top edge is
@@ -312,8 +579,6 @@ private fun VirtualizedWatContent(state: WatPanelState) {
     val prevRenderedRef = remember { mutableStateOf<Map<Int, Long>>(emptyMap()) }
     // Ordered list of item indices currently in the DOM (between top-pad and bottom-pad).
     val prevIndicesRef = remember { mutableStateOf<List<Int>>(emptyList()) }
-    // Direct references to wrapper DOM elements by item index — avoids querySelector loops.
-    val wrapperElements = remember { HashMap<Int, HTMLElement>() }
     // Direct references to the padding divs
     val topPadElRef = remember { mutableStateOf<HTMLElement?>(null) }
     val bottomPadElRef = remember { mutableStateOf<HTMLElement?>(null) }
@@ -354,27 +619,70 @@ private fun VirtualizedWatContent(state: WatPanelState) {
     // event delegation using data-action attributes.
     Div({
         style {
-            property("overflow-y", "auto")
-            property("flex", "1")
-            property("min-height", "0")
             property("font-family", "var(--vscode-editor-font-family, 'Menlo', 'Monaco', 'Courier New', monospace)")
             property("font-size", "12px")
             property("line-height", "1.4")
         }
         ref { el ->
             val htmlEl = el as HTMLElement
+            // Walk up to find the nearest scrollable ancestor — the tab content
+            // wrapper has overflow-y:auto and is the element that actually scrolls.
+            // Fall back to this element if no scrollable ancestor is found.
+            fun findScrollParent(node: HTMLElement): HTMLElement {
+                var cur = node.parentElement as? HTMLElement
+                while (cur != null) {
+                    val ov = kotlinx.browser.window.getComputedStyle(cur).overflowY
+                    if (ov == "auto" || ov == "scroll") return cur
+                    cur = cur.parentElement as? HTMLElement
+                }
+                return node
+            }
+            val scrollEl = findScrollParent(htmlEl)
+            scrollContainerRef.value = scrollEl
+            innerWrapperRef.value = htmlEl
+            // Compute the fixed pixel offset of the inner wrapper within the
+            // scroll parent so we can translate ancestor scrollTop into
+            // content-relative coordinates for the virtualizer.
+            val wrapperTopOffset: Int = run {
+                var offset = 0
+                var el: HTMLElement? = htmlEl
+                while (el != null && el !== scrollEl) {
+                    offset += el.offsetTop
+                    @Suppress("UNCHECKED_CAST_TO_EXTERNAL_INTERFACE")
+                    el = el.offsetParent as? HTMLElement
+                }
+                offset
+            }
             var rafPending = false
+            // Track recent scrollTop values to detect oscillation: if the
+            // virtualizer's topPad/bottomPad changes shift the layout and
+            // the browser compensates by adjusting scrollTop, we can end up
+            // bouncing between two values forever.  When we detect that the
+            // new value matches a recent one, we stop updating Compose state.
+            var prevScrollTop1 = -1
+            var prevScrollTop2 = -1
             val scrollHandler: (Event) -> Unit = {
-                if (!rafPending) {
+                if (!suppressScrollHandler.value && !rafPending) {
                     rafPending = true
                     kotlinx.browser.window.requestAnimationFrame {
                         rafPending = false
-                        scrollTop = htmlEl.scrollTop.toInt()
-                        viewportHeight = htmlEl.clientHeight
+                        if (!suppressScrollHandler.value) {
+                            val newST = (scrollEl.scrollTop.toInt() - wrapperTopOffset).coerceAtLeast(0)
+                            // Detect oscillation: if newST matches the value from
+                            // two updates ago, the virtualizer and browser are
+                            // fighting — skip the update to break the cycle.
+                            if (newST == prevScrollTop2 && prevScrollTop2 != prevScrollTop1) {
+                            } else {
+                                scrollTop = newST
+                                viewportHeight = scrollEl.clientHeight
+                            }
+                            prevScrollTop2 = prevScrollTop1
+                            prevScrollTop1 = newST
+                        }
                     }
                 }
             }
-            el.addEventListener("scroll", scrollHandler)
+            scrollEl.addEventListener("scroll", scrollHandler)
 
             // Event delegation for clickable elements — reads from *Ref
             // so the handler always sees the latest Compose state.
@@ -417,12 +725,13 @@ private fun VirtualizedWatContent(state: WatPanelState) {
 
             // Defer initial measurement to avoid recomposition during ref
             kotlinx.browser.window.requestAnimationFrame {
-                scrollTop = htmlEl.scrollTop.toInt()
-                viewportHeight = htmlEl.clientHeight
+                scrollTop = (scrollEl.scrollTop.toInt() - wrapperTopOffset).coerceAtLeast(0)
+                viewportHeight = scrollEl.clientHeight
             }
             onDispose {
-                el.removeEventListener("scroll", scrollHandler)
+                scrollEl.removeEventListener("scroll", scrollHandler)
                 el.removeEventListener("click", clickHandler)
+                scrollContainerRef.value = null
             }
         }
     }) {
@@ -430,8 +739,13 @@ private fun VirtualizedWatContent(state: WatPanelState) {
         // On first render or when the visible range changes drastically, we do a full
         // innerHTML. On expand/collapse toggles (same range, few chunks changed), we
         // only update the wrapper divs whose cache keys changed.
-        val contentElRef = remember { mutableStateOf<HTMLElement?>(null) }
         Div({
+            style {
+                // Ensure the content div always reflects the full virtual height so
+                // programmatic scrollTop assignments (e.g. section quick-jump) are
+                // never clamped by the browser before SideEffect updates the DOM.
+                property("min-height", "${totalHeight}px")
+            }
             ref { el ->
                 contentElRef.value = el as HTMLElement
                 onDispose { contentElRef.value = null }
@@ -519,21 +833,16 @@ private fun VirtualizedWatContent(state: WatPanelState) {
 
 @Composable
 private fun SectionShortcutBar(
-    chunkTree: org.jetbrains.hexana.providers.format.WasmChunkTree,
+    sectionEntries: List<Pair<String, Int>>,
+    barRef: MutableState<HTMLElement?> = mutableStateOf(null),
+    onSectionClick: (chunkIndex: Int) -> Unit,
     onOpenInEditor: () -> Unit,
 ) {
-    val sections = remember(chunkTree) {
-        buildList {
-            for (i in 0 until chunkTree.totalChunks) {
-                val c = chunkTree.chunkAt(i)
-                if (c is BinaryChunk.SectionHeader) {
-                    add(WasmSectionKinds.displayName(c.kind))
-                }
-            }
-        }
-    }
-
     Div({
+        ref { el ->
+            barRef.value = el as HTMLElement
+            onDispose { barRef.value = null }
+        }
         style {
             display(DisplayStyle.Flex)
             property("flex-wrap", "wrap")
@@ -543,20 +852,25 @@ private fun SectionShortcutBar(
             property("margin-bottom", "4px")
             property("flex-shrink", "0")
             property("align-items", "center")
+            property("position", "sticky")
+            property("top", "0")
+            property("z-index", "2")
+            property("background", "var(--vscode-editor-background, #1e1e1e)")
         }
     }) {
-        for (name in sections) {
+        for ((label, chunkIndex) in sectionEntries) {
             Div({
                 style {
                     property("padding", "2px 8px")
                     property("font-size", "11px")
                     property("color", "var(--vscode-textLink-foreground, #3794ff)")
-                    property("cursor", "default")
+                    property("cursor", "pointer")
                     property("user-select", "none")
                     property("opacity", "0.8")
                 }
+                onClick { onSectionClick(chunkIndex) }
             }) {
-                Text(name)
+                Text(label)
             }
         }
         // Spacer to push the button to the right
