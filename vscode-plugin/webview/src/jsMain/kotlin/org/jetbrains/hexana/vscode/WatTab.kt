@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Text
@@ -8,6 +9,7 @@ import org.jetbrains.hexana.document.binaryDocumentOf
 import org.jetbrains.hexana.document.format.BinaryChunk
 import org.jetbrains.hexana.document.format.ChunkId
 import org.jetbrains.hexana.document.format.RenderTokenKind
+import org.jetbrains.hexana.document.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
@@ -130,8 +132,21 @@ private fun VirtualizedWatContent(state: WatPanelState) {
         return
     }
 
-    // Section shortcut bar
-    SectionShortcutBar(chunkTree)
+    // Section shortcut bar + "Open in Editor" button
+    val openInEditorScope = rememberCoroutineScope()
+    SectionShortcutBar(chunkTree) {
+        openInEditorScope.launch {
+            try {
+                WasmPrinterJs.ensureInitialized()
+                val bytes = state.provider.bytes.duplicate()
+                bytes.position(0)
+                val result = WasmPrinterJs.printWat(bytes.toByteArray(), foldInstructions = false)
+                postShowWatToHost(result.wat, result.warnings)
+            } catch (e: Throwable) {
+                console.error("Failed to convert WAT for editor: ${e.message}")
+            }
+        }
+    }
 
     val visibleItems: List<VisibleItem> = remember(
         chunkTree, foldedSections, expandedRecGroups,
@@ -503,7 +518,10 @@ private fun VirtualizedWatContent(state: WatPanelState) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun SectionShortcutBar(chunkTree: org.jetbrains.hexana.providers.format.WasmChunkTree) {
+private fun SectionShortcutBar(
+    chunkTree: org.jetbrains.hexana.providers.format.WasmChunkTree,
+    onOpenInEditor: () -> Unit,
+) {
     val sections = remember(chunkTree) {
         buildList {
             for (i in 0 until chunkTree.totalChunks) {
@@ -524,6 +542,7 @@ private fun SectionShortcutBar(chunkTree: org.jetbrains.hexana.providers.format.
             property("border-bottom", "1px solid var(--hexana-border, #333)")
             property("margin-bottom", "4px")
             property("flex-shrink", "0")
+            property("align-items", "center")
         }
     }) {
         for (name in sections) {
@@ -539,6 +558,21 @@ private fun SectionShortcutBar(chunkTree: org.jetbrains.hexana.providers.format.
             }) {
                 Text(name)
             }
+        }
+        // Spacer to push the button to the right
+        Div({ style { property("flex", "1") } })
+        Div({
+            style {
+                property("padding", "2px 8px")
+                property("font-size", "11px")
+                property("color", "var(--vscode-textLink-foreground, #3794ff)")
+                property("cursor", "pointer")
+                property("user-select", "none")
+                property("white-space", "nowrap")
+            }
+            onClick { onOpenInEditor() }
+        }) {
+            Text("Open in Editor ↗")
         }
     }
 }
