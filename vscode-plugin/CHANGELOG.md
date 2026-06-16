@@ -1,3 +1,8 @@
+# 0.4.0
+
+- hex editor - allow editing of individual bytes (without changing the file size)
+- support for WASM debugging with NodeJS/Chrome
+
 # 0.3.0 - 11.06.2026
 
 - added NodeJS and browser as a wasm runtime in run configurations (no debug yet)
