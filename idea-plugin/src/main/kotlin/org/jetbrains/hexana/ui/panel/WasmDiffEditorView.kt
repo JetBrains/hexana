@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -18,9 +19,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.format.WasmEntityDiffResult
 import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.ui.VerticalSplitPanel
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -34,18 +37,29 @@ import org.jetbrains.jewel.ui.theme.defaultTabStyle
 /**
  * Top-level view for a WASM module diff: a tab strip over the size-impact and
  * entity comparisons (top), with a bottom split that shows the side-by-side WAT
- * of the function selected in either table (rendered on demand). [leftSymbolMap]/
- * [rightSymbolMap] are `--emit-symbol-map` sidecars (when present) that restore
- * original names on a minified module so matching name-anchors. A banner reports
- * the minified/symbol-map state. Hosted by [org.jetbrains.hexana.HexanaFileEditor]
- * for a [org.jetbrains.hexana.HexanaWasmDiffVirtualFile].
+ * of the function selected in either table (rendered on demand).
+ *
+ * The expensive size/entity diffs are NOT computed here. They are computed once,
+ * off the EDT, by [org.jetbrains.hexana.HexanaFileEditor] and supplied as
+ * [sizeModelFlow]/[entityModelFlow] — editor-scoped state that lives for the lifetime
+ * of the editor TAB. This view only collects them, so switching the inner tabs (or the
+ * IDE editor tab, which can tear down and rebuild this composition) re-uses the
+ * already-computed result; the diff is recomputed only when the tab is closed and
+ * reopened (a fresh editor).
+ *
+ * [leftSymbolMap]/[rightSymbolMap] are `--emit-symbol-map` sidecars (when present) that
+ * restore original names on a minified module so matching name-anchors; here they only
+ * drive the banner's "names restored" wording. A banner reports the minified state.
+ * Hosted for a [org.jetbrains.hexana.HexanaWasmDiffVirtualFile].
  */
 @Composable
-fun WasmDiffEditorView(
+internal fun WasmDiffEditorView(
     leftBuffer: CommonByteBuffer,
     rightBuffer: CommonByteBuffer,
     leftName: String,
     rightName: String,
+    sizeModelFlow: StateFlow<DiffLoadable<SizeReady>>,
+    entityModelFlow: StateFlow<DiffLoadable<WasmEntityDiffResult>>,
     leftSymbolMap: WasmSymbolMap? = null,
     rightSymbolMap: WasmSymbolMap? = null,
 ) {
@@ -54,6 +68,11 @@ fun WasmDiffEditorView(
     var topFraction by remember { mutableFloatStateOf(0.6f) }
     var minifiedNote by remember(leftBuffer, rightBuffer) { mutableStateOf<String?>(null) }
     val mapsLoaded = leftSymbolMap != null || rightSymbolMap != null
+
+    // Both models are computed and held by the editor; collecting is cheap and survives
+    // every recomposition / composition teardown for as long as the editor tab is open.
+    val sizeModel by sizeModelFlow.collectAsState()
+    val entityModel by entityModelFlow.collectAsState()
 
     // Detection is cheap (import/export sections only) but off the EDT for safety.
     LaunchedEffect(leftBuffer, rightBuffer) {
@@ -91,12 +110,8 @@ fun WasmDiffEditorView(
                 }
                 Box(modifier = Modifier.weight(1f)) {
                     when (selectedTab) {
-                        0 -> WasmSizeDiffPanel(
-                            leftBuffer, rightBuffer, leftName, rightName, leftSymbolMap, rightSymbolMap,
-                        ) { selectedFunction = it }
-                        else -> WasmEntityDiffPanel(
-                            leftBuffer, rightBuffer, leftName, rightName, leftSymbolMap, rightSymbolMap,
-                        ) { selectedFunction = it }
+                        0 -> WasmSizeDiffPanel(sizeModel, leftName, rightName) { selectedFunction = it }
+                        else -> WasmEntityDiffPanel(entityModel) { selectedFunction = it }
                     }
                 }
             }
@@ -105,6 +120,17 @@ fun WasmDiffEditorView(
             WasmFunctionWatDetailPanel(selectedFunction, leftBuffer, rightBuffer, leftSymbolMap, rightSymbolMap)
         },
     )
+}
+
+/**
+ * Loading state for a diff model computed off the EDT and held by [WasmDiffEditorView]
+ * across tab switches, so switching tabs never re-runs the parse+diff. Shared by the
+ * size and entity panels (both in this package).
+ */
+internal sealed interface DiffLoadable<out T> {
+    data object Loading : DiffLoadable<Nothing>
+    data class Error(val message: String) : DiffLoadable<Nothing>
+    data class Ready<T>(val value: T) : DiffLoadable<T>
 }
 
 /** Shown when either module's import/export names are minified. */

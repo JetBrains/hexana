@@ -85,11 +85,19 @@ public data class SectionDelta(
 public data class SizeDiffSummary(
     val totalDelta: Int,
     val sections: List<SectionDelta>,
+    /**
+     * Absolute analyzed size (bytes) of the base (left) and head (right) modules —
+     * the root node's [SizeDiffNode.sizeA]/[SizeDiffNode.sizeB]. `null` if the side
+     * was absent. `headTotal - baseTotal == totalDelta`.
+     */
+    val baseTotal: Int? = null,
+    val headTotal: Int? = null,
 )
 
 /**
- * Folds a diff tree (rooted at a module node) into a [SizeDiffSummary]: the total
- * module delta plus a per-section breakdown with function add/remove/modify counts.
+ * Folds a diff tree (rooted at a module node) into a [SizeDiffSummary]: the absolute
+ * base/head module sizes, the total module delta, and a per-section breakdown with
+ * function add/remove/modify counts.
  */
 public fun SizeDiffNode.summarize(): SizeDiffSummary {
     val sectionDeltas = children
@@ -106,5 +114,10 @@ public fun SizeDiffNode.summarize(): SizeDiffSummary {
                 movedFns = functions.count { it.classification == DiffClass.MOVED },
             )
         }
-    return SizeDiffSummary(totalDelta = delta, sections = sectionDeltas)
+    return SizeDiffSummary(
+        totalDelta = delta,
+        sections = sectionDeltas,
+        baseTotal = sizeA,
+        headTotal = sizeB,
+    )
 }

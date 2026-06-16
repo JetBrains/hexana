@@ -7,11 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -19,14 +14,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.format.ImportDelta
-import org.jetbrains.hexana.providers.format.WasmEntityDiffOrchestrator
 import org.jetbrains.hexana.providers.format.WasmEntityDiffResult
-import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
@@ -42,46 +31,20 @@ import org.jetbrains.jewel.ui.component.Text
 /**
  * Entities tab of the WASM diff: classifies imports/exports/functions/globals/
  * tables/memories/types/data/element segments as added/removed/modified, with a
- * supply-chain new-imports banner. Computes off the EDT (mirrors [WasmSizeDiffPanel]).
+ * supply-chain new-imports banner. Renders a precomputed [model] — the diff is run
+ * off the EDT by [WasmDiffEditorView] and held there, so switching tabs does not
+ * recompute it.
  */
 @Composable
-fun WasmEntityDiffPanel(
-    leftBuffer: CommonByteBuffer,
-    rightBuffer: CommonByteBuffer,
-    leftName: String,
-    rightName: String,
-    leftSymbolMap: WasmSymbolMap? = null,
-    rightSymbolMap: WasmSymbolMap? = null,
+internal fun WasmEntityDiffPanel(
+    model: DiffLoadable<WasmEntityDiffResult>,
     onSelectFunction: (FunctionSelection?) -> Unit = {},
 ) {
-    var state by remember(leftBuffer, rightBuffer) { mutableStateOf<EntityLoadState>(EntityLoadState.Loading) }
-    LaunchedEffect(leftBuffer, rightBuffer) {
-        state = withContext(Dispatchers.IO) {
-            val result = WasmEntityDiffOrchestrator.diff(
-                WasmBinaryProvider(leftBuffer.duplicate()),
-                WasmBinaryProvider(rightBuffer.duplicate()),
-                leftSymbolMap,
-                rightSymbolMap,
-            )
-            if (result == null) {
-                EntityLoadState.Error("Could not analyze one or both modules (not a core WASM module?).")
-            } else {
-                EntityLoadState.Ready(result)
-            }
-        }
+    when (model) {
+        DiffLoadable.Loading -> Centered("Comparing entities…")
+        is DiffLoadable.Error -> Centered(model.message)
+        is DiffLoadable.Ready -> EntityContent(model.value, onSelectFunction)
     }
-
-    when (val s = state) {
-        EntityLoadState.Loading -> Centered("Comparing entities…")
-        is EntityLoadState.Error -> Centered(s.message)
-        is EntityLoadState.Ready -> EntityContent(s.result, onSelectFunction)
-    }
-}
-
-private sealed class EntityLoadState {
-    data object Loading : EntityLoadState()
-    data class Error(val message: String) : EntityLoadState()
-    data class Ready(val result: WasmEntityDiffResult) : EntityLoadState()
 }
 
 @Composable

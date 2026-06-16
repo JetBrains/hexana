@@ -7,11 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -19,12 +14,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.providers.format.WasmSizeDiffOrchestrator
-import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
@@ -34,62 +23,36 @@ import org.jetbrains.hexana.wasm.analysis.diff.DiffClass
 import org.jetbrains.hexana.wasm.analysis.diff.NodeKind
 import org.jetbrains.hexana.wasm.analysis.diff.SizeDiffNode
 import org.jetbrains.hexana.wasm.analysis.diff.SizeDiffSummary
-import org.jetbrains.hexana.wasm.analysis.diff.summarize
 import org.jetbrains.jewel.ui.Orientation
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.Text
 
 /**
- * Size-impact comparison of two WASM modules (diff feature, v1). Computes the
- * diff off the EDT — mirroring [PanelSize] — and shows a summary header plus a
- * Δ-sorted table of changed sections, functions and data segments. Identical
- * entities are hidden, with a footer count.
+ * Size-impact comparison of two WASM modules (diff feature). Renders a precomputed
+ * [model] — the parse + size analysis is done off the EDT by [WasmDiffEditorView] and
+ * held there, so switching tabs does not recompute it. Shows a summary header (absolute
+ * base/head module sizes + total Δ) plus a Δ-sorted table of changed sections, functions
+ * and data segments. Identical entities are hidden, with a footer count.
  */
 @Composable
-fun WasmSizeDiffPanel(
-    leftBuffer: CommonByteBuffer,
-    rightBuffer: CommonByteBuffer,
+internal fun WasmSizeDiffPanel(
+    model: DiffLoadable<SizeReady>,
     leftName: String,
     rightName: String,
-    leftSymbolMap: WasmSymbolMap? = null,
-    rightSymbolMap: WasmSymbolMap? = null,
     onSelectFunction: (FunctionSelection?) -> Unit = {},
 ) {
-    // The diff (parse + size analysis of both modules) is expensive and MUST NOT
-    // run on the EDT. LaunchedEffect cancels this coroutine if the panel leaves
-    // composition, so no manual scope management is needed.
-    var state by remember(leftBuffer, rightBuffer) { mutableStateOf<DiffLoadState>(DiffLoadState.Loading) }
-    LaunchedEffect(leftBuffer, rightBuffer) {
-        state = withContext(Dispatchers.IO) {
-            val diff = WasmSizeDiffOrchestrator.diff(
-                WasmBinaryProvider(leftBuffer.duplicate()),
-                WasmBinaryProvider(rightBuffer.duplicate()),
-                leftSymbolMap,
-                rightSymbolMap,
-            )
-            if (diff == null) {
-                DiffLoadState.Error("Could not analyze one or both modules (not a core WASM module?).")
-            } else {
-                DiffLoadState.Ready(diff.summarize(), buildRows(diff))
-            }
-        }
-    }
-
-    when (val s = state) {
-        DiffLoadState.Loading -> Centered("Comparing modules…")
-        is DiffLoadState.Error -> Centered(s.message)
-        is DiffLoadState.Ready -> DiffContent(s, leftName, rightName, onSelectFunction)
+    when (model) {
+        DiffLoadable.Loading -> Centered("Comparing modules…")
+        is DiffLoadable.Error -> Centered(model.message)
+        is DiffLoadable.Ready -> DiffContent(model.value, leftName, rightName, onSelectFunction)
     }
 }
 
-private sealed class DiffLoadState {
-    data object Loading : DiffLoadState()
-    data class Error(val message: String) : DiffLoadState()
-    data class Ready(val summary: SizeDiffSummary, val rows: List<DiffRow>) : DiffLoadState()
-}
+/** The render-ready size diff: summary roll-up plus flattened rows (built off the EDT). */
+internal class SizeReady(val summary: SizeDiffSummary, val rows: List<DiffRow>)
 
 /** One flattened, displayable diff entry. */
-private data class DiffRow(
+internal data class DiffRow(
     val section: String,
     val name: String,
     val classification: DiffClass,
@@ -137,7 +100,7 @@ private fun Centered(message: String) {
 
 @Composable
 private fun DiffContent(
-    ready: DiffLoadState.Ready,
+    ready: SizeReady,
     leftName: String,
     rightName: String,
     onSelectFunction: (FunctionSelection?) -> Unit,
@@ -173,10 +136,20 @@ private fun SummaryHeader(summary: SizeDiffSummary, leftName: String, rightName:
         .filter { it.delta != 0 }
         .joinToString("    ") { "${it.name} ${signedSize(it.delta)}" }
 
+    // Absolute module sizes when available (base → head), with the total Δ; otherwise
+    // just the Δ. headTotal - baseTotal == totalDelta, so the three reconcile.
+    val baseTotal = summary.baseTotal
+    val headTotal = summary.headTotal
+    val sizeLine = if (baseTotal != null && headTotal != null) {
+        "${formatSize(baseTotal)}  →  ${formatSize(headTotal)}    (${signedSize(summary.totalDelta)})"
+    } else {
+        "${signedSize(summary.totalDelta)} total"
+    }
+
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
         Text("$leftName  →  $rightName", style = TextStyle(fontFamily = FontFamily.Monospace))
         Text(
-            "${signedSize(summary.totalDelta)} total",
+            sizeLine,
             style = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
         )
         if (sectionLine.isNotEmpty()) {
@@ -247,7 +220,7 @@ private fun signedSize(delta: Int): String = when {
  * (imports, exports, custom) contribute a single section-level row. Includes
  * identical rows so the caller can show a hidden-count footer.
  */
-private fun buildRows(root: SizeDiffNode): List<DiffRow> {
+internal fun buildRows(root: SizeDiffNode): List<DiffRow> {
     val rows = ArrayList<DiffRow>()
     for (section in root.children) {
         val sectionName = section.displayName

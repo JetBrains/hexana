@@ -19,7 +19,10 @@ import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.toNioPathOrNull
 import com.intellij.testFramework.LightVirtualFile
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -28,6 +31,9 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
+import org.jetbrains.hexana.providers.format.WasmEntityDiffOrchestrator
+import org.jetbrains.hexana.providers.format.WasmEntityDiffResult
+import org.jetbrains.hexana.providers.format.WasmSizeDiffOrchestrator
 import org.jetbrains.hexana.sourcemap.parseSourceMap
 import org.jetbrains.hexana.ui.BinaryEditorView
 import org.jetbrains.hexana.ui.CLASS_FILE_NAV_TARGET_KEY
@@ -36,8 +42,12 @@ import org.jetbrains.hexana.ui.HexSearchField
 import org.jetbrains.hexana.ui.WASM_FUNCTION_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import org.jetbrains.hexana.ui.createComposePanel
+import org.jetbrains.hexana.ui.panel.DiffLoadable
+import org.jetbrains.hexana.ui.panel.SizeReady
 import org.jetbrains.hexana.ui.panel.WasmDiffEditorView
+import org.jetbrains.hexana.ui.panel.buildRows
 import org.jetbrains.hexana.ui.setupSearchActions
+import org.jetbrains.hexana.wasm.analysis.diff.summarize
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 import org.jetbrains.hexana.wat.WatFileset
 import java.awt.BorderLayout
@@ -108,6 +118,19 @@ class HexanaFileEditor(
     fun requestWasmFunctionNav(target: WasmFunctionNavTarget) {
         wasmFunctionNavTargetFlow.value = target
     }
+
+    /**
+     * WASM-diff models, computed once off the EDT and held for the lifetime of this
+     * editor (this tab). Switching the inner tabs — or the IDE editor tab, which may
+     * tear down and rebuild the Compose composition — re-collects these flows rather
+     * than recomputing; the diff is recomputed only when the tab is closed and a fresh
+     * [HexanaFileEditor] is created on reopen. Scoped by [wasmDiffScope], cancelled in
+     * [dispose]. Declared BEFORE [init] so they are initialised before [initPanel]
+     * (called from `init`) launches into [wasmDiffScope] during construction.
+     */
+    private val wasmDiffScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val wasmSizeDiffFlow = MutableStateFlow<DiffLoadable<SizeReady>>(DiffLoadable.Loading)
+    private val wasmEntityDiffFlow = MutableStateFlow<DiffLoadable<WasmEntityDiffResult>>(DiffLoadable.Loading)
 
     init {
         panel = UiDataProvider.wrapComponent(JPanel(BorderLayout())) { sink ->
@@ -261,12 +284,43 @@ class HexanaFileEditor(
     }
 
     private fun initWasmDiffPanel(file: HexanaWasmDiffVirtualFile) {
+        // Compute both diffs once, off the EDT, into editor-scoped flows. These outlive
+        // any tab switch and are recomputed only on close + reopen (a fresh editor).
+        wasmDiffScope.launch {
+            val diff = WasmSizeDiffOrchestrator.diff(
+                WasmBinaryProvider(file.leftBuffer.duplicate()),
+                WasmBinaryProvider(file.rightBuffer.duplicate()),
+                file.leftSymbolMap,
+                file.rightSymbolMap,
+            )
+            wasmSizeDiffFlow.value = if (diff == null) {
+                DiffLoadable.Error(WASM_DIFF_PARSE_ERROR)
+            } else {
+                DiffLoadable.Ready(SizeReady(diff.summarize(), buildRows(diff)))
+            }
+        }
+        wasmDiffScope.launch {
+            val result = WasmEntityDiffOrchestrator.diff(
+                WasmBinaryProvider(file.leftBuffer.duplicate()),
+                WasmBinaryProvider(file.rightBuffer.duplicate()),
+                file.leftSymbolMap,
+                file.rightSymbolMap,
+            )
+            wasmEntityDiffFlow.value = if (result == null) {
+                DiffLoadable.Error(WASM_DIFF_PARSE_ERROR)
+            } else {
+                DiffLoadable.Ready(result)
+            }
+        }
+
         val view = createComposePanel {
             WasmDiffEditorView(
                 leftBuffer = file.leftBuffer,
                 rightBuffer = file.rightBuffer,
                 leftName = file.leftName,
                 rightName = file.rightName,
+                sizeModelFlow = wasmSizeDiffFlow,
+                entityModelFlow = wasmEntityDiffFlow,
                 leftSymbolMap = file.leftSymbolMap,
                 rightSymbolMap = file.rightSymbolMap,
             )
@@ -351,6 +405,7 @@ class HexanaFileEditor(
     }
 
     override fun dispose() {
+        wasmDiffScope.cancel()
         disposeClosedEditors()
         myTextEditor?.let {
             Disposer.dispose(it)
@@ -539,6 +594,9 @@ class HexanaFileEditor(
         )
     }
 }
+
+private const val WASM_DIFF_PARSE_ERROR =
+    "Could not analyze one or both modules (not a core WASM module?)."
 
 private fun isHexanaSupportedExtension(fileName: String): Boolean {
     val ext = fileName.substringAfterLast('.', "").lowercase()

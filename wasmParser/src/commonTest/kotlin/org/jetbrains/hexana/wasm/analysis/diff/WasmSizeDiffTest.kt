@@ -58,6 +58,11 @@ class WasmSizeDiffTest {
 
         val summary = diff.summarize()
         assertEquals(30, summary.totalDelta)
+        // Absolute module sizes are surfaced for the Size-Impact header and reconcile
+        // with the delta: headTotal - baseTotal == totalDelta.
+        assertEquals(100, summary.baseTotal)
+        assertEquals(130, summary.headTotal)
+        assertEquals(summary.totalDelta, summary.headTotal!! - summary.baseTotal!!)
         val code = summary.sections.single { it.sectionId == WasmSectionCode.SECTION_ID.toInt() }
         assertEquals(1, code.addedFns)
         assertEquals(0, code.removedFns)
