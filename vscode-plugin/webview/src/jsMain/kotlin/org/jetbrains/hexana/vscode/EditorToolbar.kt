@@ -188,7 +188,6 @@ fun EditorToolbar(
                         property("gap", "8px")
                         property("padding", "2px 8px")
                         property("border-radius", "4px")
-                        property("background", "var(--hexana-edit-bg, rgba(61, 50, 35, 0.8))")
                     }
                 }) {
                     if (isPostOverwrite) {
@@ -452,27 +451,6 @@ private fun EditToolbarButton(
         classes("hexana-edit-btn")
         if (primary) classes("hexana-edit-btn-primary")
         if (!enabled) classes("hexana-edit-btn-disabled")
-        style {
-            property("display", "inline-flex")
-            property("align-items", "center")
-            property("padding", "2px 8px")
-            property("border-radius", "4px")
-            property("font-size", "11px")
-            property("cursor", if (enabled) "pointer" else "default")
-            property("user-select", "none")
-            property("white-space", "nowrap")
-            if (primary) {
-                property("background", "var(--vscode-button-background, #0e639c)")
-                property("color", "var(--vscode-button-foreground, #fff)")
-            } else {
-                property("background", "var(--vscode-button-secondaryBackground, #3a3d41)")
-                property("color", "var(--vscode-button-secondaryForeground, #ccc)")
-            }
-            if (!enabled) {
-                property("opacity", "0.5")
-                property("pointer-events", "none")
-            }
-        }
         if (enabled) {
             onClick { event ->
                 event.stopPropagation()

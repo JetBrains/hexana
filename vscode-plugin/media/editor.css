@@ -514,20 +514,69 @@ html, body {
     background: rgba(255, 255, 255, 0.1);
 }
 
-/* Hex edited cell highlighting */
+/* Hex edited cell highlighting — use foreground color like IntelliJ */
 .hex-edited {
-    background: var(--hexana-edit-highlight, rgba(255, 167, 38, 0.3)) !important;
-    border-radius: 1px;
+    color: var(--hexana-edit-color, #FFA500) !important;
+}
+.vscode-light .hex-edited {
+    color: var(--hexana-edit-color, #C85A00) !important;
 }
 
 /* Edit controls strip background */
 .hexana-edit-controls {
-    background: var(--hexana-edit-bg, rgba(61, 50, 35, 0.8));
+    background: var(--hexana-edit-bg, rgba(61,50,35,1.0));
+}
+.vscode-light .hexana-edit-controls {
+    background: var(--hexana-edit-bg, rgba(255, 167, 38, 0.2));
 }
 
 /* Edit toolbar button hover */
 .hexana-edit-btn:hover:not(.hexana-edit-btn-disabled) {
     filter: brightness(1.2);
+}
+.vscode-light .hexana-edit-btn:hover:not(.hexana-edit-btn-disabled):not(.hexana-edit-btn-primary) {
+    filter: none;
+    background: rgba(0, 0, 0, 0.16);
+}
+.vscode-light .hexana-edit-btn-primary:hover:not(.hexana-edit-btn-disabled) {
+    filter: none;
+    background: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+.hexana-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    user-select: none;
+    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--vscode-editor-foreground, #ccc);
+    cursor: pointer;
+}
+.vscode-light .hexana-edit-btn {
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    background: rgba(0, 0, 0, 0.08);
+    color: var(--vscode-editor-foreground, #333);
+}
+
+.hexana-edit-btn-primary {
+    background: var(--vscode-button-background, #0e639c);
+    color: var(--vscode-button-foreground, #fff);
+    border-color: var(--vscode-button-background, #0e639c);
+}
+.vscode-light .hexana-edit-btn-primary {
+    background: var(--vscode-button-background, #0e639c);
+    color: var(--vscode-button-foreground, #fff);
+    border-color: var(--vscode-button-background, #0e639c);
+}
+
+.hexana-edit-btn-disabled {
+    opacity: 0.5;
+    pointer-events: none;
+    cursor: default;
 }
 
 /* Hex search match highlighting */
