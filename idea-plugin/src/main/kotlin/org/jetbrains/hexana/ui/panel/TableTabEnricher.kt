@@ -239,6 +239,22 @@ private fun enrichWasmFunctionsTab(
         )
     } else null
 
+    // For Kotlin/Wasm (wasmJs) modules, offer a per-row badge that jumps to the Kotlin source
+    // declaration. Mutually exclusive with the Graal badge (a module is one producer or the other).
+    val kotlinAction = if (graalAction == null && provider.kotlinWasmInfo.isKotlinWasm) {
+        RowActionDescriptor(
+            label = "Kotlin/Wasm",
+            tooltipProvider = { index ->
+                val symbol = provider.kotlinSymbolFor(importFuncCount + index)
+                symbol?.let { "Go to Kotlin source: ${it.display()}" }
+            },
+            action = { index ->
+                val symbol = provider.kotlinSymbolFor(importFuncCount + index) ?: return@RowActionDescriptor
+                KotlinSourceNavigator.navigateToSource(project, symbol)
+            },
+        )
+    } else null
+
     return TableTabDescriptor(
         name = tab.name,
         columns = enrichedColumns,
@@ -246,7 +262,7 @@ private fun enrichWasmFunctionsTab(
         defaultSortColumn = tab.defaultSortColumn,
         defaultSortAscending = tab.defaultSortAscending,
         rowSelectionProvider = tab.rowSelectionProvider,
-        rowAction = graalAction,
+        rowAction = graalAction ?: kotlinAction,
         contextMenuItems = if (onShowPaths != null) {
             listOf(
                 RowContextMenuItemDescriptor(

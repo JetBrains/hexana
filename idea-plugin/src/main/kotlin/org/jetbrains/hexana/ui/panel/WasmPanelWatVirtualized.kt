@@ -88,6 +88,7 @@ import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.openapi.project.Project
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.wasm.analysis.GraalJavaSymbol
+import org.jetbrains.hexana.wasm.analysis.KotlinWasmSymbol
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.Orientation
@@ -732,6 +733,16 @@ private fun ChunkRow(
     } else {
         null
     }
+    // Kotlin/Wasm: resolve this code chunk's function to a Kotlin symbol once. Null for
+    // non-Kotlin/Wasm modules, stripped names, or non-code chunks — mutually exclusive with
+    // [graalSymbol] since a module has a single producer. Same global-index mapping as above.
+    val kotlinSymbol: KotlinWasmSymbol? = if (project != null && graalSymbol == null && chunk.kind == WasmSectionKinds.CODE) {
+        remember(chunk.id, provider) {
+            provider.kotlinSymbolFor(provider.importFuncCount + chunk.indexInSection)
+        }
+    } else {
+        null
+    }
     // Per-row "open insert below" state — survives recompositions until
     // the chunk rebuilds (after a successful commit). Map<rowIndex, true>
     // means an empty insert TextField is showing below that row.
@@ -905,6 +916,11 @@ private fun ChunkRow(
                     rowView()
                     GraalJavaBadge(symbol = graalSymbol, project = project)
                 }
+            } else if (kotlinSymbol != null && project != null && rowIndex == 0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    rowView()
+                    KotlinWasmBadge(symbol = kotlinSymbol, project = project)
+                }
             } else {
                 rowView()
             }
@@ -943,6 +959,30 @@ private fun GraalJavaBadge(symbol: GraalJavaSymbol, project: Project) {
                 .padding(start = 8.dp)
                 .background(badgeBg, RoundedCornerShape(4.dp))
                 .clickable { GraalSymbolNavigator.navigateToBytecode(project, symbol) }
+                .padding(horizontal = 6.dp, vertical = 1.dp),
+        )
+    }
+}
+
+/**
+ * Small clickable "Kotlin/Wasm" pill shown inline on a Kotlin/Wasm function's header row. Click
+ * navigates to the resolved Kotlin source declaration via [KotlinSourceNavigator]; the tooltip
+ * shows the structured Kotlin symbol. Uses the Kotlin brand purple to distinguish it from the
+ * Web Image "Java" badge.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun KotlinWasmBadge(symbol: KotlinWasmSymbol, project: Project) {
+    val badgeBg = if (JewelTheme.isDark) Color(0xFF433A5E) else Color(0xFFE7DCF7)
+    val badgeFg = if (JewelTheme.isDark) Color(0xFFC6B7E2) else Color(0xFF5A2A80)
+    Tooltip(tooltip = { Text("Go to Kotlin source: ${symbol.display()}") }) {
+        Text(
+            text = "Kotlin/Wasm",
+            style = ROW_TEXT_STYLE.copy(color = badgeFg, fontSize = 10.sp),
+            modifier = Modifier
+                .padding(start = 8.dp)
+                .background(badgeBg, RoundedCornerShape(4.dp))
+                .clickable { KotlinSourceNavigator.navigateToSource(project, symbol) }
                 .padding(horizontal = 6.dp, vertical = 1.dp),
         )
     }

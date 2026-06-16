@@ -43,6 +43,10 @@ import org.jetbrains.hexana.wasm.analysis.GraalJavaSymbol
 import org.jetbrains.hexana.wasm.analysis.GraalSymbolDemangler
 import org.jetbrains.hexana.wasm.analysis.GraalWebImageDetector
 import org.jetbrains.hexana.wasm.analysis.GraalWebImageInfo
+import org.jetbrains.hexana.wasm.analysis.KotlinWasmDetector
+import org.jetbrains.hexana.wasm.analysis.KotlinWasmInfo
+import org.jetbrains.hexana.wasm.analysis.KotlinWasmNameParser
+import org.jetbrains.hexana.wasm.analysis.KotlinWasmSymbol
 import org.jetbrains.hexana.wasm.analysis.MinificationResult
 import org.jetbrains.hexana.wasm.analysis.MonosAnalyzer
 import org.jetbrains.hexana.wasm.analysis.MonosResult
@@ -627,6 +631,26 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
         if (!graalWebImageInfo.canResolveSymbols) return null
         val mangled = nameSection?.functionSubsection?.namemap?.get(functionIndex) ?: return null
         return GraalSymbolDemangler.demangle(mangled)
+    }
+
+    /**
+     * Whether this module was produced by the Kotlin/Wasm (`wasmJs`) backend, detected via the
+     * `js_code` import-module fingerprint. See [KotlinWasmDetector].
+     */
+    val kotlinWasmInfo: KotlinWasmInfo by lazy {
+        val module = wasmModule ?: return@lazy KotlinWasmInfo.NOT_KOTLIN_WASM
+        KotlinWasmDetector.detect(module, bytes)
+    }
+
+    /**
+     * Structured Kotlin symbol for a global function index (imports first, then defined functions),
+     * available only when this is a Kotlin/Wasm module that retained function names. Returns `null`
+     * for non-Kotlin/Wasm modules, stripped names, or names that are not Kotlin declarations.
+     */
+    fun kotlinSymbolFor(functionIndex: Int): KotlinWasmSymbol? {
+        if (!kotlinWasmInfo.canResolveSymbols) return null
+        val name = nameSection?.functionSubsection?.namemap?.get(functionIndex) ?: return null
+        return KotlinWasmNameParser.parse(name)
     }
 
     val codeRecords: List<WasmCodeRecord> by lazy {
