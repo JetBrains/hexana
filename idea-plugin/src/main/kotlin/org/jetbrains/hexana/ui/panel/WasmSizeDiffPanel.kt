@@ -97,7 +97,15 @@ private data class DiffRow(
     /** Function rows map to a WAT-comparison selection; other kinds clear it. */
     fun toSelection(): FunctionSelection? {
         if (kind != NodeKind.FUNCTION) return null
+        // Keys mirror WasmSizeDiffOrchestrator: semantic pairing fn:pair:<L>:<R>, one-sided
+        // fn:rmL:<L> / fn:addR:<R>; fn:idx:/fn:name: only when the matcher could not run.
         return when {
+            key.startsWith("fn:pair:") -> {
+                val parts = key.removePrefix("fn:pair:").split(":")
+                FunctionSelection(name, parts.getOrNull(0)?.toIntOrNull(), parts.getOrNull(1)?.toIntOrNull())
+            }
+            key.startsWith("fn:rmL:") -> FunctionSelection(name, key.removePrefix("fn:rmL:").toIntOrNull(), null)
+            key.startsWith("fn:addR:") -> FunctionSelection(name, null, key.removePrefix("fn:addR:").toIntOrNull())
             key.startsWith("fn:idx:") -> {
                 val n = key.removePrefix("fn:idx:").toIntOrNull()
                 FunctionSelection(name, n, n)

@@ -43,8 +43,10 @@ import org.jetbrains.hexana.wasm.analysis.GraalJavaSymbol
 import org.jetbrains.hexana.wasm.analysis.GraalSymbolDemangler
 import org.jetbrains.hexana.wasm.analysis.GraalWebImageDetector
 import org.jetbrains.hexana.wasm.analysis.GraalWebImageInfo
+import org.jetbrains.hexana.wasm.analysis.MinificationResult
 import org.jetbrains.hexana.wasm.analysis.MonosAnalyzer
 import org.jetbrains.hexana.wasm.analysis.MonosResult
+import org.jetbrains.hexana.wasm.analysis.WasmMinificationDetector
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
 import org.jetbrains.hexana.wasm.analysis.WasmProposalDetector
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageAnalyzer
@@ -706,6 +708,21 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
     val usedProposals: Set<WasmProposal> by lazy {
         val module = wasmModule ?: return@lazy emptySet()
         WasmProposalDetector.detect(module, bytes)
+    }
+
+    /**
+     * Whether this module's import/export names appear minified (Binaryen
+     * `--minify-imports-and-exports`). When true, cross-module name anchoring is
+     * unreliable and a diff should treat function matches as structural.
+     */
+    val minification: MinificationResult by lazy {
+        wasmModule ?: return@lazy MinificationResult.NONE
+        val funcImports = imports.filter { it.type is WasmTypeIndexExternalType }
+        WasmMinificationDetector.detect(
+            importModules = funcImports.map { it.prefix },
+            importFields = funcImports.map { it.name },
+            exportNames = exports.filterIsInstance<WasmFunctionExportRecordEntry>().map { it.name },
+        )
     }
 
     fun getCodeRecordByIndex(index: Int): WasmCodeRecord? {

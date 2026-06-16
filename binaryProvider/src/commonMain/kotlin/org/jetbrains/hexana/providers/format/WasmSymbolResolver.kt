@@ -4,6 +4,7 @@ import org.jetbrains.hexana.document.format.SymbolKind
 import org.jetbrains.hexana.document.format.SymbolResolver
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 
 /**
  * WASM symbol resolver. Resolution chain for the Function namespace:
@@ -12,11 +13,13 @@ import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
  * 2. **DWARF `DW_AT_name`** — subprogram name from `.debug_info`
  * 3. **DWARF `DW_AT_linkage_name`** — typically a mangled symbol; useful when
  *    `DW_AT_name` is absent but the binary still carries linker-visible names
- * 4. **Exports** — exported function bindings (last resort because export
- *    bindings are not really "names")
+ * 4. **Exports** — exported function bindings (export bindings are not really "names")
+ * 5. **Imports** — for an imported function index, its `module.field` binding. This is
+ *    the stable identifier the host resolves by name, so it is a strong matching anchor
+ *    (it discriminates calls to imports in the content hash even when the name section
+ *    and DWARF are absent). Last in the chain — it only fills indices the others miss.
  *
- * The first non-null win. The UI applies a final `$func<idx>` fallback when
- * all four miss.
+ * The first non-null win. The UI applies a final `$func<idx>` fallback when all miss.
  *
  * Function indices count imported functions first, then code-section-defined
  * functions (per the WASM spec). All four sources speak this combined index
@@ -37,12 +40,22 @@ public class WasmSymbolResolver(
         provider.nameSection?.functionSubsection?.namemap
     }
 
+    // Imported functions occupy global function indices 0..importFuncCount-1 in
+    // import-section order; only WasmTypeIndexExternalType imports are functions.
+    private val funcImportNames: Map<Int, String> by lazy {
+        provider.imports
+            .filter { it.type is WasmTypeIndexExternalType }
+            .mapIndexed { funcIdx, rec -> funcIdx to "${rec.prefix}.${rec.name}" }
+            .toMap()
+    }
+
     override fun resolve(kind: SymbolKind, index: Int): String? = when (kind) {
         SymbolKind.FUNCTION ->
             funcNames?.get(index)
                 ?: dwarfIndex?.nameFor(index)
                 ?: dwarfIndex?.linkageNameFor(index)
                 ?: funcExportNames[index]
+                ?: funcImportNames[index]
         // Other namespaces deferred until the WAT printer needs them.
         else -> null
     }

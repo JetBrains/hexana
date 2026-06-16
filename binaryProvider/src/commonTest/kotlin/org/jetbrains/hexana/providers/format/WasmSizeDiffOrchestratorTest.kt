@@ -43,6 +43,30 @@ class WasmSizeDiffOrchestratorTest {
         0x0A, 0x06, 0x01, 0x04, 0x00, 0x41, 0x05, 0x0B,
     )
 
+    /** Two anonymous functions A=`i32.const 5`, B=`i32.const 9` (no names). */
+    private val twoFns: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F,
+        0x03, 0x03, 0x02, 0x00, 0x00,
+        0x0A, 0x0B, 0x02, 0x04, 0x00, 0x41, 0x05, 0x0B, 0x04, 0x00, 0x41, 0x09, 0x0B,
+    )
+
+    /**
+     * Same A and B as [twoFns] but a distinct function X=`nop; i32.const 7` (different
+     * body and size) inserted at code index 0, shifting A→1, B→2. Positional matching
+     * would pair slot 0↔0 (A↔X) and report a bogus MODIFIED; the semantic matcher must
+     * pair A↔A and B↔B (identical bodies) and mark X as ADDED.
+     */
+    private val twoFnsWithInsertion: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F,
+        0x03, 0x04, 0x03, 0x00, 0x00, 0x00,
+        0x0A, 0x11, 0x03,
+        0x05, 0x00, 0x01, 0x41, 0x07, 0x0B,   // X: nop; i32.const 7
+        0x04, 0x00, 0x41, 0x05, 0x0B,         // A: i32.const 5
+        0x04, 0x00, 0x41, 0x09, 0x0B,         // B: i32.const 9
+    )
+
     private fun provider(bytes: ByteArray) = WasmBinaryProvider(bytes.toCommonByteBuffer())
 
     private fun theFunction(diff: SizeDiffNode): SizeDiffNode =
@@ -88,5 +112,22 @@ class WasmSizeDiffOrchestratorTest {
         // No imports, code index 0 -> global index 0.
         assertEquals("\$func0", fn.leftName)
         assertEquals("\$func0", fn.rightName)
+    }
+
+    @Test
+    fun `inserted function does not positionally mis-pair the others`() {
+        val diff = WasmSizeDiffOrchestrator.diff(provider(twoFns), provider(twoFnsWithInsertion))
+        assertNotNull(diff)
+
+        val fns = diff.flatten().filter { it.kind == NodeKind.FUNCTION }
+        assertEquals(3, fns.size)
+        // Semantic pairing: A↔A and B↔B (identical bodies) are IDENTICAL; X is ADDED.
+        // Positional matching would mis-pair A↔X (differing size) and report a MODIFIED.
+        assertEquals(
+            0, fns.count { it.classification == DiffClass.MODIFIED },
+            "positional matching would have produced a bogus MODIFIED row",
+        )
+        assertEquals(2, fns.count { it.classification == DiffClass.IDENTICAL })
+        assertEquals(1, fns.count { it.classification == DiffClass.ADDED })
     }
 }
