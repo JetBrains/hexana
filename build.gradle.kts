@@ -86,6 +86,7 @@ tasks.register("teamcityCiTests") {
         ":idea-plugin:test",
         ":mcp:core:build",
         ":mcp:server:test",
+        ":mcp:server:verifyMcpRuntimeClassFileVersions",
         ":mcp:server:integrationTest",
         ":mcp:vscode-server:test",
     )
