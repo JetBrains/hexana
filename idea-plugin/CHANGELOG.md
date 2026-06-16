@@ -17,6 +17,7 @@
 ### Removed
 
 ### Fixed
+- The virtualized WAT view no longer throws `IllegalArgumentException: Key … was already used` (and freezes) when scrolling or navigating a module whose name section repeats a function name. Kotlin/Wasm emits the same name (`<init>`, property accessors, `$default`, overloads) at many function indices; per-function chunk identity now disambiguates such collisions. This also fixes navigation that could land on the wrong same-named function, and fold state that collapsed across same-named functions. Custom-section headers with duplicate names are disambiguated the same way
 
 ### Security
 

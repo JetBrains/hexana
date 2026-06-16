@@ -79,6 +79,7 @@ public fun buildWasmChunkTree(parsed: WasmParsedBinary): WasmChunkTree {
     )
 
     var customCounter = 0
+    val seenCustomNames = mutableSetOf<String>()
     for (section in module.sections) {
         val kind = sectionKindOf(section)
         val records = if (kind == WasmSectionKinds.CODE ||
@@ -93,10 +94,14 @@ public fun buildWasmChunkTree(parsed: WasmParsedBinary): WasmChunkTree {
         }
 
         val headerId: ChunkId = if (kind == WasmSectionKinds.CUSTOM) {
-            // Multiple custom sections coexist — disambiguate by name (fall back to running counter).
-            val customName = (section as? WasmSectionCustom)?.name?.takeIf { it.isNotEmpty() }
+            // Custom-section names are not guaranteed unique (e.g. two "name" sections, or
+            // tool-emitted duplicates). Disambiguate empty AND colliding names with a running
+            // counter so the header id stays unique (LazyColumn key + idIndex contract).
+            val rawName = (section as? WasmSectionCustom)?.name?.takeIf { it.isNotEmpty() }
                 ?: "custom#${customCounter++}"
-            ChunkId.Symbolic(WasmSectionKinds.CUSTOM, customName)
+            val uniqueName = if (rawName in seenCustomNames) "$rawName#${customCounter++}" else rawName
+            seenCustomNames += uniqueName
+            ChunkId.Symbolic(WasmSectionKinds.CUSTOM, uniqueName)
         } else {
             ChunkId.Header(kind)
         }
@@ -124,6 +129,24 @@ public fun buildWasmChunkTree(parsed: WasmParsedBinary): WasmChunkTree {
 }
 
 /**
+ * Unique [ChunkId] for a within-section entry. Prefers [ChunkId.Symbolic] when [name] is present and
+ * unique within the section (so name-stable fold/scroll state survives renumbering); falls back to
+ * [ChunkId.Indexed] for unnamed entries and for names that repeat within the section.
+ *
+ * Kotlin/Wasm writes the same name (`<init>`, `<get-x>`, `$default`, overloads) at many function
+ * indices, so a name-only Symbolic id is not unique: it collides as a LazyColumn `key` — crashing the
+ * virtualized WAT view with "Key … was already used" — and silently collapses `idIndex` and the
+ * folded-sections set (folding one entry would fold every same-named one). [index] must be unique
+ * within the section (the funcidx for code/function chunks, the entry ordinal otherwise).
+ */
+internal fun uniqueChunkId(kind: SectionKind, index: Int, name: String?, nameCounts: Map<String, Int>): ChunkId =
+    if (name != null && (nameCounts[name] ?: 0) == 1) {
+        ChunkId.Symbolic(kind, name)
+    } else {
+        ChunkId.Indexed(kind, index)
+    }
+
+/**
  * One chunk per Function-section entry. Each entry is a single ULEB128
  * `typeidx`; the chunk's byteRange spans those bytes so the renderer can
  * emit a per-entry row (offset gutter + hex column + `(; func[i] : type[N]
@@ -139,16 +162,16 @@ private fun appendFunctionChunks(
 ) {
     val importFuncCount = provider.importFuncCount
     val ranges = with(section) { provider.bytes.scanRanges() }
+    val names = ranges.indices.map { resolver.resolve(SymbolKind.FUNCTION, importFuncCount + it) }
+    val nameCounts = names.asSequence().filterNotNull().groupingBy { it }.eachCount()
     ranges.forEachIndexed { i, r ->
         val funcIdx = importFuncCount + i
-        val name = resolver.resolve(SymbolKind.FUNCTION, funcIdx)
+        val name = names[i]
         chunks += BinaryChunk.Element(
-            // Distinct from the CODE chunk's id (SectionKind is part of
-            // Symbolic / Indexed equality) so per-section nav targets stay
-            // unambiguous.
-            id = name
-                ?.let { ChunkId.Symbolic(WasmSectionKinds.FUNCTION, it) }
-                ?: ChunkId.Indexed(WasmSectionKinds.FUNCTION, funcIdx),
+            // Distinct from the CODE chunk's id (SectionKind is part of Symbolic / Indexed equality)
+            // so per-section nav targets stay unambiguous; uniqueChunkId guarantees within-section
+            // uniqueness when names repeat (Kotlin/Wasm).
+            id = uniqueChunkId(WasmSectionKinds.FUNCTION, funcIdx, name, nameCounts),
             byteRange = r.offset.toLong()..(r.offset + r.size - 1).toLong(),
             estimatedLines = 1,
             kind = WasmSectionKinds.FUNCTION,
@@ -253,13 +276,13 @@ private fun appendCodeChunks(
     resolver: WasmSymbolResolver,
 ) {
     val importFuncCount = provider.importFuncCount
+    val names = provider.codeOffsets.indices.map { resolver.resolve(SymbolKind.FUNCTION, importFuncCount + it) }
+    val nameCounts = names.asSequence().filterNotNull().groupingBy { it }.eachCount()
     provider.codeOffsets.forEachIndexed { i, off ->
         val funcIdx = importFuncCount + i
-        val name = resolver.resolve(SymbolKind.FUNCTION, funcIdx)
+        val name = names[i]
         chunks += BinaryChunk.Element(
-            id = name
-                ?.let { ChunkId.Symbolic(WasmSectionKinds.CODE, it) }
-                ?: ChunkId.Indexed(WasmSectionKinds.CODE, funcIdx),
+            id = uniqueChunkId(WasmSectionKinds.CODE, funcIdx, name, nameCounts),
             byteRange = off.offset.toLong()..(off.offset + off.size - 1).toLong(),
             estimatedLines = estimateFunctionLines(off.size),
             kind = WasmSectionKinds.CODE,
@@ -274,12 +297,11 @@ private fun appendGenericRecords(
     kind: SectionKind,
     records: List<org.jetbrains.hexana.wasm.WasmNamedRange>,
 ) {
+    val nameCounts = records.asSequence().map { it.name }.filter { it.isNotEmpty() }.groupingBy { it }.eachCount()
     records.forEachIndexed { i, named ->
         val nameOrNull = named.name.takeIf { it.isNotEmpty() }
         chunks += BinaryChunk.Element(
-            id = nameOrNull
-                ?.let { ChunkId.Symbolic(kind, it) }
-                ?: ChunkId.Indexed(kind, i),
+            id = uniqueChunkId(kind, i, nameOrNull, nameCounts),
             byteRange = named.range.offset.toLong()..(named.range.offset + named.range.size - 1).toLong(),
             estimatedLines = 1,
             kind = kind,

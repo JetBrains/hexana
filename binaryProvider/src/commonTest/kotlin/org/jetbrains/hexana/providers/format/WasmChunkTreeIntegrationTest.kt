@@ -2,6 +2,7 @@ package org.jetbrains.hexana.providers.format
 
 import org.jetbrains.hexana.document.binaryDocumentOf
 import org.jetbrains.hexana.document.format.BinaryChunk
+import org.jetbrains.hexana.document.format.ChunkId
 import org.jetbrains.hexana.document.format.SymbolKind
 import org.jetbrains.hexana.document.io.toCommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
@@ -116,6 +117,58 @@ class WasmChunkTreeIntegrationTest {
         val fn = codeElements.single()
         assertEquals(0, fn.indexInSection)
         assertTrue(fn.byteRange.first > 0L)
+    }
+
+    /**
+     * Regression for the virtualized-WAT crash: `func[0]` and `func[1]` are both named `dup` in the
+     * name section — the shape Kotlin/Wasm emits (e.g. `<init>` / `$default` / overloads recurring at
+     * many funcidxs). A name-only `Symbolic` ChunkId is then not unique, which crashes the LazyColumn
+     * ("Key … was already used") and collapses idIndex / fold state. Every chunk id must be unique.
+     */
+    @Test
+    fun duplicate_function_names_produce_unique_chunk_ids() {
+        val module = byteArrayOf(
+            0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, // magic + version
+            0x01, 0x04, 0x01, 0x60, 0x00, 0x00, // type[0] = (func)
+            0x03, 0x03, 0x02, 0x00, 0x00, // function: 2 funcs, both type 0
+            0x0A, 0x07, 0x02, 0x02, 0x00, 0x0B, 0x02, 0x00, 0x0B, // code: 2 empty bodies
+            // name custom section: function names func0="dup", func1="dup"
+            0x00, 0x12, 0x04, 0x6E, 0x61, 0x6D, 0x65,
+            0x01, 0x0B, 0x02, 0x00, 0x03, 0x64, 0x75, 0x70, 0x01, 0x03, 0x64, 0x75, 0x70,
+        )
+        val snapshot = binaryDocumentOf(module.toCommonByteBuffer()).snapshot()
+        val provider = WasmBinaryProvider(snapshot.toCommonByteBuffer())
+        val tree = buildWasmChunkTree(WasmParsedBinary.fromProvider(provider, snapshot))
+
+        val elements = (0 until tree.totalChunks).map { tree.chunkAt(it) }
+        // Confirm the fixture really reproduces the collision (both code chunks resolved to "dup").
+        val dupCode = elements.filterIsInstance<BinaryChunk.Element>()
+            .filter { it.kind == WasmSectionKinds.CODE && it.displayName == "dup" }
+        assertEquals(2, dupCode.size, "fixture must surface two same-named code functions")
+
+        val ids = elements.map { it.id }
+        assertEquals(ids.size, ids.toSet().size, "every chunk id must be unique (LazyColumn key contract)")
+        assertEquals(2, dupCode.map { it.id }.toSet().size, "same-named code chunks must get distinct ids")
+    }
+
+    @Test
+    fun unique_chunk_id_falls_back_to_indexed_only_on_name_collision() {
+        val counts = mapOf("solo" to 1, "dup" to 3)
+        // Unique name keeps the Symbolic id (no behavior change for ordinary binaries).
+        assertEquals(
+            ChunkId.Symbolic(WasmSectionKinds.CODE, "solo"),
+            uniqueChunkId(WasmSectionKinds.CODE, 0, "solo", counts),
+        )
+        // Repeated name disambiguates to the unique within-section index.
+        assertEquals(
+            ChunkId.Indexed(WasmSectionKinds.CODE, 7),
+            uniqueChunkId(WasmSectionKinds.CODE, 7, "dup", counts),
+        )
+        // Unnamed entry is always Indexed.
+        assertEquals(
+            ChunkId.Indexed(WasmSectionKinds.CODE, 3),
+            uniqueChunkId(WasmSectionKinds.CODE, 3, null, counts),
+        )
     }
 
     @Test
