@@ -38,4 +38,24 @@ class WasmSymbolMapTest {
         assertTrue(WasmSymbolMap.parse("").isEmpty)
         assertTrue(WasmSymbolMap.parse("\n\n# only a comment\n").isEmpty)
     }
+
+    @Test
+    fun `parses Binaryen arrow form, stripping the dollar sigil and reversing direction`() {
+        // Real `wasm-opt --minify-imports-and-exports` console output shape.
+        val map = WasmSymbolMap.parse(
+            """
+            glCopyTexSubImage2D => ${'$'}a
+            __syscall_stat64 => ${'$'}b
+            firstExport => ${'$'}
+            ns::mangled::orig => ${'$'}c
+            """.trimIndent(),
+        )
+        assertEquals("glCopyTexSubImage2D", map.translate["a"])
+        assertEquals("__syscall_stat64", map.translate["b"])
+        assertEquals("ns::mangled::orig", map.translate["c"]) // arrow checked before colon
+        // `=> $` strips to empty -> skipped, not stored under "".
+        assertEquals(null, map.translate[""])
+        assertEquals(3, map.translate.size)
+        assertTrue(map.byIndex.isEmpty())
+    }
 }

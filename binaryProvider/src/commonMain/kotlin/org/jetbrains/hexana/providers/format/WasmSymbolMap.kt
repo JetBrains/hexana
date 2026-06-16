@@ -4,13 +4,17 @@ package org.jetbrains.hexana.providers.format
  * A parsed `--emit-symbol-map` file (Binaryen / emscripten). Restores original names on a
  * stripped or minified module so a diff can name-anchor against a named counterpart.
  *
- * Two line shapes are recognised, one entry per line, `key:value` (split on the first `:`,
- * so a C++-mangled value containing `:` is preserved):
- *  - `funcIndex:originalName` — the stack-trace symbol map; a name per (global) function index.
- *    Captured in [byIndex]; acts as an external name section.
- *  - `minifiedName:originalName` — the import/export minification map. Captured in [translate];
- *    de-minifies export/import bindings.
+ * Three line shapes are recognised, one entry per line:
+ *  - `funcIndex:originalName` — the stack-trace symbol map (`--symbolmap`); a name per (global)
+ *    function index. Captured in [byIndex]; acts as an external name section.
+ *  - `minifiedName:originalName` — emscripten's import/export minification map (`--emit-symbol-map`).
+ *    Captured in [translate]; de-minifies export/import bindings.
+ *  - `originalName => minifiedName` — Binaryen's `--minify-imports-and-exports` console form (the
+ *    minified token may carry a leading `$` display sigil, which is stripped). Stored reversed in
+ *    [translate] (`minified -> original`).
  *
+ * The `=>` form is checked before `:` so a C++-mangled original containing `:` is not split on the
+ * colon. Within a `:` line the split is on the first `:`, preserving a mangled value's own colons.
  * Blank lines and `#` / `//` comments are ignored. Indices are the combined (imports-first)
  * function index space, matching [WasmSymbolResolver].
  */
@@ -29,6 +33,14 @@ public data class WasmSymbolMap(
             for (raw in text.lineSequence()) {
                 val line = raw.trim()
                 if (line.isEmpty() || line.startsWith("#") || line.startsWith("//")) continue
+                // `=>` (Binaryen console) before `:` so a mangled original with colons isn't split wrong.
+                val arrow = line.indexOf("=>")
+                if (arrow > 0) {
+                    val original = line.substring(0, arrow).trim()
+                    val minified = line.substring(arrow + 2).trim().removePrefix("$")
+                    if (original.isNotEmpty() && minified.isNotEmpty()) translate[minified] = original
+                    continue
+                }
                 val sep = line.indexOf(':')
                 if (sep <= 0) continue
                 val key = line.substring(0, sep).trim()
