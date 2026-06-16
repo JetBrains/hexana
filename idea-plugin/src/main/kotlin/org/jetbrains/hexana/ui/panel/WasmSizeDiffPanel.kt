@@ -91,9 +91,17 @@ private data class DiffRow(
     val sizeA: Int?,
     val sizeB: Int?,
     val delta: Int,
+    val confidence: Float?,
     val kind: NodeKind,
     val key: String,
 ) {
+    /** Classification label with the matcher confidence appended when it is below 1.0. */
+    fun changeLabel(): String {
+        val base = classification.label()
+        val conf = confidence?.takeIf { it < 1f }?.let { " ${(it * 100).toInt()}%" }.orEmpty()
+        return base + conf
+    }
+
     /** Function rows map to a WAT-comparison selection; other kinds clear it. */
     fun toSelection(): FunctionSelection? {
         if (kind != NodeKind.FUNCTION) return null
@@ -155,6 +163,7 @@ private fun SummaryHeader(summary: SizeDiffSummary, leftName: String, rightName:
     val added = summary.sections.sumOf { it.addedFns }
     val removed = summary.sections.sumOf { it.removedFns }
     val modified = summary.sections.sumOf { it.modifiedFns }
+    val moved = summary.sections.sumOf { it.movedFns }
     val sectionLine = summary.sections
         .filter { it.delta != 0 }
         .joinToString("    ") { "${it.name} ${signedSize(it.delta)}" }
@@ -169,7 +178,7 @@ private fun SummaryHeader(summary: SizeDiffSummary, leftName: String, rightName:
             Text(sectionLine, style = TextStyle(fontFamily = FontFamily.Monospace))
         }
         Text(
-            "functions: +$added added, -$removed removed, ~$modified modified",
+            "functions: +$added added, -$removed removed, ~$modified modified, $moved moved",
             style = TextStyle(fontFamily = FontFamily.Monospace),
         )
     }
@@ -180,7 +189,7 @@ private fun DiffTable(rows: List<DiffRow>, onSelectFunction: (FunctionSelection?
     val tm = rememberTextMeasurer()
     val sectionW = Modifier.width(tm.measureWidthMonospace("custom_seg_"))
     val nameW = Modifier.width(tm.measureWidthMonospace("w".repeat(44)))
-    val changeW = Modifier.width(tm.measureWidthMonospace("Modified__"))
+    val changeW = Modifier.width(tm.measureWidthMonospace("Modified 100%_"))
     val sizeW = Modifier.width(tm.measureWidthMonospace("-9999.9 KB_"))
     val addedC = HexanaTheme.diffAddedColor
     val removedC = HexanaTheme.diffRemovedColor
@@ -190,7 +199,7 @@ private fun DiffTable(rows: List<DiffRow>, onSelectFunction: (FunctionSelection?
     val columns = listOf(
         TableColumn("Section", sectionW) { i -> TableCellValue(rows[i].section) },
         TableColumn("Name", nameW) { i -> TableCellValue(rows[i].name) },
-        TableColumn("Change", changeW) { i -> TableCellValue(rows[i].classification.label()) },
+        TableColumn("Change", changeW) { i -> TableCellValue(rows[i].changeLabel()) },
         TableColumn("Base", sizeW) { i -> TableCellValue(rows[i].sizeA?.let { formatSize(it) } ?: "—") },
         TableColumn("Head", sizeW) { i -> TableCellValue(rows[i].sizeB?.let { formatSize(it) } ?: "—") },
         TableColumn("Δ", sizeW) { i -> TableCellValue(rows[i].delta, signedSize(rows[i].delta)) },
@@ -257,6 +266,7 @@ private fun SizeDiffNode.toRow(section: String): DiffRow =
         sizeA = sizeA,
         sizeB = sizeB,
         delta = delta,
+        confidence = confidence,
         kind = kind,
         key = key.value,
     )

@@ -8,6 +8,7 @@ import org.jetbrains.hexana.wasm.analysis.diff.MatchKey
 import org.jetbrains.hexana.wasm.analysis.diff.NodeKind
 import org.jetbrains.hexana.wasm.analysis.diff.SizeDiffNode
 import org.jetbrains.hexana.wasm.analysis.diff.WasmSizeDiff
+import org.jetbrains.hexana.wasm.analysis.diff.match.FunctionMatch
 
 /**
  * Builds a name-enriched size diff between two WASM modules.
@@ -49,16 +50,20 @@ public object WasmSizeDiffOrchestrator {
         // BinarySizeNode has no equals override, so the map is keyed by reference identity.
         val keys = HashMap<BinarySizeNode, MatchKey>()
         val match = WasmFunctionMatchProvider.match(left, right)
-        if (match != null) {
+        // Matched functions keyed by right code index (unique) so enrichNames can carry the
+        // matcher's classification (incl. MOVED) + confidence onto the size row.
+        val byRight: Map<Int, FunctionMatch> = if (match != null) {
             val leftToRight = match.matches.associate { it.leftIdx to it.rightIdx }
             val rightToLeft = match.matches.associate { it.rightIdx to it.leftIdx }
             indexFunctionKeysSemantic(treeLeft, isLeft = true, leftToRight, rightToLeft, keys)
             indexFunctionKeysSemantic(treeRight, isLeft = false, leftToRight, rightToLeft, keys)
+            match.matches.associateBy { it.rightIdx }
         } else {
             // Rare: a side could not be matched as a core module. Preserve the old
             // resolved-name / index keying rather than collapsing everything to add/remove.
             indexFunctionKeysByName(treeLeft, left, keys)
             indexFunctionKeysByName(treeRight, right, keys)
+            emptyMap()
         }
 
         val keyOf: (BinarySizeNode) -> MatchKey = { node ->
@@ -66,7 +71,7 @@ public object WasmSizeDiffOrchestrator {
         }
 
         val diff = WasmSizeDiff.diff(treeLeft, treeRight, keyOf)
-        return enrichNames(diff, left, right)
+        return enrichNames(diff, left, right, byRight)
     }
 
     /**
@@ -115,11 +120,18 @@ public object WasmSizeDiffOrchestrator {
     }
 
     /**
-     * Rewrites FUNCTION node names to resolved display names. Matched pairs show the
-     * head (right) name; one-sided nodes show their own side's name. The resolved name
-     * (export/name-section/import) is preferred, falling back to `$func<globalIndex>`.
+     * Rewrites FUNCTION node names to resolved display names and, for matched pairs,
+     * carries the cross-module matcher's classification (incl. MOVED) + confidence onto
+     * the node — so the Size tab agrees with the Entities tab and a pure renumber shows
+     * as MOVED rather than a (zero) size delta. One-sided nodes keep ADDED/REMOVED. The
+     * resolved name (export/name-section/import) is preferred, else `$func<globalIndex>`.
      */
-    private fun enrichNames(root: SizeDiffNode, left: WasmBinaryProvider, right: WasmBinaryProvider): SizeDiffNode {
+    private fun enrichNames(
+        root: SizeDiffNode,
+        left: WasmBinaryProvider,
+        right: WasmBinaryProvider,
+        byRight: Map<Int, FunctionMatch>,
+    ): SizeDiffNode {
         val leftRes = WasmSymbolResolver(left)
         val rightRes = WasmSymbolResolver(right)
         val importLeft = left.importFuncCount
@@ -134,28 +146,40 @@ public object WasmSizeDiffOrchestrator {
             if (node.kind != NodeKind.FUNCTION) return node.copy(children = children)
 
             val key = node.key.value
-            val (leftName, rightName) = when {
+            return when {
                 key.startsWith(FN_PAIR_PREFIX) -> {
                     val (l, r) = key.removePrefix(FN_PAIR_PREFIX).split(":")
-                    nameLeft(l.toInt()) to nameRight(r.toInt())
+                    val m = byRight[r.toInt()]
+                    node.copy(
+                        classification = m?.classification ?: node.classification,
+                        confidence = m?.confidence,
+                        leftName = nameLeft(l.toInt()),
+                        rightName = nameRight(r.toInt()),
+                        children = children,
+                    )
                 }
                 key.startsWith(FN_RM_PREFIX) ->
-                    nameLeft(key.removePrefix(FN_RM_PREFIX).toInt()) to null
+                    node.copy(leftName = nameLeft(key.removePrefix(FN_RM_PREFIX).toInt()), rightName = null, children = children)
                 key.startsWith(FN_ADD_PREFIX) ->
-                    null to nameRight(key.removePrefix(FN_ADD_PREFIX).toInt())
+                    node.copy(leftName = null, rightName = nameRight(key.removePrefix(FN_ADD_PREFIX).toInt()), children = children)
                 key.startsWith(FN_NAME_PREFIX) -> {
                     val name = key.removePrefix(FN_NAME_PREFIX)
-                    (if (node.sizeA != null) name else null) to (if (node.sizeB != null) name else null)
+                    node.copy(
+                        leftName = if (node.sizeA != null) name else null,
+                        rightName = if (node.sizeB != null) name else null,
+                        children = children,
+                    )
                 }
                 key.startsWith(FN_INDEX_PREFIX) -> {
                     val ci = key.removePrefix(FN_INDEX_PREFIX).toIntOrNull()
-                    val ln = if (node.sizeA != null && ci != null) "\$func${importLeft + ci}" else null
-                    val rn = if (node.sizeB != null && ci != null) "\$func${importRight + ci}" else null
-                    ln to rn
+                    node.copy(
+                        leftName = if (node.sizeA != null && ci != null) "\$func${importLeft + ci}" else null,
+                        rightName = if (node.sizeB != null && ci != null) "\$func${importRight + ci}" else null,
+                        children = children,
+                    )
                 }
-                else -> node.leftName to node.rightName
+                else -> node.copy(children = children)
             }
-            return node.copy(leftName = leftName, rightName = rightName, children = children)
         }
         return walk(root)
     }

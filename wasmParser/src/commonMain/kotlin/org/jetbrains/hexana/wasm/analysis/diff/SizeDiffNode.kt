@@ -44,6 +44,13 @@ public data class SizeDiffNode(
     val rightName: String?,
     val sectionId: Int? = null,
     val children: List<SizeDiffNode> = emptyList(),
+    /**
+     * Match confidence in `0.0..1.0` when the [classification] was carried over from
+     * the cross-module function matcher (FUNCTION nodes only); `null` for size-only
+     * classification. A low value on a MODIFIED function is a security signal — the
+     * matched body may be effectively new code.
+     */
+    val confidence: Float? = null,
 ) {
     /** Signed byte delta, head minus base. Positive means the head module grew. */
     val delta: Int get() = (sizeB ?: 0) - (sizeA ?: 0)
@@ -71,6 +78,7 @@ public data class SectionDelta(
     val addedFns: Int,
     val removedFns: Int,
     val modifiedFns: Int,
+    val movedFns: Int = 0,
 )
 
 /** Top-level roll-up of a size diff. */
@@ -95,6 +103,7 @@ public fun SizeDiffNode.summarize(): SizeDiffSummary {
                 addedFns = functions.count { it.classification == DiffClass.ADDED },
                 removedFns = functions.count { it.classification == DiffClass.REMOVED },
                 modifiedFns = functions.count { it.classification == DiffClass.MODIFIED },
+                movedFns = functions.count { it.classification == DiffClass.MOVED },
             )
         }
     return SizeDiffSummary(totalDelta = delta, sections = sectionDeltas)

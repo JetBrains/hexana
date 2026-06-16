@@ -8,6 +8,7 @@ import org.jetbrains.hexana.wasm.analysis.diff.SizeDiffNode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class WasmSizeDiffOrchestratorTest {
 
@@ -67,6 +68,14 @@ class WasmSizeDiffOrchestratorTest {
         0x04, 0x00, 0x41, 0x09, 0x0B,         // B: i32.const 9
     )
 
+    /** [twoFns] with A and B reordered (B first, A second): a pure renumber. */
+    private val reversedTwoFns: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F,
+        0x03, 0x03, 0x02, 0x00, 0x00,
+        0x0A, 0x0B, 0x02, 0x04, 0x00, 0x41, 0x09, 0x0B, 0x04, 0x00, 0x41, 0x05, 0x0B,
+    )
+
     private fun provider(bytes: ByteArray) = WasmBinaryProvider(bytes.toCommonByteBuffer())
 
     private fun theFunction(diff: SizeDiffNode): SizeDiffNode =
@@ -121,13 +130,27 @@ class WasmSizeDiffOrchestratorTest {
 
         val fns = diff.flatten().filter { it.kind == NodeKind.FUNCTION }
         assertEquals(3, fns.size)
-        // Semantic pairing: A↔A and B↔B (identical bodies) are IDENTICAL; X is ADDED.
-        // Positional matching would mis-pair A↔X (differing size) and report a MODIFIED.
+        // Semantic pairing: A and B keep their identity but shifted index (X inserted),
+        // so the matcher classifies them MOVED; X is ADDED. Positional matching would
+        // mis-pair A↔X (differing size) and report a bogus MODIFIED.
         assertEquals(
             0, fns.count { it.classification == DiffClass.MODIFIED },
             "positional matching would have produced a bogus MODIFIED row",
         )
-        assertEquals(2, fns.count { it.classification == DiffClass.IDENTICAL })
+        assertEquals(2, fns.count { it.classification == DiffClass.MOVED })
         assertEquals(1, fns.count { it.classification == DiffClass.ADDED })
+    }
+
+    @Test
+    fun `reordered functions are MOVED with full confidence`() {
+        val diff = WasmSizeDiffOrchestrator.diff(provider(twoFns), provider(reversedTwoFns))
+        assertNotNull(diff)
+
+        val fns = diff.flatten().filter { it.kind == NodeKind.FUNCTION }
+        assertEquals(2, fns.size)
+        // Same bytes, swapped positions: the matcher's classification (MOVED) is carried
+        // onto the size rows instead of size-only IDENTICAL.
+        assertEquals(2, fns.count { it.classification == DiffClass.MOVED })
+        assertTrue(fns.all { it.confidence == 1f }, "exact-hash pairing -> full confidence")
     }
 }
