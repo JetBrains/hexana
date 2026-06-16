@@ -7,6 +7,7 @@
 - The **Size Impact** tab now pairs functions with the same semantic matcher as the Entities tab instead of by position, so inserting or removing a function no longer mis-attributes byte deltas to unrelated functions. Each function row shows the match classification (identical / moved / modified) and, for non-exact matches, the confidence; a pure renumber is reported as *moved* (zero bytes) rather than a spurious size change
 - The diff detects minified import/export names (for example from Binaryen's `--minify-imports-and-exports`) and shows a banner noting that matches are structural. Dropping a symbol-map sidecar — `<file>.symbols` next to the `.wasm`, as emitted by `--emit-symbol-map` — restores the original names so functions match by name again; the banner then reports that names were restored. Both map shapes are read: function-index (`index:name`) and import/export (`minified:original`, including Binaryen's `original => minified` console form)
 - Cross-module function matching is more robust to optimization: a second hashing round substitutes already-matched call targets, so a rewritten body that still calls the same functions is paired, and calls to imported functions now help discriminate matches
+- Edit mode UX improvements: highlighting of changes, option to overwrite the file
 
 ### Changed
 
@@ -25,7 +26,6 @@
 - GraalVM Native Image: native executables and shared libraries produced by `native-image` (ELF, Mach-O, PE) are detected by their SubstrateVM fingerprint — the `com.oracle.svm.core.VM=GraalVM …` identity string, `.svm_*`/`__svm*` sections, and the `__svm_version_info` marker — and tagged with a "Native Image" badge (tooltip shows version, edition, and target platform). Detection survives release stripping because the identity string lives in read-only data
 - GraalVM Native Image SBOM: binaries built with `--enable-sbom` (default-on in Oracle GraalVM for JDK 25+) get a "SBOM" badge and a dedicated SBOM tab that renders the embedded CycloneDX bill of materials — a metadata header (subject, timestamp, generating tool) plus a searchable, sortable table of components (type, group, name, version, licenses, PURL), with a "View raw JSON" action for the decompressed document
 - SBOM vulnerability reachability (GraalVM Native Image only): the SBOM tab can match components against the OSV vulnerability database and overlay known CVEs with CVSS severity, the fixed version, and an advisory link. Because native-image's dead-code elimination prunes the image, a vulnerable component shown here was actually retained; binaries built with `--enable-sbom=class-level` add a compiled-in class/method tree and refine reachability to "vulnerable class retained" vs "eliminated by DCE". Matching is offline by default — the database is downloaded once and the component list never leaves your machine — with an opt-in setting to also query osv.dev online. Off until enabled in Settings → Tools → Hexana
-- Edit mode UX improvements: highlighting of changes, option to overwrite the file
 
 ### Changed
 - WASM debugging – better handling of breakpoints on Windows (if it didn't attach for you previously it should now)
