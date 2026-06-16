@@ -8,6 +8,7 @@ import org.jetbrains.hexana.wasm.analysis.diff.match.FunctionMatchResult
 import org.jetbrains.hexana.wasm.analysis.diff.match.FunctionMatcher
 import org.jetbrains.hexana.wasm.analysis.diff.match.FunctionNormalizer
 import org.jetbrains.hexana.wasm.analysis.diff.match.NormalizerContext
+import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
 
@@ -25,10 +26,37 @@ public object WasmFunctionMatchProvider {
     public fun match(left: WasmBinaryProvider, right: WasmBinaryProvider): FunctionMatchResult? {
         if (!left.canProvideWasmModule() || !right.canProvideWasmModule()) return null
         val normalizer = FunctionNormalizer()
-        return FunctionMatcher.match(descriptors(left, normalizer), descriptors(right, normalizer))
+        val leftSide = buildSide(left, normalizer)
+        val rightSide = buildSide(right, normalizer)
+        // Round-2 re-hasher: re-normalize a function with matched callees substituted by
+        // their pair tokens. Uses the same shared normalizer so tags stay comparable.
+        val rehash: (Boolean, Int, (Int) -> Long?) -> Long = { isLeft, pos, pairTokenOfCallee ->
+            (if (isLeft) leftSide else rightSide).rehash(pos, pairTokenOfCallee, normalizer)
+        }
+        return FunctionMatcher.match(leftSide.descriptors, rightSide.descriptors, rehash)
     }
 
-    private fun descriptors(p: WasmBinaryProvider, normalizer: FunctionNormalizer): List<FunctionDescriptor> {
+    /** Per-module matcher inputs, retaining the bodies + signatures round-2 re-hashing needs. */
+    private class Side(
+        val descriptors: List<FunctionDescriptor>,
+        private val opCodes: List<List<OpCode>>,
+        private val seeds: LongArray,
+        private val paramCounts: IntArray,
+        private val resultCounts: IntArray,
+        private val round1Ctx: NormalizerContext,
+    ) {
+        fun rehash(pos: Int, pairTokenOfCallee: (Int) -> Long?, normalizer: FunctionNormalizer): Long {
+            val ctx = object : NormalizerContext {
+                override fun calleeToken(funcIdx: Int): Long =
+                    pairTokenOfCallee(funcIdx) ?: round1Ctx.calleeToken(funcIdx)
+                override fun typeArity(typeIdx: Int): Int = round1Ctx.typeArity(typeIdx)
+                override fun globalToken(globalIdx: Int): Long = round1Ctx.globalToken(globalIdx)
+            }
+            return normalizer.normalize(opCodes[pos], paramCounts[pos], resultCounts[pos], seeds[pos], ctx).hash
+        }
+    }
+
+    private fun buildSide(p: WasmBinaryProvider, normalizer: FunctionNormalizer): Side {
         val resolver = WasmSymbolResolver(p)
         val importCount = p.importFuncCount
         val graph = p.callGraphResult?.graph
@@ -40,9 +68,18 @@ public object WasmFunctionMatchProvider {
         }
 
         val signatures = p.functions
-        return p.codeRecords.mapIndexed { codeIdx, record ->
+        val records = p.codeRecords
+        val opCodes = ArrayList<List<OpCode>>(records.size)
+        val seeds = LongArray(records.size)
+        val paramCounts = IntArray(records.size)
+        val resultCounts = IntArray(records.size)
+        val descriptors = records.mapIndexed { codeIdx, record ->
             val globalIdx = importCount + codeIdx
             val (seed, params, results) = signatureSeed(signatures.getOrNull(codeIdx))
+            seeds[codeIdx] = seed
+            paramCounts[codeIdx] = params
+            resultCounts[codeIdx] = results
+            opCodes.add(record.opCodes)
             val normalized = normalizer.normalize(record.opCodes, params, results, seed, ctx)
             FunctionDescriptor(
                 codeIdx = codeIdx,
@@ -54,6 +91,7 @@ public object WasmFunctionMatchProvider {
                 callers = graph?.predecessors?.get(globalIdx).orEmpty(),
             )
         }
+        return Side(descriptors, opCodes, seeds, paramCounts, resultCounts, ctx)
     }
 
     /** (signatureSeed, paramCount, resultCount) for a function's type. */

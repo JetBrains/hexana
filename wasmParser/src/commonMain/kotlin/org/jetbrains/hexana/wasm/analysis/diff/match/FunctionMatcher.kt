@@ -5,8 +5,15 @@ import org.jetbrains.hexana.wasm.analysis.diff.DiffClass
 import kotlin.math.abs
 import kotlin.math.max
 
-/** How a function pair was matched (decreasing confidence). */
-public enum class MatchEvidence { HASH_EXACT, NAME_ANCHOR, PROPAGATED, FUZZY }
+/**
+ * How a function pair was matched (decreasing confidence).
+ *
+ * [HASH_ROUND2] is the round-2 content hash: re-hashing a body after substituting each
+ * `call` target with its matched partner's stable id, so two bodies that differ only in
+ * matched-callee identity hash equal. It sits just below [HASH_EXACT] because it depends
+ * on the partner matches feeding the substitution.
+ */
+public enum class MatchEvidence { HASH_EXACT, HASH_ROUND2, NAME_ANCHOR, PROPAGATED, FUZZY }
 
 /**
  * Per-side input to [FunctionMatcher]. [codeIdx] identifies the function within
@@ -63,9 +70,25 @@ public object FunctionMatcher {
     private const val FUZZY_FLOOR = 0.6
     private const val MAX_FUZZY_CELLS = 200_000L
 
+    // Round-2 hashing: cap on fixed-point rounds, and a marker folded into pair-id tokens
+    // so a substituted callee token can't collide with a round-1 name/anon token.
+    private const val MAX_ROUND2_ROUNDS = 3
+    private const val PAIR_MARK = 0x7E_DA12L
+
     private data class RawPair(val leftPos: Int, val rightPos: Int, val evidence: MatchEvidence)
 
-    public fun match(left: List<FunctionDescriptor>, right: List<FunctionDescriptor>): FunctionMatchResult {
+    /**
+     * @param rehash optional round-2 re-hasher: `(isLeft, pos, pairTokenOfCallee) -> hash`,
+     *   where it re-normalizes the function at [pos] on the given side, substituting each
+     *   call target's stable pair token (looked up via `pairTokenOfCallee(calleeGlobalIdx)`,
+     *   `null` when the callee is unmatched). When omitted, round-2 hashing is skipped and
+     *   behavior is identical to the round-1-only matcher.
+     */
+    public fun match(
+        left: List<FunctionDescriptor>,
+        right: List<FunctionDescriptor>,
+        rehash: ((isLeft: Boolean, pos: Int, pairTokenOfCallee: (Int) -> Long?) -> Long)? = null,
+    ): FunctionMatchResult {
         val matchedLeft = BooleanArray(left.size)
         val matchedRight = BooleanArray(right.size)
         val pairs = ArrayList<RawPair>()
@@ -77,6 +100,7 @@ public object FunctionMatcher {
 
         pairUniqueByKey(left, right, matchedLeft, matchedRight, confirm, MatchEvidence.HASH_EXACT) { it.round1Hash }
         pairUniqueByKey(left, right, matchedLeft, matchedRight, confirm, MatchEvidence.NAME_ANCHOR) { it.resolvedName }
+        if (rehash != null) roundTwo(left, right, matchedLeft, matchedRight, pairs, confirm, rehash)
         pairResidualHashBucketsPositionally(left, right, matchedLeft, matchedRight, confirm)
         propagate(left, right, matchedLeft, matchedRight, pairs, confirm)
         fuzzy(left, right, matchedLeft, matchedRight, confirm)
@@ -123,6 +147,90 @@ public object FunctionMatcher {
             val rs = ris.sortedBy { right[it].codeIdx }
             for (i in 0 until minOf(ls.size, rs.size)) confirm(ls[i], rs[i], MatchEvidence.HASH_EXACT)
         }
+    }
+
+    // --- Round 2: partner-id substitution hashing (bounded adjacency fixed-point) ---
+
+    /**
+     * After the round-1 anchors, re-hash unmatched functions with each matched callee
+     * substituted by a shared pair token, and pair those unique on both sides. A bounded
+     * adjacency worklist re-hashes only functions adjacent to the previous round's new
+     * matches, so the fixed point is reached leaf-first without an SCC condensation.
+     */
+    private fun roundTwo(
+        left: List<FunctionDescriptor>,
+        right: List<FunctionDescriptor>,
+        matchedLeft: BooleanArray,
+        matchedRight: BooleanArray,
+        pairs: List<RawPair>,
+        confirm: (Int, Int, MatchEvidence) -> Unit,
+        rehash: (Boolean, Int, (Int) -> Long?) -> Long,
+    ) {
+        val leftPosByGlobal = HashMap<Int, Int>().apply { left.forEachIndexed { i, d -> put(d.globalIdx, i) } }
+        val rightPosByGlobal = HashMap<Int, Int>().apply { right.forEachIndexed { i, d -> put(d.globalIdx, i) } }
+
+        // pos -> shared pair token; only HASH_EXACT / NAME_ANCHOR / prior round-2 pairs feed
+        // substitution (propagation/fuzzy run later), so a weak match can't poison a hash.
+        val leftPairToken = HashMap<Int, Long>()
+        val rightPairToken = HashMap<Int, Long>()
+        var nextPairId = 0L
+        for (p in pairs.toList()) {
+            val token = FnvHash.of(PAIR_MARK, nextPairId++)
+            leftPairToken[p.leftPos] = token
+            rightPairToken[p.rightPos] = token
+        }
+
+        val pairTokenOfLeftCallee: (Int) -> Long? = { g -> leftPosByGlobal[g]?.let { leftPairToken[it] } }
+        val pairTokenOfRightCallee: (Int) -> Long? = { g -> rightPosByGlobal[g]?.let { rightPairToken[it] } }
+
+        var frontierLeft: Set<Int> = leftPairToken.keys.toSet()
+        var frontierRight: Set<Int> = rightPairToken.keys.toSet()
+
+        repeat(MAX_ROUND2_ROUNDS) {
+            val leftCands = adjacentUnmatched(left, leftPosByGlobal, matchedLeft, frontierLeft)
+            val rightCands = adjacentUnmatched(right, rightPosByGlobal, matchedRight, frontierRight)
+            if (leftCands.isEmpty() || rightCands.isEmpty()) return
+
+            val leftByHash = HashMap<Long, MutableList<Int>>()
+            for (pos in leftCands) leftByHash.getOrPut(rehash(true, pos, pairTokenOfLeftCallee)) { ArrayList() }.add(pos)
+            val rightByHash = HashMap<Long, MutableList<Int>>()
+            for (pos in rightCands) rightByHash.getOrPut(rehash(false, pos, pairTokenOfRightCallee)) { ArrayList() }.add(pos)
+
+            val newLeft = ArrayList<Int>()
+            val newRight = ArrayList<Int>()
+            for ((hash, lis) in leftByHash) {
+                val ris = rightByHash[hash] ?: continue
+                if (lis.size != 1 || ris.size != 1) continue
+                val l = lis[0]
+                val r = ris[0]
+                if (matchedLeft[l] || matchedRight[r]) continue
+                confirm(l, r, MatchEvidence.HASH_ROUND2)
+                val token = FnvHash.of(PAIR_MARK, nextPairId++)
+                leftPairToken[l] = token
+                rightPairToken[r] = token
+                newLeft.add(l)
+                newRight.add(r)
+            }
+            if (newLeft.isEmpty()) return
+            frontierLeft = newLeft.toSet()
+            frontierRight = newRight.toSet()
+        }
+    }
+
+    /** Unmatched positions adjacent (callee or caller) to any position in [frontier]. */
+    private fun adjacentUnmatched(
+        descs: List<FunctionDescriptor>,
+        posByGlobal: Map<Int, Int>,
+        matched: BooleanArray,
+        frontier: Set<Int>,
+    ): Set<Int> {
+        val out = HashSet<Int>()
+        for (m in frontier) {
+            val d = descs[m]
+            for (g in d.callees) posByGlobal[g]?.let { if (!matched[it]) out.add(it) }
+            for (g in d.callers) posByGlobal[g]?.let { if (!matched[it]) out.add(it) }
+        }
+        return out
     }
 
     // --- Pass 3: call-graph propagation ---
@@ -282,6 +390,7 @@ public object FunctionMatcher {
         }
         val confidence = when (evidence) {
             MatchEvidence.HASH_EXACT -> 1.0f
+            MatchEvidence.HASH_ROUND2 -> 0.95f
             MatchEvidence.NAME_ANCHOR -> 0.9f
             MatchEvidence.PROPAGATED -> 0.75f
             MatchEvidence.FUZZY -> 0.6f

@@ -116,4 +116,36 @@ class FunctionMatcherTest {
         // "a": left idx0 <-> right idx1; "b": left idx1 <-> right idx0. Both content-equal.
         assertEquals(2, r.matches.count { it.classification == DiffClass.MOVED || it.classification == DiffClass.IDENTICAL })
     }
+
+    // Round 2: C and C' match in round 1 (identical body); A/A' have identical bodies that only
+    // differ by calling C vs C' (different round-1 hash). Once C↔C' is paired, substituting the
+    // callee's pair token makes A and A' hash equal -> a HASH_ROUND2 match.
+    private val cLeft = FunctionDescriptor(0, 0, null, 10L, fp, callees = emptyList(), callers = listOf(1))
+    private val cRight = FunctionDescriptor(0, 0, null, 10L, fp, callees = emptyList(), callers = listOf(1))
+    private val left2 = listOf(cLeft, desc(1, globalIdx = 1, hash = 20, callees = listOf(0)))
+    private val right2 = listOf(cRight, desc(1, globalIdx = 1, hash = 21, callees = listOf(0)))
+
+    // A/A' become equal (canonical 999) once their callee (global 0) carries a pair token.
+    private val fakeRehash: (Boolean, Int, (Int) -> Long?) -> Long = { isLeft, pos, tokenOf ->
+        when {
+            pos == 1 && tokenOf(0) != null -> 999L
+            pos == 1 -> if (isLeft) 20L else 21L
+            else -> 10L
+        }
+    }
+
+    @Test
+    fun `round 2 pairs functions that differ only by a matched callee`() {
+        val r = FunctionMatcher.match(left2, right2, fakeRehash)
+        val a = r.matches.single { it.leftIdx == 1 }
+        assertEquals(1, a.rightIdx)
+        assertEquals(MatchEvidence.HASH_ROUND2, a.evidence)
+        assertEquals(0, r.unmatchedLeft.size + r.unmatchedRight.size)
+    }
+
+    @Test
+    fun `without the round 2 rehasher no HASH_ROUND2 match is produced`() {
+        val r = FunctionMatcher.match(left2, right2)
+        assertEquals(0, r.matches.count { it.evidence == MatchEvidence.HASH_ROUND2 })
+    }
 }
