@@ -32,7 +32,7 @@ class KotlinWasmNameParserTest {
     }
 
     @Test
-    fun `constructor`() {
+    fun `constructor name`() {
         val s = KotlinWasmNameParser.parse("kotlin.Number.<init>")!!
         assertEquals(KotlinWasmSymbolKind.CONSTRUCTOR, s.kind)
         assertEquals("kotlin.Number", s.classFqn)
