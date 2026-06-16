@@ -52,7 +52,12 @@ public data class WasmEntityDiffResult(
  */
 public object WasmEntityDiffOrchestrator {
 
-    public fun diff(left: WasmBinaryProvider, right: WasmBinaryProvider): WasmEntityDiffResult? {
+    public fun diff(
+        left: WasmBinaryProvider,
+        right: WasmBinaryProvider,
+        leftMap: WasmSymbolMap? = null,
+        rightMap: WasmSymbolMap? = null,
+    ): WasmEntityDiffResult? {
         if (!left.canProvideWasmModule() || !right.canProvideWasmModule()) return null
 
         // All kinds except FUNCTION use v2a key/detail matching. Functions use the
@@ -68,7 +73,7 @@ public object WasmEntityDiffOrchestrator {
             EntityKind.ELEMENT to (elements(left) to elements(right)),
         )
         val generic = WasmEntityDiff.diff(byKind)
-        val functionEntries = functionEntries(left, right)
+        val functionEntries = functionEntries(left, right, leftMap, rightMap)
         val entities = EntityDiffResult(generic.entries + functionEntries)
 
         val leftKeys = left.imports.map { it.prefix to it.name }.toSet()
@@ -110,10 +115,15 @@ public object WasmEntityDiffOrchestrator {
      * MODIFIED + ADDED/REMOVED), carrying index delta + confidence. Replaces the
      * v2a per-side name/index keying for functions.
      */
-    private fun functionEntries(left: WasmBinaryProvider, right: WasmBinaryProvider): List<EntityDiffEntry> {
-        val result = WasmFunctionMatchProvider.match(left, right) ?: return emptyList()
-        val leftRes = WasmSymbolResolver(left)
-        val rightRes = WasmSymbolResolver(right)
+    private fun functionEntries(
+        left: WasmBinaryProvider,
+        right: WasmBinaryProvider,
+        leftMap: WasmSymbolMap?,
+        rightMap: WasmSymbolMap?,
+    ): List<EntityDiffEntry> {
+        val result = WasmFunctionMatchProvider.match(left, right, leftMap, rightMap) ?: return emptyList()
+        val leftRes = WasmSymbolResolver(left, symbolMap = leftMap)
+        val rightRes = WasmSymbolResolver(right, symbolMap = rightMap)
         val leftImp = left.importFuncCount
         val rightImp = right.importFuncCount
         val leftSigs = left.functions

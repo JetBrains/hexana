@@ -26,6 +26,7 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.format.ImportDelta
 import org.jetbrains.hexana.providers.format.WasmEntityDiffOrchestrator
 import org.jetbrains.hexana.providers.format.WasmEntityDiffResult
+import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
@@ -49,6 +50,8 @@ fun WasmEntityDiffPanel(
     rightBuffer: CommonByteBuffer,
     leftName: String,
     rightName: String,
+    leftSymbolMap: WasmSymbolMap? = null,
+    rightSymbolMap: WasmSymbolMap? = null,
     onSelectFunction: (FunctionSelection?) -> Unit = {},
 ) {
     var state by remember(leftBuffer, rightBuffer) { mutableStateOf<EntityLoadState>(EntityLoadState.Loading) }
@@ -57,6 +60,8 @@ fun WasmEntityDiffPanel(
             val result = WasmEntityDiffOrchestrator.diff(
                 WasmBinaryProvider(leftBuffer.duplicate()),
                 WasmBinaryProvider(rightBuffer.duplicate()),
+                leftSymbolMap,
+                rightSymbolMap,
             )
             if (result == null) {
                 EntityLoadState.Error("Could not analyze one or both modules (not a core WASM module?).")

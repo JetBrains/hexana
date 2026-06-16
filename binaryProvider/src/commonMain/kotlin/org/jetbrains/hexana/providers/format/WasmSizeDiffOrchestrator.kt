@@ -42,14 +42,19 @@ public object WasmSizeDiffOrchestrator {
      * @return the enriched diff tree, or `null` if either side has no size
      *   analysis (parse failure, or a non-core module such as a component).
      */
-    public fun diff(left: WasmBinaryProvider, right: WasmBinaryProvider): SizeDiffNode? {
+    public fun diff(
+        left: WasmBinaryProvider,
+        right: WasmBinaryProvider,
+        leftMap: WasmSymbolMap? = null,
+        rightMap: WasmSymbolMap? = null,
+    ): SizeDiffNode? {
         val treeLeft = left.sizeAnalysis ?: return null
         val treeRight = right.sizeAnalysis ?: return null
 
         // Pre-compute, per node identity, the match key for every function on each side.
         // BinarySizeNode has no equals override, so the map is keyed by reference identity.
         val keys = HashMap<BinarySizeNode, MatchKey>()
-        val match = WasmFunctionMatchProvider.match(left, right)
+        val match = WasmFunctionMatchProvider.match(left, right, leftMap, rightMap)
         // Matched functions keyed by right code index (unique) so enrichNames can carry the
         // matcher's classification (incl. MOVED) + confidence onto the size row.
         val byRight: Map<Int, FunctionMatch> = if (match != null) {
@@ -61,8 +66,8 @@ public object WasmSizeDiffOrchestrator {
         } else {
             // Rare: a side could not be matched as a core module. Preserve the old
             // resolved-name / index keying rather than collapsing everything to add/remove.
-            indexFunctionKeysByName(treeLeft, left, keys)
-            indexFunctionKeysByName(treeRight, right, keys)
+            indexFunctionKeysByName(treeLeft, left, leftMap, keys)
+            indexFunctionKeysByName(treeRight, right, rightMap, keys)
             emptyMap()
         }
 
@@ -71,7 +76,7 @@ public object WasmSizeDiffOrchestrator {
         }
 
         val diff = WasmSizeDiff.diff(treeLeft, treeRight, keyOf)
-        return enrichNames(diff, left, right, byRight)
+        return enrichNames(diff, left, right, byRight, leftMap, rightMap)
     }
 
     /**
@@ -104,9 +109,10 @@ public object WasmSizeDiffOrchestrator {
     private fun indexFunctionKeysByName(
         tree: SizeNode.Module,
         provider: WasmBinaryProvider,
+        symbolMap: WasmSymbolMap?,
         into: MutableMap<BinarySizeNode, MatchKey>,
     ) {
-        val resolver = WasmSymbolResolver(provider)
+        val resolver = WasmSymbolResolver(provider, symbolMap = symbolMap)
         val importCount = provider.importFuncCount
         fun walk(node: BinarySizeNode) {
             if (node is SizeNode.Function) {
@@ -131,9 +137,11 @@ public object WasmSizeDiffOrchestrator {
         left: WasmBinaryProvider,
         right: WasmBinaryProvider,
         byRight: Map<Int, FunctionMatch>,
+        leftMap: WasmSymbolMap?,
+        rightMap: WasmSymbolMap?,
     ): SizeDiffNode {
-        val leftRes = WasmSymbolResolver(left)
-        val rightRes = WasmSymbolResolver(right)
+        val leftRes = WasmSymbolResolver(left, symbolMap = leftMap)
+        val rightRes = WasmSymbolResolver(right, symbolMap = rightMap)
         val importLeft = left.importFuncCount
         val importRight = right.importFuncCount
         fun nameLeft(codeIdx: Int) =

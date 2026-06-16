@@ -267,6 +267,8 @@ class HexanaFileEditor(
                 rightBuffer = file.rightBuffer,
                 leftName = file.leftName,
                 rightName = file.rightName,
+                leftSymbolMap = file.leftSymbolMap,
+                rightSymbolMap = file.rightSymbolMap,
             )
         }
         panel.add(view)

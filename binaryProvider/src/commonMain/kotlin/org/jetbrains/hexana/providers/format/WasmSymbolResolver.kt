@@ -14,20 +14,24 @@ import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
  * 3. **DWARF `DW_AT_linkage_name`** — typically a mangled symbol; useful when
  *    `DW_AT_name` is absent but the binary still carries linker-visible names
  * 4. **Exports** — exported function bindings (export bindings are not really "names")
- * 5. **Imports** — for an imported function index, its `module.field` binding. This is
- *    the stable identifier the host resolves by name, so it is a strong matching anchor
- *    (it discriminates calls to imports in the content hash even when the name section
- *    and DWARF are absent). Last in the chain — it only fills indices the others miss.
+ * 4b. **Symbol map `byIndex`** — a `--emit-symbol-map` `funcIndex:name` entry, when supplied.
+ *    Acts as an external name section: restores names on a stripped/minified module.
+ * 5. **Exports** — exported function bindings (export bindings are not really "names");
+ *    a symbol-map `minified:original` `translate` entry de-minifies the binding when present.
+ * 6. **Imports** — for an imported function index, its `module.field` binding (also passed
+ *    through the symbol map's `translate`). This is the stable identifier the host resolves
+ *    by name, so it is a strong matching anchor even when the name section and DWARF are
+ *    absent. Last in the chain — it only fills indices the others miss.
  *
  * The first non-null win. The UI applies a final `$func<idx>` fallback when all miss.
  *
  * Function indices count imported functions first, then code-section-defined
- * functions (per the WASM spec). All four sources speak this combined index
- * space.
+ * functions (per the WASM spec). All sources speak this combined index space.
  */
 public class WasmSymbolResolver(
     private val provider: WasmBinaryProvider,
     private val dwarfIndex: WasmDwarfNameIndex? = null,
+    private val symbolMap: WasmSymbolMap? = null,
 ) : SymbolResolver {
 
     private val funcExportNames: Map<Int, String> by lazy {
@@ -49,13 +53,16 @@ public class WasmSymbolResolver(
             .toMap()
     }
 
+    private fun deminify(name: String): String = symbolMap?.translate?.get(name) ?: name
+
     override fun resolve(kind: SymbolKind, index: Int): String? = when (kind) {
         SymbolKind.FUNCTION ->
             funcNames?.get(index)
                 ?: dwarfIndex?.nameFor(index)
                 ?: dwarfIndex?.linkageNameFor(index)
-                ?: funcExportNames[index]
-                ?: funcImportNames[index]
+                ?: symbolMap?.byIndex?.get(index)
+                ?: funcExportNames[index]?.let(::deminify)
+                ?: funcImportNames[index]?.let(::deminify)
         // Other namespaces deferred until the WAT printer needs them.
         else -> null
     }

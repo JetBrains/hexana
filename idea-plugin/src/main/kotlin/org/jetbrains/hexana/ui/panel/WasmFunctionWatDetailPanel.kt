@@ -27,6 +27,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.format.FunctionWatDiff
 import org.jetbrains.hexana.providers.format.WasmFunctionWatSource
+import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.providers.format.WasmWatDiffBuilder
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.wasm.analysis.diff.line.LineOp
@@ -47,14 +48,16 @@ fun WasmFunctionWatDetailPanel(
     selected: FunctionSelection?,
     leftBuffer: CommonByteBuffer,
     rightBuffer: CommonByteBuffer,
+    leftSymbolMap: WasmSymbolMap? = null,
+    rightSymbolMap: WasmSymbolMap? = null,
 ) {
     var sources by remember(leftBuffer, rightBuffer) {
         mutableStateOf<Pair<WasmFunctionWatSource, WasmFunctionWatSource>?>(null)
     }
     LaunchedEffect(leftBuffer, rightBuffer) {
         sources = withContext(Dispatchers.IO) {
-            WasmFunctionWatSource(WasmBinaryProvider(leftBuffer.duplicate())) to
-                WasmFunctionWatSource(WasmBinaryProvider(rightBuffer.duplicate()))
+            WasmFunctionWatSource(WasmBinaryProvider(leftBuffer.duplicate()), leftSymbolMap) to
+                WasmFunctionWatSource(WasmBinaryProvider(rightBuffer.duplicate()), rightSymbolMap)
         }
     }
 

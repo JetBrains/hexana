@@ -13,6 +13,7 @@ import org.jetbrains.hexana.HexanaWasmDiffVirtualFile
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.toCommonByteBuffer
 
 /**
@@ -64,8 +65,24 @@ class CompareWasmAction : AnAction() {
             rightBuffer = rightBuffer,
             leftName = left.name,
             rightName = right.name,
+            leftSymbolMap = loadSymbolMap(left),
+            rightSymbolMap = loadSymbolMap(right),
         )
         FileEditorManager.getInstance(project).openFile(diffFile, true)
+    }
+
+    /**
+     * Auto-loads a `--emit-symbol-map` sidecar named `<file>.symbols` sitting next to the
+     * module (mirrors the `.hexana.json` / `.map` sibling conventions). Returns null when
+     * absent or unreadable — the diff then runs without de-minification.
+     */
+    private fun loadSymbolMap(file: VirtualFile): WasmSymbolMap? {
+        val sidecar = file.parent?.findChild("${file.name}.symbols") ?: return null
+        return try {
+            WasmSymbolMap.parse(sidecar.contentsToByteArray().decodeToString())
+        } catch (t: Throwable) {
+            null
+        }
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT

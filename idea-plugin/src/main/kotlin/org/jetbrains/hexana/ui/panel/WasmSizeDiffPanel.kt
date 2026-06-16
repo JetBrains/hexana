@@ -24,6 +24,7 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.format.WasmSizeDiffOrchestrator
+import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
@@ -50,6 +51,8 @@ fun WasmSizeDiffPanel(
     rightBuffer: CommonByteBuffer,
     leftName: String,
     rightName: String,
+    leftSymbolMap: WasmSymbolMap? = null,
+    rightSymbolMap: WasmSymbolMap? = null,
     onSelectFunction: (FunctionSelection?) -> Unit = {},
 ) {
     // The diff (parse + size analysis of both modules) is expensive and MUST NOT
@@ -61,6 +64,8 @@ fun WasmSizeDiffPanel(
             val diff = WasmSizeDiffOrchestrator.diff(
                 WasmBinaryProvider(leftBuffer.duplicate()),
                 WasmBinaryProvider(rightBuffer.duplicate()),
+                leftSymbolMap,
+                rightSymbolMap,
             )
             if (diff == null) {
                 DiffLoadState.Error("Could not analyze one or both modules (not a core WASM module?).")

@@ -15,11 +15,11 @@ import org.jetbrains.hexana.wasm.analysis.diff.line.LineOpKind
  * [lines] call). Hold one instance per side for the lifetime of the diff editor
  * and render individual functions on selection.
  */
-public class WasmFunctionWatSource(provider: WasmBinaryProvider) {
+public class WasmFunctionWatSource(provider: WasmBinaryProvider, symbolMap: WasmSymbolMap? = null) {
     private val snapshot = binaryDocumentOf(provider.bytes).snapshot()
     private val parsed = WasmParsedBinary.fromProvider(provider, snapshot)
     private val renderer = WasmHexanaWatRenderer(parsed).apply { symbolicOperands = true }
-    private val resolver = WasmSymbolResolver(provider)
+    private val resolver = WasmSymbolResolver(provider, symbolMap = symbolMap)
     private val importCount = provider.importFuncCount
 
     private val codeChunkByIndex: Map<Int, BinaryChunk.Element> = buildMap {

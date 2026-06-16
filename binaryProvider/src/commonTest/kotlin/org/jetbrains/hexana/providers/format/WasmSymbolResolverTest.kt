@@ -26,4 +26,37 @@ class WasmSymbolResolverTest {
         // No function at index 1 -> still null (import branch only fills 0..importFuncCount-1).
         assertNull(resolver.resolve(SymbolKind.FUNCTION, 1))
     }
+
+    /** One defined function, no imports/exports/name section -> resolves to null without a map. */
+    private val anonymous: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F,
+        0x03, 0x02, 0x01, 0x00,
+        0x0A, 0x06, 0x01, 0x04, 0x00, 0x41, 0x05, 0x0B,
+    )
+
+    /** One defined function exported under a minified name "Ec". */
+    private val minifiedExport: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F,
+        0x03, 0x02, 0x01, 0x00,
+        0x07, 0x06, 0x01, 0x02, 0x45, 0x63, 0x00, 0x00, // export "Ec" -> func 0
+        0x0A, 0x06, 0x01, 0x04, 0x00, 0x41, 0x05, 0x0B,
+    )
+
+    @Test
+    fun `byIndex symbol map names an otherwise-anonymous function`() {
+        val provider = WasmBinaryProvider(anonymous.toCommonByteBuffer())
+        assertNull(WasmSymbolResolver(provider).resolve(SymbolKind.FUNCTION, 0))
+        val map = WasmSymbolMap(byIndex = mapOf(0 to "myFunc"), translate = emptyMap())
+        assertEquals("myFunc", WasmSymbolResolver(provider, symbolMap = map).resolve(SymbolKind.FUNCTION, 0))
+    }
+
+    @Test
+    fun `translate symbol map de-minifies an export binding`() {
+        val provider = WasmBinaryProvider(minifiedExport.toCommonByteBuffer())
+        assertEquals("Ec", WasmSymbolResolver(provider).resolve(SymbolKind.FUNCTION, 0))
+        val map = WasmSymbolMap(byIndex = emptyMap(), translate = mapOf("Ec" to "originalName"))
+        assertEquals("originalName", WasmSymbolResolver(provider, symbolMap = map).resolve(SymbolKind.FUNCTION, 0))
+    }
 }

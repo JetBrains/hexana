@@ -2,9 +2,11 @@ package org.jetbrains.hexana.providers.format
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.wasm.analysis.diff.DiffClass
 import org.jetbrains.hexana.wasm.analysis.diff.match.MatchEvidence
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 
 class WasmFunctionMatchProviderTest {
@@ -39,5 +41,40 @@ class WasmFunctionMatchProviderTest {
         assertEquals(1, a.rightIdx)
         assertEquals(MatchEvidence.HASH_ROUND2, a.evidence, "A should be paired by round-2 substitution")
         assertEquals(0, result.unmatchedLeft.size + result.unmatchedRight.size)
+    }
+
+    // One function, exported "foo" (named) vs "Z" (minified), with DIFFERENT bodies (const 5 vs 6)
+    // so the content hash misses. Without a map, names differ -> no NAME_ANCHOR. A byIndex symbol
+    // map on the minified side restores "foo" -> the pair is NAME_ANCHORed (MODIFIED).
+    private val named: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F,
+        0x03, 0x02, 0x01, 0x00,
+        0x07, 0x07, 0x01, 0x03, 0x66, 0x6F, 0x6F, 0x00, 0x00, // export "foo" -> func 0
+        0x0A, 0x06, 0x01, 0x04, 0x00, 0x41, 0x05, 0x0B,       // body: i32.const 5
+    )
+    private val minified: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F,
+        0x03, 0x02, 0x01, 0x00,
+        0x07, 0x05, 0x01, 0x01, 0x5A, 0x00, 0x00,             // export "Z" -> func 0
+        0x0A, 0x06, 0x01, 0x04, 0x00, 0x41, 0x06, 0x0B,       // body: i32.const 6
+    )
+
+    @Test
+    fun `symbol map relights name anchoring on a renamed function`() {
+        val left = WasmBinaryProvider(named.toCommonByteBuffer())
+        val right = WasmBinaryProvider(minified.toCommonByteBuffer())
+
+        val without = WasmFunctionMatchProvider.match(left, right)
+        assertNotNull(without)
+        assertNotEquals(MatchEvidence.NAME_ANCHOR, without.matches.single().evidence)
+
+        val map = WasmSymbolMap(byIndex = mapOf(0 to "foo"), translate = emptyMap())
+        val withMap = WasmFunctionMatchProvider.match(left, right, rightMap = map)
+        assertNotNull(withMap)
+        val m = withMap.matches.single()
+        assertEquals(MatchEvidence.NAME_ANCHOR, m.evidence)
+        assertEquals(DiffClass.MODIFIED, m.classification)
     }
 }

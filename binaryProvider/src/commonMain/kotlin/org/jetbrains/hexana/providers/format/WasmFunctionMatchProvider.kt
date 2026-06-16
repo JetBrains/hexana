@@ -23,11 +23,16 @@ public object WasmFunctionMatchProvider {
 
     private const val ANON_CALLEE = 0L
 
-    public fun match(left: WasmBinaryProvider, right: WasmBinaryProvider): FunctionMatchResult? {
+    public fun match(
+        left: WasmBinaryProvider,
+        right: WasmBinaryProvider,
+        leftMap: WasmSymbolMap? = null,
+        rightMap: WasmSymbolMap? = null,
+    ): FunctionMatchResult? {
         if (!left.canProvideWasmModule() || !right.canProvideWasmModule()) return null
         val normalizer = FunctionNormalizer()
-        val leftSide = buildSide(left, normalizer)
-        val rightSide = buildSide(right, normalizer)
+        val leftSide = buildSide(left, normalizer, leftMap)
+        val rightSide = buildSide(right, normalizer, rightMap)
         // Round-2 re-hasher: re-normalize a function with matched callees substituted by
         // their pair tokens. Uses the same shared normalizer so tags stay comparable.
         val rehash: (Boolean, Int, (Int) -> Long?) -> Long = { isLeft, pos, pairTokenOfCallee ->
@@ -56,8 +61,8 @@ public object WasmFunctionMatchProvider {
         }
     }
 
-    private fun buildSide(p: WasmBinaryProvider, normalizer: FunctionNormalizer): Side {
-        val resolver = WasmSymbolResolver(p)
+    private fun buildSide(p: WasmBinaryProvider, normalizer: FunctionNormalizer, symbolMap: WasmSymbolMap?): Side {
+        val resolver = WasmSymbolResolver(p, symbolMap = symbolMap)
         val importCount = p.importFuncCount
         val graph = p.callGraphResult?.graph
         val ctx = object : NormalizerContext {
