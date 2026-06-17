@@ -1,7 +1,7 @@
 ---
 title: Hexana Feature Reference
 description: Complete capability reference for the Hexana IntelliJ plugin, grouped by surface.
-version: "0.11"
+version: "0.11.1"
 ---
 
 # Hexana Feature Reference
@@ -35,6 +35,7 @@ When Hexana opens a `.wasm` file, it presents a structured editor with the follo
 ### Functions tab
 - One row per defined function with index, type signature, local count, and code-section offset.
 - Searchable, sortable, keyboard-navigable.
+- For Kotlin/Wasm modules, a **Kotlin/Wasm** badge per function; clicking it jumps to the Kotlin source declaration — see [Kotlin/Wasm source navigation](#kotlinwasm-source-navigation-0111).
 
 ### Top tab — size profiler
 
@@ -92,7 +93,31 @@ When Hexana opens a `.wasm` file, it presents a structured editor with the follo
 - **Proposal pills** showing which WebAssembly proposals the binary uses — Threads, SIMD, GC, Tail Call, Reference Types, Bulk Memory, and so on. Hexana detects them and propagates the matching `--wasm-features` (or runtime-equivalent) flags to run / debug commands automatically.
 - Run and Debug buttons when a runtime is configured.
 - Backreference link to a parent component when applicable.
-- Format badges where applicable — e.g. **Native Image** and **SBOM** on GraalVM Native Image binaries (see [GraalVM Native Image](#graalvm-native-image-011)).
+- Format badges where applicable — e.g. **Native Image** and **SBOM** on GraalVM Native Image binaries (see [GraalVM Native Image](#graalvm-native-image-011)), and **Kotlin/Wasm** on modules compiled by the Kotlin/Wasm backend (see [Kotlin/Wasm source navigation](#kotlinwasm-source-navigation-0111)).
+
+### Kotlin/Wasm source navigation (0.11.1)
+
+![A function carrying the Kotlin/Wasm badge in the virtualised WAT view](../images/idea/16-kotlin-wasm-badge.png)
+
+Modules compiled by the Kotlin/Wasm backend are recognised and made navigable back to their Kotlin sources.
+
+- **Detection** — Hexana fingerprints the `kotlin.wasm.internal.*` import field-name prefix (not the host module), so detection works across Kotlin versions (current `js_code`, older `env`) and does not misfire on GraalVM Web Image or Emscripten, which also emit WasmGC.
+- **Badge** — detected modules carry a **Kotlin/Wasm** badge on the Functions tab and in the virtualised WAT view.
+- **Jump to source** — clicking a function's badge resolves the fully-qualified name the backend writes into the name section to the Kotlin declaration and navigates to it. Constructors, property accessors, and `$default` / `$lambda` synthetics are handled; overloads that share a name resolve to the method declaration.
+
+## Comparing WebAssembly modules (0.11.1)
+
+![The Compare WASM With… diff editor: the Size Impact tab with per-function byte deltas and the side-by-side WAT comparison below](../images/idea/15-wasm-diff-size-impact.png)
+
+**Compare WASM With…** — from a `.wasm` file's project-view context menu or the **Tools** menu — opens a diff editor for two modules. It is built to answer "what changed, and what can this build now call into the host that the last one couldn't" without leaving the IDE.
+
+- **Size Impact tab** — per-section and per-function byte deltas, sorted by impact. Functions are paired by a semantic matcher (content hash + call graph), not by position, so inserting or removing a function does not mis-attribute byte deltas to unrelated functions. Each row shows the match — *identical*, *moved*, or *modified* — and, for non-exact matches, a confidence; a pure renumber is reported as *moved* (zero bytes).
+- **Entities tab** — every entity kind (imports, exports, functions, globals, tables, memories, types, data and element segments) classified as added / removed / modified / moved, colour-coded with aligned columns. A **supply-chain banner** highlights newly-introduced imports and flags host namespaces such as `env` and `wasi_*`.
+- **Structural matching robust to optimisation** — a second hashing round substitutes already-matched call targets, so a rewritten body that still calls the same functions is paired; renaming or renumbering does not read as churn.
+- **Minified modules** — detected (e.g. Binaryen `--minify-imports-and-exports`); a symbol-map sidecar (`<file>.symbols` from `--emit-symbol-map`, in either function-index or `original => minified` form) restores the original names so functions match by name.
+- **On-demand WAT comparison** — selecting a function opens a side-by-side WAT diff rendered with symbolic names and red/green line-level highlighting, so an unchanged caller of a renumbered function reads identically.
+
+For the full release notes, see [`changelog-0.11.md`](changelog-0.11.md#0111-module-diff-and-kotlinwasm).
 
 ## WIT language support
 
