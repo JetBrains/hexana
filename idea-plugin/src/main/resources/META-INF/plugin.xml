@@ -138,6 +138,11 @@
                   fieldName="INSTANCE"
                   extensions="jit"/>
 
+        <fileType name="dex"
+                  implementationClass="org.jetbrains.hexana.DexFileType"
+                  fieldName="INSTANCE"
+                  extensions="dex"/>
+
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
         <editorTabTitleProvider implementation="org.jetbrains.hexana.ArchiveMemberTabTitleProvider"/>
         <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>

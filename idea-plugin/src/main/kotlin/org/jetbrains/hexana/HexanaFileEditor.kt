@@ -29,6 +29,7 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.dex.DexFileParser
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.providers.format.WasmEntityDiffOrchestrator
@@ -174,6 +175,13 @@ class HexanaFileEditor(
         val ext = myFile.extension?.lowercase()
         if (ext == "jar" || ext == "zip" || ext == "war" || ext == "apk") {
             initJarFilePanel(commonBuffer)
+            return
+        }
+
+        // .dex files use a dedicated 3-tab view (header / classes / strings)
+        // similar to .class files but for the Android DEX format.
+        if (ext == "dex") {
+            initDexFilePanel(commonBuffer)
             return
         }
 
@@ -544,6 +552,33 @@ class HexanaFileEditor(
         }
     }
 
+    private fun initDexFilePanel(commonBuffer: CommonByteBuffer) {
+        val parsed = try {
+            DexFileParser.parse(commonBuffer.duplicate().position(0))
+        } catch (t: Throwable) {
+            HexanaLog.LOG.warn("Failed to parse .dex file ${myFile.name}", t)
+            null
+        }
+        binaryProvider = GenericBinaryProvider(commonBuffer.duplicate().position(0))
+        val provider = binaryProvider!!
+        val view = createComposePanel {
+            val hexFocusRequester = remember { FocusRequester() }
+            if (parsed == null) {
+                org.jetbrains.jewel.ui.component.Text(
+                    "Failed to parse ${myFile.name} as an Android DEX file — see idea.log for details.",
+                )
+            } else {
+                org.jetbrains.hexana.ui.DexFileEditorView(
+                    dexFile = parsed,
+                    binaryProvider = provider,
+                    state = stateHolder,
+                    hexFocusRequester = hexFocusRequester,
+                )
+            }
+        }
+        panel.add(view)
+    }
+
     private fun openZipEntry(
         entry: org.jetbrains.hexana.zip.ZipEntry,
         parentBuffer: CommonByteBuffer,
@@ -600,7 +635,7 @@ private const val WASM_DIFF_PARSE_ERROR =
 
 private fun isHexanaSupportedExtension(fileName: String): Boolean {
     val ext = fileName.substringAfterLast('.', "").lowercase()
-    val hexanaExtensions = setOf("wasm", "class", "jar", "zip", "war", "apk", "jit")
+    val hexanaExtensions = setOf("wasm", "class", "jar", "zip", "war", "apk", "jit", "dex")
     if (ext in hexanaExtensions) return true
     val fileType = com.intellij.openapi.fileTypes.FileTypeManager.getInstance()
         .getFileTypeByFileName(fileName)

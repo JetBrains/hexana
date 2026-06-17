@@ -88,6 +88,7 @@ dependencies {
     implementation(project(":encdec"))
     implementation(project(":wasmParser"))
     implementation(project(":parsing:javaBytecode"))
+    implementation(project(":parsing:dex"))
     implementation(project(":parsing:zip"))
     implementation(project(":jvm-jit"))
     implementation(project(":jvm-jit-jmh"))

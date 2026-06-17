@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,11 +24,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intellij.openapi.ui.DialogWrapper
+import java.awt.BorderLayout
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
+import javax.swing.Action
+import javax.swing.JComponent
+import javax.swing.JPanel
+import javax.swing.JScrollPane
+import javax.swing.JTextArea
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.dex.DexFile
 import org.jetbrains.hexana.dex.renderDexClassAccessFlags
@@ -38,6 +50,7 @@ import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.TabData
 import org.jetbrains.jewel.ui.component.TabStrip
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.VerticalScrollbar
 import org.jetbrains.jewel.ui.theme.defaultTabStyle
 
 /**
@@ -92,7 +105,7 @@ private fun DexFileTabs(dexFile: DexFile) {
     Column(modifier = Modifier.fillMaxSize()) {
         TabStrip(tabs = tabs, style = JewelTheme.defaultTabStyle)
         Divider(orientation = Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
-        Box(modifier = Modifier.fillMaxWidth().weight(1f).padding(8.dp)) {
+        Box(modifier = Modifier.fillMaxSize().weight(1f).padding(8.dp)) {
             when (selectedTab) {
                 0 -> DexHeaderTab(dexFile)
                 1 -> DexClassesTab(dexFile)
@@ -134,14 +147,17 @@ private fun DexHeaderTab(dex: DexFile) {
 private fun DexClassesTab(dex: DexFile) {
     val rows = remember(dex) { buildClassRows(dex) }
     val listState = rememberLazyListState()
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-        if (rows.isEmpty()) {
-            item { Text("(no classes)", style = DexRowTextStyle) }
-            return@LazyColumn
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            if (rows.isEmpty()) {
+                item { Text("(no classes)", style = DexRowTextStyle) }
+                return@LazyColumn
+            }
+            items(rows.size, key = { it }) { idx ->
+                DexClassRow(rows[idx])
+            }
         }
-        items(rows.size, key = { it }) { idx ->
-            DexClassRow(rows[idx])
-        }
+        VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
     }
 }
 
@@ -167,17 +183,75 @@ private fun DexClassRow(row: DexClassRowData) {
 @Composable
 private fun DexStringsTab(dex: DexFile) {
     val listState = rememberLazyListState()
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-        if (dex.stringIds.isEmpty()) {
-            item { Text("(no strings)", style = DexRowTextStyle) }
-            return@LazyColumn
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            if (dex.stringIds.isEmpty()) {
+                item { Text("(no strings)", style = DexRowTextStyle) }
+                return@LazyColumn
+            }
+            items(dex.stringIds.size, key = { it }) { idx ->
+                val rawValue = dex.stringIds[idx].value
+                val displayValue = escapeControlChars(rawValue)
+                val prefix = "#${idx.toString().padStart(5, ' ')}  "
+                Text(
+                    prefix + displayValue,
+                    style = DexRowTextStyle,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                        .pointerInput(rawValue) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    StringValueDialog("String #$idx", rawValue).show()
+                                },
+                            )
+                        },
+                )
+            }
         }
-        items(dex.stringIds.size, key = { it }) { idx ->
-            val value = dex.stringIds[idx].value
-            Text(
-                "#${idx.toString().padStart(5, ' ')}  $value",
-                style = DexRowTextStyle,
-            )
+        VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
+    }
+}
+
+private class StringValueDialog(title: String, private val value: String) : DialogWrapper(true) {
+    init {
+        this.title = title
+        setOKButtonText("Close")
+        init()
+    }
+
+    override fun createCenterPanel(): JComponent {
+        val textArea = JTextArea(value).apply {
+            isEditable = false
+            lineWrap = true
+            wrapStyleWord = true
+            rows = 12
+            columns = 60
+        }
+        return JPanel(BorderLayout()).apply {
+            add(JScrollPane(textArea), BorderLayout.CENTER)
+        }
+    }
+
+    override fun createActions(): Array<Action> {
+        val copyAction = object : DialogWrapperAction("Copy to Clipboard") {
+            override fun doAction(e: java.awt.event.ActionEvent?) {
+                val selection = StringSelection(value)
+                Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, null)
+            }
+        }
+        return arrayOf(copyAction, okAction)
+    }
+}
+
+private fun escapeControlChars(s: String): String = buildString(s.length) {
+    for (c in s) {
+        when (c) {
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            '\u0000' -> append("\\0")
+            else -> if (c.code < 0x20) append("\\x${c.code.toString(16).padStart(2, '0')}") else append(c)
         }
     }
 }
