@@ -1,12 +1,21 @@
 ---
 title: Hexana for VS Code — Release Notes
 description: Release notes for the Hexana VS Code extension.
-version: "0.3.0"
+version: "0.4.0"
 ---
 
 # Release Notes — Hexana for VS Code
 
 This page tracks releases of the VS Code extension.
+
+## 0.4.0
+
+Released **2026-06-16**.
+
+### Added
+
+- **In-place byte editing in the hex viewer.** You can now edit individual bytes directly in the hex viewer — select a byte, type a new value — and write the result back to the original file with the **overwrite-file** action. Editing is **overwrite-only: the file size never changes** (you cannot insert or remove bytes). Earlier versions were inspection-only.
+- **Debugging on the Node.js and browser runtimes.** Node.js and the browser — **run-only** since 0.3.0 — are now debuggable. Hexana drives them over the **Chrome DevTools Protocol (CDP)**: Node.js is launched with `--inspect-brk`, Chrome with `--remote-debugging-port`, and Hexana translates DAP ↔ CDP so VS Code's debugger can set breakpoints, step, and inspect state. This complements the existing `lldb`-backed Wasmtime / WAMR debug path (LLVM 22.1+). GraalVM remains run-only.
 
 ## 0.3.0
 
@@ -131,4 +140,4 @@ VS Code forks (Cursor, Code OSS / VSCodium, Windsurf, Continue.dev) are supporte
 ## See also
 
 - [`getting-started.md`](getting-started.md), [`features.md`](features.md), [`run-support.md`](run-support.md), [`settings.md`](settings.md).
-- The JetBrains plugin's [changelog](../jetbrains/changelog-0.10.md).
+- The JetBrains plugin's [changelog](../jetbrains/changelog-0.11.md).

@@ -1,7 +1,7 @@
 ---
 title: Hexana for VS Code — Feature Reference
 description: Complete capability reference for the Hexana VS Code extension.
-version: "0.3.0"
+version: "0.4.0"
 ---
 
 # Hexana for VS Code — Feature Reference
@@ -12,7 +12,7 @@ This page enumerates every user-visible capability Hexana ships for VS Code. For
 
 Hexana registers a `CustomReadonlyEditorProvider` (`hexana.wasmEditor`) for files matching `*.wasm`. When you open a `.wasm`, VS Code uses this editor by default — `workbench.editorAssociations` is set to `{"*.wasm": "hexana.wasmEditor"}` automatically on install.
 
-The editor is **read-only**. Inspection and run; no in-place editing.
+Since **0.4.0** the hex viewer supports **in-place byte editing**: select a byte, type a new value, and persist the change to the original file with the **overwrite-file** action. Editing is **overwrite-only — the file size never changes** (you cannot insert or delete bytes). Editing the structured WAT view, as in the JetBrains plugin, is not available in VS Code.
 
 ### Automatic binary kind detection
 
@@ -35,6 +35,7 @@ A virtual-scrolling hex dump with:
 - **Keyboard navigation**: arrow keys move the caret; `Shift+Arrow` extends selection.
 - **Text search** (`Cmd/Ctrl+F`): incremental search across the hex dump.
 - **Selection status bar**: shows the current byte range and decoded interpretations.
+- **In-place byte editing (0.4.0)**: overwrite individual bytes and write the result back to the file with the **overwrite-file** action. Overwrite-only — the file size never changes.
 
 The viewer renders through Compose-for-Web inside a VS Code webview — it scales smoothly to large files without DOM-node-per-byte overhead.
 
@@ -81,7 +82,7 @@ Up to 11 tabs inside the same editor, surfaced by binary kind. All tables are **
 
 A **Run** button and a separate **Debug** button in the editor toolbar, present when at least one runtime is discoverable.
 
-- **Runtime picker** — Wasmtime, WAMR, GraalVM, Node.js, or the browser (Node.js and browser added in 0.3.0, run-only). Unavailable runtimes are greyed out with a tooltip explaining why.
+- **Runtime picker** — Wasmtime, WAMR, GraalVM, Node.js, or the browser (Node.js and browser added in 0.3.0; debuggable since 0.4.0). Unavailable runtimes are greyed out with a tooltip explaining why.
 - **Core modules**: pick an export, the runtime, and supply arguments. Hexana invokes the chosen runtime in a VS Code terminal with auto-generated import stubs and the runtime's equivalent of `--preload` for data segments.
 - **Component Model binaries**: Hexana resolves imports by scanning workspace directories for matching `.wasm` files (transitively), composes the result through `wasm-tools compose` or `wac plug`, then invokes the chosen runtime on the composed component.
 
@@ -89,9 +90,14 @@ See [`run-support.md`](run-support.md) for the full reference.
 
 ## Debugging (experimental)
 
-A **Debug** button alongside Run launches the module under `lldb` for **Wasmtime** or **WAMR** runtimes (not GraalVM, Node.js, or the browser — those are run-only in VS Code). Requires LLVM 22.1 or newer.
+A **Debug** button alongside Run launches the module under a debugger. Two backends, by runtime (GraalVM is run-only):
 
-- Set breakpoints in source files associated with the module (PC ↔ source mapping via DWARF).
+- **`lldb`-backed — Wasmtime and WAMR.** Requires LLVM 22.1 or newer; breakpoints map to source via DWARF.
+- **CDP-backed — Node.js and Chrome (0.4.0).** Hexana launches Node.js with `--inspect-brk` or Chrome with `--remote-debugging-port`, connects over the Chrome DevTools Protocol, and translates DAP ↔ CDP.
+
+Across both backends:
+
+- Set breakpoints in source files associated with the module (PC ↔ source mapping via DWARF on the `lldb` path).
 - Step over, into, out; continue past hit breakpoints.
 - Inspect local variables for compilers that emit DWARF with usable location expressions (Rust, C/C++, Emscripten with `-g`).
 - Component Model nested-module breakpoints are supported on Wasmtime.
@@ -157,7 +163,7 @@ Compared to the JetBrains IntelliJ plugin, the VS Code extension does **not** sh
 - Editable WAT view.
 - Java-side completion / inspections for GraalWasm or Chicory.
 - JS / TS-side type inference for `WebAssembly.instantiate`.
-- GraalVM, Node.js, and browser debug (debug works on Wasmtime + WAMR only; Node.js and the browser are run-only).
+- GraalVM debug (GraalVM is run-only). Node.js and browser debug landed in 0.4.0 over CDP; Wasmtime / WAMR debug over `lldb`.
 - Goto Symbol contribution scoped to `.wit` declarations and `.wasm` exports.
 - Decoded JVM artifact views — the three-tab `.class` view and the `.jit` viewer — and the switchable AOT / Cranelift disassembler backend. (Archives `.jar` / `.zip` / `.war` / `.apk` *do* open with a hex + entry list since 0.3.0; nested `.class` entries open in the hex viewer, not the decoded class view.)
 
