@@ -230,6 +230,7 @@ internal fun BinaryEditorView(
                     watVirtualizedFolded = watVirtualizedFolded,
                     liveProviderProvider = { liveProvider },
                     wasmFunctionNavTargetFlow = wasmNavFlow,
+                    archiveName = fileName,
                 )
             }
             mutableStateListOf(*p)
@@ -513,6 +514,7 @@ private fun BinaryProvider.resolvePanels(
     watVirtualizedFolded: MutableState<Set<ChunkId>>? = null,
     liveProviderProvider: (() -> BinaryProvider)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>? = null,
+    archiveName: String? = null,
 ): Array<Panel> {
     val enricher = getTabEnricher()
     val tabPanels = TableTabsProviderRegistry.providers.flatMap {
@@ -533,6 +535,12 @@ private fun BinaryProvider.resolvePanels(
             Panel("Debug Context") { NativeDebugContextPanel(this, state) }
         ) + commonNativePanels(state)
         is CoffBinaryProvider -> commonNativePanels(state)
+        // Must precede the generic `is NativeBinaryProvider` branch below: ArchiveBinaryProvider
+        // IS-A NativeBinaryProvider, and Kotlin `when` is first-match — otherwise the archive
+        // would fall through to the near-empty generic native branch (blank editor).
+        is ArchiveBinaryProvider -> listOf(
+            Panel("Members") { ArchiveMembersPanel(this, state, archiveName = archiveName) },
+        )
         is NativeBinaryProvider -> listOfNotNull(
             Panel("Top") { PanelSize(this, state) }.takeIf { this.sizeAnalysis != null },
         )

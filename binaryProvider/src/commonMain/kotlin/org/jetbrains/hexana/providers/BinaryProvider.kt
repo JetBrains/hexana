@@ -26,6 +26,8 @@ import org.jetbrains.hexana.providers.macho.MachOSegment
 import org.jetbrains.hexana.providers.macho.MachOSymbol
 import org.jetbrains.hexana.providers.macho.MachOSymtabCommand
 import org.jetbrains.hexana.providers.macho.MachOUuid
+import org.jetbrains.hexana.providers.pe.PeArchiveFile
+import org.jetbrains.hexana.providers.pe.PeArchiveMember
 import org.jetbrains.hexana.providers.pe.PeBaseRelocation
 import org.jetbrains.hexana.providers.pe.PeCoffHeader
 import org.jetbrains.hexana.providers.pe.PeCoffSymbol
@@ -426,6 +428,74 @@ class ArchiveBinaryProvider(
     sourcePath: String? = null,
 ) : NativeBinaryProvider(sharedBytes, sourcePath) {
     override val nativeFormat: NativeBinaryFormat get() = NativeBinaryFormat.Archive
+
+    /**
+     * Lazily enumerated archive (Unix `ar` / Windows COFF import library).
+     * Header-only walk — member bodies are never read here; [PeArchiveMember.contentRange]
+     * records each member's byte range so a single member can be sliced on demand.
+     */
+    val archiveFile: PeArchiveFile? by lazy { PeParser.parseArchive(bytes) }
+
+    /** All parsed members, including bookkeeping entries (see [PeArchiveMember.isBookkeeping]). */
+    val members: List<PeArchiveMember> get() = archiveFile?.members.orEmpty()
+}
+
+/** Coarse classification of a static-library member, derived from its leading magic bytes. */
+enum class ArchiveMemberKind {
+    ELF,
+    MACH_O,
+    FAT_MACH_O,
+    PE,
+    COFF,
+    ARCHIVE,
+    SHORT_IMPORT,
+    UNKNOWN,
+}
+
+data class ArchiveMemberClassification(
+    val kind: ArchiveMemberKind,
+    val displayName: String,
+    /** Whether extracting this member yields a file Hexana can open in a binary view. */
+    val openable: Boolean,
+)
+
+/**
+ * Classifies a single archive member by its own format, reading only the member's leading
+ * header fields. [archiveBytes] is the whole-archive buffer; [contentRange] is the member's
+ * payload range within it. A zero-copy [CommonByteBuffer.slice] view is used so the COFF
+ * detector (which validates section/symbol-table offsets against the buffer size) sees the
+ * member's true length without materializing the member into the heap.
+ */
+fun classifyArchiveMember(
+    archiveBytes: CommonByteBuffer,
+    contentRange: org.jetbrains.hexana.parsing.common.NativeByteRange,
+): ArchiveMemberClassification {
+    val unknown = ArchiveMemberClassification(ArchiveMemberKind.UNKNOWN, "unknown", openable = false)
+    if (contentRange.offset < 0 || contentRange.size < 4) return unknown
+    if (contentRange.offset + contentRange.size > archiveBytes.size) return unknown
+
+    val view = archiveBytes.slice(contentRange.offset, contentRange.size)
+
+    // Windows short-import record: Sig1 = IMAGE_FILE_MACHINE_UNKNOWN (0x0000),
+    // Sig2 = 0xFFFF (both little-endian u16). A real member, but it carries no
+    // full object file to open.
+    val b0 = view[0].toInt() and 0xFF
+    val b1 = view[1].toInt() and 0xFF
+    val b2 = view[2].toInt() and 0xFF
+    val b3 = view[3].toInt() and 0xFF
+    if (b0 == 0x00 && b1 == 0x00 && b2 == 0xFF && b3 == 0xFF) {
+        return ArchiveMemberClassification(ArchiveMemberKind.SHORT_IMPORT, "Short import", openable = false)
+    }
+
+    return when (val fmt = NativeBinaryFormatDetector.detect(view)) {
+        is NativeBinaryFormat.Elf -> ArchiveMemberClassification(ArchiveMemberKind.ELF, fmt.displayName, openable = true)
+        is NativeBinaryFormat.MachO -> ArchiveMemberClassification(ArchiveMemberKind.MACH_O, fmt.displayName, openable = true)
+        is NativeBinaryFormat.FatMachO -> ArchiveMemberClassification(ArchiveMemberKind.FAT_MACH_O, fmt.displayName, openable = true)
+        is NativeBinaryFormat.Pe -> ArchiveMemberClassification(ArchiveMemberKind.PE, fmt.displayName, openable = true)
+        is NativeBinaryFormat.Coff -> ArchiveMemberClassification(ArchiveMemberKind.COFF, fmt.displayName, openable = true)
+        NativeBinaryFormat.Archive -> ArchiveMemberClassification(ArchiveMemberKind.ARCHIVE, fmt.displayName, openable = true)
+        null -> unknown
+    }
 }
 
 fun nativeOrGenericBinaryProvider(

@@ -49,4 +49,12 @@ data class PeArchiveMember(
     val size: UInt,
     val headerRange: NativeByteRange,
     val contentRange: NativeByteRange,
+    /**
+     * True for the archive's own bookkeeping members (the symbol table `/`, the
+     * GNU long-names table `//`, and the BSD symbol tables `__.SYMDEF` /
+     * `__.SYMDEF SORTED`). These are not real object files and should be hidden
+     * from a member listing. Resolved from the member name; header-only, no
+     * content read.
+     */
+    val isBookkeeping: Boolean = false,
 )

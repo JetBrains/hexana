@@ -443,6 +443,25 @@ class PeParserTest {
     }
 
     @Test
+    fun `flags archive bookkeeping members`() {
+        val archive = coffArchiveBytes(
+            "/" to byteArrayOf(1, 2, 3, 4),
+            "//" to "long_member.obj/\n".encodeToByteArray(),
+            "/0" to "OBJECT".encodeToByteArray(),
+            "#1/10" to "inline.objPAYLOAD".encodeToByteArray(),
+        )
+
+        val file = PeParser.parseArchive(archive.toCommonByteBuffer())!!
+
+        // Symbol table "/" and long-names table "//" are bookkeeping; real members are not.
+        assertTrue(file.members[0].isBookkeeping)  // "/"
+        assertTrue(file.members[1].isBookkeeping)  // "//"
+        assertEquals(false, file.members[2].isBookkeeping)  // long_member.obj
+        assertEquals(false, file.members[3].isBookkeeping)  // inline.obj
+        assertEquals(2, file.members.count { !it.isBookkeeping })
+    }
+
+    @Test
     fun `returns null for COFF archive with missing odd member padding`() {
         val archive = coffArchiveBytes("odd.obj" to byteArrayOf(1)).copyOf(ARCHIVE_MAGIC_AND_HEADER_SIZE + 1)
 

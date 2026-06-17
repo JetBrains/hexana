@@ -30,6 +30,20 @@ class NativeBinaryFileTypeDetector : FileTypeRegistry.FileTypeDetector {
         val b2 = firstBytes.byteAt(2).toInt() and 0xFF
         val b3 = firstBytes.byteAt(3).toInt() and 0xFF
 
+        // Static-library archive: "!<arch>\n" (21 3C 61 72 63 68 3E 0A). Covers Unix `ar`
+        // (.a) and Windows COFF import libraries (.lib). Checked first; this is the
+        // authoritative signal for `.a`/`.lib`, which are NOT registered by extension
+        // (a `.lib` may be a non-archive MSVC import library).
+        if (len >= 8 &&
+            b0 == 0x21 && b1 == 0x3C && b2 == 0x61 && b3 == 0x72 &&
+            (firstBytes.byteAt(4).toInt() and 0xFF) == 0x63 &&
+            (firstBytes.byteAt(5).toInt() and 0xFF) == 0x68 &&
+            (firstBytes.byteAt(6).toInt() and 0xFF) == 0x3E &&
+            (firstBytes.byteAt(7).toInt() and 0xFF) == 0x0A
+        ) {
+            return ArchiveFileType.INSTANCE
+        }
+
         // ELF: 7F 45 4C 46
         if (b0 == 0x7F && b1 == 0x45 && b2 == 0x4C && b3 == 0x46) {
             return ElfFileType.INSTANCE
@@ -66,7 +80,35 @@ class NativeBinaryFileTypeDetector : FileTypeRegistry.FileTypeDetector {
             }
         }
 
+        // COFF object (no magic — e.g. a `.obj`/`.o` member extracted from a `.lib`
+        // static library). Identified structurally from the 20-byte COFF header, all
+        // of which is in the first bytes: machine@0 in the known set, 1..96 sections@2,
+        // optionalHeaderSize@16 == 0 (objects have no optional header), and a plausible
+        // symbol-table pointer@8. Checked LAST — it is the weakest signal — so real PE
+        // images (MZ) and Mach-O/ELF (magic) always win. The full structural validation
+        // runs later in NativeBinaryFormatDetector; a rare false positive here merely
+        // opens the file in Hexana's hex view via GenericBinaryProvider, never crashes.
+        if (len >= 20) {
+            val machine = b0 or (b1 shl 8)
+            val sectionCount = b2 or (b3 shl 8)
+            val optionalHeaderSize = readU16LE(firstBytes, 16)
+            val symbolTableOffset = readU32LE(firstBytes, 8)
+            if (machine in COFF_MACHINE_TYPES &&
+                sectionCount in 1..96 &&
+                optionalHeaderSize == 0 &&
+                (symbolTableOffset == 0 || symbolTableOffset >= 20)
+            ) {
+                return PeFileType.INSTANCE
+            }
+        }
+
         return null
+    }
+
+    private fun readU16LE(bytes: ByteSequence, offset: Int): Int {
+        val b0 = bytes.byteAt(offset).toInt() and 0xFF
+        val b1 = bytes.byteAt(offset + 1).toInt() and 0xFF
+        return b0 or (b1 shl 8)
     }
 
     private fun readU32LE(bytes: ByteSequence, offset: Int): Int {
@@ -75,5 +117,11 @@ class NativeBinaryFileTypeDetector : FileTypeRegistry.FileTypeDetector {
         val b2 = bytes.byteAt(offset + 2).toInt() and 0xFF
         val b3 = bytes.byteAt(offset + 3).toInt() and 0xFF
         return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
+    }
+
+    private companion object {
+        // IMAGE_FILE_MACHINE_* values that mark a real COFF object header. Mirrors
+        // NativeBinaryFormatDetector's set (i386, ARM, ARMNT, IA64, AMD64, ARM64).
+        val COFF_MACHINE_TYPES = setOf(0x014C, 0x01C0, 0x01C4, 0x0200, 0x8664, 0xAA64)
     }
 }

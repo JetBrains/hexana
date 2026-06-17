@@ -114,6 +114,13 @@
                   fieldName="INSTANCE"
                   extensions="exe;dll;sys;drv"/>
 
+        <!-- No extensions: `.a`/`.lib` are recognised by the "!<arch>\n" content magic in
+             NativeBinaryFileTypeDetector. Binding the extension would beat the detector and
+             force this type onto non-archive `.lib` files (MSVC import libraries). -->
+        <fileType name="Archive"
+                  implementationClass="org.jetbrains.hexana.ArchiveFileType"
+                  fieldName="INSTANCE"/>
+
         <fileType name="wat"
                   implementationClass="org.jetbrains.hexana.wat.WatFileType"
                   fieldName="INSTANCE"
@@ -132,6 +139,7 @@
                   extensions="jit"/>
 
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
+        <editorTabTitleProvider implementation="org.jetbrains.hexana.ArchiveMemberTabTitleProvider"/>
         <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>
         <fileTypeOverrider implementation="org.jetbrains.hexana.actions.HexFileTypeOverrider"/>
         <fileTypeDetector implementation="org.jetbrains.hexana.NativeBinaryFileTypeDetector"/>

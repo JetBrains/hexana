@@ -197,6 +197,7 @@ object PeParser {
                 size = member.size,
                 headerRange = member.headerRange,
                 contentRange = resolved.contentRange,
+                isBookkeeping = resolved.name in ARCHIVE_BOOKKEEPING_NAMES,
             )
         }
 
@@ -841,6 +842,11 @@ private const val PE_HEADER_OFFSET_FIELD = 0x3C
 private const val PE_SIGNATURE_SIZE = 4
 private const val ARCHIVE_MAGIC_SIZE = 8
 private const val ARCHIVE_MEMBER_HEADER_SIZE = 60
+
+// Archive bookkeeping members that are not real object files: the GNU/SysV
+// symbol table (`/`), the GNU long-names table (`//`), and the BSD symbol
+// tables. Matched against the resolved member name.
+private val ARCHIVE_BOOKKEEPING_NAMES = setOf("/", "//", "__.SYMDEF", "__.SYMDEF SORTED")
 private const val COFF_HEADER_SIZE = 20
 private const val COFF_RELOCATION_OVERFLOW_COUNT = 0xFFFF
 private const val COFF_RELOCATION_SIZE = 10
