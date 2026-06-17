@@ -723,6 +723,23 @@ private fun VirtualizedWatContent(state: WatPanelState) {
             }
             el.addEventListener("click", clickHandler)
 
+            // Watch for resize events (e.g. devtools toggle) that change
+            // the viewport height without firing a scroll event.  Without
+            // this the virtualizer keeps the old viewportHeight, computes a
+            // wrong render range, and shows an empty viewport.
+            val resizeCallback: (dynamic) -> Unit = {
+                if (!suppressScrollHandler.value) {
+                    val newST = (scrollEl.scrollTop.toInt() - wrapperTopOffset).coerceAtLeast(0)
+                    scrollTop = newST
+                    viewportHeight = scrollEl.clientHeight
+                }
+            }
+            val resizeObserverCtor: dynamic = js("ResizeObserver")
+            @Suppress("UNUSED_VARIABLE")
+            val cb = resizeCallback
+            val resizeObserver: dynamic = js("new resizeObserverCtor(cb)")
+            resizeObserver.observe(scrollEl)
+
             // Defer initial measurement to avoid recomposition during ref
             kotlinx.browser.window.requestAnimationFrame {
                 scrollTop = (scrollEl.scrollTop.toInt() - wrapperTopOffset).coerceAtLeast(0)
@@ -731,6 +748,7 @@ private fun VirtualizedWatContent(state: WatPanelState) {
             onDispose {
                 scrollEl.removeEventListener("scroll", scrollHandler)
                 el.removeEventListener("click", clickHandler)
+                resizeObserver.disconnect()
                 scrollContainerRef.value = null
             }
         }
@@ -831,6 +849,14 @@ private fun VirtualizedWatContent(state: WatPanelState) {
 // Section shortcut bar — quick-jump links for each section
 // ---------------------------------------------------------------------------
 
+private fun StyleScope.shortcutLinkStyle() {
+    property("padding", "0 8px 2px 8px")
+    property("font-size", "11px")
+    property("color", "var(--vscode-textLink-foreground, #3794ff)")
+    property("cursor", "pointer")
+    property("user-select", "none")
+}
+
 @Composable
 private fun SectionShortcutBar(
     sectionEntries: List<Pair<String, Int>>,
@@ -847,9 +873,8 @@ private fun SectionShortcutBar(
             display(DisplayStyle.Flex)
             property("flex-wrap", "wrap")
             property("gap", "4px")
-            property("padding", "4px 0")
+            property("padding", "4px 0 4px 0")
             property("border-bottom", "1px solid var(--hexana-border, #333)")
-            property("margin-bottom", "4px")
             property("flex-shrink", "0")
             property("align-items", "center")
             property("position", "sticky")
@@ -861,11 +886,7 @@ private fun SectionShortcutBar(
         for ((label, chunkIndex) in sectionEntries) {
             Div({
                 style {
-                    property("padding", "2px 8px")
-                    property("font-size", "11px")
-                    property("color", "var(--vscode-textLink-foreground, #3794ff)")
-                    property("cursor", "pointer")
-                    property("user-select", "none")
+                    shortcutLinkStyle()
                     property("opacity", "0.8")
                 }
                 onClick { onSectionClick(chunkIndex) }
@@ -877,11 +898,7 @@ private fun SectionShortcutBar(
         Div({ style { property("flex", "1") } })
         Div({
             style {
-                property("padding", "2px 8px")
-                property("font-size", "11px")
-                property("color", "var(--vscode-textLink-foreground, #3794ff)")
-                property("cursor", "pointer")
-                property("user-select", "none")
+                shortcutLinkStyle()
                 property("white-space", "nowrap")
             }
             onClick { onOpenInEditor() }
@@ -938,7 +955,7 @@ private fun appendSectionHeaderHtml(
     sb.append("<div data-action=\"toggle-section\" data-id=\"").append(escapeHtml(chunk.id.toString()))
     sb.append("\" style=\"display:flex;align-items:center;gap:8px;padding:3px 12px;")
     sb.append("background:var(--vscode-editor-selectionBackground, rgba(255,255,255,0.06));")
-    sb.append("cursor:pointer;user-select:none;position:sticky;top:0;z-index:1;")
+    sb.append("cursor:pointer;user-select:none;")
     sb.append("border-bottom:1px solid var(--hexana-border, #333)\">")
     sb.append("<span style=\"color:").append(offsetColor).append("\">").append(offset).append("</span>")
     sb.append("<span style=\"color:").append(offsetColor)

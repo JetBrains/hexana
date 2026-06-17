@@ -8,8 +8,6 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
-import org.jetbrains.hexana.shared.WasmComponentTableTabsProvider
-import org.jetbrains.hexana.shared.WasmTableTabsProvider
 
 /**
  * Identifiers for non-table tabs that remain hardcoded outside the
@@ -29,6 +27,7 @@ private enum class FixedTab(val label: String) {
  */
 private class PanelTab(
     val label: String,
+    val padding: Boolean = true,
     val content: @Composable (HexSelectionState) -> Unit,
 )
 
@@ -82,7 +81,7 @@ fun HexanaPanel(
 
             // WAT tab (always present for Wasm and component)
             if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
-                add(PanelTab(FixedTab.Wat.label) { _ ->
+                add(PanelTab(FixedTab.Wat.label, padding = false) { _ ->
                     WatTabContent(provider)
                 })
             }
@@ -222,17 +221,19 @@ fun HexanaPanel(
             }
         }
 
+        val currentTab = tabs.firstOrNull { it.label == activeTab }
         // Tab content
         Div({
             classes("hexana-tab-content")
             style {
                 property("overflow-y", "auto")
-                property("padding", "8px 12px")
+                if (currentTab?.padding != false) {
+                    property("padding", "8px 12px")
+                }
                 property("flex", "1")
                 property("min-height", "0")
             }
         }) {
-            val currentTab = tabs.firstOrNull { it.label == activeTab }
             currentTab?.content?.invoke(selection)
         }
     }
