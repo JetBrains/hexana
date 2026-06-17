@@ -1,8 +1,8 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "artifacts": [
-    "hexana-claude-plugin-0.1.0.zip",
-    "hexana-codex-plugin-0.1.0.zip",
-    "server-0.1.0.zip"
+    "hexana-claude-plugin-0.2.0.zip",
+    "hexana-codex-plugin-0.2.0.zip",
+    "server-0.2.0.zip"
   ]
 }
