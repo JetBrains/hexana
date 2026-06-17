@@ -1,12 +1,12 @@
 ---
 title: Running and Debugging WebAssembly from Hexana for VS Code
 description: How to run and debug .wasm modules through Wasmtime, WAMR, GraalVM, Node.js, or the browser — core modules with auto-generated import stubs and Component Model binaries with dependency composition.
-version: "0.3.0"
+version: "0.4.0"
 ---
 
 # Running and Debugging WebAssembly from Hexana for VS Code
 
-Hexana ships **Run** and **Debug** buttons in the editor toolbar. You can invoke a module through one of five runtimes — **Wasmtime**, **WAMR**, **GraalVM**, **Node.js**, or the **browser** — and (experimental) attach an `lldb`-backed debugger when running on Wasmtime or WAMR. Node.js and the browser were added in 0.3.0 and are **run-only** in VS Code. Both core WebAssembly modules and Component Model binaries are supported, with different orchestration for each.
+Hexana ships **Run** and **Debug** buttons in the editor toolbar. You can invoke a module through one of five runtimes — **Wasmtime**, **WAMR**, **GraalVM**, **Node.js**, or the **browser** — and (experimental) attach a debugger to all of them except GraalVM: an `lldb`-backed debugger on Wasmtime and WAMR, and (since **0.4.0**) a Chrome DevTools Protocol debugger on Node.js and Chrome. Node.js and the browser were added as run targets in 0.3.0. Both core WebAssembly modules and Component Model binaries are supported, with different orchestration for each.
 
 ## Requirements
 
@@ -66,7 +66,7 @@ You can install only one — Hexana adapts. If neither is installed and your bin
 
 The dialog has four sections:
 
-- **Runtime** — dropdown of detected runtimes (Wasmtime / WAMR / GraalVM / Node.js / browser). Unavailable runtimes are greyed out with a tooltip explaining why. Node.js and the browser are run-only.
+- **Runtime** — dropdown of detected runtimes (Wasmtime / WAMR / GraalVM / Node.js / browser). Unavailable runtimes are greyed out with a tooltip explaining why. All runtimes except GraalVM can also be debugged (see [Debugging](#debugging-experimental)).
 - **Export** — dropdown of all exported functions (core modules) or the component's primary entry interface (components).
 - **Arguments** — free-text field. Shell-style quoting is supported via Hexana's `splitShellArgs` Kotlin/JS utility. Backslash escapes work for spaces; single and double quotes group arguments.
 - **Environment** (implicit) — Hexana passes through your current shell environment to the chosen runtime.
@@ -75,17 +75,27 @@ Click **Run** (or **Debug** to launch under the debugger — see below) to start
 
 ## Debugging (experimental)
 
-Click **Debug** instead of **Run** to launch the module under `lldb`. Supported on **Wasmtime** and **WAMR**; not yet on GraalVM.
+Click **Debug** instead of **Run** to launch the module under a debugger. Hexana has two debug backends, selected by the runtime you pick; **GraalVM is run-only**.
 
+### `lldb`-backed — Wasmtime and WAMR
+
+- **Requirements** — LLVM 22.1 or newer must be on `PATH`, and the WASM binary must be compiled with debug info that `lldb` can interpret.
 - **Breakpoints** — set them in source files associated with the module (Hexana maps PCs to source via DWARF). Breakpoints inside nested modules of a Component Model binary are supported on Wasmtime only.
 - **Stepping** — step over, into, and out; continue past hit breakpoints.
 - **Variables** — local-variable inspection works for compilers that emit DWARF with reasonable location expressions (Rust, C/C++, Emscripten with `-g`).
-- **Requirements** — LLVM 22.1 or newer must be on `PATH`, and the WASM binary must be compiled with debug info that `lldb` can interpret.
+
+### CDP-backed — Node.js and Chrome (0.4.0)
+
+Choosing **Debug** with the Node.js or browser runtime drives the runtime over the **Chrome DevTools Protocol (CDP)** instead of `lldb`:
+
+- Node.js is launched with `--inspect-brk`; Chrome with `--remote-debugging-port`. Hexana connects over a CDP WebSocket and translates DAP ↔ CDP so VS Code's standard debugger UI (breakpoints, stepping, call stack, variables) works against the WASM running in the JS host.
+- Chrome/Chromium is located from common install locations for your platform; install Google Chrome (or a Chromium build) to use the browser path.
+- No LLVM is required for this backend.
 
 Known limitations:
 
-- GraalVM debug is not yet wired.
-- Some compilers' DWARF (especially aggressive-CGU Rust builds) produces source paths that need fuzzy matching; if a breakpoint does not bind, check the **Debug Console** for the path Hexana tried to resolve and file a tracker issue.
+- GraalVM debug is not wired (run-only).
+- Some compilers' DWARF (especially aggressive-CGU Rust builds) produces source paths that need fuzzy matching; if a breakpoint does not bind on the `lldb` path, check the **Debug Console** for the path Hexana tried to resolve and file a tracker issue.
 
 ## Terminal output
 
@@ -104,7 +114,7 @@ There is no setting to override `wasm-tools`, `wac`, WAMR, or GraalVM paths — 
 
 ## What this version does not do
 
-- **GraalVM, Node.js, and browser debug are not wired.** Debug works on Wasmtime and WAMR only; GraalVM, Node.js, and the browser are run-only in VS Code.
+- **GraalVM debug is not wired.** GraalVM is run-only. (Wasmtime / WAMR debug over `lldb`; Node.js / Chrome debug over CDP since 0.4.0.)
 - **No proposal-flag selection UI.** Hexana detects which proposals the binary uses and passes the appropriate `--wasm-features` flags automatically, but there is no UI to override.
 - **No run-configuration persistence.** Each Run is ad-hoc; arguments are not saved between runs. The dialog remembers the last set within the editor session but discards them on close.
 - **No host-function injection.** You cannot supply your own implementations for unresolved imports; you get auto-generated stubs or nothing.

@@ -1,7 +1,7 @@
 ---
 title: Getting Started with Hexana for VS Code
 description: How to install the Hexana VS Code extension, open a WebAssembly file, and find the main views.
-version: "0.2.0"
+version: "0.4.0"
 ---
 
 # Getting Started with Hexana for VS Code
@@ -72,7 +72,7 @@ The vertical divider between the hex viewer and the analysis panel is **resizabl
 - **Binary kind badge** — `core`, `component`, or `wasm` (generic).
 - **File size** — in bytes plus a human-readable form (hover for a per-section breakdown; click to open the **Top** tab).
 - **Run button** — present when at least one runtime (Wasmtime / WAMR / GraalVM) is available; clicking it opens the run dialog with a runtime picker (see [`run-support.md`](run-support.md)).
-- **Debug button** — present when a debug-capable runtime (Wasmtime or WAMR) and LLVM 22.1+ are available; opens the same dialog but launches under `lldb` (experimental).
+- **Debug button** — present when a debug-capable runtime is available; opens the same dialog but launches under a debugger (experimental). Wasmtime and WAMR debug under `lldb` (LLVM 22.1+ required); Node.js and Chrome debug over the Chrome DevTools Protocol since 0.4.0. GraalVM is run-only.
 
 ### Hex viewer
 
@@ -100,7 +100,7 @@ If you have **Wasmtime**, **WAMR**, or **GraalVM** installed, click **Run** in t
 
 If Wasmtime is not on `PATH`, set the path in **Settings → Hexana → Wasmtime Path** (`hexana.wasmtimePath`). WAMR and GraalVM are picked up from `PATH` and common install locations.
 
-To **debug** instead of just run, click **Debug** — supported on Wasmtime and WAMR (LLVM 22.1+ required). See [`run-support.md`](run-support.md) for the full reference, including Component Model composition with `wasm-tools` or `wac`.
+To **debug** instead of just run, click **Debug** — supported on Wasmtime and WAMR via `lldb` (LLVM 22.1+ required), and on Node.js and Chrome via the Chrome DevTools Protocol (0.4.0). GraalVM is run-only. See [`run-support.md`](run-support.md) for the full reference, including Component Model composition with `wasm-tools` or `wac`.
 
 ## What about WAT files?
 

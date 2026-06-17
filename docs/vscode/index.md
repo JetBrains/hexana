@@ -1,13 +1,13 @@
 ---
 title: Hexana VS Code Extension — Documentation
 description: User and contributor documentation for the Hexana VS Code extension.
-version: "0.3.0"
+version: "0.4.0"
 audience: [users]
 ---
 
 # Hexana — VS Code Extension Documentation
 
-**Hexana** is a Visual Studio Code extension by JetBrains for inspecting and running WebAssembly binaries — and, since 0.2.0, native binaries (ELF, Mach-O, PE); since 0.3.0, JVM archives (`.jar`, `.zip`, `.war`, `.apk`) as well. Open any `.wasm` file and Hexana replaces the default editor with a Compose-for-Web webview: a virtual-scrolling hex viewer alongside up to **11 structural-analysis tabs** (Summary, Exports, Imports, Functions, Data, Custom, Top, Monos, Garbage, Modules, WAT). Native binaries and archives open with the same hex + structure layout. Run modules through **Wasmtime**, **WAMR**, **GraalVM**, **Node.js**, or the **browser**, **debug** them (experimental, LLVM 22.1+, Wasmtime / WAMR only), resolve Component Model dependencies automatically, and drive analysis from an AI tool over the on-demand-downloaded **MCP server**.
+**Hexana** is a Visual Studio Code extension by JetBrains for inspecting and running WebAssembly binaries — and, since 0.2.0, native binaries (ELF, Mach-O, PE); since 0.3.0, JVM archives (`.jar`, `.zip`, `.war`, `.apk`) as well. Open any `.wasm` file and Hexana replaces the default editor with a Compose-for-Web webview: a virtual-scrolling hex viewer alongside up to **11 structural-analysis tabs** (Summary, Exports, Imports, Functions, Data, Custom, Top, Monos, Garbage, Modules, WAT). Native binaries and archives open with the same hex + structure layout. Since 0.4.0 the hex viewer also supports **in-place byte editing** (overwrite-only — the file size never changes). Run modules through **Wasmtime**, **WAMR**, **GraalVM**, **Node.js**, or the **browser**, **debug** them (experimental) — `lldb`-backed on Wasmtime / WAMR (LLVM 22.1+), and, since 0.4.0, CDP-backed on Node.js and Chrome — resolve Component Model dependencies automatically, and drive analysis from an AI tool over the on-demand-downloaded **MCP server**.
 
 > Looking for the IntelliJ Platform plugin? See the [JetBrains IDEs section](../jetbrains/index.md). The VS Code and JetBrains products share the same WASM parser core but differ in language-support depth, run integrations, and target audience.
 
