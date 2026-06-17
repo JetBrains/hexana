@@ -9,6 +9,8 @@ import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.providers.elf.ElfProgramHeader
 import org.jetbrains.hexana.providers.elf.ElfSectionHeader
 import org.jetbrains.hexana.providers.elf.ElfSymbol
+import org.jetbrains.hexana.providers.pe.PeCoffSymbol
+import org.jetbrains.hexana.providers.pe.PeSection
 
 class NativeFunctionDiscoveryTest {
     @Test
@@ -71,6 +73,82 @@ class NativeFunctionDiscoveryTest {
         assertEquals("ns::foo(const char*)", NativeSymbolDemangler.demangle("_ZN2ns3fooEPKc"))
         assertNull(NativeSymbolDemangler.demangle("main"))
     }
+
+    @Test
+    fun `maps relocatable ELF object function offsets as section-relative`() {
+        // Layout mirrors a real ET_REL `.o` member of a `.a` (unwind-dw2.o): no program headers,
+        // `.text` (section 1) at sh_addr 0 / sh_offset 64, and STT_FUNC symbols whose st_value is
+        // a section-relative offset rather than a virtual address.
+        val functions = NativeFunctionDiscovery.fromElf(
+            symbols = listOf(
+                symbol(index = 0, name = "init_table", tableSectionIndex = 9, sectionIndex = 1, value = 0uL, size = 344uL),
+                symbol(index = 1, name = "uw_install", tableSectionIndex = 9, sectionIndex = 1, value = 352uL, size = 352uL),
+                symbol(index = 2, name = "memcpy", tableSectionIndex = 9, sectionIndex = 0, value = 0uL, size = 0uL),
+            ),
+            sections = listOf(
+                section(index = 9, name = ".symtab"),
+                section(index = 1, name = ".text", address = 0uL, fileOffset = 64uL, size = 10656uL),
+            ),
+            programHeaders = emptyList(), // ET_REL has none
+        )
+
+        assertEquals(3, functions.size)
+
+        val first = functions[0]
+        assertEquals("init_table", first.name)
+        assertFalse(first.imported)
+        assertEquals(64L, first.fileOffset) // sh_offset(64) + st_value(0)
+        assertEquals(344uL, first.size)
+
+        val second = functions[1]
+        assertEquals("uw_install", second.name)
+        assertEquals(416L, second.fileOffset) // sh_offset(64) + st_value(352)
+
+        val imported = functions[2]
+        assertEquals("memcpy", imported.name)
+        assertTrue(imported.imported)
+        assertNull(imported.fileOffset)
+    }
+
+    @Test
+    fun `discovers defined and imported functions from COFF symbols`() {
+        // Layout mirrors a real MSVC i386 `.obj` (Util.obj): a single code section `.text`
+        // (1-based COFF section number 5 => 0-based index 4) at file offset 2152, size 1093,
+        // with two defined functions at section-relative offsets and one undefined import.
+        val text = coffSection(index = 4, name = ".text", rawDataPointer = 2152u, rawDataSize = 1093u)
+        val functions = NativeFunctionDiscovery.fromCoff(
+            symbols = listOf(
+                coffSym(index = 31, name = "_CU_translate_special_characters", value = 0u, sectionNumber = 5),
+                coffSym(index = 32, name = "_memcpy", value = 0u, sectionNumber = 0), // undefined import
+                coffSym(index = 35, name = "_get_index", value = 320u, sectionNumber = 5, storageClass = 3),
+                coffSym(index = 40, name = "_data_label", value = 8u, sectionNumber = 3, type = 0x0000), // not ISFCN
+            ),
+            sections = listOf(text),
+        )
+
+        // The non-function (`_data_label`, type without DT_FUNCTION) is excluded.
+        assertEquals(3, functions.size)
+
+        val first = functions[0]
+        assertEquals("_CU_translate_special_characters", first.name)
+        assertFalse(first.imported)
+        assertEquals(2152L, first.fileOffset)           // rawDataPointer + value(0)
+        assertEquals(320uL, first.size)                  // gap to next defined fn (320 - 0)
+        assertEquals(".text", first.sectionName)
+        assertEquals(NativeFunctionRangeConfidence.NextSymbolInSection, first.rangeConfidence)
+
+        val imported = functions[1]
+        assertEquals("_memcpy", imported.name)
+        assertTrue(imported.imported)
+        assertNull(imported.fileOffset)
+        assertNull(imported.size)
+
+        val getIndex = functions[2]
+        assertEquals("_get_index", getIndex.name)
+        assertFalse(getIndex.imported)
+        assertEquals(2472L, getIndex.fileOffset)         // 2152 + 320
+        assertEquals(773uL, getIndex.size)               // section end (1093) - 320
+    }
 }
 
 private fun symbol(
@@ -117,6 +195,47 @@ private fun section(
     entrySize = 0uL,
     headerRange = NativeByteRange(0, 64),
     contentRange = NativeByteRange(fileOffset.toInt(), size.toInt()),
+)
+
+private fun coffSection(
+    index: Int,
+    name: String,
+    rawDataPointer: UInt,
+    rawDataSize: UInt,
+    virtualAddress: UInt = 0u,
+    characteristics: UInt = 0x60500020u, // IMAGE_SCN_CNT_CODE | MEM_EXECUTE | MEM_READ
+): PeSection = PeSection(
+    index = index,
+    name = name,
+    virtualSize = rawDataSize,
+    virtualAddress = virtualAddress,
+    rawDataSize = rawDataSize,
+    rawDataPointer = rawDataPointer,
+    relocationPointer = 0u,
+    lineNumberPointer = 0u,
+    relocationCount = 0,
+    lineNumberCount = 0,
+    characteristics = characteristics,
+    headerRange = NativeByteRange(20 + index * 40, 40),
+    contentRange = NativeByteRange(rawDataPointer.toInt(), rawDataSize.toInt()),
+)
+
+private fun coffSym(
+    index: Int,
+    name: String,
+    value: UInt,
+    sectionNumber: Int,
+    type: Int = 0x0020, // DT_FUNCTION derived type (ISFCN)
+    storageClass: Int = 2, // IMAGE_SYM_CLASS_EXTERNAL
+): PeCoffSymbol = PeCoffSymbol(
+    index = index,
+    name = name,
+    value = value,
+    sectionNumber = sectionNumber,
+    type = type,
+    storageClass = storageClass,
+    auxiliaryCount = 0,
+    recordRange = NativeByteRange(index * 18, 18),
 )
 
 private fun loadSegment(): ElfProgramHeader = ElfProgramHeader(

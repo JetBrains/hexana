@@ -417,9 +417,20 @@ class CoffBinaryProvider(
 
     val coffHeader: PeCoffHeader? by lazy { PeParser.parseCoffObjectHeader(bytes) }
 
+    val sections: List<PeSection>? by lazy {
+        val h = coffHeader ?: return@lazy null
+        PeParser.parseCoffObjectSections(bytes, h)
+    }
+
     val coffSymbols: List<PeCoffSymbol>? by lazy {
         val h = coffHeader ?: return@lazy null
         PeParser.parseCoffSymbols(bytes, h)
+    }
+
+    override val nativeFunctions: List<NativeFunctionRecord>? by lazy {
+        val syms = coffSymbols ?: return@lazy null
+        val secs = sections ?: return@lazy null
+        NativeFunctionDiscovery.fromCoff(syms, secs)
     }
 }
 

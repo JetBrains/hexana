@@ -7,6 +7,8 @@ import org.jetbrains.hexana.providers.elf.ElfSectionHeader
 import org.jetbrains.hexana.providers.elf.ElfSymbol
 import org.jetbrains.hexana.providers.macho.MachOSection
 import org.jetbrains.hexana.providers.macho.MachOSymbol
+import org.jetbrains.hexana.providers.pe.PeCoffSymbol
+import org.jetbrains.hexana.providers.pe.PeSection
 
 data class NativeFunctionRecord(
     val name: String,
@@ -144,6 +146,16 @@ object NativeFunctionDiscovery {
                 virtualAddress = symbol.value,
                 fileOffset = if (symbol.isUndefined) {
                     null
+                } else if (section != null && section.address == 0uL) {
+                    // Relocatable object (ET_REL — e.g. a `.o` member of a `.a` archive):
+                    // sections are not laid out in memory (sh_addr == 0) and there are no
+                    // program headers, so st_value is an offset from the start of the symbol's
+                    // section, not a virtual address. Map it straight through the section's file
+                    // offset. (Without this, ElfAddressMapper returns null and the function is
+                    // dropped from the disassembly listing.)
+                    (section.fileOffset + symbol.value)
+                        .takeIf { it <= Long.MAX_VALUE.toULong() }
+                        ?.toLong()
                 } else {
                     ElfAddressMapper.virtualAddressToFileOffset(symbol.value, programHeaders, sections)
                         ?.takeIf { it <= Long.MAX_VALUE.toULong() }
@@ -155,7 +167,95 @@ object NativeFunctionDiscovery {
             )
         }
     }
+
+    /**
+     * Builds function records for a COFF object file (e.g. an `.obj`/`.o` member of a `.lib`
+     * static library) from its symbol table.
+     *
+     * A symbol is treated as a function when its COFF type field carries the
+     * `DT_FUNCTION` derived type (`ISFCN`: `(type and 0x30) == 0x20`). Defined functions have a
+     * 1-based `sectionNumber` pointing at a section and a section-relative `value`; undefined
+     * externals (`sectionNumber <= 0`, e.g. `memcpy`) are imports with no body.
+     *
+     * COFF carries no symbol size, so — like the ELF/Mach-O paths — a defined function's size is
+     * the gap to the next defined function symbol in the same section, capped at the section's
+     * raw-data size. `fileOffset = section.rawDataPointer + value`; `virtualAddress` is the
+     * section RVA plus the offset (RVAs are section-relative in an unlinked object, so this is a
+     * display value only).
+     */
+    fun fromCoff(
+        symbols: List<PeCoffSymbol>,
+        sections: List<PeSection>,
+    ): List<NativeFunctionRecord> {
+        val functionSymbols = symbols.filter { (it.type and COFF_DT_FUNCTION_MASK) == COFF_DT_FUNCTION &&
+            it.name.isNotBlank() }
+        val definedBySection: Map<Int, List<PeCoffSymbol>> = functionSymbols
+            .filter { it.sectionNumber > 0 }
+            .groupBy { it.sectionNumber }
+
+        return functionSymbols.map { symbol ->
+            val imported = symbol.sectionNumber <= 0
+            // COFF sectionNumber is 1-based; parsed sections carry a 0-based `index`.
+            val section = if (imported) null else sections.firstOrNull { it.index == symbol.sectionNumber - 1 }
+            val resolvedSize = if (imported || section == null) {
+                ResolvedFunctionSize(null, NativeFunctionRangeConfidence.Unknown)
+            } else {
+                resolveCoffFunctionSize(symbol, section, definedBySection[symbol.sectionNumber].orEmpty())
+            }
+            NativeFunctionRecord(
+                name = symbol.name,
+                demangledName = NativeSymbolDemangler.demangle(symbol.name),
+                symbolIndex = symbol.index,
+                source = NativeFunctionSymbolSource.Symtab,
+                // IMAGE_SYM_CLASS_EXTERNAL (2) is global; STATIC (3) and the rest are local.
+                binding = if (symbol.storageClass == COFF_SYM_CLASS_EXTERNAL) 1 else 0,
+                sectionIndex = symbol.sectionNumber,
+                sectionName = section?.name?.takeIf { it.isNotBlank() },
+                imported = imported,
+                thunkLike = false,
+                virtualAddress = if (section != null) {
+                    section.virtualAddress.toULong() + symbol.value.toULong()
+                } else {
+                    symbol.value.toULong()
+                },
+                fileOffset = if (imported || section == null) {
+                    null
+                } else {
+                    section.rawDataPointer.toLong() + symbol.value.toLong()
+                },
+                size = resolvedSize.size,
+                rangeConfidence = resolvedSize.confidence,
+                recordRange = symbol.recordRange,
+            )
+        }
+    }
 }
+
+private fun resolveCoffFunctionSize(
+    symbol: PeCoffSymbol,
+    section: PeSection,
+    definedInSection: List<PeCoffSymbol>,
+): ResolvedFunctionSize {
+    // `value` is section-relative; size = distance to the next defined function symbol in the
+    // same section, capped at the section's raw-data size (the section-relative end).
+    val nextValue = definedInSection.asSequence()
+        .map { it.value }
+        .filter { it > symbol.value }
+        .minOrNull()
+    val sectionEnd = section.rawDataSize
+    val end = when {
+        nextValue != null -> minOf(nextValue, sectionEnd)
+        else -> sectionEnd
+    }
+    val size = (end.toLong() - symbol.value.toLong()).takeIf { it > 0L }
+        ?: return ResolvedFunctionSize(null, NativeFunctionRangeConfidence.Unknown)
+    return ResolvedFunctionSize(size.toULong(), NativeFunctionRangeConfidence.NextSymbolInSection)
+}
+
+// COFF symbol type: `ISFCN` = derived type DT_FUNCTION (2) in bits 4-5 of the type word.
+private const val COFF_DT_FUNCTION_MASK: Int = 0x30
+private const val COFF_DT_FUNCTION: Int = 0x20
+private const val COFF_SYM_CLASS_EXTERNAL: Int = 2
 
 private data class ResolvedFunctionSize(
     val size: ULong?,

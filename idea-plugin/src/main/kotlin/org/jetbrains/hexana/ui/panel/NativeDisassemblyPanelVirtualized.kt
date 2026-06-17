@@ -68,6 +68,7 @@ import org.jetbrains.hexana.document.format.TokenStream
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryWordSize
+import org.jetbrains.hexana.providers.CoffBinaryProvider
 import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
@@ -714,6 +715,19 @@ private fun NativeBinaryProvider.executableSectionRanges(): List<DisasmRange> = 
                 // ImageBase load address (and any base-of-code shift) this is
                 // good enough for offset display — symbol resolution is moot in
                 // the stripped case anyway.
+                virtualAddress = sec.virtualAddress.toULong(),
+                fileOffset = sec.rawDataPointer.toLong(),
+                size = sec.rawDataSize.toLong(),
+                sectionName = sec.name.takeIf { it.isNotBlank() },
+            )
+        }
+    is CoffBinaryProvider -> sections.orEmpty()
+        .filter { (it.characteristics and PE_CODE_CHAR_MASK) != 0u && it.rawDataSize > 0u }
+        .map { sec ->
+            DisasmRange(
+                displayName = "<${sec.name.ifBlank { "section#${sec.index}" }}>",
+                // COFF object section `value`s are section-relative; the section's own
+                // RVA is the right display base.
                 virtualAddress = sec.virtualAddress.toULong(),
                 fileOffset = sec.rawDataPointer.toLong(),
                 size = sec.rawDataSize.toLong(),
