@@ -1,6 +1,6 @@
 {
   "name": "hexana",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Inspect and analyze WebAssembly modules through MCP tools backed by the Hexana runtime.",
   "author": {
     "name": "JetBrains",
