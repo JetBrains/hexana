@@ -298,7 +298,7 @@ check_obfuscated_runtime_layout() {
       hexana-runtime-obfuscated.jar)
         found_obfuscated="true"
         ;;
-      analytics-jvm.jar|binaryProvider-jvm.jar|core.jar|dwarf-jvm.jar|encdec-jvm.jar|hexanaDocument-jvm.jar|server-*.jar|wasmParser-jvm.jar)
+      analytics-jvm.jar|binaryProvider-jvm.jar|common-jvm.jar|core.jar|dwarf-jvm.jar|elf-jvm.jar|encdec-jvm.jar|hexanaDocument-jvm.jar|macho-jvm.jar|pe-jvm.jar|plugins-shared-jvm.jar|server-*.jar|wasmParser-jvm.jar)
         die "Release artifact $zip_name contains pre-obfuscation Hexana runtime jar: $jar_rel"
         ;;
       *)
