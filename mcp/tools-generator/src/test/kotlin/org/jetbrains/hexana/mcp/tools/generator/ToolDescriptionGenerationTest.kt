@@ -44,7 +44,7 @@ class ToolDescriptionGenerationTest {
     private fun assertAggregateToolGuidance(source: String) {
         assertBoundaryPhrase(
             source,
-            "Use this aggregate workflow for crash triage when logs or reports contain mixed frame identifiers",
+            "Use this aggregate workflow for crash triage without requesting full disassembly",
             "resolve_wasm_frames should be described as aggregate frame triage",
         )
         assertBoundaryPhrase(
@@ -59,22 +59,22 @@ class ToolDescriptionGenerationTest {
         )
         assertBoundaryPhrase(
             source,
-            "direct and transitive dependencies",
+            "Search `scanRoots`, `projectRoot`, and the input component directory",
             "resolve_component_dependencies should mention transitive resolution",
         )
         assertBoundaryPhrase(
             source,
-            "Use this aggregate dependency-resolution workflow when provider files may need to be discovered",
+            "Use this aggregate dependency-resolution workflow when provider files must be discovered",
             "resolve_component_dependencies should be described as provider discovery",
         )
         assertBoundaryPhrase(
             source,
-            "extern-description or sort mismatches",
+            "shape mismatches",
             "check_component_compatibility should mention compatibility mismatch classes",
         )
         assertBoundaryPhrase(
             source,
-            "This is an inspection lookup only; it does not select provider files or compute compatibility verdicts",
+            "It does not select provider files or compute compatibility verdicts",
             "list_component_surface should stay separate from resolution workflows",
         )
     }

@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.mcp.server
 
+import io.modelcontextprotocol.kotlin.sdk.types.Tool
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -12,6 +16,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class HexanaMcpServerSchemaTest {
+    private val compactJson = Json { encodeDefaults = false }
+
     @Test
     fun generatedToolsAreMarkedReadOnly() {
         val annotations = createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED)
@@ -146,19 +152,33 @@ class HexanaMcpServerSchemaTest {
         val schema = queryArtifactsInputSchema()
 
         assertEquals(
-            "Path to a local `.wasm` file readable by the Hexana MCP server. " +
-                "Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`.",
+            "Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`.",
             schema.getValue("path").jsonObject.getValue("description").jsonPrimitive.content
         )
         assertEquals(
-            "Base64-encoded `.wasm` bytes. " +
-                "Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`.",
+            "Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`.",
             schema.getValue("bytesBase64").jsonObject.getValue("description").jsonPrimitive.content
         )
         assertEquals(
-            "Raw `.wasm` bytes as integers in the range 0..255. " +
-                "Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`.",
+            "Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`.",
             schema.getValue("bytes").jsonObject.getValue("description").jsonPrimitive.content
+        )
+    }
+
+    @Test
+    fun productionRegistryStaysWithinSchemaBudget() {
+        val tools = createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.PRODUCTION)
+            .tools
+            .values
+            .map { it.tool }
+            .sortedBy { it.name }
+
+        val schemaBytes = compactJson.encodeToString<List<Tool>>(tools).encodeToByteArray().size
+        val estimatedTokens = (schemaBytes + 3) / 4
+
+        assertTrue(
+            estimatedTokens <= 13_875,
+            "Production MCP schema estimate is $estimatedTokens tokens ($schemaBytes bytes), expected <= 13875",
         )
     }
 
@@ -228,17 +248,11 @@ class HexanaMcpServerSchemaTest {
         assertEquals(listOf("bindingPath"), tool.inputSchema.required)
 
         val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing planner output schema properties")
-        val importsValue = output.getValue("imports").jsonObject
-            .getValue("additionalProperties").jsonObject
-        assertTrue("results" in importsValue.getValue("properties").jsonObject)
-        assertFalse("return" in importsValue.getValue("properties").jsonObject)
-
-        val replacementExportValue = output.getValue("replacementBindings").jsonObject
-            .getValue("properties").jsonObject
-            .getValue("EXPORTS").jsonObject
-            .getValue("additionalProperties").jsonObject
-        assertTrue("results" in replacementExportValue.getValue("properties").jsonObject)
-        assertFalse("return" in replacementExportValue.getValue("properties").jsonObject)
+        assertTrue("module" in output)
+        assertTrue("imports" in output)
+        assertTrue("exports" in output)
+        assertTrue("replacementBindings" in output)
+        assertFalse(output.containsSchemaDescription())
     }
 
     @Test
@@ -249,8 +263,7 @@ class HexanaMcpServerSchemaTest {
             .tool
 
         val description = tool.description ?: error("Missing frame resolver description")
-        assertTrue(description.contains("pass it as `crashReportPath`"))
-        assertTrue(description.contains("do not synthesize placeholder frame arrays"))
+        assertTrue(description.contains("Prefer `crashReportPath`"))
 
         val input = tool.inputSchema.properties?.jsonObject ?: error("Missing frame resolver input schema")
         assertTrue(
@@ -263,22 +276,11 @@ class HexanaMcpServerSchemaTest {
         )
 
         val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing frame resolver output schema")
-        val frameProperties = output.getValue("frames").jsonObject
-            .getValue("items").jsonObject
-            .getValue("properties").jsonObject
-        val signatureProperties = frameProperties.getValue("signature").jsonObject
-            .getValue("properties").jsonObject
-
-        assertTrue("results" in signatureProperties)
-        assertTrue("return" in signatureProperties)
-        assertTrue(
-            frameProperties.getValue("sourceFallbackReason")
-                .jsonObject
-                .getValue("description")
-                .jsonPrimitive
-                .content
-                .contains("import_has_no_code_range")
-        )
+        assertFalse(output.containsSchemaDescription())
+        assertTrue("frames" in output)
+        assertTrue("crashReport" in output)
+        assertTrue("topApplicationFrame" in output)
+        assertTrue("skippedFrames" in output)
     }
 
     @Test
@@ -293,11 +295,12 @@ class HexanaMcpServerSchemaTest {
         assertEquals(listOf("configPath"), tool.inputSchema.required)
 
         val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing host adapter planner output schema properties")
-        val repairConfig = output.getValue("repair_config").jsonObject
-            .getValue("properties").jsonObject
-        assertTrue("module" in repairConfig)
-        assertTrue("imports" in repairConfig)
-        assertTrue("entrypoint" in repairConfig)
+        assertTrue("module" in output)
+        assertTrue("requiredImports" in output)
+        assertTrue("staleImports" in output)
+        assertTrue("configMismatches" in output)
+        assertTrue("repair_config" in output)
+        assertFalse(output.containsSchemaDescription())
     }
 
     @Test
@@ -308,20 +311,12 @@ class HexanaMcpServerSchemaTest {
             .tool
 
         val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing memory contract output schema")
-        val module = output.getValue("module").jsonObject
-            .getValue("properties").jsonObject
-        assertTrue("path" in module)
-        assertTrue("baselinePath" in module)
-        assertTrue("policyPath" in module)
-        assertTrue("logPath" in module)
-
+        assertTrue("module" in output)
         val memories = output.getValue("memories").jsonObject
-            .getValue("items").jsonObject
-            .getValue("properties").jsonObject
-        assertTrue("declaredLimits" in memories)
-        assertTrue("previousLimits" in memories)
-        assertTrue("policyLimits" in memories)
-        assertTrue("minimalCompatibleLimits" in memories)
+        assertEquals("array", memories.getValue("type").jsonPrimitive.content)
+        assertTrue("violations" in output)
+        assertTrue("warnings" in output)
+        assertFalse(output.containsSchemaDescription())
     }
 
     @Test
@@ -332,17 +327,12 @@ class HexanaMcpServerSchemaTest {
             .tool
 
         val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing global-state output schema")
-        val module = output.getValue("module").jsonObject
-            .getValue("properties").jsonObject
-        assertTrue("path" in module)
-        assertTrue("baselinePath" in module)
-        assertTrue("policyPath" in module)
-        assertTrue("logPath" in module)
-
+        assertTrue("module" in output)
         assertTrue("newPublicGlobals" in output)
         assertTrue("allowedPublicGlobals" in output)
         assertTrue("targetedGlobalIndices" in output)
         assertTrue("violations" in output)
+        assertFalse(output.containsSchemaDescription())
     }
 
     private fun queryArtifactsInputSchema(): JsonObject {
@@ -358,6 +348,21 @@ class HexanaMcpServerSchemaTest {
 
     private fun schemaTypes(schema: JsonObject): List<String> {
         return schema.getValue("type").jsonArray.map { it.jsonPrimitive.content }
+    }
+
+    private fun JsonObject.containsSchemaDescription(): Boolean {
+        if ("description" in this) return true
+        return values.any { value ->
+            when (value) {
+                is JsonObject -> value.containsSchemaDescription()
+                else -> {
+                    val array = value as? JsonArray
+                    array?.any { element ->
+                        (element as? JsonObject)?.containsSchemaDescription() == true
+                    } == true
+                }
+            }
+        }
     }
 
     private fun assertBefore(names: List<String>, earlier: String, later: String) {

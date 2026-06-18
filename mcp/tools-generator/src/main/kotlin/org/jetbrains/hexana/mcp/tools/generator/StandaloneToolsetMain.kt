@@ -127,7 +127,7 @@ private fun buildDefaultProperty(name: String, default: Any): PropertySpec {
 private fun renderAddToolCall(spec: ToolSpec): CodeBlock {
     val handlerMethod = spec.name.toCamelCase()
     val inputSchema = buildToolSchema(spec.input)
-    val outputSchema = buildToolSchema(spec.output)
+    val outputSchema = buildToolSchema(spec.output, includeDescriptions = false, includeNestedClasses = false)
 
     return CodeBlock.builder()
         .add(
@@ -155,13 +155,23 @@ private fun renderAddToolCall(spec: ToolSpec): CodeBlock {
  * Nested classes are inlined into the schema — the generated file is verbose
  * but self-contained.
  */
-private fun buildToolSchema(cls: ClassSpec): CodeBlock {
+private fun buildToolSchema(
+    cls: ClassSpec,
+    includeDescriptions: Boolean = true,
+    includeNestedClasses: Boolean = true,
+): CodeBlock {
     val builder = CodeBlock.builder()
     builder.add("%T(\n", TOOL_SCHEMA)
     builder.add("  properties = %M {\n", BUILD_JSON_OBJECT)
     cls.fields.forEach { field ->
         builder.add("    put(%S, ", field.schemaKey)
-        builder.add(fieldSchemaObject(field))
+        builder.add(
+            fieldSchemaObject(
+                field,
+                includeDescriptions = includeDescriptions,
+                includeNestedClasses = includeNestedClasses,
+            )
+        )
         builder.add(")\n")
     }
     builder.add("  },\n")
@@ -176,14 +186,26 @@ private fun buildToolSchema(cls: ClassSpec): CodeBlock {
 }
 
 private fun fieldSchemaObject(field: FieldSpec): CodeBlock {
-    return fieldSchemaObject(field, schemaIndent = "      ", closingIndent = "    ")
+    return fieldSchemaObject(field, includeDescriptions = true)
 }
 
-private fun fieldSchemaObject(field: FieldSpec, schemaIndent: String, closingIndent: String): CodeBlock {
+private fun fieldSchemaObject(
+    field: FieldSpec,
+    schemaIndent: String = "      ",
+    closingIndent: String = "    ",
+    includeDescriptions: Boolean,
+    includeNestedClasses: Boolean = true,
+): CodeBlock {
     val b = CodeBlock.builder()
     b.add("%M {\n", BUILD_JSON_OBJECT)
-    emitTypeSchema(field, b, indent = schemaIndent)
-    field.describe?.let {
+    emitTypeSchema(
+        field,
+        b,
+        indent = schemaIndent,
+        includeDescriptions = includeDescriptions,
+        includeNestedClasses = includeNestedClasses,
+    )
+    if (includeDescriptions) field.describe?.let {
         b.add("${schemaIndent}put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, it)
     }
     field.default?.let {
@@ -195,12 +217,24 @@ private fun fieldSchemaObject(field: FieldSpec, schemaIndent: String, closingInd
 }
 
 /** Emits the JSON Schema properties (`type`, `items`, nested `properties`/`required`) for a field. */
-private fun emitTypeSchema(field: FieldSpec, builder: CodeBlock.Builder, indent: String) {
+private fun emitTypeSchema(
+    field: FieldSpec,
+    builder: CodeBlock.Builder,
+    indent: String,
+    includeDescriptions: Boolean,
+    includeNestedClasses: Boolean,
+) {
     when (val type = field.type) {
         is FieldType.ListOf -> {
             emitJsonType(builder, indent, "array", nullable = field.nullable)
             builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
-            emitTypeSchema(type.element, builder, indent = "$indent  ")
+            emitTypeSchema(
+                type.element,
+                builder,
+                indent = "$indent  ",
+                includeDescriptions = includeDescriptions,
+                includeNestedClasses = includeNestedClasses,
+            )
             field.itemMinimum?.let {
                 builder.add("$indent  put(%S, %T(%L))\n", "minimum", JSON_PRIMITIVE, it)
             }
@@ -212,11 +246,24 @@ private fun emitTypeSchema(field: FieldSpec, builder: CodeBlock.Builder, indent:
         is FieldType.MapOf -> {
             emitJsonType(builder, indent, "object", nullable = field.nullable)
             builder.add("${indent}put(%S, %M {\n", "additionalProperties", BUILD_JSON_OBJECT)
-            emitTypeSchema(type.value, builder, indent = "$indent  ")
+            emitTypeSchema(
+                type.value,
+                builder,
+                indent = "$indent  ",
+                includeDescriptions = includeDescriptions,
+                includeNestedClasses = includeNestedClasses,
+            )
             builder.add("${indent}})\n")
         }
 
-        else -> emitTypeSchema(type, builder, indent, nullable = field.nullable)
+        else -> emitTypeSchema(
+            type,
+            builder,
+            indent,
+            nullable = field.nullable,
+            includeDescriptions = includeDescriptions,
+            includeNestedClasses = includeNestedClasses,
+        )
     }
 }
 
@@ -225,6 +272,8 @@ private fun emitTypeSchema(
     builder: CodeBlock.Builder,
     indent: String,
     nullable: Boolean = false,
+    includeDescriptions: Boolean,
+    includeNestedClasses: Boolean,
 ) {
     when (type) {
         FieldType.Int32,
@@ -244,22 +293,43 @@ private fun emitTypeSchema(
         is FieldType.ListOf -> {
             emitJsonType(builder, indent, "array", nullable)
             builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
-            emitTypeSchema(type.element, builder, indent = "$indent  ")
+            emitTypeSchema(
+                type.element,
+                builder,
+                indent = "$indent  ",
+                includeDescriptions = includeDescriptions,
+                includeNestedClasses = includeNestedClasses,
+            )
             builder.add("${indent}})\n")
         }
         is FieldType.MapOf -> {
             emitJsonType(builder, indent, "object", nullable)
             builder.add("${indent}put(%S, %M {\n", "additionalProperties", BUILD_JSON_OBJECT)
-            emitTypeSchema(type.value, builder, indent = "$indent  ")
+            emitTypeSchema(
+                type.value,
+                builder,
+                indent = "$indent  ",
+                includeDescriptions = includeDescriptions,
+                includeNestedClasses = includeNestedClasses,
+            )
             builder.add("${indent}})\n")
         }
 
         is FieldType.ClassRef -> {
             emitJsonType(builder, indent, "object", nullable)
+            if (!includeNestedClasses) return
             builder.add("${indent}put(%S, %M {\n", "properties", BUILD_JSON_OBJECT)
             type.clazz.fields.forEach { nested ->
                 builder.add("$indent  put(%S, ", nested.schemaKey)
-                builder.add(fieldSchemaObject(nested, schemaIndent = "$indent    ", closingIndent = "$indent  "))
+                builder.add(
+                    fieldSchemaObject(
+                        nested,
+                        schemaIndent = "$indent    ",
+                        closingIndent = "$indent  ",
+                        includeDescriptions = includeDescriptions,
+                        includeNestedClasses = includeNestedClasses,
+                    )
+                )
                 builder.add(")\n")
             }
             builder.add("${indent}})\n")

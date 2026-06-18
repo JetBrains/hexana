@@ -92,7 +92,7 @@ internal val RuntimeTools: List<ToolSpec> = tools {
         summary = "List required WebAssembly proposals inferred from detected module features."
         guidance = """
             Derive compact required WebAssembly proposals from the same detector used by `list_enabled_features`.
-            Each required proposal includes the source feature flag plus section, instruction, and custom-section evidence when available.
+            Includes conservative evidence when available.
         """
         input = WasmInputClass
         inputPattern = ToolInputPattern.WasmOnly
@@ -103,7 +103,7 @@ internal val RuntimeTools: List<ToolSpec> = tools {
     tool("diff_required_proposals") {
         summary = "Diff required WebAssembly proposals between a current and baseline module."
         guidance = """
-            Compare the current module against `baselinePath` and return both full required-proposal name lists plus the compact newly-required and no-longer-required subsets.
+            Compare the current module against `baselinePath` and return full plus newly/no-longer-required proposal lists.
             Prefer this over calling `list_required_proposals` twice when the request needs current-versus-baseline proposal changes.
         """
         input = ProposalDiffInputClass
@@ -115,8 +115,8 @@ internal val RuntimeTools: List<ToolSpec> = tools {
     tool("check_runtime_compatibility") {
         summary = "Check a WebAssembly module's required proposals against a conservative runtime support profile."
         guidance = """
-            Compare required proposals against a small conservative support matrix for `graalwasm`, `wasmtime`, `v8`, `node`, and `browser`.
-            Treat `unknown` as not confirmed compatible; exact runtime version parsing and external support lookups are intentionally avoided.
+            Compare required proposals with conservative `graalwasm`, `wasmtime`, `v8`, `node`, or `browser` support.
+            `unknown` is not confirmed compatible; no external support lookup is performed.
         """
         input = RuntimeCompatibilityInputClass
         inputPattern = ToolInputPattern.RuntimeCompatibility

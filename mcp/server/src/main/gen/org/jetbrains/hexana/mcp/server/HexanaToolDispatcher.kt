@@ -106,14 +106,14 @@ private fun Server.registerSummarizeModuleTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -126,7 +126,7 @@ private fun Server.registerSummarizeModuleTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -136,59 +136,27 @@ private fun Server.registerSummarizeModuleTool(handlers: HexanaToolHandlers) {
     properties = buildJsonObject {
       put("functions", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Total function count (imports + defined)."))
       })
       put("exports", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Number of exports declared by the module."))
       })
       put("memories", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Number of memories declared by the module."))
       })
       put("globals", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Number of globals declared by the module."))
       })
       put("tables", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Number of tables declared by the module."))
       })
       put("types", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Number of type entries declared by the module."))
       })
       put("imports", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("functions", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of imported functions."))
-          })
-          put("memories", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of imported memories."))
-          })
-          put("tables", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of imported tables."))
-          })
-          put("globals", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of imported globals."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("functions"))
-          add(JsonPrimitive("memories"))
-          add(JsonPrimitive("tables"))
-          add(JsonPrimitive("globals"))
-        })
-        put("description", JsonPrimitive("Import breakdown by kind."))
       })
       put("moduleSize", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Size of the module binary in bytes."))
       })
     },
     required = listOf("functions", "exports", "memories", "globals", "tables", "types", "imports", "moduleSize")
@@ -218,14 +186,14 @@ private fun Server.registerListEnabledFeaturesTool(handlers: HexanaToolHandlers)
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -238,7 +206,7 @@ private fun Server.registerListEnabledFeaturesTool(handlers: HexanaToolHandlers)
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -248,98 +216,9 @@ private fun Server.registerListEnabledFeaturesTool(handlers: HexanaToolHandlers)
     properties = buildJsonObject {
       put("features", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("referenceTypes", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when reference types are used."))
-          })
-          put("bulkMemory", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when bulk-memory sections or instructions are used."))
-          })
-          put("multiValue", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when multi-value function results are used."))
-          })
-          put("signExtension", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when sign-extension instructions are used."))
-          })
-          put("simd", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when SIMD value types or instructions are used."))
-          })
-          put("threads", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when atomic/thread instructions are used."))
-          })
-          put("memory64", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when memory64 limits are used."))
-          })
-          put("gcTypes", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when GC types, packed storage, or GC instructions are used."))
-          })
-          put("subtyping", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when type subtyping metadata is present."))
-          })
-          put("functionReferences", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when function-reference instructions such as `ref.func` or `call_ref` are used."))
-          })
-          put("extendedConst", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when extended constant-expression instructions are observed."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("referenceTypes"))
-          add(JsonPrimitive("bulkMemory"))
-          add(JsonPrimitive("multiValue"))
-          add(JsonPrimitive("signExtension"))
-          add(JsonPrimitive("simd"))
-          add(JsonPrimitive("threads"))
-          add(JsonPrimitive("memory64"))
-          add(JsonPrimitive("gcTypes"))
-          add(JsonPrimitive("subtyping"))
-          add(JsonPrimitive("functionReferences"))
-          add(JsonPrimitive("extendedConst"))
-        })
-        put("description", JsonPrimitive("Enabled or inferred WebAssembly feature flags."))
       })
       put("sources", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("sections", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Sections that contributed feature evidence."))
-          })
-          put("instructions", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Instructions that contributed feature evidence."))
-          })
-          put("customSections", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Feature-related custom sections found in the module."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("sections"))
-          add(JsonPrimitive("instructions"))
-          add(JsonPrimitive("customSections"))
-        })
-        put("description", JsonPrimitive("Evidence sources for enabled features."))
       })
     },
     required = listOf("features", "sources")
@@ -370,14 +249,14 @@ private fun Server.registerGetEntrypointPolicyTool(handlers: HexanaToolHandlers)
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -390,7 +269,7 @@ private fun Server.registerGetEntrypointPolicyTool(handlers: HexanaToolHandlers)
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -400,111 +279,21 @@ private fun Server.registerGetEntrypointPolicyTool(handlers: HexanaToolHandlers)
     properties = buildJsonObject {
       put("policy_id", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Entrypoint host-call policy identifier."))
       })
       put("module", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Module path label echoed from the tool input path."))
       })
       put("direct_host_entrypoints", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("export", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Export name of the local entrypoint."))
-            })
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Unified function index of the exported local function."))
-            })
-            put("signature", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Exported function parameter types."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Exported function result types."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-              })
-              put("description", JsonPrimitive("Exported entrypoint function signature."))
-            })
-            put("called_imports", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("module", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Imported module name."))
-                  })
-                  put("name", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Imported field name."))
-                  })
-                  put("signature", buildJsonObject {
-                    put("type", JsonPrimitive("object"))
-                    put("properties", buildJsonObject {
-                      put("params", buildJsonObject {
-                        put("type", JsonPrimitive("array"))
-                        put("items", buildJsonObject {
-                          put("type", JsonPrimitive("string"))
-                        })
-                        put("description", JsonPrimitive("Imported function parameter types."))
-                      })
-                      put("return", buildJsonObject {
-                        put("type", JsonPrimitive("array"))
-                        put("items", buildJsonObject {
-                          put("type", JsonPrimitive("string"))
-                        })
-                        put("description", JsonPrimitive("Imported function return types."))
-                      })
-                    })
-                    put("required", buildJsonArray {
-                      add(JsonPrimitive("params"))
-                      add(JsonPrimitive("return"))
-                    })
-                    put("description", JsonPrimitive("Imported function signature."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("module"))
-                  add(JsonPrimitive("name"))
-                  add(JsonPrimitive("signature"))
-                })
-              })
-              put("description", JsonPrimitive("Unique imports directly called by this entrypoint body, sorted by module then name."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("export"))
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("signature"))
-            add(JsonPrimitive("called_imports"))
-          })
         })
-        put("description", JsonPrimitive("Policy-ready entries for exported local functions whose own body directly calls imported functions."))
       })
       put("excluded_transitive_exports", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Exports that reach imported functions only through local helper calls and should stay out of the direct policy."))
       })
     },
     required = listOf("policy_id", "module", "direct_host_entrypoints", "excluded_transitive_exports")
@@ -525,7 +314,7 @@ private fun Server.registerListRequiredProposalsTool(handlers: HexanaToolHandler
     description = """
   |List required WebAssembly proposals inferred from detected module features.
   |Derive compact required WebAssembly proposals from the same detector used by `list_enabled_features`.
-  |Each required proposal includes the source feature flag plus section, instruction, and custom-section evidence when available.
+  |Includes conservative evidence when available.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -534,14 +323,14 @@ private fun Server.registerListRequiredProposalsTool(handlers: HexanaToolHandler
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -554,7 +343,7 @@ private fun Server.registerListRequiredProposalsTool(handlers: HexanaToolHandler
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -566,89 +355,10 @@ private fun Server.registerListRequiredProposalsTool(handlers: HexanaToolHandler
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("proposal", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("WebAssembly proposal name."))
-            })
-            put("required", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the proposal is required by detected module features."))
-            })
-            put("evidence", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("featureFlag", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Enabled feature flag that required the proposal."))
-                })
-                put("sections", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Module sections that contributed evidence for the proposal."))
-                })
-                put("instructions", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Instructions that contributed evidence for the proposal."))
-                })
-                put("customSections", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Feature-related custom sections found in the module."))
-                })
-                put("notes", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Short conservative interpretation notes for the evidence."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("featureFlag"))
-                add(JsonPrimitive("sections"))
-                add(JsonPrimitive("instructions"))
-                add(JsonPrimitive("customSections"))
-                add(JsonPrimitive("notes"))
-              })
-              put("description", JsonPrimitive("Evidence that made the proposal required."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("proposal"))
-            add(JsonPrimitive("required"))
-            add(JsonPrimitive("evidence"))
-          })
         })
-        put("description", JsonPrimitive("Required WebAssembly proposals with evidence."))
       })
       put("summary", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("requiredCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of required proposals."))
-          })
-          put("proposals", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Required proposal names."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("requiredCount"))
-          add(JsonPrimitive("proposals"))
-        })
-        put("description", JsonPrimitive("Compact proposal count and name summary."))
       })
     },
     required = listOf("proposals", "summary")
@@ -668,7 +378,7 @@ private fun Server.registerDiffRequiredProposalsTool(handlers: HexanaToolHandler
     name = "diff_required_proposals",
     description = """
   |Diff required WebAssembly proposals between a current and baseline module.
-  |Compare the current module against `baselinePath` and return both full required-proposal name lists plus the compact newly-required and no-longer-required subsets.
+  |Compare the current module against `baselinePath` and return full plus newly/no-longer-required proposal lists.
   |Prefer this over calling `list_required_proposals` twice when the request needs current-versus-baseline proposal changes.
   """.trimMargin(),
     inputSchema = ToolSchema(
@@ -678,14 +388,14 @@ private fun Server.registerDiffRequiredProposalsTool(handlers: HexanaToolHandler
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -698,7 +408,7 @@ private fun Server.registerDiffRequiredProposalsTool(handlers: HexanaToolHandler
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("baselinePath", buildJsonObject {
@@ -715,204 +425,51 @@ private fun Server.registerDiffRequiredProposalsTool(handlers: HexanaToolHandler
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Input path label for the current module when the caller provided `path`."))
       })
       put("baselinePath", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Input path label for the baseline module."))
       })
       put("currentRequiredProposals", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Required proposal names for the current module."))
       })
       put("baselineRequiredProposals", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Required proposal names for the baseline module."))
       })
       put("newlyRequiredProposals", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Proposals required by the current module but not the baseline."))
       })
       put("noLongerRequiredProposals", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Proposals required by the baseline but not the current module."))
       })
       put("newlyRequiredEvidence", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("proposal", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("WebAssembly proposal name."))
-            })
-            put("required", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the proposal is required by detected module features."))
-            })
-            put("evidence", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("featureFlag", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Enabled feature flag that required the proposal."))
-                })
-                put("sections", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Module sections that contributed evidence for the proposal."))
-                })
-                put("instructions", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Instructions that contributed evidence for the proposal."))
-                })
-                put("customSections", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Feature-related custom sections found in the module."))
-                })
-                put("notes", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Short conservative interpretation notes for the evidence."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("featureFlag"))
-                add(JsonPrimitive("sections"))
-                add(JsonPrimitive("instructions"))
-                add(JsonPrimitive("customSections"))
-                add(JsonPrimitive("notes"))
-              })
-              put("description", JsonPrimitive("Evidence that made the proposal required."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("proposal"))
-            add(JsonPrimitive("required"))
-            add(JsonPrimitive("evidence"))
-          })
         })
-        put("description", JsonPrimitive("Evidence for proposals that became newly required in the current module."))
       })
       put("noLongerRequiredEvidence", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("proposal", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("WebAssembly proposal name."))
-            })
-            put("required", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the proposal is required by detected module features."))
-            })
-            put("evidence", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("featureFlag", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Enabled feature flag that required the proposal."))
-                })
-                put("sections", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Module sections that contributed evidence for the proposal."))
-                })
-                put("instructions", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Instructions that contributed evidence for the proposal."))
-                })
-                put("customSections", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Feature-related custom sections found in the module."))
-                })
-                put("notes", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Short conservative interpretation notes for the evidence."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("featureFlag"))
-                add(JsonPrimitive("sections"))
-                add(JsonPrimitive("instructions"))
-                add(JsonPrimitive("customSections"))
-                add(JsonPrimitive("notes"))
-              })
-              put("description", JsonPrimitive("Evidence that made the proposal required."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("proposal"))
-            add(JsonPrimitive("required"))
-            add(JsonPrimitive("evidence"))
-          })
         })
-        put("description", JsonPrimitive("Evidence for proposals that are no longer required in the current module."))
       })
       put("summary", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("currentRequiredCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of required proposals in the current module."))
-          })
-          put("baselineRequiredCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of required proposals in the baseline module."))
-          })
-          put("newlyRequiredCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of proposals newly required by the current module."))
-          })
-          put("noLongerRequiredCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of proposals that were required only by the baseline module."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("currentRequiredCount"))
-          add(JsonPrimitive("baselineRequiredCount"))
-          add(JsonPrimitive("newlyRequiredCount"))
-          add(JsonPrimitive("noLongerRequiredCount"))
-        })
-        put("description", JsonPrimitive("Compact proposal-diff counts."))
       })
     },
     required = listOf("currentRequiredProposals", "baselineRequiredProposals", "newlyRequiredProposals", "noLongerRequiredProposals", "newlyRequiredEvidence", "noLongerRequiredEvidence", "summary")
@@ -932,8 +489,8 @@ private fun Server.registerCheckRuntimeCompatibilityTool(handlers: HexanaToolHan
     name = "check_runtime_compatibility",
     description = """
   |Check a WebAssembly module's required proposals against a conservative runtime support profile.
-  |Compare required proposals against a small conservative support matrix for `graalwasm`, `wasmtime`, `v8`, `node`, and `browser`.
-  |Treat `unknown` as not confirmed compatible; exact runtime version parsing and external support lookups are intentionally avoided.
+  |Compare required proposals with conservative `graalwasm`, `wasmtime`, `v8`, `node`, or `browser` support.
+  |`unknown` is not confirmed compatible; no external support lookup is performed.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -942,14 +499,14 @@ private fun Server.registerCheckRuntimeCompatibilityTool(handlers: HexanaToolHan
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -962,7 +519,7 @@ private fun Server.registerCheckRuntimeCompatibilityTool(handlers: HexanaToolHan
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("runtime", buildJsonObject {
@@ -983,185 +540,51 @@ private fun Server.registerCheckRuntimeCompatibilityTool(handlers: HexanaToolHan
     properties = buildJsonObject {
       put("runtime", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Normalized runtime name."))
       })
       put("version", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Optional caller-provided runtime version."))
       })
       put("compatible", buildJsonObject {
         put("type", JsonPrimitive("boolean"))
-        put("description", JsonPrimitive("True only when every required proposal is marked `supported`."))
       })
       put("requiredProposals", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Required proposal names."))
       })
       put("unsupportedProposals", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Required proposals marked `unsupported` for the runtime."))
       })
       put("unknownProposals", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Required proposals with unknown, version-gated, or environment-gated support."))
       })
       put("proposalStatuses", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("proposal", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Required WebAssembly proposal name."))
-            })
-            put("status", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Compatibility status: `supported`, `unsupported`, or `unknown`."))
-            })
-            put("note", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Conservative runtime-support note for this proposal."))
-            })
-            put("evidence", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("featureFlag", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Enabled feature flag that required the proposal."))
-                })
-                put("sections", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Module sections that contributed evidence for the proposal."))
-                })
-                put("instructions", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Instructions that contributed evidence for the proposal."))
-                })
-                put("customSections", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Feature-related custom sections found in the module."))
-                })
-                put("notes", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Short conservative interpretation notes for the evidence."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("featureFlag"))
-                add(JsonPrimitive("sections"))
-                add(JsonPrimitive("instructions"))
-                add(JsonPrimitive("customSections"))
-                add(JsonPrimitive("notes"))
-              })
-              put("description", JsonPrimitive("Evidence that made the proposal required."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("proposal"))
-            add(JsonPrimitive("status"))
-            add(JsonPrimitive("note"))
-            add(JsonPrimitive("evidence"))
-          })
         })
-        put("description", JsonPrimitive("Per-required-proposal runtime support status and evidence."))
       })
       put("evidence", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("proposal", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("WebAssembly proposal name."))
-            })
-            put("required", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the proposal is required by detected module features."))
-            })
-            put("evidence", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("featureFlag", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Enabled feature flag that required the proposal."))
-                })
-                put("sections", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Module sections that contributed evidence for the proposal."))
-                })
-                put("instructions", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Instructions that contributed evidence for the proposal."))
-                })
-                put("customSections", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Feature-related custom sections found in the module."))
-                })
-                put("notes", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Short conservative interpretation notes for the evidence."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("featureFlag"))
-                add(JsonPrimitive("sections"))
-                add(JsonPrimitive("instructions"))
-                add(JsonPrimitive("customSections"))
-                add(JsonPrimitive("notes"))
-              })
-              put("description", JsonPrimitive("Evidence that made the proposal required."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("proposal"))
-            add(JsonPrimitive("required"))
-            add(JsonPrimitive("evidence"))
-          })
         })
-        put("description", JsonPrimitive("Required proposal evidence reused for compatibility reasoning."))
       })
       put("notes", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Top-level conservative compatibility notes."))
       })
     },
     required = listOf("runtime", "compatible", "requiredProposals", "unsupportedProposals", "unknownProposals", "proposalStatuses", "evidence", "notes")
@@ -1182,8 +605,7 @@ private fun Server.registerListComponentSurfaceTool(handlers: HexanaToolHandlers
     description = """
   |Inspect WebAssembly component imports and exports with WIT-style names and runtime-import flags.
   |Use this for compact component-model surface inspection before dependency or compatibility reasoning.
-  |This is an inspection lookup only; it does not select provider files or compute compatibility verdicts.
-  |Imports and exports include base names, versions, sort or extern descriptions when available, and known runtime-provided imports.
+  |It does not select provider files or compute compatibility verdicts.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -1192,14 +614,14 @@ private fun Server.registerListComponentSurfaceTool(handlers: HexanaToolHandlers
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -1212,7 +634,7 @@ private fun Server.registerListComponentSurfaceTool(handlers: HexanaToolHandlers
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -1225,129 +647,24 @@ private fun Server.registerListComponentSurfaceTool(handlers: HexanaToolHandlers
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Input path label when the caller provided `path`."))
       })
       put("isComponent", buildJsonObject {
         put("type", JsonPrimitive("boolean"))
-        put("description", JsonPrimitive("True when the input parsed as a WebAssembly component."))
       })
       put("imports", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("name", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Full WIT/component name, including version when present."))
-            })
-            put("baseName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Name without the version suffix."))
-            })
-            put("version", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Version suffix without `@`, or empty when absent."))
-            })
-            put("sort", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Component sort/index label for exports when available."))
-            })
-            put("externDescription", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Compact component extern description when available."))
-            })
-            put("runtimeProvided", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when this import is provided by a known runtime namespace."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("name"))
-            add(JsonPrimitive("baseName"))
-            add(JsonPrimitive("version"))
-            add(JsonPrimitive("runtimeProvided"))
-          })
         })
-        put("description", JsonPrimitive("Component import surface."))
       })
       put("exports", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("name", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Full WIT/component name, including version when present."))
-            })
-            put("baseName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Name without the version suffix."))
-            })
-            put("version", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Version suffix without `@`, or empty when absent."))
-            })
-            put("sort", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Component sort/index label for exports when available."))
-            })
-            put("externDescription", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Compact component extern description when available."))
-            })
-            put("runtimeProvided", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when this import is provided by a known runtime namespace."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("name"))
-            add(JsonPrimitive("baseName"))
-            add(JsonPrimitive("version"))
-            add(JsonPrimitive("runtimeProvided"))
-          })
         })
-        put("description", JsonPrimitive("Component export surface."))
       })
       put("summary", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("importCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Total component import count before response truncation."))
-          })
-          put("exportCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Total component export count before response truncation."))
-          })
-          put("nonRuntimeImportCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Imports that require component dependencies."))
-          })
-          put("runtimeImportCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Imports supplied by known runtime namespaces."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("importCount"))
-          add(JsonPrimitive("exportCount"))
-          add(JsonPrimitive("nonRuntimeImportCount"))
-          add(JsonPrimitive("runtimeImportCount"))
-        })
-        put("description", JsonPrimitive("Compact surface counts."))
       })
     },
     required = listOf("isComponent", "imports", "exports", "summary")
@@ -1367,9 +684,8 @@ private fun Server.registerResolveComponentDependenciesTool(handlers: HexanaTool
     name = "resolve_component_dependencies",
     description = """
   |Resolve direct and transitive component dependencies from scan roots and project roots.
-  |Search `scanRoots`, `projectRoot`, and the input component directory for `.wasm` components whose exports satisfy non-runtime imports.
-  |The result separates direct and transitive dependencies, required non-runtime imports, ignored runtime imports, unresolved imports, rejected candidates, and ambiguous provider candidates.
-  |Use this aggregate dependency-resolution workflow when provider files may need to be discovered rather than supplied explicitly.
+  |Search `scanRoots`, `projectRoot`, and the input component directory for component providers of non-runtime imports.
+  |Use this aggregate dependency-resolution workflow when provider files must be discovered.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -1378,14 +694,14 @@ private fun Server.registerResolveComponentDependenciesTool(handlers: HexanaTool
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -1398,7 +714,7 @@ private fun Server.registerResolveComponentDependenciesTool(handlers: HexanaTool
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("projectRoot", buildJsonObject {
@@ -1429,353 +745,63 @@ private fun Server.registerResolveComponentDependenciesTool(handlers: HexanaTool
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Input path label when the caller provided `path`."))
       })
       put("scanRoots", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Directory roots used for bounded component scanning."))
       })
       put("requiredNonRuntimeImports", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("importName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Required import name."))
-            })
-            put("baseName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Required import base name without version."))
-            })
-            put("version", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Required import version without `@`, or empty when absent."))
-            })
-            put("classification", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Dependency classification: `direct` or `transitive`."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("importName"))
-            add(JsonPrimitive("baseName"))
-            add(JsonPrimitive("version"))
-            add(JsonPrimitive("classification"))
-          })
         })
-        put("description", JsonPrimitive("Non-runtime imports required by the root component or resolved dependencies."))
       })
       put("ignoredRuntimeImports", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("importName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Ignored runtime import name."))
-            })
-            put("baseName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Ignored runtime import base name without version."))
-            })
-            put("version", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Ignored runtime import version without `@`, or empty when absent."))
-            })
-            put("classification", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Import classification: `direct` or `transitive`."))
-            })
-            put("reason", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Concise reason the import was ignored for dependency resolution."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("importName"))
-            add(JsonPrimitive("baseName"))
-            add(JsonPrimitive("version"))
-            add(JsonPrimitive("classification"))
-            add(JsonPrimitive("reason"))
-          })
         })
-        put("description", JsonPrimitive("Runtime-provided imports ignored during dependency resolution."))
       })
       put("resolvedDependencyPaths", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("importName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Required import name resolved by the dependency file."))
-            })
-            put("dependencyPath", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Dependency file that provided the import."))
-            })
-            put("classification", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Dependency classification: `direct` or `transitive`."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("importName"))
-            add(JsonPrimitive("dependencyPath"))
-            add(JsonPrimitive("classification"))
-          })
         })
-        put("description", JsonPrimitive("Resolved dependency files with direct/transitive classification."))
       })
       put("directDependencies", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("importName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Required import name."))
-            })
-            put("importBaseName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Required import base name without version."))
-            })
-            put("importVersion", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Required import version without `@`, or empty when absent."))
-            })
-            put("dependencyPath", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Component file that provides a matching export."))
-            })
-            put("exportName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Matched export name."))
-            })
-            put("exportVersion", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Matched export version without `@`, or empty when absent."))
-            })
-            put("exactVersionMatch", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when versions are absent or equal."))
-            })
-            put("transitive", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the dependency was required by another resolved dependency."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("importName"))
-            add(JsonPrimitive("importBaseName"))
-            add(JsonPrimitive("importVersion"))
-            add(JsonPrimitive("dependencyPath"))
-            add(JsonPrimitive("exportName"))
-            add(JsonPrimitive("exportVersion"))
-            add(JsonPrimitive("exactVersionMatch"))
-            add(JsonPrimitive("transitive"))
-          })
         })
-        put("description", JsonPrimitive("Resolved direct dependencies."))
       })
       put("transitiveDependencies", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("importName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Required import name."))
-            })
-            put("importBaseName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Required import base name without version."))
-            })
-            put("importVersion", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Required import version without `@`, or empty when absent."))
-            })
-            put("dependencyPath", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Component file that provides a matching export."))
-            })
-            put("exportName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Matched export name."))
-            })
-            put("exportVersion", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Matched export version without `@`, or empty when absent."))
-            })
-            put("exactVersionMatch", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when versions are absent or equal."))
-            })
-            put("transitive", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the dependency was required by another resolved dependency."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("importName"))
-            add(JsonPrimitive("importBaseName"))
-            add(JsonPrimitive("importVersion"))
-            add(JsonPrimitive("dependencyPath"))
-            add(JsonPrimitive("exportName"))
-            add(JsonPrimitive("exportVersion"))
-            add(JsonPrimitive("exactVersionMatch"))
-            add(JsonPrimitive("transitive"))
-          })
         })
-        put("description", JsonPrimitive("Resolved transitive dependencies."))
       })
       put("unresolvedImports", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("importName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Unresolved import name."))
-            })
-            put("baseName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Unresolved import base name without version."))
-            })
-            put("version", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Unresolved import version without `@`, or empty when absent."))
-            })
-            put("runtimeProvided", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the import is known to be runtime-provided."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("importName"))
-            add(JsonPrimitive("baseName"))
-            add(JsonPrimitive("version"))
-            add(JsonPrimitive("runtimeProvided"))
-          })
         })
-        put("description", JsonPrimitive("Non-runtime imports without a provider."))
       })
       put("candidateConflicts", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("importName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Import name with more than one matching candidate."))
-            })
-            put("baseName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Import base name used for matching."))
-            })
-            put("candidatePaths", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Candidate component files, capped for compactness."))
-            })
-            put("reason", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Short conflict reason."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("importName"))
-            add(JsonPrimitive("baseName"))
-            add(JsonPrimitive("candidatePaths"))
-            add(JsonPrimitive("reason"))
-          })
         })
-        put("description", JsonPrimitive("Ambiguous provider candidates."))
       })
       put("rejectedCandidates", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("candidatePath", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Scanned candidate file that was not selected as a dependency."))
-            })
-            put("reason", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Concise rejection reason."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("candidatePath"))
-            add(JsonPrimitive("reason"))
-          })
         })
-        put("description", JsonPrimitive("Scanned candidates rejected from the resolved dependency set."))
       })
       put("summary", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("directRequiredImportCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Direct non-runtime imports required by the root component."))
-          })
-          put("transitiveRequiredImportCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Non-runtime imports required only by resolved dependencies."))
-          })
-          put("ignoredRuntimeImportCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Runtime-provided imports ignored for dependency resolution."))
-          })
-          put("directResolvedCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Direct dependency matches."))
-          })
-          put("transitiveResolvedCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Transitive dependency matches."))
-          })
-          put("unresolvedCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Unresolved non-runtime imports."))
-          })
-          put("ambiguousCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Imports with multiple candidate providers."))
-          })
-          put("rejectedCandidateCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Scanned candidates rejected from the resolved dependency set."))
-          })
-          put("scannedFileCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of `.wasm` files inspected."))
-          })
-          put("truncated", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when bounded scanning stopped before exhausting all files."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("directRequiredImportCount"))
-          add(JsonPrimitive("transitiveRequiredImportCount"))
-          add(JsonPrimitive("ignoredRuntimeImportCount"))
-          add(JsonPrimitive("directResolvedCount"))
-          add(JsonPrimitive("transitiveResolvedCount"))
-          add(JsonPrimitive("unresolvedCount"))
-          add(JsonPrimitive("ambiguousCount"))
-          add(JsonPrimitive("rejectedCandidateCount"))
-          add(JsonPrimitive("scannedFileCount"))
-          add(JsonPrimitive("truncated"))
-        })
-        put("description", JsonPrimitive("Compact dependency-resolution counts."))
       })
     },
     required = listOf("scanRoots", "requiredNonRuntimeImports", "ignoredRuntimeImports", "resolvedDependencyPaths", "directDependencies", "transitiveDependencies", "unresolvedImports", "candidateConflicts", "rejectedCandidates", "summary")
@@ -1796,9 +822,8 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
     description = """
   |Compute component-provider compatibility verdicts against explicit or resolved dependency exports.
   |Compare non-runtime imports with `dependencyPaths` or with providers discovered from `projectRoot`.
-  |Reports matched provider files, missing imports, version drift, ambiguous providers, and extern-description or sort mismatches when available.
-  |Optional `previousPath` and `dependencyLockPath` add import-drift context, configured providers, candidate verdicts, selected incompatibility reason, involved provider paths, and a minimal lock/config fix.
-  |Use this aggregate compatibility workflow when you need provider verdicts and remediation context rather than raw component surface listings.
+  |Reports matches, missing imports, version drift, ambiguity, and shape mismatches.
+  |Optional `previousPath` and `dependencyLockPath` add drift and minimal lock/config fix context.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -1807,14 +832,14 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -1827,7 +852,7 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("dependencyPaths", buildJsonObject {
@@ -1872,395 +897,84 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Input path label when the caller provided `path`."))
       })
       put("previousPath", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Previous component path label when provided."))
       })
       put("dependencyLockPath", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Dependency lock/config path label when provided."))
       })
       put("compatible", buildJsonObject {
         put("type", JsonPrimitive("boolean"))
-        put("description", JsonPrimitive("True when no compatibility errors were found."))
       })
       put("matches", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("importName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Required import name."))
-            })
-            put("dependencyPath", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Dependency file that provided the import."))
-            })
-            put("exportName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Matched export name."))
-            })
-            put("exactVersionMatch", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when versions are absent or equal."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("importName"))
-            add(JsonPrimitive("dependencyPath"))
-            add(JsonPrimitive("exportName"))
-            add(JsonPrimitive("exactVersionMatch"))
-          })
         })
-        put("description", JsonPrimitive("Matched imports and provider files."))
       })
       put("missingImports", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("importName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Unresolved import name."))
-            })
-            put("baseName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Unresolved import base name without version."))
-            })
-            put("version", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Unresolved import version without `@`, or empty when absent."))
-            })
-            put("runtimeProvided", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the import is known to be runtime-provided."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("importName"))
-            add(JsonPrimitive("baseName"))
-            add(JsonPrimitive("version"))
-            add(JsonPrimitive("runtimeProvided"))
-          })
         })
-        put("description", JsonPrimitive("Required imports without a provider."))
       })
       put("issues", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("importName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Import involved in the compatibility issue."))
-            })
-            put("dependencyPath", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Dependency file involved, when there is one."))
-            })
-            put("severity", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Issue severity: `error` or `warning`."))
-            })
-            put("reason", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Stable reason such as `missing_import`, `version_drift`, or `ambiguous_provider`."))
-            })
-            put("expected", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Expected version or extern description when available."))
-            })
-            put("actual", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Actual version, provider list, or extern description when available."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("importName"))
-            add(JsonPrimitive("severity"))
-            add(JsonPrimitive("reason"))
-          })
         })
-        put("description", JsonPrimitive("Compatibility issues and warnings."))
       })
       put("failingImport", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("object"))
           add(JsonPrimitive("null"))
         })
-        put("properties", buildJsonObject {
-          put("importName", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Current import selected as the root compatibility failure."))
-          })
-          put("baseName", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Current import base name without version."))
-          })
-          put("requiredVersion", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Current required version without `@`, or empty when absent."))
-          })
-          put("sort", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Expected provider export sort inferred from the import shape when available."))
-          })
-          put("externDescription", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Current import extern description when available."))
-          })
-          put("previousImportName", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Previous import name for the same base interface when available."))
-          })
-          put("previousBaseName", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Previous import base name when available."))
-          })
-          put("previousVersion", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Previous import version without `@` when available."))
-          })
-          put("changedSincePrevious", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when the current import differs from the previous component import."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("importName"))
-          add(JsonPrimitive("baseName"))
-          add(JsonPrimitive("requiredVersion"))
-          add(JsonPrimitive("changedSincePrevious"))
-        })
-        put("description", JsonPrimitive("Selected root failing import with previous-build drift context."))
       })
       put("configuredProviders", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("interfaceName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Provider interface/base name from dependency metadata."))
-            })
-            put("version", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Configured provider version without `@`, or empty when absent."))
-            })
-            put("path", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Configured provider path from dependency metadata."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("interfaceName"))
-            add(JsonPrimitive("version"))
-            add(JsonPrimitive("path"))
-          })
         })
-        put("description", JsonPrimitive("Provider entries read from optional dependency metadata."))
       })
       put("candidateProviders", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("dependencyPath", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Scanned provider component file."))
-            })
-            put("exportName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Provider export name."))
-            })
-            put("baseName", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Provider export base name without version."))
-            })
-            put("version", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Provider export version without `@`, or empty when absent."))
-            })
-            put("sort", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Provider export sort label."))
-            })
-            put("externDescription", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Provider export extern description when available."))
-            })
-            put("verdict", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Provider verdict: `compatible`, `version_drift`, `sort_mismatch`, `extern_description_mismatch`, or `wrong_interface`."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("dependencyPath"))
-            add(JsonPrimitive("exportName"))
-            add(JsonPrimitive("baseName"))
-            add(JsonPrimitive("version"))
-            add(JsonPrimitive("sort"))
-            add(JsonPrimitive("verdict"))
-          })
         })
-        put("description", JsonPrimitive("Provider candidates inspected with compatibility verdicts."))
       })
       put("selectedIncompatibilityReason", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Selected root incompatibility reason when one is present."))
       })
       put("providerPathsInvolved", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Provider paths relevant to the selected fix."))
       })
       put("minimalDependencyLockFix", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("object"))
           add(JsonPrimitive("null"))
         })
-        put("properties", buildJsonObject {
-          put("dependencyLockPath", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Dependency lock/config path to update when provided."))
-          })
-          put("replaceProviderPath", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Configured provider path that should be replaced when known."))
-          })
-          put("requiredInterface", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Required provider interface/base name."))
-          })
-          put("requiredVersion", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Required provider version without `@`, or empty when absent."))
-          })
-          put("requiredShape", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Required provider export shape."))
-          })
-          put("rejectProviderPath", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Candidate provider path that has the wrong version or shape when known."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("requiredInterface"))
-          add(JsonPrimitive("requiredVersion"))
-          add(JsonPrimitive("requiredShape"))
-        })
-        put("description", JsonPrimitive("Minimal dependency lock/config fix when enough context is available."))
       })
       put("recommendation", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Concise production-oriented remediation recommendation when available."))
       })
       put("summary", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("compatible", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when no compatibility errors were found."))
-          })
-          put("matchedCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of matched imports."))
-          })
-          put("missingCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of missing imports."))
-          })
-          put("versionDriftCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of matches with version drift."))
-          })
-          put("sortMismatchCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of providers with sort or shape mismatches."))
-          })
-          put("wrongInterfaceCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of scanned providers exporting unrelated interfaces."))
-          })
-          put("ambiguousCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of imports with ambiguous providers."))
-          })
-          put("incompatibleDescriptionCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of incompatible extern-description matches."))
-          })
-          put("candidateProviderCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of candidate provider exports inspected."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("compatible"))
-          add(JsonPrimitive("matchedCount"))
-          add(JsonPrimitive("missingCount"))
-          add(JsonPrimitive("versionDriftCount"))
-          add(JsonPrimitive("sortMismatchCount"))
-          add(JsonPrimitive("wrongInterfaceCount"))
-          add(JsonPrimitive("ambiguousCount"))
-          add(JsonPrimitive("incompatibleDescriptionCount"))
-          add(JsonPrimitive("candidateProviderCount"))
-        })
-        put("description", JsonPrimitive("Compact compatibility counts."))
       })
     },
     required = listOf("compatible", "matches", "missingImports", "issues", "configuredProviders", "candidateProviders", "providerPathsInvolved", "summary")
@@ -2292,14 +1006,14 @@ private fun Server.registerPlanAbiBindingRegenerationTool(handlers: HexanaToolHa
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -2312,7 +1026,7 @@ private fun Server.registerPlanAbiBindingRegenerationTool(handlers: HexanaToolHa
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("bindingPath", buildJsonObject {
@@ -2327,291 +1041,45 @@ private fun Server.registerPlanAbiBindingRegenerationTool(handlers: HexanaToolHa
     properties = buildJsonObject {
       put("module", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("path", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Exact current WebAssembly module path echoed from input `path`, when available."))
-          })
-          put("bindingPath", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Exact stale binding file path echoed from input `bindingPath`, when available."))
-          })
-          put("staleModule", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("MODULE value parsed from the stale binding file."))
-          })
-          put("replacementModule", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("MODULE value used in regenerated bindings."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("replacementModule"))
-        })
-        put("description", JsonPrimitive("Module and binding file identity."))
       })
       put("imports", buildJsonObject {
         put("type", JsonPrimitive("object"))
         put("additionalProperties", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("params", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Parameter value types."))
-            })
-            put("results", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Result value types."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("params"))
-            add(JsonPrimitive("results"))
-          })
         })
-        put("description", JsonPrimitive("Current WebAssembly function import signature map keyed by qualified import name in stable sorted order."))
       })
       put("exports", buildJsonObject {
         put("type", JsonPrimitive("object"))
         put("additionalProperties", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("params", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Parameter value types."))
-            })
-            put("results", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Result value types."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("params"))
-            add(JsonPrimitive("results"))
-          })
         })
-        put("description", JsonPrimitive("Current WebAssembly function export signature map keyed by export name in stable sorted order."))
       })
       put("staleImports", buildJsonObject {
         put("type", JsonPrimitive("object"))
         put("additionalProperties", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("params", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Parameter value types."))
-            })
-            put("results", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Result value types."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("params"))
-            add(JsonPrimitive("results"))
-          })
         })
-        put("description", JsonPrimitive("Stale binding IMPORTS signature map parsed from `bindingPath` in stable sorted order."))
       })
       put("staleExports", buildJsonObject {
         put("type", JsonPrimitive("object"))
         put("additionalProperties", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("params", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Parameter value types."))
-            })
-            put("results", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Result value types."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("params"))
-            add(JsonPrimitive("results"))
-          })
         })
-        put("description", JsonPrimitive("Stale binding EXPORTS signature map parsed from `bindingPath` in stable sorted order."))
       })
       put("bindingMismatches", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("symbol", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Binding symbol prefixed with `IMPORTS.` or `EXPORTS.`."))
-            })
-            put("expected", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter value types."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Result value types."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-              })
-              put("description", JsonPrimitive("Current WebAssembly signature, or null when a stale binding should be removed."))
-            })
-            put("actual", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter value types."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Result value types."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-              })
-              put("description", JsonPrimitive("Stale binding signature, or null when the binding is missing."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("symbol"))
-          })
         })
-        put("description", JsonPrimitive("Binding mismatches in stable symbol order using `expected` for current WebAssembly and `actual` for stale bindings."))
       })
       put("replacementBindings", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("MODULE", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("MODULE value for regenerated bindings."))
-          })
-          put("IMPORTS", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("additionalProperties", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter value types."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Result value types."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-              })
-            })
-            put("description", JsonPrimitive("Regenerated IMPORTS signature map keyed by qualified import name."))
-          })
-          put("EXPORTS", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("additionalProperties", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter value types."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Result value types."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-              })
-            })
-            put("description", JsonPrimitive("Regenerated EXPORTS signature map keyed by export name."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("MODULE"))
-          add(JsonPrimitive("IMPORTS"))
-          add(JsonPrimitive("EXPORTS"))
-        })
-        put("description", JsonPrimitive("Drop-in replacement binding maps derived from the current WebAssembly ABI."))
       })
       put("warnings", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Non-fatal binding parse warnings."))
       })
     },
     required = listOf("module", "imports", "exports", "staleImports", "staleExports", "bindingMismatches", "replacementBindings", "warnings")
@@ -2643,14 +1111,14 @@ private fun Server.registerRepairHostAdapterConfigTool(handlers: HexanaToolHandl
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -2663,7 +1131,7 @@ private fun Server.registerRepairHostAdapterConfigTool(handlers: HexanaToolHandl
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("configPath", buildJsonObject {
@@ -2678,268 +1146,51 @@ private fun Server.registerRepairHostAdapterConfigTool(handlers: HexanaToolHandl
     properties = buildJsonObject {
       put("module", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("path", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Exact current WebAssembly module path echoed from input `path`, when available."))
-          })
-          put("configPath", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Exact stale host adapter config path echoed from input `configPath`, when available."))
-          })
-          put("staleModule", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Module value parsed from the stale host adapter config."))
-          })
-          put("repairModule", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Module value used in the minimal repair config."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("repairModule"))
-        })
-        put("description", JsonPrimitive("Module and config file identity."))
       })
       put("requiredImports", buildJsonObject {
         put("type", JsonPrimitive("object"))
         put("additionalProperties", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("params", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Function parameter value types."))
-            })
-            put("results", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Function result value types."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("params"))
-            add(JsonPrimitive("results"))
-          })
         })
-        put("description", JsonPrimitive("Current WebAssembly function import signature map keyed by qualified import name in stable sorted order."))
       })
       put("requiredEntrypoint", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("object"))
           add(JsonPrimitive("null"))
         })
-        put("properties", buildJsonObject {
-          put("export", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Exported function name selected as the adapter entrypoint."))
-          })
-          put("params", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Entrypoint parameter value types."))
-          })
-          put("results", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Entrypoint result value types."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("export"))
-          add(JsonPrimitive("params"))
-          add(JsonPrimitive("results"))
-        })
-        put("description", JsonPrimitive("Selected local exported function entrypoint required by the repair config."))
       })
       put("staleImports", buildJsonObject {
         put("type", JsonPrimitive("object"))
         put("additionalProperties", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("params", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Function parameter value types."))
-            })
-            put("results", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Function result value types."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("params"))
-            add(JsonPrimitive("results"))
-          })
         })
-        put("description", JsonPrimitive("Import signature map parsed from the stale config in stable sorted order."))
       })
       put("staleEntrypoint", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("object"))
           add(JsonPrimitive("null"))
         })
-        put("properties", buildJsonObject {
-          put("export", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Exported function name selected as the adapter entrypoint."))
-          })
-          put("params", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Entrypoint parameter value types."))
-          })
-          put("results", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Entrypoint result value types."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("export"))
-          add(JsonPrimitive("params"))
-          add(JsonPrimitive("results"))
-        })
-        put("description", JsonPrimitive("Entrypoint parsed from the stale config."))
       })
       put("ignoredConfigFields", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Stale top-level config fields excluded from the minimal repair config in stable sorted order."))
       })
       put("configMismatches", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("field", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Config field path that differs from the current WebAssembly adapter ABI."))
-            })
-            put("expectedJson", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Exact JSON value required by the current WebAssembly adapter ABI."))
-            })
-            put("actualJson", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Exact JSON value found in the stale config, or the literal JSON `null` string when missing."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("field"))
-            add(JsonPrimitive("expectedJson"))
-            add(JsonPrimitive("actualJson"))
-          })
         })
-        put("description", JsonPrimitive("Exact config mismatches in stable field order using JSON strings for expected and actual values."))
       })
       put("repair_config", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("module", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Current WebAssembly module path for the repaired adapter config."))
-          })
-          put("imports", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("additionalProperties", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Function parameter value types."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Function result value types."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-              })
-            })
-            put("description", JsonPrimitive("Minimal import signature map keyed by qualified import name."))
-          })
-          put("entrypoint", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("object"))
-              add(JsonPrimitive("null"))
-            })
-            put("properties", buildJsonObject {
-              put("export", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Exported function name selected as the adapter entrypoint."))
-              })
-              put("params", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Entrypoint parameter value types."))
-              })
-              put("results", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Entrypoint result value types."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("export"))
-              add(JsonPrimitive("params"))
-              add(JsonPrimitive("results"))
-            })
-            put("description", JsonPrimitive("Selected local exported function entrypoint when one exists."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("module"))
-          add(JsonPrimitive("imports"))
-        })
-        put("description", JsonPrimitive("Minimal replacement host adapter config derived from the current WebAssembly ABI."))
       })
       put("warnings", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Non-fatal config parse warnings."))
       })
     },
     required = listOf("module", "requiredImports", "staleImports", "ignoredConfigFields", "configMismatches", "repair_config", "warnings")
@@ -2970,14 +1221,14 @@ private fun Server.registerCheckMemoryContractTool(handlers: HexanaToolHandlers)
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -2990,7 +1241,7 @@ private fun Server.registerCheckMemoryContractTool(handlers: HexanaToolHandlers)
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("baselinePath", buildJsonObject {
@@ -3018,337 +1269,24 @@ private fun Server.registerCheckMemoryContractTool(handlers: HexanaToolHandlers)
     properties = buildJsonObject {
       put("module", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("path", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Exact current module path echoed from input `path`, when available."))
-          })
-          put("baselinePath", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Exact baseline module path echoed from input `baselinePath`, when available."))
-          })
-          put("policyPath", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Exact memory policy path echoed from input `policyPath`, when available."))
-          })
-          put("logPath", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Exact runtime log path echoed from input `logPath`, when provided."))
-          })
-        })
-        put("description", JsonPrimitive("Exact input path identity for report-ready memory contract output."))
       })
       put("memories", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("memoryIdx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Index in the unified memory index space."))
-            })
-            put("exportedAs", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Memory export names that point at this memory index."))
-            })
-            put("declaredLimits", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("addressType", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
-                })
-                put("min", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Minimum number of pages."))
-                })
-                put("max", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("integer"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
-                })
-                put("hasMax", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when an explicit upper bound was declared."))
-                })
-                put("range", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Human-readable range such as `1..ε`."))
-                })
-                put("flag", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Raw limits flag byte as hex (`0x00`, `0x01`, etc.)."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("addressType"))
-                add(JsonPrimitive("min"))
-                add(JsonPrimitive("hasMax"))
-                add(JsonPrimitive("range"))
-                add(JsonPrimitive("flag"))
-              })
-              put("description", JsonPrimitive("Current declared memory limits."))
-            })
-            put("previousLimits", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("addressType", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
-                })
-                put("min", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Minimum number of pages."))
-                })
-                put("max", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("integer"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
-                })
-                put("hasMax", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when an explicit upper bound was declared."))
-                })
-                put("range", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Human-readable range such as `1..ε`."))
-                })
-                put("flag", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Raw limits flag byte as hex (`0x00`, `0x01`, etc.)."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("addressType"))
-                add(JsonPrimitive("min"))
-                add(JsonPrimitive("hasMax"))
-                add(JsonPrimitive("range"))
-                add(JsonPrimitive("flag"))
-              })
-              put("description", JsonPrimitive("Baseline memory limits for the same index, when available."))
-            })
-            put("policyLimits", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("maxMin", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("integer"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Maximum allowed declared minimum pages."))
-                })
-                put("maxMax", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("integer"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Maximum allowed declared maximum pages."))
-                })
-                put("requireMax", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("boolean"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("True when an explicit maximum must be declared."))
-                })
-              })
-              put("description", JsonPrimitive("Effective policy limits after per-memory overrides."))
-            })
-            put("violations", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("memoryIdx", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Memory index whose contract check produced this violation."))
-                  })
-                  put("exportedAs", buildJsonObject {
-                    put("type", JsonPrimitive("array"))
-                    put("items", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                    })
-                    put("description", JsonPrimitive("Memory export names that point at this memory index."))
-                  })
-                  put("kind", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Stable violation code, for example `min_increased`, `max_decreased`, or `policy_max_exceeded`."))
-                  })
-                  put("field", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Limit field involved in the violation: `min`, `max`, or `hasMax`."))
-                  })
-                  put("previous", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Previous baseline value for diff violations."))
-                  })
-                  put("declared", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Current declared value."))
-                  })
-                  put("policy", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Policy value involved in the violation."))
-                  })
-                  put("message", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Report-ready explanation of the violation."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("memoryIdx"))
-                  add(JsonPrimitive("exportedAs"))
-                  add(JsonPrimitive("kind"))
-                  add(JsonPrimitive("field"))
-                  add(JsonPrimitive("message"))
-                })
-              })
-              put("description", JsonPrimitive("Limit changes and policy violations for this memory."))
-            })
-            put("minimalCompatibleLimits", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("addressType", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
-                })
-                put("min", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Minimum pages compatible with current and baseline declarations."))
-                })
-                put("max", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("integer"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Maximum pages compatible with current and baseline declarations, when bounded."))
-                })
-                put("hasMax", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when the compatible limits include an explicit maximum."))
-                })
-                put("range", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Human-readable compatible range such as `24..48`."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("addressType"))
-                add(JsonPrimitive("min"))
-                add(JsonPrimitive("hasMax"))
-                add(JsonPrimitive("range"))
-              })
-              put("description", JsonPrimitive("Smallest limits compatible with the current and baseline declarations."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("memoryIdx"))
-            add(JsonPrimitive("exportedAs"))
-            add(JsonPrimitive("declaredLimits"))
-            add(JsonPrimitive("policyLimits"))
-            add(JsonPrimitive("violations"))
-            add(JsonPrimitive("minimalCompatibleLimits"))
-          })
         })
-        put("description", JsonPrimitive("Per-memory contract report entries in stable `memoryIdx` order."))
       })
       put("violations", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("memoryIdx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Memory index whose contract check produced this violation."))
-            })
-            put("exportedAs", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Memory export names that point at this memory index."))
-            })
-            put("kind", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Stable violation code, for example `min_increased`, `max_decreased`, or `policy_max_exceeded`."))
-            })
-            put("field", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Limit field involved in the violation: `min`, `max`, or `hasMax`."))
-            })
-            put("previous", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Previous baseline value for diff violations."))
-            })
-            put("declared", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Current declared value."))
-            })
-            put("policy", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Policy value involved in the violation."))
-            })
-            put("message", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Report-ready explanation of the violation."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("memoryIdx"))
-            add(JsonPrimitive("exportedAs"))
-            add(JsonPrimitive("kind"))
-            add(JsonPrimitive("field"))
-            add(JsonPrimitive("message"))
-          })
         })
-        put("description", JsonPrimitive("Flattened contract violations in stable `memoryIdx` and violation order."))
       })
       put("warnings", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Non-fatal input or runtime-log warnings."))
       })
     },
     required = listOf("module", "memories", "violations", "warnings")
@@ -3379,14 +1317,14 @@ private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandle
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -3399,7 +1337,7 @@ private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandle
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("baselinePath", buildJsonObject {
@@ -3427,470 +1365,60 @@ private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandle
     properties = buildJsonObject {
       put("module", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("path", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Exact current module path echoed from input `path`, when available."))
-          })
-          put("baselinePath", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Exact baseline module path echoed from input `baselinePath`, when available."))
-          })
-          put("policyPath", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Exact global-state policy path echoed from input `policyPath`, when available."))
-          })
-          put("logPath", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Exact runtime log path echoed from input `logPath`, when provided."))
-          })
-        })
-        put("description", JsonPrimitive("Exact input path identity for report-ready global-state policy output."))
       })
       put("policyId", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Policy identifier from the policy file, when present."))
       })
       put("globals", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("export", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Export name when the global is public."))
-            })
-            put("importNameQualified", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Qualified import name such as `env.clock_offset`, when imported."))
-            })
-            put("globalidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Global index in the unified global index space."))
-            })
-            put("type", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global value type."))
-            })
-            put("mutable", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the global is mutable."))
-            })
-            put("initExpr", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Initialization expression in WAT syntax."))
-            })
-            put("origin", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global origin: `import` or `local`."))
-            })
-            put("importModule", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import module name when the global is imported."))
-            })
-            put("importName", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import field name when the global is imported."))
-            })
-            put("status", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`."))
-            })
-            put("allowed", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the policy or baseline allows this public global."))
-            })
-            put("allowedBy", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("globalidx"))
-            add(JsonPrimitive("type"))
-            add(JsonPrimitive("mutable"))
-            add(JsonPrimitive("origin"))
-            add(JsonPrimitive("status"))
-            add(JsonPrimitive("allowed"))
-          })
         })
-        put("description", JsonPrimitive("Targeted globals relevant to the audit in stable `globalidx` order."))
       })
       put("newPublicGlobals", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("export", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Export name when the global is public."))
-            })
-            put("importNameQualified", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Qualified import name such as `env.clock_offset`, when imported."))
-            })
-            put("globalidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Global index in the unified global index space."))
-            })
-            put("type", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global value type."))
-            })
-            put("mutable", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the global is mutable."))
-            })
-            put("initExpr", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Initialization expression in WAT syntax."))
-            })
-            put("origin", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global origin: `import` or `local`."))
-            })
-            put("importModule", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import module name when the global is imported."))
-            })
-            put("importName", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import field name when the global is imported."))
-            })
-            put("status", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`."))
-            })
-            put("allowed", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the policy or baseline allows this public global."))
-            })
-            put("allowedBy", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("globalidx"))
-            add(JsonPrimitive("type"))
-            add(JsonPrimitive("mutable"))
-            add(JsonPrimitive("origin"))
-            add(JsonPrimitive("status"))
-            add(JsonPrimitive("allowed"))
-          })
         })
-        put("description", JsonPrimitive("Public global exports added relative to the baseline in stable `globalidx` order."))
       })
       put("allowedPublicGlobals", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("export", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Export name when the global is public."))
-            })
-            put("importNameQualified", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Qualified import name such as `env.clock_offset`, when imported."))
-            })
-            put("globalidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Global index in the unified global index space."))
-            })
-            put("type", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global value type."))
-            })
-            put("mutable", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the global is mutable."))
-            })
-            put("initExpr", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Initialization expression in WAT syntax."))
-            })
-            put("origin", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global origin: `import` or `local`."))
-            })
-            put("importModule", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import module name when the global is imported."))
-            })
-            put("importName", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import field name when the global is imported."))
-            })
-            put("status", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`."))
-            })
-            put("allowed", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the policy or baseline allows this public global."))
-            })
-            put("allowedBy", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("globalidx"))
-            add(JsonPrimitive("type"))
-            add(JsonPrimitive("mutable"))
-            add(JsonPrimitive("origin"))
-            add(JsonPrimitive("status"))
-            add(JsonPrimitive("allowed"))
-          })
         })
-        put("description", JsonPrimitive("Public global exports allowed by the baseline or policy in stable `globalidx` order."))
       })
       put("requestLimits", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("export", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Request-limit export name."))
-            })
-            put("globalidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Global index for the request-limit export."))
-            })
-            put("value", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Constant request-limit value, when statically available."))
-            })
-            put("maxValue", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Maximum request-limit value from policy, when configured."))
-            })
-            put("allowed", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the request-limit global satisfies the policy."))
-            })
-            put("violation", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Violation code such as `request_limit_exceeded` or `mutable_request_limit`."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("export"))
-            add(JsonPrimitive("globalidx"))
-            add(JsonPrimitive("allowed"))
-          })
         })
-        put("description", JsonPrimitive("Request-limit public globals evaluated against policy limits in stable `globalidx` order."))
       })
       put("violations", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("kind", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Stable violation code."))
-            })
-            put("globalidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Global index involved in the violation."))
-            })
-            put("export", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Export name involved in the violation, when public."))
-            })
-            put("importNameQualified", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Qualified import name involved in the violation, when imported."))
-            })
-            put("field", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Policy field or Wasm property involved in the violation."))
-            })
-            put("observed", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Observed value."))
-            })
-            put("policy", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Policy value or policy concept."))
-            })
-            put("message", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Report-ready explanation of the violation."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("kind"))
-            add(JsonPrimitive("globalidx"))
-            add(JsonPrimitive("field"))
-            add(JsonPrimitive("message"))
-          })
         })
-        put("description", JsonPrimitive("Report-ready policy violations in stable `globalidx` and violation order."))
       })
       put("targetedGlobalIndices", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("integer"))
         })
-        put("description", JsonPrimitive("Stable sorted `globalidx` values relevant to the audit."))
       })
       put("evidence", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("kind", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Evidence category."))
-            })
-            put("globalidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Global index for this evidence item."))
-            })
-            put("export", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Export name, when public."))
-            })
-            put("importNameQualified", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Qualified import name, when imported."))
-            })
-            put("type", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global value type."))
-            })
-            put("mutable", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the global is mutable."))
-            })
-            put("initExpr", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Initialization expression in WAT syntax."))
-            })
-            put("origin", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global origin: `import` or `local`."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("kind"))
-            add(JsonPrimitive("globalidx"))
-            add(JsonPrimitive("type"))
-            add(JsonPrimitive("mutable"))
-            add(JsonPrimitive("origin"))
-          })
         })
-        put("description", JsonPrimitive("Relevant global evidence used for the audit report."))
       })
       put("warnings", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Non-fatal input or runtime-log warnings."))
       })
     },
     required = listOf("module", "globals", "newPublicGlobals", "allowedPublicGlobals", "requestLimits", "violations", "targetedGlobalIndices", "evidence", "warnings")
@@ -3921,14 +1449,14 @@ private fun Server.registerListCustomSectionsTool(handlers: HexanaToolHandlers) 
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -3941,7 +1469,7 @@ private fun Server.registerListCustomSectionsTool(handlers: HexanaToolHandlers) 
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -3953,37 +1481,7 @@ private fun Server.registerListCustomSectionsTool(handlers: HexanaToolHandlers) 
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("name", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Custom section name as encoded in the module."))
-            })
-            put("offset", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Byte offset of the full custom section in the module."))
-            })
-            put("size", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Size of the full custom section in bytes."))
-            })
-            put("encoding", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Preview encoding: `utf8` when the content prefix is printable UTF-8, otherwise `binary`."))
-            })
-            put("preview", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Small content preview, excluding the section name."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("name"))
-            add(JsonPrimitive("offset"))
-            add(JsonPrimitive("size"))
-            add(JsonPrimitive("encoding"))
-            add(JsonPrimitive("preview"))
-          })
         })
-        put("description", JsonPrimitive("Custom sections found in the module."))
       })
     },
     required = listOf("customSections")
@@ -4016,14 +1514,14 @@ private fun Server.registerListImportsTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -4036,7 +1534,7 @@ private fun Server.registerListImportsTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -4048,71 +1546,7 @@ private fun Server.registerListImportsTool(handlers: HexanaToolHandlers) {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Funcidx in the unified function index space."))
-            })
-            put("typeidx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Function type index referenced by this import, when resolved."))
-            })
-            put("locationKind", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Stable location kind. Function imports use `import`."))
-            })
-            put("module", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Imported module name."))
-            })
-            put("name", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Imported field name."))
-            })
-            put("locationDisplay", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
-            })
-            put("signature", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter types, in declaration order."))
-                })
-                put("return", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Return types, in declaration order."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("return"))
-              })
-              put("description", JsonPrimitive("Parsed signature, when available."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("locationKind"))
-            add(JsonPrimitive("module"))
-            add(JsonPrimitive("name"))
-            add(JsonPrimitive("locationDisplay"))
-          })
         })
-        put("description", JsonPrimitive("Imported functions declared by the module."))
       })
     },
     required = listOf("imports")
@@ -4145,14 +1579,14 @@ private fun Server.registerListExportsTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -4165,7 +1599,7 @@ private fun Server.registerListExportsTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -4177,27 +1611,7 @@ private fun Server.registerListExportsTool(handlers: HexanaToolHandlers) {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("name", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Export field name."))
-            })
-            put("externIndex", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Index into the exported address space (funcidx, tableidx, memidx, or globalidx)."))
-            })
-            put("kind", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("WebAssembly export kind byte (0=func, 1=table, 2=memory, 3=global)."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("name"))
-            add(JsonPrimitive("externIndex"))
-            add(JsonPrimitive("kind"))
-          })
         })
-        put("description", JsonPrimitive("Exports declared by the module."))
       })
     },
     required = listOf("exports")
@@ -4228,14 +1642,14 @@ private fun Server.registerSearchExportsTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -4248,7 +1662,7 @@ private fun Server.registerSearchExportsTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("query", buildJsonObject {
@@ -4275,142 +1689,7 @@ private fun Server.registerSearchExportsTool(handlers: HexanaToolHandlers) {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("name", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Export name."))
-            })
-            put("kind", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Export kind: `func`, `table`, `memory`, `global`, `tag`, or `unknown`."))
-            })
-            put("externIndex", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Index into the exported address space."))
-            })
-            put("funcidx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Function index for function exports."))
-            })
-            put("tableidx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Table index for table exports."))
-            })
-            put("memidx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Memory index for memory exports."))
-            })
-            put("globalidx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Global index for global exports."))
-            })
-            put("tagidx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Tag index for tag exports."))
-            })
-            put("signature", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter types."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Result types."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-              })
-              put("description", JsonPrimitive("Resolved function signature for function exports."))
-            })
-            put("limits", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("addressType", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
-                })
-                put("min", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Minimum number of pages."))
-                })
-                put("max", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("integer"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
-                })
-                put("hasMax", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when an explicit upper bound was declared."))
-                })
-                put("range", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Human-readable range such as `1..ε`."))
-                })
-                put("flag", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Raw limits flag byte as hex (`0x00`, `0x01`, etc.)."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("addressType"))
-                add(JsonPrimitive("min"))
-                add(JsonPrimitive("hasMax"))
-                add(JsonPrimitive("range"))
-                add(JsonPrimitive("flag"))
-              })
-              put("description", JsonPrimitive("Resolved page limits for memory exports."))
-            })
-            put("repr", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Compact WAT export representation."))
-            })
-            put("score", buildJsonObject {
-              put("type", JsonPrimitive("number"))
-              put("description", JsonPrimitive("Name-match score between 0.0 and 1.0."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("name"))
-            add(JsonPrimitive("kind"))
-            add(JsonPrimitive("externIndex"))
-            add(JsonPrimitive("repr"))
-            add(JsonPrimitive("score"))
-          })
         })
-        put("description", JsonPrimitive("Matching export entries."))
       })
     },
     required = listOf("results")
@@ -4444,14 +1723,14 @@ private fun Server.registerListExportedFunctionsTool(handlers: HexanaToolHandler
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -4464,7 +1743,7 @@ private fun Server.registerListExportedFunctionsTool(handlers: HexanaToolHandler
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("entriesRange", buildJsonObject {
@@ -4494,133 +1773,27 @@ private fun Server.registerListExportedFunctionsTool(handlers: HexanaToolHandler
     properties = buildJsonObject {
       put("from", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Inclusive lower bound that was requested."))
       })
       put("to", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Inclusive upper bound that was requested."))
       })
       put("returned", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("name", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Export name."))
-            })
-            put("entry", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("funcidx", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Funcidx in the unified function index space."))
-                })
-                put("module", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("string"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Import module name, when the export resolves to an imported function."))
-                })
-                put("name", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("string"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Import field name, when applicable."))
-                })
-                put("signature", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("object"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("properties", buildJsonObject {
-                    put("params", buildJsonObject {
-                      put("type", JsonPrimitive("array"))
-                      put("items", buildJsonObject {
-                        put("type", JsonPrimitive("string"))
-                      })
-                      put("description", JsonPrimitive("Parameter types."))
-                    })
-                    put("return", buildJsonObject {
-                      put("type", JsonPrimitive("array"))
-                      put("items", buildJsonObject {
-                        put("type", JsonPrimitive("string"))
-                      })
-                      put("description", JsonPrimitive("Return types."))
-                    })
-                  })
-                  put("required", buildJsonArray {
-                    add(JsonPrimitive("params"))
-                    add(JsonPrimitive("return"))
-                  })
-                  put("description", JsonPrimitive("Parsed signature when available."))
-                })
-                put("exportedAs", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("All export names pointing at this function."))
-                })
-                put("definedIn", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("string"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Which section the function body lives in."))
-                })
-                put("codeOffset", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("integer"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Byte offset of the function body in the module."))
-                })
-                put("codeSize", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("integer"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Size of the function body in bytes."))
-                })
-                put("instructionCount", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("integer"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Number of decoded instructions in the body."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("funcidx"))
-                add(JsonPrimitive("exportedAs"))
-              })
-              put("description", JsonPrimitive("Resolved function entry for the export."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("name"))
-            add(JsonPrimitive("entry"))
-          })
         })
-        put("description", JsonPrimitive("Entries inside the requested range."))
       })
       put("total", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Total number of exported functions in the module."))
       })
       put("truncate", buildJsonObject {
         put("type", JsonPrimitive("boolean"))
-        put("description", JsonPrimitive("True when the range was clipped to the module's export count."))
       })
       put("nextOffset", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("integer"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Next offset to continue pagination; null when the range was exhausted."))
       })
     },
     required = listOf("from", "to", "returned", "total", "truncate")
@@ -4653,14 +1826,14 @@ private fun Server.registerListFunctionsTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -4673,7 +1846,7 @@ private fun Server.registerListFunctionsTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("offset", buildJsonObject {
@@ -4697,142 +1870,7 @@ private fun Server.registerListFunctionsTool(handlers: HexanaToolHandlers) {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Funcidx in the unified function index space."))
-            })
-            put("typeidx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Function type index, when resolved."))
-            })
-            put("signature", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter types, in declaration order."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Result types, in declaration order."))
-                })
-                put("return", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-                add(JsonPrimitive("return"))
-              })
-              put("description", JsonPrimitive("Parsed signature when available."))
-            })
-            put("import", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("module", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import module name."))
-                })
-                put("name", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import field name."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("module"))
-                add(JsonPrimitive("name"))
-              })
-              put("description", JsonPrimitive("Import descriptor when the function is imported."))
-            })
-            put("exportedAs", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Export names pointing at this function."))
-            })
-            put("definedIn", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Which section the function lives in."))
-            })
-            put("locationKind", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Stable location kind for imported functions, currently `import`."))
-            })
-            put("module", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import module name when the function is imported."))
-            })
-            put("name", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import field name when the function is imported."))
-            })
-            put("locationDisplay", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
-            })
-            put("codeOffset", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Byte offset of the function body in the module."))
-            })
-            put("codeSize", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Size of the function body in bytes."))
-            })
-            put("instructionCount", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Number of decoded instructions in the body."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("exportedAs"))
-            add(JsonPrimitive("definedIn"))
-          })
         })
-        put("description", JsonPrimitive("Resolved function entries."))
       })
     },
     required = listOf("functions")
@@ -4863,14 +1901,14 @@ private fun Server.registerListCodeSectionOffsetsTool(handlers: HexanaToolHandle
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -4883,7 +1921,7 @@ private fun Server.registerListCodeSectionOffsetsTool(handlers: HexanaToolHandle
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -4895,27 +1933,7 @@ private fun Server.registerListCodeSectionOffsetsTool(handlers: HexanaToolHandle
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Unified function index for this defined function body."))
-            })
-            put("offset", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Byte offset of the function body in the module."))
-            })
-            put("size", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Size of the function body in bytes."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("offset"))
-            add(JsonPrimitive("size"))
-          })
         })
-        put("description", JsonPrimitive("Code-section byte ranges keyed by unified function index."))
       })
     },
     required = listOf("functions")
@@ -4945,14 +1963,14 @@ private fun Server.registerFunctionsForIndicesTool(handlers: HexanaToolHandlers)
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -4965,7 +1983,7 @@ private fun Server.registerFunctionsForIndicesTool(handlers: HexanaToolHandlers)
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("indices", buildJsonObject {
@@ -4985,142 +2003,7 @@ private fun Server.registerFunctionsForIndicesTool(handlers: HexanaToolHandlers)
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Funcidx in the unified function index space."))
-            })
-            put("typeidx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Function type index, when resolved."))
-            })
-            put("signature", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter types, in declaration order."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Result types, in declaration order."))
-                })
-                put("return", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-                add(JsonPrimitive("return"))
-              })
-              put("description", JsonPrimitive("Parsed signature when available."))
-            })
-            put("import", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("module", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import module name."))
-                })
-                put("name", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import field name."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("module"))
-                add(JsonPrimitive("name"))
-              })
-              put("description", JsonPrimitive("Import descriptor when the function is imported."))
-            })
-            put("exportedAs", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Export names pointing at this function."))
-            })
-            put("definedIn", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Which section the function lives in."))
-            })
-            put("locationKind", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Stable location kind for imported functions, currently `import`."))
-            })
-            put("module", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import module name when the function is imported."))
-            })
-            put("name", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import field name when the function is imported."))
-            })
-            put("locationDisplay", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
-            })
-            put("codeOffset", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Byte offset of the function body in the module."))
-            })
-            put("codeSize", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Size of the function body in bytes."))
-            })
-            put("instructionCount", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Number of decoded instructions in the body."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("exportedAs"))
-            add(JsonPrimitive("definedIn"))
-          })
         })
-        put("description", JsonPrimitive("Resolved function entries."))
       })
     },
     required = listOf("functions")
@@ -5150,14 +2033,14 @@ private fun Server.registerResolveFunctionSignatureTool(handlers: HexanaToolHand
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -5170,7 +2053,7 @@ private fun Server.registerResolveFunctionSignatureTool(handlers: HexanaToolHand
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("funcidx", buildJsonObject {
@@ -5185,53 +2068,45 @@ private fun Server.registerResolveFunctionSignatureTool(handlers: HexanaToolHand
     properties = buildJsonObject {
       put("funcidx", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Funcidx in the unified function index space."))
       })
       put("typeidx", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("integer"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Function type index, when resolved."))
       })
       put("params", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Parameter types, in declaration order."))
       })
       put("results", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Result types, in declaration order."))
       })
       put("kind", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Function origin: `import`, `export`, or `internal`."))
       })
       put("module", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Import module name for imported functions."))
       })
       put("importName", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Import field name for imported functions."))
       })
       put("exportNames", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Export names pointing at this function."))
       })
     },
     required = listOf("funcidx", "params", "results", "kind", "exportNames")
@@ -5262,14 +2137,14 @@ private fun Server.registerDisassembleFunctionTool(handlers: HexanaToolHandlers)
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -5282,7 +2157,7 @@ private fun Server.registerDisassembleFunctionTool(handlers: HexanaToolHandlers)
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("funcidx", buildJsonObject {
@@ -5297,169 +2172,78 @@ private fun Server.registerDisassembleFunctionTool(handlers: HexanaToolHandlers)
     properties = buildJsonObject {
       put("funcidx", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Funcidx in the unified function index space."))
       })
       put("typeidx", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("integer"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Function type index, when resolved."))
       })
       put("signature", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("object"))
           add(JsonPrimitive("null"))
         })
-        put("properties", buildJsonObject {
-          put("params", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Parameter types, in declaration order."))
-          })
-          put("results", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Result types, in declaration order."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("params"))
-          add(JsonPrimitive("results"))
-        })
-        put("description", JsonPrimitive("Parsed signature when available."))
       })
       put("locals", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Grouped local types for defined functions."))
       })
       put("localGroups", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("count", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Number of local slots in this grouped declaration."))
-            })
-            put("type", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Local type (`i32`, `i64`, `v128`, reference types, etc.)."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("count"))
-            add(JsonPrimitive("type"))
-          })
         })
-        put("description", JsonPrimitive("Grouped local declarations with declaration counts preserved."))
       })
       put("isImported", buildJsonObject {
         put("type", JsonPrimitive("boolean"))
-        put("description", JsonPrimitive("Whether this function is imported and has no body."))
       })
       put("isExported", buildJsonObject {
         put("type", JsonPrimitive("boolean"))
-        put("description", JsonPrimitive("Whether this function is exported by at least one export entry."))
       })
       put("exportNames", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Export names pointing at this function."))
       })
       put("import", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("object"))
           add(JsonPrimitive("null"))
         })
-        put("properties", buildJsonObject {
-          put("module", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Import module name."))
-          })
-          put("name", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Import field name."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("module"))
-          add(JsonPrimitive("name"))
-        })
-        put("description", JsonPrimitive("Import descriptor when this function is imported."))
       })
       put("codeOffset", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("integer"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Byte offset of the code entry for defined functions."))
       })
       put("codeSize", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("integer"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Size of the code entry in bytes for defined functions."))
       })
       put("instructions", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("op", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Instruction mnemonic."))
-            })
-            put("args", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Rendered WAT operands for this instruction."))
-            })
-            put("text", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Full decoded instruction text."))
-            })
-            put("offset", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Instruction byte offset when the parser provides one."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("op"))
-            add(JsonPrimitive("args"))
-            add(JsonPrimitive("text"))
-          })
         })
-        put("description", JsonPrimitive("Decoded instruction records."))
       })
       put("wat", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Best-effort WAT-style function text for defined functions."))
       })
       put("hex", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Raw code-entry bytes rendered as space-separated hex for defined functions."))
       })
     },
     required = listOf("funcidx", "locals", "localGroups", "isImported", "isExported", "exportNames", "instructions")
@@ -5490,14 +2274,14 @@ private fun Server.registerGetFunctionCallGraphTool(handlers: HexanaToolHandlers
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -5510,7 +2294,7 @@ private fun Server.registerGetFunctionCallGraphTool(handlers: HexanaToolHandlers
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("indices", buildJsonObject {
@@ -5530,470 +2314,7 @@ private fun Server.registerGetFunctionCallGraphTool(handlers: HexanaToolHandlers
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Funcidx in the unified function index space."))
-            })
-            put("kind", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Function origin: `import` or `local`."))
-            })
-            put("typeidx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Function type index, when resolved."))
-            })
-            put("signature", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter types, in declaration order."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Result types, in declaration order."))
-                })
-                put("return", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-                add(JsonPrimitive("return"))
-              })
-              put("description", JsonPrimitive("Parsed signature when available."))
-            })
-            put("import", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("module", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import module name."))
-                })
-                put("name", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import field name."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("module"))
-                add(JsonPrimitive("name"))
-              })
-              put("description", JsonPrimitive("Import descriptor when the function is imported."))
-            })
-            put("exportedAs", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Export names pointing at this function."))
-            })
-            put("codeOffset", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Byte offset of the code entry for defined functions."))
-            })
-            put("codeSize", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Size of the code entry in bytes for defined functions."))
-            })
-            put("instructionCount", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Number of decoded instructions in the body."))
-            })
-            put("locals", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("count", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Number of local slots in this grouped declaration."))
-                  })
-                  put("type", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Local type (`i32`, `i64`, `v128`, reference types, etc.)."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("count"))
-                  add(JsonPrimitive("type"))
-                })
-              })
-              put("description", JsonPrimitive("Grouped local declarations with declaration counts preserved."))
-            })
-            put("directCalls", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("op", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Call instruction mnemonic, for example `call` or `return_call`."))
-                  })
-                  put("text", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Full decoded call instruction text."))
-                  })
-                  put("offset", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Instruction byte offset when the parser provides one."))
-                  })
-                  put("targetFuncidx", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Raw target funcidx encoded by the call instruction."))
-                  })
-                  put("target", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("object"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("properties", buildJsonObject {
-                      put("funcidx", buildJsonObject {
-                        put("type", JsonPrimitive("integer"))
-                        put("description", JsonPrimitive("Resolved callee funcidx in the unified function index space."))
-                      })
-                      put("kind", buildJsonObject {
-                        put("type", JsonPrimitive("string"))
-                        put("description", JsonPrimitive("Callee origin: `import` or `local`."))
-                      })
-                      put("typeidx", buildJsonObject {
-                        put("type", buildJsonArray {
-                          add(JsonPrimitive("integer"))
-                          add(JsonPrimitive("null"))
-                        })
-                        put("description", JsonPrimitive("Function type index, when resolved."))
-                      })
-                      put("signature", buildJsonObject {
-                        put("type", buildJsonArray {
-                          add(JsonPrimitive("object"))
-                          add(JsonPrimitive("null"))
-                        })
-                        put("properties", buildJsonObject {
-                          put("params", buildJsonObject {
-                            put("type", JsonPrimitive("array"))
-                            put("items", buildJsonObject {
-                              put("type", JsonPrimitive("string"))
-                            })
-                            put("description", JsonPrimitive("Parameter types, in declaration order."))
-                          })
-                          put("results", buildJsonObject {
-                            put("type", JsonPrimitive("array"))
-                            put("items", buildJsonObject {
-                              put("type", JsonPrimitive("string"))
-                            })
-                            put("description", JsonPrimitive("Result types, in declaration order."))
-                          })
-                          put("return", buildJsonObject {
-                            put("type", JsonPrimitive("array"))
-                            put("items", buildJsonObject {
-                              put("type", JsonPrimitive("string"))
-                            })
-                            put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
-                          })
-                        })
-                        put("required", buildJsonArray {
-                          add(JsonPrimitive("params"))
-                          add(JsonPrimitive("results"))
-                          add(JsonPrimitive("return"))
-                        })
-                        put("description", JsonPrimitive("Parsed signature when available."))
-                      })
-                      put("import", buildJsonObject {
-                        put("type", buildJsonArray {
-                          add(JsonPrimitive("object"))
-                          add(JsonPrimitive("null"))
-                        })
-                        put("properties", buildJsonObject {
-                          put("module", buildJsonObject {
-                            put("type", JsonPrimitive("string"))
-                            put("description", JsonPrimitive("Import module name."))
-                          })
-                          put("name", buildJsonObject {
-                            put("type", JsonPrimitive("string"))
-                            put("description", JsonPrimitive("Import field name."))
-                          })
-                        })
-                        put("required", buildJsonArray {
-                          add(JsonPrimitive("module"))
-                          add(JsonPrimitive("name"))
-                        })
-                        put("description", JsonPrimitive("Import descriptor when the callee is imported."))
-                      })
-                      put("exportedAs", buildJsonObject {
-                        put("type", JsonPrimitive("array"))
-                        put("items", buildJsonObject {
-                          put("type", JsonPrimitive("string"))
-                        })
-                        put("description", JsonPrimitive("Export names pointing at the callee."))
-                      })
-                    })
-                    put("required", buildJsonArray {
-                      add(JsonPrimitive("funcidx"))
-                      add(JsonPrimitive("kind"))
-                      add(JsonPrimitive("exportedAs"))
-                    })
-                    put("description", JsonPrimitive("Resolved callee metadata when the target funcidx exists."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("op"))
-                  add(JsonPrimitive("text"))
-                  add(JsonPrimitive("targetFuncidx"))
-                })
-              })
-              put("description", JsonPrimitive("Direct `call` and `return_call` sites with resolved target metadata."))
-            })
-            put("directImportedCalls", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("op", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Call instruction mnemonic, for example `call` or `return_call`."))
-                  })
-                  put("text", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Full decoded call instruction text."))
-                  })
-                  put("offset", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Instruction byte offset when the parser provides one."))
-                  })
-                  put("targetFuncidx", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Raw target funcidx encoded by the call instruction."))
-                  })
-                  put("target", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("object"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("properties", buildJsonObject {
-                      put("funcidx", buildJsonObject {
-                        put("type", JsonPrimitive("integer"))
-                        put("description", JsonPrimitive("Resolved callee funcidx in the unified function index space."))
-                      })
-                      put("kind", buildJsonObject {
-                        put("type", JsonPrimitive("string"))
-                        put("description", JsonPrimitive("Callee origin: `import` or `local`."))
-                      })
-                      put("typeidx", buildJsonObject {
-                        put("type", buildJsonArray {
-                          add(JsonPrimitive("integer"))
-                          add(JsonPrimitive("null"))
-                        })
-                        put("description", JsonPrimitive("Function type index, when resolved."))
-                      })
-                      put("signature", buildJsonObject {
-                        put("type", buildJsonArray {
-                          add(JsonPrimitive("object"))
-                          add(JsonPrimitive("null"))
-                        })
-                        put("properties", buildJsonObject {
-                          put("params", buildJsonObject {
-                            put("type", JsonPrimitive("array"))
-                            put("items", buildJsonObject {
-                              put("type", JsonPrimitive("string"))
-                            })
-                            put("description", JsonPrimitive("Parameter types, in declaration order."))
-                          })
-                          put("results", buildJsonObject {
-                            put("type", JsonPrimitive("array"))
-                            put("items", buildJsonObject {
-                              put("type", JsonPrimitive("string"))
-                            })
-                            put("description", JsonPrimitive("Result types, in declaration order."))
-                          })
-                          put("return", buildJsonObject {
-                            put("type", JsonPrimitive("array"))
-                            put("items", buildJsonObject {
-                              put("type", JsonPrimitive("string"))
-                            })
-                            put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
-                          })
-                        })
-                        put("required", buildJsonArray {
-                          add(JsonPrimitive("params"))
-                          add(JsonPrimitive("results"))
-                          add(JsonPrimitive("return"))
-                        })
-                        put("description", JsonPrimitive("Parsed signature when available."))
-                      })
-                      put("import", buildJsonObject {
-                        put("type", buildJsonArray {
-                          add(JsonPrimitive("object"))
-                          add(JsonPrimitive("null"))
-                        })
-                        put("properties", buildJsonObject {
-                          put("module", buildJsonObject {
-                            put("type", JsonPrimitive("string"))
-                            put("description", JsonPrimitive("Import module name."))
-                          })
-                          put("name", buildJsonObject {
-                            put("type", JsonPrimitive("string"))
-                            put("description", JsonPrimitive("Import field name."))
-                          })
-                        })
-                        put("required", buildJsonArray {
-                          add(JsonPrimitive("module"))
-                          add(JsonPrimitive("name"))
-                        })
-                        put("description", JsonPrimitive("Import descriptor when the callee is imported."))
-                      })
-                      put("exportedAs", buildJsonObject {
-                        put("type", JsonPrimitive("array"))
-                        put("items", buildJsonObject {
-                          put("type", JsonPrimitive("string"))
-                        })
-                        put("description", JsonPrimitive("Export names pointing at the callee."))
-                      })
-                    })
-                    put("required", buildJsonArray {
-                      add(JsonPrimitive("funcidx"))
-                      add(JsonPrimitive("kind"))
-                      add(JsonPrimitive("exportedAs"))
-                    })
-                    put("description", JsonPrimitive("Resolved callee metadata when the target funcidx exists."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("op"))
-                  add(JsonPrimitive("text"))
-                  add(JsonPrimitive("targetFuncidx"))
-                })
-              })
-              put("description", JsonPrimitive("Subset of direct calls whose resolved target is an imported function."))
-            })
-            put("indirectCalls", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("op", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Indirect call instruction mnemonic, for example `call_indirect`."))
-                  })
-                  put("text", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Full decoded indirect call instruction text."))
-                  })
-                  put("offset", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Instruction byte offset when the parser provides one."))
-                  })
-                  put("typeidx", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Function type index used by the indirect call."))
-                  })
-                  put("tableidx", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Table index used by the indirect call."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("op"))
-                  add(JsonPrimitive("text"))
-                  add(JsonPrimitive("typeidx"))
-                  add(JsonPrimitive("tableidx"))
-                })
-              })
-              put("description", JsonPrimitive("Indirect call sites with type and table indices."))
-            })
-            put("directMemoryWrites", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("op", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Memory-writing instruction mnemonic."))
-                  })
-                  put("text", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Full decoded memory-writing instruction text."))
-                  })
-                  put("offset", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Instruction byte offset when the parser provides one."))
-                  })
-                  put("memoryOffset", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Static memory offset from memarg for store-like instructions."))
-                  })
-                  put("alignment", buildJsonObject {
-                    put("type", buildJsonArray {
-                      add(JsonPrimitive("integer"))
-                      add(JsonPrimitive("null"))
-                    })
-                    put("description", JsonPrimitive("Alignment from memarg for store-like instructions."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("op"))
-                  add(JsonPrimitive("text"))
-                })
-              })
-              put("description", JsonPrimitive("Direct memory-writing instruction sites in this function body."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("kind"))
-            add(JsonPrimitive("exportedAs"))
-            add(JsonPrimitive("locals"))
-            add(JsonPrimitive("directCalls"))
-            add(JsonPrimitive("directImportedCalls"))
-            add(JsonPrimitive("indirectCalls"))
-            add(JsonPrimitive("directMemoryWrites"))
-          })
         })
-        put("description", JsonPrimitive("Per-function direct call graph and memory-write summaries."))
       })
     },
     required = listOf("functions")
@@ -6023,14 +2344,14 @@ private fun Server.registerSearchFunctionsByNameTool(handlers: HexanaToolHandler
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -6043,7 +2364,7 @@ private fun Server.registerSearchFunctionsByNameTool(handlers: HexanaToolHandler
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("query", buildJsonObject {
@@ -6067,95 +2388,7 @@ private fun Server.registerSearchFunctionsByNameTool(handlers: HexanaToolHandler
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Funcidx in the unified function index space."))
-            })
-            put("name", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Matched function name."))
-            })
-            put("kind", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Name source: `import`, `export`, or `internal`."))
-            })
-            put("module", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import module name for imported functions."))
-            })
-            put("importName", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import field name for imported functions."))
-            })
-            put("exportName", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Export name for exported functions."))
-            })
-            put("signature", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter types, in declaration order."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Result types, in declaration order."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-              })
-              put("description", JsonPrimitive("Parsed signature when available."))
-            })
-            put("locals", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Local types for defined functions."))
-            })
-            put("repr", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Compact WAT-like function representation."))
-            })
-            put("offset", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Byte offset of the function body in the module."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("name"))
-            add(JsonPrimitive("kind"))
-            add(JsonPrimitive("locals"))
-            add(JsonPrimitive("repr"))
-          })
         })
-        put("description", JsonPrimitive("Matching function name entries."))
       })
     },
     required = listOf("functions")
@@ -6175,11 +2408,9 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
     name = "resolve_wasm_frames",
     description = """
   |Aggregate WebAssembly stack and crash-frame triage from function indices, labels, and offsets.
-  |Resolve WebAssembly stack or crash frames from `funcidx` values, raw function labels, and optional absolute code offsets.
-  |The result reports import/local origin, best symbol with its source, signature, export names, code range, source-map or DWARF source location when available, and per-frame warnings.
-  |Imported frames keep import module/name metadata, empty export names, a signature with `params` and `results`, and `import_has_no_code_range` when no source location can exist.
-  |When the bundle contains a crash report JSON file, pass it as `crashReportPath` with the matching `sourceMapPath`; do not synthesize placeholder frame arrays from function-list indices.
-  |Use this aggregate workflow for crash triage when logs or reports contain mixed frame identifiers and you need symbols, signatures, ranges, and source locations without requesting full disassembly.
+  |Resolve `funcidx` values, raw labels, and optional code offsets into symbols, signatures, ranges, and source locations.
+  |Prefer `crashReportPath` with a matching `sourceMapPath` when a crash report JSON is available.
+  |Use this aggregate workflow for crash triage without requesting full disassembly.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -6188,14 +2419,14 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -6208,7 +2439,7 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("frames", buildJsonObject {
@@ -6280,456 +2511,31 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("frameIndex", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Zero-based position of the input frame in the request."))
-            })
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Unified function index from the input frame."))
-            })
-            put("inputCodeOffset", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Absolute code offset supplied for the input frame."))
-            })
-            put("module", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Original frame module path or runtime module label, when supplied."))
-            })
-            put("rawLabel", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Original raw frame label, when supplied."))
-            })
-            put("origin", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Function origin: `import`, `local`, or `unknown`."))
-            })
-            put("symbol", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Best resolved symbol name or the `funcidx` fallback."))
-            })
-            put("symbolSource", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Symbol source: `import`, `name_section`, `dwarf_name`, `dwarf_linkage_name`, `export`, or `funcidx_fallback`."))
-            })
-            put("signature", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter types, in declaration order."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Result types, in declaration order."))
-                })
-                put("return", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-                add(JsonPrimitive("return"))
-              })
-              put("description", JsonPrimitive("Parsed function signature when available. Uses `params` and `results`, with `return` retained as a legacy alias."))
-            })
-            put("import", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("module", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import module name."))
-                })
-                put("name", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import field name."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("module"))
-                add(JsonPrimitive("name"))
-              })
-              put("description", JsonPrimitive("Import descriptor when the function is imported."))
-            })
-            put("exportedAs", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Export names pointing at this function."))
-            })
-            put("codeRange", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("offset", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Absolute byte offset of the function body in the module."))
-                })
-                put("size", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Size of the function body in bytes."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("offset"))
-                add(JsonPrimitive("size"))
-              })
-              put("description", JsonPrimitive("Function body byte range for local functions."))
-            })
-            put("sourceLocation", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("file", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Resolved source file path."))
-                })
-                put("line", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Resolved source line."))
-                })
-                put("column", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Resolved source column."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("file"))
-                add(JsonPrimitive("line"))
-                add(JsonPrimitive("column"))
-              })
-              put("description", JsonPrimitive("Resolved source-map or DWARF source location when available."))
-            })
-            put("sourceFallbackReason", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Machine-readable reason when source location could not be resolved, for example `import_has_no_code_range` or `invalid_funcidx`."))
-            })
-            put("warnings", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Non-fatal resolution warnings for this frame."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("frameIndex"))
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("origin"))
-            add(JsonPrimitive("symbol"))
-            add(JsonPrimitive("symbolSource"))
-            add(JsonPrimitive("exportedAs"))
-            add(JsonPrimitive("warnings"))
-          })
         })
-        put("description", JsonPrimitive("Resolved crash frame records."))
       })
       put("crashReport", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("object"))
           add(JsonPrimitive("null"))
         })
-        put("properties", buildJsonObject {
-          put("path", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Crash report path used as input."))
-          })
-          put("incidentId", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Incident identifier from the crash report, when present."))
-          })
-          put("crashEventId", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Crash event identifier from the crash report, when present."))
-          })
-          put("buildId", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Build identifier from the crash report, when present."))
-          })
-          put("module", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Module path or label from the crash report, when present."))
-          })
-          put("frameCount", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of frames read from the crash report."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("frameCount"))
-        })
-        put("description", JsonPrimitive("Crash report metadata when frames were loaded from `crashReportPath`."))
       })
       put("sourceMapPath", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Source map path used for source-location resolution, including auto-discovered adjacent maps."))
       })
       put("topApplicationFrame", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("object"))
           add(JsonPrimitive("null"))
         })
-        put("properties", buildJsonObject {
-          put("frameIndex", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Zero-based position of the input frame in the request."))
-          })
-          put("funcidx", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Unified function index from the input frame."))
-          })
-          put("inputCodeOffset", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("integer"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Absolute code offset supplied for the input frame."))
-          })
-          put("module", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Original frame module path or runtime module label, when supplied."))
-          })
-          put("rawLabel", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Original raw frame label, when supplied."))
-          })
-          put("origin", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Function origin: `import`, `local`, or `unknown`."))
-          })
-          put("symbol", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Best resolved symbol name or the `funcidx` fallback."))
-          })
-          put("symbolSource", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Symbol source: `import`, `name_section`, `dwarf_name`, `dwarf_linkage_name`, `export`, or `funcidx_fallback`."))
-          })
-          put("signature", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("object"))
-              add(JsonPrimitive("null"))
-            })
-            put("properties", buildJsonObject {
-              put("params", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Parameter types, in declaration order."))
-              })
-              put("results", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Result types, in declaration order."))
-              })
-              put("return", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                })
-                put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("params"))
-              add(JsonPrimitive("results"))
-              add(JsonPrimitive("return"))
-            })
-            put("description", JsonPrimitive("Parsed function signature when available. Uses `params` and `results`, with `return` retained as a legacy alias."))
-          })
-          put("import", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("object"))
-              add(JsonPrimitive("null"))
-            })
-            put("properties", buildJsonObject {
-              put("module", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Import module name."))
-              })
-              put("name", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Import field name."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("module"))
-              add(JsonPrimitive("name"))
-            })
-            put("description", JsonPrimitive("Import descriptor when the function is imported."))
-          })
-          put("exportedAs", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Export names pointing at this function."))
-          })
-          put("codeRange", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("object"))
-              add(JsonPrimitive("null"))
-            })
-            put("properties", buildJsonObject {
-              put("offset", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Absolute byte offset of the function body in the module."))
-              })
-              put("size", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Size of the function body in bytes."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("offset"))
-              add(JsonPrimitive("size"))
-            })
-            put("description", JsonPrimitive("Function body byte range for local functions."))
-          })
-          put("sourceLocation", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("object"))
-              add(JsonPrimitive("null"))
-            })
-            put("properties", buildJsonObject {
-              put("file", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-                put("description", JsonPrimitive("Resolved source file path."))
-              })
-              put("line", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Resolved source line."))
-              })
-              put("column", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-                put("description", JsonPrimitive("Resolved source column."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("file"))
-              add(JsonPrimitive("line"))
-              add(JsonPrimitive("column"))
-            })
-            put("description", JsonPrimitive("Resolved source-map or DWARF source location when available."))
-          })
-          put("sourceFallbackReason", buildJsonObject {
-            put("type", buildJsonArray {
-              add(JsonPrimitive("string"))
-              add(JsonPrimitive("null"))
-            })
-            put("description", JsonPrimitive("Machine-readable reason when source location could not be resolved, for example `import_has_no_code_range` or `invalid_funcidx`."))
-          })
-          put("warnings", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Non-fatal resolution warnings for this frame."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("frameIndex"))
-          add(JsonPrimitive("funcidx"))
-          add(JsonPrimitive("origin"))
-          add(JsonPrimitive("symbol"))
-          add(JsonPrimitive("symbolSource"))
-          add(JsonPrimitive("exportedAs"))
-          add(JsonPrimitive("warnings"))
-        })
-        put("description", JsonPrimitive("First local frame in stack order with a resolved source location."))
       })
       put("skippedFrames", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("frameIndex", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Zero-based position in the resolved frame list."))
-            })
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Unified function index for the skipped frame."))
-            })
-            put("origin", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Function origin: `import`, `local`, or `unknown`."))
-            })
-            put("reason", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Machine-readable reason this frame was skipped for top-application-frame selection."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("frameIndex"))
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("origin"))
-            add(JsonPrimitive("reason"))
-          })
         })
-        put("description", JsonPrimitive("Imported, unknown, or otherwise non-source-resolved frames skipped when choosing the top application frame."))
       })
     },
     required = listOf("frames", "skippedFrames")
@@ -6760,14 +2566,14 @@ private fun Server.registerResolveFunctionSymbolsTool(handlers: HexanaToolHandle
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -6780,7 +2586,7 @@ private fun Server.registerResolveFunctionSymbolsTool(handlers: HexanaToolHandle
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("indices", buildJsonObject {
@@ -6808,158 +2614,7 @@ private fun Server.registerResolveFunctionSymbolsTool(handlers: HexanaToolHandle
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Unified function index from the input request."))
-            })
-            put("origin", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Function origin: `import`, `local`, or `unknown`."))
-            })
-            put("symbol", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Best resolved symbol name or the `funcidx` fallback."))
-            })
-            put("symbolSource", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Symbol source: `import`, `name_section`, `dwarf_name`, `dwarf_linkage_name`, `export`, or `funcidx_fallback`."))
-            })
-            put("typeidx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Function type index, when resolved."))
-            })
-            put("signature", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter types, in declaration order."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Result types, in declaration order."))
-                })
-                put("return", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Legacy alias for `results`; prefer `results` for new report shapes."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-                add(JsonPrimitive("return"))
-              })
-              put("description", JsonPrimitive("Parsed function signature when available."))
-            })
-            put("import", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("module", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import module name."))
-                })
-                put("name", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import field name."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("module"))
-                add(JsonPrimitive("name"))
-              })
-              put("description", JsonPrimitive("Import descriptor when the function is imported."))
-            })
-            put("exportedAs", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Export names pointing at this function."))
-            })
-            put("codeRange", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("offset", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Absolute byte offset of the function body in the module."))
-                })
-                put("size", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Size of the function body in bytes."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("offset"))
-                add(JsonPrimitive("size"))
-              })
-              put("description", JsonPrimitive("Function body byte range for local functions."))
-            })
-            put("sourceLocation", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("file", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Resolved source file path."))
-                })
-                put("line", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Resolved source line."))
-                })
-                put("column", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Resolved source column."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("file"))
-                add(JsonPrimitive("line"))
-                add(JsonPrimitive("column"))
-              })
-              put("description", JsonPrimitive("Resolved source-map or DWARF source location when available."))
-            })
-            put("warnings", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Non-fatal resolution warnings for this function."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("origin"))
-            add(JsonPrimitive("symbol"))
-            add(JsonPrimitive("symbolSource"))
-            add(JsonPrimitive("exportedAs"))
-            add(JsonPrimitive("warnings"))
-          })
         })
-        put("description", JsonPrimitive("Resolved function symbol records."))
       })
     },
     required = listOf("symbols")
@@ -6990,14 +2645,14 @@ private fun Server.registerResolveSourceLocationsTool(handlers: HexanaToolHandle
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -7010,7 +2665,7 @@ private fun Server.registerResolveSourceLocationsTool(handlers: HexanaToolHandle
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("locations", buildJsonObject {
@@ -7055,93 +2710,7 @@ private fun Server.registerResolveSourceLocationsTool(handlers: HexanaToolHandle
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("queryIndex", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Zero-based position of the input location query."))
-            })
-            put("funcidx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Resolved or supplied unified function index."))
-            })
-            put("codeOffset", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Resolved or supplied absolute code offset."))
-            })
-            put("codeRange", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("offset", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Absolute byte offset of the function body in the module."))
-                })
-                put("size", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Size of the function body in bytes."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("offset"))
-                add(JsonPrimitive("size"))
-              })
-              put("description", JsonPrimitive("Function body byte range when known."))
-            })
-            put("sourceLocation", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("file", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Resolved source file path."))
-                })
-                put("line", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Resolved source line."))
-                })
-                put("column", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Resolved source column."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("file"))
-                add(JsonPrimitive("line"))
-                add(JsonPrimitive("column"))
-              })
-              put("description", JsonPrimitive("Resolved source-map or DWARF source location when available."))
-            })
-            put("source", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Location source: `source_map` or `dwarf`."))
-            })
-            put("warnings", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Non-fatal resolution warnings for this query."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("queryIndex"))
-            add(JsonPrimitive("warnings"))
-          })
         })
-        put("description", JsonPrimitive("Resolved source-location records."))
       })
     },
     required = listOf("locations")
@@ -7171,14 +2740,14 @@ private fun Server.registerGetLocalsForFunctionsTool(handlers: HexanaToolHandler
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -7191,7 +2760,7 @@ private fun Server.registerGetLocalsForFunctionsTool(handlers: HexanaToolHandler
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("indices", buildJsonObject {
@@ -7211,39 +2780,7 @@ private fun Server.registerGetLocalsForFunctionsTool(handlers: HexanaToolHandler
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Funcidx whose locals were resolved."))
-            })
-            put("locals", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("local", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Local slot index."))
-                  })
-                  put("type", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Local type (`i32`, `i64`, `f32`, `f64`, `v128`, reference types, etc.)."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("local"))
-                  add(JsonPrimitive("type"))
-                })
-              })
-              put("description", JsonPrimitive("Grouped local declarations for the function."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("locals"))
-          })
         })
-        put("description", JsonPrimitive("Per-function local declarations."))
       })
     },
     required = listOf("functions")
@@ -7275,14 +2812,14 @@ private fun Server.registerGetInstructionsForFunctionsTool(handlers: HexanaToolH
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -7295,7 +2832,7 @@ private fun Server.registerGetInstructionsForFunctionsTool(handlers: HexanaToolH
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("indices", buildJsonObject {
@@ -7315,25 +2852,7 @@ private fun Server.registerGetInstructionsForFunctionsTool(handlers: HexanaToolH
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("funcidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Funcidx whose body was decoded."))
-            })
-            put("instructions", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Decoded instruction text, one entry per instruction."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("funcidx"))
-            add(JsonPrimitive("instructions"))
-          })
         })
-        put("description", JsonPrimitive("Per-function decoded instructions."))
       })
     },
     required = listOf("functions")
@@ -7364,14 +2883,14 @@ private fun Server.registerListMemoryTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -7384,7 +2903,7 @@ private fun Server.registerListMemoryTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -7396,92 +2915,7 @@ private fun Server.registerListMemoryTool(handlers: HexanaToolHandlers) {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("memoryIdx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Index in the unified memory index space."))
-            })
-            put("limit", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("addressType", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
-                })
-                put("min", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Minimum number of pages."))
-                })
-                put("max", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("integer"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
-                })
-                put("hasMax", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when an explicit upper bound was declared."))
-                })
-                put("range", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Human-readable range such as `1..ε`."))
-                })
-                put("flag", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Raw limits flag byte as hex (`0x00`, `0x01`, etc.)."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("addressType"))
-                add(JsonPrimitive("min"))
-                add(JsonPrimitive("hasMax"))
-                add(JsonPrimitive("range"))
-                add(JsonPrimitive("flag"))
-              })
-              put("description", JsonPrimitive("Page limits for the memory."))
-            })
-            put("import", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("module", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import module name."))
-                })
-                put("name", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import field name."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("module"))
-                add(JsonPrimitive("name"))
-              })
-              put("description", JsonPrimitive("Import descriptor when the memory is imported."))
-            })
-            put("definedIn", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Section the memory is declared in."))
-            })
-            put("exportedAs", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Memory export names that point at this memory index."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("memoryIdx"))
-            add(JsonPrimitive("limit"))
-            add(JsonPrimitive("definedIn"))
-            add(JsonPrimitive("exportedAs"))
-          })
         })
-        put("description", JsonPrimitive("Imported and defined memories."))
       })
     },
     required = listOf("memories")
@@ -7511,14 +2945,14 @@ private fun Server.registerGetMemoryForIndicesTool(handlers: HexanaToolHandlers)
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -7531,7 +2965,7 @@ private fun Server.registerGetMemoryForIndicesTool(handlers: HexanaToolHandlers)
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("indices", buildJsonObject {
@@ -7551,92 +2985,7 @@ private fun Server.registerGetMemoryForIndicesTool(handlers: HexanaToolHandlers)
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("memoryIdx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Index in the unified memory index space."))
-            })
-            put("limit", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("addressType", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Address space type (`i32` or `i64`)."))
-                })
-                put("min", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Minimum number of pages."))
-                })
-                put("max", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("integer"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Maximum number of pages, when the memory is bounded."))
-                })
-                put("hasMax", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when an explicit upper bound was declared."))
-                })
-                put("range", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Human-readable range such as `1..ε`."))
-                })
-                put("flag", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Raw limits flag byte as hex (`0x00`, `0x01`, etc.)."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("addressType"))
-                add(JsonPrimitive("min"))
-                add(JsonPrimitive("hasMax"))
-                add(JsonPrimitive("range"))
-                add(JsonPrimitive("flag"))
-              })
-              put("description", JsonPrimitive("Page limits for the memory."))
-            })
-            put("import", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("module", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import module name."))
-                })
-                put("name", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Import field name."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("module"))
-                add(JsonPrimitive("name"))
-              })
-              put("description", JsonPrimitive("Import descriptor when the memory is imported."))
-            })
-            put("definedIn", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Section the memory is declared in."))
-            })
-            put("exportedAs", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Memory export names that point at this memory index."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("memoryIdx"))
-            add(JsonPrimitive("limit"))
-            add(JsonPrimitive("definedIn"))
-            add(JsonPrimitive("exportedAs"))
-          })
         })
-        put("description", JsonPrimitive("Imported and defined memories."))
       })
     },
     required = listOf("memories")
@@ -7667,14 +3016,14 @@ private fun Server.registerListGlobalsTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -7687,7 +3036,7 @@ private fun Server.registerListGlobalsTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -7699,80 +3048,7 @@ private fun Server.registerListGlobalsTool(handlers: HexanaToolHandlers) {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("globalIdx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Global index in the unified global index space."))
-            })
-            put("prefix", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import module prefix, when the global is imported."))
-            })
-            put("name", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import or exported name, when applicable."))
-            })
-            put("type", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global value type (`i32`, `i64`, `f32`, `f64`, ...)."))
-            })
-            put("mutability", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the global is mutable."))
-            })
-            put("expression", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Initialization expression in WAT syntax."))
-            })
-            put("definedIn", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Section the global is declared in."))
-            })
-            put("origin", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global origin: `import` or `local`."))
-            })
-            put("importModule", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import module name when the global is imported."))
-            })
-            put("importName", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import field name when the global is imported."))
-            })
-            put("exportedAs", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Export names pointing at this global."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("globalIdx"))
-            add(JsonPrimitive("type"))
-            add(JsonPrimitive("mutability"))
-            add(JsonPrimitive("definedIn"))
-            add(JsonPrimitive("origin"))
-            add(JsonPrimitive("exportedAs"))
-          })
         })
-        put("description", JsonPrimitive("Globals declared or imported by the module."))
       })
     },
     required = listOf("globals")
@@ -7802,14 +3078,14 @@ private fun Server.registerGetGlobalsForIndicesTool(handlers: HexanaToolHandlers
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -7822,7 +3098,7 @@ private fun Server.registerGetGlobalsForIndicesTool(handlers: HexanaToolHandlers
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("indices", buildJsonObject {
@@ -7842,80 +3118,7 @@ private fun Server.registerGetGlobalsForIndicesTool(handlers: HexanaToolHandlers
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("globalIdx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Global index in the unified global index space."))
-            })
-            put("prefix", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import module prefix, when the global is imported."))
-            })
-            put("name", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import or exported name, when applicable."))
-            })
-            put("type", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global value type (`i32`, `i64`, `f32`, `f64`, ...)."))
-            })
-            put("mutability", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the global is mutable."))
-            })
-            put("expression", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Initialization expression in WAT syntax."))
-            })
-            put("definedIn", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Section the global is declared in."))
-            })
-            put("origin", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global origin: `import` or `local`."))
-            })
-            put("importModule", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import module name when the global is imported."))
-            })
-            put("importName", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import field name when the global is imported."))
-            })
-            put("exportedAs", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Export names pointing at this global."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("globalIdx"))
-            add(JsonPrimitive("type"))
-            add(JsonPrimitive("mutability"))
-            add(JsonPrimitive("definedIn"))
-            add(JsonPrimitive("origin"))
-            add(JsonPrimitive("exportedAs"))
-          })
         })
-        put("description", JsonPrimitive("Globals declared or imported by the module."))
       })
     },
     required = listOf("globals")
@@ -7946,14 +3149,14 @@ private fun Server.registerListTypesTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -7966,7 +3169,7 @@ private fun Server.registerListTypesTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -7978,149 +3181,7 @@ private fun Server.registerListTypesTool(handlers: HexanaToolHandlers) {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("kind", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Type kind (`func`, `struct`, `array`, etc.)."))
-            })
-            put("typeidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Type index."))
-            })
-            put("importLocations", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("locationKind", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Stable location kind. Function imports use `import`."))
-                  })
-                  put("module", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Imported module name."))
-                  })
-                  put("name", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Imported field name."))
-                  })
-                  put("locationDisplay", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
-                  })
-                  put("funcidx", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Funcidx of the imported function using this type."))
-                  })
-                  put("typeidx", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Type index referenced by the imported function."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("locationKind"))
-                  add(JsonPrimitive("module"))
-                  add(JsonPrimitive("name"))
-                  add(JsonPrimitive("locationDisplay"))
-                  add(JsonPrimitive("funcidx"))
-                  add(JsonPrimitive("typeidx"))
-                })
-              })
-              put("description", JsonPrimitive("Function imports that reference this type, with stable display strings."))
-            })
-            put("elementType", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("type", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Field storage type."))
-                })
-                put("mutable", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when the field is mutable."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("type"))
-                add(JsonPrimitive("mutable"))
-              })
-              put("description", JsonPrimitive("Array element type, when applicable."))
-            })
-            put("superTypes", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("array"))
-                add(JsonPrimitive("null"))
-              })
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-              })
-              put("description", JsonPrimitive("Supertype indices for subtyping, when applicable."))
-            })
-            put("fields", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("array"))
-                add(JsonPrimitive("null"))
-              })
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("type", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Field storage type."))
-                  })
-                  put("mutable", buildJsonObject {
-                    put("type", JsonPrimitive("boolean"))
-                    put("description", JsonPrimitive("True when the field is mutable."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("type"))
-                  add(JsonPrimitive("mutable"))
-                })
-              })
-              put("description", JsonPrimitive("Struct fields, when applicable."))
-            })
-            put("entries", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("array"))
-                add(JsonPrimitive("null"))
-              })
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Entry signatures, when applicable."))
-            })
-            put("params", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("array"))
-                add(JsonPrimitive("null"))
-              })
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Function parameter types, when applicable."))
-            })
-            put("retTypes", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("array"))
-                add(JsonPrimitive("null"))
-              })
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Function return types, when applicable."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("kind"))
-            add(JsonPrimitive("typeidx"))
-            add(JsonPrimitive("importLocations"))
-          })
         })
-        put("description", JsonPrimitive("Declared type entries."))
       })
     },
     required = listOf("types")
@@ -8150,14 +3211,14 @@ private fun Server.registerListValueTypesTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -8170,7 +3231,7 @@ private fun Server.registerListValueTypesTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -8180,210 +3241,12 @@ private fun Server.registerListValueTypesTool(handlers: HexanaToolHandlers) {
     properties = buildJsonObject {
       put("valueTypes", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("scalar", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Scalar numeric value types used by the module."))
-          })
-          put("vector", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Vector value types used by the module."))
-          })
-          put("packed", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-            })
-            put("description", JsonPrimitive("Packed storage value types used by GC fields or locals."))
-          })
-          put("reference", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("type", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Canonical reference value type, for example `funcref`, `externref`, or `ref struct`."))
-                })
-                put("refKind", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Heap kind without nullability, for example `func`, `extern`, `struct`, or `array`."))
-                })
-                put("nullable", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when the reference type is nullable."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("type"))
-                add(JsonPrimitive("refKind"))
-                add(JsonPrimitive("nullable"))
-              })
-            })
-            put("description", JsonPrimitive("Reference value types used by the module."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("scalar"))
-          add(JsonPrimitive("vector"))
-          add(JsonPrimitive("packed"))
-          add(JsonPrimitive("reference"))
-        })
-        put("description", JsonPrimitive("Distinct value types grouped by category."))
       })
       put("counts", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("valueTypes", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put("properties", buildJsonObject {
-              put("scalar", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("object"))
-                  put("properties", buildJsonObject {
-                    put("type", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                      put("description", JsonPrimitive("Value type name."))
-                    })
-                    put("count", buildJsonObject {
-                      put("type", JsonPrimitive("integer"))
-                      put("description", JsonPrimitive("Number of observed type occurrences."))
-                    })
-                  })
-                  put("required", buildJsonArray {
-                    add(JsonPrimitive("type"))
-                    add(JsonPrimitive("count"))
-                  })
-                })
-                put("description", JsonPrimitive("Counts for scalar numeric value types."))
-              })
-              put("vector", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("object"))
-                  put("properties", buildJsonObject {
-                    put("type", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                      put("description", JsonPrimitive("Value type name."))
-                    })
-                    put("count", buildJsonObject {
-                      put("type", JsonPrimitive("integer"))
-                      put("description", JsonPrimitive("Number of observed type occurrences."))
-                    })
-                  })
-                  put("required", buildJsonArray {
-                    add(JsonPrimitive("type"))
-                    add(JsonPrimitive("count"))
-                  })
-                })
-                put("description", JsonPrimitive("Counts for vector value types."))
-              })
-              put("packed", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("object"))
-                  put("properties", buildJsonObject {
-                    put("type", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                      put("description", JsonPrimitive("Value type name."))
-                    })
-                    put("count", buildJsonObject {
-                      put("type", JsonPrimitive("integer"))
-                      put("description", JsonPrimitive("Number of observed type occurrences."))
-                    })
-                  })
-                  put("required", buildJsonArray {
-                    add(JsonPrimitive("type"))
-                    add(JsonPrimitive("count"))
-                  })
-                })
-                put("description", JsonPrimitive("Counts for packed storage value types."))
-              })
-              put("reference", buildJsonObject {
-                put("type", JsonPrimitive("array"))
-                put("items", buildJsonObject {
-                  put("type", JsonPrimitive("object"))
-                  put("properties", buildJsonObject {
-                    put("type", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                      put("description", JsonPrimitive("Canonical reference value type."))
-                    })
-                    put("refKind", buildJsonObject {
-                      put("type", JsonPrimitive("string"))
-                      put("description", JsonPrimitive("Heap kind without nullability."))
-                    })
-                    put("nullable", buildJsonObject {
-                      put("type", JsonPrimitive("boolean"))
-                      put("description", JsonPrimitive("True when the reference type is nullable."))
-                    })
-                    put("count", buildJsonObject {
-                      put("type", JsonPrimitive("integer"))
-                      put("description", JsonPrimitive("Number of observed type occurrences."))
-                    })
-                  })
-                  put("required", buildJsonArray {
-                    add(JsonPrimitive("type"))
-                    add(JsonPrimitive("refKind"))
-                    add(JsonPrimitive("nullable"))
-                    add(JsonPrimitive("count"))
-                  })
-                })
-                put("description", JsonPrimitive("Counts for reference value types."))
-              })
-            })
-            put("required", buildJsonArray {
-              add(JsonPrimitive("scalar"))
-              add(JsonPrimitive("vector"))
-              add(JsonPrimitive("packed"))
-              add(JsonPrimitive("reference"))
-            })
-            put("description", JsonPrimitive("Counts grouped by value-type category."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("valueTypes"))
-        })
-        put("description", JsonPrimitive("Observed value-type occurrence counts."))
       })
       put("summary", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("hasGC", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when GC-only value types or storage types are present."))
-          })
-          put("hasPacked", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when packed storage types such as `i8` or `i16` are present."))
-          })
-          put("hasSIMD", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when `v128` or SIMD instructions are present."))
-          })
-          put("hasReferenceTypes", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when reference value types are present."))
-          })
-          put("pureMVP", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when no post-MVP value-type features were observed."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("hasGC"))
-          add(JsonPrimitive("hasPacked"))
-          add(JsonPrimitive("hasSIMD"))
-          add(JsonPrimitive("hasReferenceTypes"))
-          add(JsonPrimitive("pureMVP"))
-        })
-        put("description", JsonPrimitive("High-level feature flags inferred from value types."))
       })
     },
     required = listOf("valueTypes", "counts", "summary")
@@ -8413,14 +3276,14 @@ private fun Server.registerListReferenceTypesTool(handlers: HexanaToolHandlers) 
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -8433,7 +3296,7 @@ private fun Server.registerListReferenceTypesTool(handlers: HexanaToolHandlers) 
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -8443,247 +3306,15 @@ private fun Server.registerListReferenceTypesTool(handlers: HexanaToolHandlers) 
     properties = buildJsonObject {
       put("referenceTypes", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("functionReferences", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("type", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Canonical reference value type, for example `funcref`, `externref`, or `ref struct`."))
-                })
-                put("refKind", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Heap kind without nullability, for example `func`, `extern`, `struct`, or `array`."))
-                })
-                put("nullable", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when the reference type is nullable."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("type"))
-                add(JsonPrimitive("refKind"))
-                add(JsonPrimitive("nullable"))
-              })
-            })
-            put("description", JsonPrimitive("Function reference types such as `funcref`."))
-          })
-          put("externalReferences", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("type", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Canonical reference value type, for example `funcref`, `externref`, or `ref struct`."))
-                })
-                put("refKind", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Heap kind without nullability, for example `func`, `extern`, `struct`, or `array`."))
-                })
-                put("nullable", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when the reference type is nullable."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("type"))
-                add(JsonPrimitive("refKind"))
-                add(JsonPrimitive("nullable"))
-              })
-            })
-            put("description", JsonPrimitive("External reference types such as `externref`."))
-          })
-          put("gcReferences", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("type", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Canonical reference value type, for example `funcref`, `externref`, or `ref struct`."))
-                })
-                put("refKind", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Heap kind without nullability, for example `func`, `extern`, `struct`, or `array`."))
-                })
-                put("nullable", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when the reference type is nullable."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("type"))
-                add(JsonPrimitive("refKind"))
-                add(JsonPrimitive("nullable"))
-              })
-            })
-            put("description", JsonPrimitive("GC composite reference types such as `structref` and `arrayref`."))
-          })
-          put("primitiveReferences", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("type", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Canonical reference value type, for example `funcref`, `externref`, or `ref struct`."))
-                })
-                put("refKind", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Heap kind without nullability, for example `func`, `extern`, `struct`, or `array`."))
-                })
-                put("nullable", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when the reference type is nullable."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("type"))
-                add(JsonPrimitive("refKind"))
-                add(JsonPrimitive("nullable"))
-              })
-            })
-            put("description", JsonPrimitive("Primitive GC reference types such as `i31ref`."))
-          })
-          put("anyReferences", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("type", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Canonical reference value type, for example `funcref`, `externref`, or `ref struct`."))
-                })
-                put("refKind", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Heap kind without nullability, for example `func`, `extern`, `struct`, or `array`."))
-                })
-                put("nullable", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when the reference type is nullable."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("type"))
-                add(JsonPrimitive("refKind"))
-                add(JsonPrimitive("nullable"))
-              })
-            })
-            put("description", JsonPrimitive("Top-like GC reference types such as `anyref` and `eqref`."))
-          })
-          put("noneReferences", buildJsonObject {
-            put("type", JsonPrimitive("array"))
-            put("items", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("type", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Canonical reference value type, for example `funcref`, `externref`, or `ref struct`."))
-                })
-                put("refKind", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Heap kind without nullability, for example `func`, `extern`, `struct`, or `array`."))
-                })
-                put("nullable", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when the reference type is nullable."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("type"))
-                add(JsonPrimitive("refKind"))
-                add(JsonPrimitive("nullable"))
-              })
-            })
-            put("description", JsonPrimitive("Bottom/null reference types such as `nullref`."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("functionReferences"))
-          add(JsonPrimitive("externalReferences"))
-          add(JsonPrimitive("gcReferences"))
-          add(JsonPrimitive("primitiveReferences"))
-          add(JsonPrimitive("anyReferences"))
-          add(JsonPrimitive("noneReferences"))
-        })
-        put("description", JsonPrimitive("Distinct reference types grouped by semantic family."))
       })
       put("counts", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("type", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Canonical reference value type."))
-            })
-            put("refKind", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Heap kind without nullability."))
-            })
-            put("nullable", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the reference type is nullable."))
-            })
-            put("count", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Number of observed type occurrences."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("type"))
-            add(JsonPrimitive("refKind"))
-            add(JsonPrimitive("nullable"))
-            add(JsonPrimitive("count"))
-          })
         })
-        put("description", JsonPrimitive("Observed reference-type occurrence counts."))
       })
       put("summary", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("hasGC", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when GC-only reference kinds are present."))
-          })
-          put("hasI31", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when `i31ref` or `ref i31` is present."))
-          })
-          put("hasStruct", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when struct references are present."))
-          })
-          put("hasArray", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when array references are present."))
-          })
-          put("hasRefEq", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when `eqref` or `ref eq` is present."))
-          })
-          put("hasAnyRef", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when `anyref` or `ref any` is present."))
-          })
-          put("hasExternRef", buildJsonObject {
-            put("type", JsonPrimitive("boolean"))
-            put("description", JsonPrimitive("True when external references are present."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("hasGC"))
-          add(JsonPrimitive("hasI31"))
-          add(JsonPrimitive("hasStruct"))
-          add(JsonPrimitive("hasArray"))
-          add(JsonPrimitive("hasRefEq"))
-          add(JsonPrimitive("hasAnyRef"))
-          add(JsonPrimitive("hasExternRef"))
-        })
-        put("description", JsonPrimitive("High-level reference feature flags."))
       })
     },
     required = listOf("referenceTypes", "counts", "summary")
@@ -8713,14 +3344,14 @@ private fun Server.registerGetTypesForIndicesTool(handlers: HexanaToolHandlers) 
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -8733,7 +3364,7 @@ private fun Server.registerGetTypesForIndicesTool(handlers: HexanaToolHandlers) 
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("indices", buildJsonObject {
@@ -8753,149 +3384,7 @@ private fun Server.registerGetTypesForIndicesTool(handlers: HexanaToolHandlers) 
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("kind", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Type kind (`func`, `struct`, `array`, etc.)."))
-            })
-            put("typeidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Type index."))
-            })
-            put("importLocations", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("locationKind", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Stable location kind. Function imports use `import`."))
-                  })
-                  put("module", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Imported module name."))
-                  })
-                  put("name", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Imported field name."))
-                  })
-                  put("locationDisplay", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Stable human-readable import location, for example `import host.bind_external`."))
-                  })
-                  put("funcidx", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Funcidx of the imported function using this type."))
-                  })
-                  put("typeidx", buildJsonObject {
-                    put("type", JsonPrimitive("integer"))
-                    put("description", JsonPrimitive("Type index referenced by the imported function."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("locationKind"))
-                  add(JsonPrimitive("module"))
-                  add(JsonPrimitive("name"))
-                  add(JsonPrimitive("locationDisplay"))
-                  add(JsonPrimitive("funcidx"))
-                  add(JsonPrimitive("typeidx"))
-                })
-              })
-              put("description", JsonPrimitive("Function imports that reference this type, with stable display strings."))
-            })
-            put("elementType", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("type", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Field storage type."))
-                })
-                put("mutable", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when the field is mutable."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("type"))
-                add(JsonPrimitive("mutable"))
-              })
-              put("description", JsonPrimitive("Array element type, when applicable."))
-            })
-            put("superTypes", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("array"))
-                add(JsonPrimitive("null"))
-              })
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("integer"))
-              })
-              put("description", JsonPrimitive("Supertype indices for subtyping, when applicable."))
-            })
-            put("fields", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("array"))
-                add(JsonPrimitive("null"))
-              })
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("type", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Field storage type."))
-                  })
-                  put("mutable", buildJsonObject {
-                    put("type", JsonPrimitive("boolean"))
-                    put("description", JsonPrimitive("True when the field is mutable."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("type"))
-                  add(JsonPrimitive("mutable"))
-                })
-              })
-              put("description", JsonPrimitive("Struct fields, when applicable."))
-            })
-            put("entries", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("array"))
-                add(JsonPrimitive("null"))
-              })
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Entry signatures, when applicable."))
-            })
-            put("params", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("array"))
-                add(JsonPrimitive("null"))
-              })
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Function parameter types, when applicable."))
-            })
-            put("retTypes", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("array"))
-                add(JsonPrimitive("null"))
-              })
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Function return types, when applicable."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("kind"))
-            add(JsonPrimitive("typeidx"))
-            add(JsonPrimitive("importLocations"))
-          })
         })
-        put("description", JsonPrimitive("Declared type entries."))
       })
     },
     required = listOf("types")
@@ -8925,14 +3414,14 @@ private fun Server.registerListElementSegmentsTool(handlers: HexanaToolHandlers)
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -8945,7 +3434,7 @@ private fun Server.registerListElementSegmentsTool(handlers: HexanaToolHandlers)
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
     },
@@ -8957,59 +3446,7 @@ private fun Server.registerListElementSegmentsTool(handlers: HexanaToolHandlers)
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("elementidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Element segment index."))
-            })
-            put("kind", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Raw element segment kind byte."))
-            })
-            put("mode", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Segment mode (`active`, `passive`, `declarative`)."))
-            })
-            put("tableIdx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Target table index for active segments."))
-            })
-            put("offsetExpr", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("array"))
-                add(JsonPrimitive("null"))
-              })
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Offset expression tokens for active segments."))
-            })
-            put("elementType", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Element reference type."))
-            })
-            put("elements", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("array"))
-                add(JsonPrimitive("null"))
-              })
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Element expressions or funcidx list."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("elementidx"))
-            add(JsonPrimitive("kind"))
-            add(JsonPrimitive("mode"))
-            add(JsonPrimitive("elementType"))
-          })
         })
-        put("description", JsonPrimitive("Element segments declared by the module."))
       })
     },
     required = listOf("segments")
@@ -9039,14 +3476,14 @@ private fun Server.registerListDataTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -9059,7 +3496,7 @@ private fun Server.registerListDataTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("entriesRange", buildJsonObject {
@@ -9089,71 +3526,27 @@ private fun Server.registerListDataTool(handlers: HexanaToolHandlers) {
     properties = buildJsonObject {
       put("from", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Inclusive lower bound that was requested."))
       })
       put("to", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Inclusive upper bound that was requested."))
       })
       put("returned", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("kind", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Raw data-entry kind byte."))
-            })
-            put("index", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Data-entry index within the returned slice."))
-            })
-            put("offset", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Byte offset of the entry in the module."))
-            })
-            put("data", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Raw data payload (serialised as Base64)."))
-            })
-            put("memoryIndex", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Target memory index for active entries."))
-            })
-            put("expression", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Offset expression for active entries."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("kind"))
-            add(JsonPrimitive("index"))
-            add(JsonPrimitive("offset"))
-            add(JsonPrimitive("data"))
-          })
         })
-        put("description", JsonPrimitive("Entries inside the requested range."))
       })
       put("total_segments", buildJsonObject {
         put("type", JsonPrimitive("integer"))
-        put("description", JsonPrimitive("Total number of data-section entries in the module."))
       })
       put("truncate", buildJsonObject {
         put("type", JsonPrimitive("boolean"))
-        put("description", JsonPrimitive("True when the range was clipped."))
       })
       put("nextOffset", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("integer"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Next offset to continue pagination; null when exhausted."))
       })
     },
     required = listOf("from", "to", "returned", "total_segments", "truncate")
@@ -9183,14 +3576,14 @@ private fun Server.registerListDataSegmentsTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -9203,7 +3596,7 @@ private fun Server.registerListDataSegmentsTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("segmentRange", buildJsonObject {
@@ -9255,226 +3648,34 @@ private fun Server.registerListDataSegmentsTool(handlers: HexanaToolHandlers) {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("memidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Memory index."))
-            })
-            put("limits", buildJsonObject {
-              put("type", JsonPrimitive("object"))
-              put("properties", buildJsonObject {
-                put("addressType", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Address space type."))
-                })
-                put("min", buildJsonObject {
-                  put("type", JsonPrimitive("integer"))
-                  put("description", JsonPrimitive("Minimum number of pages."))
-                })
-                put("max", buildJsonObject {
-                  put("type", buildJsonArray {
-                    add(JsonPrimitive("integer"))
-                    add(JsonPrimitive("null"))
-                  })
-                  put("description", JsonPrimitive("Maximum number of pages, when bounded."))
-                })
-                put("hasMax", buildJsonObject {
-                  put("type", JsonPrimitive("boolean"))
-                  put("description", JsonPrimitive("True when an explicit upper bound was declared."))
-                })
-                put("range", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Human-readable range."))
-                })
-                put("flag", buildJsonObject {
-                  put("type", JsonPrimitive("string"))
-                  put("description", JsonPrimitive("Raw limits flag byte as hex."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("addressType"))
-                add(JsonPrimitive("min"))
-                add(JsonPrimitive("hasMax"))
-                add(JsonPrimitive("range"))
-                add(JsonPrimitive("flag"))
-              })
-              put("description", JsonPrimitive("Page limits for the memory."))
-            })
-            put("definedIn", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Section the memory is declared in."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("memidx"))
-            add(JsonPrimitive("limits"))
-            add(JsonPrimitive("definedIn"))
-          })
         })
-        put("description", JsonPrimitive("Memories referenced by the segments."))
       })
       put("globals", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("globalidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Global index."))
-            })
-            put("module", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import module name when the global is imported."))
-            })
-            put("name", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Import or exported name when applicable."))
-            })
-            put("type", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Global value type."))
-            })
-            put("mutable", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the global is mutable."))
-            })
-            put("initExpr", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Initialization expression in WAT syntax."))
-            })
-            put("definedIn", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Section the global is declared in."))
-            })
-            put("exportedAs", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("string"))
-              })
-              put("description", JsonPrimitive("Export names pointing at this global."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("globalidx"))
-            add(JsonPrimitive("type"))
-            add(JsonPrimitive("mutable"))
-            add(JsonPrimitive("definedIn"))
-            add(JsonPrimitive("exportedAs"))
-          })
         })
-        put("description", JsonPrimitive("Globals referenced by segment offset expressions."))
       })
       put("segments", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("dataidx", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Data segment index."))
-            })
-            put("mode", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Segment mode (`active`, `passive`)."))
-            })
-            put("memory", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Target memory index for active segments."))
-            })
-            put("offsetExpr", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Offset expression for active segments."))
-            })
-            put("byteLength", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Byte length of the segment payload."))
-            })
-            put("hexPreview", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Hex-encoded preview of the first bytes."))
-            })
-            put("utf8Preview", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Best-effort UTF-8 preview of the segment content."))
-            })
-            put("rawAvailable", buildJsonObject {
-              put("type", JsonPrimitive("boolean"))
-              put("description", JsonPrimitive("True when the raw bytes are available via `list_data`."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("dataidx"))
-            add(JsonPrimitive("mode"))
-            add(JsonPrimitive("byteLength"))
-            add(JsonPrimitive("rawAvailable"))
-          })
         })
-        put("description", JsonPrimitive("Data segment metadata."))
       })
       put("linkingMetadata", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("object"))
           add(JsonPrimitive("null"))
         })
-        put("properties", buildJsonObject {
-        })
-        put("description", JsonPrimitive("Optional linker/CG metadata block."))
       })
       put("exportedSymbols", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Exported symbol names, when `includeExports` was requested."))
       })
       put("summary", buildJsonObject {
         put("type", JsonPrimitive("object"))
-        put("properties", buildJsonObject {
-          put("totalSegments", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Total segment count."))
-          })
-          put("activeSegments", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Count of active segments."))
-          })
-          put("passiveSegments", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Count of passive segments."))
-          })
-          put("memories", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of memories referenced by segments."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("totalSegments"))
-          add(JsonPrimitive("activeSegments"))
-          add(JsonPrimitive("passiveSegments"))
-          add(JsonPrimitive("memories"))
-        })
-        put("description", JsonPrimitive("Counts across the returned segments."))
       })
     },
     required = listOf("memory", "globals", "segments", "exportedSymbols", "summary")
@@ -9513,14 +3714,14 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Path to a local `.wasm` file readable by the Hexana MCP server. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
       })
       put("bytesBase64", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
-        put("description", JsonPrimitive("Base64-encoded `.wasm` bytes. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
       })
       put("bytes", buildJsonObject {
@@ -9533,7 +3734,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
           put("minimum", JsonPrimitive(0))
           put("maximum", JsonPrimitive(255))
         })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as integers in the range 0..255. Runtime validation requires exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
         put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
       })
       put("baselinePath", buildJsonObject {
@@ -9642,278 +3843,33 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
     properties = buildJsonObject {
       put("operation", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Executed operation."))
       })
       put("detail", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Executed detail level."))
       })
       put("modules", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("source", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Module role: `current` or `baseline`."))
-            })
-            put("path", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Input path label for this module when the caller provided `path` or `baselinePath`."))
-            })
-            put("artifactPath", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Canonical artifact path echoed from `path` or `baselinePath` for report-ready module identity."))
-            })
-            put("artifactName", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Display basename derived from `artifactPath`; use `artifactPath` when paths can collide."))
-            })
-            put("functions", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Function count."))
-            })
-            put("imports", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Total import count across supported import kinds."))
-            })
-            put("exports", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Export count."))
-            })
-            put("memories", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Memory count."))
-            })
-            put("globals", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Global count."))
-            })
-            put("tables", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Table count."))
-            })
-            put("types", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Type count."))
-            })
-            put("moduleSize", buildJsonObject {
-              put("type", JsonPrimitive("integer"))
-              put("description", JsonPrimitive("Module size in bytes."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("source"))
-            add(JsonPrimitive("functions"))
-            add(JsonPrimitive("imports"))
-            add(JsonPrimitive("exports"))
-            add(JsonPrimitive("memories"))
-            add(JsonPrimitive("globals"))
-            add(JsonPrimitive("tables"))
-            add(JsonPrimitive("types"))
-            add(JsonPrimitive("moduleSize"))
-          })
         })
-        put("description", JsonPrimitive("Current and optional baseline module summaries."))
       })
       put("records", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
-          put("properties", buildJsonObject {
-            put("id", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Stable record identifier for this query result."))
-            })
-            put("entityType", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Entity type such as `export`, `import`, `memory`, `global`, `function`, `call`, or `instruction`."))
-            })
-            put("status", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Record status, for example `current`, `added`, `removed`, or `changed`."))
-            })
-            put("source", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Module role that owns the record: `current` or `baseline`."))
-            })
-            put("summary", buildJsonObject {
-              put("type", JsonPrimitive("string"))
-              put("description", JsonPrimitive("Compact human-readable summary."))
-            })
-            put("name", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Entity name when one exists."))
-            })
-            put("kind", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Entity kind or operation kind."))
-            })
-            put("index", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Primary numeric index when one exists."))
-            })
-            put("artifactPath", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Canonical artifact path that owns this record; prefer it over display names or basenames in reports."))
-            })
-            put("artifactName", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Display basename for the owning artifact; use `artifactPath` when paths can collide."))
-            })
-            put("locationKind", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Structured location kind, for example `import`, when the record points at a specific ABI location."))
-            })
-            put("module", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Structured module name for import or module-scoped ABI records."))
-            })
-            put("typeidx", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("integer"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Structured type index when the record points at a WebAssembly function type."))
-            })
-            put("locationDisplay", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Stable human-readable location string derived from the structured location fields."))
-            })
-            put("relation", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Relation name for trace records."))
-            })
-            put("targetId", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("string"))
-                add(JsonPrimitive("null"))
-              })
-              put("description", JsonPrimitive("Related target record id for trace records."))
-            })
-            put("signature", buildJsonObject {
-              put("type", buildJsonArray {
-                add(JsonPrimitive("object"))
-                add(JsonPrimitive("null"))
-              })
-              put("properties", buildJsonObject {
-                put("params", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Parameter value types."))
-                })
-                put("results", buildJsonObject {
-                  put("type", JsonPrimitive("array"))
-                  put("items", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                  })
-                  put("description", JsonPrimitive("Result value types."))
-                })
-              })
-              put("required", buildJsonArray {
-                add(JsonPrimitive("params"))
-                add(JsonPrimitive("results"))
-              })
-              put("description", JsonPrimitive("Function signature when applicable."))
-            })
-            put("attributes", buildJsonObject {
-              put("type", JsonPrimitive("array"))
-              put("items", buildJsonObject {
-                put("type", JsonPrimitive("object"))
-                put("properties", buildJsonObject {
-                  put("name", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Attribute name."))
-                  })
-                  put("value", buildJsonObject {
-                    put("type", JsonPrimitive("string"))
-                    put("description", JsonPrimitive("Attribute value rendered as a compact string."))
-                  })
-                })
-                put("required", buildJsonArray {
-                  add(JsonPrimitive("name"))
-                  add(JsonPrimitive("value"))
-                })
-              })
-              put("description", JsonPrimitive("Bounded key-value evidence for this record."))
-            })
-          })
-          put("required", buildJsonArray {
-            add(JsonPrimitive("id"))
-            add(JsonPrimitive("entityType"))
-            add(JsonPrimitive("status"))
-            add(JsonPrimitive("source"))
-            add(JsonPrimitive("summary"))
-            add(JsonPrimitive("attributes"))
-          })
         })
-        put("description", JsonPrimitive("Bounded query records."))
       })
       put("omitted", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("object"))
           add(JsonPrimitive("null"))
         })
-        put("properties", buildJsonObject {
-          put("count", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive("Number of records omitted by response bounds."))
-          })
-          put("reason", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Why records were omitted."))
-          })
-        })
-        put("required", buildJsonArray {
-          add(JsonPrimitive("count"))
-          add(JsonPrimitive("reason"))
-        })
-        put("description", JsonPrimitive("Omission summary when the result exceeded `limit` or `maxBytes`."))
       })
       put("warnings", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
-        put("description", JsonPrimitive("Non-fatal query warnings."))
       })
     },
     required = listOf("operation", "detail", "modules", "records", "warnings")

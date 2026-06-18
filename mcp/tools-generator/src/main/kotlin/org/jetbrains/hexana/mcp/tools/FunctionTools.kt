@@ -512,11 +512,9 @@ internal val FunctionTools: List<ToolSpec> = tools {
     tool("resolve_wasm_frames") {
         summary = "Aggregate WebAssembly stack and crash-frame triage from function indices, labels, and offsets."
         guidance = """
-            Resolve WebAssembly stack or crash frames from `funcidx` values, raw function labels, and optional absolute code offsets.
-            The result reports import/local origin, best symbol with its source, signature, export names, code range, source-map or DWARF source location when available, and per-frame warnings.
-            Imported frames keep import module/name metadata, empty export names, a signature with `params` and `results`, and `import_has_no_code_range` when no source location can exist.
-            When the bundle contains a crash report JSON file, pass it as `crashReportPath` with the matching `sourceMapPath`; do not synthesize placeholder frame arrays from function-list indices.
-            Use this aggregate workflow for crash triage when logs or reports contain mixed frame identifiers and you need symbols, signatures, ranges, and source locations without requesting full disassembly.
+            Resolve `funcidx` values, raw labels, and optional code offsets into symbols, signatures, ranges, and source locations.
+            Prefer `crashReportPath` with a matching `sourceMapPath` when a crash report JSON is available.
+            Use this aggregate workflow for crash triage without requesting full disassembly.
         """
         input = ResolveWasmFramesInput
         inputPattern = ToolInputPattern.WasmFrames
