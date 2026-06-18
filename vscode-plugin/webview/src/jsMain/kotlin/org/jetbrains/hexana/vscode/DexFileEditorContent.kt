@@ -4,6 +4,7 @@ import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.dex.*
+import kotlinx.coroutines.delay
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 
@@ -159,10 +160,12 @@ private fun DexFilePanel(
         Div({
             classes("hexana-tab-content")
             style {
-                property("overflow-y", "auto")
+                property("overflow", "hidden")
                 property("padding", "8px 12px")
                 property("flex", "1")
                 property("min-height", "0")
+                display(DisplayStyle.Flex)
+                property("flex-direction", "column")
             }
         }) {
             when (activeTab) {
@@ -199,6 +202,9 @@ private fun DexHeaderTab(dex: DexFile) {
             property("font-family", "monospace")
             property("font-size", "12px")
             property("line-height", "1.6")
+            property("overflow-y", "auto")
+            property("flex", "1")
+            property("min-height", "0")
         }
     }) {
         Div({ style { property("font-weight", "bold") } }) {
@@ -234,10 +240,17 @@ private data class DexClassRowData(
 private fun DexClassesTab(dex: DexFile, onClassClick: (Int) -> Unit) {
     val rows = remember(dex) { buildClassRows(dex) }
     var searchQuery by remember(dex) { mutableStateOf("") }
-    val filteredRows = remember(dex, searchQuery) {
-        if (searchQuery.isBlank()) rows
+    var debouncedQuery by remember(dex) { mutableStateOf("") }
+
+    LaunchedEffect(searchQuery) {
+        delay(300)
+        debouncedQuery = searchQuery
+    }
+
+    val filteredRows = remember(dex, debouncedQuery) {
+        if (debouncedQuery.isBlank()) rows
         else {
-            val q = searchQuery.trim().lowercase()
+            val q = debouncedQuery.trim().lowercase()
             rows.filter { it.text.lowercase().contains(q) }
         }
     }
@@ -247,6 +260,8 @@ private fun DexClassesTab(dex: DexFile, onClassClick: (Int) -> Unit) {
             display(DisplayStyle.Flex)
             property("flex-direction", "column")
             property("gap", "4px")
+            property("flex", "1")
+            property("min-height", "0")
         }
     }) {
         Input(org.jetbrains.compose.web.attributes.InputType.Text) {
@@ -263,6 +278,7 @@ private fun DexClassesTab(dex: DexFile, onClassClick: (Int) -> Unit) {
                 property("border", "1px solid var(--hexana-border, #333)")
                 property("border-radius", "3px")
                 property("outline", "none")
+                property("flex", "none")
                 width(100.percent)
             }
         }
@@ -277,7 +293,11 @@ private fun DexClassesTab(dex: DexFile, onClassClick: (Int) -> Unit) {
                 Text(if (searchQuery.isNotEmpty()) "No classes match the search." else "(no classes)")
             }
         } else {
-            for (row in filteredRows) {
+            VirtualizedList(
+                itemCount = filteredRows.size,
+                itemHeightPx = 20,
+            ) { idx ->
+                val row = filteredRows[idx]
                 val bg = if (row.index % 2 != 0) "var(--hexana-tab-bg, rgba(255,255,255,0.03))" else "transparent"
                 Div({
                     style {
@@ -317,10 +337,17 @@ private fun DexStringsTab(dex: DexFile) {
         }
     }
     var searchQuery by remember(dex) { mutableStateOf("") }
-    val filteredStrings = remember(dex, searchQuery) {
-        if (searchQuery.isBlank()) allStrings
+    var debouncedQuery by remember(dex) { mutableStateOf("") }
+
+    LaunchedEffect(searchQuery) {
+        delay(300)
+        debouncedQuery = searchQuery
+    }
+
+    val filteredStrings = remember(dex, debouncedQuery) {
+        if (debouncedQuery.isBlank()) allStrings
         else {
-            val q = searchQuery.trim().lowercase()
+            val q = debouncedQuery.trim().lowercase()
             allStrings.filter { it.displayValue.lowercase().contains(q) }
         }
     }
@@ -330,6 +357,8 @@ private fun DexStringsTab(dex: DexFile) {
             display(DisplayStyle.Flex)
             property("flex-direction", "column")
             property("gap", "4px")
+            property("flex", "1")
+            property("min-height", "0")
         }
     }) {
         Input(org.jetbrains.compose.web.attributes.InputType.Text) {
@@ -346,6 +375,7 @@ private fun DexStringsTab(dex: DexFile) {
                 property("border", "1px solid var(--hexana-border, #333)")
                 property("border-radius", "3px")
                 property("outline", "none")
+                property("flex", "none")
                 width(100.percent)
             }
         }
@@ -360,7 +390,11 @@ private fun DexStringsTab(dex: DexFile) {
                 Text(if (searchQuery.isNotEmpty()) "No strings match the search." else "(no strings)")
             }
         } else {
-            for (s in filteredStrings) {
+            VirtualizedList(
+                itemCount = filteredStrings.size,
+                itemHeightPx = 20,
+            ) { idx ->
+                val s = filteredStrings[idx]
                 Div({
                     style {
                         property("font-family", "monospace")
@@ -422,6 +456,9 @@ private fun DexClassDetailView(
             display(DisplayStyle.Flex)
             property("flex-direction", "column")
             property("gap", "4px")
+            property("overflow-y", "auto")
+            property("flex", "1")
+            property("min-height", "0")
         }
     }) {
         // Back link

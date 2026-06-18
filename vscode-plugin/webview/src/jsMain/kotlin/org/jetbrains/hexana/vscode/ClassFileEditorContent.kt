@@ -3,6 +3,7 @@ package org.jetbrains.hexana.vscode
 import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
+import kotlinx.coroutines.delay
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.javabytecode.*
 import org.jetbrains.hexana.providers.GenericBinaryProvider
@@ -124,10 +125,12 @@ private fun ClassFilePanel(
         Div({
             classes("hexana-tab-content")
             style {
-                property("overflow-y", "auto")
+                property("overflow", "hidden")
                 property("padding", "8px 12px")
                 property("flex", "1")
                 property("min-height", "0")
+                display(DisplayStyle.Flex)
+                property("flex-direction", "column")
             }
         }) {
             when (activeTab) {
@@ -150,6 +153,9 @@ private fun ClassHeaderTab(cf: JavaClassFile) {
             property("font-family", "monospace")
             property("font-size", "12px")
             property("line-height", "1.6")
+            property("overflow-y", "auto")
+            property("flex", "1")
+            property("min-height", "0")
         }
     }) {
         Div({ style { property("font-weight", "bold") } }) {
@@ -202,10 +208,17 @@ private data class ClassMethodSection(
 private fun ClassMethodsTab(cf: JavaClassFile) {
     val sections = remember(cf) { buildMethodSections(cf) }
     var searchQuery by remember(cf) { mutableStateOf("") }
-    val filteredSections = remember(cf, searchQuery) {
-        if (searchQuery.isBlank()) sections
+    var debouncedQuery by remember(cf) { mutableStateOf("") }
+
+    LaunchedEffect(searchQuery) {
+        delay(300)
+        debouncedQuery = searchQuery
+    }
+
+    val filteredSections = remember(cf, debouncedQuery) {
+        if (debouncedQuery.isBlank()) sections
         else {
-            val q = searchQuery.trim().lowercase()
+            val q = debouncedQuery.trim().lowercase()
             sections.filter { it.signature.lowercase().contains(q) }
         }
     }
@@ -216,6 +229,9 @@ private fun ClassMethodsTab(cf: JavaClassFile) {
             display(DisplayStyle.Flex)
             property("flex-direction", "column")
             property("gap", "4px")
+            property("overflow-y", "auto")
+            property("flex", "1")
+            property("min-height", "0")
         }
     }) {
         // Search field
@@ -233,6 +249,7 @@ private fun ClassMethodsTab(cf: JavaClassFile) {
                 property("border", "1px solid var(--hexana-border, #333)")
                 property("border-radius", "3px")
                 property("outline", "none")
+                property("flex", "none")
                 width(100.percent)
             }
         }
@@ -313,10 +330,17 @@ private fun ClassMethodsTab(cf: JavaClassFile) {
 private fun ClassConstantPoolTab(cf: JavaClassFile) {
     val rows = remember(cf) { cf.constantPool.asSequence().toList() }
     var searchQuery by remember(cf) { mutableStateOf("") }
-    val filteredRows = remember(cf, searchQuery) {
-        if (searchQuery.isBlank()) rows
+    var debouncedQuery by remember(cf) { mutableStateOf("") }
+
+    LaunchedEffect(searchQuery) {
+        delay(300)
+        debouncedQuery = searchQuery
+    }
+
+    val filteredRows = remember(cf, debouncedQuery) {
+        if (debouncedQuery.isBlank()) rows
         else {
-            val q = searchQuery.trim().lowercase()
+            val q = debouncedQuery.trim().lowercase()
             rows.filter { (index, entry) ->
                 val text = "#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}"
                 text.lowercase().contains(q)
@@ -329,6 +353,8 @@ private fun ClassConstantPoolTab(cf: JavaClassFile) {
             display(DisplayStyle.Flex)
             property("flex-direction", "column")
             property("gap", "4px")
+            property("flex", "1")
+            property("min-height", "0")
         }
     }) {
         Input(org.jetbrains.compose.web.attributes.InputType.Text) {
@@ -345,6 +371,7 @@ private fun ClassConstantPoolTab(cf: JavaClassFile) {
                 property("border", "1px solid var(--hexana-border, #333)")
                 property("border-radius", "3px")
                 property("outline", "none")
+                property("flex", "none")
                 width(100.percent)
             }
         }
@@ -359,7 +386,11 @@ private fun ClassConstantPoolTab(cf: JavaClassFile) {
                 Text("No entries match the search.")
             }
         } else {
-            for ((index, entry) in filteredRows) {
+            VirtualizedList(
+                itemCount = filteredRows.size,
+                itemHeightPx = 20,
+            ) { idx ->
+                val (index, entry) = filteredRows[idx]
                 Div({
                     style {
                         property("font-family", "monospace")

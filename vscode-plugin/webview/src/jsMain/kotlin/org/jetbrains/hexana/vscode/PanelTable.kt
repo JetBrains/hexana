@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.*
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
@@ -53,7 +54,15 @@ internal fun SearchableTable(
 ) {
     var searchVisible by remember { mutableStateOf(alwaysShowSearch) }
     var query by remember { mutableStateOf("") }
+    var debouncedQuery by remember { mutableStateOf("") }
     var containerRef by remember { mutableStateOf<HTMLElement?>(null) }
+
+    // Debounce the search query so DOM filtering only runs after the user
+    // pauses typing, avoiding UI freezes on large tables.
+    LaunchedEffect(query) {
+        delay(300)
+        debouncedQuery = query
+    }
 
     Div({
         classes("hexana-searchable-table")
@@ -116,14 +125,14 @@ internal fun SearchableTable(
             footer()
         }
 
-        // Re-apply the filter and sort whenever the query or sort state changes.
+        // Re-apply the filter and sort whenever the debounced query or sort state changes.
         // Use requestAnimationFrame to ensure the DOM is fully rendered before
         // manipulating row order – on the very first composition the table body
         // may not yet be populated when DisposableEffect fires synchronously.
-        DisposableEffect(query, sortState.columnIndex, sortState.direction) {
+        DisposableEffect(debouncedQuery, sortState.columnIndex, sortState.direction) {
             val colIdx = sortState.columnIndex
             val dir = sortState.direction
-            val q = query
+            val q = debouncedQuery
             val rafId = kotlinx.browser.window.requestAnimationFrame {
                 val container = containerRef
                 if (container != null) {
@@ -266,6 +275,10 @@ private fun parseNumericValue(text: String): Double? {
 /**
  * Hides/shows `<tr>` rows inside a [table] based on whether their text
  * content matches [query] (case-insensitive).
+ *
+ * Each row's lowercase text is cached in a `data-search-text` attribute
+ * on first access so that subsequent filter passes avoid the expensive
+ * DOM `.textContent` traversal.
  */
 private fun applySearchFilter(table: HTMLTableElement, query: String) {
     val tbodyElement = table.querySelector("tbody") ?: return
@@ -276,7 +289,12 @@ private fun applySearchFilter(table: HTMLTableElement, query: String) {
         if (lowerQuery.isEmpty()) {
             row.style.removeProperty("display")
         } else {
-            val text = row.textContent?.lowercase() ?: ""
+            val cached = row.getAttribute("data-search-text")
+            val text = if (cached != null) cached else {
+                val t = row.textContent?.lowercase() ?: ""
+                row.setAttribute("data-search-text", t)
+                t
+            }
             row.style.display = if (text.contains(lowerQuery)) "" else "none"
         }
     }
