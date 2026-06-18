@@ -305,8 +305,12 @@ class HexanaMcpServerSchemaTest {
 
         val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing global-state output schema")
         assertTrue("module" in output)
+        assertTrue("detail" in output)
         assertTrue("newPublicGlobals" in output)
         assertTrue("allowedPublicGlobals" in output)
+        assertTrue("allowedPublicGlobalSummary" in output)
+        assertTrue("unchangedGlobalSummary" in output)
+        assertTrue("recommendedReport" in output)
         assertTrue("targetedGlobalIndices" in output)
         assertTrue("violations" in output)
         assertFalse(output.containsSchemaDescription())

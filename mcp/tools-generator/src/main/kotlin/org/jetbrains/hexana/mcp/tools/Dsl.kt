@@ -345,6 +345,7 @@ sealed class ToolInputPattern {
     object DataSegments : ToolInputPattern()
     object ArtifactQuery : ToolInputPattern()
     object PolicyWithBaselineAndLog : ToolInputPattern()
+    object GlobalStatePolicyAudit : ToolInputPattern()
     object RuntimeCompatibility : ToolInputPattern()
     object ComponentSurface : ToolInputPattern()
     object ComponentDependencies : ToolInputPattern()
@@ -721,6 +722,28 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireType(logPath, FieldType.StringT)
             requireNullable(logPath)
             requireDescribed(logPath)
+        }
+        ToolInputPattern.GlobalStatePolicyAudit -> {
+            val baselinePath = requireField("baselinePath")
+            requireType(baselinePath, FieldType.StringT)
+            requireNonNullable(baselinePath)
+            requireDescribed(baselinePath)
+
+            val policyPath = requireField("policyPath")
+            requireType(policyPath, FieldType.StringT)
+            requireNonNullable(policyPath)
+            requireDescribed(policyPath)
+
+            val logPath = requireField("logPath")
+            requireType(logPath, FieldType.StringT)
+            requireNullable(logPath)
+            requireDescribed(logPath)
+
+            val detail = requireField("detail")
+            requireType(detail, FieldType.StringT)
+            requireNonNullable(detail)
+            requireDefault(detail, "String") { it is String }
+            requireDescribed(detail)
         }
         ToolInputPattern.RuntimeCompatibility -> {
             val runtime = requireField("runtime")

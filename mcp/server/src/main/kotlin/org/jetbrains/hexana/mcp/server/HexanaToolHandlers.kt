@@ -268,7 +268,9 @@ class HexanaToolHandlers(
                 input = wasmInput(arguments),
                 baselineInput = WasmInput.FilePath(arguments.requireNonBlankString("baselinePath")),
                 policyInput = TextInput.FilePath(arguments.requireNonBlankString("policyPath")),
-                logInput = arguments.optionalNonBlankString("logPath")?.let(TextInput::FilePath)
+                logInput = arguments.optionalNonBlankString("logPath")?.let(TextInput::FilePath),
+                detail = arguments.optionalNonBlankString("detail")
+                    ?: HexanaToolInputDefaults.AUDIT_GLOBAL_STATE_POLICY_DETAIL
             )
         }
     }

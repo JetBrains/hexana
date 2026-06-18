@@ -107,7 +107,7 @@ class HexanaMcpGlobalsToolTest : HexanaMcpToolsetDirectTestBase() {
         )
         val policy = createTextFixture(
             "fixtures/direct/globals/audit-policy.json",
-            """{"requestLimits":{"exports":["request_limit"],"maxValue":2048}}"""
+            """{"allowedPublicGlobals":["request_limit"],"requestLimits":{"exports":["request_limit"],"maxValue":2048}}"""
         )
 
         val result = callTool(
@@ -124,6 +124,7 @@ class HexanaMcpGlobalsToolTest : HexanaMcpToolsetDirectTestBase() {
         val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
         val structuredContent = result.requireStructuredObject()
         assertEquals(textJson, structuredContent)
+        assertEquals("compact", structuredContent.obj("detail").text("mode"))
 
         val module = structuredContent.obj("module")
         assertEquals(current.projectRelativePath, module.text("path"))
@@ -144,7 +145,9 @@ class HexanaMcpGlobalsToolTest : HexanaMcpToolsetDirectTestBase() {
             listOf("mutable_imported_global", "forbidden_public_global"),
             structuredContent.array("violations").map { it.jsonObject.text("kind") }
         )
-        assertEquals(listOf(0, 2, 3, 4), structuredContent.array("targetedGlobalIndices").map { it.jsonPrimitive.int })
+        assertEquals(listOf(0, 3, 4), structuredContent.array("targetedGlobalIndices").map { it.jsonPrimitive.int })
+        assertTrue(structuredContent.obj("allowedPublicGlobalSummary").array("names").any { it.jsonPrimitive.content == "abi_version" })
+        assertTrue(structuredContent.obj("recommendedReport").array("new_public_globals").obj(0).text("export") == "feature_flag")
     }
 
     private fun createGlobalsFixture(pathInProject: String) = createWasmFixture(

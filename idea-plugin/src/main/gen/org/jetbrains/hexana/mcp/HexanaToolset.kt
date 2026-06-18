@@ -1027,7 +1027,8 @@ public class HexanaToolset : McpToolsProvider {
       |Audit global-state policy with current/baseline Wasm and policy JSON; returns report-ready violations.
       |Use this as the shortest path for global-state audits that have a current module, `baselinePath`, and `policyPath`.
       |Compares current globals with baseline public globals, applies policy rules, and returns exact input path echoes.
-      |The result includes report-ready violations, added public globals, allowed public globals, request-limit facts, targeted global indices, and supporting evidence.
+      |Default `detail=compact` is diff-first: it returns policy violations, added public globals, compact allowed/unchanged summaries, exact report fields, targeted global indices, and remediation/recommendation text.
+      |Use `detail=full` only when full unchanged allowed-global objects are required.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.auditGlobalStatePolicy",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -1054,6 +1055,12 @@ public class HexanaToolset : McpToolsProvider {
           put("description", JsonPrimitive("Optional runtime log path to validate as readable input and attach log-related warnings."))
           put("maxLength", JsonPrimitive(4_096))
         })
+        put("detail", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Result detail mode: `compact` returns diff-first report facts and summaries; `full` also returns unchanged allowed globals as full objects."))
+          put("default", JsonPrimitive("compact"))
+          put("maxLength", JsonPrimitive(16))
+        })
         put("projectPath", buildJsonObject {
           put("type", JsonPrimitive("string"))
           put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
@@ -1073,6 +1080,9 @@ public class HexanaToolset : McpToolsProvider {
             add(JsonPrimitive("null"))
           })
         })
+        put("detail", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
         put("globals", buildJsonObject {
           put("type", JsonPrimitive("array"))
           put("items", buildJsonObject {
@@ -1090,6 +1100,12 @@ public class HexanaToolset : McpToolsProvider {
           put("items", buildJsonObject {
             put("type", JsonPrimitive("object"))
           })
+        })
+        put("allowedPublicGlobalSummary", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+        put("unchangedGlobalSummary", buildJsonObject {
+          put("type", JsonPrimitive("object"))
         })
         put("requestLimits", buildJsonObject {
           put("type", JsonPrimitive("array"))
@@ -1115,6 +1131,9 @@ public class HexanaToolset : McpToolsProvider {
             put("type", JsonPrimitive("object"))
           })
         })
+        put("recommendedReport", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
         put("warnings", buildJsonObject {
           put("type", JsonPrimitive("array"))
           put("items", buildJsonObject {
@@ -1122,7 +1141,7 @@ public class HexanaToolset : McpToolsProvider {
           })
         })
       },
-      requiredProperties = setOf("module", "globals", "newPublicGlobals", "allowedPublicGlobals", "requestLimits", "violations", "targetedGlobalIndices", "evidence", "warnings"),
+      requiredProperties = setOf("module", "detail", "globals", "newPublicGlobals", "allowedPublicGlobals", "allowedPublicGlobalSummary", "unchangedGlobalSummary", "requestLimits", "violations", "targetedGlobalIndices", "evidence", "recommendedReport", "warnings"),
       definitions = emptyMap<String, JsonElement>(),
       ),
     )
@@ -1131,12 +1150,13 @@ public class HexanaToolset : McpToolsProvider {
       val baselinePath = args.requireStringArgument("baselinePath")
       val policyPath = args.requireStringArgument("policyPath")
       val logPath = args.optionalStringArgument("logPath")
+      val detail = args.optionalStringArgument("detail") ?: "compact"
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val baselineProvider = requireWasmFile(baselinePath).requireCoreWasmBinaryProvider()
       val policyText = requireTextFile(policyPath)
       val logText = logPath?.let { requireTextFile(it) }
-      val result = provider.auditGlobalStatePolicy(baseline = baselineProvider, policyText = policyText, logText = logText, pathLabel = path, baselinePathLabel = baselinePath, policyPathLabel = policyPath, logPathLabel = logPath)
+      val result = provider.auditGlobalStatePolicy(baseline = baselineProvider, policyText = policyText, logText = logText, pathLabel = path, baselinePathLabel = baselinePath, policyPathLabel = policyPath, logPathLabel = logPath, detail = detail)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)

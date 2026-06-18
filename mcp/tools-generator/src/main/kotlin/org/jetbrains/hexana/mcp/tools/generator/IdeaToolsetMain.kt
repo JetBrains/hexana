@@ -225,6 +225,13 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             code.addStatement("val policyPath = args.requireStringArgument(%S)", "policyPath")
             code.addStatement("val logPath = args.optionalStringArgument(%S)", "logPath")
         }
+        ToolInputPattern.GlobalStatePolicyAudit -> {
+            val detail = inputField(spec.input, "detail").defaultOrError<String>()
+            code.addStatement("val baselinePath = args.requireStringArgument(%S)", "baselinePath")
+            code.addStatement("val policyPath = args.requireStringArgument(%S)", "policyPath")
+            code.addStatement("val logPath = args.optionalStringArgument(%S)", "logPath")
+            code.addStatement("val detail = args.optionalStringArgument(%S) ?: %S", "detail", detail)
+        }
         ToolInputPattern.RuntimeCompatibility -> {
             code.addStatement("val runtime = args.requireStringArgument(%S)", "runtime")
             code.addStatement("val version = args.optionalStringArgument(%S)", "version")
@@ -285,7 +292,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
                 ")",
             handlerMember,
         )
-    } else if (spec.inputPattern == ToolInputPattern.PolicyWithBaselineAndLog) {
+    } else if (spec.inputPattern == ToolInputPattern.PolicyWithBaselineAndLog || spec.inputPattern == ToolInputPattern.GlobalStatePolicyAudit) {
         code.addStatement(
             "val baselineProvider = %M(baselinePath).%M()",
             REQUIRE_WASM_FILE,
@@ -293,6 +300,11 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
         )
         code.addStatement("val policyText = %M(policyPath)", REQUIRE_TEXT_FILE)
         code.addStatement("val logText = logPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
+        val detailArgument = if (spec.inputPattern == ToolInputPattern.GlobalStatePolicyAudit) {
+            ", detail = detail"
+        } else {
+            ""
+        }
         code.addStatement(
             "val result = provider.%M(" +
                 "baseline = baselineProvider, " +
@@ -302,6 +314,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
                 "baselinePathLabel = baselinePath, " +
                 "policyPathLabel = policyPath, " +
                 "logPathLabel = logPath" +
+                detailArgument +
                 ")",
             handlerMember,
         )
@@ -339,6 +352,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
             ToolInputPattern.ArtifactQuery -> error("Handled above")
             ToolInputPattern.PolicyWithBaselineAndLog -> error("Handled above")
+            ToolInputPattern.GlobalStatePolicyAudit -> error("Handled above")
             ToolInputPattern.RuntimeCompatibility -> "(runtime, version)"
             ToolInputPattern.ComponentSurface -> "(pathLabel = path)"
             ToolInputPattern.ComponentDependencies ->
@@ -431,6 +445,12 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
             inputField(spec.input, "baselinePath"),
             inputField(spec.input, "policyPath"),
             inputField(spec.input, "logPath"),
+        )
+        ToolInputPattern.GlobalStatePolicyAudit -> listOf(
+            inputField(spec.input, "baselinePath"),
+            inputField(spec.input, "policyPath"),
+            inputField(spec.input, "logPath"),
+            inputField(spec.input, "detail"),
         )
         ToolInputPattern.RuntimeCompatibility -> listOf(
             inputField(spec.input, "runtime"),

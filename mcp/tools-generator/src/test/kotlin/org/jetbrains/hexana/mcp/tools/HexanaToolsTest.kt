@@ -195,7 +195,7 @@ class HexanaToolsTest {
             HexanaTools.single { it.name == "check_memory_contract" }.inputPattern
         )
         assertEquals(
-            ToolInputPattern.PolicyWithBaselineAndLog,
+            ToolInputPattern.GlobalStatePolicyAudit,
             HexanaTools.single { it.name == "audit_global_state_policy" }.inputPattern
         )
     }

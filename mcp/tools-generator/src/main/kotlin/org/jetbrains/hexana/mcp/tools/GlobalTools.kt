@@ -14,6 +14,9 @@ val AuditGlobalStatePolicyInput = WasmInputClass.with("AuditGlobalStatePolicyInp
         .maxLength(4096)
     nullable("logPath", of = string()).describe("Optional runtime log path to validate as readable input and attach log-related warnings.")
         .maxLength(4096)
+    string("detail", default = "compact")
+        .describe("Result detail mode: `compact` returns diff-first report facts and summaries; `full` also returns unchanged allowed globals as full objects.")
+        .maxLength(16)
 }
 
 val GlobalResultClass = class_("GlobalResult") {
@@ -47,6 +50,30 @@ val GlobalStatePolicyGlobalResultClass = class_("GlobalStatePolicyGlobalResult")
     string("status").describe("Audit status such as `added`, `baseline_public`, `policy_allowed`, or `targeted_mutable_import`.")
     boolean("allowed").describe("True when the policy or baseline allows this public global.")
     nullable("allowedBy", string()).describe("Policy concept that allowed the global, such as `baseline`, `allowed_public_globals`, or `request_limits`.")
+}
+
+val GlobalStatePolicyDetailResultClass = class_("GlobalStatePolicyDetailResult") {
+    string("mode").describe("Effective detail mode: `compact` or `full`.")
+    int("compactPayloadBudgetEstimatedTokens").describe("Documented compact-mode payload budget for this production tool.")
+    int("allowedPublicGlobalsReturned").describe("Number of allowed public globals returned as full objects.")
+    int("allowedPublicGlobalsTotal").describe("Total allowed public globals considered by the audit.")
+    int("evidenceReturned").describe("Number of evidence records returned.")
+    int("evidenceTotal").describe("Total evidence records available in `full` mode.")
+}
+
+val GlobalStatePolicyAllowedGlobalsSummaryResultClass = class_("GlobalStatePolicyAllowedGlobalsSummaryResult") {
+    int("count").describe("Total allowed public global export names.")
+    list("names", of = string()).describe("Allowed public global export names as compact strings.")
+    int("returnedAsObjects").describe("Number of allowed globals included in `allowedPublicGlobals` as full objects.")
+    int("omittedObjectCount").describe("Number of allowed globals summarized instead of returned as full objects.")
+}
+
+val GlobalStatePolicyUnchangedGlobalsSummaryResultClass = class_("GlobalStatePolicyUnchangedGlobalsSummaryResult") {
+    int("currentGlobalCount").describe("Total imported and local globals in the current module.")
+    int("importedGlobalCount").describe("Imported global count in the current module.")
+    int("localGlobalCount").describe("Local global count in the current module.")
+    int("unchangedPublicGlobalCount").describe("Public globals present in both baseline and current modules.")
+    list("unchangedPublicGlobalNames", of = string()).describe("Unchanged public global export names summarized as strings.")
 }
 
 val GlobalStatePolicyRequestLimitResultClass = class_("GlobalStatePolicyRequestLimitResult") {
@@ -87,16 +114,55 @@ val GlobalStatePolicyEvidenceResultClass = class_("GlobalStatePolicyEvidenceResu
     string("origin").describe("Global origin: `import` or `local`.")
 }
 
+val GlobalStatePolicyReportViolationResultClass = class_("GlobalStatePolicyReportViolationResult") {
+    string("kind").describe("Report violation kind.")
+    int("globalidx").describe("Global index involved in the report violation.")
+    nullable("importName", string()).serialName("import").describe("Qualified import name such as `env.clock_offset`.")
+    string("type").describe("Global value type.")
+    boolean("mutable").describe("True when the global is mutable.")
+}
+
+val GlobalStatePolicyReportGlobalResultClass = class_("GlobalStatePolicyReportGlobalResult") {
+    string("export").describe("Public global export name.")
+    int("globalidx").describe("Global index for the public global.")
+    string("origin").describe("Global origin: `import` or `local`.")
+    string("type").describe("Global value type.")
+    boolean("mutable").describe("True when the global is mutable.")
+    nullable("initExpr", string()).serialName("init_expr").describe("Initialization expression in WAT syntax, or null for imports.")
+}
+
+val GlobalStatePolicyRecommendedReportResultClass = class_("GlobalStatePolicyRecommendedReportResult") {
+    nullable("policyId", string()).serialName("policy_id").describe("Policy identifier from the policy file.")
+    nullable("module", string()).describe("Current module path for the final report.")
+    nullable("comparedTo", string()).serialName("compared_to").describe("Baseline module path parsed from the log or echoed from input.")
+    nullable("logEventId", string()).serialName("log_event_id").describe("Relevant runtime log event id, when available.")
+    list("violations", of = GlobalStatePolicyReportViolationResultClass).describe("Report-ready blocking violations.")
+    list("newPublicGlobals", of = GlobalStatePolicyReportGlobalResultClass).serialName("new_public_globals")
+        .describe("Report-ready new public globals sorted by export name.")
+    list("allowedPublicGlobals", of = string()).serialName("allowed_public_globals")
+        .describe("Allowed public global names for the final report.")
+    list("targetedGlobalIndices", of = int()).serialName("targeted_global_indices")
+        .describe("Report-ready targeted global indices sorted ascending.")
+    string("recommendation").describe("Concise release recommendation/remediation text.")
+}
+
 val AuditGlobalStatePolicyResultClass = class_("AuditGlobalStatePolicyResult", kotlinPackage = MODEL_PACKAGE) {
     embed("module", of = GlobalStatePolicyModuleIdentityClass).describe("Exact input path identity for report-ready global-state policy output.")
     nullable("policyId", string()).describe("Policy identifier from the policy file, when present.")
+    embed("detail", of = GlobalStatePolicyDetailResultClass).describe("Effective detail mode and compact payload budget facts.")
     list("globals", of = GlobalStatePolicyGlobalResultClass).describe("Targeted globals relevant to the audit in stable `globalidx` order.")
     list("newPublicGlobals", of = GlobalStatePolicyGlobalResultClass).describe("Public global exports added relative to the baseline in stable `globalidx` order.")
-    list("allowedPublicGlobals", of = GlobalStatePolicyGlobalResultClass).describe("Public global exports allowed by the baseline or policy in stable `globalidx` order.")
+    list("allowedPublicGlobals", of = GlobalStatePolicyGlobalResultClass).describe("Allowed public global objects returned for the selected `detail` mode.")
+    embed("allowedPublicGlobalSummary", of = GlobalStatePolicyAllowedGlobalsSummaryResultClass)
+        .describe("Compact allowed-public-global summary; use this by default instead of full unchanged objects.")
+    embed("unchangedGlobalSummary", of = GlobalStatePolicyUnchangedGlobalsSummaryResultClass)
+        .describe("Compact unchanged global inventory summary.")
     list("requestLimits", of = GlobalStatePolicyRequestLimitResultClass).describe("Request-limit public globals evaluated against policy limits in stable `globalidx` order.")
     list("violations", of = GlobalStatePolicyViolationResultClass).describe("Report-ready policy violations in stable `globalidx` and violation order.")
     list("targetedGlobalIndices", of = int()).describe("Stable sorted `globalidx` values relevant to the audit.")
-    list("evidence", of = GlobalStatePolicyEvidenceResultClass).describe("Relevant global evidence used for the audit report.")
+    list("evidence", of = GlobalStatePolicyEvidenceResultClass).describe("Relevant global evidence returned for the selected `detail` mode.")
+    embed("recommendedReport", of = GlobalStatePolicyRecommendedReportResultClass)
+        .describe("Report-ready fields using the task's expected naming and stable ordering.")
     list("warnings", of = string()).describe("Non-fatal input or runtime-log warnings.")
 }
 
@@ -119,10 +185,11 @@ internal val GlobalTools: List<ToolSpec> = tools {
         guidance = """
             Use this as the shortest path for global-state audits that have a current module, `baselinePath`, and `policyPath`.
             Compares current globals with baseline public globals, applies policy rules, and returns exact input path echoes.
-            The result includes report-ready violations, added public globals, allowed public globals, request-limit facts, targeted global indices, and supporting evidence.
+            Default `detail=compact` is diff-first: it returns policy violations, added public globals, compact allowed/unchanged summaries, exact report fields, targeted global indices, and remediation/recommendation text.
+            Use `detail=full` only when full unchanged allowed-global objects are required.
         """
         input = AuditGlobalStatePolicyInput
-        inputPattern = ToolInputPattern.PolicyWithBaselineAndLog
+        inputPattern = ToolInputPattern.GlobalStatePolicyAudit
         output = AuditGlobalStatePolicyResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.auditGlobalStatePolicy"
     }

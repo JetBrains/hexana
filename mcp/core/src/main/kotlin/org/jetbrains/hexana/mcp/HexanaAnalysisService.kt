@@ -161,7 +161,8 @@ interface HexanaAnalysisService {
         input: WasmInput,
         baselineInput: WasmInput,
         policyInput: TextInput,
-        logInput: TextInput?
+        logInput: TextInput?,
+        detail: String = "compact"
     ): AuditGlobalStatePolicyResult {
         throw UnsupportedOperationException("auditGlobalStatePolicy is not implemented")
     }
@@ -509,7 +510,8 @@ class DefaultHexanaAnalysisService(
         input: WasmInput,
         baselineInput: WasmInput,
         policyInput: TextInput,
-        logInput: TextInput?
+        logInput: TextInput?,
+        detail: String
     ): AuditGlobalStatePolicyResult {
         val wasm = load(input)
         val baseline = load(baselineInput)
@@ -522,7 +524,8 @@ class DefaultHexanaAnalysisService(
             pathLabel = input.artifactPathLabel(),
             baselinePathLabel = baselineInput.artifactPathLabel(),
             policyPathLabel = policyInput.artifactPathLabel(),
-            logPathLabel = logInput?.artifactPathLabel()
+            logPathLabel = logInput?.artifactPathLabel(),
+            detail = detail
         )
     }
 

@@ -581,6 +581,7 @@ class DefaultHexanaAnalysisServiceTest {
             """
             {
               "policyId": "global-state-policy-v1",
+              "allowedPublicGlobals": ["request_limit"],
               "requestLimits": {
                 "exports": ["request_limit"],
                 "maxValue": 2048
@@ -601,9 +602,9 @@ class DefaultHexanaAnalysisServiceTest {
         assertEquals(policy.toString(), result.module.policyPath)
 
         assertEquals("global-state-policy-v1", result.policyId)
-        assertEquals(listOf(2, 3, 4, 5, 6), result.targetedGlobalIndices.take(5))
-        assertTrue(34 in result.targetedGlobalIndices)
-        assertTrue(50 in result.targetedGlobalIndices)
+        assertEquals("compact", result.detail.mode)
+        assertEquals(12_000, result.detail.compactPayloadBudgetEstimatedTokens)
+        assertEquals(listOf(2, 34, 50), result.targetedGlobalIndices)
 
         val requestLimit = result.newPublicGlobals.single { it.export == "request_limit" }
         assertEquals(34, requestLimit.globalidx)
@@ -615,8 +616,12 @@ class DefaultHexanaAnalysisServiceTest {
         assertEquals(50, featureFlag.globalidx)
         assertFalse(featureFlag.allowed)
 
-        assertTrue(result.allowedPublicGlobals.any { it.export == "abi_version" && it.allowedBy == "baseline" })
+        assertFalse(result.allowedPublicGlobals.any { it.allowedBy == "baseline" })
         assertTrue(result.allowedPublicGlobals.any { it.export == "request_limit" && it.allowedBy == "request_limits" })
+        assertTrue(result.allowedPublicGlobalSummary.names.contains("abi_version"))
+        assertTrue(result.allowedPublicGlobalSummary.names.contains("request_limit"))
+        assertEquals(result.allowedPublicGlobalSummary.count - result.allowedPublicGlobals.size, result.allowedPublicGlobalSummary.omittedObjectCount)
+        assertTrue(result.unchangedGlobalSummary.unchangedPublicGlobalNames.contains("abi_version"))
 
         val requestLimitFact = result.requestLimits.single()
         assertEquals("request_limit", requestLimitFact.export)
@@ -638,6 +643,70 @@ class DefaultHexanaAnalysisServiceTest {
 
         assertTrue(result.evidence.any { it.globalidx == 34 && it.export == "request_limit" })
         assertTrue(result.evidence.any { it.globalidx == 2 && it.importNameQualified == "env.clock_offset" })
+        assertFalse(result.evidence.any { it.kind == "baseline_public" })
+
+        val fullResult = service.auditGlobalStatePolicy(
+            input = WasmInput.FilePath(current.toString()),
+            baselineInput = WasmInput.FilePath(baseline.toString()),
+            policyInput = TextInput.FilePath(policy.toString()),
+            logInput = null,
+            detail = "full"
+        )
+        assertEquals("full", fullResult.detail.mode)
+        assertTrue(fullResult.allowedPublicGlobals.any { it.export == "abi_version" && it.allowedBy == "baseline" })
+        assertEquals(fullResult.allowedPublicGlobalSummary.count, fullResult.allowedPublicGlobals.size)
+    }
+
+    @Test
+    fun auditGlobalStatePolicyReturnsCompactRecommendedReportForReportOnlyPolicy() {
+        val baseline = createWasmFile(
+            "global-report-only-baseline.wasm",
+            globalStatePolicyWat(
+                includeClockOffset = false,
+                includeRequestLimit = false,
+                includeFeatureFlag = false
+            )
+        )
+        val current = createWasmFile(
+            "global-report-only-current.wasm",
+            globalStatePolicyWat(
+                includeClockOffset = true,
+                includeRequestLimit = true,
+                includeFeatureFlag = true
+            )
+        )
+        val policy = createTextFile(
+            "global-report-only-policy.json",
+            """
+            {
+              "policy_id": "host-global-state-policy-2026-04",
+              "allow_mutable_imported_globals": false,
+              "report_new_exported_globals": true
+            }
+            """.trimIndent()
+        )
+        val log = createTextFile(
+            "global-report-only.log",
+            """
+            2026-04-30T15:20:33Z policy=host-global-state-policy-2026-04 event=evt-global-5501 status=blocked module=dist/runtime/global_state.wasm reason=global-state-release-gate
+            2026-04-30T15:20:34Z policy=host-global-state-policy-2026-04 event=evt-global-5501 status=needs-report module=dist/runtime/global_state.wasm compared_to=previous_build/dist/runtime/global_state.wasm
+            """.trimIndent()
+        )
+
+        val result = service.auditGlobalStatePolicy(
+            input = WasmInput.FilePath(current.toString()),
+            baselineInput = WasmInput.FilePath(baseline.toString()),
+            policyInput = TextInput.FilePath(policy.toString()),
+            logInput = TextInput.FilePath(log.toString())
+        )
+
+        assertEquals(listOf("mutable_imported_global"), result.violations.map { it.kind })
+        assertEquals(listOf("feature_flag", "request_limit"), result.recommendedReport.newPublicGlobals.map { it.export })
+        assertEquals(listOf(2, 34, 50), result.recommendedReport.targetedGlobalIndices)
+        assertEquals("evt-global-5501", result.recommendedReport.logEventId)
+        assertEquals("previous_build/dist/runtime/global_state.wasm", result.recommendedReport.comparedTo)
+        assertTrue(result.recommendedReport.allowedPublicGlobals.first() == "abi_version")
+        assertTrue(result.detail.allowedPublicGlobalsReturned < result.detail.allowedPublicGlobalsTotal)
     }
 
     @Test

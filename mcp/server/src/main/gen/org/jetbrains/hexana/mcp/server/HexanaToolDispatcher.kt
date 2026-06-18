@@ -18,6 +18,8 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
  * Generated input defaults shared by standalone server handlers.
  */
 internal object HexanaToolInputDefaults {
+  public const val AUDIT_GLOBAL_STATE_POLICY_DETAIL: String = "compact"
+
   public const val SEARCH_EXPORTS_LIMIT: Int = 50
 
   public const val LIST_FUNCTIONS_OFFSET: Int = 0
@@ -1199,7 +1201,8 @@ private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandle
   |Audit global-state policy with current/baseline Wasm and policy JSON; returns report-ready violations.
   |Use this as the shortest path for global-state audits that have a current module, `baselinePath`, and `policyPath`.
   |Compares current globals with baseline public globals, applies policy rules, and returns exact input path echoes.
-  |The result includes report-ready violations, added public globals, allowed public globals, request-limit facts, targeted global indices, and supporting evidence.
+  |Default `detail=compact` is diff-first: it returns policy violations, added public globals, compact allowed/unchanged summaries, exact report fields, targeted global indices, and remediation/recommendation text.
+  |Use `detail=full` only when full unchanged allowed-global objects are required.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -1249,6 +1252,12 @@ private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandle
         put("description", JsonPrimitive("Optional runtime log path to validate as readable input and attach log-related warnings."))
         put("maxLength", JsonPrimitive(4_096))
       })
+      put("detail", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Result detail mode: `compact` returns diff-first report facts and summaries; `full` also returns unchanged allowed globals as full objects."))
+        put("default", JsonPrimitive("compact"))
+        put("maxLength", JsonPrimitive(16))
+      })
     },
     required = listOf("baselinePath", "policyPath")
   ),
@@ -1262,6 +1271,9 @@ private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandle
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
+      })
+      put("detail", buildJsonObject {
+        put("type", JsonPrimitive("object"))
       })
       put("globals", buildJsonObject {
         put("type", JsonPrimitive("array"))
@@ -1280,6 +1292,12 @@ private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandle
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
         })
+      })
+      put("allowedPublicGlobalSummary", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("unchangedGlobalSummary", buildJsonObject {
+        put("type", JsonPrimitive("object"))
       })
       put("requestLimits", buildJsonObject {
         put("type", JsonPrimitive("array"))
@@ -1305,6 +1323,9 @@ private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandle
           put("type", JsonPrimitive("object"))
         })
       })
+      put("recommendedReport", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
       put("warnings", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
@@ -1312,7 +1333,7 @@ private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandle
         })
       })
     },
-    required = listOf("module", "globals", "newPublicGlobals", "allowedPublicGlobals", "requestLimits", "violations", "targetedGlobalIndices", "evidence", "warnings")
+    required = listOf("module", "detail", "globals", "newPublicGlobals", "allowedPublicGlobals", "allowedPublicGlobalSummary", "unchangedGlobalSummary", "requestLimits", "violations", "targetedGlobalIndices", "evidence", "recommendedReport", "warnings")
   ),
     annotations = ToolAnnotations(
       readOnlyHint = true,

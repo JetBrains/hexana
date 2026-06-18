@@ -15,12 +15,21 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.model.exports.ExportResult
 import org.jetbrains.hexana.mcp.model.globals.AuditGlobalStatePolicyResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalResult
+import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyAllowedGlobalsSummaryResult
+import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyDetailResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyModuleIdentity
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyEvidenceResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyGlobalResult
+import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyRecommendedReportResult
+import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyReportGlobalResult
+import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyReportViolationResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyRequestLimitResult
+import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyUnchangedGlobalsSummaryResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyViolationResult
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+
+private const val DEFAULT_GLOBAL_STATE_POLICY_DETAIL = "compact"
+private const val COMPACT_PAYLOAD_BUDGET_ESTIMATED_TOKENS = 12_000
 
 private val globalStatePolicyJson = Json {
     ignoreUnknownKeys = true
@@ -33,9 +42,11 @@ fun WasmBinaryProvider.auditGlobalStatePolicy(
     pathLabel: String? = null,
     baselinePathLabel: String? = null,
     policyPathLabel: String? = null,
-    logPathLabel: String? = null
+    logPathLabel: String? = null,
+    detail: String = DEFAULT_GLOBAL_STATE_POLICY_DETAIL
 ): AuditGlobalStatePolicyResult {
     val policy = parseGlobalStatePolicy(policyText)
+    val detailMode = GlobalStatePolicyDetailMode.parse(detail)
     val currentExports = globalExports()
     val baselineExportNames = baseline.globalExports().map { it.export }.toSet()
     val currentGlobals = readGlobals().globals
@@ -81,7 +92,7 @@ fun WasmBinaryProvider.auditGlobalStatePolicy(
         }
 
         newPublicGlobals
-            .filterNot { it.allowed }
+            .filter { policy.enforceAllowedPublicGlobals && !it.allowed }
             .forEach { global ->
                 add(
                     GlobalStatePolicyViolationResult(
@@ -117,14 +128,73 @@ fun WasmBinaryProvider.auditGlobalStatePolicy(
         .distinctBy { it.globalidx to (it.export ?: it.importNameQualified).orEmpty() }
         .sortedByIdentity()
 
-    val targetedGlobalIndices = (violations.map { it.globalidx } + globals.map { it.globalidx } + allowedPublicGlobals.map { it.globalidx })
+    val targetedGlobalIndices = (violations.map { it.globalidx } + globals.map { it.globalidx })
         .distinct()
         .sorted()
 
-    val evidence = (globals + allowedPublicGlobals)
+    val fullEvidence = (globals + allowedPublicGlobals)
         .distinctBy { it.globalidx to (it.export ?: it.importNameQualified).orEmpty() }
         .map { it.toEvidence() }
         .sortedWith(compareBy<GlobalStatePolicyEvidenceResult> { it.globalidx }.thenBy { it.export.orEmpty() }.thenBy { it.importNameQualified.orEmpty() })
+    val evidence = when (detailMode) {
+        GlobalStatePolicyDetailMode.COMPACT -> globals.map { it.toEvidence() }
+            .sortedWith(compareBy<GlobalStatePolicyEvidenceResult> { it.globalidx }.thenBy { it.export.orEmpty() }.thenBy { it.importNameQualified.orEmpty() })
+        GlobalStatePolicyDetailMode.FULL -> fullEvidence
+    }
+    val allowedPublicGlobalsResult = when (detailMode) {
+        GlobalStatePolicyDetailMode.COMPACT -> allowedPublicGlobals
+            .filter { it.allowedBy != "baseline" }
+            .sortedByIdentity()
+        GlobalStatePolicyDetailMode.FULL -> allowedPublicGlobals
+    }
+    val allowedPublicGlobalNames = allowedPublicGlobals
+        .mapNotNull { it.export }
+        .distinct()
+        .sorted()
+    val unchangedPublicGlobalNames = allowedPublicGlobals
+        .filter { it.allowedBy == "baseline" }
+        .mapNotNull { it.export }
+        .distinct()
+        .sorted()
+    val allowedPublicGlobalSummary = GlobalStatePolicyAllowedGlobalsSummaryResult(
+        count = allowedPublicGlobalNames.size,
+        names = allowedPublicGlobalNames,
+        returnedAsObjects = allowedPublicGlobalsResult.size,
+        omittedObjectCount = allowedPublicGlobals.size - allowedPublicGlobalsResult.size
+    )
+    val unchangedGlobalSummary = GlobalStatePolicyUnchangedGlobalsSummaryResult(
+        currentGlobalCount = currentGlobals.size,
+        importedGlobalCount = currentGlobals.count { it.origin == "import" },
+        localGlobalCount = currentGlobals.count { it.origin == "local" },
+        unchangedPublicGlobalCount = unchangedPublicGlobalNames.size,
+        unchangedPublicGlobalNames = unchangedPublicGlobalNames
+    )
+    val logEvidence = parseGlobalStatePolicyLogEvidence(logText, pathLabel)
+    val recommendedReport = GlobalStatePolicyRecommendedReportResult(
+        policyId = policy.policyId,
+        module = pathLabel ?: logEvidence?.module,
+        comparedTo = logEvidence?.comparedTo ?: baselinePathLabel,
+        logEventId = logEvidence?.eventId,
+        violations = violations
+            .filter { it.kind == "mutable_imported_global" && it.importNameQualified != null }
+            .mapNotNull { violation ->
+                val global = currentGlobals.firstOrNull { it.globalIdx == violation.globalidx } ?: return@mapNotNull null
+                GlobalStatePolicyReportViolationResult(
+                    kind = violation.kind,
+                    globalidx = violation.globalidx,
+                    importName = violation.importNameQualified,
+                    type = global.type,
+                    mutable = global.mutability
+                )
+            }
+            .sortedBy { it.globalidx },
+        newPublicGlobals = newPublicGlobals
+            .mapNotNull { it.toReportGlobal() }
+            .sortedWith(compareBy<GlobalStatePolicyReportGlobalResult> { it.export }.thenBy { it.globalidx }),
+        allowedPublicGlobals = allowedPublicGlobalNames,
+        targetedGlobalIndices = targetedGlobalIndices,
+        recommendation = recommendationFor(violations, newPublicGlobals)
+    )
 
     val warnings = buildList {
         if (logText != null && logText.isBlank()) {
@@ -140,13 +210,24 @@ fun WasmBinaryProvider.auditGlobalStatePolicy(
             logPath = logPathLabel
         ),
         policyId = policy.policyId,
+        detail = GlobalStatePolicyDetailResult(
+            mode = detailMode.wireName,
+            compactPayloadBudgetEstimatedTokens = COMPACT_PAYLOAD_BUDGET_ESTIMATED_TOKENS,
+            allowedPublicGlobalsReturned = allowedPublicGlobalsResult.size,
+            allowedPublicGlobalsTotal = allowedPublicGlobals.size,
+            evidenceReturned = evidence.size,
+            evidenceTotal = fullEvidence.size
+        ),
         globals = globals,
         newPublicGlobals = newPublicGlobals,
-        allowedPublicGlobals = allowedPublicGlobals,
+        allowedPublicGlobals = allowedPublicGlobalsResult,
+        allowedPublicGlobalSummary = allowedPublicGlobalSummary,
+        unchangedGlobalSummary = unchangedGlobalSummary,
         requestLimits = requestLimits,
         violations = violations,
         targetedGlobalIndices = targetedGlobalIndices,
         evidence = evidence,
+        recommendedReport = recommendedReport,
         warnings = warnings
     )
 }
@@ -200,6 +281,18 @@ private fun GlobalStatePolicyGlobalResult.toEvidence(): GlobalStatePolicyEvidenc
         origin = origin
     )
 
+private fun GlobalStatePolicyGlobalResult.toReportGlobal(): GlobalStatePolicyReportGlobalResult? {
+    val export = export ?: return null
+    return GlobalStatePolicyReportGlobalResult(
+        export = export,
+        globalidx = globalidx,
+        origin = origin,
+        type = type,
+        mutable = mutable,
+        initExpr = initExpr
+    )
+}
+
 private fun GlobalExport.toRequestLimit(policy: GlobalStatePolicy): GlobalStatePolicyRequestLimitResult {
     val value = global.expression?.constIntegerValue()
     val maxValue = policy.requestLimitMaxValue
@@ -235,13 +328,23 @@ private fun parseGlobalStatePolicy(text: String): GlobalStatePolicy {
     val requestLimits = root["requestLimits"]?.asObjectOrNull() ?: root["requestLimit"]?.asObjectOrNull()
     val allowedPublicGlobals = (
         root.allowedGlobalExports("allowedPublicGlobals") +
+            root.allowedGlobalExports("allowed_public_globals") +
             root.allowedGlobalExports("allowedGlobals") +
+            root.allowedGlobalExports("allowed_globals") +
             requestLimits.allowedGlobalExports("allowedPublicGlobals") +
+            requestLimits.allowedGlobalExports("allowed_public_globals") +
             requestLimits.allowedGlobalExports("exports") +
             requestLimits.stringOrNull("export")
         )
         .filterNotNull()
         .toSet()
+    val reportNewExportedGlobals = root.booleanOrNull("reportNewExportedGlobals")
+        ?: root.booleanOrNull("report_new_exported_globals")
+        ?: false
+    val explicitAllowedPublicGlobals = root.containsKey("allowedPublicGlobals") ||
+        root.containsKey("allowed_public_globals") ||
+        root.containsKey("allowedGlobals") ||
+        root.containsKey("allowed_globals")
 
     val requestLimitExports = (
         requestLimits.allowedGlobalExports("exports") +
@@ -250,7 +353,6 @@ private fun parseGlobalStatePolicy(text: String): GlobalStatePolicy {
             root.stringOrNull("requestLimitExport")
         )
         .filterNotNull()
-        .ifEmpty { listOf("request_limit") }
         .toSet()
 
     return GlobalStatePolicy(
@@ -261,7 +363,12 @@ private fun parseGlobalStatePolicy(text: String): GlobalStatePolicy {
             ?: requestLimits.longOrNull("max")
             ?: requestLimits.longOrNull("maximum")
             ?: root.longOrNull("maxRequestLimit"),
-        forbidMutableImportedGlobals = root.booleanOrNull("forbidMutableImportedGlobals") ?: true
+        forbidMutableImportedGlobals = root.booleanOrNull("forbidMutableImportedGlobals")
+            ?: root.booleanOrNull("forbid_mutable_imported_globals")
+            ?: root.booleanOrNull("allowMutableImportedGlobals")?.not()
+            ?: root.booleanOrNull("allow_mutable_imported_globals")?.not()
+            ?: true,
+        enforceAllowedPublicGlobals = explicitAllowedPublicGlobals && !reportNewExportedGlobals
     )
 }
 
@@ -273,7 +380,7 @@ private fun GlobalStatePolicy.allowedBy(export: GlobalExport): String? =
     }
 
 private fun GlobalStatePolicy.isRequestLimitExport(export: String): Boolean =
-    export in requestLimitExports || export.contains("request_limit", ignoreCase = true)
+    export in requestLimitExports
 
 private fun String.constIntegerValue(): Long? {
     val parts = trim().split(Regex("\\s+"))
@@ -326,16 +433,84 @@ private fun JsonElement.stringOrNull(): String? =
 private fun JsonElement.asObjectOrNull(): JsonObject? =
     this as? JsonObject
 
+private fun parseGlobalStatePolicyLogEvidence(
+    logText: String?,
+    pathLabel: String?
+): GlobalStatePolicyLogEvidence? {
+    if (logText.isNullOrBlank()) return null
+    val records = logText.lineSequence()
+        .mapNotNull { line -> parseLogKeyValueRecord(line) }
+        .filter { record -> record["event"] != null }
+        .toList()
+    if (records.isEmpty()) return null
+    val selected = records.firstOrNull { record ->
+        record["compared_to"] != null && pathMatches(pathLabel, record["module"])
+    } ?: records.firstOrNull { record ->
+        record["status"] == "needs-report"
+    } ?: records.firstOrNull { record ->
+        record["compared_to"] != null
+    } ?: records.first()
+
+    return GlobalStatePolicyLogEvidence(
+        eventId = selected["event"],
+        module = selected["module"],
+        comparedTo = selected["compared_to"]
+    )
+}
+
+private fun parseLogKeyValueRecord(line: String): Map<String, String>? {
+    val pairs = Regex("""([A-Za-z_][A-Za-z0-9_]*)=([^\s]+)""")
+        .findAll(line)
+        .associate { it.groupValues[1] to it.groupValues[2] }
+    return pairs.ifEmpty { null }
+}
+
+private fun pathMatches(expected: String?, observed: String?): Boolean {
+    if (expected == null || observed == null) return true
+    return expected == observed || expected.endsWith(observed)
+}
+
+private fun recommendationFor(
+    violations: List<GlobalStatePolicyViolationResult>,
+    newPublicGlobals: List<GlobalStatePolicyGlobalResult>
+): String =
+    when {
+        violations.isNotEmpty() -> "Block release until policy violations are remediated; include new public globals in the release report."
+        newPublicGlobals.isNotEmpty() -> "Include new public globals in the release report; no blocking global-state policy violations were found."
+        else -> "No blocking global-state policy violations or new public globals were found."
+    }
+
+private enum class GlobalStatePolicyDetailMode(val wireName: String) {
+    COMPACT("compact"),
+    FULL("full");
+
+    companion object {
+        fun parse(value: String): GlobalStatePolicyDetailMode =
+            entries.firstOrNull { it.wireName == value.lowercase() }
+                ?: throw HexanaAnalysisException(
+                    HexanaAnalysisErrorCode.INVALID_INPUT,
+                    "Global-state policy detail must be `compact` or `full`"
+                )
+    }
+}
+
 private data class GlobalStatePolicy(
     val policyId: String?,
     val allowedPublicGlobals: Set<String>,
     val requestLimitExports: Set<String>,
     val requestLimitMaxValue: Long?,
-    val forbidMutableImportedGlobals: Boolean
+    val forbidMutableImportedGlobals: Boolean,
+    val enforceAllowedPublicGlobals: Boolean
 )
 
 private data class GlobalExport(
     val export: String,
     val global: GlobalResult,
     @Suppress("unused") val exportRecord: ExportResult
+)
+
+private data class GlobalStatePolicyLogEvidence(
+    val eventId: String?,
+    val module: String?,
+    val comparedTo: String?
 )
