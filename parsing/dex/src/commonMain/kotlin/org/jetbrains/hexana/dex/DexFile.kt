@@ -57,7 +57,7 @@ data class DexHeader(
 ) {
     /** DEX version string extracted from the magic bytes, e.g. `"039"`. */
     val version: String
-        get() = String(magic, 4, 3)
+        get() = magic.decodeToString(4, 7)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
