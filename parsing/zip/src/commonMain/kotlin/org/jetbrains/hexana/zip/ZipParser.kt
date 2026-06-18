@@ -5,10 +5,14 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 /**
  * Parses ZIP central directories. Returns the entry list in directory order.
  *
- * MVP scope:
- *  - Classic ZIP only. Zip64 extensions are *not* parsed; if the End of
- *    Central Directory Record reports any field as `0xFFFFFFFF` (the
- *    classic-ZIP overflow marker) [parse] throws.
+ * Supports both classic ZIP and Zip64 extensions:
+ *  - When the End of Central Directory Record contains overflow markers
+ *    (`0xFFFF` / `0xFFFFFFFF`), the parser locates the Zip64 End of Central
+ *    Directory Locator and Record to obtain the true entry count, central
+ *    directory size, and offset.
+ *  - Per-entry Zip64 Extended Information Extra Fields (header id `0x0001`)
+ *    are parsed to recover oversized compressed/uncompressed sizes and
+ *    local-header offsets.
  *  - Per-entry name length, extra field length, and offsets are read from
  *    both the central directory and the local file header (the local header
  *    is needed to compute [ZipEntry.dataOffset] because the central
@@ -27,8 +31,19 @@ object ZipParser {
     /** Local file header signature: `PK\x03\x04`. */
     const val LOCAL_HEADER_SIGNATURE: Int = 0x04034B50
 
+    /** Zip64 End of Central Directory Record signature: `PK\x06\x06`. */
+    private const val ZIP64_EOCD_SIGNATURE: Int = 0x06064B50
+
+    /** Zip64 End of Central Directory Locator signature: `PK\x06\x07`. */
+    private const val ZIP64_EOCD_LOCATOR_SIGNATURE: Int = 0x07064B50
+
+    /** Zip64 Extended Information Extra Field header id. */
+    private const val ZIP64_EXTRA_FIELD_ID: Int = 0x0001
+
     private const val EOCD_FIXED_SIZE = 22 // bytes without the variable-length comment
     private const val EOCD_MAX_SEARCH_WINDOW = 22 + 65_535 // EOCD + max comment length
+    private const val ZIP64_EOCD_LOCATOR_SIZE = 20
+    private const val ZIP64_EOCD_FIXED_SIZE = 56 // minimum fixed part
 
     fun parse(buffer: CommonByteBuffer): List<ZipEntry> {
         val totalSize = buffer.size
@@ -40,18 +55,23 @@ object ZipParser {
             ?: error("End of Central Directory Record not found")
 
         // Read EOCD fixed fields.
-        val cdEntryCount = buffer.readU2LE(eocdOffset + 10) // total entries in CD (this disk)
-        val cdSize = buffer.readU4LE(eocdOffset + 12)
-        val cdOffset = buffer.readU4LE(eocdOffset + 16)
+        var cdEntryCount = buffer.readU2LE(eocdOffset + 10).toLong()
+        var cdSize = buffer.readU4LE(eocdOffset + 12)
+        var cdOffset = buffer.readU4LE(eocdOffset + 16)
 
-        if (cdEntryCount == 0xFFFF || cdSize == 0xFFFFFFFFL || cdOffset == 0xFFFFFFFFL) {
-            error("ZIP64 overflow markers detected — Zip64 parsing is not yet supported")
+        // If any EOCD field is at its overflow sentinel, look for Zip64 records.
+        if (cdEntryCount == 0xFFFFL || cdSize == 0xFFFFFFFFL || cdOffset == 0xFFFFFFFFL) {
+            val zip64Eocd = findZip64Eocd(buffer, eocdOffset)
+                ?: error("Zip64 overflow markers in EOCD but Zip64 End of Central Directory Record not found")
+            cdEntryCount = zip64Eocd.entryCount
+            cdSize = zip64Eocd.cdSize
+            cdOffset = zip64Eocd.cdOffset
         }
 
         // Walk central directory.
-        val entries = ArrayList<ZipEntry>(cdEntryCount)
-        var p = cdOffset.toInt()
-        repeat(cdEntryCount) {
+        val entries = ArrayList<ZipEntry>(cdEntryCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+        var p = cdOffset
+        repeat(cdEntryCount.toInt()) {
             val signature = buffer.readU4LE(p)
             require(signature.toInt() == CENTRAL_DIR_SIGNATURE) {
                 "central directory entry at $p has bad signature 0x${signature.toString(16)}"
@@ -59,21 +79,32 @@ object ZipParser {
             val flags = buffer.readU2LE(p + 8)
             val method = buffer.readU2LE(p + 10)
             val crc = buffer.readU4LE(p + 16).toInt()
-            val compressedSize = buffer.readU4LE(p + 20)
-            val uncompressedSize = buffer.readU4LE(p + 24)
+            var compressedSize = buffer.readU4LE(p + 20)
+            var uncompressedSize = buffer.readU4LE(p + 24)
             val nameLen = buffer.readU2LE(p + 28)
             val extraLen = buffer.readU2LE(p + 30)
             val commentLen = buffer.readU2LE(p + 32)
-            val localHeaderOffset = buffer.readU4LE(p + 42)
+            var localHeaderOffset = buffer.readU4LE(p + 42)
 
-            if (compressedSize == 0xFFFFFFFFL ||
-                uncompressedSize == 0xFFFFFFFFL ||
+            // Parse Zip64 Extended Information Extra Field when overflow markers are present.
+            if (uncompressedSize == 0xFFFFFFFFL ||
+                compressedSize == 0xFFFFFFFFL ||
                 localHeaderOffset == 0xFFFFFFFFL
             ) {
-                error("ZIP64 size/offset markers in central directory entry $p; not yet supported")
+                val zip64Extra = parseZip64ExtraField(
+                    buffer, p + 46 + nameLen, extraLen,
+                    uncompressedSize, compressedSize, localHeaderOffset,
+                )
+                if (zip64Extra != null) {
+                    uncompressedSize = zip64Extra.uncompressedSize
+                    compressedSize = zip64Extra.compressedSize
+                    localHeaderOffset = zip64Extra.localHeaderOffset
+                } else {
+                    error("Zip64 overflow markers in central directory entry at $p but no Zip64 extra field found")
+                }
             }
 
-            val name = buffer.readUtf8(p + 46, nameLen)
+            val name = buffer.readUtf8(p, 46, nameLen)
             val cdEntrySize = 46 + nameLen + extraLen + commentLen
             val dataOffset = computeLocalDataOffset(buffer, localHeaderOffset)
 
@@ -93,11 +124,9 @@ object ZipParser {
         return entries
     }
 
-    private fun findEocdOffset(buffer: CommonByteBuffer): Int? {
-        val size = buffer.size
+    private fun findEocdOffset(buffer: CommonByteBuffer): Long? {
+        val size = buffer.size.toLong()
         val searchFrom = (size - EOCD_MAX_SEARCH_WINDOW).coerceAtLeast(0)
-        // Walk backwards so the first hit is the EOCD record proper (not a
-        // false match inside an archive comment).
         var p = size - EOCD_FIXED_SIZE
         while (p >= searchFrom) {
             if (buffer.readU4LE(p).toInt() == EOCD_SIGNATURE) {
@@ -111,14 +140,84 @@ object ZipParser {
         return null
     }
 
-    private fun computeLocalDataOffset(buffer: CommonByteBuffer, localHeaderOffset: Long): Long {
-        val p = localHeaderOffset.toInt()
-        val signature = buffer.readU4LE(p)
-        require(signature.toInt() == LOCAL_HEADER_SIGNATURE) {
-            "local file header at $p has bad signature 0x${signature.toString(16)}"
+    private class Zip64EocdInfo(
+        val entryCount: Long,
+        val cdSize: Long,
+        val cdOffset: Long,
+    )
+
+    private fun findZip64Eocd(buffer: CommonByteBuffer, eocdOffset: Long): Zip64EocdInfo? {
+        // The Zip64 EOCD Locator sits immediately before the classic EOCD.
+        val locatorOffset = eocdOffset - ZIP64_EOCD_LOCATOR_SIZE
+        if (locatorOffset < 0) return null
+        if (buffer.readU4LE(locatorOffset).toInt() != ZIP64_EOCD_LOCATOR_SIGNATURE) return null
+
+        val zip64EocdOffset = buffer.readU8LE(locatorOffset + 8)
+        if (zip64EocdOffset < 0 || zip64EocdOffset + ZIP64_EOCD_FIXED_SIZE > buffer.size) return null
+        if (buffer.readU4LE(zip64EocdOffset).toInt() != ZIP64_EOCD_SIGNATURE) return null
+
+        val entryCount = buffer.readU8LE(zip64EocdOffset + 32)
+        val cdSize = buffer.readU8LE(zip64EocdOffset + 40)
+        val cdOffset = buffer.readU8LE(zip64EocdOffset + 48)
+        return Zip64EocdInfo(entryCount, cdSize, cdOffset)
+    }
+
+    private class Zip64ExtraInfo(
+        val uncompressedSize: Long,
+        val compressedSize: Long,
+        val localHeaderOffset: Long,
+    )
+
+    /**
+     * Parses the Zip64 Extended Information Extra Field (header id 0x0001)
+     * from the extra field area of a central directory entry.
+     *
+     * Per APPNOTE 4.5.3, the extra field contains 8-byte values only for
+     * fields that are set to 0xFFFFFFFF in the corresponding fixed-size
+     * record, in the order: uncompressed size, compressed size, local header
+     * offset, disk start number.
+     */
+    private fun parseZip64ExtraField(
+        buffer: CommonByteBuffer,
+        extraStart: Long,
+        extraLen: Int,
+        origUncompressed: Long,
+        origCompressed: Long,
+        origLocalOffset: Long,
+    ): Zip64ExtraInfo? {
+        var pos = extraStart
+        val extraEnd = extraStart + extraLen
+        while (pos + 4 <= extraEnd) {
+            val headerId = buffer.readU2LE(pos)
+            val dataSize = buffer.readU2LE(pos + 2)
+            if (headerId == ZIP64_EXTRA_FIELD_ID) {
+                var off = pos + 4
+                var uncompressed = origUncompressed
+                var compressed = origCompressed
+                var localOffset = origLocalOffset
+                if (origUncompressed == 0xFFFFFFFFL) {
+                    uncompressed = buffer.readU8LE(off); off += 8
+                }
+                if (origCompressed == 0xFFFFFFFFL) {
+                    compressed = buffer.readU8LE(off); off += 8
+                }
+                if (origLocalOffset == 0xFFFFFFFFL) {
+                    localOffset = buffer.readU8LE(off)
+                }
+                return Zip64ExtraInfo(uncompressed, compressed, localOffset)
+            }
+            pos += 4 + dataSize
         }
-        val nameLen = buffer.readU2LE(p + 26)
-        val extraLen = buffer.readU2LE(p + 28)
+        return null
+    }
+
+    private fun computeLocalDataOffset(buffer: CommonByteBuffer, localHeaderOffset: Long): Long {
+        val signature = buffer.readU4LE(localHeaderOffset)
+        require(signature.toInt() == LOCAL_HEADER_SIGNATURE) {
+            "local file header at $localHeaderOffset has bad signature 0x${signature.toString(16)}"
+        }
+        val nameLen = buffer.readU2LE(localHeaderOffset + 26)
+        val extraLen = buffer.readU2LE(localHeaderOffset + 28)
         return localHeaderOffset + 30 + nameLen + extraLen
     }
 }
@@ -127,20 +226,38 @@ object ZipParser {
 // Little-endian readers and bounded UTF-8 string reads on CommonByteBuffer
 // -----------------------------------------------------------------------------
 
-private fun CommonByteBuffer.readU2LE(at: Int): Int =
-    (this[at].toInt() and 0xFF) or ((this[at + 1].toInt() and 0xFF) shl 8)
+private fun CommonByteBuffer.readU2LE(at: Long): Int {
+    val a = at.toInt()
+    return (this[a].toInt() and 0xFF) or ((this[a + 1].toInt() and 0xFF) shl 8)
+}
 
-private fun CommonByteBuffer.readU4LE(at: Int): Long {
-    val b0 = this[at].toLong() and 0xFFL
-    val b1 = this[at + 1].toLong() and 0xFFL
-    val b2 = this[at + 2].toLong() and 0xFFL
-    val b3 = this[at + 3].toLong() and 0xFFL
+private fun CommonByteBuffer.readU4LE(at: Long): Long {
+    val a = at.toInt()
+    val b0 = this[a].toLong() and 0xFFL
+    val b1 = this[a + 1].toLong() and 0xFFL
+    val b2 = this[a + 2].toLong() and 0xFFL
+    val b3 = this[a + 3].toLong() and 0xFFL
     return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
 }
 
-private fun CommonByteBuffer.readUtf8(at: Int, length: Int): String {
+private fun CommonByteBuffer.readU8LE(at: Long): Long {
+    val a = at.toInt()
+    val b0 = this[a].toLong() and 0xFFL
+    val b1 = this[a + 1].toLong() and 0xFFL
+    val b2 = this[a + 2].toLong() and 0xFFL
+    val b3 = this[a + 3].toLong() and 0xFFL
+    val b4 = this[a + 4].toLong() and 0xFFL
+    val b5 = this[a + 5].toLong() and 0xFFL
+    val b6 = this[a + 6].toLong() and 0xFFL
+    val b7 = this[a + 7].toLong() and 0xFFL
+    return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24) or
+        (b4 shl 32) or (b5 shl 40) or (b6 shl 48) or (b7 shl 56)
+}
+
+private fun CommonByteBuffer.readUtf8(at: Long, offset: Int, length: Int): String {
     if (length <= 0) return ""
+    val start = at.toInt() + offset
     val bytes = ByteArray(length)
-    for (i in 0 until length) bytes[i] = this[at + i]
+    for (i in 0 until length) bytes[i] = this[start + i]
     return bytes.decodeToString()
 }

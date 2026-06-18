@@ -3,10 +3,8 @@ package org.jetbrains.hexana.zip
 /**
  * One entry from a ZIP central directory (PKWARE APPNOTE 4.4).
  *
- * MVP — classic ZIP only. Zip64 extensions (entries / offsets >= 4 GiB) are
- * not yet supported; oversized values raise from the parser rather than being
- * silently truncated. Encrypted entries are exposed as-is — the consumer
- * decides whether to surface them as readable.
+ * Both classic ZIP and Zip64 extensions are supported. Encrypted entries are
+ * exposed as-is — the consumer decides whether to surface them as readable.
  */
 data class ZipEntry(
     /** Decoded entry name (path). Forward slashes; the parser does not normalize. */
