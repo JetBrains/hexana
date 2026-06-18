@@ -1,0 +1,95 @@
+[
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.JSONRPCRequest",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.JSONRPCRequest$Companion",
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.JSONRPCNotification",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.JSONRPCNotification$Companion",
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.JSONRPCResponse",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.JSONRPCResponse$Companion",
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.JSONRPCError",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.JSONRPCError$Companion",
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.JSONRPCEmptyMessage",
+    "allDeclaredFields": true,
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.RequestId$StringId",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.RequestId$StringId$Companion",
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.RequestId$NumberId",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.RequestId$NumberId$Companion",
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.InitializeResult",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.InitializeResult$Companion",
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.ListToolsResult",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.ListToolsResult$Companion",
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.CallToolResult",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.CallToolResult$Companion",
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.EmptyResult",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.EmptyResult$Companion",
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.TextContent",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "io.modelcontextprotocol.kotlin.sdk.types.TextContent$Companion",
+    "allDeclaredMethods": true
+  }
+]

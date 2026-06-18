@@ -36,7 +36,7 @@
 ### Changed
 - Hexana's project-view actions (Hex view, Open Archive, **Compare WASM With…**, and the in-editor Hex/offset/structure actions) are now grouped under a single **Hexana** submenu instead of being scattered across the right-click menu. In IntelliJ IDEA the submenu sits at the top level of the project-view popup; in RustRover and CLion — whose project-view popup is overridden to a fixed action list that silently drops third-party top-level contributions — it appears under **Open In ▸ Hexana**, the one group those IDEs still surface. Each entry continues to gate its own visibility, so only the actions that apply to the selected file appear
 - **Compare WASM With…** can now be invoked from Search Everywhere and the keymap, not only from a selected `.wasm`: when run without a `.wasm` selection it prompts for the first module, then the second, instead of doing nothing
-- Stability improvements for debugging with NodeJS 
+- Stability improvements for debugging with NodeJS
 
 ### Fixed
 - Size-profiler (**Top**) tree nodes expand again. Nodes whose children are generated lazily — now any nested component / embedded core module, and a core module's sections expanding into their functions — silently showed nothing when expanded: the lazy children-generator was gated by the tree-build coroutine's cancellation flag, which is already cancelled by the time a node is expanded, so it returned no children. The generator no longer inherits that flag

@@ -150,7 +150,8 @@ graalvmNative {
             fallback.set(false)
             buildArgs.addAll(
                 "-Dhexana.version=$version",
-                "-H:+ReportExceptionStackTraces"
+                "-H:+ReportExceptionStackTraces",
+                "--initialize-at-build-time=kotlin.DeprecationLevel"
             )
             resources {
                 includedPatterns.addAll(
@@ -335,6 +336,30 @@ tasks.register<Exec>("nativeMcpVersionSmoke") {
         check(output.matches(Regex("""hexana-mcp \S+"""))) {
             "Expected `hexana-mcp <version>` from native executable, got: $output"
         }
+    }
+}
+
+tasks.register<Test>("nativeMcpStdioSmoke") {
+    description = "Builds the experimental GraalVM native MCP executable and runs the stdio integration smoke test."
+    group = "verification"
+    dependsOn(tasks.named("nativeCompile"))
+    shouldRunAfter(tasks.named("integrationTest"))
+
+    testClassesDirs = integrationTestSourceSet.output.classesDirs
+    classpath = integrationTestSourceSet.runtimeClasspath
+    testLogging {
+        showStandardStreams = true
+        events("failed", "passed", "skipped")
+    }
+    doFirst {
+        val executableFile = nativeExecutable.get().asFile
+        check(executableFile.canExecute()) {
+            "Expected native executable at ${executableFile.absolutePath}. Run :mcp:server:nativeCompile first."
+        }
+        systemProperty("hexana.integration.nativeExecutable", executableFile.absolutePath)
+    }
+    filter {
+        includeTestsMatching("*HexanaNativeStdioIntegrationTest")
     }
 }
 

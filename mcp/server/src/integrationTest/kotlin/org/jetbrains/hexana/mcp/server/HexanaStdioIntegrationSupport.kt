@@ -21,6 +21,7 @@ internal data class StdioLauncher(
     val unixRelativePath: String,
     val windowsRelativePath: String,
     val clientName: String,
+    val executableSystemProperty: String? = null,
 ) {
     companion object {
         val Server = StdioLauncher(
@@ -41,11 +42,17 @@ internal data class StdioLauncher(
             windowsRelativePath = "bin/hexana-mcp.cmd",
             clientName = "hexana-codex-plugin-integration-test",
         )
+        val NativeExecutable = StdioLauncher(
+            installDirSystemProperty = "hexana.integration.nativeExecutable",
+            unixRelativePath = "",
+            windowsRelativePath = "",
+            clientName = "hexana-native-integration-test",
+            executableSystemProperty = "hexana.integration.nativeExecutable",
+        )
     }
 }
 
 internal class HexanaInstalledStdioClient private constructor(
-    private val installDir: Path,
     private val command: List<String>,
     private val process: Process,
     val client: Client,
@@ -98,9 +105,9 @@ internal class HexanaInstalledStdioClient private constructor(
             launcher: StdioLauncher = StdioLauncher.Server,
             toolProfile: HexanaMcpToolProfile? = null,
         ): HexanaInstalledStdioClient {
-            val installDir = integrationInstallDir(launcher.installDirSystemProperty)
+            val processSpec = processSpec(launcher)
             val command = buildCommand(
-                installDir = installDir,
+                processSpec = processSpec,
                 launcher = launcher,
                 arguments = buildList {
                     add("stdio")
@@ -113,15 +120,15 @@ internal class HexanaInstalledStdioClient private constructor(
                 }
             )
             logger.info(
-                "Starting installed stdio server from {} with logLevel={} command={}",
-                installDir,
+                "Starting stdio server from {} with logLevel={} command={}",
+                processSpec.workingDirectory,
                 logLevel.cliValue(),
                 command.joinToString(" ")
             )
 
             val process = withContext(Dispatchers.IO) {
                 ProcessBuilder(command)
-                    .directory(installDir.toFile())
+                    .directory(processSpec.workingDirectory.toFile())
                     .useCurrentJvm(logger)
                     .start()
             }
@@ -146,7 +153,6 @@ internal class HexanaInstalledStdioClient private constructor(
                 }
                 logger.info("Connected MCP stdio client to pid={}", process.pid())
                 return HexanaInstalledStdioClient(
-                    installDir = installDir,
                     command = command,
                     process = process,
                     client = client,
@@ -173,17 +179,17 @@ internal class HexanaInstalledStdioClient private constructor(
             launcher: StdioLauncher,
             vararg arguments: String
         ): InstalledCommandResult {
-            val installDir = integrationInstallDir(launcher.installDirSystemProperty)
+            val processSpec = processSpec(launcher)
             val command = buildCommand(
-                installDir = installDir,
+                processSpec = processSpec,
                 launcher = launcher,
                 arguments = arguments.toList()
             )
-            logger.info("Starting installed command from {} command={}", installDir, command.joinToString(" "))
+            logger.info("Starting command from {} command={}", processSpec.workingDirectory, command.joinToString(" "))
 
             val process = withContext(Dispatchers.IO) {
                 ProcessBuilder(command)
-                    .directory(installDir.toFile())
+                    .directory(processSpec.workingDirectory.toFile())
                     .useCurrentJvm(logger)
                     .start()
             }
@@ -213,27 +219,48 @@ internal class HexanaInstalledStdioClient private constructor(
             )
         }
 
-        private fun integrationInstallDir(systemPropertyName: String): Path {
+        private fun processSpec(launcher: StdioLauncher): StdioProcessSpec {
+            launcher.executableSystemProperty?.let { systemPropertyName ->
+                val executable = integrationPath(systemPropertyName)
+                require(Files.isRegularFile(executable)) { "Native executable does not exist: $executable" }
+                require(Files.isExecutable(executable)) { "Native executable is not executable: $executable" }
+                return StdioProcessSpec(
+                    workingDirectory = executable.parent ?: Path.of(".").toAbsolutePath(),
+                    executable = executable,
+                )
+            }
+
+            val installDir = integrationPath(launcher.installDirSystemProperty)
+            require(Files.isDirectory(installDir)) { "Install directory does not exist: $installDir" }
+            return StdioProcessSpec(
+                workingDirectory = installDir,
+                executable = null,
+            )
+        }
+
+        private fun integrationPath(systemPropertyName: String): Path {
             val rawPath = System.getProperty(systemPropertyName)
                 ?: error("Missing `$systemPropertyName` system property")
-            val path = Path.of(rawPath)
-            require(Files.isDirectory(path)) { "Install directory does not exist: $path" }
-            return path
+            return Path.of(rawPath)
         }
 
         private fun buildCommand(
-            installDir: Path,
+            processSpec: StdioProcessSpec,
             launcher: StdioLauncher,
             arguments: List<String>,
         ): List<String> {
+            processSpec.executable?.let { executable ->
+                return listOf(executable.toString()) + arguments
+            }
+
             return if (isWindows()) {
                 listOf(
                     "cmd.exe",
                     "/c",
-                    installDir.resolve(launcher.windowsRelativePath).toString(),
+                    processSpec.workingDirectory.resolve(launcher.windowsRelativePath).toString(),
                 ) + arguments
             } else {
-                listOf(installDir.resolve(launcher.unixRelativePath).toString()) + arguments
+                listOf(processSpec.workingDirectory.resolve(launcher.unixRelativePath).toString()) + arguments
             }
         }
 
@@ -271,6 +298,11 @@ internal class HexanaInstalledStdioClient private constructor(
         }
     }
 }
+
+private data class StdioProcessSpec(
+    val workingDirectory: Path,
+    val executable: Path?,
+)
 
 internal data class InstalledCommandResult(
     val command: List<String>,

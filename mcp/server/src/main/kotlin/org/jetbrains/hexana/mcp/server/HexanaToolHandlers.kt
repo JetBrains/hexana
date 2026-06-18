@@ -2,12 +2,27 @@ package org.jetbrains.hexana.mcp.server
 
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.*
 import org.jetbrains.hexana.analytics.HexanaAnalytics
 import org.jetbrains.hexana.analytics.HexanaEvent
 import org.jetbrains.hexana.mcp.*
-import org.jetbrains.hexana.mcp.model.functions.SourceLocationInput
-import org.jetbrains.hexana.mcp.model.functions.WasmFrameInput
+import org.jetbrains.hexana.mcp.model.artifacts.*
+import org.jetbrains.hexana.mcp.model.binaries.*
+import org.jetbrains.hexana.mcp.model.components.*
+import org.jetbrains.hexana.mcp.model.data.*
+import org.jetbrains.hexana.mcp.model.elements.*
+import org.jetbrains.hexana.mcp.model.entrypoints.*
+import org.jetbrains.hexana.mcp.model.exports.*
+import org.jetbrains.hexana.mcp.model.features.*
+import org.jetbrains.hexana.mcp.model.functions.*
+import org.jetbrains.hexana.mcp.model.globals.*
+import org.jetbrains.hexana.mcp.model.imports.*
+import org.jetbrains.hexana.mcp.model.memory.*
+import org.jetbrains.hexana.mcp.model.runtime.*
+import org.jetbrains.hexana.mcp.model.sections.*
+import org.jetbrains.hexana.mcp.model.summary.*
+import org.jetbrains.hexana.mcp.model.types.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -25,7 +40,7 @@ class HexanaToolHandlers(
     private val logger: Logger = LoggerFactory.getLogger(HexanaToolHandlers::class.java)
 ) {
     fun queryArtifacts(arguments: JsonObject?): CallToolResult {
-        return execute("query_artifacts") {
+        return execute("query_artifacts", QueryArtifactsResult.serializer()) {
             analysisService.queryArtifacts(
                 input = wasmInput(arguments),
                 baselineInput = arguments.optionalNonBlankString("baselinePath")?.let(WasmInput::FilePath),
@@ -47,7 +62,7 @@ class HexanaToolHandlers(
     }
 
     fun planAbiBindingRegeneration(arguments: JsonObject?): CallToolResult {
-        return execute("plan_abi_binding_regeneration") {
+        return execute("plan_abi_binding_regeneration", PlanAbiBindingRegenerationResult.serializer()) {
             analysisService.planAbiBindingRegeneration(
                 input = wasmInput(arguments),
                 bindingInput = TextInput.FilePath(arguments.requireNonBlankString("bindingPath"))
@@ -56,19 +71,19 @@ class HexanaToolHandlers(
     }
 
     fun summarizeModule(arguments: JsonObject?): CallToolResult {
-        return execute("summarize_module") {
+        return execute("summarize_module", SummarizeModuleResult.serializer()) {
             analysisService.summarizeModule(wasmInput(arguments))
         }
     }
 
     fun summarizeBinary(arguments: JsonObject?): CallToolResult {
-        return execute("summarize_binary") {
+        return execute("summarize_binary", BinarySummaryResult.serializer()) {
             analysisService.summarizeBinary(binaryInput(arguments))
         }
     }
 
     fun queryBinary(arguments: JsonObject?): CallToolResult {
-        return execute("query_binary") {
+        return execute("query_binary", QueryBinaryResult.serializer()) {
             analysisService.queryBinary(
                 input = binaryInput(arguments),
                 operation = arguments.stringOrDefault(
@@ -86,7 +101,7 @@ class HexanaToolHandlers(
     }
 
     fun listBinaryFunctions(arguments: JsonObject?): CallToolResult {
-        return execute("list_binary_functions") {
+        return execute("list_binary_functions", BinaryFunctionsResult.serializer()) {
             analysisService.listBinaryFunctions(
                 input = binaryInput(arguments),
                 offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.LIST_BINARY_FUNCTIONS_OFFSET),
@@ -96,7 +111,7 @@ class HexanaToolHandlers(
     }
 
     fun searchBinaryFunctions(arguments: JsonObject?): CallToolResult {
-        return execute("search_binary_functions") {
+        return execute("search_binary_functions", BinaryFunctionsResult.serializer()) {
             analysisService.searchBinaryFunctions(
                 input = binaryInput(arguments),
                 query = arguments.requireStringList("query"),
@@ -107,25 +122,25 @@ class HexanaToolHandlers(
     }
 
     fun getEntrypointPolicy(arguments: JsonObject?): CallToolResult {
-        return execute("get_entrypoint_policy") {
+        return execute("get_entrypoint_policy", EntrypointPolicyResult.serializer()) {
             analysisService.getEntrypointPolicy(wasmInput(arguments))
         }
     }
 
     fun listEnabledFeatures(arguments: JsonObject?): CallToolResult {
-        return execute("list_enabled_features") {
+        return execute("list_enabled_features", ListEnabledFeaturesResult.serializer()) {
             analysisService.listEnabledFeatures(wasmInput(arguments))
         }
     }
 
     fun listRequiredProposals(arguments: JsonObject?): CallToolResult {
-        return execute("list_required_proposals") {
+        return execute("list_required_proposals", ListRequiredProposalsResult.serializer()) {
             analysisService.listRequiredProposals(wasmInput(arguments))
         }
     }
 
     fun diffRequiredProposals(arguments: JsonObject?): CallToolResult {
-        return execute("diff_required_proposals") {
+        return execute("diff_required_proposals", DiffRequiredProposalsResult.serializer()) {
             analysisService.diffRequiredProposals(
                 input = wasmInput(arguments),
                 baselineInput = WasmInput.FilePath(arguments.requireNonBlankString("baselinePath"))
@@ -134,7 +149,7 @@ class HexanaToolHandlers(
     }
 
     fun checkRuntimeCompatibility(arguments: JsonObject?): CallToolResult {
-        return execute("check_runtime_compatibility") {
+        return execute("check_runtime_compatibility", CheckRuntimeCompatibilityResult.serializer()) {
             analysisService.checkRuntimeCompatibility(
                 input = wasmInput(arguments),
                 runtime = arguments.requireNonBlankString("runtime"),
@@ -144,13 +159,13 @@ class HexanaToolHandlers(
     }
 
     fun listComponentSurface(arguments: JsonObject?): CallToolResult {
-        return execute("list_component_surface") {
+        return execute("list_component_surface", ListComponentSurfaceResult.serializer()) {
             analysisService.listComponentSurface(wasmInput(arguments))
         }
     }
 
     fun resolveComponentDependencies(arguments: JsonObject?): CallToolResult {
-        return execute("resolve_component_dependencies") {
+        return execute("resolve_component_dependencies", ResolveComponentDependenciesResult.serializer()) {
             analysisService.resolveComponentDependencies(
                 input = wasmInput(arguments),
                 projectRoot = arguments.optionalNonBlankString("projectRoot"),
@@ -160,7 +175,7 @@ class HexanaToolHandlers(
     }
 
     fun checkComponentCompatibility(arguments: JsonObject?): CallToolResult {
-        return execute("check_component_compatibility") {
+        return execute("check_component_compatibility", CheckComponentCompatibilityResult.serializer()) {
             analysisService.checkComponentCompatibility(
                 input = wasmInput(arguments),
                 dependencyPaths = arguments.optionalStringList("dependencyPaths").orEmpty(),
@@ -172,25 +187,25 @@ class HexanaToolHandlers(
     }
 
     fun listCustomSections(arguments: JsonObject?): CallToolResult {
-        return execute("list_custom_sections") {
+        return execute("list_custom_sections", ListCustomSectionsResult.serializer()) {
             analysisService.listCustomSections(wasmInput(arguments))
         }
     }
 
     fun listImports(arguments: JsonObject?): CallToolResult {
-        return execute("list_imports") {
+        return execute("list_imports", ListImportsResult.serializer()) {
             analysisService.listImports(wasmInput(arguments))
         }
     }
 
     fun listExports(arguments: JsonObject?): CallToolResult {
-        return execute("list_exports") {
+        return execute("list_exports", ListExportsResult.serializer()) {
             analysisService.listExports(wasmInput(arguments))
         }
     }
 
     fun searchExports(arguments: JsonObject?): CallToolResult {
-        return execute("search_exports") {
+        return execute("search_exports", SearchExportsResult.serializer()) {
             analysisService.searchExports(
                 input = wasmInput(arguments),
                 query = arguments.requireStringList("query"),
@@ -200,7 +215,7 @@ class HexanaToolHandlers(
     }
 
     fun listFunctions(arguments: JsonObject?): CallToolResult {
-        return execute("list_functions") {
+        return execute("list_functions", FunctionsResult.serializer()) {
             analysisService.listFunctions(
                 input = wasmInput(arguments),
                 offset = arguments.intOrDefault("offset", LEGACY_LIST_FUNCTIONS_OFFSET),
@@ -210,13 +225,13 @@ class HexanaToolHandlers(
     }
 
     fun listCodeSectionOffsets(arguments: JsonObject?): CallToolResult {
-        return execute("list_code_section_offsets") {
+        return execute("list_code_section_offsets", ListCodeSectionOffsetsResult.serializer()) {
             analysisService.listCodeSectionOffsets(wasmInput(arguments))
         }
     }
 
     fun resolveFunctionSignature(arguments: JsonObject?): CallToolResult {
-        return execute("resolve_function_signature") {
+        return execute("resolve_function_signature", ResolveFunctionSignatureResult.serializer()) {
             analysisService.resolveFunctionSignature(
                 input = wasmInput(arguments),
                 funcidx = arguments.requireIntArgument("funcidx")
@@ -225,7 +240,7 @@ class HexanaToolHandlers(
     }
 
     fun disassembleFunction(arguments: JsonObject?): CallToolResult {
-        return execute("disassemble_function") {
+        return execute("disassemble_function", DisassembleFunctionResult.serializer()) {
             analysisService.disassembleFunction(
                 input = wasmInput(arguments),
                 funcidx = arguments.requireIntArgument("funcidx")
@@ -234,7 +249,7 @@ class HexanaToolHandlers(
     }
 
     fun getFunctionCallGraph(arguments: JsonObject?): CallToolResult {
-        return execute("get_function_call_graph") {
+        return execute("get_function_call_graph", GetFunctionCallGraphResult.serializer()) {
             analysisService.getFunctionCallGraph(
                 input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
@@ -243,7 +258,7 @@ class HexanaToolHandlers(
     }
 
     fun auditLocalStackBudget(arguments: JsonObject?): CallToolResult {
-        return execute("audit_local_stack_budget") {
+        return execute("audit_local_stack_budget", AuditLocalStackBudgetResult.serializer()) {
             analysisService.auditLocalStackBudget(
                 input = wasmInput(arguments),
                 policyInput = arguments.optionalNonBlankString("policyPath")?.let(TextInput::FilePath),
@@ -259,7 +274,7 @@ class HexanaToolHandlers(
     }
 
     fun searchFunctionsByName(arguments: JsonObject?): CallToolResult {
-        return execute("search_functions_by_name") {
+        return execute("search_functions_by_name", SearchFunctionsByNameResult.serializer()) {
             analysisService.searchFunctionsByName(
                 input = wasmInput(arguments),
                 query = arguments.requireNonBlankString("query"),
@@ -269,7 +284,7 @@ class HexanaToolHandlers(
     }
 
     fun resolveWasmFrames(arguments: JsonObject?): CallToolResult {
-        return execute("resolve_wasm_frames") {
+        return execute("resolve_wasm_frames", ResolveWasmFramesResult.serializer()) {
             analysisService.resolveWasmFrames(
                 input = wasmInput(arguments),
                 frames = arguments.optionalFrameInputs("frames"),
@@ -280,7 +295,7 @@ class HexanaToolHandlers(
     }
 
     fun resolveFunctionSymbols(arguments: JsonObject?): CallToolResult {
-        return execute("resolve_function_symbols") {
+        return execute("resolve_function_symbols", ResolveFunctionSymbolsResult.serializer()) {
             analysisService.resolveFunctionSymbols(
                 input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices"),
@@ -290,7 +305,7 @@ class HexanaToolHandlers(
     }
 
     fun resolveSourceLocations(arguments: JsonObject?): CallToolResult {
-        return execute("resolve_source_locations") {
+        return execute("resolve_source_locations", ResolveSourceLocationsResult.serializer()) {
             analysisService.resolveSourceLocations(
                 input = wasmInput(arguments),
                 locations = arguments.requireSourceLocationInputs("locations"),
@@ -300,7 +315,7 @@ class HexanaToolHandlers(
     }
 
     fun listExportedFunctions(arguments: JsonObject?): CallToolResult {
-        return execute("list_exported_functions") {
+        return execute("list_exported_functions", ListExportedFunctionsResult.serializer()) {
             analysisService.listExportedFunctions(
                 input = wasmInput(arguments),
                 entriesRange = arguments.requireClosedRange("entriesRange")
@@ -309,7 +324,7 @@ class HexanaToolHandlers(
     }
 
     fun functionsForIndices(arguments: JsonObject?): CallToolResult {
-        return execute("functions_for_indices") {
+        return execute("functions_for_indices", FunctionsResult.serializer()) {
             analysisService.functionsForIndices(
                 input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
@@ -318,13 +333,13 @@ class HexanaToolHandlers(
     }
 
     fun listGlobals(arguments: JsonObject?): CallToolResult {
-        return execute("list_globals") {
+        return execute("list_globals", ListGlobalsResult.serializer()) {
             analysisService.listGlobals(wasmInput(arguments))
         }
     }
 
     fun auditGlobalStatePolicy(arguments: JsonObject?): CallToolResult {
-        return execute("audit_global_state_policy") {
+        return execute("audit_global_state_policy", AuditGlobalStatePolicyResult.serializer()) {
             analysisService.auditGlobalStatePolicy(
                 input = wasmInput(arguments),
                 baselineInput = WasmInput.FilePath(arguments.requireNonBlankString("baselinePath")),
@@ -337,31 +352,31 @@ class HexanaToolHandlers(
     }
 
     fun listTypes(arguments: JsonObject?): CallToolResult {
-        return execute("list_types") {
+        return execute("list_types", TypesResult.serializer()) {
             analysisService.listTypes(wasmInput(arguments))
         }
     }
 
     fun listValueTypes(arguments: JsonObject?): CallToolResult {
-        return execute("list_value_types") {
+        return execute("list_value_types", ListValueTypesResult.serializer()) {
             analysisService.listValueTypes(wasmInput(arguments))
         }
     }
 
     fun listReferenceTypes(arguments: JsonObject?): CallToolResult {
-        return execute("list_reference_types") {
+        return execute("list_reference_types", ListReferenceTypesResult.serializer()) {
             analysisService.listReferenceTypes(wasmInput(arguments))
         }
     }
 
     fun listMemory(arguments: JsonObject?): CallToolResult {
-        return execute("list_memory") {
+        return execute("list_memory", ListMemoryResult.serializer()) {
             analysisService.listMemory(wasmInput(arguments))
         }
     }
 
     fun checkMemoryContract(arguments: JsonObject?): CallToolResult {
-        return execute("check_memory_contract") {
+        return execute("check_memory_contract", CheckMemoryContractResult.serializer()) {
             analysisService.checkMemoryContract(
                 input = wasmInput(arguments),
                 baselineInput = WasmInput.FilePath(arguments.requireNonBlankString("baselinePath")),
@@ -372,7 +387,7 @@ class HexanaToolHandlers(
     }
 
     fun getGlobalsForIndices(arguments: JsonObject?): CallToolResult {
-        return execute("get_globals_for_indices") {
+        return execute("get_globals_for_indices", ListGlobalsResult.serializer()) {
             analysisService.getGlobalsForIndices(
                 input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
@@ -381,7 +396,7 @@ class HexanaToolHandlers(
     }
 
     fun listData(arguments: JsonObject?): CallToolResult {
-        return execute("list_data") {
+        return execute("list_data", ListDataSectionsResult.serializer()) {
             analysisService.listData(
                 input = wasmInput(arguments),
                 entriesRange = arguments.requireClosedRange("entriesRange")
@@ -390,7 +405,7 @@ class HexanaToolHandlers(
     }
 
     fun listDataSegments(arguments: JsonObject?): CallToolResult {
-        return execute("list_data_segments") {
+        return execute("list_data_segments", ListDataSegmentsResult.serializer()) {
             val (from, toExclusive) = arguments.requireHalfOpenRange("segmentRange")
             analysisService.listDataSegments(
                 input = wasmInput(arguments),
@@ -410,7 +425,7 @@ class HexanaToolHandlers(
     }
 
     fun auditDataPayloadPolicy(arguments: JsonObject?): CallToolResult {
-        return execute("audit_data_payload_policy") {
+        return execute("audit_data_payload_policy", AuditDataPayloadPolicyResult.serializer()) {
             analysisService.auditDataPayloadPolicy(
                 input = wasmInput(arguments),
                 policyInput = TextInput.FilePath(arguments.requireNonBlankString("policyPath"))
@@ -419,7 +434,7 @@ class HexanaToolHandlers(
     }
 
     fun getMemoryForIndices(arguments: JsonObject?): CallToolResult {
-        return execute("get_memory_for_indices") {
+        return execute("get_memory_for_indices", ListMemoryResult.serializer()) {
             analysisService.getMemoryForIndices(
                 input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
@@ -428,7 +443,7 @@ class HexanaToolHandlers(
     }
 
     fun getTypesForIndices(arguments: JsonObject?): CallToolResult {
-        return execute("get_types_for_indices") {
+        return execute("get_types_for_indices", TypesResult.serializer()) {
             analysisService.getTypesForIndices(
                 input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
@@ -437,7 +452,7 @@ class HexanaToolHandlers(
     }
 
     fun getLocalsForFunctions(arguments: JsonObject?): CallToolResult {
-        return execute("get_locals_for_functions") {
+        return execute("get_locals_for_functions", GetLocalsForFunctionsResult.serializer()) {
             analysisService.getLocalsForFunctions(
                 input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
@@ -446,7 +461,7 @@ class HexanaToolHandlers(
     }
 
     fun getInstructionsForFunctions(arguments: JsonObject?): CallToolResult {
-        return execute("get_instructions_for_functions") {
+        return execute("get_instructions_for_functions", GetInstructionsForFunctionsResult.serializer()) {
             analysisService.getInstructionsForFunctions(
                 input = wasmInput(arguments),
                 indices = arguments.requireIntList("indices")
@@ -455,17 +470,17 @@ class HexanaToolHandlers(
     }
 
     fun listElementSegments(arguments: JsonObject?): CallToolResult {
-        return execute("list_element_segments") {
+        return execute("list_element_segments", ListElementSegmentsResult.serializer()) {
             analysisService.listElementSegments(wasmInput(arguments))
         }
     }
 
-    private inline fun <reified T> execute(toolName: String, block: () -> T): CallToolResult {
+    private fun <T> execute(toolName: String, serializer: KSerializer<T>, block: () -> T): CallToolResult {
         val startTime = System.currentTimeMillis()
         return try {
             val result = block()
-            val jsonResult = encodeHexanaJson(result)
-            val structuredContent = encodeHexanaJsonElement(result) as? JsonObject
+            val jsonResult = HexanaJson.compact.encodeToString(serializer, result)
+            val structuredContent = HexanaJson.compact.encodeToJsonElement(serializer, result) as? JsonObject
             captureToolEvent(toolName, startTime, success = true)
             CallToolResult(
                 content = listOf(TextContent(jsonResult)),

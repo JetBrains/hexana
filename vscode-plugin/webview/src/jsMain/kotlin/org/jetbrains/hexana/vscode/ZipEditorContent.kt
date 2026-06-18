@@ -30,7 +30,6 @@ internal fun zipExtraTabs(buffer: CommonByteBuffer): List<PanelTab> {
         }
     )
 }
-
 @Composable
 private fun ZipEntriesContent(
     entries: List<ZipEntry>?,
@@ -140,4 +139,3 @@ private fun ZipEntriesContent(
         }
     }
 }
-
