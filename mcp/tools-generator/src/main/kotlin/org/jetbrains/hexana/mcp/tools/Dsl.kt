@@ -333,7 +333,6 @@ sealed class ToolInputPattern {
     object WasmPathLabel : ToolInputPattern()
     object WasmWithBaseline : ToolInputPattern()
     object WasmWithBinding : ToolInputPattern()
-    object WasmWithConfig : ToolInputPattern()
     object FunctionPage : ToolInputPattern()
     object Funcidx : ToolInputPattern()
     object FunctionNameSearch : ToolInputPattern()
@@ -526,12 +525,6 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireNonNullable(bindingPath)
             requireDescribed(bindingPath)
         }
-        ToolInputPattern.WasmWithConfig -> {
-            val configPath = requireField("configPath")
-            requireType(configPath, FieldType.StringT)
-            requireNonNullable(configPath)
-            requireDescribed(configPath)
-        }
         ToolInputPattern.FunctionPage -> {
             val offset = requireField("offset")
             requireType(offset, FieldType.Int32)
@@ -663,11 +656,6 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireType(bindingPath, FieldType.StringT)
             requireNullable(bindingPath)
             requireDescribed(bindingPath)
-
-            val configPath = requireField("configPath")
-            requireType(configPath, FieldType.StringT)
-            requireNullable(configPath)
-            requireDescribed(configPath)
 
             val operation = requireField("operation")
             requireType(operation, FieldType.StringT)

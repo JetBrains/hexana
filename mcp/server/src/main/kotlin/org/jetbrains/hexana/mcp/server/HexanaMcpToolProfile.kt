@@ -50,7 +50,6 @@ private val PRODUCTION_TOOL_NAMES = setOf(
     "list_memory",
     "list_required_proposals",
     "plan_abi_binding_regeneration",
-    "repair_host_adapter_config",
     "resolve_component_dependencies",
     "resolve_function_symbols",
     "resolve_function_signature",

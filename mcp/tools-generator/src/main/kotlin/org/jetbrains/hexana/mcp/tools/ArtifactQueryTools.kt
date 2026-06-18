@@ -9,11 +9,8 @@ private val QueryArtifactsInput = WasmInputClass.with("QueryArtifactsInput") {
     nullable("bindingPath", of = string())
         .describe("Optional stale binding source file used by `abi_binding_regeneration`; common Python files with MODULE, IMPORTS, and EXPORTS literals are parsed.")
         .maxLength(4096)
-    nullable("configPath", of = string())
-        .describe("Optional stale host adapter JSON config used by `host_adapter_repair`; only active `module`, `imports`, and `entrypoint` fields are compared.")
-        .maxLength(4096)
     string("operation", default = "overview")
-        .describe("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, `import_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `entrypoint_effects`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the requested artifact fact; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details.")
+        .describe("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `abi_binding_regeneration`, `import_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `entrypoint_effects`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the requested artifact fact; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details.")
         .maxLength(32)
     nullable("entityTypes", of = list(of = string()))
         .describe("Optional entity filter. Supported values include `export`, `import`, `memory`, `global`, `function`, and `element`.")
@@ -46,12 +43,6 @@ private val QueryArtifactsInput = WasmInputClass.with("QueryArtifactsInput") {
 private val PlanAbiBindingRegenerationInput = WasmInputClass.with("PlanAbiBindingRegenerationInput") {
     string("bindingPath")
         .describe("Path to a stale binding source file with MODULE, IMPORTS, and EXPORTS literals.")
-        .maxLength(4096)
-}
-
-private val RepairHostAdapterConfigInput = WasmInputClass.with("RepairHostAdapterConfigInput") {
-    string("configPath")
-        .describe("Path to a stale host adapter JSON config with active `module`, `imports`, and `entrypoint` fields.")
         .maxLength(4096)
 }
 
@@ -166,84 +157,6 @@ private val PlanAbiBindingRegenerationResultClass = class_(
     list("warnings", of = string()).describe("Non-fatal binding parse warnings.")
 }
 
-private val HostAdapterConfigModuleIdentityClass = class_(
-    "HostAdapterConfigModuleIdentity",
-    kotlinPackage = ARTIFACT_MODEL_PACKAGE,
-) {
-    nullable("path", of = string()).describe("Exact current WebAssembly module path echoed from input `path`, when available.")
-    nullable("configPath", of = string()).describe("Exact stale host adapter config path echoed from input `configPath`, when available.")
-    nullable("staleModule", of = string()).describe("Module value parsed from the stale host adapter config.")
-    string("repairModule").describe("Module value used in the minimal repair config.")
-}
-
-private val HostAdapterSignatureClass = class_("HostAdapterSignature", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
-    list("params", of = string()).describe("Function parameter value types.")
-    list("results", of = string()).describe("Function result value types.")
-}
-
-private val HostAdapterSignatureRepairClass = class_(
-    "HostAdapterSignatureRepair",
-    kotlinPackage = ARTIFACT_MODEL_PACKAGE,
-) {
-    embed("expected", of = HostAdapterSignatureClass)
-        .describe("Signature required by the current WebAssembly adapter ABI.")
-    embed("actual", of = HostAdapterSignatureClass)
-        .describe("Signature parsed from the stale host adapter config.")
-}
-
-private val HostAdapterEntrypointClass = class_("HostAdapterEntrypoint", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
-    string("export").describe("Exported function name selected as the adapter entrypoint.")
-    list("params", of = string()).describe("Entrypoint parameter value types.")
-    list("results", of = string()).describe("Entrypoint result value types.")
-}
-
-private val HostAdapterConfigMismatchResultClass = class_(
-    "HostAdapterConfigMismatchResult",
-    kotlinPackage = ARTIFACT_MODEL_PACKAGE,
-) {
-    string("field").describe("Config field path that differs from the current WebAssembly adapter ABI.")
-    string("expectedJson").describe("Exact JSON value required by the current WebAssembly adapter ABI.")
-    string("actualJson").describe("Exact JSON value found in the stale config, or the literal JSON `null` string when missing.")
-}
-
-private val HostAdapterRepairConfigClass = class_("HostAdapterRepairConfig", kotlinPackage = ARTIFACT_MODEL_PACKAGE) {
-    string("module").describe("Current WebAssembly module path for the repaired adapter config.")
-    map("imports", of = HostAdapterSignatureClass)
-        .describe("Minimal import signature map keyed by qualified import name.")
-    nullable("entrypoint", of = HostAdapterEntrypointClass)
-        .describe("Selected local exported function entrypoint when one exists.")
-}
-
-private val RepairHostAdapterConfigResultClass = class_(
-    "RepairHostAdapterConfigResult",
-    kotlinPackage = ARTIFACT_MODEL_PACKAGE,
-) {
-    embed("module", of = HostAdapterConfigModuleIdentityClass).describe("Module and config file identity.")
-    map("requiredImports", of = HostAdapterSignatureClass)
-        .describe("Current WebAssembly function import signature map keyed by qualified import name in stable sorted order.")
-    nullable("requiredEntrypoint", of = HostAdapterEntrypointClass)
-        .describe("Selected local exported function entrypoint required by the repair config.")
-    map("staleImports", of = HostAdapterSignatureClass)
-        .describe("Import signature map parsed from the stale config in stable sorted order.")
-    nullable("staleEntrypoint", of = HostAdapterEntrypointClass)
-        .describe("Entrypoint parsed from the stale config.")
-    map("addedImports", of = HostAdapterSignatureClass)
-        .describe("Required imports missing from the stale config, keyed by qualified import name in stable sorted order.")
-    map("fixedSignatures", of = HostAdapterSignatureRepairClass)
-        .describe("Imports present in the stale config with signatures that must be updated, in stable sorted order.")
-    map("removedExtraImports", of = HostAdapterSignatureClass)
-        .describe("Stale config imports that are not required by the current WebAssembly adapter ABI, in stable sorted order.")
-    map("unchangedImports", of = HostAdapterSignatureClass)
-        .describe("Imports already matching the current WebAssembly adapter ABI, in stable sorted order.")
-    list("ignoredConfigFields", of = string())
-        .describe("Stale top-level config fields excluded from the minimal repair config in stable sorted order.")
-    list("configMismatches", of = HostAdapterConfigMismatchResultClass)
-        .describe("Exact config mismatches in stable field order using JSON strings for expected and actual values.")
-    embed("repairConfig", of = HostAdapterRepairConfigClass).serialName("repair_config")
-        .describe("Minimal replacement host adapter config derived from the current WebAssembly ABI.")
-    list("warnings", of = string()).describe("Non-fatal config parse warnings.")
-}
-
 val ArtifactQueryTools = tools {
     tool("plan_abi_binding_regeneration") {
         summary = "Plan report-ready ABI binding regeneration from current Wasm plus a stale binding file."
@@ -259,34 +172,19 @@ val ArtifactQueryTools = tools {
         handlerFqn = "org.jetbrains.hexana.mcp.query.planAbiBindingRegeneration"
     }
 
-    tool("repair_host_adapter_config") {
-        summary = "Plan report-ready host adapter config repair from current Wasm plus a stale JSON config."
-        guidance = """
-            Use this as the shortest path for repairing host adapter configs when a current module and stale `configPath` are available.
-            Compare the current WebAssembly host adapter ABI against a stale JSON config and return a report-ready repair plan with exact input path echoes.
-            The result includes stable current required imports, the selected entrypoint, parsed stale config fields, added imports, fixed signatures, removed extra imports, unchanged imports, exact JSON mismatches, ignored stale top-level fields, and a minimal `repair_config` object.
-            Use `repair_config` directly as the replacement adapter config; it intentionally contains only active `module`, `imports`, and `entrypoint` fields.
-        """
-        input = RepairHostAdapterConfigInput
-        inputPattern = ToolInputPattern.WasmWithConfig
-        output = RepairHostAdapterConfigResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.repairHostAdapterConfig"
-    }
-
     tool("query_artifacts") {
         summary = "Query WebAssembly artifact entities, diffs, and function relations with bounded output."
         guidance = """
             Use this as the default Hexana MCP entry point for WebAssembly artifact facts.
             `overview` returns module counts; skip it when the request already names a focused production fact.
-            Prefer dedicated focused tools before this broad query when their inputs are available: `plan_abi_binding_regeneration` for stale binding regeneration, `repair_host_adapter_config` for stale host adapter config repair, `check_memory_contract` for baseline-plus-policy memory audits, and `audit_global_state_policy` for baseline-plus-policy global-state audits.
-            Choose a focused operation first when the requested artifact fact matches one: `api_diff` for old/new public function ABI diffs, changed signatures, public type indices, and current reference-type import ABI risks; `public_surface` for single-module exported ABI surface; `abi_surface` for compact function imports plus exports in one module; `abi_binding_regeneration` for current Wasm import/export signature maps, stale Python binding maps from `bindingPath`, mismatch JSON, and `replacementBindingsJson`; `host_adapter_repair` for host adapter config repair reports with required imports, required entrypoint, added imports, fixed signatures, removed extra imports, unchanged imports, config mismatches, and minimal `repairConfigJson` from current Wasm ABI plus active config fields only; `import_surface` for host manifest/link checks, including compact `functionImportsJson` and exported function candidates on the summary; `memory_contract` for memory declarations and baseline limit changes; `global_state_policy` for mutable imported globals and new exported globals, including `targetedGlobalIndices`, `mutableImportedGlobalsJson`, `newPublicGlobalsJson`, and allowed public global exports on the summary; `data_payload_audit` for raw data segment payload string confirmation after reading policy strings; `local_budget` for exported-function declared local counts; `entrypoint_effects` for exported local functions whose own body directly writes memory or directly calls host imports, including policy-ready direct-host-entry JSON and transitive-host exclusions; `crash_frames` for crash reports after reading all numeric stack funcidx values into `query`; `dispatch_table_diff` for element-table slot target changes; and `host_call_diff` for direct imported-call regressions from `startName` or `startFuncidx`.
+            Prefer dedicated focused tools before this broad query when their inputs are available: `plan_abi_binding_regeneration` for stale binding regeneration, `check_memory_contract` for baseline-plus-policy memory audits, and `audit_global_state_policy` for baseline-plus-policy global-state audits.
+            Choose a focused operation first when the requested artifact fact matches one: `api_diff` for old/new public function ABI diffs, changed signatures, public type indices, and current reference-type import ABI risks; `public_surface` for single-module exported ABI surface; `abi_surface` for compact function imports plus exports in one module; `abi_binding_regeneration` for current Wasm import/export signature maps, stale Python binding maps from `bindingPath`, mismatch JSON, and `replacementBindingsJson`; `import_surface` for host manifest/link checks, including compact `functionImportsJson` and exported function candidates on the summary; `memory_contract` for memory declarations and baseline limit changes; `global_state_policy` for mutable imported globals and new exported globals, including `targetedGlobalIndices`, `mutableImportedGlobalsJson`, `newPublicGlobalsJson`, and allowed public global exports on the summary; `data_payload_audit` for raw data segment payload string confirmation after reading policy strings; `local_budget` for exported-function declared local counts; `entrypoint_effects` for exported local functions whose own body directly writes memory or directly calls host imports, including policy-ready direct-host-entry JSON and transitive-host exclusions; `crash_frames` for crash reports after reading all numeric stack funcidx values into `query`; `dispatch_table_diff` for element-table slot target changes; and `host_call_diff` for direct imported-call regressions from `startName` or `startFuncidx`.
             For `data_payload_audit`, read the policy first and pass all forbidden strings in one call; an empty `query` only returns a small reminder. For `crash_frames`, read the crash report first and pass all stack funcidx values in one call; avoid probing a single frame and then repeating.
             For `abi_binding_regeneration`, pass the stale binding file as `bindingPath` when one exists. Its mismatch records and `bindingMismatchesJson` use `expected` for the current Wasm signature, or null when a stale binding should be removed; `actual` is the stale binding signature, or null when the binding is missing.
-            For `host_adapter_repair`, pass the stale adapter JSON as `configPath` when one exists. Use `repairConfigJson` directly for `repair_config`; it intentionally excludes stale top-level fields such as `profile`, `rollback_entrypoint`, `legacy_profiles`, and `notes`.
             Use generic `find`, `diff`, or `trace` only when no focused operation matches, or when a focused response is missing a required output field. Use `triage` only for ambiguous requests where no production fact is named.
-            Stop after a focused operation when its response contains the required names, signatures, type indices, `functionImportsJson`, `functionExportsJson`, `replacementBindingsJson`, `bindingMismatchesJson`, `requiredImportsJson`, `requiredEntrypointJson`, `addedImportsJson`, `fixedSignaturesJson`, `removedExtraImportsJson`, `unchangedImportsJson`, `configMismatchesJson`, `repairConfigJson`, memory limits, `targetedGlobalIndices`, `newPublicGlobalsJson`, `mutableImportedGlobalsJson`, matched data segments, local counts, entrypoint direct memory writes, `directHostEntryPointsJson`, `excludedTransitiveExportsJson`, frame metadata, table slots, or call relations. Do not follow `api_diff` with generic `find` or `diff`, `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, or `import_surface` with generic `find`, `global_state_policy` with generic `list_globals` or `list_exports`, `data_payload_audit` with generic `find`, `local_budget` with per-function `trace`, `entrypoint_effects` with per-export `trace`, `host_call_diff` with generic `trace`, or `crash_frames` with per-frame `trace`, unless a required output field is absent.
+            Stop after a focused operation when its response contains the required names, signatures, type indices, `functionImportsJson`, `functionExportsJson`, `replacementBindingsJson`, `bindingMismatchesJson`, memory limits, `targetedGlobalIndices`, `newPublicGlobalsJson`, `mutableImportedGlobalsJson`, matched data segments, local counts, entrypoint direct memory writes, `directHostEntryPointsJson`, `excludedTransitiveExportsJson`, frame metadata, table slots, or call relations. Do not follow `api_diff` with generic `find` or `diff`, `abi_surface`, `abi_binding_regeneration`, or `import_surface` with generic `find`, `global_state_policy` with generic `list_globals` or `list_exports`, `data_payload_audit` with generic `find`, `local_budget` with per-function `trace`, `entrypoint_effects` with per-export `trace`, `host_call_diff` with generic `trace`, or `crash_frames` with per-frame `trace`, unless a required output field is absent.
             If an output field asks for a module path, use the exact artifact path or the `modules[].path` value echoed from input `path`/`baselinePath`; do not write `local`, `current`, or `baseline` into path fields. For binding regeneration replacement objects, use `replacementBindingsJson` directly.
-            Keep `limit` and `maxBytes` small; for `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, or `import_surface`, use `limit=1` when summary JSON arrays are sufficient. Use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets, locals, element lists, or instruction text.
+            Keep `limit` and `maxBytes` small; for `abi_surface`, `abi_binding_regeneration`, or `import_surface`, use `limit=1` when summary JSON arrays are sufficient. Use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets, locals, element lists, or instruction text.
         """
         input = QueryArtifactsInput
         inputPattern = ToolInputPattern.ArtifactQuery

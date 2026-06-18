@@ -55,7 +55,6 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers, profile: Hex
   if (profile.includesTool("resolve_component_dependencies")) registerResolveComponentDependenciesTool(handlers)
   if (profile.includesTool("check_component_compatibility")) registerCheckComponentCompatibilityTool(handlers)
   if (profile.includesTool("plan_abi_binding_regeneration")) registerPlanAbiBindingRegenerationTool(handlers)
-  if (profile.includesTool("repair_host_adapter_config")) registerRepairHostAdapterConfigTool(handlers)
   if (profile.includesTool("check_memory_contract")) registerCheckMemoryContractTool(handlers)
   if (profile.includesTool("audit_global_state_policy")) registerAuditGlobalStatePolicyTool(handlers)
   if (profile.includesTool("list_custom_sections")) registerListCustomSectionsTool(handlers)
@@ -1091,141 +1090,6 @@ private fun Server.registerPlanAbiBindingRegenerationTool(handlers: HexanaToolHa
     ),
   ))  {
     request: CallToolRequest -> handlers.planAbiBindingRegeneration(request.arguments)
-  }
-}
-
-private fun Server.registerRepairHostAdapterConfigTool(handlers: HexanaToolHandlers) {
-  addTool(tool = Tool(
-    name = "repair_host_adapter_config",
-    description = """
-  |Plan report-ready host adapter config repair from current Wasm plus a stale JSON config.
-  |Use this as the shortest path for repairing host adapter configs when a current module and stale `configPath` are available.
-  |Compare the current WebAssembly host adapter ABI against a stale JSON config and return a report-ready repair plan with exact input path echoes.
-  |The result includes stable current required imports, the selected entrypoint, parsed stale config fields, added imports, fixed signatures, removed extra imports, unchanged imports, exact JSON mismatches, ignored stale top-level fields, and a minimal `repair_config` object.
-  |Use `repair_config` directly as the replacement adapter config; it intentionally contains only active `module`, `imports`, and `entrypoint` fields.
-  """.trimMargin(),
-    inputSchema = ToolSchema(
-    properties = buildJsonObject {
-      put("path", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
-      })
-      put("bytesBase64", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
-        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
-      })
-      put("bytes", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("array"))
-          add(JsonPrimitive("null"))
-        })
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("integer"))
-          put("minimum", JsonPrimitive(0))
-          put("maximum", JsonPrimitive(255))
-        })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
-        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
-      })
-      put("configPath", buildJsonObject {
-        put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Path to a stale host adapter JSON config with active `module`, `imports`, and `entrypoint` fields."))
-        put("maxLength", JsonPrimitive(4_096))
-      })
-    },
-    required = listOf("configPath")
-  ),
-    outputSchema = ToolSchema(
-    properties = buildJsonObject {
-      put("module", buildJsonObject {
-        put("type", JsonPrimitive("object"))
-      })
-      put("requiredImports", buildJsonObject {
-        put("type", JsonPrimitive("object"))
-        put("additionalProperties", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      })
-      put("requiredEntrypoint", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("object"))
-          add(JsonPrimitive("null"))
-        })
-      })
-      put("staleImports", buildJsonObject {
-        put("type", JsonPrimitive("object"))
-        put("additionalProperties", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      })
-      put("staleEntrypoint", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("object"))
-          add(JsonPrimitive("null"))
-        })
-      })
-      put("addedImports", buildJsonObject {
-        put("type", JsonPrimitive("object"))
-        put("additionalProperties", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      })
-      put("fixedSignatures", buildJsonObject {
-        put("type", JsonPrimitive("object"))
-        put("additionalProperties", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      })
-      put("removedExtraImports", buildJsonObject {
-        put("type", JsonPrimitive("object"))
-        put("additionalProperties", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      })
-      put("unchangedImports", buildJsonObject {
-        put("type", JsonPrimitive("object"))
-        put("additionalProperties", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      })
-      put("ignoredConfigFields", buildJsonObject {
-        put("type", JsonPrimitive("array"))
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-        })
-      })
-      put("configMismatches", buildJsonObject {
-        put("type", JsonPrimitive("array"))
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      })
-      put("repair_config", buildJsonObject {
-        put("type", JsonPrimitive("object"))
-      })
-      put("warnings", buildJsonObject {
-        put("type", JsonPrimitive("array"))
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-        })
-      })
-    },
-    required = listOf("module", "requiredImports", "staleImports", "addedImports", "fixedSignatures", "removedExtraImports", "unchangedImports", "ignoredConfigFields", "configMismatches", "repair_config", "warnings")
-  ),
-    annotations = ToolAnnotations(
-      readOnlyHint = true,
-      destructiveHint = false,
-      idempotentHint = true,
-    ),
-  ))  {
-    request: CallToolRequest -> handlers.repairHostAdapterConfig(request.arguments)
   }
 }
 
@@ -3721,15 +3585,14 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
   |Query WebAssembly artifact entities, diffs, and function relations with bounded output.
   |Use this as the default Hexana MCP entry point for WebAssembly artifact facts.
   |`overview` returns module counts; skip it when the request already names a focused production fact.
-  |Prefer dedicated focused tools before this broad query when their inputs are available: `plan_abi_binding_regeneration` for stale binding regeneration, `repair_host_adapter_config` for stale host adapter config repair, `check_memory_contract` for baseline-plus-policy memory audits, and `audit_global_state_policy` for baseline-plus-policy global-state audits.
-  |Choose a focused operation first when the requested artifact fact matches one: `api_diff` for old/new public function ABI diffs, changed signatures, public type indices, and current reference-type import ABI risks; `public_surface` for single-module exported ABI surface; `abi_surface` for compact function imports plus exports in one module; `abi_binding_regeneration` for current Wasm import/export signature maps, stale Python binding maps from `bindingPath`, mismatch JSON, and `replacementBindingsJson`; `host_adapter_repair` for host adapter config repair reports with required imports, required entrypoint, added imports, fixed signatures, removed extra imports, unchanged imports, config mismatches, and minimal `repairConfigJson` from current Wasm ABI plus active config fields only; `import_surface` for host manifest/link checks, including compact `functionImportsJson` and exported function candidates on the summary; `memory_contract` for memory declarations and baseline limit changes; `global_state_policy` for mutable imported globals and new exported globals, including `targetedGlobalIndices`, `mutableImportedGlobalsJson`, `newPublicGlobalsJson`, and allowed public global exports on the summary; `data_payload_audit` for raw data segment payload string confirmation after reading policy strings; `local_budget` for exported-function declared local counts; `entrypoint_effects` for exported local functions whose own body directly writes memory or directly calls host imports, including policy-ready direct-host-entry JSON and transitive-host exclusions; `crash_frames` for crash reports after reading all numeric stack funcidx values into `query`; `dispatch_table_diff` for element-table slot target changes; and `host_call_diff` for direct imported-call regressions from `startName` or `startFuncidx`.
+  |Prefer dedicated focused tools before this broad query when their inputs are available: `plan_abi_binding_regeneration` for stale binding regeneration, `check_memory_contract` for baseline-plus-policy memory audits, and `audit_global_state_policy` for baseline-plus-policy global-state audits.
+  |Choose a focused operation first when the requested artifact fact matches one: `api_diff` for old/new public function ABI diffs, changed signatures, public type indices, and current reference-type import ABI risks; `public_surface` for single-module exported ABI surface; `abi_surface` for compact function imports plus exports in one module; `abi_binding_regeneration` for current Wasm import/export signature maps, stale Python binding maps from `bindingPath`, mismatch JSON, and `replacementBindingsJson`; `import_surface` for host manifest/link checks, including compact `functionImportsJson` and exported function candidates on the summary; `memory_contract` for memory declarations and baseline limit changes; `global_state_policy` for mutable imported globals and new exported globals, including `targetedGlobalIndices`, `mutableImportedGlobalsJson`, `newPublicGlobalsJson`, and allowed public global exports on the summary; `data_payload_audit` for raw data segment payload string confirmation after reading policy strings; `local_budget` for exported-function declared local counts; `entrypoint_effects` for exported local functions whose own body directly writes memory or directly calls host imports, including policy-ready direct-host-entry JSON and transitive-host exclusions; `crash_frames` for crash reports after reading all numeric stack funcidx values into `query`; `dispatch_table_diff` for element-table slot target changes; and `host_call_diff` for direct imported-call regressions from `startName` or `startFuncidx`.
   |For `data_payload_audit`, read the policy first and pass all forbidden strings in one call; an empty `query` only returns a small reminder. For `crash_frames`, read the crash report first and pass all stack funcidx values in one call; avoid probing a single frame and then repeating.
   |For `abi_binding_regeneration`, pass the stale binding file as `bindingPath` when one exists. Its mismatch records and `bindingMismatchesJson` use `expected` for the current Wasm signature, or null when a stale binding should be removed; `actual` is the stale binding signature, or null when the binding is missing.
-  |For `host_adapter_repair`, pass the stale adapter JSON as `configPath` when one exists. Use `repairConfigJson` directly for `repair_config`; it intentionally excludes stale top-level fields such as `profile`, `rollback_entrypoint`, `legacy_profiles`, and `notes`.
   |Use generic `find`, `diff`, or `trace` only when no focused operation matches, or when a focused response is missing a required output field. Use `triage` only for ambiguous requests where no production fact is named.
-  |Stop after a focused operation when its response contains the required names, signatures, type indices, `functionImportsJson`, `functionExportsJson`, `replacementBindingsJson`, `bindingMismatchesJson`, `requiredImportsJson`, `requiredEntrypointJson`, `addedImportsJson`, `fixedSignaturesJson`, `removedExtraImportsJson`, `unchangedImportsJson`, `configMismatchesJson`, `repairConfigJson`, memory limits, `targetedGlobalIndices`, `newPublicGlobalsJson`, `mutableImportedGlobalsJson`, matched data segments, local counts, entrypoint direct memory writes, `directHostEntryPointsJson`, `excludedTransitiveExportsJson`, frame metadata, table slots, or call relations. Do not follow `api_diff` with generic `find` or `diff`, `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, or `import_surface` with generic `find`, `global_state_policy` with generic `list_globals` or `list_exports`, `data_payload_audit` with generic `find`, `local_budget` with per-function `trace`, `entrypoint_effects` with per-export `trace`, `host_call_diff` with generic `trace`, or `crash_frames` with per-frame `trace`, unless a required output field is absent.
+  |Stop after a focused operation when its response contains the required names, signatures, type indices, `functionImportsJson`, `functionExportsJson`, `replacementBindingsJson`, `bindingMismatchesJson`, memory limits, `targetedGlobalIndices`, `newPublicGlobalsJson`, `mutableImportedGlobalsJson`, matched data segments, local counts, entrypoint direct memory writes, `directHostEntryPointsJson`, `excludedTransitiveExportsJson`, frame metadata, table slots, or call relations. Do not follow `api_diff` with generic `find` or `diff`, `abi_surface`, `abi_binding_regeneration`, or `import_surface` with generic `find`, `global_state_policy` with generic `list_globals` or `list_exports`, `data_payload_audit` with generic `find`, `local_budget` with per-function `trace`, `entrypoint_effects` with per-export `trace`, `host_call_diff` with generic `trace`, or `crash_frames` with per-frame `trace`, unless a required output field is absent.
   |If an output field asks for a module path, use the exact artifact path or the `modules[].path` value echoed from input `path`/`baselinePath`; do not write `local`, `current`, or `baseline` into path fields. For binding regeneration replacement objects, use `replacementBindingsJson` directly.
-  |Keep `limit` and `maxBytes` small; for `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, or `import_surface`, use `limit=1` when summary JSON arrays are sufficient. Use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets, locals, element lists, or instruction text.
+  |Keep `limit` and `maxBytes` small; for `abi_surface`, `abi_binding_regeneration`, or `import_surface`, use `limit=1` when summary JSON arrays are sufficient. Use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets, locals, element lists, or instruction text.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -3777,17 +3640,9 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
         put("description", JsonPrimitive("Optional stale binding source file used by `abi_binding_regeneration`; common Python files with MODULE, IMPORTS, and EXPORTS literals are parsed."))
         put("maxLength", JsonPrimitive(4_096))
       })
-      put("configPath", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-        put("description", JsonPrimitive("Optional stale host adapter JSON config used by `host_adapter_repair`; only active `module`, `imports`, and `entrypoint` fields are compared."))
-        put("maxLength", JsonPrimitive(4_096))
-      })
       put("operation", buildJsonObject {
         put("type", JsonPrimitive("string"))
-        put("description", JsonPrimitive("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `abi_binding_regeneration`, `host_adapter_repair`, `import_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `entrypoint_effects`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the requested artifact fact; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details."))
+        put("description", JsonPrimitive("Query operation. Default `overview` returns module counts. Prefer focused operations such as `api_diff`, `public_surface`, `abi_surface`, `abi_binding_regeneration`, `import_surface`, `memory_contract`, `global_state_policy`, `data_payload_audit`, `local_budget`, `entrypoint_effects`, `crash_frames`, `dispatch_table_diff`, and `host_call_diff` when they match the requested artifact fact; `api_diff` also reports public type indices and current reference-type import ABI risks. Use generic `find`, `diff`, `trace`, or fallback `triage` only for unmatched facts or missing details."))
         put("default", JsonPrimitive("overview"))
         put("maxLength", JsonPrimitive(32))
       })

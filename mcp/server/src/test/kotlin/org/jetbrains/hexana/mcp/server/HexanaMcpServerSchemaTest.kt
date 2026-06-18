@@ -56,7 +56,6 @@ class HexanaMcpServerSchemaTest {
                 "list_memory",
                 "list_required_proposals",
                 "plan_abi_binding_regeneration",
-                "repair_host_adapter_config",
                 "resolve_component_dependencies",
                 "resolve_function_signature",
                 "resolve_function_symbols",
@@ -107,7 +106,6 @@ class HexanaMcpServerSchemaTest {
                 "list_value_types",
                 "plan_abi_binding_regeneration",
                 "query_artifacts",
-                "repair_host_adapter_config",
                 "resolve_component_dependencies",
                 "resolve_function_signature",
                 "resolve_function_symbols",
@@ -122,11 +120,10 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
-    fun productionRegistryPresentsFocusedRepairAndAuditToolsBeforeGenericViews() {
+    fun productionRegistryPresentsFocusedAuditToolsBeforeGenericViews() {
         val names = createHexanaMcpServer().tools.keys.toList()
 
         assertBefore(names, "plan_abi_binding_regeneration", "list_exports")
-        assertBefore(names, "repair_host_adapter_config", "list_imports")
         assertBefore(names, "check_memory_contract", "list_memory")
         assertBefore(names, "resolve_component_dependencies", "list_imports")
         assertBefore(names, "check_component_compatibility", "list_exports")
@@ -281,26 +278,6 @@ class HexanaMcpServerSchemaTest {
         assertTrue("crashReport" in output)
         assertTrue("topApplicationFrame" in output)
         assertTrue("skippedFrames" in output)
-    }
-
-    @Test
-    fun hostAdapterRepairPlannerSchemaUsesRequiredConfigPathAndRepairConfig() {
-        val tool = createHexanaMcpServer()
-            .tools
-            .getValue("repair_host_adapter_config")
-            .tool
-
-        val input = tool.inputSchema.properties?.jsonObject ?: error("Missing host adapter planner input schema properties")
-        assertEquals("string", input.getValue("configPath").jsonObject.getValue("type").jsonPrimitive.content)
-        assertEquals(listOf("configPath"), tool.inputSchema.required)
-
-        val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing host adapter planner output schema properties")
-        assertTrue("module" in output)
-        assertTrue("requiredImports" in output)
-        assertTrue("staleImports" in output)
-        assertTrue("configMismatches" in output)
-        assertTrue("repair_config" in output)
-        assertFalse(output.containsSchemaDescription())
     }
 
     @Test

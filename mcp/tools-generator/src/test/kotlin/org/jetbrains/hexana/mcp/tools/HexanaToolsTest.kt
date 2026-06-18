@@ -25,7 +25,6 @@ class HexanaToolsTest {
                 "resolve_component_dependencies",
                 "check_component_compatibility",
                 "plan_abi_binding_regeneration",
-                "repair_host_adapter_config",
                 "check_memory_contract",
                 "audit_global_state_policy",
                 "list_custom_sections",

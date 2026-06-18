@@ -44,7 +44,6 @@ private val SUPPORTED_OPERATIONS = setOf(
     "public_surface",
     "abi_surface",
     "abi_binding_regeneration",
-    "host_adapter_repair",
     "import_surface",
     "memory_contract",
     "global_state_policy",
@@ -84,7 +83,6 @@ private val API_DIFF_STATUS_PRIORITY = mapOf(
 fun WasmBinaryProvider.readArtifactQuery(
     baseline: WasmBinaryProvider? = null,
     bindingText: String? = null,
-    configText: String? = null,
     operation: String = "overview",
     entityTypes: List<String> = emptyList(),
     query: List<String> = emptyList(),
@@ -96,8 +94,7 @@ fun WasmBinaryProvider.readArtifactQuery(
     maxBytes: Int = DEFAULT_MAX_BYTES,
     pathLabel: String? = null,
     baselinePathLabel: String? = null,
-    bindingPathLabel: String? = null,
-    configPathLabel: String? = null
+    bindingPathLabel: String? = null
 ): QueryArtifactsResult {
     val normalizedOperation = operation.trim().lowercase().ifBlank { "overview" }
     val normalizedDetail = detail.trim().lowercase().ifBlank { "summary" }
@@ -184,13 +181,6 @@ fun WasmBinaryProvider.readArtifactQuery(
             bindingText = bindingText,
             pathLabel = pathLabel,
             bindingPathLabel = bindingPathLabel,
-            warnings = warnings
-        )
-        "host_adapter_repair" -> hostAdapterRepairRecords(
-            terms = query.normalizedTerms(),
-            configText = configText,
-            pathLabel = pathLabel,
-            configPathLabel = configPathLabel,
             warnings = warnings
         )
         "import_surface" -> importSurfaceRecords(
@@ -414,72 +404,6 @@ private fun WasmBinaryProvider.importSurfaceRecords(
             exportFacts = exportFacts
         )
     ) + records
-}
-
-private fun WasmBinaryProvider.hostAdapterRepairRecords(
-    terms: List<String>,
-    configText: String?,
-    pathLabel: String?,
-    configPathLabel: String?,
-    warnings: MutableList<String>
-): List<ArtifactRecordResult> {
-    val plan = repairHostAdapterConfigOrCurrentOnly(
-        configText = configText,
-        pathLabel = pathLabel,
-        configPathLabel = configPathLabel,
-        terms = terms,
-        warnings = warnings
-    )
-    val mismatchRecords = plan.configMismatches.map { mismatch ->
-        ArtifactRecordResult(
-            id = "host-adapter-repair:mismatch:${mismatch.field}",
-            entityType = "config_mismatch",
-            status = "changed",
-            source = "current",
-            name = mismatch.field,
-            kind = "host_adapter_config_mismatch",
-            summary = "Host adapter config `${mismatch.field}` differs from the current Wasm ABI.",
-            attributes = buildList {
-                add("field", mismatch.field)
-                add("expectedJson", mismatch.expectedJson)
-                add("actualJson", mismatch.actualJson)
-            }.toAttributes()
-        )
-    }
-    return listOf(
-        ArtifactRecordResult(
-            id = "host-adapter-repair:summary",
-            entityType = "finding",
-            status = "current",
-            source = "current",
-            kind = "host_adapter_repair",
-            summary = "Host adapter repair has ${plan.requiredImports.size} required imports, ${plan.requiredEntrypoint?.let { 1 } ?: 0} selected entrypoint, and ${plan.configMismatches.size} config mismatches",
-            attributes = buildList {
-                add("repairSchema", "Minimal repair_config contains only `module`, `imports`, and `entrypoint`; stale fields such as `profile`, `rollback_entrypoint`, `legacy_profiles`, and `notes` are not part of the repair output.")
-                pathLabel?.let { add("module", it) }
-                configPathLabel?.let { add("configPath", it) }
-                add("requiredImports", plan.requiredImports.size.toString())
-                plan.requiredEntrypoint?.let { add("requiredEntrypoint", it.export) }
-                add("addedImports", plan.addedImports.size.toString())
-                add("fixedSignatures", plan.fixedSignatures.size.toString())
-                add("removedExtraImports", plan.removedExtraImports.size.toString())
-                add("unchangedImports", plan.unchangedImports.size.toString())
-                plan.ignoredConfigFields
-                    ?.takeIf { it.isNotEmpty() }
-                    ?.let { add("ignoredConfigFields", it.joinToString(",")) }
-                addJsonFacts("requiredImportsJson", plan.requiredImports.map { (name, signature) ->
-                    HostAdapterRequiredImportFact(name, signature.params, signature.results)
-                })
-                add("requiredEntrypointJson", encodeHexanaJson(plan.requiredEntrypoint))
-                add("addedImportsJson", encodeHexanaJson(plan.addedImports))
-                add("fixedSignaturesJson", encodeHexanaJson(plan.fixedSignatures))
-                add("removedExtraImportsJson", encodeHexanaJson(plan.removedExtraImports))
-                add("unchangedImportsJson", encodeHexanaJson(plan.unchangedImports))
-                add("configMismatchesJson", encodeHexanaJson(plan.configMismatches))
-                add("repairConfigJson", encodeHexanaJson(plan.repairConfig))
-            }.toAttributes()
-        )
-    ) + mismatchRecords
 }
 
 private fun WasmBinaryProvider.apiDiffRecords(
@@ -3192,13 +3116,6 @@ private data class FunctionExportFact(
 
 @Serializable
 private data class ArtifactFunctionSignature(
-    val params: List<String>,
-    val results: List<String>
-)
-
-@Serializable
-private data class HostAdapterRequiredImportFact(
-    val name: String,
     val params: List<String>,
     val results: List<String>
 )

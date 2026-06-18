@@ -57,7 +57,6 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
         assertContains(descriptor.description, "generic `trace`")
         assertContains(descriptor.description, "public_surface")
         assertContains(descriptor.description, "plan_abi_binding_regeneration")
-        assertContains(descriptor.description, "repair_host_adapter_config")
         assertContains(descriptor.description, "check_memory_contract")
         assertContains(descriptor.description, "audit_global_state_policy")
         assertContains(inputFieldDescription(descriptor, "path"), "relative")
@@ -89,18 +88,6 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
         assertContains(descriptor.description, "imports called directly")
         assertContains(descriptor.description, "direct_host_entrypoints")
         assertFalse(descriptor.description.contains("entrypoint_policy_repair"))
-        assertFalse(descriptor.description.contains("task"))
-    }
-
-    fun testRepairHostAdapterConfigDescriptionContent() {
-        val descriptor = descriptor("repair_host_adapter_config")
-
-        assertContains(descriptor.description, "host adapter config repair")
-        assertContains(descriptor.description, "current WebAssembly host adapter ABI")
-        assertContains(descriptor.description, "exact input path echoes")
-        assertContains(descriptor.description, "repair_config")
-        assertContains(inputFieldDescription(descriptor, "configPath"), "stale host adapter JSON config")
-        assertFalse(descriptor.description.contains("broken_host_adapter"))
         assertFalse(descriptor.description.contains("task"))
     }
 
