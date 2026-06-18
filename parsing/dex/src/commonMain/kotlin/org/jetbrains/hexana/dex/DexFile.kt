@@ -119,6 +119,29 @@ data class DexClassDef(
     val staticValuesOff: Long,
 )
 
+/** Parsed `class_data_item`: fields and methods belonging to a single class. */
+data class DexClassData(
+    val staticFields: List<DexEncodedField>,
+    val instanceFields: List<DexEncodedField>,
+    val directMethods: List<DexEncodedMethod>,
+    val virtualMethods: List<DexEncodedMethod>,
+)
+
+/** `encoded_field` inside a `class_data_item`. */
+data class DexEncodedField(
+    /** Index into [DexFile.fieldIds]. */
+    val fieldIdx: Int,
+    val accessFlags: Int,
+)
+
+/** `encoded_method` inside a `class_data_item`. */
+data class DexEncodedMethod(
+    /** Index into [DexFile.methodIds]. */
+    val methodIdx: Int,
+    val accessFlags: Int,
+    val codeOff: Long,
+)
+
 /** DEX access flag constants (shared between classes, fields, and methods). */
 object DexAccessFlags {
     const val ACC_PUBLIC = 0x0001

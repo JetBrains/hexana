@@ -176,6 +176,58 @@ object DexFileParser {
             )
         }
     }
+
+    /**
+     * Parses the `class_data_item` at [classDef]'s `classDataOff`.
+     * Returns `null` when the offset is zero (no class data).
+     */
+    fun parseClassData(buffer: CommonByteBuffer, classDef: DexClassDef): DexClassData? {
+        val off = classDef.classDataOff
+        if (off == 0L) return null
+        buffer.position(off.toInt())
+
+        val staticFieldsSize = buffer.readUleb128()
+        val instanceFieldsSize = buffer.readUleb128()
+        val directMethodsSize = buffer.readUleb128()
+        val virtualMethodsSize = buffer.readUleb128()
+
+        fun readFields(count: Int): List<DexEncodedField> {
+            var fieldIdx = 0
+            return List(count) {
+                fieldIdx += buffer.readUleb128()
+                val accessFlags = buffer.readUleb128()
+                DexEncodedField(fieldIdx, accessFlags)
+            }
+        }
+
+        fun readMethods(count: Int): List<DexEncodedMethod> {
+            var methodIdx = 0
+            return List(count) {
+                methodIdx += buffer.readUleb128()
+                val accessFlags = buffer.readUleb128()
+                val codeOff = buffer.readUleb128().toLong()
+                DexEncodedMethod(methodIdx, accessFlags, codeOff)
+            }
+        }
+
+        return DexClassData(
+            staticFields = readFields(staticFieldsSize),
+            instanceFields = readFields(instanceFieldsSize),
+            directMethods = readMethods(directMethodsSize),
+            virtualMethods = readMethods(virtualMethodsSize),
+        )
+    }
+
+    /**
+     * Parses a `type_list` at the given offset (e.g. `interfaces_off` or
+     * `parameters_off`). Returns an empty list when [offset] is zero.
+     */
+    fun parseTypeList(buffer: CommonByteBuffer, offset: Long): List<Int> {
+        if (offset == 0L) return emptyList()
+        buffer.position(offset.toInt())
+        val size = buffer.readU4().toInt()
+        return List(size) { buffer.readU2() }
+    }
 }
 
 // -----------------------------------------------------------------------------
