@@ -460,6 +460,10 @@ private fun WasmBinaryProvider.hostAdapterRepairRecords(
                 configPathLabel?.let { add("configPath", it) }
                 add("requiredImports", plan.requiredImports.size.toString())
                 plan.requiredEntrypoint?.let { add("requiredEntrypoint", it.export) }
+                add("addedImports", plan.addedImports.size.toString())
+                add("fixedSignatures", plan.fixedSignatures.size.toString())
+                add("removedExtraImports", plan.removedExtraImports.size.toString())
+                add("unchangedImports", plan.unchangedImports.size.toString())
                 plan.ignoredConfigFields
                     ?.takeIf { it.isNotEmpty() }
                     ?.let { add("ignoredConfigFields", it.joinToString(",")) }
@@ -467,6 +471,10 @@ private fun WasmBinaryProvider.hostAdapterRepairRecords(
                     HostAdapterRequiredImportFact(name, signature.params, signature.results)
                 })
                 add("requiredEntrypointJson", encodeHexanaJson(plan.requiredEntrypoint))
+                add("addedImportsJson", encodeHexanaJson(plan.addedImports))
+                add("fixedSignaturesJson", encodeHexanaJson(plan.fixedSignatures))
+                add("removedExtraImportsJson", encodeHexanaJson(plan.removedExtraImports))
+                add("unchangedImportsJson", encodeHexanaJson(plan.unchangedImports))
                 add("configMismatchesJson", encodeHexanaJson(plan.configMismatches))
                 add("repairConfigJson", encodeHexanaJson(plan.repairConfig))
             }.toAttributes()

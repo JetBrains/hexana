@@ -10,6 +10,10 @@ data class RepairHostAdapterConfigResult(
     val requiredEntrypoint: HostAdapterEntrypoint? = null,
     val staleImports: Map<String, HostAdapterSignature>,
     val staleEntrypoint: HostAdapterEntrypoint? = null,
+    val addedImports: Map<String, HostAdapterSignature>,
+    val fixedSignatures: Map<String, HostAdapterSignatureRepair>,
+    val removedExtraImports: Map<String, HostAdapterSignature>,
+    val unchangedImports: Map<String, HostAdapterSignature>,
     val ignoredConfigFields: List<String>,
     val configMismatches: List<HostAdapterConfigMismatchResult>,
     @SerialName("repair_config")
@@ -29,6 +33,12 @@ data class HostAdapterConfigModuleIdentity(
 data class HostAdapterSignature(
     val params: List<String>,
     val results: List<String>
+)
+
+@Serializable
+data class HostAdapterSignatureRepair(
+    val expected: HostAdapterSignature,
+    val actual: HostAdapterSignature
 )
 
 @Serializable

@@ -898,6 +898,87 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun repairHostAdapterConfigParsesArrayImportManifestAndReportsRepairGroups() {
+        val wasm = createWasmFile(
+            "payments.wasm",
+            """
+            (module
+              (import "env" "emit" (func ${'$'}emit (param i32 i64)))
+              (import "env" "fetch" (func ${'$'}fetch (param i32) (result i32)))
+              (import "host" "required" (func ${'$'}required (result i64)))
+              (func (export "run") (result i32)
+                i32.const 1))
+            """.trimIndent()
+        )
+        val manifest = createTextFile(
+            "host_imports.json",
+            """
+            {
+              "imports": [
+                {
+                  "module": "env",
+                  "name": "emit",
+                  "signature": {"params": ["i32"], "return": []}
+                },
+                {
+                  "module": "env",
+                  "name": "fetch",
+                  "signature": {"params": ["i32"], "return": ["i32"]}
+                },
+                {
+                  "module": "host",
+                  "name": "legacy",
+                  "signature": {"params": ["i64"], "return": []}
+                }
+              ],
+              "notes": ["manifest-style import arrays must be accepted"]
+            }
+            """.trimIndent()
+        )
+
+        val result = service.repairHostAdapterConfig(
+            input = WasmInput.FilePath(wasm.toString()),
+            configInput = TextInput.FilePath(manifest.toString())
+        )
+
+        assertEquals(listOf("env.emit", "env.fetch", "host.required"), result.requiredImports.keys.toList())
+        assertEquals(listOf("host.required"), result.addedImports.keys.toList())
+        assertEquals(listOf("env.emit"), result.fixedSignatures.keys.toList())
+        assertEquals(listOf("host.legacy"), result.removedExtraImports.keys.toList())
+        assertEquals(listOf("env.fetch"), result.unchangedImports.keys.toList())
+        assertEquals(listOf("i32", "i64"), result.fixedSignatures.getValue("env.emit").expected.params)
+        assertEquals(listOf("i32"), result.fixedSignatures.getValue("env.emit").actual.params)
+        assertEquals(listOf("i64"), result.addedImports.getValue("host.required").results)
+        assertEquals(listOf("notes"), result.ignoredConfigFields)
+        assertTrue(result.warnings.isEmpty())
+
+        val routed = service.queryArtifacts(
+            input = WasmInput.FilePath(wasm.toString()),
+            baselineInput = null,
+            bindingInput = null,
+            configInput = TextInput.FilePath(manifest.toString()),
+            operation = "host_adapter_repair",
+            entityTypes = emptyList(),
+            query = emptyList(),
+            startName = null,
+            startFuncidx = null,
+            relations = emptyList(),
+            limit = 25,
+            detail = "summary",
+            maxBytes = 24_000
+        )
+        val summary = routed.records.single { it.id == "host-adapter-repair:summary" }
+        assertEquals("1", summary.attributeValue("addedImports"))
+        assertEquals("1", summary.attributeValue("fixedSignatures"))
+        assertEquals("1", summary.attributeValue("removedExtraImports"))
+        assertEquals("1", summary.attributeValue("unchangedImports"))
+        assertTrue(summary.attributeValue("addedImportsJson")!!.contains("\"host.required\""))
+        assertTrue(summary.attributeValue("fixedSignaturesJson")!!.contains("\"env.emit\""))
+        assertTrue(summary.attributeValue("removedExtraImportsJson")!!.contains("\"host.legacy\""))
+        assertTrue(summary.attributeValue("unchangedImportsJson")!!.contains("\"env.fetch\""))
+    }
+
+    @Test
     fun listDataPaginatesWithoutRepeatingCurrentEntry() {
         val wasm = createWasmFile(
             "data_pagination.wasm",

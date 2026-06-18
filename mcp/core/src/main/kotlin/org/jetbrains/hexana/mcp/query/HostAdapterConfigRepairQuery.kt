@@ -16,6 +16,7 @@ import org.jetbrains.hexana.mcp.model.artifacts.HostAdapterConfigModuleIdentity
 import org.jetbrains.hexana.mcp.model.artifacts.HostAdapterEntrypoint
 import org.jetbrains.hexana.mcp.model.artifacts.HostAdapterRepairConfig
 import org.jetbrains.hexana.mcp.model.artifacts.HostAdapterSignature
+import org.jetbrains.hexana.mcp.model.artifacts.HostAdapterSignatureRepair
 import org.jetbrains.hexana.mcp.model.artifacts.RepairHostAdapterConfigResult
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 
@@ -80,6 +81,10 @@ internal fun WasmBinaryProvider.repairHostAdapterConfigOrCurrentOnly(
         imports = requiredImports,
         entrypoint = requiredEntrypoint
     )
+    val importRepair = hostAdapterImportRepair(
+        requiredImports = requiredImports,
+        staleImports = config?.imports.orEmpty()
+    )
     return RepairHostAdapterConfigResult(
         module = HostAdapterConfigModuleIdentity(
             path = pathLabel,
@@ -91,6 +96,10 @@ internal fun WasmBinaryProvider.repairHostAdapterConfigOrCurrentOnly(
         requiredEntrypoint = requiredEntrypoint,
         staleImports = config?.imports.orEmpty(),
         staleEntrypoint = config?.entrypoint,
+        addedImports = importRepair.addedImports,
+        fixedSignatures = importRepair.fixedSignatures,
+        removedExtraImports = importRepair.removedExtraImports,
+        unchangedImports = importRepair.unchangedImports,
         ignoredConfigFields = config?.ignoredTopLevelFields.orEmpty(),
         configMismatches = hostAdapterConfigMismatches(
             repairModule = repairModule,
@@ -111,9 +120,7 @@ private fun parseHostAdapterConfig(text: String, warnings: MutableList<String>):
     }
     val knownFields = setOf("module", "imports", "entrypoint")
     val module = root["module"]?.jsonPrimitive?.content
-    val imports = root["imports"]?.jsonObject?.mapValues { (_, value) ->
-        parseHostAdapterSignature(value.jsonObject)
-    }.orEmpty().toSortedMap()
+    val imports = parseHostAdapterImports(root["imports"], warnings)
     val entrypoint = root["entrypoint"]?.jsonObject?.let { entrypoint ->
         HostAdapterEntrypoint(
             export = entrypoint["export"]?.jsonPrimitive?.content.orEmpty(),
@@ -129,10 +136,45 @@ private fun parseHostAdapterConfig(text: String, warnings: MutableList<String>):
     )
 }
 
+private fun parseHostAdapterImports(element: JsonElement?, warnings: MutableList<String>): Map<String, HostAdapterSignature> {
+    return when (element) {
+        null -> emptyMap()
+        is JsonObject -> element.mapValues { (_, value) ->
+            parseHostAdapterSignature(value.jsonObject)
+        }
+        is JsonArray -> element.mapNotNull { item ->
+            parseHostAdapterImportEntry(item, warnings)
+        }.toMap()
+        else -> {
+            warnings += "`imports` must be a JSON object or array; got ${element::class.simpleName.orEmpty()}."
+            emptyMap()
+        }
+    }.toSortedMap()
+}
+
+private fun parseHostAdapterImportEntry(
+    element: JsonElement,
+    warnings: MutableList<String>
+): Pair<String, HostAdapterSignature>? {
+    val obj = element as? JsonObject
+    if (obj == null) {
+        warnings += "`imports` array contains a non-object entry."
+        return null
+    }
+    val module = obj["module"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+    val name = obj["name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+    if (module == null || name == null) {
+        warnings += "`imports` array contains an entry without non-empty `module` and `name`."
+        return null
+    }
+    val signature = (obj["signature"] as? JsonObject) ?: obj
+    return "$module.$name" to parseHostAdapterSignature(signature)
+}
+
 private fun parseHostAdapterSignature(obj: JsonObject): HostAdapterSignature =
     HostAdapterSignature(
         params = obj["params"].stringList(),
-        results = obj["results"].stringList()
+        results = obj["results"].stringList().ifEmpty { obj["return"].stringList() }
     )
 
 private fun JsonElement?.stringList(): List<String> {
@@ -191,6 +233,35 @@ private fun hostAdapterConfigMismatches(
     return mismatches.sortedBy { it.field }
 }
 
+private fun hostAdapterImportRepair(
+    requiredImports: Map<String, HostAdapterSignature>,
+    staleImports: Map<String, HostAdapterSignature>
+): HostAdapterImportRepair {
+    val addedImports = mutableMapOf<String, HostAdapterSignature>()
+    val fixedSignatures = mutableMapOf<String, HostAdapterSignatureRepair>()
+    val unchangedImports = mutableMapOf<String, HostAdapterSignature>()
+    for ((name, expected) in requiredImports) {
+        val actual = staleImports[name]
+        when {
+            actual == null -> addedImports[name] = expected
+            actual == expected -> unchangedImports[name] = expected
+            else -> fixedSignatures[name] = HostAdapterSignatureRepair(
+                expected = expected,
+                actual = actual
+            )
+        }
+    }
+    val removedExtraImports = staleImports
+        .filterKeys { it !in requiredImports }
+        .toSortedMap()
+    return HostAdapterImportRepair(
+        addedImports = addedImports.toSortedMap(),
+        fixedSignatures = fixedSignatures.toSortedMap(),
+        removedExtraImports = removedExtraImports,
+        unchangedImports = unchangedImports.toSortedMap()
+    )
+}
+
 private fun MutableList<HostAdapterConfigMismatchResult>.addIfDifferent(
     field: String,
     expected: JsonElement,
@@ -235,4 +306,11 @@ private data class ParsedHostAdapterConfig(
     val imports: Map<String, HostAdapterSignature>,
     val entrypoint: HostAdapterEntrypoint?,
     val ignoredTopLevelFields: List<String>
+)
+
+private data class HostAdapterImportRepair(
+    val addedImports: Map<String, HostAdapterSignature>,
+    val fixedSignatures: Map<String, HostAdapterSignatureRepair>,
+    val removedExtraImports: Map<String, HostAdapterSignature>,
+    val unchangedImports: Map<String, HostAdapterSignature>
 )
