@@ -153,12 +153,6 @@ graalvmNative {
                 "-H:+ReportExceptionStackTraces",
                 "--initialize-at-build-time=kotlin.DeprecationLevel"
             )
-            resources {
-                includedPatterns.addAll(
-                    "ch/qos/logback/classic/logback-classic-version\\.properties",
-                    "ch/qos/logback/core/logback-core-version\\.properties"
-                )
-            }
         }
     }
 }
