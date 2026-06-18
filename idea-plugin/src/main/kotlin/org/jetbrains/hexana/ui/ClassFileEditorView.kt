@@ -51,6 +51,7 @@ import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.TabData
 import org.jetbrains.jewel.ui.component.TabStrip
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.VerticalScrollbar
 import org.jetbrains.jewel.ui.theme.defaultTabStyle
 
 /**
@@ -220,32 +221,35 @@ private fun ClassMethodsTab(
         navTargetFlow.value = null
     }
 
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-        if (sections.isEmpty()) {
-            item { Text("(no methods)", style = RowTextStyle) }
-            return@LazyColumn
-        }
-        for (section in sections) {
-            val isFolded = section.methodOffset in folded
-            item(key = "header-${section.methodOffset}") {
-                MethodHeaderRow(
-                    section = section,
-                    folded = isFolded,
-                    onToggle = {
-                        folded = if (isFolded) folded - section.methodOffset
-                        else folded + section.methodOffset
-                    },
-                )
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            if (sections.isEmpty()) {
+                item { Text("(no methods)", style = RowTextStyle) }
+                return@LazyColumn
             }
-            if (!isFolded) {
-                items(
-                    count = section.bodyRows.size,
-                    key = { idx -> "body-${section.methodOffset}-$idx" },
-                ) { idx ->
-                    MethodBodyRow(section.bodyRows[idx])
+            for (section in sections) {
+                val isFolded = section.methodOffset in folded
+                item(key = "header-${section.methodOffset}") {
+                    MethodHeaderRow(
+                        section = section,
+                        folded = isFolded,
+                        onToggle = {
+                            folded = if (isFolded) folded - section.methodOffset
+                            else folded + section.methodOffset
+                        },
+                    )
+                }
+                if (!isFolded) {
+                    items(
+                        count = section.bodyRows.size,
+                        key = { idx -> "body-${section.methodOffset}-$idx" },
+                    ) { idx ->
+                        MethodBodyRow(section.bodyRows[idx])
+                    }
                 }
             }
         }
+        VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
     }
 }
 
@@ -300,14 +304,17 @@ private fun MethodBodyRow(row: MethodRow) {
 private fun ClassConstantPoolTab(cf: JavaClassFile) {
     val rows = remember(cf) { cf.constantPool.asSequence().toList() }
     val listState = rememberLazyListState()
-    LazyColumn(state = listState) {
-        items(rows.size) { idx ->
-            val (index, entry) = rows[idx]
-            Text(
-                "#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}",
-                style = RowTextStyle,
-            )
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            items(rows.size) { idx ->
+                val (index, entry) = rows[idx]
+                Text(
+                    "#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}",
+                    style = RowTextStyle,
+                )
+            }
         }
+        VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
     }
 }
 
