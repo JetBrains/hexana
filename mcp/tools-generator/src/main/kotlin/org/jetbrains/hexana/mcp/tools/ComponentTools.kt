@@ -111,6 +111,7 @@ val ResolveComponentDependenciesResultClass = class_(
     list("candidateConflicts", of = ComponentCandidateConflictResultClass).describe("Ambiguous provider candidates.")
     list("rejectedCandidates", of = ComponentRejectedCandidateResultClass)
         .describe("Scanned candidates rejected from the resolved dependency set.")
+    string("minimalRunBuildFix").describe("Concise action for wiring resolved dependency files before running the component.")
     embed("summary", of = ComponentDependencySummaryResultClass).describe("Compact dependency-resolution counts.")
 }
 

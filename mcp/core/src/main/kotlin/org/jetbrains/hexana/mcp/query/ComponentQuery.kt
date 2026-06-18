@@ -59,7 +59,7 @@ fun WasmComponentBinaryProvider.resolveComponentDependencies(
     scanRoots: List<String>,
 ): ResolveComponentDependenciesResult {
     val roots = componentScanRoots(path, projectRoot, scanRoots)
-    val index = ComponentScanIndex.scan(roots, excludedPath = path)
+    val index = ComponentScanIndex.scan(roots, excludedPaths = excludedComponentPaths(path, projectRoot))
     val directImports = imports.map { it.importRef() }
     val directRuntimeImports = directImports
         .filter { isRuntimeImport(it.fullName) }
@@ -105,10 +105,11 @@ fun WasmComponentBinaryProvider.resolveComponentDependencies(
         transitiveImports.map { it.toDependencyImportResult(classification = "transitive") }
     val ignoredRuntimeImports = (directRuntimeImports + transitiveRuntimeImports.values).distinctBy {
         it.classification + "\u0000" + it.importName
-    }
+    }.sortedWith(compareBy({ it.classification }, { it.importName }))
     val resolvedDependencyPaths = (directDeps.map { it.toDependencyPathResult(classification = "direct") } +
         transitiveDeps.map { it.toDependencyPathResult(classification = "transitive") })
         .distinctBy { it.classification + "\u0000" + it.importName + "\u0000" + it.dependencyPath }
+        .sortedWith(compareBy({ it.classification }, { it.importName }, { it.dependencyPath }))
     val excludedRejectedPaths = (directDeps + transitiveDeps)
         .map { Path.of(it.dependencyPath).normalize() }
         .toMutableSet()
@@ -123,17 +124,29 @@ fun WasmComponentBinaryProvider.resolveComponentDependencies(
     return ResolveComponentDependenciesResult(
         path = path,
         scanRoots = roots.map(Path::toString),
-        requiredNonRuntimeImports = requiredImports.take(MAX_RESULT_ITEMS),
+        requiredNonRuntimeImports = requiredImports
+            .sortedWith(compareBy({ it.classification }, { it.importName }))
+            .take(MAX_RESULT_ITEMS),
         ignoredRuntimeImports = ignoredRuntimeImports.take(MAX_RESULT_ITEMS),
         resolvedDependencyPaths = resolvedDependencyPaths.take(MAX_RESULT_ITEMS),
-        directDependencies = directDeps.take(MAX_RESULT_ITEMS),
-        transitiveDependencies = transitiveDeps.take(MAX_RESULT_ITEMS),
-        unresolvedImports = allUnresolved.map { it.importRef.toUnresolvedResult() }.take(MAX_RESULT_ITEMS),
-        candidateConflicts = allConflicts.map { it.toResult() }.take(MAX_RESULT_ITEMS),
+        directDependencies = directDeps.sortedBy { it.importName }.take(MAX_RESULT_ITEMS),
+        transitiveDependencies = transitiveDeps.sortedBy { it.importName }.take(MAX_RESULT_ITEMS),
+        unresolvedImports = allUnresolved.map { it.importRef.toUnresolvedResult() }
+            .sortedBy { it.importName }
+            .take(MAX_RESULT_ITEMS),
+        candidateConflicts = allConflicts.map { it.toResult() }
+            .sortedBy { it.importName }
+            .take(MAX_RESULT_ITEMS),
         rejectedCandidates = rejectedCandidates
             .map { it.toResult() }
             .sortedBy { it.candidatePath }
             .take(MAX_RESULT_ITEMS),
+        minimalRunBuildFix = buildMinimalRunBuildFix(
+            componentPath = path,
+            projectRoot = projectRoot,
+            resolvedDependencyPaths = resolvedDependencyPaths,
+            unresolvedImports = allUnresolved,
+        ),
         summary = ComponentDependencySummaryResult(
             directRequiredImportCount = direct.size,
             transitiveRequiredImportCount = transitiveImports.size,
@@ -164,7 +177,10 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
         }
     }
     val resolvedIndex = if (explicitProviders.isEmpty()) {
-        ComponentScanIndex.scan(componentScanRoots(path, projectRoot, emptyList()), excludedPath = path)
+        ComponentScanIndex.scan(
+            componentScanRoots(path, projectRoot, emptyList()),
+            excludedPaths = excludedComponentPaths(path, projectRoot),
+        )
     } else {
         ComponentScanIndex(
             explicitProviders,
@@ -411,8 +427,7 @@ private data class ComponentScanIndex(
     val truncated: Boolean,
 ) {
     companion object {
-        fun scan(roots: List<Path>, excludedPath: String?): ComponentScanIndex {
-            val excluded = excludedPath?.let { Path.of(it).normalize() }
+        fun scan(roots: List<Path>, excludedPaths: Set<Path>): ComponentScanIndex {
             val components = mutableListOf<ScannedComponent>()
             val rejectedCandidates = mutableListOf<RejectedScannedCandidate>()
             var scanned = 0
@@ -430,7 +445,7 @@ private data class ComponentScanIndex(
                         }
                         if (!Files.isRegularFile(path) || path.extension.lowercase() != "wasm") continue
                         val normalized = path.normalize()
-                        if (excluded != null && normalized == excluded) continue
+                        if (normalized in excludedPaths) continue
                         scanned += 1
                         val provider = readComponentProvider(path)
                         if (provider == null) {
@@ -830,7 +845,88 @@ private fun buildRejectedComponentCandidates(
                 path = component.path,
                 reason = rejectedComponentReason(component, requiredImports),
             )
+    }
+}
+
+private fun excludedComponentPaths(path: String?, projectRoot: String?): Set<Path> {
+    val raw = path?.takeIf { it.isNotBlank() } ?: return emptySet()
+    val candidate = Path.of(raw)
+    return buildSet {
+        add(candidate.normalize())
+        add(candidate.toAbsolutePath().normalize())
+        if (!candidate.isAbsolute && !projectRoot.isNullOrBlank()) {
+            add(Path.of(projectRoot).resolve(candidate).normalize())
         }
+    }
+}
+
+private fun buildMinimalRunBuildFix(
+    componentPath: String?,
+    projectRoot: String?,
+    resolvedDependencyPaths: List<ComponentResolvedDependencyPathResult>,
+    unresolvedImports: List<UnresolvedImport>,
+): String {
+    val component = componentPath?.takeIf { it.isNotBlank() } ?: "the component"
+    val dependencySet = componentDependencySetLabel(componentPath)
+    val dependencies = resolvedDependencyPaths
+        .map { displayPath(it.dependencyPath, projectRoot) }
+        .distinct()
+    val unresolved = unresolvedImports
+        .map { it.importRef.fullName }
+        .distinct()
+    return when {
+        dependencies.isEmpty() && unresolved.isEmpty() ->
+            "No component dependency changes are required before running $component."
+        unresolved.isEmpty() ->
+            "Add ${dependencies.toHumanList()} to the $dependencySet before running $component."
+        dependencies.isEmpty() ->
+            "Add providers for ${unresolved.toHumanList()} to the $dependencySet before running $component."
+        else ->
+            "Add ${dependencies.toHumanList()} and providers for ${unresolved.toHumanList()} to the $dependencySet before running $component."
+    }
+}
+
+private fun componentDependencySetLabel(componentPath: String?): String {
+    val fileName = componentPath
+        ?.takeIf { it.isNotBlank() }
+        ?.let { Path.of(it).fileName?.toString() }
+        .orEmpty()
+    val rawName = when {
+        fileName.endsWith(".component.wasm") -> fileName.removeSuffix(".component.wasm")
+        fileName.endsWith(".wasm") -> fileName.removeSuffix(".wasm")
+        else -> ""
+    }
+    val componentName = rawName
+        .replace('-', ' ')
+        .replace('_', ' ')
+        .trim()
+    return if (componentName.isBlank()) {
+        "component dependency set"
+    } else {
+        "$componentName component dependency set"
+    }
+}
+
+private fun displayPath(path: String, projectRoot: String?): String {
+    if (projectRoot.isNullOrBlank()) return path
+    val root = Path.of(projectRoot).normalize()
+    val candidate = Path.of(path).normalize()
+    return try {
+        if (candidate.isAbsolute && candidate.startsWith(root)) {
+            root.relativize(candidate).toString()
+        } else {
+            path
+        }
+    } catch (_: IllegalArgumentException) {
+        path
+    }
+}
+
+private fun List<String>.toHumanList(): String = when (size) {
+    0 -> ""
+    1 -> single()
+    2 -> "${this[0]} and ${this[1]}"
+    else -> dropLast(1).joinToString(", ") + ", and " + last()
 }
 
 private fun rejectedComponentReason(

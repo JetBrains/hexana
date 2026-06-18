@@ -1,6 +1,9 @@
 package org.jetbrains.hexana.mcp
 
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
+import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.mcp.query.resolveComponentDependencies
+import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -177,6 +180,54 @@ class ComponentAnalysisServiceTest {
         assertEquals(1, result.summary.transitiveResolvedCount)
         assertEquals(1, result.summary.unresolvedCount)
         assertTrue(result.summary.rejectedCandidateCount >= 4)
+    }
+
+    @Test
+    fun resolveComponentDependenciesExcludesRelativeMainComponentFromRejectedCandidates() {
+        val root = temporaryFolder.newFolder("relative-checkout").toPath()
+        val relativeCheckout = "dist/components/checkout.component.wasm"
+        val checkout = writeComponent(
+            root.resolve(relativeCheckout),
+            imports = listOf(
+                "acme:pricing/calculate@1.2.0",
+                "wasi:cli/run@0.2.3",
+            ),
+            exports = listOf("acme:checkout/run@1.0.0"),
+        )
+        writeComponent(
+            root.resolve("components/pricing.component.wasm"),
+            imports = listOf("acme:tax/rates@1.0.0"),
+            exports = listOf("acme:pricing/calculate@1.2.0"),
+        )
+        writeComponent(
+            root.resolve("components/tax.component.wasm"),
+            imports = emptyList(),
+            exports = listOf("acme:tax/rates@1.0.0"),
+        )
+        writeComponent(
+            root.resolve("components/pricing_preview.component.wasm"),
+            imports = emptyList(),
+            exports = listOf("acme:pricing/quote@1.2.0"),
+        )
+
+        val provider = WasmComponentBinaryProvider(Files.readAllBytes(checkout).toCommonByteBuffer())
+        val result = provider.resolveComponentDependencies(
+            path = relativeCheckout,
+            projectRoot = root.toString(),
+            scanRoots = emptyList(),
+        )
+
+        assertFalse(result.rejectedCandidates.any { it.candidatePath.endsWith(relativeCheckout) })
+        assertTrue(result.resolvedDependencyPaths.any {
+            it.importName == "acme:pricing/calculate@1.2.0" && it.classification == "direct"
+        })
+        assertTrue(result.resolvedDependencyPaths.any {
+            it.importName == "acme:tax/rates@1.0.0" && it.classification == "transitive"
+        })
+        assertEquals(
+            "Add components/pricing.component.wasm and components/tax.component.wasm to the checkout component dependency set before running dist/components/checkout.component.wasm.",
+            result.minimalRunBuildFix,
+        )
     }
 
     @Test

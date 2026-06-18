@@ -799,11 +799,14 @@ private fun Server.registerResolveComponentDependenciesTool(handlers: HexanaTool
           put("type", JsonPrimitive("object"))
         })
       })
+      put("minimalRunBuildFix", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+      })
       put("summary", buildJsonObject {
         put("type", JsonPrimitive("object"))
       })
     },
-    required = listOf("scanRoots", "requiredNonRuntimeImports", "ignoredRuntimeImports", "resolvedDependencyPaths", "directDependencies", "transitiveDependencies", "unresolvedImports", "candidateConflicts", "rejectedCandidates", "summary")
+    required = listOf("scanRoots", "requiredNonRuntimeImports", "ignoredRuntimeImports", "resolvedDependencyPaths", "directDependencies", "transitiveDependencies", "unresolvedImports", "candidateConflicts", "rejectedCandidates", "minimalRunBuildFix", "summary")
   ),
     annotations = ToolAnnotations(
       readOnlyHint = true,

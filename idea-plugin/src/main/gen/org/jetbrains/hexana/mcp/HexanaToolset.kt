@@ -659,11 +659,14 @@ public class HexanaToolset : McpToolsProvider {
             put("type", JsonPrimitive("object"))
           })
         })
+        put("minimalRunBuildFix", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
         put("summary", buildJsonObject {
           put("type", JsonPrimitive("object"))
         })
       },
-      requiredProperties = setOf("scanRoots", "requiredNonRuntimeImports", "ignoredRuntimeImports", "resolvedDependencyPaths", "directDependencies", "transitiveDependencies", "unresolvedImports", "candidateConflicts", "rejectedCandidates", "summary"),
+      requiredProperties = setOf("scanRoots", "requiredNonRuntimeImports", "ignoredRuntimeImports", "resolvedDependencyPaths", "directDependencies", "transitiveDependencies", "unresolvedImports", "candidateConflicts", "rejectedCandidates", "minimalRunBuildFix", "summary"),
       definitions = emptyMap<String, JsonElement>(),
       ),
     )

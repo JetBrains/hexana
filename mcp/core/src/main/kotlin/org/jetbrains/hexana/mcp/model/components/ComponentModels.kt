@@ -113,6 +113,7 @@ data class ResolveComponentDependenciesResult(
     val unresolvedImports: List<ComponentUnresolvedImportResult>,
     val candidateConflicts: List<ComponentCandidateConflictResult>,
     val rejectedCandidates: List<ComponentRejectedCandidateResult>,
+    val minimalRunBuildFix: String,
     val summary: ComponentDependencySummaryResult,
 )
 
