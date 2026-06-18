@@ -23,7 +23,34 @@ data class ResolveWasmFramesResult(
     val crashReport: CrashReportMetadataResult? = null,
     val sourceMapPath: String? = null,
     val topApplicationFrame: ResolvedWasmFrameResult? = null,
+    val applicationFrameSummary: String? = null,
+    val reportSummary: String? = null,
+    val frameHighlights: WasmFrameHighlightsResult = WasmFrameHighlightsResult(),
     val skippedFrames: List<SkippedWasmFrameResult> = emptyList(),
+)
+
+@Serializable
+data class WasmFrameHighlightsResult(
+    val topApplicationFrame: WasmFrameHighlightResult? = null,
+    val callerApplicationFrame: WasmFrameHighlightResult? = null,
+    val callerExportFrame: WasmFrameHighlightResult? = null,
+    val applicationFrames: List<WasmFrameHighlightResult> = emptyList(),
+    val importFrames: List<WasmFrameHighlightResult> = emptyList(),
+    val fallbackFrames: List<WasmFrameHighlightResult> = emptyList(),
+)
+
+@Serializable
+data class WasmFrameHighlightResult(
+    val frameIndex: Int,
+    val funcidx: Int,
+    val origin: String,
+    val symbol: String,
+    val symbolSource: String,
+    val exportedAs: List<String> = emptyList(),
+    @SerialName("import")
+    val importInfo: FunctionImportResult? = null,
+    val sourceLocation: FunctionSourceLocationResult? = null,
+    val reason: String,
 )
 
 @Serializable

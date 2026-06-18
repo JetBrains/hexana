@@ -2422,6 +2422,21 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
           add(JsonPrimitive("null"))
         })
       })
+      put("applicationFrameSummary", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("reportSummary", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("frameHighlights", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
       put("skippedFrames", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
@@ -2429,7 +2444,7 @@ private fun Server.registerResolveWasmFramesTool(handlers: HexanaToolHandlers) {
         })
       })
     },
-    required = listOf("frames", "skippedFrames")
+    required = listOf("frames", "frameHighlights", "skippedFrames")
   ),
     annotations = ToolAnnotations(
       readOnlyHint = true,

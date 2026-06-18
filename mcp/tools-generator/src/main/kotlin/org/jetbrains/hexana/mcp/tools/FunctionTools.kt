@@ -323,6 +323,36 @@ val ResolvedWasmFrameResultClass = class_("ResolvedWasmFrameResult") {
     list("warnings", of = string()).describe("Non-fatal resolution warnings for this frame.")
 }
 
+val WasmFrameHighlightResultClass = class_("WasmFrameHighlightResult") {
+    int("frameIndex").describe("Zero-based position of the input frame in the request.")
+    int("funcidx").describe("Unified function index from the highlighted frame.")
+    string("origin").describe("Function origin: `import`, `local`, or `unknown`.")
+    string("symbol").describe("Best resolved symbol name or the `funcidx` fallback.")
+    string("symbolSource")
+        .describe("Symbol source: `import`, `name_section`, `dwarf_name`, `dwarf_linkage_name`, `export`, or `funcidx_fallback`.")
+    list("exportedAs", of = string()).describe("Export names pointing at this function.")
+    nullable("importInfo", of = FunctionImportResultClass).serialName("import")
+        .describe("Import descriptor when the highlighted frame is imported.")
+    nullable("sourceLocation", of = FunctionSourceLocationResultClass)
+        .describe("Resolved source-map or DWARF source location for local application frames.")
+    string("reason").describe("Machine-readable reason this frame was highlighted.")
+}
+
+val WasmFrameHighlightsResultClass = class_("WasmFrameHighlightsResult") {
+    nullable("topApplicationFrame", of = WasmFrameHighlightResultClass)
+        .describe("Compact highlight for the first local frame in stack order with a resolved source location.")
+    nullable("callerApplicationFrame", of = WasmFrameHighlightResultClass)
+        .describe("Compact highlight for the next source-resolved local frame below the top application frame.")
+    nullable("callerExportFrame", of = WasmFrameHighlightResultClass)
+        .describe("Compact highlight for the next exported local frame below the top application frame, when present.")
+    list("applicationFrames", of = WasmFrameHighlightResultClass)
+        .describe("Source-resolved local application frames in stack order.")
+    list("importFrames", of = WasmFrameHighlightResultClass)
+        .describe("Imported frames in stack order.")
+    list("fallbackFrames", of = WasmFrameHighlightResultClass)
+        .describe("Invalid or `funcidx` fallback frames in stack order.")
+}
+
 val CrashReportMetadataResultClass = class_("CrashReportMetadataResult") {
     nullable("path", of = string()).describe("Crash report path used as input.")
     nullable("incidentId", of = string()).describe("Incident identifier from the crash report, when present.")
@@ -348,6 +378,12 @@ val ResolveWasmFramesResultClass = class_("ResolveWasmFramesResult", kotlinPacka
         .describe("Source map path used for source-location resolution, including auto-discovered adjacent maps.")
     nullable("topApplicationFrame", of = ResolvedWasmFrameResultClass)
         .describe("First local frame in stack order with a resolved source location.")
+    nullable("applicationFrameSummary", of = string())
+        .describe("Report-ready prose naming source-resolved local application frames in stack order.")
+    nullable("reportSummary", of = string())
+        .describe("Report-ready incident summary naming the top application frame, caller/export context, imports, and invalid/fallback frames.")
+    embed("frameHighlights", of = WasmFrameHighlightsResultClass)
+        .describe("Compact structured highlights for application, import, and fallback frame triage.")
     list("skippedFrames", of = SkippedWasmFrameResultClass)
         .describe("Imported, unknown, or otherwise non-source-resolved frames skipped when choosing the top application frame.")
 }

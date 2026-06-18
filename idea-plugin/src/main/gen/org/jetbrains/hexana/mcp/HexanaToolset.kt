@@ -2042,6 +2042,21 @@ public class HexanaToolset : McpToolsProvider {
             add(JsonPrimitive("null"))
           })
         })
+        put("applicationFrameSummary", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("reportSummary", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("frameHighlights", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
         put("skippedFrames", buildJsonObject {
           put("type", JsonPrimitive("array"))
           put("items", buildJsonObject {
@@ -2049,7 +2064,7 @@ public class HexanaToolset : McpToolsProvider {
           })
         })
       },
-      requiredProperties = setOf("frames", "skippedFrames"),
+      requiredProperties = setOf("frames", "frameHighlights", "skippedFrames"),
       definitions = emptyMap<String, JsonElement>(),
       ),
     )

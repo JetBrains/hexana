@@ -27,6 +27,8 @@ import org.jetbrains.hexana.mcp.model.functions.ResolvedWasmFrameResult
 import org.jetbrains.hexana.mcp.model.functions.SkippedWasmFrameResult
 import org.jetbrains.hexana.mcp.model.functions.SourceLocationInput
 import org.jetbrains.hexana.mcp.model.functions.WasmFrameInput
+import org.jetbrains.hexana.mcp.model.functions.WasmFrameHighlightResult
+import org.jetbrains.hexana.mcp.model.functions.WasmFrameHighlightsResult
 import org.jetbrains.hexana.providers.HexanaSourceLocation
 import org.jetbrains.hexana.providers.HexanaSourceLocationProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -82,11 +84,15 @@ fun WasmBinaryProvider.resolveWasmFrames(
             warnings = warnings + sourceLocation?.warnings.orEmpty(),
         )
     }
+    val frameHighlights = buildFrameHighlights(resolvedFrames)
     return ResolveWasmFramesResult(
         frames = resolvedFrames,
         crashReport = crashReport?.metadata,
         sourceMapPath = sourceMapPath,
         topApplicationFrame = resolvedFrames.firstOrNull { it.origin == "local" && it.sourceLocation != null },
+        applicationFrameSummary = buildApplicationFrameSummary(frameHighlights.applicationFrames),
+        reportSummary = buildReportSummary(frameHighlights),
+        frameHighlights = frameHighlights,
         skippedFrames = resolvedFrames.mapNotNull(::skippedFrame),
     )
 }
@@ -378,6 +384,103 @@ private fun skippedFrame(frame: ResolvedWasmFrameResult): SkippedWasmFrameResult
         reason = reason,
     )
 }
+
+private fun buildFrameHighlights(frames: List<ResolvedWasmFrameResult>): WasmFrameHighlightsResult {
+    val applicationFrames = frames
+        .filter { it.origin == "local" && it.sourceLocation != null }
+        .map { it.toHighlight("resolved_application_frame") }
+    val topApplicationFrame = applicationFrames.firstOrNull()?.copy(reason = "top_application_frame")
+    val callerApplicationFrame = applicationFrames.drop(1).firstOrNull()?.copy(reason = "caller_application_frame")
+    val callerExportFrame = applicationFrames
+        .drop(1)
+        .firstOrNull { it.exportedAs.isNotEmpty() }
+        ?.copy(reason = "caller_export_frame")
+    val importFrames = frames
+        .filter { it.origin == "import" }
+        .map { it.toHighlight("import_frame") }
+    val fallbackFrames = frames
+        .filter { it.origin == "unknown" || it.symbolSource == SYMBOL_FUNCIDX_FALLBACK || "invalid_funcidx" in it.warnings }
+        .map { it.toHighlight(if (it.origin == "unknown") "invalid_funcidx_fallback" else "symbol_fallback") }
+    return WasmFrameHighlightsResult(
+        topApplicationFrame = topApplicationFrame,
+        callerApplicationFrame = callerApplicationFrame,
+        callerExportFrame = callerExportFrame,
+        applicationFrames = applicationFrames,
+        importFrames = importFrames,
+        fallbackFrames = fallbackFrames,
+    )
+}
+
+private fun ResolvedWasmFrameResult.toHighlight(reason: String): WasmFrameHighlightResult =
+    WasmFrameHighlightResult(
+        frameIndex = frameIndex,
+        funcidx = funcidx,
+        origin = origin,
+        symbol = symbol,
+        symbolSource = symbolSource,
+        exportedAs = exportedAs,
+        importInfo = importInfo,
+        sourceLocation = sourceLocation,
+        reason = reason,
+    )
+
+private fun buildApplicationFrameSummary(applicationFrames: List<WasmFrameHighlightResult>): String =
+    if (applicationFrames.isEmpty()) {
+        "No local application frames with resolved source locations were found."
+    } else {
+        "Application frames in stack order: " + applicationFrames.joinToString("; ") { frame ->
+            buildString {
+                append(frame.symbol)
+                append(" at funcidx ")
+                append(frame.funcidx)
+                frame.sourceLocation?.let { location ->
+                    append(" mapped to ")
+                    append(location.file)
+                    append(':')
+                    append(location.line)
+                    append(':')
+                    append(location.column)
+                }
+                if (frame.exportedAs.isNotEmpty()) {
+                    append(" exported as ")
+                    append(frame.exportedAs.joinToString(", "))
+                }
+            }
+        } + "."
+    }
+
+private fun buildReportSummary(highlights: WasmFrameHighlightsResult): String {
+    val clauses = mutableListOf<String>()
+    val top = highlights.topApplicationFrame
+    if (top != null) {
+        clauses += "Top application frame resolves to ${top.symbol}"
+    }
+    val caller = highlights.callerExportFrame ?: highlights.callerApplicationFrame
+    if (caller != null) {
+        val role = if (caller.exportedAs.isNotEmpty()) "caller/export frame" else "caller application frame"
+        clauses += "$role resolves to ${caller.symbol}"
+    }
+    if (highlights.importFrames.isNotEmpty()) {
+        clauses += "imported frame${pluralSuffix(highlights.importFrames)} ${highlights.importFrames.symbolList()} ${verb(highlights.importFrames, "appears", "appear")} below it"
+    }
+    if (highlights.fallbackFrames.isNotEmpty()) {
+        clauses += "invalid/fallback frame${pluralSuffix(highlights.fallbackFrames)} ${highlights.fallbackFrames.symbolList()} ${verb(highlights.fallbackFrames, "remains", "remain")} unresolved"
+    }
+    return if (clauses.isEmpty()) {
+        "No resolved application, import, or invalid WebAssembly frames were identified."
+    } else {
+        clauses.joinToString("; ") + "."
+    }
+}
+
+private fun pluralSuffix(frames: List<WasmFrameHighlightResult>): String =
+    if (frames.size == 1) "" else "s"
+
+private fun verb(frames: List<WasmFrameHighlightResult>, singular: String, plural: String): String =
+    if (frames.size == 1) singular else plural
+
+private fun List<WasmFrameHighlightResult>.symbolList(): String =
+    joinToString(", ") { it.symbol }
 
 private fun JsonObject.stringOrNull(name: String): String? =
     valueOrNull(name)?.jsonPrimitive?.contentOrNull

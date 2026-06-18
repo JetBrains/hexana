@@ -156,6 +156,11 @@ class CrashResolverServiceTest {
 
         val mismatched = result.frames[1]
         assertTrue("code_offset_outside_function_range" in mismatched.warnings)
+
+        assertTrue(result.applicationFrameSummary?.contains("frame_target") == true)
+        assertTrue(result.reportSummary?.contains("Top application frame resolves to frame_target") == true)
+        assertEquals("frame_target", result.frameHighlights.topApplicationFrame?.symbol)
+        assertEquals(listOf("frame_target", "frame_target"), result.frameHighlights.applicationFrames.map { it.symbol })
     }
 
     @Test
@@ -249,11 +254,18 @@ class CrashResolverServiceTest {
         assertTrue("invalid_funcidx" in invalid.warnings)
 
         assertEquals(mapped, result.topApplicationFrame)
+        assertTrue(result.applicationFrameSummary?.contains("mapped_export") == true)
+        assertTrue(result.reportSummary?.contains("mapped_export") == true)
+        assertTrue(result.reportSummary?.contains("host_log") == true)
+        assertTrue(result.reportSummary?.contains("func99") == true)
+        assertEquals("mapped_export", result.frameHighlights.topApplicationFrame?.symbol)
+        assertEquals("host_log", result.frameHighlights.importFrames.single().symbol)
+        assertEquals("func99", result.frameHighlights.fallbackFrames.single().symbol)
         assertEquals(listOf(0, 2), result.skippedFrames.map { it.frameIndex })
         assertEquals(listOf("imported_frame", "unknown_funcidx"), result.skippedFrames.map { it.reason })
 
-        val serializedFrames = encodeHexanaJsonElement(result)
-            .jsonObject
+        val serialized = encodeHexanaJsonElement(result).jsonObject
+        val serializedFrames = serialized
             .getValue("frames")
             .jsonArray
             .map { it.jsonObject }
@@ -267,6 +279,16 @@ class CrashResolverServiceTest {
         val serializedMappedSignature = serializedFrames[1].getValue("signature").jsonObject
         assertEquals(listOf("i32"), serializedMappedSignature.stringArray("results"))
         assertEquals(listOf("i32"), serializedMappedSignature.stringArray("return"))
+
+        val serializedHighlights = serialized.getValue("frameHighlights").jsonObject
+        assertEquals(
+            "host_log",
+            serializedHighlights.getValue("importFrames").jsonArray.single().jsonObject.getValue("symbol").jsonPrimitive.content,
+        )
+        assertEquals(
+            "func99",
+            serializedHighlights.getValue("fallbackFrames").jsonArray.single().jsonObject.getValue("symbol").jsonPrimitive.content,
+        )
     }
 
     @Test
