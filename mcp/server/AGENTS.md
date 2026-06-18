@@ -38,6 +38,16 @@ Read these files before making structural changes:
 - Default HTTP bind should stay local-first (`127.0.0.1`) unless the CLI explicitly allows a public bind.
 - Prefer the official MCP Kotlin SDK transport/runtime APIs over custom protocol plumbing.
 
+## Analytics Policy
+
+- JVM standalone MCP analytics stay enabled by default for `stdio` and `http`; users can opt out with
+  `--telemetry-enabled false` or `HEXANA_MCP_TELEMETRY_ENABLED=false`.
+- GraalVM Native Image MCP analytics are disabled by default because PostHog networking and shutdown-hook behavior add
+  runtime surface that can block native startup/smoke reliability. Native users can still opt in explicitly with
+  `--telemetry-enabled true` or `HEXANA_MCP_TELEMETRY_ENABLED=true`.
+- Keep native stdio smoke coverage on the default command line so it verifies analytics do not initialize implicitly in
+  native binaries.
+
 ## Testing
 
 - Add focused server tests in this module for tool argument handling and runtime behavior.

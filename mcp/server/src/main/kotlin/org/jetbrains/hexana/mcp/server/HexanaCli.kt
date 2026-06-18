@@ -191,9 +191,19 @@ private fun parseLogLevel(value: String): HexanaLogLevel {
 
 private fun CliktCommand.analyticsEnabledOption() = option(
     "--telemetry-enabled",
-    help = "Whether anonymous usage analytics are allowed.",
+    help = "Whether anonymous usage analytics are allowed. Defaults to false in GraalVM Native Image and true on JVM.",
     envvar = "HEXANA_MCP_TELEMETRY_ENABLED"
-).convert("true|false") { parseBooleanOption("--telemetry-enabled", it) }.default(true)
+).convert("true|false") { parseBooleanOption("--telemetry-enabled", it) }.default(defaultMcpAnalyticsEnabled())
+
+internal fun defaultMcpAnalyticsEnabled(): Boolean {
+    return !isRunningInGraalVmNativeImage()
+}
+
+internal fun isRunningInGraalVmNativeImage(
+    imageCodeProperty: String? = System.getProperty(GRAALVM_NATIVE_IMAGE_CODE_PROPERTY)
+): Boolean {
+    return imageCodeProperty == GRAALVM_NATIVE_IMAGE_RUNTIME_VALUE
+}
 
 private fun CliktCommand.toolProfileOption() = option(
     "--tool-profile",
@@ -225,3 +235,6 @@ private fun String.isLoopbackHost(): Boolean {
 private fun String.prependIfMissing(prefix: String): String {
     return if (startsWith(prefix)) this else prefix + this
 }
+
+private const val GRAALVM_NATIVE_IMAGE_CODE_PROPERTY = "org.graalvm.nativeimage.imagecode"
+private const val GRAALVM_NATIVE_IMAGE_RUNTIME_VALUE = "runtime"
