@@ -89,6 +89,10 @@
     "allDeclaredFields": true
   },
   {
+    "name": "io.ktor.network.selector.InterestSuspensionsMap",
+    "allDeclaredFields": true
+  },
+  {
     "name": "io.modelcontextprotocol.kotlin.sdk.types.TextContent$Companion",
     "allDeclaredMethods": true
   }

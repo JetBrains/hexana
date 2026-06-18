@@ -357,6 +357,30 @@ tasks.register<Test>("nativeMcpStdioSmoke") {
     }
 }
 
+tasks.register<Test>("nativeMcpHttpSmoke") {
+    description = "Builds the experimental GraalVM native MCP executable and runs the HTTP integration smoke test."
+    group = "verification"
+    dependsOn(tasks.named("nativeCompile"))
+    shouldRunAfter(tasks.named("nativeMcpStdioSmoke"))
+
+    testClassesDirs = integrationTestSourceSet.output.classesDirs
+    classpath = integrationTestSourceSet.runtimeClasspath
+    testLogging {
+        showStandardStreams = true
+        events("failed", "passed", "skipped")
+    }
+    doFirst {
+        val executableFile = nativeExecutable.get().asFile
+        check(executableFile.canExecute()) {
+            "Expected native executable at ${executableFile.absolutePath}. Run :mcp:server:nativeCompile first."
+        }
+        systemProperty("hexana.integration.nativeExecutable", executableFile.absolutePath)
+    }
+    filter {
+        includeTestsMatching("*HexanaNativeHttpIntegrationTest")
+    }
+}
+
 kotlin {
     jvmToolchain(21)
     sourceSets.named("main") {

@@ -10,9 +10,8 @@ import java.nio.file.Path
 import java.time.Duration
 
 internal class HexanaInstalledServer private constructor(
-    private val installDir: Path,
-    private val port: Int,
-    private val endpoint: String,
+    val port: Int,
+    val endpoint: String,
     private val command: List<String>,
     private val process: Process,
     private val pumpScope: CoroutineScope,
@@ -59,19 +58,20 @@ internal class HexanaInstalledServer private constructor(
         private val DEFAULT_HTTP_READY_TIMEOUT: Duration = Duration.ofSeconds(20)
 
         suspend fun start(
+            launcher: HttpLauncher = HttpLauncher.Server,
             endpoint: String = "/mcp",
             logLevel: HexanaLogLevel = HexanaLogLevel.QUIET,
             toolProfile: HexanaMcpToolProfile? = null,
         ): HexanaInstalledServer {
-            val installDir = integrationInstallDir()
+            val processSpec = processSpec(launcher)
             val port = findFreePort()
             val stdoutBuffer = StringBuffer()
             val stderrBuffer = StringBuffer()
 
-            val command = buildCommand(installDir, port, endpoint, logLevel, toolProfile)
+            val command = buildCommand(processSpec, launcher, port, endpoint, logLevel, toolProfile)
             logger.info(
                 "Starting installed server from {} on http://127.0.0.1:{}{} with logLevel={} command={}",
-                installDir,
+                processSpec.workingDirectory,
                 port,
                 endpoint,
                 logLevel.cliValue(),
@@ -79,7 +79,7 @@ internal class HexanaInstalledServer private constructor(
             )
             val process = withContext(Dispatchers.IO) {
                 ProcessBuilder(command)
-                    .directory(installDir.toFile())
+                    .directory(processSpec.workingDirectory.toFile())
                     .useCurrentJvm(logger)
                     .start()
             }
@@ -97,7 +97,6 @@ internal class HexanaInstalledServer private constructor(
             logger.info("Installed server is ready on http://127.0.0.1:{}{}", port, endpoint)
 
             return HexanaInstalledServer(
-                installDir = installDir,
                 port = port,
                 endpoint = endpoint,
                 command = command,
@@ -110,22 +109,39 @@ internal class HexanaInstalledServer private constructor(
             )
         }
 
-        private fun integrationInstallDir(): Path {
-            val rawPath = System.getProperty("hexana.integration.installDir")
-                ?: error("Missing `hexana.integration.installDir` system property")
-            val path = Path.of(rawPath)
-            require(Files.isDirectory(path)) { "Install directory does not exist: $path" }
-            return path
+        private fun processSpec(launcher: HttpLauncher): HttpProcessSpec {
+            launcher.executableSystemProperty?.let { systemPropertyName ->
+                val executable = integrationPath(systemPropertyName)
+                require(Files.isRegularFile(executable)) { "Native executable does not exist: $executable" }
+                require(Files.isExecutable(executable)) { "Native executable is not executable: $executable" }
+                return HttpProcessSpec(
+                    workingDirectory = executable.parent ?: Path.of(".").toAbsolutePath(),
+                    executable = executable,
+                )
+            }
+
+            val installDir = integrationPath(launcher.installDirSystemProperty)
+            require(Files.isDirectory(installDir)) { "Install directory does not exist: $installDir" }
+            return HttpProcessSpec(
+                workingDirectory = installDir,
+                executable = null,
+            )
+        }
+
+        private fun integrationPath(systemPropertyName: String): Path {
+            val rawPath = System.getProperty(systemPropertyName)
+                ?: error("Missing `$systemPropertyName` system property")
+            return Path.of(rawPath)
         }
 
         private fun buildCommand(
-            installDir: Path,
+            processSpec: HttpProcessSpec,
+            launcher: HttpLauncher,
             port: Int,
             endpoint: String,
             logLevel: HexanaLogLevel,
             toolProfile: HexanaMcpToolProfile?,
         ): List<String> {
-            val binDir = installDir.resolve("bin")
             val arguments = buildList {
                 add("http")
                 add("--host")
@@ -141,14 +157,18 @@ internal class HexanaInstalledServer private constructor(
                     add(toolProfile.cliValue())
                 }
             }
+            processSpec.executable?.let { executable ->
+                return listOf(executable.toString()) + arguments
+            }
+
             return if (isWindows()) {
                 listOf(
                     "cmd.exe",
                     "/c",
-                    binDir.resolve("server.bat").toString(),
+                    processSpec.workingDirectory.resolve(launcher.windowsRelativePath).toString(),
                 ) + arguments
             } else {
-                listOf(binDir.resolve("server").toString()) + arguments
+                listOf(processSpec.workingDirectory.resolve(launcher.unixRelativePath).toString()) + arguments
             }
         }
 
@@ -225,6 +245,32 @@ internal class HexanaInstalledServer private constructor(
     }
 }
 
+internal data class HttpLauncher(
+    val installDirSystemProperty: String,
+    val unixRelativePath: String,
+    val windowsRelativePath: String,
+    val executableSystemProperty: String? = null,
+) {
+    companion object {
+        val Server = HttpLauncher(
+            installDirSystemProperty = "hexana.integration.installDir",
+            unixRelativePath = "bin/server",
+            windowsRelativePath = "bin/server.bat",
+        )
+        val NativeExecutable = HttpLauncher(
+            installDirSystemProperty = "hexana.integration.nativeExecutable",
+            unixRelativePath = "",
+            windowsRelativePath = "",
+            executableSystemProperty = "hexana.integration.nativeExecutable",
+        )
+    }
+}
+
+private data class HttpProcessSpec(
+    val workingDirectory: Path,
+    val executable: Path?,
+)
+
 private suspend fun java.io.InputStream.pumpTo(target: StringBuffer, streamName: String) {
     val logger = LoggerFactory.getLogger("org.jetbrains.hexana.mcp.server.HexanaInstalledServer.$streamName")
     withContext(Dispatchers.IO) {
@@ -240,12 +286,14 @@ private suspend fun java.io.InputStream.pumpTo(target: StringBuffer, streamName:
 }
 
 internal suspend inline fun <T> withInstalledServer(
+    launcher: HttpLauncher = HttpLauncher.Server,
     endpoint: String = "/mcp",
     logLevel: HexanaLogLevel = HexanaLogLevel.QUIET,
     toolProfile: HexanaMcpToolProfile? = null,
     crossinline block: suspend (HexanaInstalledServer) -> T
 ): T {
     val server = HexanaInstalledServer.start(
+        launcher = launcher,
         endpoint = endpoint,
         logLevel = logLevel,
         toolProfile = toolProfile,

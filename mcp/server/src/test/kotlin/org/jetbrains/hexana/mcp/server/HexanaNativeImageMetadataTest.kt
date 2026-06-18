@@ -7,6 +7,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -29,6 +30,18 @@ class HexanaNativeImageMetadataTest {
         assertTrue("io.modelcontextprotocol.kotlin.sdk.types.ListToolsResult" in retainedClasses)
         assertTrue("io.modelcontextprotocol.kotlin.sdk.types.CallToolResult" in retainedClasses)
         assertTrue("io.modelcontextprotocol.kotlin.sdk.types.TextContent" in retainedClasses)
+    }
+
+    @Test
+    fun nativeImageReflectConfigRetainsKtorHttpSelectorFields() {
+        val entries = nativeImageJson("reflect-config.json").jsonArray
+        val selectorEntry = entries
+            .map { it.jsonObject }
+            .single { entry ->
+                entry["name"]?.jsonPrimitive?.content == "io.ktor.network.selector.InterestSuspensionsMap"
+            }
+
+        assertEquals("true", selectorEntry["allDeclaredFields"]?.jsonPrimitive?.content)
     }
 
     @Test

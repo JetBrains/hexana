@@ -161,6 +161,17 @@ class HexanaHttpIntegrationTest {
         }
     }
 
+    @Test
+    fun installedServerRejectsInvalidLocalHttpOriginAndHost() = runBlocking {
+        withInstalledServer { server ->
+            assertLocalHttpProtectionSmoke(
+                server = server,
+                logger = logger,
+                label = "installed"
+            )
+        }
+    }
+
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {
         Files.write(it, wat2wasm(wat))
     }
