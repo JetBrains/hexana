@@ -62,14 +62,38 @@ data class DexHeader(
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is DexHeader) return false
-        return checksum == other.checksum &&
+        return magic.contentEquals(other.magic) &&
+            checksum == other.checksum &&
+            signature.contentEquals(other.signature) &&
             fileSize == other.fileSize &&
             headerSize == other.headerSize &&
-            magic.contentEquals(other.magic) &&
-            signature.contentEquals(other.signature)
+            endianTag == other.endianTag &&
+            linkSize == other.linkSize &&
+            linkOff == other.linkOff &&
+            mapOff == other.mapOff &&
+            stringIdsSize == other.stringIdsSize &&
+            stringIdsOff == other.stringIdsOff &&
+            typeIdsSize == other.typeIdsSize &&
+            typeIdsOff == other.typeIdsOff &&
+            protoIdsSize == other.protoIdsSize &&
+            protoIdsOff == other.protoIdsOff &&
+            fieldIdsSize == other.fieldIdsSize &&
+            fieldIdsOff == other.fieldIdsOff &&
+            methodIdsSize == other.methodIdsSize &&
+            methodIdsOff == other.methodIdsOff &&
+            classDefsSize == other.classDefsSize &&
+            classDefsOff == other.classDefsOff &&
+            dataSize == other.dataSize &&
+            dataOff == other.dataOff
     }
 
-    override fun hashCode(): Int = magic.contentHashCode()
+    override fun hashCode(): Int {
+        var result = magic.contentHashCode()
+        result = 31 * result + checksum.hashCode()
+        result = 31 * result + fileSize.hashCode()
+        result = 31 * result + headerSize.hashCode()
+        return result
+    }
 }
 
 /**

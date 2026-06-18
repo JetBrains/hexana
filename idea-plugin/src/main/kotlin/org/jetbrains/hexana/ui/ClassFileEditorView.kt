@@ -221,6 +221,8 @@ private fun ClassMethodsTab(
             navTargetFlow.value = null
             return@LaunchedEffect
         }
+        // Clear search so the full list is rendered and scroll indices are valid.
+        searchQuery = TextFieldValue("")
         // Ensure the target method is unfolded so its body rows participate
         // in the LazyColumn index computation below.
         val targetOffset = sections[sectionIdx].methodOffset

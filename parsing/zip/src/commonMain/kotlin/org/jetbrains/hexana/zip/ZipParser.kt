@@ -69,9 +69,13 @@ object ZipParser {
         }
 
         // Walk central directory.
-        val entries = ArrayList<ZipEntry>(cdEntryCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+        require(cdEntryCount <= Int.MAX_VALUE) {
+            "ZIP entry count $cdEntryCount exceeds supported maximum of ${Int.MAX_VALUE}"
+        }
+        val entryCount = cdEntryCount.toInt()
+        val entries = ArrayList<ZipEntry>(entryCount.coerceAtMost(65536))
         var p = cdOffset
-        repeat(cdEntryCount.toInt()) {
+        repeat(entryCount) {
             val signature = buffer.readU4LE(p)
             require(signature.toInt() == CENTRAL_DIR_SIGNATURE) {
                 "central directory entry at $p has bad signature 0x${signature.toString(16)}"

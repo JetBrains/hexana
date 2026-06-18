@@ -327,10 +327,18 @@ private fun DexClassDetailView(
     val classDef = dex.classDefs[classDefIndex]
     val className = dex.typeName(classDef.classIdx) ?: "<#${classDef.classIdx}>"
     val classData = remember(dex, classDefIndex) {
-        DexFileParser.parseClassData(buffer, classDef)
+        try {
+            DexFileParser.parseClassData(buffer, classDef)
+        } catch (_: Exception) {
+            null
+        }
     }
     val interfaces = remember(dex, classDefIndex) {
-        DexFileParser.parseTypeList(buffer, classDef.interfacesOff)
+        try {
+            DexFileParser.parseTypeList(buffer, classDef.interfacesOff)
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     var detailTab by rememberSaveable(classDefIndex) { mutableStateOf(0) }
