@@ -314,7 +314,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
         // Check if the entry is a binary format we handle (wasm, class, jar, etc.)
         const ext = childName.includes(".") ? childName.substring(childName.lastIndexOf(".") + 1).toLowerCase() : "";
-        const binaryExtensions = new Set(["wasm", "class", "jar", "zip", "war", "apk", "bin", "elf", "exe", "so", "o", "a", "dll", "dylib"]);
+        const binaryExtensions = new Set(["wasm", "class", "dex", "jar", "zip", "war", "apk", "bin", "elf", "exe", "so", "o", "a", "dll", "dylib"]);
 
         if (binaryExtensions.has(ext)) {
             // Open as a binary in our custom editor.

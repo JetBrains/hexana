@@ -121,6 +121,7 @@ private fun ZipEntriesPanel(
             columnAligns = aligns,
             defaultSortColumn = 0,
             defaultSortDirection = SortDirection.ASC,
+            alwaysShowSearch = true,
         ) {
             for (entry in displayEntries) {
                 PanelTableRow(

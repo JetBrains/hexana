@@ -21,6 +21,8 @@ kotlin {
                 implementation(project(":binaryProvider"))
                 implementation(project(":encdec"))
                 implementation(project(":parsing:zip"))
+                implementation(project(":parsing:javaBytecode"))
+                implementation(project(":parsing:dex"))
                 implementation(project(":plugins-shared"))
 
                 implementation(compose.html.core)

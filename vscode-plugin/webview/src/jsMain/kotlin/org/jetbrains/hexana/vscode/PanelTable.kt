@@ -47,10 +47,11 @@ internal fun SearchableTable(
     columnAligns: List<String> = emptyList(),
     defaultSortColumn: Int = headers.indexOf("ID").takeIf { it >= 0 } ?: -1,
     defaultSortDirection: SortDirection = SortDirection.ASC,
+    alwaysShowSearch: Boolean = false,
     footer: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    var searchVisible by remember { mutableStateOf(false) }
+    var searchVisible by remember { mutableStateOf(alwaysShowSearch) }
     var query by remember { mutableStateOf("") }
     var containerRef by remember { mutableStateOf<HTMLElement?>(null) }
 
@@ -89,7 +90,9 @@ internal fun SearchableTable(
                 query = query,
                 onQueryChange = { query = it },
                 onClose = {
-                    searchVisible = false
+                    if (!alwaysShowSearch) {
+                        searchVisible = false
+                    }
                     query = ""
                 },
             )

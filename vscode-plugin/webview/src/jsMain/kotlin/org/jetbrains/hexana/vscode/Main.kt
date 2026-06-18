@@ -5,14 +5,10 @@ import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.renderComposable
+import org.jetbrains.hexana.dex.DexFileParser
 import org.jetbrains.hexana.io.toCommonByteBuffer
-import org.jetbrains.hexana.providers.BinaryProvider
-import org.jetbrains.hexana.providers.BinaryProviderType
-import org.jetbrains.hexana.providers.GenericBinaryProvider
-import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
-import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
-import org.jetbrains.hexana.providers.nativeOrGenericBinaryProvider
+import org.jetbrains.hexana.javabytecode.JavaClassFileParser
+import org.jetbrains.hexana.providers.*
 
 fun main() {
     renderComposable(rootElementId = "root") {
@@ -51,6 +47,39 @@ fun WasmEditorApp() {
                 fileName = fileName,
                 buffer = buffer,
             )
+        } else if (isClassFile(buffer)) {
+            val classFile = try {
+                JavaClassFileParser.parse(buffer.duplicate().position(0))
+            } catch (_: Exception) {
+                null
+            }
+            if (classFile != null) {
+                ClassFileEditorContent(
+                    fileName = fileName,
+                    classFile = classFile,
+                    buffer = buffer,
+                )
+            } else {
+                // Fallback to generic hex view if parsing fails
+                val provider = nativeOrGenericBinaryProvider(buffer, filePath)
+                WasmEditorContent(fileName = fileName, provider = provider)
+            }
+        } else if (isDexFile(buffer)) {
+            val dexFile = try {
+                DexFileParser.parse(buffer.duplicate().position(0))
+            } catch (_: Exception) {
+                null
+            }
+            if (dexFile != null) {
+                DexFileEditorContent(
+                    fileName = fileName,
+                    dexFile = dexFile,
+                    buffer = buffer,
+                )
+            } else {
+                val provider = nativeOrGenericBinaryProvider(buffer, filePath)
+                WasmEditorContent(fileName = fileName, provider = provider)
+            }
         } else {
             val provider = when (WasmBinaryProviderSelector.select(buffer)) {
                 BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
