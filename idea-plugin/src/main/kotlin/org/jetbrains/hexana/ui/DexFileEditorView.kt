@@ -2,24 +2,11 @@ package org.jetbrains.hexana.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -28,30 +15,23 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.openapi.ui.DialogWrapper
-import java.awt.BorderLayout
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
-import javax.swing.Action
-import javax.swing.JComponent
-import javax.swing.JPanel
-import javax.swing.JScrollPane
-import javax.swing.JTextArea
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.dex.DexFile
 import org.jetbrains.hexana.dex.renderDexClassAccessFlags
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.Orientation
-import org.jetbrains.jewel.ui.component.Divider
-import org.jetbrains.jewel.ui.component.TabData
-import org.jetbrains.jewel.ui.component.TabStrip
-import org.jetbrains.jewel.ui.component.Text
-import org.jetbrains.jewel.ui.component.VerticalScrollbar
+import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.theme.defaultTabStyle
+import java.awt.BorderLayout
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
+import javax.swing.*
 
 /**
  * Editor view for a parsed Android `.dex` file. Vertically split: a [HexViewer]
@@ -146,18 +126,33 @@ private fun DexHeaderTab(dex: DexFile) {
 @Composable
 private fun DexClassesTab(dex: DexFile) {
     val rows = remember(dex) { buildClassRows(dex) }
-    val listState = rememberLazyListState()
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-            if (rows.isEmpty()) {
-                item { Text("(no classes)", style = DexRowTextStyle) }
-                return@LazyColumn
-            }
-            items(rows.size, key = { it }) { idx ->
-                DexClassRow(rows[idx])
-            }
+    var searchQuery by remember(dex) { mutableStateOf(TextFieldValue("")) }
+    val filteredRows = remember(dex, searchQuery.text) {
+        if (searchQuery.text.isBlank()) rows
+        else {
+            val q = searchQuery.text.trim().lowercase()
+            rows.filter { it.text.lowercase().contains(q) }
         }
-        VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
+    }
+    val listState = rememberLazyListState()
+    Column(modifier = Modifier.fillMaxSize()) {
+        SearchField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = "Search classes",
+        )
+        Box(modifier = Modifier.fillMaxSize().weight(1f)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                if (filteredRows.isEmpty()) {
+                    item { Text(if (searchQuery.text.isNotEmpty()) "No classes match the search." else "(no classes)", style = DexRowTextStyle) }
+                    return@LazyColumn
+                }
+                items(filteredRows.size, key = { filteredRows[it].index }) { idx ->
+                    DexClassRow(filteredRows[idx])
+                }
+            }
+            VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
+        }
     }
 }
 
@@ -182,34 +177,55 @@ private fun DexClassRow(row: DexClassRowData) {
 
 @Composable
 private fun DexStringsTab(dex: DexFile) {
-    val listState = rememberLazyListState()
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-            if (dex.stringIds.isEmpty()) {
-                item { Text("(no strings)", style = DexRowTextStyle) }
-                return@LazyColumn
-            }
-            items(dex.stringIds.size, key = { it }) { idx ->
-                val rawValue = dex.stringIds[idx].value
-                val displayValue = escapeControlChars(rawValue)
-                val prefix = "#${idx.toString().padStart(5, ' ')}  "
-                Text(
-                    prefix + displayValue,
-                    style = DexRowTextStyle,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
-                        .pointerInput(rawValue) {
-                            detectTapGestures(
-                                onDoubleTap = {
-                                    StringValueDialog("String #$idx", rawValue).show()
-                                },
-                            )
-                        },
-                )
-            }
+    data class IndexedString(val index: Int, val rawValue: String, val displayValue: String)
+
+    val allStrings = remember(dex) {
+        dex.stringIds.mapIndexed { idx, entry ->
+            IndexedString(idx, entry.value, escapeControlChars(entry.value))
         }
-        VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
+    }
+    var searchQuery by remember(dex) { mutableStateOf(TextFieldValue("")) }
+    val filteredStrings = remember(dex, searchQuery.text) {
+        if (searchQuery.text.isBlank()) allStrings
+        else {
+            val q = searchQuery.text.trim().lowercase()
+            allStrings.filter { it.displayValue.lowercase().contains(q) }
+        }
+    }
+    val listState = rememberLazyListState()
+    Column(modifier = Modifier.fillMaxSize()) {
+        SearchField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = "Search strings",
+        )
+        Box(modifier = Modifier.fillMaxSize().weight(1f)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                if (filteredStrings.isEmpty()) {
+                    item { Text(if (searchQuery.text.isNotEmpty()) "No strings match the search." else "(no strings)", style = DexRowTextStyle) }
+                    return@LazyColumn
+                }
+                items(filteredStrings.size, key = { filteredStrings[it].index }) { idx ->
+                    val s = filteredStrings[idx]
+                    val prefix = "#${s.index.toString().padStart(5, ' ')}  "
+                    Text(
+                        prefix + s.displayValue,
+                        style = DexRowTextStyle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                            .pointerInput(s.rawValue) {
+                                detectTapGestures(
+                                    onDoubleTap = {
+                                        StringValueDialog("String #${s.index}", s.rawValue).show()
+                                    },
+                                )
+                            },
+                    )
+                }
+            }
+            VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
+        }
     }
 }
 

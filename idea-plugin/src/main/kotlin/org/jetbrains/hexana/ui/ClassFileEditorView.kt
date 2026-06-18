@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.openapi.util.Key
@@ -197,6 +198,14 @@ private fun ClassMethodsTab(
     navTargetFlow: MutableStateFlow<ClassFileNavTarget?>,
 ) {
     val sections = remember(cf) { buildMethodSections(cf) }
+    var searchQuery by remember(cf) { mutableStateOf(TextFieldValue("")) }
+    val filteredSections = remember(cf, searchQuery.text) {
+        if (searchQuery.text.isBlank()) sections
+        else {
+            val q = searchQuery.text.trim().lowercase()
+            sections.filter { it.signature.lowercase().contains(q) }
+        }
+    }
     var folded by remember(cf) { mutableStateOf(emptySet<Int>()) }
     val listState = rememberLazyListState()
     val navTarget by navTargetFlow.collectAsState()
@@ -221,13 +230,19 @@ private fun ClassMethodsTab(
         navTargetFlow.value = null
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        SearchField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = "Search methods",
+        )
+        Box(modifier = Modifier.fillMaxSize().weight(1f)) {
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-            if (sections.isEmpty()) {
-                item { Text("(no methods)", style = RowTextStyle) }
+            if (filteredSections.isEmpty()) {
+                item { Text(if (searchQuery.text.isNotEmpty()) "No methods match the search." else "(no methods)", style = RowTextStyle) }
                 return@LazyColumn
             }
-            for (section in sections) {
+            for (section in filteredSections) {
                 val isFolded = section.methodOffset in folded
                 item(key = "header-${section.methodOffset}") {
                     MethodHeaderRow(
@@ -250,6 +265,7 @@ private fun ClassMethodsTab(
             }
         }
         VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
+    }
     }
 }
 
@@ -303,18 +319,40 @@ private fun MethodBodyRow(row: MethodRow) {
 @Composable
 private fun ClassConstantPoolTab(cf: JavaClassFile) {
     val rows = remember(cf) { cf.constantPool.asSequence().toList() }
-    val listState = rememberLazyListState()
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-            items(rows.size) { idx ->
-                val (index, entry) = rows[idx]
-                Text(
-                    "#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}",
-                    style = RowTextStyle,
-                )
+    var searchQuery by remember(cf) { mutableStateOf(TextFieldValue("")) }
+    val filteredRows = remember(cf, searchQuery.text) {
+        if (searchQuery.text.isBlank()) rows
+        else {
+            val q = searchQuery.text.trim().lowercase()
+            rows.filter { (index, entry) ->
+                val text = "#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}"
+                text.lowercase().contains(q)
             }
         }
-        VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
+    }
+    val listState = rememberLazyListState()
+    Column(modifier = Modifier.fillMaxSize()) {
+        SearchField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = "Search constant pool",
+        )
+        Box(modifier = Modifier.fillMaxSize().weight(1f)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                if (filteredRows.isEmpty() && searchQuery.text.isNotEmpty()) {
+                    item { Text("No entries match the search.", style = RowTextStyle) }
+                } else {
+                    items(filteredRows.size) { idx ->
+                        val (index, entry) = filteredRows[idx]
+                        Text(
+                            "#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}",
+                            style = RowTextStyle,
+                        )
+                    }
+                }
+            }
+            VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
+        }
     }
 }
 
