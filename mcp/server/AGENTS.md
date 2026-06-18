@@ -47,5 +47,9 @@ Read these files before making structural changes:
   `./gradlew :mcp:assembleMcpPackagingPlain :mcp:server:plainMcpPackagingSmoke` for pre-R8 packages and
   `./gradlew :mcp:assembleMcpPackaging :mcp:server:obfuscatedMcpPackagingSmoke` for R8-obfuscated release packages.
   Both gates exercise the standalone runtime plus Claude and Codex wrappers.
+- The experimental GraalVM Native Image prototype is intentionally separate from JVM/R8 packaging. Use
+  `./gradlew :mcp:server:nativeCompile` to build `build/native/nativeCompile/hexana-mcp`, and
+  `./gradlew :mcp:server:nativeMcpVersionSmoke` to verify `hexana-mcp version` when a GraalVM Native Image
+  toolchain is available.
 - Run `./gradlew :mcp:server:build` after changes here.
 - If a change crosses the `mcp/core` boundary, also run `./gradlew :mcp:core:build`.

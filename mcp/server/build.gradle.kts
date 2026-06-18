@@ -1,9 +1,11 @@
+import java.io.ByteArrayOutputStream
 import java.util.*
 import java.util.zip.ZipFile
 
 plugins {
     application
     idea
+    alias(libs.plugins.graalvm.native)
     alias(libs.plugins.kotlin.jvm)
 }
 
@@ -39,6 +41,12 @@ configurations.named(integrationTestSourceSet.runtimeOnlyConfigurationName) {
 
 val generatedToolDispatcherDir = layout.projectDirectory.dir("src/main/gen")
 val verifiedToolDispatcherDir = layout.buildDirectory.dir("generator-verify/dispatcher")
+val nativeExecutableName = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
+    "hexana-mcp.exe"
+} else {
+    "hexana-mcp"
+}
+val nativeExecutable = layout.buildDirectory.file("native/nativeCompile/$nativeExecutableName")
 
 tasks.register<JavaExec>("generateHexanaToolDispatcher") {
     description = "Regenerates HexanaToolDispatcher.kt into src/main/gen; the output is checked into git."
@@ -129,6 +137,29 @@ dependencies {
 application {
     mainClass = "org.jetbrains.hexana.mcp.server.MainKt"
     applicationDefaultJvmArgs = listOf("-Dhexana.version=$version")
+}
+
+graalvmNative {
+    testSupport.set(false)
+    toolchainDetection.set(true)
+
+    binaries {
+        named("main") {
+            imageName.set("hexana-mcp")
+            mainClass.set(application.mainClass)
+            fallback.set(false)
+            buildArgs.addAll(
+                "-Dhexana.version=$version",
+                "-H:+ReportExceptionStackTraces"
+            )
+            resources {
+                includedPatterns.addAll(
+                    "ch/qos/logback/classic/logback-classic-version\\.properties",
+                    "ch/qos/logback/core/logback-core-version\\.properties"
+                )
+            }
+        }
+    }
 }
 
 tasks.jar {
@@ -280,6 +311,31 @@ tasks.register<Test>("obfuscatedMcpPackagingSmoke") {
         claudePluginDir = obfuscatedClaudePluginDir,
         codexPluginDir = obfuscatedCodexPluginDir,
     )
+}
+
+tasks.register<Exec>("nativeMcpVersionSmoke") {
+    description = "Builds the experimental GraalVM native MCP executable and checks that `hexana-mcp version` runs."
+    group = "verification"
+    dependsOn(tasks.named("nativeCompile"))
+    outputs.upToDateWhen { false }
+
+    val stdout = ByteArrayOutputStream()
+    standardOutput = stdout
+
+    doFirst {
+        val executableFile = nativeExecutable.get().asFile
+        check(executableFile.canExecute()) {
+            "Expected native executable at ${executableFile.absolutePath}. Run :mcp:server:nativeCompile first."
+        }
+        commandLine(executableFile.absolutePath, "version")
+    }
+
+    doLast {
+        val output = stdout.toString(Charsets.UTF_8).trim()
+        check(output.matches(Regex("""hexana-mcp \S+"""))) {
+            "Expected `hexana-mcp <version>` from native executable, got: $output"
+        }
+    }
 }
 
 kotlin {

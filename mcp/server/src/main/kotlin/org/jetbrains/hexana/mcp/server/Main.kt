@@ -20,7 +20,7 @@ import org.jetbrains.hexana.analytics.*
 import org.slf4j.LoggerFactory
 import kotlin.system.exitProcess
 
-private val logger = LoggerFactory.getLogger("org.jetbrains.hexana.mcp.server.Main")
+private val logger by lazy { LoggerFactory.getLogger("org.jetbrains.hexana.mcp.server.Main") }
 
 fun main(args: Array<String>) {
     KotlinLoggingConfiguration.logStartupMessage = false
