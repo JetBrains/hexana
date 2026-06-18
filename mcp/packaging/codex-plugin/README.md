@@ -7,6 +7,8 @@ This package is the Codex-facing wrapper for the standalone Hexana MCP runtime i
 - `.codex-plugin/plugin.json`: required Codex plugin manifest
 - `.mcp.json`: distributable MCP config that launches `./bin/hexana-mcp` with `cwd` set to the plugin root
 - `bin/hexana-mcp`: thin launcher that delegates to the bundled standalone server
+- `native/<platform>/hexana-mcp`: optional native executable in native-enabled packages
+- `server/`: bundled JVM standalone runtime used as fallback when no matching native executable is present
 - `LICENSE.txt`: JetBrains plugin license agreement
 - `THIRD-PARTY-NOTICES.md`: generated third-party dependency notices
 - `skills/wasm-inspector/`: bundled Codex skill plus `agents/openai.yaml` metadata
@@ -26,6 +28,15 @@ That task:
 - rewrites the installed `.mcp.json` to the absolute `plugins/hexana/bin/hexana-mcp` launcher path
 
 After running the task, restart Codex and install `Hexana` from the `Hexana Local` marketplace.
+
+Native-enabled assembly for the current host platform is available with:
+
+```bash
+./gradlew :mcp:assembleNativeMcpPackaging
+```
+
+The launcher uses `HEXANA_SERVER_BIN` when explicitly set, otherwise prefers `native/<platform>/hexana-mcp` when it is
+present, then falls back to `server/bin/server`.
 
 ## Notes from the current Codex docs
 

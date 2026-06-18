@@ -54,7 +54,15 @@ val jibAllowPublicBind = providers.gradleProperty("hexanaMcpAllowPublicBind")
 val standaloneInstallDir = project(":mcp:server").layout.buildDirectory.dir("install/server")
 val plainPackagingDir = layout.buildDirectory.dir("packaging-plain")
 val obfuscatedPackagingDir = layout.buildDirectory.dir("packaging")
+val nativePackagingDir = layout.buildDirectory.dir("packaging-native")
 val obfuscatedInstallDir = project(":mcp").layout.buildDirectory.dir("install/server-r8")
+val nativeServerExecutableName = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
+    "hexana-mcp.exe"
+} else {
+    "hexana-mcp"
+}
+val nativeHostPlatformName = currentNativePlatformName()
+val nativeServerExecutable = project(":mcp:server").layout.buildDirectory.file("native/nativeCompile/$nativeServerExecutableName")
 val publicMarketplaceDir = layout.projectDirectory.dir("out/teamcity/public-marketplace")
 val pluginLicenseFile = layout.projectDirectory.file("packaging/LICENSE.txt")
 val thirdPartyNoticesDir = layout.buildDirectory.dir("generated/third-party-notices")
@@ -231,8 +239,13 @@ fun registerPackagingSync(
     runtimeTask: Any,
     outputRootDir: Provider<Directory>,
     rewriteMcpJson: Boolean = false,
+    nativeExecutableFile: Provider<RegularFile>? = null,
+    nativeTask: Any? = null,
 ) = tasks.register<Sync>(taskName) {
     dependsOn(runtimeTask, generateThirdPartyNotices)
+    if (nativeExecutableFile != null) {
+        dependsOn(nativeTask ?: ":mcp:server:nativeCompile")
+    }
     from(layout.projectDirectory.dir("packaging/$packagingDirName")) {
         filesMatching(pluginManifestPath) {
             filter { line -> line.replace(GENERATED_VERSION_TOKEN, mcpServerVersion) }
@@ -248,6 +261,17 @@ fun registerPackagingSync(
     }
     from(generateThirdPartyNotices) {
         into("server")
+    }
+    if (nativeExecutableFile != null) {
+        from(nativeExecutableFile) {
+            into("native/$nativeHostPlatformName")
+            rename { nativeServerExecutableName }
+            filesMatching(nativeServerExecutableName) {
+                if (!nativeServerExecutableName.endsWith(".exe")) {
+                    permissions { unix("rwxr-xr-x") }
+                }
+            }
+        }
     }
     into(outputRootDir.map { it.dir(packagingDirName) })
     if (rewriteMcpJson) {
@@ -513,6 +537,29 @@ val assembleCodexPluginPackage = registerPackagingSync(
     outputRootDir = obfuscatedPackagingDir,
 )
 
+val assembleNativeClaudePluginPackage = registerPackagingSync(
+    taskName = "assembleNativeClaudePluginPackage",
+    packagingDirName = "claude-plugin",
+    pluginManifestPath = ".claude-plugin/plugin.json",
+    runtimeInstallDir = obfuscatedInstallDir,
+    runtimeTask = "installObfuscatedMcpServerRuntime",
+    outputRootDir = nativePackagingDir,
+    rewriteMcpJson = false,
+    nativeExecutableFile = nativeServerExecutable,
+    nativeTask = ":mcp:server:nativeCompile",
+)
+
+val assembleNativeCodexPluginPackage = registerPackagingSync(
+    taskName = "assembleNativeCodexPluginPackage",
+    packagingDirName = "codex-plugin",
+    pluginManifestPath = ".codex-plugin/plugin.json",
+    runtimeInstallDir = obfuscatedInstallDir,
+    runtimeTask = "installObfuscatedMcpServerRuntime",
+    outputRootDir = nativePackagingDir,
+    nativeExecutableFile = nativeServerExecutable,
+    nativeTask = ":mcp:server:nativeCompile",
+)
+
 tasks.register<Sync>("installRepoLocalClaudePlugin") {
     group = "distribution"
     description = "Install the assembled Claude plugin into the repo-local plugins/hexana path for /plugin testing."
@@ -575,7 +622,7 @@ fun registerPluginZip(
     description = "Zip the assembled $packagingDirName wrapper into mcp/build/distributions."
     dependsOn(assembleTaskName)
     from(packagingRootDir.map { it.dir(packagingDirName) }) {
-        filesMatching(listOf("bin/hexana-mcp", "server/bin/*")) {
+        filesMatching(listOf("bin/hexana-mcp", "server/bin/*", "native/**/hexana-mcp")) {
             if (!name.endsWith(".bat") && !name.endsWith(".cmd")) {
                 permissions { unix("rwxr-xr-x") }
             }
@@ -620,6 +667,24 @@ val zipCodexPlugin = registerPluginZip(
     archiveBaseNameValue = "hexana-codex-plugin",
 )
 
+val zipNativeClaudePlugin = registerPluginZip(
+    taskName = "zipNativeClaudePlugin",
+    assembleTaskName = "assembleNativeClaudePluginPackage",
+    packagingRootDir = nativePackagingDir,
+    packagingDirName = "claude-plugin",
+    archiveBaseNameValue = "hexana-claude-plugin-$nativeHostPlatformName",
+    distributionDirName = "distributions-native",
+)
+
+val zipNativeCodexPlugin = registerPluginZip(
+    taskName = "zipNativeCodexPlugin",
+    assembleTaskName = "assembleNativeCodexPluginPackage",
+    packagingRootDir = nativePackagingDir,
+    packagingDirName = "codex-plugin",
+    archiveBaseNameValue = "hexana-codex-plugin-$nativeHostPlatformName",
+    distributionDirName = "distributions-native",
+)
+
 tasks.register("assembleMcpPackagingPlain") {
     group = "distribution"
     description = "Assemble pre-R8 standalone, Claude, and Codex MCP wrapper layouts for smoke testing."
@@ -630,6 +695,12 @@ tasks.register("assembleMcpPackaging") {
     group = "distribution"
     description = "Assemble self-contained Claude and Codex MCP wrapper layouts under mcp/build/packaging and their distributable ZIPs."
     dependsOn(assembleClaudePluginPackage, assembleCodexPluginPackage, zipClaudePlugin, zipCodexPlugin, zipObfuscatedMcpServer)
+}
+
+tasks.register("assembleNativeMcpPackaging") {
+    group = "distribution"
+    description = "Assemble native-enabled Claude and Codex MCP wrapper layouts for the current host platform while keeping JVM fallback."
+    dependsOn(assembleNativeClaudePluginPackage, assembleNativeCodexPluginPackage, zipNativeClaudePlugin, zipNativeCodexPlugin)
 }
 
 tasks.register<Sync>("assemblePublicMarketplaceBundle") {
@@ -656,6 +727,12 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
     from(obfuscatedPackagingDir.map { it.dir("codex-plugin/server") }) {
         into("plugins/hexana/server")
         filesMatching("bin/server") {
+            permissions { unix("rwxr-xr-x") }
+        }
+    }
+    from(obfuscatedPackagingDir.map { it.dir("codex-plugin/native") }) {
+        into("plugins/hexana/native")
+        filesMatching("**/hexana-mcp") {
             permissions { unix("rwxr-xr-x") }
         }
     }
@@ -774,6 +851,7 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
             - `.codex-plugin/plugin.json`: Codex plugin manifest.
             - `.claude-plugin/mcp.json` and `.codex-plugin/mcp.json`: client-specific MCP server configuration.
             - `bin/hexana-mcp`: launcher used by the client plugin.
+            - `native/<platform>/hexana-mcp`: optional bundled native executable; the launcher prefers it when present.
             - `LICENSE.txt`: JetBrains plugin license agreement.
             - `THIRD-PARTY-NOTICES.md`: generated third-party dependency notices.
             - `server/`: bundled standalone Hexana MCP runtime.
@@ -824,6 +902,21 @@ fun parseRequiredBoolean(value: String): Boolean {
         "false" -> false
         else -> error("Expected boolean Gradle property value `true` or `false`, got: $value")
     }
+}
+
+fun currentNativePlatformName(): String {
+    val os = when {
+        System.getProperty("os.name").startsWith("Mac", ignoreCase = true) -> "macos"
+        System.getProperty("os.name").startsWith("Windows", ignoreCase = true) -> "windows"
+        System.getProperty("os.name").startsWith("Linux", ignoreCase = true) -> "linux"
+        else -> System.getProperty("os.name").lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-')
+    }
+    val arch = when (System.getProperty("os.arch").lowercase(Locale.ROOT)) {
+        "x86_64", "amd64" -> "x64"
+        "aarch64", "arm64" -> "aarch64"
+        else -> System.getProperty("os.arch").lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-')
+    }
+    return "$os-$arch"
 }
 
 fun String.isLoopbackHost(): Boolean {

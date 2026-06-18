@@ -19,6 +19,12 @@ Build pre-R8 wrapper outputs for comparison/smoke gates with:
 ./gradlew :mcp:assembleMcpPackagingPlain
 ```
 
+Build native-enabled wrapper outputs for the current host platform with:
+
+```bash
+./gradlew :mcp:assembleNativeMcpPackaging
+```
+
 Install the Codex plugin into the repo-local marketplace layout with:
 
 ```bash
@@ -31,6 +37,14 @@ This produces:
 mcp/build/packaging/claude-plugin/
 mcp/build/packaging/codex-plugin/
 mcp/build/distributions/
+```
+
+The native-enabled task produces outputs under:
+
+```text
+mcp/build/packaging-native/claude-plugin/
+mcp/build/packaging-native/codex-plugin/
+mcp/build/distributions-native/
 ```
 
 The pre-R8 task produces non-release smoke outputs under:
@@ -48,7 +62,10 @@ and for repo-local Codex testing:
 plugins/hexana/
 ```
 
-Each assembled wrapper includes its own bundled standalone runtime under `server/` and exposes `bin/hexana-mcp`.
+Each assembled wrapper includes its own bundled standalone JVM runtime under `server/` and exposes `bin/hexana-mcp`.
+Native-enabled wrappers also include `native/<os>-<arch>/hexana-mcp` for the current host platform. The launcher first
+uses `HEXANA_SERVER_BIN` when explicitly set, then prefers the bundled native executable matching the current platform,
+then falls back to `server/bin/server`.
 Release ZIPs must not contain build-machine absolute paths. The Claude package uses Claude's plugin-root variable, and
 the Codex package keeps its `.mcp.json` launcher path and working directory relative to the plugin root.
 
@@ -69,6 +86,12 @@ For ad hoc local testing, you can still override the launcher path explicitly:
 
 ```bash
 HEXANA_SERVER_BIN=/absolute/path/to/server/bin/server mcp/packaging/claude-plugin/bin/hexana-mcp version
+```
+
+When testing a native-enabled assembled package, run the wrapper from the assembled plugin root:
+
+```bash
+mcp/build/packaging-native/claude-plugin/bin/hexana-mcp version
 ```
 
 For Codex local plugin testing, run `./gradlew :mcp:installRepoLocalCodexPlugin`, restart Codex, and install
@@ -164,6 +187,7 @@ Public files allowlist:
 - `plugins/<plugin-name>/skills/**`
 - `plugins/<plugin-name>/mcp/**`
 - `plugins/<plugin-name>/bin/**`
+- `plugins/<plugin-name>/native/**`
 - `plugins/<plugin-name>/server/**`; jars inside this tree are allowed only under
   `plugins/<plugin-name>/server/lib/**` with `ALLOW_BUNDLED_JAR=true`
 

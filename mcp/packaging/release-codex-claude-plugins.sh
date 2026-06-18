@@ -570,6 +570,7 @@ sync_public_bundle() {
   sync_dir_if_present "plugins/$PLUGIN_NAME/skills"
   sync_dir_if_present "plugins/$PLUGIN_NAME/mcp"
   sync_dir_if_present "plugins/$PLUGIN_NAME/bin"
+  sync_dir_if_present "plugins/$PLUGIN_NAME/native"
   sync_dir_if_present "plugins/$PLUGIN_NAME/server"
 
   if [ "${#SYNCED_PATHS[@]}" -eq 0 ]; then
@@ -589,7 +590,7 @@ is_allowed_public_path() {
     "plugins/$PLUGIN_NAME/.claude-plugin/"*|"plugins/$PLUGIN_NAME/.codex-plugin/"*)
       return 0
       ;;
-    "plugins/$PLUGIN_NAME/skills/"*|"plugins/$PLUGIN_NAME/mcp/"*|"plugins/$PLUGIN_NAME/bin/"*|"plugins/$PLUGIN_NAME/server/"*)
+    "plugins/$PLUGIN_NAME/skills/"*|"plugins/$PLUGIN_NAME/mcp/"*|"plugins/$PLUGIN_NAME/bin/"*|"plugins/$PLUGIN_NAME/native/"*|"plugins/$PLUGIN_NAME/server/"*)
       return 0
       ;;
     *)
