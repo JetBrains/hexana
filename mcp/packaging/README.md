@@ -4,7 +4,7 @@ This directory contains client-specific wrapper templates for the standalone run
 
 Related documents:
 
-- [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) lists the JVM and native smoke gates for releases.
+- [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) lists the native release gates and JVM fallback compatibility checks.
 - [Hexana MCP Native Image Release Design](../../docs/superpowers/specs/2026-06-19-mcp-native-image-release-design.md)
   records the native package support policy and current limitations.
 
@@ -13,13 +13,13 @@ Source layouts:
 - `claude-plugin/`
 - `codex-plugin/`
 
-Build release wrapper outputs with R8-obfuscated Hexana runtime classes:
+Build JVM fallback wrapper outputs with R8-obfuscated Hexana runtime classes:
 
 ```bash
 ./gradlew :mcp:assembleMcpPackaging
 ```
 
-Build pre-R8 wrapper outputs for comparison/smoke gates with:
+Build pre-R8 JVM fallback wrapper outputs for comparison/smoke gates with:
 
 ```bash
 ./gradlew :mcp:assembleMcpPackagingPlain
@@ -139,12 +139,14 @@ smoke reliability. Native users can opt in explicitly with `--telemetry-enabled 
 ## Codex/Claude release automation
 
 `release-codex-claude-plugins.sh` owns the release mechanics for the Claude Code and Codex plugin wrappers. TeamCity
-should use it after the release build's snapshot dependencies have passed. The script:
+should use it after the release build's snapshot dependencies have passed. The release path is native-first by default:
+`INCLUDE_NATIVE_ARTIFACTS` defaults to `true`, so artifact collection fails early unless the native matrix ZIPs are
+available. The script:
 
-1. builds pre-R8 standalone, Claude, and Codex MCP packages,
-2. smoke-tests the pre-R8 standalone runtime plus Claude and Codex wrappers,
-3. builds R8-obfuscated release standalone, Claude, and Codex MCP packages,
-4. smoke-tests the R8-obfuscated standalone runtime plus Claude and Codex wrappers,
+1. builds pre-R8 JVM fallback standalone, Claude, and Codex MCP packages,
+2. smoke-tests the pre-R8 JVM fallback runtime plus Claude and Codex wrappers,
+3. builds R8-obfuscated JVM fallback standalone, Claude, and Codex MCP packages,
+4. smoke-tests the R8-obfuscated JVM fallback runtime plus Claude and Codex wrappers,
 5. runs the release artifact security check,
 6. validates the generated public marketplace bundle JSON files and native artifact policy,
 7. validates, commits, pushes, and creates or updates the public marketplace pull request,
@@ -168,8 +170,8 @@ versioned artifacts to `mcp/build/distributions-native/`:
 - `hexana-claude-plugin-<platform>-<version>.zip`: Claude wrapper with the native executable and JVM fallback.
 - `hexana-codex-plugin-<platform>-<version>.zip`: Codex wrapper with the native executable and JVM fallback.
 
-The release job should download all native matrix artifacts into one directory and set `INCLUDE_NATIVE_ARTIFACTS=true`
-before running `release-codex-claude-plugins.sh`. By default the script requires `macos-arm64 linux-x64 windows-x64`;
+The release job must download all native matrix artifacts into one directory before running
+`release-codex-claude-plugins.sh`. By default the script requires `macos-arm64 linux-x64 windows-x64`;
 override `NATIVE_RELEASE_PLATFORMS` only when intentionally changing the supported matrix. Unsupported platforms keep
 using the bundled JVM runtime through the wrapper fallback.
 
@@ -227,15 +229,16 @@ Optional environment variables:
   or noreply automation identity; do not use a personal email.
 - `ALLOW_BUNDLED_JAR`: defaults to `false`. When `true`, jars are allowed only under
   `plugins/<plugin-name>/server/lib/`.
-- `INCLUDE_NATIVE_ARTIFACTS`: defaults to `false`. When public `release.lock.json` advertises
-  `github-release-only` native artifacts, the release script requires this to be `true` and verifies every listed
-  native executable, Claude plugin, and Codex plugin ZIP is present before publishing.
+- `INCLUDE_NATIVE_ARTIFACTS`: defaults to `true`. Release publishing should keep the default so the script verifies
+  every listed native executable, Claude plugin, and Codex plugin ZIP is present before publishing. Set it to `false`
+  only for explicit JVM fallback diagnostics; public `release.lock.json` native policy still rejects publishing when
+  native artifacts are advertised.
 - `NATIVE_RELEASE_ARTIFACT_DIR`: defaults to `mcp/build/distributions-native`.
 - `NATIVE_RELEASE_PLATFORMS`: defaults to `macos-arm64 linux-x64 windows-x64`.
 - `VALIDATE_CLAUDE_CMD`: optional command run from the cloned public repo root.
 - `VALIDATE_CODEX_CMD`: optional command run from the cloned public repo root.
 - `SKIP_RELEASE_BUILD_AND_SMOKE`: defaults to `false`. TeamCity sets this to `true` only after it has already run the
-  visible pre-R8 and R8-obfuscated Gradle smoke steps in the same checkout.
+  visible pre-R8 and R8-obfuscated JVM fallback smoke steps plus the native matrix gates in the same build chain.
 
 Public files allowlist:
 

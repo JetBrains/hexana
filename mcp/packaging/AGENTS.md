@@ -24,9 +24,11 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
 
 ## Testing
 
-- Run `./gradlew :mcp:assembleMcpPackagingPlain :mcp:server:plainMcpPackagingSmoke` to verify the pre-R8 standalone
+- Run `./gradlew :mcp:assembleMcpPackagingPlain :mcp:server:plainMcpPackagingSmoke` to verify the pre-R8 JVM fallback
   runtime plus Claude and Codex wrappers.
-- Run `./gradlew :mcp:assembleMcpPackaging :mcp:server:obfuscatedMcpPackagingSmoke` before publishing release ZIPs.
+- Run `./gradlew :mcp:assembleMcpPackaging :mcp:server:obfuscatedMcpPackagingSmoke` to verify the R8-obfuscated JVM
+  fallback runtime plus Claude and Codex wrappers. These checks are compatibility gates; native matrix artifacts are
+  still required for release readiness.
 - For R8 rule or obfuscated-runtime layout changes, also run
   `./gradlew :mcp:server:obfuscatedMcpPackagingSmoke --rerun-tasks`.
 - Release ZIPs must pass `release-codex-claude-plugins.sh`'s artifact security check before any GitHub Release upload.

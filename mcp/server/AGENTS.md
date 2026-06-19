@@ -53,10 +53,11 @@ Read these files before making structural changes:
 - Add focused server tests in this module for tool argument handling and runtime behavior.
 - Use `src/integrationTest/kotlin` plus `./gradlew :mcp:server:integrationTest` for black-box process tests against the
   installed standalone distribution.
-- Release packaging has two explicit smoke gates:
+- Release packaging keeps two JVM fallback compatibility smoke gates:
   `./gradlew :mcp:assembleMcpPackagingPlain :mcp:server:plainMcpPackagingSmoke` for pre-R8 packages and
-  `./gradlew :mcp:assembleMcpPackaging :mcp:server:obfuscatedMcpPackagingSmoke` for R8-obfuscated release packages.
-  Both gates exercise the standalone runtime plus Claude and Codex wrappers.
+  `./gradlew :mcp:assembleMcpPackaging :mcp:server:obfuscatedMcpPackagingSmoke` for R8-obfuscated packages.
+  Both gates exercise the standalone runtime plus Claude and Codex wrappers, but native matrix artifacts are required
+  for release readiness.
 - The experimental GraalVM Native Image prototype is intentionally separate from JVM/R8 packaging. Use
   `./gradlew :mcp:server:nativeCompile` to build `build/native/nativeCompile/hexana-mcp`, and
   `./gradlew :mcp:server:nativeMcpVersionSmoke` to verify `hexana-mcp version` reports the exact

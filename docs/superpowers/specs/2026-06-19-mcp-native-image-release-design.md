@@ -42,9 +42,9 @@ durable repo-local record for the native MCP packaging decisions.
   networking and shutdown-hook behavior adds startup/runtime surface that can
   destabilize native smoke reliability. Native users can opt in explicitly with
   `--telemetry-enabled true` or `HEXANA_MCP_TELEMETRY_ENABLED=true`.
-- Public Claude/Codex release packages continue to use the R8-obfuscated JVM
-  runtime layout. Native artifacts are additive and are collected from platform
-  CI matrix outputs by the release script.
+- Public Claude/Codex packages continue to include the R8-obfuscated JVM
+  runtime layout as a fallback. Native artifacts are the release path and are
+  collected from platform CI matrix outputs by the release script.
 
 ## Release Artifacts
 
@@ -62,9 +62,9 @@ The task produces current-host artifacts in `mcp/build/distributions-native/`:
 
 The release job downloads every matrix leg's native artifacts into one directory
 and runs `mcp/packaging/release-codex-claude-plugins.sh` with
-`INCLUDE_NATIVE_ARTIFACTS=true`. The script requires all supported platforms by
-default and rejects missing native executable, Claude plugin, or Codex plugin
-ZIPs.
+`INCLUDE_NATIVE_ARTIFACTS=true`, which is the script default. The script requires
+all supported platforms by default and rejects missing native executable, Claude
+plugin, or Codex plugin ZIPs before publishing.
 
 ## Known Limitations
 

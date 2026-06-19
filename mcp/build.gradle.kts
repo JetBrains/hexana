@@ -709,13 +709,13 @@ val zipNativeMcpExecutable = tasks.register<Zip>("zipNativeMcpExecutable") {
 
 tasks.register("assembleMcpPackagingPlain") {
     group = "distribution"
-    description = "Assemble pre-R8 standalone, Claude, and Codex MCP wrapper layouts for smoke testing."
+    description = "Assemble pre-R8 JVM fallback standalone, Claude, and Codex MCP wrapper layouts for diagnostic smoke testing."
     dependsOn(":mcp:server:distZip", assemblePlainClaudePluginPackage, assemblePlainCodexPluginPackage, zipPlainClaudePlugin, zipPlainCodexPlugin)
 }
 
 tasks.register("assembleMcpPackaging") {
     group = "distribution"
-    description = "Assemble self-contained Claude and Codex MCP wrapper layouts under mcp/build/packaging and their distributable ZIPs."
+    description = "Assemble R8-obfuscated JVM fallback Claude and Codex MCP wrapper layouts; native matrix artifacts are required for release readiness."
     dependsOn(assembleClaudePluginPackage, assembleCodexPluginPackage, zipClaudePlugin, zipCodexPlugin, zipObfuscatedMcpServer)
 }
 
@@ -727,7 +727,7 @@ val assembleNativeMcpPackaging = tasks.register("assembleNativeMcpPackaging") {
 
 tasks.register("assembleNativeMcpReleaseArtifacts") {
     group = "distribution"
-    description = "Build and smoke-test current-host native MCP release artifacts for the platform CI matrix."
+    description = "Build and smoke-test mandatory current-host GraalVM Native Image MCP release artifacts for the platform CI matrix."
     dependsOn(
         ":mcp:server:nativeMcpVersionSmoke",
         ":mcp:server:nativeMcpStdioSmoke",

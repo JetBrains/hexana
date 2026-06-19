@@ -259,6 +259,54 @@ self_test_release_native_artifact_policy() {
   log "Native artifact policy self-test passed"
 }
 
+self_test_release_native_artifact_default() {
+  local temp_dir
+  local version="0.2.0"
+  local scan_status
+
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/hexana-native-artifact-default.XXXXXX")"
+  register_cleanup_dir "$temp_dir"
+  mkdir -p "$temp_dir/mcp/build/distributions" "$temp_dir/mcp/build/distributions-native"
+  touch \
+    "$temp_dir/mcp/build/distributions/server-$version.zip" \
+    "$temp_dir/mcp/build/distributions/hexana-claude-plugin-$version.zip" \
+    "$temp_dir/mcp/build/distributions/hexana-codex-plugin-$version.zip"
+
+  set +e
+  (
+    cd "$temp_dir"
+    unset INCLUDE_NATIVE_ARTIFACTS
+    PLUGIN_VERSION="$version"
+    INCLUDE_NATIVE_ARTIFACTS="$(to_bool "${INCLUDE_NATIVE_ARTIFACTS:-true}" "INCLUDE_NATIVE_ARTIFACTS")"
+    NATIVE_RELEASE_ARTIFACT_DIR="mcp/build/distributions-native"
+    NATIVE_RELEASE_PLATFORMS="macos-arm64"
+    collect_release_artifacts
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Native artifact default self-test did not require native artifacts by default"
+
+  touch \
+    "$temp_dir/mcp/build/distributions-native/hexana-mcp-native-macos-arm64-$version.zip" \
+    "$temp_dir/mcp/build/distributions-native/hexana-claude-plugin-macos-arm64-$version.zip" \
+    "$temp_dir/mcp/build/distributions-native/hexana-codex-plugin-macos-arm64-$version.zip"
+
+  (
+    cd "$temp_dir"
+    unset INCLUDE_NATIVE_ARTIFACTS
+    PLUGIN_VERSION="$version"
+    INCLUDE_NATIVE_ARTIFACTS="$(to_bool "${INCLUDE_NATIVE_ARTIFACTS:-true}" "INCLUDE_NATIVE_ARTIFACTS")"
+    NATIVE_RELEASE_ARTIFACT_DIR="mcp/build/distributions-native"
+    NATIVE_RELEASE_PLATFORMS="macos-arm64"
+    collect_release_artifacts
+    [ -f "mcp/out/teamcity/release/hexana-mcp-native-macos-arm64-$version.zip" ]
+    [ -f "mcp/out/teamcity/release/hexana-claude-plugin-macos-arm64-$version.zip" ]
+    [ -f "mcp/out/teamcity/release/hexana-codex-plugin-macos-arm64-$version.zip" ]
+  )
+
+  log "Native artifact default self-test passed"
+}
+
 publish_github_release() {
   require_public_github_text_file "GitHub release notes" "$release_notes"
 
@@ -1127,6 +1175,10 @@ main() {
     self_test_release_native_artifact_policy
     return
   fi
+  if [ "$(to_bool "${RELEASE_NATIVE_ARTIFACT_DEFAULT_SELF_TEST:-false}" "RELEASE_NATIVE_ARTIFACT_DEFAULT_SELF_TEST")" = "true" ]; then
+    self_test_release_native_artifact_default
+    return
+  fi
 
   require_tool "./gradlew"
   require_tool "gh"
@@ -1153,7 +1205,7 @@ main() {
   export AUTO_MERGE="$(to_bool "${AUTO_MERGE:-false}" "AUTO_MERGE")"
   export DRY_RUN="$(to_bool "${DRY_RUN:-false}" "DRY_RUN")"
   export ALLOW_BUNDLED_JAR="$(to_bool "${ALLOW_BUNDLED_JAR:-false}" "ALLOW_BUNDLED_JAR")"
-  export INCLUDE_NATIVE_ARTIFACTS="$(to_bool "${INCLUDE_NATIVE_ARTIFACTS:-false}" "INCLUDE_NATIVE_ARTIFACTS")"
+  export INCLUDE_NATIVE_ARTIFACTS="$(to_bool "${INCLUDE_NATIVE_ARTIFACTS:-true}" "INCLUDE_NATIVE_ARTIFACTS")"
   export NATIVE_RELEASE_ARTIFACT_DIR="${NATIVE_RELEASE_ARTIFACT_DIR:-mcp/build/distributions-native}"
   export NATIVE_RELEASE_PLATFORMS="${NATIVE_RELEASE_PLATFORMS:-macos-arm64 linux-x64 windows-x64}"
   PUBLIC_REPO_CLONE_DIR="${PUBLIC_REPO_CLONE_DIR:-}"

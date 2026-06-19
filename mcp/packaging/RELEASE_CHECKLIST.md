@@ -2,32 +2,6 @@
 
 Use this checklist for Claude and Codex MCP wrapper releases.
 
-## JVM Package Gates
-
-- Build and smoke-test pre-R8 packages:
-
-  ```bash
-  ./gradlew :mcp:assembleMcpPackagingPlain :mcp:server:plainMcpPackagingSmoke
-  ```
-
-- Build and smoke-test R8-obfuscated release packages:
-
-  ```bash
-  ./gradlew :mcp:assembleMcpPackaging :mcp:server:obfuscatedMcpPackagingSmoke
-  ```
-
-- If `mcp/packaging/release-codex-claude-plugins.sh` changed, run:
-
-  ```bash
-  bash -n mcp/packaging/release-codex-claude-plugins.sh
-  ```
-
-- Run the GitHub-facing text guard when release text or script validation changes:
-
-  ```bash
-  PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh
-  ```
-
 ## Native Matrix Gates
 
 Run each native matrix leg on a host with a GraalVM distribution that includes
@@ -61,15 +35,46 @@ Run the optional native HTTP smoke when qualifying HTTP support on a platform:
 HTTP smoke is intentionally separate from the native release artifact gate until
 it is proven across the matrix.
 
+## JVM Fallback Compatibility Checks
+
+- Build and smoke-test pre-R8 JVM fallback packages:
+
+  ```bash
+  ./gradlew :mcp:assembleMcpPackagingPlain :mcp:server:plainMcpPackagingSmoke
+  ```
+
+- Build and smoke-test R8-obfuscated JVM fallback packages:
+
+  ```bash
+  ./gradlew :mcp:assembleMcpPackaging :mcp:server:obfuscatedMcpPackagingSmoke
+  ```
+
+These checks keep the bundled `server/` fallback honest. They are not sufficient
+release readiness without the native matrix artifacts above.
+
+- If `mcp/packaging/release-codex-claude-plugins.sh` changed, run:
+
+  ```bash
+  bash -n mcp/packaging/release-codex-claude-plugins.sh
+  ```
+
+- Run the GitHub-facing text guard when release text or script validation changes:
+
+  ```bash
+  PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh
+  ```
+
 ## Release Script Inputs
 
 Before invoking `mcp/packaging/release-codex-claude-plugins.sh` for a
-native-enabled release:
+release:
 
 - Download the native matrix artifacts into `NATIVE_RELEASE_ARTIFACT_DIR`, or use
   the default `mcp/build/distributions-native` if the release job assembled them
   in the same checkout.
-- Set `INCLUDE_NATIVE_ARTIFACTS=true`.
+- Leave `INCLUDE_NATIVE_ARTIFACTS=true` at its default. Setting it to `false`
+  is only for explicit JVM fallback diagnostics and must not be used for
+  release publishing.
 - Keep `NATIVE_RELEASE_PLATFORMS` at the default
   `macos-arm64 linux-x64 windows-x64` unless the supported matrix is intentionally
   changing.
@@ -78,9 +83,9 @@ native-enabled release:
   collected into the release directory.
 - Ensure `PLUGIN_VERSION` matches `mcp/server/gradle.properties:mcpServerVersion`
   unless the release job intentionally overrides it.
-- Keep the JVM release gates visible in the same build chain. Set
-  `SKIP_RELEASE_BUILD_AND_SMOKE=true` only after those gates already passed in
-  the same checkout.
+- Keep the JVM fallback compatibility checks visible in the same build chain.
+  Set `SKIP_RELEASE_BUILD_AND_SMOKE=true` only after those checks and all native
+  matrix gates already passed in the same checkout/build chain.
 
 ## Artifact Checks
 
