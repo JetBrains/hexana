@@ -21,9 +21,9 @@ class HexanaToolsTest {
                 "list_required_proposals",
                 "diff_required_proposals",
                 "check_runtime_compatibility",
+                "check_component_compatibility",
                 "resolve_component_dependencies",
                 "list_component_surface",
-                "check_component_compatibility",
                 "plan_abi_binding_regeneration",
                 "check_memory_contract",
                 "audit_global_state_policy",
@@ -256,6 +256,20 @@ class HexanaToolsTest {
         assertEquals("resolved_dependency_paths", topLevelFields.getValue("resolvedDependencyPaths").serialName)
         assertEquals("rejected_candidates", topLevelFields.getValue("rejectedCandidates").serialName)
         assertEquals("minimal_run_build_fix", topLevelFields.getValue("minimalRunBuildFix").serialName)
+    }
+
+    @Test
+    fun `component compatibility output carries report-ready serial names`() {
+        val compatibilityOutput = HexanaTools.single { it.name == "check_component_compatibility" }.output
+        val topLevelFields = compatibilityOutput.fields.associateBy { it.name }
+        assertEquals("component_path", topLevelFields.getValue("componentPath").serialName)
+        assertEquals("previous_component_path", topLevelFields.getValue("previousComponentPath").serialName)
+        assertEquals("dependency_lock_path", topLevelFields.getValue("dependencyLockPathForReport").serialName)
+        assertEquals("failing_import", topLevelFields.getValue("failingImportForReport").serialName)
+        assertEquals("candidate_providers_inspected", topLevelFields.getValue("candidateProvidersInspected").serialName)
+        assertEquals("selected_incompatibility_reason", topLevelFields.getValue("selectedIncompatibilityReasonForReport").serialName)
+        assertEquals("provider_paths_involved", topLevelFields.getValue("providerPathsInvolvedForReport").serialName)
+        assertEquals("minimal_dependency_lock_fix", topLevelFields.getValue("minimalDependencyLockFixForReport").serialName)
     }
 
     @Test

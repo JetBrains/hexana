@@ -384,13 +384,55 @@ class ComponentAnalysisServiceTest {
         })
         assertTrue(result.providerPathsInvolved.any { it == "components/reporting_sink_legacy.component.wasm" })
         assertTrue(result.providerPathsInvolved.any { it.endsWith("reporting_sink_v2_wrong_shape.component.wasm") })
+        assertEquals("dist/components/reporting.component.wasm", result.componentPath)
+        assertEquals("previous_build/dist/components/reporting.component.wasm", result.previousComponentPath)
+        assertEquals("config/component-lock.json", result.dependencyLockPathForReport)
+        assertEquals("acme:reporting/sink@2.0.0", result.failingImportForReport?.importName)
+        assertEquals("acme:reporting/sink", result.failingImportForReport?.baseName)
+        assertEquals("2.0.0", result.failingImportForReport?.requiredVersion)
+        assertEquals("acme:reporting/sink@1.4.0", result.failingImportForReport?.previousImportName)
+        assertEquals("sort_mismatch", result.selectedIncompatibilityReasonForReport)
+        assertEquals(
+            listOf(
+                "components/reporting_sink_legacy.component.wasm",
+                "components/reporting_sink_v2_wrong_shape.component.wasm",
+            ),
+            result.providerPathsInvolvedForReport,
+        )
+        assertFalse(
+            result.providerPathsInvolvedForReport.any { it.contains("telemetry_sink") },
+            "Report-ready involved paths must not include unrelated telemetry providers",
+        )
+        assertTrue(result.candidateProvidersInspected.any {
+            it.dependencyPath == "components/reporting_sink_v2_wrong_shape.component.wasm" &&
+                it.exportName == "acme:reporting/sink@2.0.0" &&
+                it.verdict == "sort_mismatch"
+        })
+        assertTrue(result.candidateProvidersInspected.any {
+            it.dependencyPath == "third_party/components/telemetry_sink.component.wasm" &&
+                it.verdict == "wrong_interface"
+        })
+        assertFalse(
+            result.candidateProvidersInspected.any { it.dependencyPath == "previous_build/dist/components/reporting.component.wasm" },
+            "Previous component is drift context, not a provider candidate",
+        )
         assertEquals("config/component-lock.json", result.minimalDependencyLockFix?.dependencyLockPath)
         assertEquals("components/reporting_sink_legacy.component.wasm", result.minimalDependencyLockFix?.replaceProviderPath)
         assertEquals("acme:reporting/sink", result.minimalDependencyLockFix?.requiredInterface)
         assertEquals("2.0.0", result.minimalDependencyLockFix?.requiredVersion)
         assertEquals(wrongShape.toString(), result.minimalDependencyLockFix?.rejectProviderPath)
+        assertEquals(
+            "components/reporting_sink_legacy.component.wasm",
+            result.minimalDependencyLockFixForReport?.replaceProviderPath,
+        )
+        assertEquals(
+            "components/reporting_sink_v2_wrong_shape.component.wasm",
+            result.minimalDependencyLockFixForReport?.rejectProviderPath,
+        )
         assertTrue(result.minimalDependencyLockFix?.requiredShape.orEmpty().contains("Func export"))
+        assertTrue(result.evidence?.summary.orEmpty().contains("acme:reporting/sink@2.0.0"))
         assertTrue(result.recommendation.orEmpty().contains("config/component-lock.json"))
+        assertTrue(result.recommendation.orEmpty().contains("acme:reporting/sink@2.0.0"))
         assertTrue(result.summary.sortMismatchCount >= 1)
         assertTrue(result.summary.wrongInterfaceCount >= 1)
     }

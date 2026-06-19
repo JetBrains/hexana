@@ -74,13 +74,23 @@ class ToolDescriptionGenerationTest {
         )
         assertBoundaryPhrase(
             source,
-            "shape mismatches",
-            "check_component_compatibility should mention compatibility mismatch classes",
+            "Use this first for component compatibility drift, compose failure logs, provider candidate triage, and dependency lock/config repair",
+            "check_component_compatibility should be described as the compatibility drift workflow",
+        )
+        assertBoundaryPhrase(
+            source,
+            "Returns report-ready `failing_import`, `candidate_providers_inspected`, `provider_paths_involved`, `minimal_dependency_lock_fix`, `evidence`, and `recommendation` fields",
+            "check_component_compatibility should advertise report-ready compatibility fields",
         )
         assertBoundaryPhrase(
             source,
             "For component run/link failures, project-root scans, or dependency resolution across candidate component files, call `resolve_component_dependencies` instead",
             "list_component_surface should stay separate from resolution workflows",
+        )
+        assertBoundaryPhrase(
+            source,
+            "For previous/current component drift, compose failure logs, provider-candidate compatibility, or lock/config repair, call `check_component_compatibility` instead",
+            "list_component_surface should redirect compatibility drift workflows",
         )
         assertBoundaryPhrase(
             source,

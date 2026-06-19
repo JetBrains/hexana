@@ -179,7 +179,7 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
     val resolvedIndex = if (explicitProviders.isEmpty()) {
         ComponentScanIndex.scan(
             componentScanRoots(path, projectRoot, emptyList()),
-            excludedPaths = excludedComponentPaths(path, projectRoot),
+            excludedPaths = excludedComponentPaths(path, projectRoot) + excludedComponentPaths(previousPath, projectRoot),
         )
     } else {
         ComponentScanIndex(
@@ -204,6 +204,7 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
     val providerPathsInvolved = failingImport
         ?.let { involvedProviderPaths(it, selectedReason, lock.configuredProviders, candidateProviders) }
         .orEmpty()
+    val providerPathsInvolvedForReport = providerPathsInvolved.map { displayPath(it, projectRoot) }.distinct()
     val lockFix = failingImport?.let {
         buildDependencyLockFix(
             failingImport = it,
@@ -213,6 +214,14 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
             candidateProviders = candidateProviders,
         )
     }
+    val evidence = failingImport?.let {
+        buildCompatibilityEvidenceSummary(
+            failingImport = it,
+            previousImport = previousImport,
+            selectedReason = selectedReason,
+            candidateProviders = candidateProviders,
+        )
+    }?.let(::ComponentCompatibilityEvidenceResult)
     val issues = mutableListOf<ComponentCompatibilityIssueResult>()
     issues += resolved.unresolved.map {
         ComponentCompatibilityIssueResult(
@@ -281,8 +290,11 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
     val compatible = errorCount == 0 && versionDriftCount == 0
     return CheckComponentCompatibilityResult(
         path = path,
+        componentPath = path?.let { displayPath(it, projectRoot) },
         previousPath = previousPath,
+        previousComponentPath = previousPath?.let { displayPath(it, projectRoot) },
         dependencyLockPath = lock.label,
+        dependencyLockPathForReport = lock.label,
         compatible = compatible,
         matches = matches.map {
             ComponentCompatibilityMatchResult(
@@ -295,6 +307,7 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
         missingImports = missing.take(MAX_RESULT_ITEMS),
         issues = issues.take(MAX_RESULT_ITEMS),
         failingImport = failingImport?.toResult(previousImport),
+        failingImportForReport = failingImport?.toReportResult(previousImport),
         configuredProviders = lock.configuredProviders
             .map { it.toResult() }
             .take(MAX_RESULT_ITEMS),
@@ -302,10 +315,18 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
             .map { it.toResult() }
             .sortedBy { it.dependencyPath }
             .take(MAX_RESULT_ITEMS),
+        candidateProvidersInspected = candidateProviders
+            .map { it.toInspectedResult(projectRoot) }
+            .sortedBy { it.dependencyPath }
+            .take(MAX_RESULT_ITEMS),
         selectedIncompatibilityReason = selectedReason,
+        selectedIncompatibilityReasonForReport = selectedReason,
         providerPathsInvolved = providerPathsInvolved.take(MAX_RESULT_ITEMS),
+        providerPathsInvolvedForReport = providerPathsInvolvedForReport.take(MAX_RESULT_ITEMS),
         minimalDependencyLockFix = lockFix,
-        recommendation = lockFix?.recommendation(path),
+        minimalDependencyLockFixForReport = lockFix?.toReportResult(projectRoot),
+        evidence = evidence,
+        recommendation = lockFix?.recommendation(path, failingImport),
         summary = ComponentCompatibilitySummaryResult(
             compatible = compatible,
             matchedCount = matches.size,
@@ -537,6 +558,17 @@ private data class ProviderVerdict(
             externDescription = export.externDescription,
             verdict = verdict,
         )
+
+    fun toInspectedResult(projectRoot: String?): ComponentCandidateProviderInspectedResult =
+        ComponentCandidateProviderInspectedResult(
+            dependencyPath = displayPath(dependency.path.toString(), projectRoot),
+            exportName = export.fullName,
+            baseName = export.baseName,
+            version = export.version,
+            sort = export.sort,
+            externDescription = export.externDescription,
+            verdict = verdict,
+        )
 }
 
 private data class ResolveResult(
@@ -693,10 +725,22 @@ private fun buildDependencyLockFix(
     )
 }
 
-private fun ComponentDependencyLockFixResult.recommendation(componentPath: String?): String {
+private fun ComponentDependencyLockFixResult.toReportResult(projectRoot: String?): ComponentReportDependencyLockFixResult =
+    ComponentReportDependencyLockFixResult(
+        replaceProviderPath = replaceProviderPath?.let { displayPath(it, projectRoot) },
+        requiredInterface = requiredInterface,
+        requiredVersion = requiredVersion,
+        requiredShape = requiredShape,
+        rejectProviderPath = rejectProviderPath?.let { displayPath(it, projectRoot) },
+    )
+
+private fun ComponentDependencyLockFixResult.recommendation(
+    componentPath: String?,
+    failingImport: ComponentImportRef,
+): String {
     val target = dependencyLockPath ?: "the dependency lock/config"
     val component = componentPath ?: "the component"
-    val provider = if (requiredVersion.isBlank()) requiredInterface else "$requiredInterface@$requiredVersion"
+    val provider = failingImport.fullName
     return "Update $target to point at a rebuilt $provider provider with $requiredShape required by $component."
 }
 
@@ -714,6 +758,43 @@ private fun ComponentImportRef.toResult(
         previousVersion = previousImport?.version,
         changedSincePrevious = previousImport != null && previousImport.fullName != fullName,
     )
+
+private fun ComponentImportRef.toReportResult(
+    previousImport: ComponentImportRef?,
+): ComponentCompatibilityReportFailingImportResult =
+    ComponentCompatibilityReportFailingImportResult(
+        importName = fullName,
+        baseName = baseName,
+        requiredVersion = version,
+        previousImportName = previousImport?.fullName,
+        previousBaseName = previousImport?.baseName,
+        previousVersion = previousImport?.version,
+        changedSincePrevious = previousImport != null && previousImport.fullName != fullName,
+    )
+
+private fun buildCompatibilityEvidenceSummary(
+    failingImport: ComponentImportRef,
+    previousImport: ComponentImportRef?,
+    selectedReason: String?,
+    candidateProviders: List<ProviderVerdict>,
+): String {
+    val drift = previousImport
+        ?.takeIf { it.fullName != failingImport.fullName }
+        ?.let { " while the previous build imported ${it.fullName}" }
+        .orEmpty()
+    val sameInterface = candidateProviders.filter { it.export.matchKey == failingImport.matchKey }
+    val selected = sameInterface.firstOrNull { verdict ->
+        verdict.verdict == selectedReason &&
+            (failingImport.version.isBlank() || verdict.export.version == failingImport.version)
+    } ?: sameInterface.firstOrNull { it.verdict != "compatible" }
+    val providerEvidence = selected?.let {
+        val expected = expectedProviderShape(failingImport)
+        val actual = actualProviderShape(it.export)
+        " Candidate ${it.dependency.path} exports ${it.export.fullName} with $actual, but the import requires $expected."
+    } ?: " No compatible provider export was selected for the failing import."
+    val reason = selectedReason?.replace('_', ' ') ?: "compatibility failure"
+    return "The current component imports ${failingImport.fullName}$drift. The selected incompatibility is $reason.$providerEvidence"
+}
 
 private fun readPreviousImport(
     previousPath: String?,

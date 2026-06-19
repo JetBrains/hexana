@@ -496,6 +496,173 @@ public class HexanaToolset : McpToolsProvider {
   },
   object : McpTool {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
+      name = "check_component_compatibility",
+      description = """
+      |Compare current/previous component imports against provider candidates and lock/config files.
+      |Use this first for component compatibility drift, compose failure logs, provider candidate triage, and dependency lock/config repair.
+      |Compare current non-runtime imports with `dependencyPaths` or providers discovered from `projectRoot`, then use `previousPath` to explain import drift and `dependencyLockPath` to identify the configured provider to replace.
+      |Returns report-ready `failing_import`, `candidate_providers_inspected`, `provider_paths_involved`, `minimal_dependency_lock_fix`, `evidence`, and `recommendation` fields.
+      """.trimMargin(),
+      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.checkComponentCompatibility",
+      inputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path relative to the project root"))
+        })
+        put("dependencyPaths", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("array"))
+            add(JsonPrimitive("null"))
+          })
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+          put("description", JsonPrimitive("Optional explicit component dependency files. When omitted, `projectRoot` is scanned."))
+          put("maxItems", JsonPrimitive(64))
+        })
+        put("projectRoot", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Optional project root used for compatibility resolution when `dependencyPaths` is omitted."))
+        })
+        put("previousPath", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Optional previous component path used to explain import drift."))
+        })
+        put("dependencyLockPath", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Optional dependency lock/config JSON path used to report configured providers and lock fixes."))
+        })
+        put("projectPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
+        })
+      },
+      requiredProperties = setOf("path"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+      outputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("component_path", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("previous_component_path", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("dependency_lock_path", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("compatible", buildJsonObject {
+          put("type", JsonPrimitive("boolean"))
+        })
+        put("matches", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+        put("missingImports", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+        put("issues", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+        put("failing_import", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("object"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("configuredProviders", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+        put("candidate_providers_inspected", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+        put("selected_incompatibility_reason", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("provider_paths_involved", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+        })
+        put("minimal_dependency_lock_fix", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("object"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("evidence", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("object"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("recommendation", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("summary", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      },
+      requiredProperties = setOf("compatible", "matches", "missingImports", "issues", "configuredProviders", "candidate_providers_inspected", "provider_paths_involved", "summary"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+    )
+    override suspend fun call(args: JsonObject): McpToolCallResult {
+      val path = args.requireStringArgument("path")
+      val dependencyPaths = args.optionalStringListArgument("dependencyPaths")
+      val projectRoot = args.optionalStringArgument("projectRoot")
+      val previousPath = args.optionalStringArgument("previousPath")
+      val dependencyLockPath = args.optionalStringArgument("dependencyLockPath")
+      val file = requireWasmFile(path)
+      val provider = file.requireComponentWasmBinaryProvider()
+      val result = provider.checkComponentCompatibility(path = file.path, dependencyPaths = dependencyPaths.orEmpty(), projectRoot = projectRoot, previousPath = previousPath, dependencyLockPath = dependencyLockPath)
+      val text = encodeHexanaJson(result)
+      val structuredContent = encodeHexanaJsonElement(result).jsonObject
+      return McpToolCallResult.text(text, structuredContent)
+    }
+  },
+  object : McpTool {
+    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "resolve_component_dependencies",
       description = """
       |Resolve component run/link dependencies from a main component and candidate roots into report-ready fields.
@@ -630,6 +797,7 @@ public class HexanaToolset : McpToolsProvider {
       |Low-level component import/export listing; not for dependency/provider resolution.
       |Use this only for compact component-model surface inspection when provider selection is not needed.
       |For component run/link failures, project-root scans, or dependency resolution across candidate component files, call `resolve_component_dependencies` instead.
+      |For previous/current component drift, compose failure logs, provider-candidate compatibility, or lock/config repair, call `check_component_compatibility` instead.
       |This low-level surface view does not select providers, follow transitive imports, reject candidates, ignore runtime imports for dependency decisions, or compute compatibility verdicts.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.listComponentSurface",
@@ -683,167 +851,6 @@ public class HexanaToolset : McpToolsProvider {
       val file = requireWasmFile(path)
       val provider = file.requireComponentWasmBinaryProvider()
       val result = provider.readComponentSurface(pathLabel = path)
-      val text = encodeHexanaJson(result)
-      val structuredContent = encodeHexanaJsonElement(result).jsonObject
-      return McpToolCallResult.text(text, structuredContent)
-    }
-  },
-  object : McpTool {
-    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
-      name = "check_component_compatibility",
-      description = """
-      |Compute component-provider compatibility verdicts against explicit or resolved dependency exports.
-      |Compare non-runtime imports with `dependencyPaths` or with providers discovered from `projectRoot`.
-      |Reports matches, missing imports, version drift, ambiguity, and shape mismatches.
-      |Optional `previousPath` and `dependencyLockPath` add drift and minimal lock/config fix context.
-      """.trimMargin(),
-      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.checkComponentCompatibility",
-      inputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("path", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path relative to the project root"))
-        })
-        put("dependencyPaths", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("array"))
-            add(JsonPrimitive("null"))
-          })
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-          })
-          put("description", JsonPrimitive("Optional explicit component dependency files. When omitted, `projectRoot` is scanned."))
-          put("maxItems", JsonPrimitive(64))
-        })
-        put("projectRoot", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("string"))
-            add(JsonPrimitive("null"))
-          })
-          put("description", JsonPrimitive("Optional project root used for compatibility resolution when `dependencyPaths` is omitted."))
-        })
-        put("previousPath", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("string"))
-            add(JsonPrimitive("null"))
-          })
-          put("description", JsonPrimitive("Optional previous component path used to explain import drift."))
-        })
-        put("dependencyLockPath", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("string"))
-            add(JsonPrimitive("null"))
-          })
-          put("description", JsonPrimitive("Optional dependency lock/config JSON path used to report configured providers and lock fixes."))
-        })
-        put("projectPath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
-        })
-      },
-      requiredProperties = setOf("path"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-      outputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("path", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("string"))
-            add(JsonPrimitive("null"))
-          })
-        })
-        put("previousPath", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("string"))
-            add(JsonPrimitive("null"))
-          })
-        })
-        put("dependencyLockPath", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("string"))
-            add(JsonPrimitive("null"))
-          })
-        })
-        put("compatible", buildJsonObject {
-          put("type", JsonPrimitive("boolean"))
-        })
-        put("matches", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-          })
-        })
-        put("missingImports", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-          })
-        })
-        put("issues", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-          })
-        })
-        put("failingImport", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("object"))
-            add(JsonPrimitive("null"))
-          })
-        })
-        put("configuredProviders", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-          })
-        })
-        put("candidateProviders", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-          })
-        })
-        put("selectedIncompatibilityReason", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("string"))
-            add(JsonPrimitive("null"))
-          })
-        })
-        put("providerPathsInvolved", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-          })
-        })
-        put("minimalDependencyLockFix", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("object"))
-            add(JsonPrimitive("null"))
-          })
-        })
-        put("recommendation", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("string"))
-            add(JsonPrimitive("null"))
-          })
-        })
-        put("summary", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      },
-      requiredProperties = setOf("compatible", "matches", "missingImports", "issues", "configuredProviders", "candidateProviders", "providerPathsInvolved", "summary"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-    )
-    override suspend fun call(args: JsonObject): McpToolCallResult {
-      val path = args.requireStringArgument("path")
-      val dependencyPaths = args.optionalStringListArgument("dependencyPaths")
-      val projectRoot = args.optionalStringArgument("projectRoot")
-      val previousPath = args.optionalStringArgument("previousPath")
-      val dependencyLockPath = args.optionalStringArgument("dependencyLockPath")
-      val file = requireWasmFile(path)
-      val provider = file.requireComponentWasmBinaryProvider()
-      val result = provider.checkComponentCompatibility(path = file.path, dependencyPaths = dependencyPaths.orEmpty(), projectRoot = projectRoot, previousPath = previousPath, dependencyLockPath = dependencyLockPath)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)
@@ -1222,7 +1229,7 @@ public class HexanaToolset : McpToolsProvider {
       |List imported functions declared by a `.wasm` module.
       |List imported functions declared by a WebAssembly (.wasm) module.
       |This is the primary MCP tool for import inventories, link-mismatch analysis, and mapping direct host calls to imported functions.
-      |For WebAssembly component dependency/provider resolution, candidate component scans, transitive WIT imports, or component run/link fixes, use `resolve_component_dependencies` instead.
+      |For WebAssembly component compatibility drift, provider selection, candidate component scans, dependency lock repair, or component run/link fixes, use `check_component_compatibility` instead.
       |Do not use this low-level function-import inventory as the main workflow for selecting component dependency files.
       |Returns only function imports from the unified function index space, including the `funcidx` values needed to map direct `call` targets back to imports.
       |Each import includes structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
@@ -1275,7 +1282,7 @@ public class HexanaToolset : McpToolsProvider {
       |Includes exported functions, tables, memories, and globals; `kind` uses the standard tags 0=function, 1=table, 2=memory, 3=global.
       |This is the light name-and-kind view of exports.
       |Use this when you only need exported names, kinds, or raw external indices.
-      |For WebAssembly component dependency/provider resolution, candidate component scans, transitive WIT imports, or component run/link fixes, use `resolve_component_dependencies` instead.
+      |For WebAssembly component compatibility drift, provider selection, candidate component scans, dependency lock repair, or component run/link fixes, use `check_component_compatibility` instead.
       |Do not use this low-level export inventory as the main workflow for selecting component dependency files.
       |If you need function signatures or origins, skip directly to `list_exported_functions`.
       |For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not identify new or policy-allowed public globals.

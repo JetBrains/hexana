@@ -53,9 +53,9 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers, profile: Hex
   if (profile.includesTool("list_required_proposals")) registerListRequiredProposalsTool(handlers)
   if (profile.includesTool("diff_required_proposals")) registerDiffRequiredProposalsTool(handlers)
   if (profile.includesTool("check_runtime_compatibility")) registerCheckRuntimeCompatibilityTool(handlers)
+  if (profile.includesTool("check_component_compatibility")) registerCheckComponentCompatibilityTool(handlers)
   if (profile.includesTool("resolve_component_dependencies")) registerResolveComponentDependenciesTool(handlers)
   if (profile.includesTool("list_component_surface")) registerListComponentSurfaceTool(handlers)
-  if (profile.includesTool("check_component_compatibility")) registerCheckComponentCompatibilityTool(handlers)
   if (profile.includesTool("plan_abi_binding_regeneration")) registerPlanAbiBindingRegenerationTool(handlers)
   if (profile.includesTool("check_memory_contract")) registerCheckMemoryContractTool(handlers)
   if (profile.includesTool("audit_global_state_policy")) registerAuditGlobalStatePolicyTool(handlers)
@@ -602,6 +602,185 @@ private fun Server.registerCheckRuntimeCompatibilityTool(handlers: HexanaToolHan
   }
 }
 
+private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "check_component_compatibility",
+    description = """
+  |Compare current/previous component imports against provider candidates and lock/config files.
+  |Use this first for component compatibility drift, compose failure logs, provider candidate triage, and dependency lock/config repair.
+  |Compare current non-runtime imports with `dependencyPaths` or providers discovered from `projectRoot`, then use `previousPath` to explain import drift and `dependencyLockPath` to identify the configured provider to replace.
+  |Returns report-ready `failing_import`, `candidate_providers_inspected`, `provider_paths_involved`, `minimal_dependency_lock_fix`, `evidence`, and `recommendation` fields.
+  """.trimMargin(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("dependencyPaths", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Optional explicit component dependency files. When omitted, `projectRoot` is scanned."))
+        put("maxItems", JsonPrimitive(64))
+      })
+      put("projectRoot", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional project root used for compatibility resolution when `dependencyPaths` is omitted."))
+      })
+      put("previousPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional previous component path used to explain import drift."))
+      })
+      put("dependencyLockPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional dependency lock/config JSON path used to report configured providers and lock fixes."))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("component_path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("previous_component_path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("dependency_lock_path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("compatible", buildJsonObject {
+        put("type", JsonPrimitive("boolean"))
+      })
+      put("matches", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("missingImports", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("issues", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("failing_import", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("configuredProviders", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("candidate_providers_inspected", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("selected_incompatibility_reason", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("provider_paths_involved", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+      })
+      put("minimal_dependency_lock_fix", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("evidence", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("recommendation", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("summary", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+    },
+    required = listOf("compatible", "matches", "missingImports", "issues", "configuredProviders", "candidate_providers_inspected", "provider_paths_involved", "summary")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.checkComponentCompatibility(request.arguments)
+  }
+}
+
 private fun Server.registerResolveComponentDependenciesTool(handlers: HexanaToolHandlers) {
   addTool(tool = Tool(
     name = "resolve_component_dependencies",
@@ -752,6 +931,7 @@ private fun Server.registerListComponentSurfaceTool(handlers: HexanaToolHandlers
   |Low-level component import/export listing; not for dependency/provider resolution.
   |Use this only for compact component-model surface inspection when provider selection is not needed.
   |For component run/link failures, project-root scans, or dependency resolution across candidate component files, call `resolve_component_dependencies` instead.
+  |For previous/current component drift, compose failure logs, provider-candidate compatibility, or lock/config repair, call `check_component_compatibility` instead.
   |This low-level surface view does not select providers, follow transitive imports, reject candidates, ignore runtime imports for dependency decisions, or compute compatibility verdicts.
   """.trimMargin(),
     inputSchema = ToolSchema(
@@ -823,179 +1003,6 @@ private fun Server.registerListComponentSurfaceTool(handlers: HexanaToolHandlers
     ),
   ))  {
     request: CallToolRequest -> handlers.listComponentSurface(request.arguments)
-  }
-}
-
-private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolHandlers) {
-  addTool(tool = Tool(
-    name = "check_component_compatibility",
-    description = """
-  |Compute component-provider compatibility verdicts against explicit or resolved dependency exports.
-  |Compare non-runtime imports with `dependencyPaths` or with providers discovered from `projectRoot`.
-  |Reports matches, missing imports, version drift, ambiguity, and shape mismatches.
-  |Optional `previousPath` and `dependencyLockPath` add drift and minimal lock/config fix context.
-  """.trimMargin(),
-    inputSchema = ToolSchema(
-    properties = buildJsonObject {
-      put("path", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
-      })
-      put("bytesBase64", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
-        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
-      })
-      put("bytes", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("array"))
-          add(JsonPrimitive("null"))
-        })
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("integer"))
-          put("minimum", JsonPrimitive(0))
-          put("maximum", JsonPrimitive(255))
-        })
-        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
-        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
-      })
-      put("dependencyPaths", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("array"))
-          add(JsonPrimitive("null"))
-        })
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-        })
-        put("description", JsonPrimitive("Optional explicit component dependency files. When omitted, `projectRoot` is scanned."))
-        put("maxItems", JsonPrimitive(64))
-      })
-      put("projectRoot", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-        put("description", JsonPrimitive("Optional project root used for compatibility resolution when `dependencyPaths` is omitted."))
-      })
-      put("previousPath", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-        put("description", JsonPrimitive("Optional previous component path used to explain import drift."))
-      })
-      put("dependencyLockPath", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-        put("description", JsonPrimitive("Optional dependency lock/config JSON path used to report configured providers and lock fixes."))
-      })
-    },
-    required = listOf()
-  ),
-    outputSchema = ToolSchema(
-    properties = buildJsonObject {
-      put("path", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-      })
-      put("previousPath", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-      })
-      put("dependencyLockPath", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-      })
-      put("compatible", buildJsonObject {
-        put("type", JsonPrimitive("boolean"))
-      })
-      put("matches", buildJsonObject {
-        put("type", JsonPrimitive("array"))
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      })
-      put("missingImports", buildJsonObject {
-        put("type", JsonPrimitive("array"))
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      })
-      put("issues", buildJsonObject {
-        put("type", JsonPrimitive("array"))
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      })
-      put("failingImport", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("object"))
-          add(JsonPrimitive("null"))
-        })
-      })
-      put("configuredProviders", buildJsonObject {
-        put("type", JsonPrimitive("array"))
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      })
-      put("candidateProviders", buildJsonObject {
-        put("type", JsonPrimitive("array"))
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      })
-      put("selectedIncompatibilityReason", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-      })
-      put("providerPathsInvolved", buildJsonObject {
-        put("type", JsonPrimitive("array"))
-        put("items", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-        })
-      })
-      put("minimalDependencyLockFix", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("object"))
-          add(JsonPrimitive("null"))
-        })
-      })
-      put("recommendation", buildJsonObject {
-        put("type", buildJsonArray {
-          add(JsonPrimitive("string"))
-          add(JsonPrimitive("null"))
-        })
-      })
-      put("summary", buildJsonObject {
-        put("type", JsonPrimitive("object"))
-      })
-    },
-    required = listOf("compatible", "matches", "missingImports", "issues", "configuredProviders", "candidateProviders", "providerPathsInvolved", "summary")
-  ),
-    annotations = ToolAnnotations(
-      readOnlyHint = true,
-      destructiveHint = false,
-      idempotentHint = true,
-    ),
-  ))  {
-    request: CallToolRequest -> handlers.checkComponentCompatibility(request.arguments)
   }
 }
 
@@ -1421,7 +1428,7 @@ private fun Server.registerListImportsTool(handlers: HexanaToolHandlers) {
   |List imported functions declared by a `.wasm` module.
   |List imported functions declared by a WebAssembly (.wasm) module.
   |This is the primary MCP tool for import inventories, link-mismatch analysis, and mapping direct host calls to imported functions.
-  |For WebAssembly component dependency/provider resolution, candidate component scans, transitive WIT imports, or component run/link fixes, use `resolve_component_dependencies` instead.
+  |For WebAssembly component compatibility drift, provider selection, candidate component scans, dependency lock repair, or component run/link fixes, use `check_component_compatibility` instead.
   |Do not use this low-level function-import inventory as the main workflow for selecting component dependency files.
   |Returns only function imports from the unified function index space, including the `funcidx` values needed to map direct `call` targets back to imports.
   |Each import includes structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
@@ -1490,7 +1497,7 @@ private fun Server.registerListExportsTool(handlers: HexanaToolHandlers) {
   |Includes exported functions, tables, memories, and globals; `kind` uses the standard tags 0=function, 1=table, 2=memory, 3=global.
   |This is the light name-and-kind view of exports.
   |Use this when you only need exported names, kinds, or raw external indices.
-  |For WebAssembly component dependency/provider resolution, candidate component scans, transitive WIT imports, or component run/link fixes, use `resolve_component_dependencies` instead.
+  |For WebAssembly component compatibility drift, provider selection, candidate component scans, dependency lock repair, or component run/link fixes, use `check_component_compatibility` instead.
   |Do not use this low-level export inventory as the main workflow for selecting component dependency files.
   |If you need function signatures or origins, skip directly to `list_exported_functions`.
   |For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not identify new or policy-allowed public globals.

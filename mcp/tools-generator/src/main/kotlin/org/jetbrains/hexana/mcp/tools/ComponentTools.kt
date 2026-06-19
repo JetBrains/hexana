@@ -154,6 +154,16 @@ val ComponentCompatibilityFailingImportResultClass = class_("ComponentCompatibil
     boolean("changedSincePrevious").describe("True when the current import differs from the previous component import.")
 }
 
+val ComponentCompatibilityReportFailingImportResultClass = class_("ComponentCompatibilityReportFailingImportResult") {
+    string("importName").serialName("name").describe("Failing import name.")
+    string("baseName").serialName("base_name").describe("Failing import base name.")
+    string("requiredVersion").serialName("required_version").describe("Required version without `@`.")
+    nullable("previousImportName", of = string()).serialName("previous_import").describe("Previous matching import.")
+    nullable("previousBaseName", of = string()).serialName("previous_base_name").describe("Previous import base name.")
+    nullable("previousVersion", of = string()).serialName("previous_version").describe("Previous version without `@`.")
+    boolean("changedSincePrevious").serialName("changed_since_previous").describe("True when the current import differs from the previous component import.")
+}
+
 val ComponentConfiguredProviderResultClass = class_("ComponentConfiguredProviderResult") {
     string("interfaceName").describe("Provider interface/base name from dependency metadata.")
     string("version").describe("Configured provider version without `@`, or empty when absent.")
@@ -170,6 +180,16 @@ val ComponentProviderVerdictResultClass = class_("ComponentProviderVerdictResult
     string("verdict").describe("Provider verdict: `compatible`, `version_drift`, `sort_mismatch`, `extern_description_mismatch`, or `wrong_interface`.")
 }
 
+val ComponentCandidateProviderInspectedResultClass = class_("ComponentCandidateProviderInspectedResult") {
+    string("dependencyPath").serialName("path").describe("Provider component path.")
+    string("exportName").serialName("export").describe("Provider export name.")
+    string("baseName").serialName("base_name").describe("Provider export base name.")
+    string("version").describe("Provider export version.")
+    string("sort").describe("Provider export sort.")
+    nullable("externDescription", of = string()).serialName("extern_description").describe("Provider export shape.")
+    string("verdict").describe("Compatibility verdict.")
+}
+
 val ComponentDependencyLockFixResultClass = class_("ComponentDependencyLockFixResult") {
     nullable("dependencyLockPath", of = string()).describe("Dependency lock/config path to update when provided.")
     nullable("replaceProviderPath", of = string()).describe("Configured provider path that should be replaced when known.")
@@ -177,6 +197,18 @@ val ComponentDependencyLockFixResultClass = class_("ComponentDependencyLockFixRe
     string("requiredVersion").describe("Required provider version without `@`, or empty when absent.")
     string("requiredShape").describe("Required provider export shape.")
     nullable("rejectProviderPath", of = string()).describe("Candidate provider path that has the wrong version or shape when known.")
+}
+
+val ComponentReportDependencyLockFixResultClass = class_("ComponentReportDependencyLockFixResult") {
+    nullable("replaceProviderPath", of = string()).serialName("replace_provider_path").describe("Configured provider path to replace.")
+    string("requiredInterface").serialName("required_interface").describe("Required provider interface.")
+    string("requiredVersion").serialName("required_version").describe("Required provider version.")
+    string("requiredShape").serialName("required_shape").describe("Required provider shape.")
+    nullable("rejectProviderPath", of = string()).serialName("reject_provider_path").describe("Rejected wrong-version or wrong-shape provider.")
+}
+
+val ComponentCompatibilityEvidenceResultClass = class_("ComponentCompatibilityEvidenceResult") {
+    string("summary").describe("Prose summary of the failing import and provider evidence.")
 }
 
 val ComponentCompatibilitySummaryResultClass = class_("ComponentCompatibilitySummaryResult") {
@@ -195,19 +227,20 @@ val CheckComponentCompatibilityResultClass = class_(
     "CheckComponentCompatibilityResult",
     kotlinPackage = COMPONENT_MODEL_PACKAGE,
 ) {
-    nullable("path", of = string()).describe("Input path label when the caller provided `path`.")
-    nullable("previousPath", of = string()).describe("Previous component path label when provided.")
-    nullable("dependencyLockPath", of = string()).describe("Dependency lock/config path label when provided.")
+    nullable("componentPath", of = string()).serialName("component_path").describe("Current component path.")
+    nullable("previousComponentPath", of = string()).serialName("previous_component_path").describe("Previous component path.")
+    nullable("dependencyLockPathForReport", of = string()).serialName("dependency_lock_path").describe("Dependency lock/config path.")
     boolean("compatible").describe("True when no compatibility errors were found.")
     list("matches", of = ComponentCompatibilityMatchResultClass).describe("Matched imports and provider files.")
     list("missingImports", of = ComponentUnresolvedImportResultClass).describe("Required imports without a provider.")
     list("issues", of = ComponentCompatibilityIssueResultClass).describe("Compatibility issues and warnings.")
-    nullable("failingImport", of = ComponentCompatibilityFailingImportResultClass).describe("Selected root failing import with previous-build drift context.")
+    nullable("failingImportForReport", of = ComponentCompatibilityReportFailingImportResultClass).serialName("failing_import").describe("Report-ready failing import.")
     list("configuredProviders", of = ComponentConfiguredProviderResultClass).describe("Provider entries read from optional dependency metadata.")
-    list("candidateProviders", of = ComponentProviderVerdictResultClass).describe("Provider candidates inspected with compatibility verdicts.")
-    nullable("selectedIncompatibilityReason", of = string()).describe("Selected root incompatibility reason when one is present.")
-    list("providerPathsInvolved", of = string()).describe("Provider paths relevant to the selected fix.")
-    nullable("minimalDependencyLockFix", of = ComponentDependencyLockFixResultClass).describe("Minimal dependency lock/config fix when enough context is available.")
+    list("candidateProvidersInspected", of = ComponentCandidateProviderInspectedResultClass).serialName("candidate_providers_inspected").describe("Report-ready provider verdicts.")
+    nullable("selectedIncompatibilityReasonForReport", of = string()).serialName("selected_incompatibility_reason").describe("Report-ready incompatibility reason.")
+    list("providerPathsInvolvedForReport", of = string()).serialName("provider_paths_involved").describe("Report-ready provider paths for the fix.")
+    nullable("minimalDependencyLockFixForReport", of = ComponentReportDependencyLockFixResultClass).serialName("minimal_dependency_lock_fix").describe("Report-ready lock/config fix.")
+    nullable("evidence", of = ComponentCompatibilityEvidenceResultClass).describe("Report-ready evidence summary.")
     nullable("recommendation", of = string()).describe("Concise production-oriented remediation recommendation when available.")
     embed("summary", of = ComponentCompatibilitySummaryResultClass).describe("Compact compatibility counts.")
 }
@@ -238,6 +271,7 @@ internal val ComponentTools: List<ToolSpec> = tools {
         guidance = """
             Use this only for compact component-model surface inspection when provider selection is not needed.
             For component run/link failures, project-root scans, or dependency resolution across candidate component files, call `resolve_component_dependencies` instead.
+            For previous/current component drift, compose failure logs, provider-candidate compatibility, or lock/config repair, call `check_component_compatibility` instead.
             This low-level surface view does not select providers, follow transitive imports, reject candidates, ignore runtime imports for dependency decisions, or compute compatibility verdicts.
         """
         input = WasmInputClass
@@ -262,11 +296,11 @@ internal val ComponentTools: List<ToolSpec> = tools {
     }
 
     tool("check_component_compatibility") {
-        summary = "Compute component-provider compatibility verdicts against explicit or resolved dependency exports."
+        summary = "Compare current/previous component imports against provider candidates and lock/config files."
         guidance = """
-            Compare non-runtime imports with `dependencyPaths` or with providers discovered from `projectRoot`.
-            Reports matches, missing imports, version drift, ambiguity, and shape mismatches.
-            Optional `previousPath` and `dependencyLockPath` add drift and minimal lock/config fix context.
+            Use this first for component compatibility drift, compose failure logs, provider candidate triage, and dependency lock/config repair.
+            Compare current non-runtime imports with `dependencyPaths` or providers discovered from `projectRoot`, then use `previousPath` to explain import drift and `dependencyLockPath` to identify the configured provider to replace.
+            Returns report-ready `failing_import`, `candidate_providers_inspected`, `provider_paths_involved`, `minimal_dependency_lock_fix`, `evidence`, and `recommendation` fields.
         """
         input = ComponentCompatibilityInputClass
         inputPattern = ToolInputPattern.ComponentCompatibility

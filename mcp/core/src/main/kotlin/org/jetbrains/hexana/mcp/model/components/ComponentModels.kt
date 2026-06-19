@@ -170,6 +170,24 @@ data class ComponentCompatibilityFailingImportResult(
 )
 
 @Serializable
+data class ComponentCompatibilityReportFailingImportResult(
+    @SerialName("name")
+    val importName: String,
+    @SerialName("base_name")
+    val baseName: String,
+    @SerialName("required_version")
+    val requiredVersion: String,
+    @SerialName("previous_import")
+    val previousImportName: String?,
+    @SerialName("previous_base_name")
+    val previousBaseName: String?,
+    @SerialName("previous_version")
+    val previousVersion: String?,
+    @SerialName("changed_since_previous")
+    val changedSincePrevious: Boolean,
+)
+
+@Serializable
 data class ComponentConfiguredProviderResult(
     val interfaceName: String,
     val version: String,
@@ -188,6 +206,21 @@ data class ComponentProviderVerdictResult(
 )
 
 @Serializable
+data class ComponentCandidateProviderInspectedResult(
+    @SerialName("path")
+    val dependencyPath: String,
+    @SerialName("export")
+    val exportName: String,
+    @SerialName("base_name")
+    val baseName: String,
+    val version: String,
+    val sort: String,
+    @SerialName("extern_description")
+    val externDescription: String?,
+    val verdict: String,
+)
+
+@Serializable
 data class ComponentDependencyLockFixResult(
     val dependencyLockPath: String?,
     val replaceProviderPath: String?,
@@ -195,6 +228,25 @@ data class ComponentDependencyLockFixResult(
     val requiredVersion: String,
     val requiredShape: String,
     val rejectProviderPath: String?,
+)
+
+@Serializable
+data class ComponentReportDependencyLockFixResult(
+    @SerialName("replace_provider_path")
+    val replaceProviderPath: String?,
+    @SerialName("required_interface")
+    val requiredInterface: String,
+    @SerialName("required_version")
+    val requiredVersion: String,
+    @SerialName("required_shape")
+    val requiredShape: String,
+    @SerialName("reject_provider_path")
+    val rejectProviderPath: String?,
+)
+
+@Serializable
+data class ComponentCompatibilityEvidenceResult(
+    val summary: String,
 )
 
 @Serializable
@@ -213,18 +265,35 @@ data class ComponentCompatibilitySummaryResult(
 @Serializable
 data class CheckComponentCompatibilityResult(
     val path: String?,
+    @SerialName("component_path")
+    val componentPath: String?,
     val previousPath: String?,
+    @SerialName("previous_component_path")
+    val previousComponentPath: String?,
     val dependencyLockPath: String?,
+    @SerialName("dependency_lock_path")
+    val dependencyLockPathForReport: String?,
     val compatible: Boolean,
     val matches: List<ComponentCompatibilityMatchResult>,
     val missingImports: List<ComponentUnresolvedImportResult>,
     val issues: List<ComponentCompatibilityIssueResult>,
     val failingImport: ComponentCompatibilityFailingImportResult?,
+    @SerialName("failing_import")
+    val failingImportForReport: ComponentCompatibilityReportFailingImportResult?,
     val configuredProviders: List<ComponentConfiguredProviderResult>,
     val candidateProviders: List<ComponentProviderVerdictResult>,
+    @SerialName("candidate_providers_inspected")
+    val candidateProvidersInspected: List<ComponentCandidateProviderInspectedResult>,
     val selectedIncompatibilityReason: String?,
+    @SerialName("selected_incompatibility_reason")
+    val selectedIncompatibilityReasonForReport: String?,
     val providerPathsInvolved: List<String>,
+    @SerialName("provider_paths_involved")
+    val providerPathsInvolvedForReport: List<String>,
     val minimalDependencyLockFix: ComponentDependencyLockFixResult?,
+    @SerialName("minimal_dependency_lock_fix")
+    val minimalDependencyLockFixForReport: ComponentReportDependencyLockFixResult?,
+    val evidence: ComponentCompatibilityEvidenceResult?,
     val recommendation: String?,
     val summary: ComponentCompatibilitySummaryResult,
 )

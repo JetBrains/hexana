@@ -45,7 +45,6 @@ class HexanaMcpServerSchemaTest {
                 "disassemble_function",
                 "get_entrypoint_policy",
                 "get_function_call_graph",
-                "list_component_surface",
                 "list_data_segments",
                 "list_element_segments",
                 "list_enabled_features",
@@ -57,7 +56,6 @@ class HexanaMcpServerSchemaTest {
                 "list_memory",
                 "list_required_proposals",
                 "plan_abi_binding_regeneration",
-                "resolve_component_dependencies",
                 "resolve_function_signature",
                 "resolve_function_symbols",
                 "resolve_source_locations",
@@ -127,8 +125,7 @@ class HexanaMcpServerSchemaTest {
 
         assertBefore(names, "plan_abi_binding_regeneration", "list_exports")
         assertBefore(names, "check_memory_contract", "list_memory")
-        assertBefore(names, "resolve_component_dependencies", "list_component_surface")
-        assertBefore(names, "resolve_component_dependencies", "list_imports")
+        assertBefore(names, "check_component_compatibility", "list_imports")
         assertBefore(names, "check_component_compatibility", "list_exports")
         assertBefore(names, "audit_global_state_policy", "list_globals")
         assertBefore(names, "audit_global_state_policy", "list_exports")
