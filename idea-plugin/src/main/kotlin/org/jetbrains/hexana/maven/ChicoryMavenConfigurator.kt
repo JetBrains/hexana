@@ -5,9 +5,9 @@ import com.intellij.openapi.vfs.VfsUtil
 import org.jetbrains.idea.maven.importing.MavenAfterImportConfigurator
 import org.jetbrains.idea.maven.model.MavenPlugin
 import org.jetbrains.idea.maven.project.MavenProject
-import org.jetbrains.hexana.javaLang.ChicoryAotConfig
-import org.jetbrains.hexana.javaLang.ChicoryAotRegistry
-import org.jetbrains.hexana.javaLang.ConfigSource
+import org.jetbrains.hexana.chicory.ChicoryAotConfig
+import org.jetbrains.hexana.chicory.ChicoryAotRegistry
+import org.jetbrains.hexana.chicory.ConfigSource
 import org.jdom.Element
 
 private val LOG = logger<ChicoryMavenConfigurator>()

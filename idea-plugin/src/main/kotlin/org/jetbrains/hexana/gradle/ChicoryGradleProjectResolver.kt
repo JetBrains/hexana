@@ -7,9 +7,9 @@ import com.intellij.openapi.externalSystem.model.project.ProjectData
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import org.gradle.tooling.model.idea.IdeaProject
-import org.jetbrains.hexana.javaLang.ChicoryAotConfig
-import org.jetbrains.hexana.javaLang.ChicoryAotRegistry
-import org.jetbrains.hexana.javaLang.ConfigSource
+import org.jetbrains.hexana.chicory.ChicoryAotConfig
+import org.jetbrains.hexana.chicory.ChicoryAotRegistry
+import org.jetbrains.hexana.chicory.ConfigSource
 import org.jetbrains.plugins.gradle.service.project.AbstractProjectResolverExtension
 import java.io.File
 

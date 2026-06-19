@@ -16,6 +16,10 @@ import com.intellij.psi.SyntaxTraverser
 import com.intellij.psi.util.contextOfType
 import com.intellij.psi.util.descendantsOfType
 import org.jetbrains.hexana.shared.looksLikeWitInterfaceExport
+import org.jetbrains.hexana.wasmcache.ComponentWasmData
+import org.jetbrains.hexana.wasmcache.CoreWasmData
+import org.jetbrains.hexana.wasmcache.ParsedWasmData
+import org.jetbrains.hexana.wasmcache.WasmBinaryDataCacheService
 import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.hexana.wasm.sections.*
 

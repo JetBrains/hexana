@@ -57,6 +57,15 @@
 
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
+    <extensionPoints>
+        <!-- Seam for "navigate from a WASM/JIT symbol to Java/Kotlin source or bytecode".
+             The implementation requires com.intellij.java PSI, so it is contributed only by the
+             Java-gated config (org.jetbrains.hexana.java.xml). Core no-ops when absent. -->
+        <extensionPoint name="symbolNavigator"
+                        interface="org.jetbrains.hexana.navigation.SymbolNavigator"
+                        dynamic="true"/>
+    </extensionPoints>
+
     <extensions defaultExtensionNs="com.intellij">
         <!-- Disassembly view tunables. Toggle live via
              Help → Find Action → Registry... → search "hexana.disassembly".
@@ -249,14 +258,6 @@
         <programRunner implementation="org.jetbrains.hexana.run.WasmDebugRunner"/>
         <programRunner implementation="org.jetbrains.hexana.run.CdpDebugRunner"/>
         <xdebugger.breakpointType implementation="org.jetbrains.hexana.run.WasmLineBreakpointType"/>
-
-        <!--
-            Optional "JIT Viewer" tab on every Java-based run configuration.
-            When enabled, appends -agentpath:<libjitview> so the agent
-            records JIT-compiled methods into mem.userDump in the run's
-            working directory.
-        -->
-        <runConfigurationExtension implementation="org.jetbrains.hexana.jit.JitviewRunConfigurationExtension"/>
 
     </extensions>
 

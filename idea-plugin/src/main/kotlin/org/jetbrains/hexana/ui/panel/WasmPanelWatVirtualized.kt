@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.io.encoding.Base64
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.navigation.SymbolNavigator
 import org.jetbrains.hexana.document.EditableBinaryDocument
 import org.jetbrains.hexana.document.binaryDocumentOf
 import org.jetbrains.hexana.document.format.BinaryChunk
@@ -943,8 +944,9 @@ private fun ChunkRow(
 
 /**
  * Small clickable "Java" pill shown inline on a GraalVM Web Image function's
- * header row. Click navigates to the resolved Java method's bytecode via
- * [GraalSymbolNavigator]. The tooltip shows the demangled Java signature.
+ * header row. Click navigates to the resolved Java method's bytecode via the
+ * [SymbolNavigator] extension point (no-op when the Java plugin is absent). The tooltip
+ * shows the demangled Java signature.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -958,7 +960,7 @@ private fun GraalJavaBadge(symbol: GraalJavaSymbol, project: Project) {
             modifier = Modifier
                 .padding(start = 8.dp)
                 .background(badgeBg, RoundedCornerShape(4.dp))
-                .clickable { GraalSymbolNavigator.navigateToBytecode(project, symbol) }
+                .clickable { SymbolNavigator.getInstance()?.navigateToGraalSymbol(project, symbol) }
                 .padding(horizontal = 6.dp, vertical = 1.dp),
         )
     }
@@ -966,7 +968,7 @@ private fun GraalJavaBadge(symbol: GraalJavaSymbol, project: Project) {
 
 /**
  * Small clickable "Kotlin/Wasm" pill shown inline on a Kotlin/Wasm function's header row. Click
- * navigates to the resolved Kotlin source declaration via [KotlinSourceNavigator]; the tooltip
+ * navigates to the resolved Kotlin source declaration via the [SymbolNavigator] EP; the tooltip
  * shows the structured Kotlin symbol. Uses the Kotlin brand purple to distinguish it from the
  * Web Image "Java" badge.
  */
@@ -982,7 +984,7 @@ private fun KotlinWasmBadge(symbol: KotlinWasmSymbol, project: Project) {
             modifier = Modifier
                 .padding(start = 8.dp)
                 .background(badgeBg, RoundedCornerShape(4.dp))
-                .clickable { KotlinSourceNavigator.navigateToSource(project, symbol) }
+                .clickable { SymbolNavigator.getInstance()?.navigateToKotlinSymbol(project, symbol) }
                 .padding(horizontal = 6.dp, vertical = 1.dp),
         )
     }

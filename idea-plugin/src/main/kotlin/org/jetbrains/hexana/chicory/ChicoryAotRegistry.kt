@@ -1,4 +1,4 @@
-package org.jetbrains.hexana.javaLang
+package org.jetbrains.hexana.chicory
 
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service

@@ -1,8 +1,10 @@
 <idea-plugin>
     <extensions defaultExtensionNs="com.intellij">
         <fileBasedIndex implementation="org.jetbrains.hexana.javaLang.JavaWasmReferenceIndex"/>
-        <projectService serviceImplementation="org.jetbrains.hexana.javaLang.ChicoryAotRegistryImpl"
-                        serviceInterface="org.jetbrains.hexana.javaLang.ChicoryAotRegistry"/>
+        <!-- JIT Viewer agent injection on Java-based run configs. Lives here (Java-gated)
+             because RunConfigurationExtension is provided by com.intellij.java, not the base
+             platform — registering it in core plugin.xml crashes non-IDEA IDEs at startup. -->
+        <runConfigurationExtension implementation="org.jetbrains.hexana.jit.JitviewRunConfigurationExtension"/>
         <completion.contributor language="JAVA"
                                 implementationClass="org.jetbrains.hexana.javaLang.GraalWasmJavaCompletionContributor"
                                 order="first"/>
@@ -37,5 +39,10 @@
                          enabledByDefault="true"
                          level="WARNING"
                          implementationClass="org.jetbrains.hexana.javaLang.WasmExportArgTypeInspection"/>
+    </extensions>
+    <!-- Java-PSI-backed implementation of the core SymbolNavigator EP (Graal/Kotlin/JIT-inline
+         "go to source/bytecode"). Loads only where com.intellij.modules.java is present. -->
+    <extensions defaultExtensionNs="org.jetbrains.hexana">
+        <symbolNavigator implementation="org.jetbrains.hexana.javaLang.JavaSymbolNavigator"/>
     </extensions>
 </idea-plugin>

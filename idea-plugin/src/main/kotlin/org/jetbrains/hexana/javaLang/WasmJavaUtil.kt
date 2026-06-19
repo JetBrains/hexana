@@ -8,8 +8,8 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.*
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.hexana.javascript.CoreWasmData
-import org.jetbrains.hexana.javascript.WasmBinaryDataCacheService
+import org.jetbrains.hexana.wasmcache.CoreWasmData
+import org.jetbrains.hexana.wasmcache.WasmBinaryDataCacheService
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType

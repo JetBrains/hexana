@@ -3,8 +3,8 @@ package org.jetbrains.hexana.maven
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
-import org.jetbrains.hexana.javaLang.ChicoryAotRegistry
-import org.jetbrains.hexana.javaLang.ConfigSource
+import org.jetbrains.hexana.chicory.ChicoryAotRegistry
+import org.jetbrains.hexana.chicory.ConfigSource
 import org.jetbrains.idea.maven.project.MavenProjectsManager
 
 private val LOG = logger<ChicoryMavenStartupActivity>()

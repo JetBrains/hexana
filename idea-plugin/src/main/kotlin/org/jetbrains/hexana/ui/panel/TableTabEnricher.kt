@@ -7,6 +7,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.HexanaBinaryVirtualFile
+import org.jetbrains.hexana.navigation.SymbolNavigator
 import org.jetbrains.hexana.providers.FatMachOBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
@@ -234,7 +235,7 @@ private fun enrichWasmFunctionsTab(
             },
             action = { index ->
                 val symbol = provider.graalSymbolFor(importFuncCount + index) ?: return@RowActionDescriptor
-                if (!symbol.isSynthetic) GraalSymbolNavigator.navigateToBytecode(project, symbol)
+                if (!symbol.isSynthetic) SymbolNavigator.getInstance()?.navigateToGraalSymbol(project, symbol)
             },
         )
     } else null
@@ -250,7 +251,7 @@ private fun enrichWasmFunctionsTab(
             },
             action = { index ->
                 val symbol = provider.kotlinSymbolFor(importFuncCount + index) ?: return@RowActionDescriptor
-                KotlinSourceNavigator.navigateToSource(project, symbol)
+                SymbolNavigator.getInstance()?.navigateToKotlinSymbol(project, symbol)
             },
         )
     } else null

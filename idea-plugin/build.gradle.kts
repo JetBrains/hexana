@@ -75,8 +75,16 @@ dependencies {
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Plugin.JavaScript)
         testBundledPlugins("JavaScript", "com.intellij.css", "com.intellij.modules.json")
 
-        bundledPlugins("com.intellij.mcpServer", "JavaScript", "com.intellij.java",
-            "org.jetbrains.idea.maven", "com.intellij.gradle")
+        bundledPlugins("com.intellij.mcpServer")
+        // Java / Maven / Gradle / JavaScript ship only in IntelliJ IDEA. Other IDEs (CLion,
+        // RustRover via -PtestIdeType) don't bundle them, and `bundledPlugins` has no
+        // "optional" form — requesting them there fails intellijPlatformRuntimeClasspath
+        // resolution. The matching integration sources are excluded from compilation below,
+        // and plugin.xml keeps these as optional <depends> so the plugin still loads without
+        // them. com.intellij.java is only a transitive prerequisite of the Maven/Gradle plugins.
+        if (defaultIdeaType.get() == IntelliJPlatformType.IntellijIdea) {
+            bundledPlugins("JavaScript", "com.intellij.java", "org.jetbrains.idea.maven", "com.intellij.gradle")
+        }
 
         // TODO: whenever composeUI() will be updated, we can safely remove direct dependencies to dekstop runtime
         // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
@@ -147,6 +155,14 @@ intellijPlatform {
             create(defaultIdeaType, ideLibs.versions.defaultIdeVersion) {
                 useInstaller = false
             }
+            // Cross-IDE checks for the "installable in any JetBrains IDE" goal: these IDEs
+            // lack the Java/Maven/Gradle/JS plugins, so the verifier confirms the core loads
+            // and no extension references a missing (Java-only) EP. Explicit entries — not
+            // recommended(), which can silently resolve zero IDEs. ~2 GB download each; intended
+            // for a dedicated CI compatibility slice rather than every local build.
+            ide(IntelliJPlatformType.CLion, ideLibs.versions.defaultIdeVersion.get())
+            ide(IntelliJPlatformType.WebStorm, ideLibs.versions.defaultIdeVersion.get())
+            ide(IntelliJPlatformType.PyCharmProfessional, ideLibs.versions.defaultIdeVersion.get())
         }
     }
 }
@@ -166,6 +182,28 @@ tasks {
     withType<org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask>().configureEach {
         //jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5007")
         jvmArgs("-Xmx8g", "-XX:HeapDumpPath=/tmp")
+    }
+
+    // When targeting an IDE other than IntelliJ IDEA (e.g. -PtestIdeType=CLion / RustRover),
+    // the Java / Maven / Gradle / JavaScript plugins are not on the classpath (see
+    // bundledPlugins above), so every source that compiles against them must be excluded.
+    // All such code is consolidated into these packages/files; they are reached from core only
+    // through optional <depends> (maven/gradle/js) and the `symbolNavigator` extension point
+    // (javaLang/JavaSymbolNavigator), so the plugin still loads and degrades gracefully.
+    // The whole javaLang package is Java-gated; the platform-only types that core needs were
+    // moved out to chicory/ (ChicoryAotRegistry) and wasmcache/ (WasmBinaryDataCacheService).
+    // NOTE: any NEW source touching a Java/Maven/Gradle/JS plugin API must live under one of
+    // these, or the CLion/RustRover build will break.
+    if (defaultIdeaType.get() != IntelliJPlatformType.IntellijIdea) {
+        named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileKotlin") {
+            exclude(
+                "**/hexana/javaLang/**",
+                "**/hexana/maven/**",
+                "**/hexana/gradle/**",
+                "**/hexana/javascript/WasmFrameworkIndexingHandler.kt",
+                "**/hexana/jit/JitviewRunConfigurationExtension.kt",
+            )
+        }
     }
 
     named<SignPluginTask>("signPlugin") {

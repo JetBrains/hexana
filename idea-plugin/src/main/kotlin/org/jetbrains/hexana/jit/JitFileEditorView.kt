@@ -68,7 +68,6 @@ import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.pom.Navigatable
-import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiCompiledFile
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.util.concurrency.AppExecutorUtil
@@ -81,8 +80,10 @@ import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaFileEditor
 import org.jetbrains.hexana.HexanaFileEditorProvider
 import com.intellij.openapi.diagnostic.Logger
-import org.jetbrains.hexana.javaLang.ChicoryAotMatch
-import org.jetbrains.hexana.javaLang.ChicoryAotRegistry
+import org.jetbrains.hexana.chicory.ChicoryAotMatch
+import org.jetbrains.hexana.chicory.ChicoryAotRegistry
+import org.jetbrains.hexana.navigation.JitInlineRequest
+import org.jetbrains.hexana.navigation.SymbolNavigator
 import org.jetbrains.hexana.ui.CLASS_FILE_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.ClassFileNavTarget
 import org.jetbrains.hexana.ui.WASM_FUNCTION_NAV_TARGET_KEY
@@ -1861,8 +1862,8 @@ private fun ChicoryWasmBadge(project: Project, match: ChicoryAotMatch) {
 
 /**
  * Open the originating `.wasm` in Hexana's editor and request that the WAT
- * (virtualized) panel scroll to function index [funcIdx]. Mirrors
- * [openBytecodeView] — if an editor is already mounted for the file we
+ * (virtualized) panel scroll to function index [funcIdx]. Mirrors the bytecode-view
+ * open flow — if an editor is already mounted for the file we
  * call `requestWasmFunctionNav` directly so even no-op `openFile` triggers
  * the scroll; otherwise we stash the target on the VirtualFile's UserData
  * for the constructor to pick up.
@@ -1982,7 +1983,15 @@ private fun InlineStackColumn(project: Project, stack: List<Inlined>) {
                     label,
                     style = InlineLineStyle.copy(color = HexanaLinkColor),
                     modifier = Modifier.clickable {
-                        navigateToInline(project, frameSym, frame.bci)
+                        SymbolNavigator.getInstance()?.navigateToJitInline(
+                            project,
+                            JitInlineRequest(
+                                classFqn = javaFqn(frameSym.classSignature),
+                                methodName = frameSym.methodName,
+                                methodSignature = frameSym.methodSignature,
+                                bci = frame.bci,
+                            ),
+                        )
                     },
                 )
             }
@@ -2279,98 +2288,6 @@ private fun bucketByBci(sym: JitSym, flat: List<NativeRow>): Map<Int, List<Nativ
     return out
 }
 
-// -----------------------------------------------------------------------------
-// Navigation for inline frame clicks — Hexana bytecode view first, PSI fallback
-// -----------------------------------------------------------------------------
-
-/**
- * Resolve the inlined frame's class and open the Hexana Bytecode view on
- * its `.class` file. Falls back to PSI source navigation when no
- * compiled class file is available on the project's classpath (e.g. a
- * pure-source class that hasn't been compiled yet).
- *
- * The PSI / stub-index lookup must NOT run on the EDT — `findClasses`
- * eventually calls `FileBasedIndexImpl.ensureUpToDate`, which the
- * platform's SlowOperations guard rejects from the UI thread. We run
- * the resolution in a non-blocking read action on a background pooled
- * thread and hop back to the EDT only for the editor-open call.
- */
-private fun navigateToInline(project: Project, sym: Sym, bci: Int) {
-    ReadAction
-        .nonBlocking<InlineTarget?> { resolveInlineTarget(project, sym) }
-        .inSmartMode(project)
-        .expireWith(project)
-        .finishOnUiThread(ModalityState.defaultModalityState()) { target ->
-            when (target) {
-                is InlineTarget.Bytecode -> openBytecodeView(project, target.classFile, sym, bci)
-                is InlineTarget.Source -> target.navigatable.navigate(true)
-                null -> Unit
-            }
-        }
-        .submit(AppExecutorUtil.getAppExecutorService())
-}
-
-/**
- * Open the Hexana bytecode view on [vf] and ask it to scroll to ([sym]'s
- * method, [bci]). If a `HexanaFileEditor` is already mounted for the file,
- * route the request through its `MutableStateFlow` so the editor reacts
- * even when [FileEditorManager.openFile] is a no-op (the file is already
- * the active tab). For not-yet-open files, stash the target on the
- * VirtualFile UserData where the editor constructor picks it up.
- */
-private fun openBytecodeView(project: Project, vf: VirtualFile, sym: Sym, bci: Int) {
-    val target = ClassFileNavTarget(
-        methodName = sym.methodName,
-        methodDescriptor = sym.methodSignature,
-        bci = bci,
-    )
-    val mgr = FileEditorManager.getInstance(project)
-    val existing = mgr.getEditors(vf).filterIsInstance<HexanaFileEditor>().firstOrNull()
-    if (existing != null) {
-        existing.requestClassFileNav(target)
-    } else {
-        vf.putUserData(CLASS_FILE_NAV_TARGET_KEY, target)
-    }
-    mgr.openFile(vf, /* focusEditor = */ true)
-    // Force Hexana's tab to the front. Without this the platform restores
-    // the last-selected editor for the file, which is often the decompiler.
-    mgr.setSelectedEditor(vf, HexanaFileEditorProvider.EDITOR_TYPE_ID)
-}
-
-/**
- * Off-EDT half of [navigateToInline] — does all the index-touching work
- * under the read action and returns a target that can be opened on the
- * UI thread without blocking. Prefers a compiled-backed PsiClass (the
- * `.class` file backing it is what the bytecode view reads); if only a
- * source-backed PsiClass exists, returns a source [Navigatable] so the
- * caller can degrade gracefully to old-style PSI navigation.
- */
-private fun resolveInlineTarget(project: Project, sym: Sym): InlineTarget? {
-    val fqn = javaFqn(sym.classSignature)
-    val scope = GlobalSearchScope.allScope(project)
-    val classes = JavaPsiFacade.getInstance(project).findClasses(fqn, scope)
-    if (classes.isEmpty()) return null
-
-    val compiled = classes.firstOrNull { it.containingFile is PsiCompiledFile }
-    if (compiled != null) {
-        val vf = compiled.containingFile?.virtualFile
-        if (vf != null) return InlineTarget.Bytecode(vf)
-    }
-
-    val cls = classes.first()
-    val matched = cls.findMethodsByName(sym.methodName, true).firstOrNull { method ->
-        runCatching {
-            com.intellij.psi.util.ClassUtil.getAsmMethodSignature(method) == sym.methodSignature
-        }.getOrDefault(false)
-    } ?: cls.findMethodsByName(sym.methodName, true).firstOrNull()
-    val nav = (matched as? Navigatable) ?: (cls as? Navigatable)
-    return nav?.let { InlineTarget.Source(it) }
-}
-
-private sealed interface InlineTarget {
-    data class Bytecode(val classFile: VirtualFile) : InlineTarget
-    data class Source(val navigatable: Navigatable) : InlineTarget
-}
 
 // -----------------------------------------------------------------------------
 // Styling
