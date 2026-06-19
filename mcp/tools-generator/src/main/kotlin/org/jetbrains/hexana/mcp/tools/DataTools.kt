@@ -163,7 +163,7 @@ val AuditDataPayloadPolicyResultClass = class_("AuditDataPayloadPolicyResult", k
     list("cleanSegments", of = int()).describe("Data segment indices with no forbidden payload strings.")
     embed("minimalFix", of = DataPayloadPolicyMinimalFixResultClass).describe("Minimal segment-level remediation summary.")
     embed("recommendedReport", of = DataPayloadPolicyRecommendedReportResultClass)
-        .describe("Report-ready JSON object matching the data payload audit task contract.")
+        .describe("Recommended policy audit report object with stable JSON field names.")
 }
 
 internal val DataTools: List<ToolSpec> = tools {
@@ -197,7 +197,7 @@ internal val DataTools: List<ToolSpec> = tools {
         summary = "Audit data segments against a payload policy JSON file and return report-ready matches."
         guidance = """
             Use this as the shortest path for embedded payload audits that have a Wasm module and `policyPath`.
-            It reads forbidden strings from the policy, confirms matches against raw data-segment bytes, and returns `recommendedReport` in the task output shape.
+            It reads forbidden strings from the policy, confirms matches against raw data-segment bytes, and returns `recommendedReport` as a report-ready object.
         """
         input = AuditDataPayloadPolicyInput
         inputPattern = ToolInputPattern.DataPayloadPolicyAudit

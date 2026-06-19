@@ -3647,7 +3647,7 @@ private fun Server.registerAuditDataPayloadPolicyTool(handlers: HexanaToolHandle
     description = """
   |Audit data segments against a payload policy JSON file and return report-ready matches.
   |Use this as the shortest path for embedded payload audits that have a Wasm module and `policyPath`.
-  |It reads forbidden strings from the policy, confirms matches against raw data-segment bytes, and returns `recommendedReport` in the task output shape.
+  |It reads forbidden strings from the policy, confirms matches against raw data-segment bytes, and returns `recommendedReport` as a report-ready object.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
