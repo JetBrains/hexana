@@ -41,12 +41,39 @@ configurations.named(integrationTestSourceSet.runtimeOnlyConfigurationName) {
 
 val generatedToolDispatcherDir = layout.projectDirectory.dir("src/main/gen")
 val verifiedToolDispatcherDir = layout.buildDirectory.dir("generator-verify/dispatcher")
+val generatedBuildInfoDir = layout.buildDirectory.dir("generated/sources/hexanaBuildInfo/main/kotlin")
+val generatedBuildInfoFile = generatedBuildInfoDir.map {
+    it.file("org/jetbrains/hexana/mcp/server/HexanaBuildInfo.kt")
+}
 val nativeExecutableName = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
     "hexana-mcp.exe"
 } else {
     "hexana-mcp"
 }
 val nativeExecutable = layout.buildDirectory.file("native/nativeCompile/$nativeExecutableName")
+
+val generateHexanaBuildInfo = tasks.register("generateHexanaBuildInfo") {
+    description = "Generates compile-time MCP server build metadata."
+    group = "generation"
+
+    val serverVersion = project.version.toString()
+    inputs.property("mcpServerVersion", serverVersion)
+    outputs.file(generatedBuildInfoFile)
+
+    doLast {
+        val outputFile = generatedBuildInfoFile.get().asFile
+        outputFile.parentFile.mkdirs()
+        outputFile.writeText(
+            """
+            package org.jetbrains.hexana.mcp.server
+
+            internal object HexanaBuildInfo {
+                const val VERSION = "$serverVersion"
+            }
+            """.trimIndent() + "\n"
+        )
+    }
+}
 
 tasks.register<JavaExec>("generateHexanaToolDispatcher") {
     description = "Regenerates HexanaToolDispatcher.kt into src/main/gen; the output is checked into git."
@@ -280,8 +307,35 @@ tasks.register<Test>("integrationTest") {
     )
 }
 
+fun assertNativeMcpVersionSmokeOutput(output: String, expectedVersion: String) {
+    val trimmedOutput = output.trim()
+    val expectedOutput = "hexana-mcp $expectedVersion"
+    check(trimmedOutput == expectedOutput) {
+        "Expected `$expectedOutput` from native executable, got: $trimmedOutput"
+    }
+}
+
+tasks.register("verifyNativeMcpVersionSmokeAssertion") {
+    description = "Verifies that the native MCP version smoke gate rejects fallback development versions."
+    group = "verification"
+
+    val expectedVersion = project.version.toString()
+    inputs.property("mcpServerVersion", expectedVersion)
+
+    doLast {
+        assertNativeMcpVersionSmokeOutput("hexana-mcp $expectedVersion", expectedVersion)
+        val devResult = runCatching {
+            assertNativeMcpVersionSmokeOutput("hexana-mcp dev", expectedVersion)
+        }
+        check(devResult.exceptionOrNull() is IllegalStateException) {
+            "nativeMcpVersionSmoke assertion must reject `hexana-mcp dev`."
+        }
+    }
+}
+
 tasks.named("check") {
     dependsOn(tasks.named("verifyMcpRuntimeClassFileVersions"))
+    dependsOn(tasks.named("verifyNativeMcpVersionSmokeAssertion"))
 }
 
 tasks.register<Test>("plainMcpPackagingSmoke") {
@@ -309,15 +363,17 @@ tasks.register<Test>("obfuscatedMcpPackagingSmoke") {
 }
 
 tasks.register<Exec>("nativeMcpVersionSmoke") {
-    description = "Builds the experimental GraalVM native MCP executable and checks that `hexana-mcp version` runs."
+    description = "Builds the experimental GraalVM native MCP executable and checks that `hexana-mcp version` reports the exact MCP server version."
     group = "verification"
     dependsOn(tasks.named("nativeCompile"))
     outputs.upToDateWhen { false }
 
     val stdout = ByteArrayOutputStream()
     standardOutput = stdout
+    val expectedVersion = project.version.toString()
 
     doFirst {
+        stdout.reset()
         val executableFile = nativeExecutable.get().asFile
         check(executableFile.canExecute()) {
             "Expected native executable at ${executableFile.absolutePath}. Run :mcp:server:nativeCompile first."
@@ -326,10 +382,7 @@ tasks.register<Exec>("nativeMcpVersionSmoke") {
     }
 
     doLast {
-        val output = stdout.toString(Charsets.UTF_8).trim()
-        check(output.matches(Regex("""hexana-mcp \S+"""))) {
-            "Expected `hexana-mcp <version>` from native executable, got: $output"
-        }
+        assertNativeMcpVersionSmokeOutput(stdout.toString(Charsets.UTF_8), expectedVersion)
     }
 }
 
@@ -385,5 +438,10 @@ kotlin {
     jvmToolchain(21)
     sourceSets.named("main") {
         kotlin.srcDir("src/main/gen")
+        kotlin.srcDir(generatedBuildInfoDir)
     }
+}
+
+tasks.named("compileKotlin") {
+    dependsOn(generateHexanaBuildInfo)
 }

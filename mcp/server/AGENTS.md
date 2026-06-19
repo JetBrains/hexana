@@ -59,8 +59,9 @@ Read these files before making structural changes:
   Both gates exercise the standalone runtime plus Claude and Codex wrappers.
 - The experimental GraalVM Native Image prototype is intentionally separate from JVM/R8 packaging. Use
   `./gradlew :mcp:server:nativeCompile` to build `build/native/nativeCompile/hexana-mcp`, and
-  `./gradlew :mcp:server:nativeMcpVersionSmoke` to verify `hexana-mcp version` when a GraalVM Native Image
-  toolchain is available. Use `./gradlew :mcp:server:nativeMcpStdioSmoke` to run the native executable through
+  `./gradlew :mcp:server:nativeMcpVersionSmoke` to verify `hexana-mcp version` reports the exact
+  `mcp/server/gradle.properties:mcpServerVersion` when a GraalVM Native Image toolchain is available. Use
+  `./gradlew :mcp:server:nativeMcpStdioSmoke` to run the native executable through
   the stdio MCP startup/tools/list/tool-call integration smoke.
 - Run `./gradlew :mcp:server:build` after changes here.
 - If a change crosses the `mcp/core` boundary, also run `./gradlew :mcp:core:build`.

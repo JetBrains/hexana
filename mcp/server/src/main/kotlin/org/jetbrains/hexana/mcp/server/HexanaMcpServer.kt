@@ -32,5 +32,6 @@ fun createHexanaMcpServer(
 internal fun hexanaServerVersion(): String {
     return System.getProperty("hexana.version")
         ?: object {}.javaClass.`package`.implementationVersion
+        ?: HexanaBuildInfo.VERSION.takeIf { it.isNotBlank() }
         ?: "dev"
 }

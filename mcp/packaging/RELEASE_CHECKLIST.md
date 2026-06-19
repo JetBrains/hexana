@@ -46,8 +46,11 @@ Each leg must run:
 ```
 
 That task builds the current-host native executable, verifies `hexana-mcp
-version`, runs the native stdio MCP smoke test, and writes native standalone,
-Claude plugin, and Codex plugin ZIPs under `mcp/build/distributions-native/`.
+version` prints exactly `hexana-mcp <mcpServerVersion>` from
+`mcp/server/gradle.properties`, runs the native stdio MCP smoke test, and writes
+native standalone, Claude plugin, and Codex plugin ZIPs under
+`mcp/build/distributions-native/`. A native executable that falls back to
+`hexana-mcp dev` must fail this gate.
 
 Run the optional native HTTP smoke when qualifying HTTP support on a platform:
 

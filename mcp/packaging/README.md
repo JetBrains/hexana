@@ -160,8 +160,9 @@ matrix leg must run:
 ./gradlew :mcp:assembleNativeMcpReleaseArtifacts
 ```
 
-That task builds the current host's GraalVM Native Image executable, runs `hexana-mcp version`, runs the native stdio MCP
-smoke test, and writes versioned artifacts to `mcp/build/distributions-native/`:
+That task builds the current host's GraalVM Native Image executable, requires `hexana-mcp version` to print exactly
+`hexana-mcp <mcpServerVersion>` from `mcp/server/gradle.properties`, runs the native stdio MCP smoke test, and writes
+versioned artifacts to `mcp/build/distributions-native/`:
 
 - `hexana-mcp-native-<platform>-<version>.zip`: standalone native executable with license files.
 - `hexana-claude-plugin-<platform>-<version>.zip`: Claude wrapper with the native executable and JVM fallback.

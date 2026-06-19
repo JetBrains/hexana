@@ -31,8 +31,9 @@ durable repo-local record for the native MCP packaging decisions.
 - Unsupported platforms are supported through the bundled JVM runtime, not by
   cross-running a native executable from another platform.
 - The first native release gate is stdio-first. Every native matrix leg must pass
-  `hexana-mcp version` and native stdio MCP smoke before its artifacts are
-  publishable.
+  `hexana-mcp version` with exact `mcp/server/gradle.properties:mcpServerVersion`
+  output and native stdio MCP smoke before its artifacts are publishable. A
+  fallback `hexana-mcp dev` output is a release-gate failure.
 - Native HTTP validation is available as a separate smoke task. It is not part of
   `:mcp:assembleNativeMcpReleaseArtifacts` until the platform matrix has rebuilt
   and passed it consistently.
