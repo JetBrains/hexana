@@ -63,6 +63,7 @@ val nativeServerExecutableName = if (System.getProperty("os.name").startsWith("W
 }
 val nativeHostPlatformName = currentNativePlatformName()
 val nativeServerExecutable = project(":mcp:server").layout.buildDirectory.file("native/nativeCompile/$nativeServerExecutableName")
+val nativeDistributionDir = layout.buildDirectory.dir("distributions-native")
 val publicMarketplaceDir = layout.projectDirectory.dir("out/teamcity/public-marketplace")
 val pluginLicenseFile = layout.projectDirectory.file("packaging/LICENSE.txt")
 val thirdPartyNoticesDir = layout.buildDirectory.dir("generated/third-party-notices")
@@ -685,6 +686,26 @@ val zipNativeCodexPlugin = registerPluginZip(
     distributionDirName = "distributions-native",
 )
 
+val zipNativeMcpExecutable = tasks.register<Zip>("zipNativeMcpExecutable") {
+    group = "distribution"
+    description = "Zip the current host's GraalVM native MCP executable into mcp/build/distributions-native."
+    dependsOn(":mcp:server:nativeCompile", generateThirdPartyNotices)
+    from(nativeServerExecutable) {
+        into("bin")
+        rename { nativeServerExecutableName }
+        filesMatching(nativeServerExecutableName) {
+            if (!nativeServerExecutableName.endsWith(".exe")) {
+                permissions { unix("rwxr-xr-x") }
+            }
+        }
+    }
+    from(pluginLicenseFile)
+    from(generateThirdPartyNotices)
+    archiveBaseName.set("hexana-mcp-native-$nativeHostPlatformName")
+    archiveVersion.set(mcpServerVersion)
+    destinationDirectory.set(nativeDistributionDir)
+}
+
 tasks.register("assembleMcpPackagingPlain") {
     group = "distribution"
     description = "Assemble pre-R8 standalone, Claude, and Codex MCP wrapper layouts for smoke testing."
@@ -697,10 +718,20 @@ tasks.register("assembleMcpPackaging") {
     dependsOn(assembleClaudePluginPackage, assembleCodexPluginPackage, zipClaudePlugin, zipCodexPlugin, zipObfuscatedMcpServer)
 }
 
-tasks.register("assembleNativeMcpPackaging") {
+val assembleNativeMcpPackaging = tasks.register("assembleNativeMcpPackaging") {
     group = "distribution"
     description = "Assemble native-enabled Claude and Codex MCP wrapper layouts for the current host platform while keeping JVM fallback."
-    dependsOn(assembleNativeClaudePluginPackage, assembleNativeCodexPluginPackage, zipNativeClaudePlugin, zipNativeCodexPlugin)
+    dependsOn(assembleNativeClaudePluginPackage, assembleNativeCodexPluginPackage, zipNativeClaudePlugin, zipNativeCodexPlugin, zipNativeMcpExecutable)
+}
+
+tasks.register("assembleNativeMcpReleaseArtifacts") {
+    group = "distribution"
+    description = "Build and smoke-test current-host native MCP release artifacts for the platform CI matrix."
+    dependsOn(
+        ":mcp:server:nativeMcpVersionSmoke",
+        ":mcp:server:nativeMcpStdioSmoke",
+        assembleNativeMcpPackaging,
+    )
 }
 
 tasks.register<Sync>("assemblePublicMarketplaceBundle") {
@@ -913,7 +944,7 @@ fun currentNativePlatformName(): String {
     }
     val arch = when (System.getProperty("os.arch").lowercase(Locale.ROOT)) {
         "x86_64", "amd64" -> "x64"
-        "aarch64", "arm64" -> "aarch64"
+        "aarch64", "arm64" -> "arm64"
         else -> System.getProperty("os.arch").lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-')
     }
     return "$os-$arch"

@@ -25,6 +25,12 @@ Build native-enabled wrapper outputs for the current host platform with:
 ./gradlew :mcp:assembleNativeMcpPackaging
 ```
 
+Build and smoke-test native release artifacts for the current host platform with:
+
+```bash
+./gradlew :mcp:assembleNativeMcpReleaseArtifacts
+```
+
 Install the Codex plugin into the repo-local marketplace layout with:
 
 ```bash
@@ -63,7 +69,14 @@ plugins/hexana/
 ```
 
 Each assembled wrapper includes its own bundled standalone JVM runtime under `server/` and exposes `bin/hexana-mcp`.
-Native-enabled wrappers also include `native/<os>-<arch>/hexana-mcp` for the current host platform. The launcher first
+Native-enabled wrappers also include `native/<os>-<arch>/hexana-mcp` for the current host platform. The supported native
+release matrix uses these platform tags:
+
+- `macos-arm64`
+- `linux-x64`
+- `windows-x64`
+
+The launcher first
 uses `HEXANA_SERVER_BIN` when explicitly set, then prefers the bundled native executable matching the current platform,
 then falls back to `server/bin/server`.
 Release ZIPs must not contain build-machine absolute paths. The Claude package uses Claude's plugin-root variable, and
@@ -113,6 +126,25 @@ should use it after the release build's snapshot dependencies have passed. The s
 
 TeamCity stays responsible for branch policy, secure parameters, build-chain dependencies, and notifications. The
 packaging repository stays responsible for the release mechanics and public-file safety rules.
+
+Native release artifacts are built by a platform CI matrix rather than by the GitHub release script on one host. Each
+matrix leg must run:
+
+```bash
+./gradlew :mcp:assembleNativeMcpReleaseArtifacts
+```
+
+That task builds the current host's GraalVM Native Image executable, runs `hexana-mcp version`, runs the native stdio MCP
+smoke test, and writes versioned artifacts to `mcp/build/distributions-native/`:
+
+- `hexana-mcp-native-<platform>-<version>.zip`: standalone native executable with license files.
+- `hexana-claude-plugin-<platform>-<version>.zip`: Claude wrapper with the native executable and JVM fallback.
+- `hexana-codex-plugin-<platform>-<version>.zip`: Codex wrapper with the native executable and JVM fallback.
+
+The release job should download all native matrix artifacts into one directory and set `INCLUDE_NATIVE_ARTIFACTS=true`
+before running `release-codex-claude-plugins.sh`. By default the script requires `macos-arm64 linux-x64 windows-x64`;
+override `NATIVE_RELEASE_PLATFORMS` only when intentionally changing the supported matrix. Unsupported platforms keep
+using the bundled JVM runtime through the wrapper fallback.
 
 Release script example:
 
@@ -168,6 +200,10 @@ Optional environment variables:
   or noreply automation identity; do not use a personal email.
 - `ALLOW_BUNDLED_JAR`: defaults to `false`. When `true`, jars are allowed only under
   `plugins/<plugin-name>/server/lib/`.
+- `INCLUDE_NATIVE_ARTIFACTS`: defaults to `false`. When `true`, release collection requires native executable,
+  Claude plugin, and Codex plugin ZIPs for every platform in `NATIVE_RELEASE_PLATFORMS`.
+- `NATIVE_RELEASE_ARTIFACT_DIR`: defaults to `mcp/build/distributions-native`.
+- `NATIVE_RELEASE_PLATFORMS`: defaults to `macos-arm64 linux-x64 windows-x64`.
 - `VALIDATE_CLAUDE_CMD`: optional command run from the cloned public repo root.
 - `VALIDATE_CODEX_CMD`: optional command run from the cloned public repo root.
 - `SKIP_RELEASE_BUILD_AND_SMOKE`: defaults to `false`. TeamCity sets this to `true` only after it has already run the

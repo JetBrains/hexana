@@ -15,7 +15,7 @@ else
   esac
   case "$ARCH_NAME" in
     x86_64|amd64) ARCH_NAME=x64 ;;
-    arm64|aarch64) ARCH_NAME=aarch64 ;;
+    arm64|aarch64) ARCH_NAME=arm64 ;;
   esac
 
   NATIVE_BIN="$PLUGIN_ROOT/native/$OS_NAME-$ARCH_NAME/hexana-mcp"

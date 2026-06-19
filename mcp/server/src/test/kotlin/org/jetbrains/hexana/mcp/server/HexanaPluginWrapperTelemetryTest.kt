@@ -42,6 +42,28 @@ class HexanaPluginWrapperTelemetryTest {
         assertWrapperLauncherSelection("mcp/packaging/codex-plugin/bin/hexana-mcp", includeNative = false, expected = "jvm")
     }
 
+    @Test
+    fun wrappersUseArm64NativePlatformDirectory() {
+        assumeFalse("POSIX wrapper smoke is not applicable on Windows", isWindows())
+
+        assertWrapperLauncherSelection(
+            wrapperPath = "mcp/packaging/claude-plugin/bin/hexana-mcp",
+            includeNative = true,
+            expected = "native",
+            nativePlatformName = "macos-arm64",
+            unameSystem = "Darwin",
+            unameMachine = "aarch64",
+        )
+        assertWrapperLauncherSelection(
+            wrapperPath = "mcp/packaging/codex-plugin/bin/hexana-mcp",
+            includeNative = true,
+            expected = "native",
+            nativePlatformName = "macos-arm64",
+            unameSystem = "Darwin",
+            unameMachine = "arm64",
+        )
+    }
+
     private fun assertWrapperPreservesTelemetry(wrapperPath: String) {
         assumeFalse("POSIX wrapper smoke is not applicable on Windows", isWindows())
 
@@ -88,7 +110,14 @@ class HexanaPluginWrapperTelemetryTest {
         assertTrue(output.contains("arg=false"), output)
     }
 
-    private fun assertWrapperLauncherSelection(wrapperPath: String, includeNative: Boolean, expected: String) {
+    private fun assertWrapperLauncherSelection(
+        wrapperPath: String,
+        includeNative: Boolean,
+        expected: String,
+        nativePlatformName: String = currentNativePlatformName(),
+        unameSystem: String? = null,
+        unameMachine: String? = null,
+    ) {
         val outputPath = temporaryFolder.newFile().toPath()
         val pluginRoot = temporaryFolder.newFolder().toPath()
         val wrapper = pluginRoot.resolve("bin/hexana-mcp")
@@ -104,13 +133,20 @@ class HexanaPluginWrapperTelemetryTest {
         if (includeNative) {
             createFakeServer(
                 outputPath = outputPath,
-                destination = pluginRoot.resolve("native/${currentNativePlatformName()}/hexana-mcp"),
+                destination = pluginRoot.resolve("native/$nativePlatformName/hexana-mcp"),
                 launcherName = "native",
             )
         }
 
         val process = ProcessBuilder(wrapper.absolutePathString(), "version")
             .directory(pluginRoot.toFile())
+            .apply {
+                if (unameSystem != null && unameMachine != null) {
+                    val fakeBin = temporaryFolder.newFolder().toPath()
+                    createFakeUname(fakeBin, unameSystem, unameMachine)
+                    environment()["PATH"] = "${fakeBin.absolutePathString()}:${environment()["PATH"].orEmpty()}"
+                }
+            }
             .start()
 
         try {
@@ -156,6 +192,23 @@ class HexanaPluginWrapperTelemetryTest {
         return destination
     }
 
+    private fun createFakeUname(fakeBin: Path, system: String, machine: String): Path {
+        val uname = fakeBin.resolve("uname")
+        Files.writeString(
+            uname,
+            """
+            #!/bin/sh
+            case "${'$'}1" in
+              -s) printf '%s\n' "$system" ;;
+              -m) printf '%s\n' "$machine" ;;
+              *) exit 2 ;;
+            esac
+            """.trimIndent()
+        )
+        uname.toFile().setExecutable(true)
+        return uname
+    }
+
     private fun isWindows(): Boolean {
         return System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
     }
@@ -168,7 +221,7 @@ class HexanaPluginWrapperTelemetryTest {
         }
         val arch = when (System.getProperty("os.arch").lowercase()) {
             "x86_64", "amd64" -> "x64"
-            "aarch64", "arm64" -> "aarch64"
+            "aarch64", "arm64" -> "arm64"
             else -> System.getProperty("os.arch").lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
         }
         return "$os-$arch"

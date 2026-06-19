@@ -9,7 +9,7 @@ if defined HEXANA_SERVER_BIN (
 ) else (
     set "HEXANA_NATIVE_ARCH=%PROCESSOR_ARCHITECTURE%"
     if /I "%HEXANA_NATIVE_ARCH%"=="AMD64" set "HEXANA_NATIVE_ARCH=x64"
-    if /I "%HEXANA_NATIVE_ARCH%"=="ARM64" set "HEXANA_NATIVE_ARCH=aarch64"
+    if /I "%HEXANA_NATIVE_ARCH%"=="ARM64" set "HEXANA_NATIVE_ARCH=arm64"
     set "NATIVE_BIN=%PLUGIN_ROOT%\native\windows-%HEXANA_NATIVE_ARCH%\hexana-mcp.exe"
     if exist "%NATIVE_BIN%" (
         set "SERVER_BIN=%NATIVE_BIN%"

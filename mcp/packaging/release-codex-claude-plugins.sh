@@ -72,6 +72,25 @@ versioned_release_artifact() {
   fi
 }
 
+collect_native_release_artifacts() {
+  local platform
+  local artifact
+  local native_zip
+
+  NATIVE_RELEASE_ARTIFACTS=()
+  for platform in $NATIVE_RELEASE_PLATFORMS; do
+    for artifact in \
+      "hexana-mcp-native-$platform-$PLUGIN_VERSION.zip" \
+      "hexana-claude-plugin-$platform-$PLUGIN_VERSION.zip" \
+      "hexana-codex-plugin-$platform-$PLUGIN_VERSION.zip"; do
+      native_zip="$(versioned_release_artifact "$NATIVE_RELEASE_ARTIFACT_DIR" "$artifact")"
+      [ -n "$native_zip" ] || die "No $artifact produced under $NATIVE_RELEASE_ARTIFACT_DIR"
+      cp "$native_zip" "$release_dir/"
+      NATIVE_RELEASE_ARTIFACTS+=("$artifact")
+    done
+  done
+}
+
 collect_release_artifacts() {
   release_dir="${RELEASE_ARTIFACT_DIR:-mcp/out/teamcity/release}"
   rm -rf "$release_dir"
@@ -91,6 +110,12 @@ collect_release_artifacts() {
   cp "$server_zip" "$release_dir/"
   cp "$claude_zip" "$release_dir/"
   cp "$codex_zip" "$release_dir/"
+
+  if [ "$INCLUDE_NATIVE_ARTIFACTS" = "true" ]; then
+    collect_native_release_artifacts
+  else
+    NATIVE_RELEASE_ARTIFACTS=()
+  fi
 }
 
 write_release_notes() {
@@ -100,6 +125,9 @@ write_release_notes() {
     printf -- '- Claude Code plugin archive is attached.\n'
     printf -- '- Codex plugin archive is attached.\n'
     printf -- '- Standalone MCP server archive is attached.\n'
+    if [ "${#NATIVE_RELEASE_ARTIFACTS[@]}" -gt 0 ]; then
+      printf -- '- Native MCP artifacts are attached for: %s.\n' "$NATIVE_RELEASE_PLATFORMS"
+    fi
     printf -- '- Public marketplace metadata is updated through the companion pull request.\n'
   } > "$release_notes"
 }
@@ -251,6 +279,13 @@ check_release_artifact_legal_files() {
     server-*.zip)
       require_nonempty_file "Release artifact $zip_name" "$root/server/LICENSE.txt"
       require_nonempty_file "Release artifact $zip_name" "$root/server/THIRD-PARTY-NOTICES.md"
+      ;;
+    hexana-mcp-native-*.zip)
+      require_nonempty_file "Release artifact $zip_name" "$root/LICENSE.txt"
+      require_nonempty_file "Release artifact $zip_name" "$root/THIRD-PARTY-NOTICES.md"
+      if [ ! -f "$root/bin/hexana-mcp" ] && [ ! -f "$root/bin/hexana-mcp.exe" ]; then
+        die "Release artifact $zip_name is missing native executable under bin/"
+      fi
       ;;
     *)
       die "Unexpected release artifact name: $zip_name"
@@ -429,8 +464,14 @@ security_check_release_artifacts() {
     done < <(find "$extract_dir" -type f -print)
 
     check_embedded_jar_entries "$zip_name" "$extract_dir"
-    check_obfuscated_runtime_layout "$zip_name" "$extract_dir"
-    check_obfuscated_runtime_hardening "$zip_name" "$extract_dir"
+    case "$zip_name" in
+      hexana-mcp-native-*.zip)
+        ;;
+      *)
+        check_obfuscated_runtime_layout "$zip_name" "$extract_dir"
+        check_obfuscated_runtime_hardening "$zip_name" "$extract_dir"
+        ;;
+    esac
     check_release_artifact_legal_files "$zip_name" "$extract_dir"
   done
   rm -rf "$security_dir"
@@ -999,6 +1040,9 @@ main() {
   export AUTO_MERGE="$(to_bool "${AUTO_MERGE:-false}" "AUTO_MERGE")"
   export DRY_RUN="$(to_bool "${DRY_RUN:-false}" "DRY_RUN")"
   export ALLOW_BUNDLED_JAR="$(to_bool "${ALLOW_BUNDLED_JAR:-false}" "ALLOW_BUNDLED_JAR")"
+  export INCLUDE_NATIVE_ARTIFACTS="$(to_bool "${INCLUDE_NATIVE_ARTIFACTS:-false}" "INCLUDE_NATIVE_ARTIFACTS")"
+  export NATIVE_RELEASE_ARTIFACT_DIR="${NATIVE_RELEASE_ARTIFACT_DIR:-mcp/build/distributions-native}"
+  export NATIVE_RELEASE_PLATFORMS="${NATIVE_RELEASE_PLATFORMS:-macos-arm64 linux-x64 windows-x64}"
   PUBLIC_REPO_CLONE_DIR="${PUBLIC_REPO_CLONE_DIR:-}"
   COMMIT_AUTHOR_NAME="${COMMIT_AUTHOR_NAME:-}"
   COMMIT_AUTHOR_EMAIL="${COMMIT_AUTHOR_EMAIL:-}"
