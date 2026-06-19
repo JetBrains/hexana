@@ -44,7 +44,8 @@ internal val EntrypointPolicyTools: List<ToolSpec> = tools {
         guidance = """
             Use this when repairing or validating entrypoint host-call policy JSON.
             It scans exported local functions and returns only imports called directly by each entrypoint body; exports that only reach host imports through local helper calls are listed separately in `excluded_transitive_exports`.
-            The top-level `policy_id`, `module`, `direct_host_entrypoints`, and `excluded_transitive_exports` fields are ready to copy into policy files that use the entrypoint-host-call-policy-v2 contract.
+            The complete top-level JSON object is the canonical entrypoint-host-call-policy-v2 payload and is ready to copy unchanged into both the policy file and any matching repair/audit report file.
+            Do not wrap, rename, summarize, or split the returned fields when the target file expects `policy_id`, `module`, `direct_host_entrypoints`, and `excluded_transitive_exports`.
         """
         input = WasmInputClass
         inputPattern = ToolInputPattern.WasmPathLabel

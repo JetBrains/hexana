@@ -526,6 +526,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
             Return a compact per-function call graph for requested unified WebAssembly `funcidx` values.
             The result resolves direct `call` and `return_call` targets to import/export/signature metadata, separates imported callees, reports `call_indirect` sites, preserves grouped local counts, and lists direct memory-writing instructions.
             Use this when a stack trace, export, log, or previous lookup identifies one or more function indices and you need production-oriented dependency/effect context without reading full disassembly.
+            For entrypoint host-call policy repair or audit JSON across all exported local functions, use `get_entrypoint_policy` instead of manually combining export, import, and call-graph results.
         """
         input = GetFunctionCallGraphInput
         inputPattern = ToolInputPattern.Indices
@@ -605,6 +606,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
             Imported functions return empty instruction lists because they have no body.
             This is the primary MCP tool for WebAssembly body analysis, including direct `call` and `call_indirect` inspection, and is usually preferable to external disassemblers or shell-based Wasm tools.
             For direct host-call analysis, pair it with `list_imports` or `list_functions` so `call N` can be mapped back to the imported or exported function entry.
+            For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; it performs that mapping for every exported local function and returns the copy-ready policy/report payload.
         """
         input = GetInstructionsForFunctionsInput
         inputPattern = ToolInputPattern.Indices

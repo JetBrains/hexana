@@ -96,6 +96,7 @@ internal val ExportTools: List<ToolSpec> = tools {
             Do not use this low-level export inventory as the main workflow for selecting component dependency files.
             If you need function signatures or origins, skip directly to `list_exported_functions`.
             For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not identify new or policy-allowed public globals.
+            For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; this low-level view does not distinguish direct imported calls from transitive local helper calls.
         """
         input = WasmInputClass
         inputPattern = ToolInputPattern.WasmOnly
@@ -125,6 +126,7 @@ internal val ExportTools: List<ToolSpec> = tools {
             This is the primary MCP tool for export inventories, export diffs, function-signature extraction, and import-vs-local origin checks.
             Prefer this over `list_exports` for export diffs or signature extraction, because each result already includes the resolved function entry, signature, and origin.
             The signature strings are usually ready to use as-is, so `list_types` is often unnecessary unless you need raw type definitions.
+            For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; it already filters exported local functions to direct imported-call entrypoints and returns the copy-ready payload.
         """
         input = ListExportedFunctionsInput
         inputPattern = ToolInputPattern.ClosedRange(

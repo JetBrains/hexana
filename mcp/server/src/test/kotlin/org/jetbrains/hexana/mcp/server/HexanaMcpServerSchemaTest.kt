@@ -143,6 +143,7 @@ class HexanaMcpServerSchemaTest {
 
         val description = tool.description ?: error("Missing get_entrypoint_policy description")
         assertTrue(description.contains("Return policy-ready direct host-call facts"))
+        assertTrue(description.contains("copy unchanged into both the policy file"))
         assertFalse(description.contains("entrypoint_policy_repair"))
         assertFalse(description.contains("task"))
     }

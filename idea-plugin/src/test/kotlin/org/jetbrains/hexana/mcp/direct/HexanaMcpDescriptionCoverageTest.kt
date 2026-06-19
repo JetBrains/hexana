@@ -87,6 +87,7 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
         assertContains(descriptor.description, "entrypoint host-call policy JSON")
         assertContains(descriptor.description, "imports called directly")
         assertContains(descriptor.description, "direct_host_entrypoints")
+        assertContains(descriptor.description, "copy unchanged into both the policy file")
         assertFalse(descriptor.description.contains("entrypoint_policy_repair"))
         assertFalse(descriptor.description.contains("task"))
     }

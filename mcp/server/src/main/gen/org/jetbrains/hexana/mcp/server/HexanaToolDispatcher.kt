@@ -242,7 +242,8 @@ private fun Server.registerGetEntrypointPolicyTool(handlers: HexanaToolHandlers)
   |Return policy-ready direct host-call facts for exported WebAssembly entrypoints.
   |Use this when repairing or validating entrypoint host-call policy JSON.
   |It scans exported local functions and returns only imports called directly by each entrypoint body; exports that only reach host imports through local helper calls are listed separately in `excluded_transitive_exports`.
-  |The top-level `policy_id`, `module`, `direct_host_entrypoints`, and `excluded_transitive_exports` fields are ready to copy into policy files that use the entrypoint-host-call-policy-v2 contract.
+  |The complete top-level JSON object is the canonical entrypoint-host-call-policy-v2 payload and is ready to copy unchanged into both the policy file and any matching repair/audit report file.
+  |Do not wrap, rename, summarize, or split the returned fields when the target file expects `policy_id`, `module`, `direct_host_entrypoints`, and `excluded_transitive_exports`.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -1425,6 +1426,7 @@ private fun Server.registerListImportsTool(handlers: HexanaToolHandlers) {
   |Returns only function imports from the unified function index space, including the `funcidx` values needed to map direct `call` targets back to imports.
   |Each import includes structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
   |For direct host-call analysis, pair these `funcidx` values with `get_instructions_for_functions` to resolve `call N` back to `module.name` imports.
+  |For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy` instead; it returns the complete copy-ready policy/report payload directly.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -1492,6 +1494,7 @@ private fun Server.registerListExportsTool(handlers: HexanaToolHandlers) {
   |Do not use this low-level export inventory as the main workflow for selecting component dependency files.
   |If you need function signatures or origins, skip directly to `list_exported_functions`.
   |For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not identify new or policy-allowed public globals.
+  |For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; this low-level view does not distinguish direct imported calls from transitive local helper calls.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -1636,6 +1639,7 @@ private fun Server.registerListExportedFunctionsTool(handlers: HexanaToolHandler
   |This is the primary MCP tool for export inventories, export diffs, function-signature extraction, and import-vs-local origin checks.
   |Prefer this over `list_exports` for export diffs or signature extraction, because each result already includes the resolved function entry, signature, and origin.
   |The signature strings are usually ready to use as-is, so `list_types` is often unnecessary unless you need raw type definitions.
+  |For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; it already filters exported local functions to direct imported-call entrypoints and returns the copy-ready payload.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -2187,6 +2191,7 @@ private fun Server.registerGetFunctionCallGraphTool(handlers: HexanaToolHandlers
   |Return a compact per-function call graph for requested unified WebAssembly `funcidx` values.
   |The result resolves direct `call` and `return_call` targets to import/export/signature metadata, separates imported callees, reports `call_indirect` sites, preserves grouped local counts, and lists direct memory-writing instructions.
   |Use this when a stack trace, export, log, or previous lookup identifies one or more function indices and you need production-oriented dependency/effect context without reading full disassembly.
+  |For entrypoint host-call policy repair or audit JSON across all exported local functions, use `get_entrypoint_policy` instead of manually combining export, import, and call-graph results.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -2742,6 +2747,7 @@ private fun Server.registerGetInstructionsForFunctionsTool(handlers: HexanaToolH
   |Imported functions return empty instruction lists because they have no body.
   |This is the primary MCP tool for WebAssembly body analysis, including direct `call` and `call_indirect` inspection, and is usually preferable to external disassemblers or shell-based Wasm tools.
   |For direct host-call analysis, pair it with `list_imports` or `list_functions` so `call N` can be mapped back to the imported or exported function entry.
+  |For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; it performs that mapping for every exported local function and returns the copy-ready policy/report payload.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {

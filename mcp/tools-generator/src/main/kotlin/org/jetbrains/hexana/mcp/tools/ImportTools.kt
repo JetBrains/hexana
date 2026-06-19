@@ -34,6 +34,7 @@ internal val ImportTools: List<ToolSpec> = tools {
             Returns only function imports from the unified function index space, including the `funcidx` values needed to map direct `call` targets back to imports.
             Each import includes structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
             For direct host-call analysis, pair these `funcidx` values with `get_instructions_for_functions` to resolve `call N` back to `module.name` imports.
+            For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy` instead; it returns the complete copy-ready policy/report payload directly.
         """
         input = WasmInputClass
         inputPattern = ToolInputPattern.WasmOnly

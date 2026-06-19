@@ -153,6 +153,7 @@ class HexanaToolsTest {
         val guidance = assertNotNull(get.guidance)
         assertTrue(guidance.contains("repairing or validating entrypoint host-call policy JSON"))
         assertTrue(guidance.contains("direct_host_entrypoints"))
+        assertTrue(guidance.contains("copy unchanged into both the policy file"))
         assertTrue(!guidance.contains("entrypoint_policy_repair"))
         assertTrue(!guidance.contains("task"))
     }
