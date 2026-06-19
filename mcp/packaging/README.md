@@ -2,6 +2,12 @@
 
 This directory contains client-specific wrapper templates for the standalone runtime in `mcp/server`.
 
+Related documents:
+
+- [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) lists the JVM and native smoke gates for releases.
+- [Hexana MCP Native Image Release Design](../../docs/superpowers/specs/2026-06-19-mcp-native-image-release-design.md)
+  records the native package support policy and current limitations.
+
 Source layouts:
 
 - `claude-plugin/`
@@ -30,6 +36,10 @@ Build and smoke-test native release artifacts for the current host platform with
 ```bash
 ./gradlew :mcp:assembleNativeMcpReleaseArtifacts
 ```
+
+Native builds require a GraalVM distribution with `native-image` installed. Set `GRAALVM_HOME` or `JAVA_HOME` to that
+distribution before running native tasks if Gradle does not auto-detect it. JBR and ordinary JDKs can run JVM package
+gates, but they cannot rebuild the native executable.
 
 Install the Codex plugin into the repo-local marketplace layout with:
 
@@ -68,9 +78,11 @@ and for repo-local Codex testing:
 plugins/hexana/
 ```
 
+## Package layout and fallback
+
 Each assembled wrapper includes its own bundled standalone JVM runtime under `server/` and exposes `bin/hexana-mcp`.
-Native-enabled wrappers also include `native/<os>-<arch>/hexana-mcp` for the current host platform. The supported native
-release matrix uses these platform tags:
+Native-enabled wrappers also include `native/<platform>/hexana-mcp` for the current host platform, or
+`native/<platform>/hexana-mcp.exe` on Windows. The supported native release matrix uses these platform tags:
 
 - `macos-arm64`
 - `linux-x64`
@@ -79,6 +91,8 @@ release matrix uses these platform tags:
 The launcher first
 uses `HEXANA_SERVER_BIN` when explicitly set, then prefers the bundled native executable matching the current platform,
 then falls back to `server/bin/server`.
+Unsupported platforms keep working through the bundled JVM runtime; the launcher does not try to run a native
+executable built for a different platform.
 Release ZIPs must not contain build-machine absolute paths. The Claude package uses Claude's plugin-root variable, and
 the Codex package keeps its `.mcp.json` launcher path and working directory relative to the plugin root.
 
@@ -109,6 +123,18 @@ mcp/build/packaging-native/claude-plugin/bin/hexana-mcp version
 
 For Codex local plugin testing, run `./gradlew :mcp:installRepoLocalCodexPlugin`, restart Codex, and install
 `Hexana` from the `Hexana Local` marketplace in the plugin directory (`/plugins` in CLI).
+
+## Native support policy
+
+Native MCP releases are stdio-first. The release artifact task runs `hexana-mcp version` and the native stdio MCP smoke
+test before writing current-host artifacts. Native HTTP support is validated by the separate
+`:mcp:server:nativeMcpHttpSmoke` task; it is not part of `:mcp:assembleNativeMcpReleaseArtifacts` until the HTTP path is
+proven on the supported platform matrix.
+
+JVM standalone MCP analytics are enabled by default for `stdio` and `http`. GraalVM Native Image MCP analytics are
+disabled by default because PostHog networking and shutdown-hook behavior adds runtime surface to native startup and
+smoke reliability. Native users can opt in explicitly with `--telemetry-enabled true` or
+`HEXANA_MCP_TELEMETRY_ENABLED=true`; explicit opt-out works everywhere.
 
 ## Codex/Claude release automation
 
