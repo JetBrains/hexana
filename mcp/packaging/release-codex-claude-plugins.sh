@@ -492,10 +492,40 @@ check_public_bundle_plugin_manifest_licenses() {
   check_plugin_manifest_license "Public marketplace bundle" "plugins/$PLUGIN_NAME/.claude-plugin/plugin.json" "$manifest"
 }
 
+check_public_bundle_native_policy() {
+  local plugin_dir="$GENERATED_PUBLIC_DIR/plugins/$PLUGIN_NAME"
+  local readme="$plugin_dir/README.md"
+  local lock_file="$plugin_dir/release.lock.json"
+  local native_dir="$plugin_dir/native"
+  local native_file=""
+
+  require_nonempty_file "Public marketplace bundle" "$readme"
+  require_nonempty_file "Public marketplace bundle" "$lock_file"
+
+  if [ -d "$native_dir" ]; then
+    native_file="$(find "$native_dir" -type f -print -quit)"
+  fi
+
+  if [ -z "$native_file" ]; then
+    if grep -F -q '`native/<platform>/hexana-mcp`: optional bundled native executable' "$readme" ||
+       grep -F -q 'Native-enabled wrappers also include' "$readme"; then
+      die "Public marketplace README claims bundled native files, but plugins/$PLUGIN_NAME/native is missing"
+    fi
+    if jq -e '.nativeArtifacts.distribution == "marketplace-bundle" or .nativeArtifacts.distribution == "bundled"' "$lock_file" >/dev/null; then
+      die "Public marketplace release.lock.json claims bundled native files, but plugins/$PLUGIN_NAME/native is missing"
+    fi
+    grep -F -q 'Native executables are not included in this public marketplace tree.' "$readme" ||
+      die "Public marketplace README must document that native executables are GitHub Release artifacts when plugins/$PLUGIN_NAME/native is absent"
+    jq -e '.nativeArtifacts.distribution == "github-release-only"' "$lock_file" >/dev/null ||
+      die "Public marketplace release.lock.json must document the GitHub Release-only native artifact policy when plugins/$PLUGIN_NAME/native is absent"
+  fi
+}
+
 validate_public_bundle() {
   [ -d "$GENERATED_PUBLIC_DIR" ] || die "Generated public marketplace bundle is missing: $GENERATED_PUBLIC_DIR"
   check_public_bundle_legal_files
   check_public_bundle_plugin_manifest_licenses
+  check_public_bundle_native_policy
 
   find "$GENERATED_PUBLIC_DIR" -type f -name '*.json' -print0 |
     while IFS= read -r -d '' file; do

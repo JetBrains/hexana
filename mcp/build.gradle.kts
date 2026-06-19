@@ -62,6 +62,7 @@ val nativeServerExecutableName = if (System.getProperty("os.name").startsWith("W
     "hexana-mcp"
 }
 val nativeHostPlatformName = currentNativePlatformName()
+val nativeReleasePlatforms = listOf("macos-arm64", "linux-x64", "windows-x64")
 val nativeServerExecutable = project(":mcp:server").layout.buildDirectory.file("native/nativeCompile/$nativeServerExecutableName")
 val nativeDistributionDir = layout.buildDirectory.dir("distributions-native")
 val publicMarketplaceDir = layout.projectDirectory.dir("out/teamcity/public-marketplace")
@@ -734,6 +735,44 @@ tasks.register("assembleNativeMcpReleaseArtifacts") {
     )
 }
 
+fun validatePublicMarketplaceBundleNativePolicy(outputDir: File) {
+    val pluginDir = outputDir.resolve("plugins/hexana")
+    val readmeFile = pluginDir.resolve("README.md")
+    val releaseLockFile = pluginDir.resolve("release.lock.json")
+    check(readmeFile.isFile) {
+        "Public marketplace bundle is missing ${readmeFile.absolutePath}"
+    }
+    check(releaseLockFile.isFile) {
+        "Public marketplace bundle is missing ${releaseLockFile.absolutePath}"
+    }
+
+    val readme = readmeFile.readText()
+    val releaseLock = releaseLockFile.readText()
+    val nativeDir = pluginDir.resolve("native")
+    val nativeFilesPresent = nativeDir.exists() && nativeDir.walkTopDown().any { it.isFile }
+    val readmeClaimsBundledNative = listOf(
+        "`native/<platform>/hexana-mcp`: optional bundled native executable",
+        "Native-enabled wrappers also include",
+    ).any(readme::contains)
+    val lockClaimsBundledNative = listOf(
+        "\"distribution\": \"marketplace-bundle\"",
+        "\"distribution\": \"bundled\"",
+    ).any(releaseLock::contains)
+
+    check(nativeFilesPresent || !readmeClaimsBundledNative) {
+        "Public marketplace README claims bundled native files, but plugins/hexana/native is missing."
+    }
+    check(nativeFilesPresent || !lockClaimsBundledNative) {
+        "Public marketplace release.lock.json claims bundled native files, but plugins/hexana/native is missing."
+    }
+    check(nativeFilesPresent || readme.contains("Native executables are not included in this public marketplace tree.")) {
+        "Public marketplace README must document that native executables are GitHub Release artifacts when plugins/hexana/native is absent."
+    }
+    check(nativeFilesPresent || releaseLock.contains("\"distribution\": \"github-release-only\"")) {
+        "Public marketplace release.lock.json must document the GitHub Release-only native artifact policy when plugins/hexana/native is absent."
+    }
+}
+
 tasks.register<Sync>("assemblePublicMarketplaceBundle") {
     group = "distribution"
     description = "Assemble the public marketplace bundle consumed by TeamCity release automation."
@@ -758,12 +797,6 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
     from(obfuscatedPackagingDir.map { it.dir("codex-plugin/server") }) {
         into("plugins/hexana/server")
         filesMatching("bin/server") {
-            permissions { unix("rwxr-xr-x") }
-        }
-    }
-    from(obfuscatedPackagingDir.map { it.dir("codex-plugin/native") }) {
-        into("plugins/hexana/native")
-        filesMatching("**/hexana-mcp") {
             permissions { unix("rwxr-xr-x") }
         }
     }
@@ -882,11 +915,22 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
             - `.codex-plugin/plugin.json`: Codex plugin manifest.
             - `.claude-plugin/mcp.json` and `.codex-plugin/mcp.json`: client-specific MCP server configuration.
             - `bin/hexana-mcp`: launcher used by the client plugin.
-            - `native/<platform>/hexana-mcp`: optional bundled native executable; the launcher prefers it when present.
             - `LICENSE.txt`: JetBrains plugin license agreement.
             - `THIRD-PARTY-NOTICES.md`: generated third-party dependency notices.
             - `server/`: bundled standalone Hexana MCP runtime.
             - `skills/wasm-inspector/`: Codex skill metadata and instructions.
+
+            ## Native Artifacts
+
+            Native executables are not included in this public marketplace tree. They are published as GitHub Release
+            artifacts produced by the platform matrix:
+
+            ${nativeReleasePlatforms.joinToString(separator = "\n            ") { "- `hexana-mcp-native-$it-$mcpServerVersion.zip`" }}
+            ${nativeReleasePlatforms.joinToString(separator = "\n            ") { "- `hexana-claude-plugin-$it-$mcpServerVersion.zip`" }}
+            ${nativeReleasePlatforms.joinToString(separator = "\n            ") { "- `hexana-codex-plugin-$it-$mcpServerVersion.zip`" }}
+
+            The marketplace launcher uses the bundled JVM runtime from `server/`. Native-enabled release ZIPs use the
+            same launcher and add `native/<platform>/hexana-mcp` beside the JVM fallback.
 
             ## What It Provides
 
@@ -902,10 +946,36 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
                 "hexana-claude-plugin-$mcpServerVersion.zip",
                 "hexana-codex-plugin-$mcpServerVersion.zip",
                 "server-$mcpServerVersion.zip"
-              ]
+              ],
+              "nativeArtifacts": {
+                "distribution": "github-release-only",
+                "platforms": [
+                  ${nativeReleasePlatforms.joinToString(separator = ",\n                  ") { "\"$it\"" }}
+                ],
+                "artifacts": [
+                  ${nativeReleasePlatforms.flatMap { platform ->
+                      listOf(
+                          "hexana-mcp-native-$platform-$mcpServerVersion.zip",
+                          "hexana-claude-plugin-$platform-$mcpServerVersion.zip",
+                          "hexana-codex-plugin-$platform-$mcpServerVersion.zip",
+                      )
+                  }.joinToString(separator = ",\n                  ") { "\"$it\"" }}
+                ]
+              }
             }
             """.trimIndent() + "\n"
         )
+        validatePublicMarketplaceBundleNativePolicy(outputDir)
+    }
+}
+
+tasks.register("validatePublicMarketplaceBundle") {
+    group = "verification"
+    description = "Validate generated public marketplace metadata and native artifact policy."
+    dependsOn("assemblePublicMarketplaceBundle")
+    inputs.dir(publicMarketplaceDir)
+    doLast {
+        validatePublicMarketplaceBundleNativePolicy(publicMarketplaceDir.asFile)
     }
 }
 

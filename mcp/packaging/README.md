@@ -146,7 +146,7 @@ should use it after the release build's snapshot dependencies have passed. The s
 3. builds R8-obfuscated release standalone, Claude, and Codex MCP packages,
 4. smoke-tests the R8-obfuscated standalone runtime plus Claude and Codex wrappers,
 5. runs the release artifact security check,
-6. validates the generated public marketplace bundle JSON files,
+6. validates the generated public marketplace bundle JSON files and native artifact policy,
 7. validates, commits, pushes, and creates or updates the public marketplace pull request,
 8. creates or updates the GitHub Release and uploads ZIP assets.
 
