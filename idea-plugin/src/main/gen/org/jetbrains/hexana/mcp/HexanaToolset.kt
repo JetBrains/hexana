@@ -494,75 +494,13 @@ public class HexanaToolset : McpToolsProvider {
   },
   object : McpTool {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
-      name = "list_component_surface",
-      description = """
-      |Inspect WebAssembly component imports and exports with WIT-style names and runtime-import flags.
-      |Use this only for compact component-model surface inspection when provider selection is not needed.
-      |For dependency resolution across candidate component files, use `resolve_component_dependencies`; this low-level surface view does not select providers, follow transitive imports, reject candidates, or compute compatibility verdicts.
-      """.trimMargin(),
-      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.listComponentSurface",
-      inputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("path", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Path relative to the project root"))
-        })
-        put("projectPath", buildJsonObject {
-          put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
-        })
-      },
-      requiredProperties = setOf("path"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-      outputSchema = McpToolSchema.ofPropertiesSchema(
-      properties = buildJsonObject {
-        put("path", buildJsonObject {
-          put("type", buildJsonArray {
-            add(JsonPrimitive("string"))
-            add(JsonPrimitive("null"))
-          })
-        })
-        put("isComponent", buildJsonObject {
-          put("type", JsonPrimitive("boolean"))
-        })
-        put("imports", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-          })
-        })
-        put("exports", buildJsonObject {
-          put("type", JsonPrimitive("array"))
-          put("items", buildJsonObject {
-            put("type", JsonPrimitive("object"))
-          })
-        })
-        put("summary", buildJsonObject {
-          put("type", JsonPrimitive("object"))
-        })
-      },
-      requiredProperties = setOf("isComponent", "imports", "exports", "summary"),
-      definitions = emptyMap<String, JsonElement>(),
-      ),
-    )
-    override suspend fun call(args: JsonObject): McpToolCallResult {
-      val path = args.requireStringArgument("path")
-      val file = requireWasmFile(path)
-      val provider = file.requireComponentWasmBinaryProvider()
-      val result = provider.readComponentSurface(pathLabel = path)
-      val text = encodeHexanaJson(result)
-      val structuredContent = encodeHexanaJsonElement(result).jsonObject
-      return McpToolCallResult.text(text, structuredContent)
-    }
-  },
-  object : McpTool {
-    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "resolve_component_dependencies",
       description = """
-      |Resolve direct and transitive component dependencies from candidate scan roots into report-ready fields.
+      |Resolve component run/link dependencies from a main component and candidate roots into report-ready fields.
       |Search `scanRoots`, `projectRoot`, and the input component directory for component providers of non-runtime imports.
-      |Use this aggregate dependency-resolution workflow as the shortest path when provider files must be discovered, transitive imports must be followed, runtime imports ignored, rejected candidates explained, and a minimal run/build fix reported.
+      |Use this aggregate dependency-resolution workflow first when a component run/build/link step has a main component plus project root or candidate directories.
+      |This is the shortest path when provider files must be discovered, transitive imports must be followed, runtime imports ignored, rejected candidates explained, and a minimal run/build fix reported.
+      |Prefer this over `list_component_surface`, `list_imports`, or `list_exports` for component provider selection because it performs the scan and returns the final dependency report fields directly.
       |Returns report-ready `required_non_runtime_imports`, `ignored_runtime_imports`, `resolved_dependency_paths`, `rejected_candidates`, and `minimal_run_build_fix` fields.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.resolveComponentDependencies",
@@ -678,6 +616,71 @@ public class HexanaToolset : McpToolsProvider {
       val file = requireWasmFile(path)
       val provider = file.requireComponentWasmBinaryProvider()
       val result = provider.resolveComponentDependencies(path = file.path, projectRoot = projectRoot, scanRoots = scanRoots.orEmpty())
+      val text = encodeHexanaJson(result)
+      val structuredContent = encodeHexanaJsonElement(result).jsonObject
+      return McpToolCallResult.text(text, structuredContent)
+    }
+  },
+  object : McpTool {
+    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
+      name = "list_component_surface",
+      description = """
+      |Low-level component import/export listing; not for dependency/provider resolution.
+      |Use this only for compact component-model surface inspection when provider selection is not needed.
+      |For component run/link failures, project-root scans, or dependency resolution across candidate component files, call `resolve_component_dependencies` instead.
+      |This low-level surface view does not select providers, follow transitive imports, reject candidates, ignore runtime imports for dependency decisions, or compute compatibility verdicts.
+      """.trimMargin(),
+      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.listComponentSurface",
+      inputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path relative to the project root"))
+        })
+        put("projectPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
+        })
+      },
+      requiredProperties = setOf("path"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+      outputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("isComponent", buildJsonObject {
+          put("type", JsonPrimitive("boolean"))
+        })
+        put("imports", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+        put("exports", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+        put("summary", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      },
+      requiredProperties = setOf("isComponent", "imports", "exports", "summary"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+    )
+    override suspend fun call(args: JsonObject): McpToolCallResult {
+      val path = args.requireStringArgument("path")
+      val file = requireWasmFile(path)
+      val provider = file.requireComponentWasmBinaryProvider()
+      val result = provider.readComponentSurface(pathLabel = path)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)
@@ -1217,6 +1220,8 @@ public class HexanaToolset : McpToolsProvider {
       |List imported functions declared by a `.wasm` module.
       |List imported functions declared by a WebAssembly (.wasm) module.
       |This is the primary MCP tool for import inventories, link-mismatch analysis, and mapping direct host calls to imported functions.
+      |For WebAssembly component dependency/provider resolution, candidate component scans, transitive WIT imports, or component run/link fixes, use `resolve_component_dependencies` instead.
+      |Do not use this low-level function-import inventory as the main workflow for selecting component dependency files.
       |Returns only function imports from the unified function index space, including the `funcidx` values needed to map direct `call` targets back to imports.
       |Each import includes structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
       |For direct host-call analysis, pair these `funcidx` values with `get_instructions_for_functions` to resolve `call N` back to `module.name` imports.
@@ -1267,6 +1272,8 @@ public class HexanaToolset : McpToolsProvider {
       |Includes exported functions, tables, memories, and globals; `kind` uses the standard tags 0=function, 1=table, 2=memory, 3=global.
       |This is the light name-and-kind view of exports.
       |Use this when you only need exported names, kinds, or raw external indices.
+      |For WebAssembly component dependency/provider resolution, candidate component scans, transitive WIT imports, or component run/link fixes, use `resolve_component_dependencies` instead.
+      |Do not use this low-level export inventory as the main workflow for selecting component dependency files.
       |If you need function signatures or origins, skip directly to `list_exported_functions`.
       |For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not identify new or policy-allowed public globals.
       """.trimMargin(),

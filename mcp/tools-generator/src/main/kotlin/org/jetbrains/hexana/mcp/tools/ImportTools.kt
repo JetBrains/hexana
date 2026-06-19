@@ -29,6 +29,8 @@ internal val ImportTools: List<ToolSpec> = tools {
         guidance = """
             List imported functions declared by a WebAssembly (.wasm) module.
             This is the primary MCP tool for import inventories, link-mismatch analysis, and mapping direct host calls to imported functions.
+            For WebAssembly component dependency/provider resolution, candidate component scans, transitive WIT imports, or component run/link fixes, use `resolve_component_dependencies` instead.
+            Do not use this low-level function-import inventory as the main workflow for selecting component dependency files.
             Returns only function imports from the unified function index space, including the `funcidx` values needed to map direct `call` targets back to imports.
             Each import includes structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
             For direct host-call analysis, pair these `funcidx` values with `get_instructions_for_functions` to resolve `call N` back to `module.name` imports.

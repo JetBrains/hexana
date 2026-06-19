@@ -234,10 +234,11 @@ val ComponentCompatibilityInputClass = WasmInputClass.with("ComponentCompatibili
 
 internal val ComponentTools: List<ToolSpec> = tools {
     tool("list_component_surface") {
-        summary = "Inspect WebAssembly component imports and exports with WIT-style names and runtime-import flags."
+        summary = "Low-level component import/export listing; not for dependency/provider resolution."
         guidance = """
             Use this only for compact component-model surface inspection when provider selection is not needed.
-            For dependency resolution across candidate component files, use `resolve_component_dependencies`; this low-level surface view does not select providers, follow transitive imports, reject candidates, or compute compatibility verdicts.
+            For component run/link failures, project-root scans, or dependency resolution across candidate component files, call `resolve_component_dependencies` instead.
+            This low-level surface view does not select providers, follow transitive imports, reject candidates, ignore runtime imports for dependency decisions, or compute compatibility verdicts.
         """
         input = WasmInputClass
         inputPattern = ToolInputPattern.ComponentSurface
@@ -246,10 +247,12 @@ internal val ComponentTools: List<ToolSpec> = tools {
     }
 
     tool("resolve_component_dependencies") {
-        summary = "Resolve direct and transitive component dependencies from candidate scan roots into report-ready fields."
+        summary = "Resolve component run/link dependencies from a main component and candidate roots into report-ready fields."
         guidance = """
             Search `scanRoots`, `projectRoot`, and the input component directory for component providers of non-runtime imports.
-            Use this aggregate dependency-resolution workflow as the shortest path when provider files must be discovered, transitive imports must be followed, runtime imports ignored, rejected candidates explained, and a minimal run/build fix reported.
+            Use this aggregate dependency-resolution workflow first when a component run/build/link step has a main component plus project root or candidate directories.
+            This is the shortest path when provider files must be discovered, transitive imports must be followed, runtime imports ignored, rejected candidates explained, and a minimal run/build fix reported.
+            Prefer this over `list_component_surface`, `list_imports`, or `list_exports` for component provider selection because it performs the scan and returns the final dependency report fields directly.
             Returns report-ready `required_non_runtime_imports`, `ignored_runtime_imports`, `resolved_dependency_paths`, `rejected_candidates`, and `minimal_run_build_fix` fields.
         """
         input = ComponentDependencyInputClass

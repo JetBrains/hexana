@@ -125,6 +125,7 @@ class HexanaMcpServerSchemaTest {
 
         assertBefore(names, "plan_abi_binding_regeneration", "list_exports")
         assertBefore(names, "check_memory_contract", "list_memory")
+        assertBefore(names, "resolve_component_dependencies", "list_component_surface")
         assertBefore(names, "resolve_component_dependencies", "list_imports")
         assertBefore(names, "check_component_compatibility", "list_exports")
         assertBefore(names, "audit_global_state_policy", "list_globals")

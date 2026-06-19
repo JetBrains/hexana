@@ -973,13 +973,39 @@ private fun rejectedComponentReason(
 private fun componentPackagePrefix(baseName: String): String = baseName.substringBeforeLast('/', baseName)
 
 private fun componentScanRoots(path: String?, projectRoot: String?, scanRoots: List<String>): List<Path> {
-    val roots = linkedSetOf<Path>()
-    scanRoots.filter { it.isNotBlank() }.forEach { roots.add(Path.of(it).normalize()) }
-    projectRoot?.takeIf { it.isNotBlank() }?.let { roots.add(Path.of(it).normalize()) }
-    path?.takeIf { it.isNotBlank() }?.let { rawPath ->
-        Path.of(rawPath).toAbsolutePath().parent?.normalize()?.let(roots::add)
+    val roots = linkedMapOf<Path, Path>()
+    fun addRoot(candidate: Path) {
+        val normalized = candidate.normalize()
+        val key = try {
+            normalized.toRealPath()
+        } catch (_: Exception) {
+            normalized.toAbsolutePath().normalize()
+        }
+        roots.putIfAbsent(key, normalized)
     }
-    return roots.filter { Files.isDirectory(it) }.take(MAX_SCAN_ROOTS)
+
+    val projectRootPath = projectRoot
+        ?.takeIf { it.isNotBlank() }
+        ?.let { Path.of(it).normalize() }
+    scanRoots.filter { it.isNotBlank() }.forEach { rawRoot ->
+        val candidate = Path.of(rawRoot)
+        if (candidate.isAbsolute || projectRootPath == null) {
+            addRoot(candidate)
+        } else {
+            addRoot(projectRootPath.resolve(candidate))
+        }
+    }
+    projectRootPath?.let(::addRoot)
+    path?.takeIf { it.isNotBlank() }?.let { rawPath ->
+        val candidate = Path.of(rawPath)
+        val resolvedPath = if (candidate.isAbsolute || projectRootPath == null) {
+            candidate
+        } else {
+            projectRootPath.resolve(candidate)
+        }
+        resolvedPath.toAbsolutePath().parent?.normalize()?.let(::addRoot)
+    }
+    return roots.values.filter { Files.isDirectory(it) }.take(MAX_SCAN_ROOTS)
 }
 
 private fun componentMatchKey(baseName: String): String =

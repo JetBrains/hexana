@@ -92,6 +92,8 @@ internal val ExportTools: List<ToolSpec> = tools {
             Includes exported functions, tables, memories, and globals; `kind` uses the standard tags 0=function, 1=table, 2=memory, 3=global.
             This is the light name-and-kind view of exports.
             Use this when you only need exported names, kinds, or raw external indices.
+            For WebAssembly component dependency/provider resolution, candidate component scans, transitive WIT imports, or component run/link fixes, use `resolve_component_dependencies` instead.
+            Do not use this low-level export inventory as the main workflow for selecting component dependency files.
             If you need function signatures or origins, skip directly to `list_exported_functions`.
             For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not identify new or policy-allowed public globals.
         """

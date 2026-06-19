@@ -59,8 +59,13 @@ class ToolDescriptionGenerationTest {
         )
         assertBoundaryPhrase(
             source,
-            "Use this aggregate dependency-resolution workflow as the shortest path",
+            "Use this aggregate dependency-resolution workflow first when a component run/build/link step has a main component plus project root or candidate directories",
             "resolve_component_dependencies should mention transitive resolution",
+        )
+        assertBoundaryPhrase(
+            source,
+            "Prefer this over `list_component_surface`, `list_imports`, or `list_exports` for component provider selection",
+            "resolve_component_dependencies should be favored over low-level inventories",
         )
         assertBoundaryPhrase(
             source,
@@ -74,8 +79,18 @@ class ToolDescriptionGenerationTest {
         )
         assertBoundaryPhrase(
             source,
-            "For dependency resolution across candidate component files, use `resolve_component_dependencies`",
+            "For component run/link failures, project-root scans, or dependency resolution across candidate component files, call `resolve_component_dependencies` instead",
             "list_component_surface should stay separate from resolution workflows",
+        )
+        assertBoundaryPhrase(
+            source,
+            "Do not use this low-level function-import inventory as the main workflow for selecting component dependency files",
+            "list_imports should redirect component dependency workflows",
+        )
+        assertBoundaryPhrase(
+            source,
+            "Do not use this low-level export inventory as the main workflow for selecting component dependency files",
+            "list_exports should redirect component dependency workflows",
         )
     }
 

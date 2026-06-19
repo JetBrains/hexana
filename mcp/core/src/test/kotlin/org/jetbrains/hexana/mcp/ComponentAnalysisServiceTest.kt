@@ -231,6 +231,53 @@ class ComponentAnalysisServiceTest {
     }
 
     @Test
+    fun resolveComponentDependenciesDeduplicatesRelativeScanRootsAgainstProjectRoot() {
+        val root = temporaryFolder.newFolder("relative-scan-roots").toPath()
+        val relativeCheckout = "dist/components/checkout.component.wasm"
+        val checkout = writeComponent(
+            root.resolve(relativeCheckout),
+            imports = listOf(
+                "acme:pricing/calculate@1.2.0",
+                "wasi:cli/run@0.2.3",
+            ),
+            exports = listOf("acme:checkout/run@1.0.0"),
+        )
+        val pricing = writeComponent(
+            root.resolve("components/pricing.component.wasm"),
+            imports = listOf("acme:tax/rates@1.0.0"),
+            exports = listOf("acme:pricing/calculate@1.2.0"),
+        )
+        val tax = writeComponent(
+            root.resolve("components/tax.component.wasm"),
+            imports = emptyList(),
+            exports = listOf("acme:tax/rates@1.0.0"),
+        )
+
+        val provider = WasmComponentBinaryProvider(Files.readAllBytes(checkout).toCommonByteBuffer())
+        val result = provider.resolveComponentDependencies(
+            path = root.resolve(relativeCheckout).toString(),
+            projectRoot = root.toString(),
+            scanRoots = listOf("components", "third_party", "tools/wasm"),
+        )
+
+        assertTrue(result.candidateConflicts.isEmpty(), "Relative scan roots must not duplicate project-root files")
+        assertTrue(result.resolvedDependencyPaths.any {
+            it.importName == "acme:pricing/calculate@1.2.0" &&
+                it.dependencyPath == pricing.toString() &&
+                it.classification == "direct"
+        })
+        assertTrue(result.resolvedDependencyPaths.any {
+            it.importName == "acme:tax/rates@1.0.0" &&
+                it.dependencyPath == tax.toString() &&
+                it.classification == "transitive"
+        })
+        assertEquals(
+            "Add components/pricing.component.wasm and components/tax.component.wasm to the checkout component dependency set before running ${root.resolve(relativeCheckout)}.",
+            result.minimalRunBuildFix,
+        )
+    }
+
+    @Test
     fun checkComponentCompatibilityReportsMatchesAndMissingImports() {
         val root = temporaryFolder.newFolder("compat").toPath()
         val calculator = copyFixture("calculator.wasm", root.resolve("calculator.wasm"))
