@@ -1964,10 +1964,10 @@ public class HexanaToolset : McpToolsProvider {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "resolve_wasm_frames",
       description = """
-      |Aggregate WebAssembly stack and crash-frame triage from function indices, labels, and offsets.
-      |Resolve `funcidx` values, raw labels, and optional code offsets into symbols, signatures, ranges, and source locations.
-      |Prefer `crashReportPath` with a matching `sourceMapPath` when a crash report JSON is available.
-      |Use this aggregate workflow for crash triage without requesting full disassembly.
+      |Aggregate WebAssembly crash-report and stack-frame triage from function indices, labels, and offsets.
+      |Resolve crash-report or stack-frame `funcidx` values, raw labels, and optional code offsets into symbols, signatures, exported names, code ranges, source locations, top application frame, skipped-frame reasons, and report-ready summaries.
+      |Prefer `crashReportPath` with a matching `sourceMapPath` when a crash report JSON is available; for previous/current build regression triage, call this once for each build's module, crash report, and source map, then compare the returned `topApplicationFrame` symbols and exports.
+      |Use this aggregate workflow for crash triage, frame regression analysis, and source-map-backed incident reports before lower-level symbol/source lookups or full disassembly.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.resolveWasmFrames",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -2025,7 +2025,7 @@ public class HexanaToolset : McpToolsProvider {
             add(JsonPrimitive("string"))
             add(JsonPrimitive("null"))
           })
-          put("description", JsonPrimitive("Optional path to a crash report JSON file containing stack frames with `funcidx`, code offsets, and raw labels. Prefer this over manually constructing `frames` when a report file exists."))
+          put("description", JsonPrimitive("Optional path to a crash report JSON file containing stack frames with `funcidx`, code offsets, and raw labels. Prefer this over manually constructing `frames` when a report file exists, including previous/current crash reports resolved one build at a time."))
           put("maxLength", JsonPrimitive(1_000))
         })
         put("sourceMapPath", buildJsonObject {
@@ -2119,7 +2119,8 @@ public class HexanaToolset : McpToolsProvider {
       |Focused lookup for function indices, symbols, signatures, and metadata.
       |Batch-resolve unified WebAssembly function indices to compact symbol records.
       |Symbol resolution prefers name-section entries, then DWARF names, DWARF linkage names, export names, and finally an explicit `funcidx_fallback`.
-      |Use this focused lookup when you already have `funcidx` values and need stable names, signatures, imports, exports, code ranges, or debug source locations.
+      |Use this focused lookup when you already have `funcidx` values and need stable names, signatures, imports, exports, code ranges, or debug source locations outside a crash-frame workflow.
+      |For crash reports, stack traces, top application frame selection, or previous/current frame regression analysis, call `resolve_wasm_frames` instead.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.resolveFunctionSymbols",
       inputSchema = McpToolSchema.ofPropertiesSchema(
@@ -2186,6 +2187,7 @@ public class HexanaToolset : McpToolsProvider {
       |Map absolute WebAssembly code offsets or unified `funcidx` values to source-map or DWARF source locations.
       |When only `funcidx` is supplied, the function body start offset is used; when only `codeOffset` is supplied, the containing local function is inferred when possible.
       |This is source-location lookup only; it does not perform full frame triage or enrich results with symbol fallback ranking, signatures, exports, and code ranges.
+      |For crash reports, stack traces, top application frame selection, or previous/current frame regression analysis, call `resolve_wasm_frames` instead.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.resolveSourceLocations",
       inputSchema = McpToolSchema.ofPropertiesSchema(

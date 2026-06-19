@@ -44,13 +44,13 @@ class ToolDescriptionGenerationTest {
     private fun assertAggregateToolGuidance(source: String) {
         assertBoundaryPhrase(
             source,
-            "Use this aggregate workflow for crash triage without requesting full disassembly",
+            "for previous/current build regression triage, call this once for each build's module, crash report, and source map",
             "resolve_wasm_frames should be described as aggregate frame triage",
         )
         assertBoundaryPhrase(
             source,
-            "Use this focused lookup when you already have `funcidx` values",
-            "resolve_function_symbols should be described as focused lookup",
+            "For crash reports, stack traces, top application frame selection, or previous/current frame regression analysis, call `resolve_wasm_frames` instead",
+            "lower-level function/source tools should redirect crash-frame triage",
         )
         assertBoundaryPhrase(
             source,
