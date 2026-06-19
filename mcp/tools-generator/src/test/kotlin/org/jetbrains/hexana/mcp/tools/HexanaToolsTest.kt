@@ -245,6 +245,18 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `component dependency output carries report-ready serial names`() {
+        val dependencyOutput = HexanaTools.single { it.name == "resolve_component_dependencies" }.output
+        val topLevelFields = dependencyOutput.fields.associateBy { it.name }
+        assertEquals("component_path", topLevelFields.getValue("path").serialName)
+        assertEquals("required_non_runtime_imports", topLevelFields.getValue("requiredNonRuntimeImports").serialName)
+        assertEquals("ignored_runtime_imports", topLevelFields.getValue("ignoredRuntimeImports").serialName)
+        assertEquals("resolved_dependency_paths", topLevelFields.getValue("resolvedDependencyPaths").serialName)
+        assertEquals("rejected_candidates", topLevelFields.getValue("rejectedCandidates").serialName)
+        assertEquals("minimal_run_build_fix", topLevelFields.getValue("minimalRunBuildFix").serialName)
+    }
+
+    @Test
     fun `artifact query pattern validates required input fields`() {
         val fields = queryArtifacts.input.fields.associateBy { it.name }
         listOf(

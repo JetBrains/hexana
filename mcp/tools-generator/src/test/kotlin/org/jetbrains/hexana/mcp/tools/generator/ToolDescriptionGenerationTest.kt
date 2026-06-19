@@ -59,12 +59,12 @@ class ToolDescriptionGenerationTest {
         )
         assertBoundaryPhrase(
             source,
-            "Search `scanRoots`, `projectRoot`, and the input component directory",
+            "Use this aggregate dependency-resolution workflow as the shortest path",
             "resolve_component_dependencies should mention transitive resolution",
         )
         assertBoundaryPhrase(
             source,
-            "Use this aggregate dependency-resolution workflow when provider files must be discovered",
+            "Returns report-ready `required_non_runtime_imports`, `ignored_runtime_imports`, `resolved_dependency_paths`, `rejected_candidates`, and `minimal_run_build_fix` fields",
             "resolve_component_dependencies should be described as provider discovery",
         )
         assertBoundaryPhrase(
@@ -74,7 +74,7 @@ class ToolDescriptionGenerationTest {
         )
         assertBoundaryPhrase(
             source,
-            "It does not select provider files or compute compatibility verdicts",
+            "For dependency resolution across candidate component files, use `resolve_component_dependencies`",
             "list_component_surface should stay separate from resolution workflows",
         )
     }

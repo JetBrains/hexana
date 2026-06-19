@@ -605,8 +605,8 @@ private fun Server.registerListComponentSurfaceTool(handlers: HexanaToolHandlers
     name = "list_component_surface",
     description = """
   |Inspect WebAssembly component imports and exports with WIT-style names and runtime-import flags.
-  |Use this for compact component-model surface inspection before dependency or compatibility reasoning.
-  |It does not select provider files or compute compatibility verdicts.
+  |Use this only for compact component-model surface inspection when provider selection is not needed.
+  |For dependency resolution across candidate component files, use `resolve_component_dependencies`; this low-level surface view does not select providers, follow transitive imports, reject candidates, or compute compatibility verdicts.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -684,9 +684,10 @@ private fun Server.registerResolveComponentDependenciesTool(handlers: HexanaTool
   addTool(tool = Tool(
     name = "resolve_component_dependencies",
     description = """
-  |Resolve direct and transitive component dependencies from scan roots and project roots.
+  |Resolve direct and transitive component dependencies from candidate scan roots into report-ready fields.
   |Search `scanRoots`, `projectRoot`, and the input component directory for component providers of non-runtime imports.
-  |Use this aggregate dependency-resolution workflow when provider files must be discovered.
+  |Use this aggregate dependency-resolution workflow as the shortest path when provider files must be discovered, transitive imports must be followed, runtime imports ignored, rejected candidates explained, and a minimal run/build fix reported.
+  |Returns report-ready `required_non_runtime_imports`, `ignored_runtime_imports`, `resolved_dependency_paths`, `rejected_candidates`, and `minimal_run_build_fix` fields.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -741,74 +742,74 @@ private fun Server.registerResolveComponentDependenciesTool(handlers: HexanaTool
   ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
-      put("path", buildJsonObject {
+      put("component_path", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
       })
-      put("scanRoots", buildJsonObject {
+      put("scan_roots", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
         })
       })
-      put("requiredNonRuntimeImports", buildJsonObject {
+      put("required_non_runtime_imports", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
         })
       })
-      put("ignoredRuntimeImports", buildJsonObject {
+      put("ignored_runtime_imports", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
         })
       })
-      put("resolvedDependencyPaths", buildJsonObject {
+      put("resolved_dependency_paths", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
         })
       })
-      put("directDependencies", buildJsonObject {
+      put("direct_dependencies", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
         })
       })
-      put("transitiveDependencies", buildJsonObject {
+      put("transitive_dependencies", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
         })
       })
-      put("unresolvedImports", buildJsonObject {
+      put("unresolved_imports", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
         })
       })
-      put("candidateConflicts", buildJsonObject {
+      put("candidate_conflicts", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
         })
       })
-      put("rejectedCandidates", buildJsonObject {
+      put("rejected_candidates", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
         })
       })
-      put("minimalRunBuildFix", buildJsonObject {
+      put("minimal_run_build_fix", buildJsonObject {
         put("type", JsonPrimitive("string"))
       })
       put("summary", buildJsonObject {
         put("type", JsonPrimitive("object"))
       })
     },
-    required = listOf("scanRoots", "requiredNonRuntimeImports", "ignoredRuntimeImports", "resolvedDependencyPaths", "directDependencies", "transitiveDependencies", "unresolvedImports", "candidateConflicts", "rejectedCandidates", "minimalRunBuildFix", "summary")
+    required = listOf("scan_roots", "required_non_runtime_imports", "ignored_runtime_imports", "resolved_dependency_paths", "direct_dependencies", "transitive_dependencies", "unresolved_imports", "candidate_conflicts", "rejected_candidates", "minimal_run_build_fix", "summary")
   ),
     annotations = ToolAnnotations(
       readOnlyHint = true,

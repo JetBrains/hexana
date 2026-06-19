@@ -41,29 +41,29 @@ val ComponentDependencyProviderResultClass = class_("ComponentDependencyProvider
 }
 
 val ComponentDependencyImportResultClass = class_("ComponentDependencyImportResult") {
-    string("importName").describe("Required import name.")
-    string("baseName").describe("Required import base name without version.")
+    string("importName").serialName("name").describe("Required import name.")
+    string("baseName").serialName("base_name").describe("Required import base name without version.")
     string("version").describe("Required import version without `@`, or empty when absent.")
     string("classification").describe("Dependency classification: `direct` or `transitive`.")
 }
 
 val ComponentIgnoredRuntimeImportResultClass = class_("ComponentIgnoredRuntimeImportResult") {
-    string("importName").describe("Ignored runtime import name.")
-    string("baseName").describe("Ignored runtime import base name without version.")
+    string("importName").serialName("name").describe("Ignored runtime import name.")
+    string("baseName").serialName("base_name").describe("Ignored runtime import base name without version.")
     string("version").describe("Ignored runtime import version without `@`, or empty when absent.")
     string("classification").describe("Import classification: `direct` or `transitive`.")
     string("reason").describe("Concise reason the import was ignored for dependency resolution.")
 }
 
 val ComponentResolvedDependencyPathResultClass = class_("ComponentResolvedDependencyPathResult") {
-    string("importName").describe("Required import name resolved by the dependency file.")
-    string("dependencyPath").describe("Dependency file that provided the import.")
+    string("importName").serialName("import").describe("Required import name resolved by the dependency file.")
+    string("dependencyPath").serialName("path").describe("Dependency file that provided the import.")
     string("classification").describe("Dependency classification: `direct` or `transitive`.")
 }
 
 val ComponentUnresolvedImportResultClass = class_("ComponentUnresolvedImportResult") {
-    string("importName").describe("Unresolved import name.")
-    string("baseName").describe("Unresolved import base name without version.")
+    string("importName").serialName("name").describe("Unresolved import name.")
+    string("baseName").serialName("base_name").describe("Unresolved import base name without version.")
     string("version").describe("Unresolved import version without `@`, or empty when absent.")
     boolean("runtimeProvided").describe("True when the import is known to be runtime-provided.")
 }
@@ -76,7 +76,7 @@ val ComponentCandidateConflictResultClass = class_("ComponentCandidateConflictRe
 }
 
 val ComponentRejectedCandidateResultClass = class_("ComponentRejectedCandidateResult") {
-    string("candidatePath").describe("Scanned candidate file that was not selected as a dependency.")
+    string("candidatePath").serialName("path").describe("Scanned candidate file that was not selected as a dependency.")
     string("reason").describe("Concise rejection reason.")
 }
 
@@ -97,21 +97,32 @@ val ResolveComponentDependenciesResultClass = class_(
     "ResolveComponentDependenciesResult",
     kotlinPackage = COMPONENT_MODEL_PACKAGE,
 ) {
-    nullable("path", of = string()).describe("Input path label when the caller provided `path`.")
-    list("scanRoots", of = string()).describe("Directory roots used for bounded component scanning.")
+    nullable("path", of = string()).serialName("component_path")
+        .describe("Input path label when the caller provided `path`.")
+    list("scanRoots", of = string()).serialName("scan_roots")
+        .describe("Directory roots used for bounded component scanning.")
     list("requiredNonRuntimeImports", of = ComponentDependencyImportResultClass)
+        .serialName("required_non_runtime_imports")
         .describe("Non-runtime imports required by the root component or resolved dependencies.")
     list("ignoredRuntimeImports", of = ComponentIgnoredRuntimeImportResultClass)
+        .serialName("ignored_runtime_imports")
         .describe("Runtime-provided imports ignored during dependency resolution.")
     list("resolvedDependencyPaths", of = ComponentResolvedDependencyPathResultClass)
+        .serialName("resolved_dependency_paths")
         .describe("Resolved dependency files with direct/transitive classification.")
-    list("directDependencies", of = ComponentDependencyProviderResultClass).describe("Resolved direct dependencies.")
-    list("transitiveDependencies", of = ComponentDependencyProviderResultClass).describe("Resolved transitive dependencies.")
-    list("unresolvedImports", of = ComponentUnresolvedImportResultClass).describe("Non-runtime imports without a provider.")
-    list("candidateConflicts", of = ComponentCandidateConflictResultClass).describe("Ambiguous provider candidates.")
+    list("directDependencies", of = ComponentDependencyProviderResultClass).serialName("direct_dependencies")
+        .describe("Resolved direct dependencies.")
+    list("transitiveDependencies", of = ComponentDependencyProviderResultClass).serialName("transitive_dependencies")
+        .describe("Resolved transitive dependencies.")
+    list("unresolvedImports", of = ComponentUnresolvedImportResultClass).serialName("unresolved_imports")
+        .describe("Non-runtime imports without a provider.")
+    list("candidateConflicts", of = ComponentCandidateConflictResultClass).serialName("candidate_conflicts")
+        .describe("Ambiguous provider candidates.")
     list("rejectedCandidates", of = ComponentRejectedCandidateResultClass)
+        .serialName("rejected_candidates")
         .describe("Scanned candidates rejected from the resolved dependency set.")
-    string("minimalRunBuildFix").describe("Concise action for wiring resolved dependency files before running the component.")
+    string("minimalRunBuildFix").serialName("minimal_run_build_fix")
+        .describe("Concise action for wiring resolved dependency files before running the component.")
     embed("summary", of = ComponentDependencySummaryResultClass).describe("Compact dependency-resolution counts.")
 }
 
@@ -225,8 +236,8 @@ internal val ComponentTools: List<ToolSpec> = tools {
     tool("list_component_surface") {
         summary = "Inspect WebAssembly component imports and exports with WIT-style names and runtime-import flags."
         guidance = """
-            Use this for compact component-model surface inspection before dependency or compatibility reasoning.
-            It does not select provider files or compute compatibility verdicts.
+            Use this only for compact component-model surface inspection when provider selection is not needed.
+            For dependency resolution across candidate component files, use `resolve_component_dependencies`; this low-level surface view does not select providers, follow transitive imports, reject candidates, or compute compatibility verdicts.
         """
         input = WasmInputClass
         inputPattern = ToolInputPattern.ComponentSurface
@@ -235,10 +246,11 @@ internal val ComponentTools: List<ToolSpec> = tools {
     }
 
     tool("resolve_component_dependencies") {
-        summary = "Resolve direct and transitive component dependencies from scan roots and project roots."
+        summary = "Resolve direct and transitive component dependencies from candidate scan roots into report-ready fields."
         guidance = """
             Search `scanRoots`, `projectRoot`, and the input component directory for component providers of non-runtime imports.
-            Use this aggregate dependency-resolution workflow when provider files must be discovered.
+            Use this aggregate dependency-resolution workflow as the shortest path when provider files must be discovered, transitive imports must be followed, runtime imports ignored, rejected candidates explained, and a minimal run/build fix reported.
+            Returns report-ready `required_non_runtime_imports`, `ignored_runtime_imports`, `resolved_dependency_paths`, `rejected_candidates`, and `minimal_run_build_fix` fields.
         """
         input = ComponentDependencyInputClass
         inputPattern = ToolInputPattern.ComponentDependencies

@@ -205,7 +205,7 @@ class HexanaClaudePluginWrapperIntegrationTest {
         )
         assertTrue(
             dependencies.structuredContent
-                ?.get("directDependencies")
+                ?.get("direct_dependencies")
                 ?.jsonArray
                 ?.any {
                     it.jsonObject.getValue("importBaseName").jsonPrimitive.content.contains("component:adder/add")
@@ -214,30 +214,30 @@ class HexanaClaudePluginWrapperIntegrationTest {
         )
         assertTrue(
             dependencies.structuredContent
-                ?.get("requiredNonRuntimeImports")
+                ?.get("required_non_runtime_imports")
                 ?.jsonArray
                 ?.any {
-                    it.jsonObject.getValue("importName").jsonPrimitive.content.contains("component:adder/add") &&
+                    it.jsonObject.getValue("name").jsonPrimitive.content.contains("component:adder/add") &&
                         it.jsonObject.getValue("classification").jsonPrimitive.content == "direct"
                 } == true,
             "$clientLabel resolve_component_dependencies did not report direct required imports: ${surfaceText(dependencies)}"
         )
         assertTrue(
             dependencies.structuredContent
-                ?.get("resolvedDependencyPaths")
+                ?.get("resolved_dependency_paths")
                 ?.jsonArray
                 ?.any {
-                    it.jsonObject.getValue("dependencyPath").jsonPrimitive.content == adder.toString() &&
+                    it.jsonObject.getValue("path").jsonPrimitive.content == adder.toString() &&
                         it.jsonObject.getValue("classification").jsonPrimitive.content == "direct"
                 } == true,
             "$clientLabel resolve_component_dependencies did not report resolved dependency paths: ${surfaceText(dependencies)}"
         )
         assertTrue(
             dependencies.structuredContent
-                ?.get("unresolvedImports")
+                ?.get("unresolved_imports")
                 ?.jsonArray
                 ?.any {
-                    it.jsonObject.getValue("baseName").jsonPrimitive.content.contains("component:subtractor/subtract")
+                    it.jsonObject.getValue("base_name").jsonPrimitive.content.contains("component:subtractor/subtract")
                 } == true,
             "$clientLabel resolve_component_dependencies did not report subtractor unresolved: ${surfaceText(dependencies)}"
         )
@@ -273,7 +273,7 @@ class HexanaClaudePluginWrapperIntegrationTest {
                 ?.get("missingImports")
                 ?.jsonArray
                 ?.any {
-                    it.jsonObject.getValue("baseName").jsonPrimitive.content.contains("component:subtractor/subtract")
+                    it.jsonObject.getValue("base_name").jsonPrimitive.content.contains("component:subtractor/subtract")
                 } == true,
             "$clientLabel check_component_compatibility did not report missing subtractor: ${surfaceText(compatibility)}"
         )

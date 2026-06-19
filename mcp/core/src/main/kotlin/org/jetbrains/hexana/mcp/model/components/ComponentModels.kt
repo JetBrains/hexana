@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.model.components
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -43,7 +44,9 @@ data class ComponentDependencyProviderResult(
 
 @Serializable
 data class ComponentDependencyImportResult(
+    @SerialName("name")
     val importName: String,
+    @SerialName("base_name")
     val baseName: String,
     val version: String,
     val classification: String,
@@ -51,7 +54,9 @@ data class ComponentDependencyImportResult(
 
 @Serializable
 data class ComponentIgnoredRuntimeImportResult(
+    @SerialName("name")
     val importName: String,
+    @SerialName("base_name")
     val baseName: String,
     val version: String,
     val classification: String,
@@ -60,14 +65,18 @@ data class ComponentIgnoredRuntimeImportResult(
 
 @Serializable
 data class ComponentResolvedDependencyPathResult(
+    @SerialName("import")
     val importName: String,
+    @SerialName("path")
     val dependencyPath: String,
     val classification: String,
 )
 
 @Serializable
 data class ComponentUnresolvedImportResult(
+    @SerialName("name")
     val importName: String,
+    @SerialName("base_name")
     val baseName: String,
     val version: String,
     val runtimeProvided: Boolean,
@@ -83,6 +92,7 @@ data class ComponentCandidateConflictResult(
 
 @Serializable
 data class ComponentRejectedCandidateResult(
+    @SerialName("path")
     val candidatePath: String,
     val reason: String,
 )
@@ -103,16 +113,27 @@ data class ComponentDependencySummaryResult(
 
 @Serializable
 data class ResolveComponentDependenciesResult(
+    @SerialName("component_path")
     val path: String?,
+    @SerialName("scan_roots")
     val scanRoots: List<String>,
+    @SerialName("required_non_runtime_imports")
     val requiredNonRuntimeImports: List<ComponentDependencyImportResult>,
+    @SerialName("ignored_runtime_imports")
     val ignoredRuntimeImports: List<ComponentIgnoredRuntimeImportResult>,
+    @SerialName("resolved_dependency_paths")
     val resolvedDependencyPaths: List<ComponentResolvedDependencyPathResult>,
+    @SerialName("direct_dependencies")
     val directDependencies: List<ComponentDependencyProviderResult>,
+    @SerialName("transitive_dependencies")
     val transitiveDependencies: List<ComponentDependencyProviderResult>,
+    @SerialName("unresolved_imports")
     val unresolvedImports: List<ComponentUnresolvedImportResult>,
+    @SerialName("candidate_conflicts")
     val candidateConflicts: List<ComponentCandidateConflictResult>,
+    @SerialName("rejected_candidates")
     val rejectedCandidates: List<ComponentRejectedCandidateResult>,
+    @SerialName("minimal_run_build_fix")
     val minimalRunBuildFix: String,
     val summary: ComponentDependencySummaryResult,
 )

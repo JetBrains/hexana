@@ -167,7 +167,7 @@ class ComponentAnalysisServiceTest {
         })
         assertTrue(result.rejectedCandidates.any {
             it.candidatePath.endsWith("pricing_preview.component.wasm") &&
-                it.reason.contains("does not match any required import")
+                it.reason == "exports acme:pricing/quote@1.2.0, which does not match required base name acme:pricing/calculate"
         })
         assertTrue(result.rejectedCandidates.any {
             it.candidatePath.endsWith("metrics.wasm") &&

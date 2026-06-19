@@ -947,6 +947,20 @@ private fun rejectedComponentReason(
             return "exports ${versionMismatch.fullName}, but required version is ${required.version}"
         }
     }
+    val closestRequiredBase = component.exports
+        .asSequence()
+        .mapNotNull { export ->
+            requiredImports.firstOrNull { required ->
+                componentPackagePrefix(export.baseName) == componentPackagePrefix(required.baseName)
+            }?.baseName
+        }
+        .firstOrNull()
+    if (closestRequiredBase != null) {
+        val exports = component.exports.map { it.fullName }.distinct().take(3)
+        val suffix = if (component.exports.size > exports.size) ", ..." else ""
+        val exportText = if (exports.size == 1) exports.single() else exports.joinToString()
+        return "exports $exportText$suffix, which does not match required base name $closestRequiredBase"
+    }
     val exports = component.exports.map { it.fullName }.distinct().take(3)
     val suffix = if (component.exports.size > exports.size) ", ..." else ""
     return if (exports.size == 1) {
@@ -955,6 +969,8 @@ private fun rejectedComponentReason(
         "exports ${exports.joinToString()}$suffix, which do not match any required import"
     }
 }
+
+private fun componentPackagePrefix(baseName: String): String = baseName.substringBeforeLast('/', baseName)
 
 private fun componentScanRoots(path: String?, projectRoot: String?, scanRoots: List<String>): List<Path> {
     val roots = linkedSetOf<Path>()
