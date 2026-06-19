@@ -348,6 +348,15 @@ class HexanaToolHandlers(
         }
     }
 
+    fun auditDataPayloadPolicy(arguments: JsonObject?): CallToolResult {
+        return execute("audit_data_payload_policy") {
+            analysisService.auditDataPayloadPolicy(
+                input = wasmInput(arguments),
+                policyInput = TextInput.FilePath(arguments.requireNonBlankString("policyPath"))
+            )
+        }
+    }
+
     fun getMemoryForIndices(arguments: JsonObject?): CallToolResult {
         return execute("get_memory_for_indices") {
             analysisService.getMemoryForIndices(

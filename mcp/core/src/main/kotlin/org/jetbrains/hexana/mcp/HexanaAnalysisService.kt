@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.mcp.model.data.AuditDataPayloadPolicyResult
 import org.jetbrains.hexana.mcp.model.data.ListDataSectionsResult
 import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
 import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
@@ -176,6 +177,12 @@ interface HexanaAnalysisService {
         includeGlobals: Boolean,
         minByteLength: Int?
     ): ListDataSegmentsResult
+    fun auditDataPayloadPolicy(
+        input: WasmInput,
+        policyInput: TextInput
+    ): AuditDataPayloadPolicyResult {
+        throw UnsupportedOperationException("auditDataPayloadPolicy is not implemented")
+    }
 
     fun getMemoryForIndices(input: WasmInput, indices: List<Int>): ListMemoryResult
     fun getTypesForIndices(input: WasmInput, indices: List<Int>): TypesResult
@@ -558,6 +565,16 @@ class DefaultHexanaAnalysisService(
             includeExports = includeExports,
             includeGlobals = includeGlobals,
             minByteLength = minByteLength
+        )
+    }
+
+    override fun auditDataPayloadPolicy(input: WasmInput, policyInput: TextInput): AuditDataPayloadPolicyResult {
+        val wasm = load(input)
+        val policy = loadText(policyInput)
+        return wasm.provider.auditDataPayloadPolicy(
+            policyText = policy.text,
+            pathLabel = input.artifactPathLabel(),
+            policyPathLabel = policy.path ?: policyInput.artifactPathLabel()
         )
     }
 

@@ -36,6 +36,7 @@ class HexanaMcpServerSchemaTest {
     fun defaultRegistryExposesProductionHexanaTools() {
         assertEquals(
             listOf(
+                "audit_data_payload_policy",
                 "audit_global_state_policy",
                 "check_component_compatibility",
                 "check_memory_contract",
@@ -73,6 +74,7 @@ class HexanaMcpServerSchemaTest {
     fun advancedRegistryExposesAllGeneratedHexanaTools() {
         assertEquals(
             listOf(
+                "audit_data_payload_policy",
                 "audit_global_state_policy",
                 "check_component_compatibility",
                 "check_memory_contract",

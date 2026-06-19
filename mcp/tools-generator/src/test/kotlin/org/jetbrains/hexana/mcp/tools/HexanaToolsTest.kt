@@ -55,6 +55,7 @@ class HexanaToolsTest {
                 "list_element_segments",
                 "list_data",
                 "list_data_segments",
+                "audit_data_payload_policy",
                 "query_artifacts",
             ),
             HexanaTools.map { it.name },

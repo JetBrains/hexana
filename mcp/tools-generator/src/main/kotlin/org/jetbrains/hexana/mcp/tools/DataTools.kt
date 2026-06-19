@@ -24,6 +24,10 @@ val ListDataSegmentsInput = WasmInputClass.with("ListDataSegmentsInput") {
         .minimum(0)
 }
 
+val AuditDataPayloadPolicyInput = WasmInputClass.with("AuditDataPayloadPolicyInput") {
+    string("policyPath").describe("Path to a payload policy JSON file with `policy_id` and `forbidden_payloads` entries.")
+}
+
 val DataEntryResultClass = class_("DataEntryResult") {
     int("kind").describe("Raw data-entry kind byte.")
     int("index").describe("Data-entry index within the returned slice.")
@@ -106,6 +110,62 @@ val ListDataSegmentsResultClass = class_("ListDataSegmentsResult", kotlinPackage
     embed("summary", of = DataSegmentsSummaryResultClass).describe("Counts across the returned segments.")
 }
 
+val DataPayloadPolicyMatchResultClass = class_("DataPayloadPolicyMatchResult") {
+    string("policyEntryId").describe("Policy entry id for the matched forbidden payload.")
+    string("forbiddenString").describe("Forbidden payload string confirmed in raw data bytes.")
+    string("severity").describe("Severity copied from the policy entry.")
+    int("segmentIndex").describe("Zero-based data segment index.")
+    string("mode").describe("Segment mode (`active`, `passive`).")
+    nullable("memory", int()).describe("Target memory index for active segments.")
+    nullable("offsetExpr", string()).describe("Offset expression for active segments.")
+    int("byteLength").describe("Byte length of the matching segment payload.")
+    boolean("rawBytesConfirmed").describe("True because the raw segment bytes contain the forbidden string.")
+}
+
+val DataPayloadPolicyMinimalFixResultClass = class_("DataPayloadPolicyMinimalFixResult") {
+    list("removeOrReplaceSegments", of = int()).describe("Data segment indices that contain forbidden payload strings.")
+}
+
+val DataPayloadPolicyReportMinimalFixResultClass = class_("DataPayloadPolicyReportMinimalFixResult") {
+    list("removeOrReplaceSegments", of = int()).serialName("remove_or_replace_segments")
+        .describe("Data segment indices that contain forbidden payload strings.")
+}
+
+val DataPayloadPolicyReportMatchResultClass = class_("DataPayloadPolicyReportMatchResult") {
+    string("policyEntryId").serialName("policy_entry_id").describe("Policy entry id for the matched forbidden payload.")
+    string("forbiddenString").serialName("forbidden_string").describe("Forbidden payload string confirmed in raw data bytes.")
+    string("severity").describe("Severity copied from the policy entry.")
+    int("segmentIndex").serialName("segment_index").describe("Zero-based data segment index.")
+    string("mode").describe("Segment mode (`active`, `passive`).")
+    nullable("memory", int()).describe("Target memory index for active segments.")
+    nullable("offsetExpr", string()).serialName("offset_expr").describe("Offset expression for active segments.")
+    int("byteLength").serialName("byte_length").describe("Byte length of the matching segment payload.")
+    boolean("rawBytesConfirmed").serialName("raw_bytes_confirmed")
+        .describe("True because the raw segment bytes contain the forbidden string.")
+}
+
+val DataPayloadPolicyRecommendedReportResultClass = class_("DataPayloadPolicyRecommendedReportResult") {
+    string("policyId").serialName("policy_id").describe("Policy id copied from the policy file.")
+    nullable("module", string()).describe("Wasm module path echoed from input `path`, when available.")
+    int("scannedSegments").serialName("scanned_segments").describe("Total number of scanned data segments.")
+    list("matches", of = DataPayloadPolicyReportMatchResultClass).describe("Report-ready policy matches.")
+    list("cleanSegments", of = int()).serialName("clean_segments").describe("Data segment indices with no forbidden payload strings.")
+    embed("minimalFix", of = DataPayloadPolicyReportMinimalFixResultClass).serialName("minimal_fix")
+        .describe("Minimal segment-level remediation summary.")
+}
+
+val AuditDataPayloadPolicyResultClass = class_("AuditDataPayloadPolicyResult", kotlinPackage = MODEL_PACKAGE) {
+    string("policyId").describe("Policy id copied from the policy file.")
+    nullable("module", string()).describe("Wasm module path echoed from input `path`, when available.")
+    nullable("policyPath", string()).describe("Payload policy path echoed from input `policyPath`, when available.")
+    int("scannedSegments").describe("Total number of scanned data segments.")
+    list("matches", of = DataPayloadPolicyMatchResultClass).describe("Policy matches confirmed against raw segment bytes.")
+    list("cleanSegments", of = int()).describe("Data segment indices with no forbidden payload strings.")
+    embed("minimalFix", of = DataPayloadPolicyMinimalFixResultClass).describe("Minimal segment-level remediation summary.")
+    embed("recommendedReport", of = DataPayloadPolicyRecommendedReportResultClass)
+        .describe("Report-ready JSON object matching the data payload audit task contract.")
+}
+
 internal val DataTools: List<ToolSpec> = tools {
     tool("list_data") {
         summary = "Return raw data-section entries for a closed data-segment range."
@@ -131,5 +191,17 @@ internal val DataTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.DataSegments
         output = ListDataSegmentsResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readDataSegmentsByRange"
+    }
+
+    tool("audit_data_payload_policy") {
+        summary = "Audit data segments against a payload policy JSON file and return report-ready matches."
+        guidance = """
+            Use this as the shortest path for embedded payload audits that have a Wasm module and `policyPath`.
+            It reads forbidden strings from the policy, confirms matches against raw data-segment bytes, and returns `recommendedReport` in the task output shape.
+        """
+        input = AuditDataPayloadPolicyInput
+        inputPattern = ToolInputPattern.DataPayloadPolicyAudit
+        output = AuditDataPayloadPolicyResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.auditDataPayloadPolicy"
     }
 }

@@ -203,6 +203,9 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             code.addStatement("val minByteLength = args.optionalIntArgument(%S)", "minByteLength")
             code.addStatement("val range = %M(segmentRange)", REQUIRE_HALF_OPEN_RANGE)
         }
+        ToolInputPattern.DataPayloadPolicyAudit -> {
+            code.addStatement("val policyPath = args.requireStringArgument(%S)", "policyPath")
+        }
         ToolInputPattern.ArtifactQuery -> {
             val operation = inputField(spec.input, "operation").defaultOrError<String>()
             val limit = inputField(spec.input, "limit").defaultOrError<Int>()
@@ -292,6 +295,12 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
                 ")",
             handlerMember,
         )
+    } else if (spec.inputPattern == ToolInputPattern.DataPayloadPolicyAudit) {
+        code.addStatement("val policyText = %M(policyPath)", REQUIRE_TEXT_FILE)
+        code.addStatement(
+            "val result = provider.%M(policyText = policyText, pathLabel = path, policyPathLabel = policyPath)",
+            handlerMember,
+        )
     } else if (spec.inputPattern == ToolInputPattern.PolicyWithBaselineAndLog || spec.inputPattern == ToolInputPattern.GlobalStatePolicyAudit) {
         code.addStatement(
             "val baselineProvider = %M(baselinePath).%M()",
@@ -350,6 +359,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             ToolInputPattern.SourceLocations -> "(locations, sourceMapText, sourceMapPath)"
             is ToolInputPattern.ClosedRange -> "(range)"
             ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
+            ToolInputPattern.DataPayloadPolicyAudit -> error("Handled above")
             ToolInputPattern.ArtifactQuery -> error("Handled above")
             ToolInputPattern.PolicyWithBaselineAndLog -> error("Handled above")
             ToolInputPattern.GlobalStatePolicyAudit -> error("Handled above")
@@ -427,6 +437,9 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
             inputField(spec.input, "includeExports"),
             inputField(spec.input, "includeGlobals"),
             inputField(spec.input, "minByteLength"),
+        )
+        ToolInputPattern.DataPayloadPolicyAudit -> listOf(
+            inputField(spec.input, "policyPath"),
         )
         ToolInputPattern.ArtifactQuery -> listOf(
             inputField(spec.input, "operation"),

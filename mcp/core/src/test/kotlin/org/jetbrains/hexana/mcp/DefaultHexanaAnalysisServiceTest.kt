@@ -397,6 +397,70 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun auditDataPayloadPolicyReturnsReportReadyRawByteMatches() {
+        val wasm = createWasmFile(
+            "payloads.wasm",
+            """
+            (module
+              (memory 1)
+              (data (i32.const 0) "public payload")
+              (data (i32.const 2048) "leaked https://api.shadow.internal/v2/keys endpoint")
+              (data (i32.const 4096) "safe payload")
+              (data "FLAG_ENABLE_UNRELEASED_BILLING is passive"))
+            """.trimIndent()
+        )
+        val policy = temporaryFolder.newFile("payload_policy.json").toPath()
+        Files.writeString(
+            policy,
+            """
+            {
+              "policy_id": "payload-policy-2026-04",
+              "forbidden_payloads": [
+                {
+                  "id": "shadow-admin-endpoint",
+                  "match": "https://api.shadow.internal/v2/keys",
+                  "severity": "critical"
+                },
+                {
+                  "id": "unreleased-billing-flag",
+                  "match": "FLAG_ENABLE_UNRELEASED_BILLING",
+                  "severity": "high"
+                },
+                {
+                  "id": "legacy-debug-token",
+                  "match": "DEBUG_TOKEN_DO_NOT_SHIP",
+                  "severity": "medium"
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val result = service.auditDataPayloadPolicy(
+            WasmInput.FilePath(wasm.toString()),
+            TextInput.FilePath(policy.toString())
+        )
+
+        assertEquals("payload-policy-2026-04", result.policyId)
+        assertEquals(wasm.toString(), result.module)
+        assertEquals(4, result.scannedSegments)
+        assertEquals(listOf(0, 2), result.cleanSegments)
+        assertEquals(listOf(1, 3), result.minimalFix.removeOrReplaceSegments)
+        assertEquals(listOf(1, 3), result.matches.map { it.segmentIndex })
+        assertTrue(result.matches.all { it.rawBytesConfirmed })
+        assertEquals(0, result.matches.first().memory)
+        assertEquals("i32.const 2048", result.matches.first().offsetExpr)
+        assertEquals(null, result.matches.last().memory)
+        assertEquals(null, result.matches.last().offsetExpr)
+        assertEquals(result.policyId, result.recommendedReport.policyId)
+        assertEquals(result.scannedSegments, result.recommendedReport.scannedSegments)
+        assertEquals(result.cleanSegments, result.recommendedReport.cleanSegments)
+        assertEquals(result.minimalFix.removeOrReplaceSegments, result.recommendedReport.minimalFix.removeOrReplaceSegments)
+        assertEquals("shadow-admin-endpoint", result.recommendedReport.matches.first().policyEntryId)
+        assertEquals("high", result.recommendedReport.matches.last().severity)
+    }
+
+    @Test
     fun globalStatePolicyReturnsTargetedGlobalsAmongManyStableGlobals() {
         val baseline = createWasmFile(
             "global-policy-baseline.wasm",

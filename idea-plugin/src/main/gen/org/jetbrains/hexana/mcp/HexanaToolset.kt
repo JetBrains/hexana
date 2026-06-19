@@ -27,6 +27,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import org.jetbrains.hexana.mcp.model.functions.SourceLocationInput
 import org.jetbrains.hexana.mcp.model.functions.WasmFrameInput
+import org.jetbrains.hexana.mcp.query.auditDataPayloadPolicy
 import org.jetbrains.hexana.mcp.query.auditGlobalStatePolicy
 import org.jetbrains.hexana.mcp.query.checkComponentCompatibility
 import org.jetbrains.hexana.mcp.query.checkMemoryContract
@@ -3027,6 +3028,88 @@ public class HexanaToolset : McpToolsProvider {
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val result = provider.readDataSegmentsByRange(range, includeExports, includeGlobals, minByteLength ?: 0)
+      val text = encodeHexanaJson(result)
+      val structuredContent = encodeHexanaJsonElement(result).jsonObject
+      return McpToolCallResult.text(text, structuredContent)
+    }
+  },
+  object : McpTool {
+    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
+      name = "audit_data_payload_policy",
+      description = """
+      |Audit data segments against a payload policy JSON file and return report-ready matches.
+      |Use this as the shortest path for embedded payload audits that have a Wasm module and `policyPath`.
+      |It reads forbidden strings from the policy, confirms matches against raw data-segment bytes, and returns `recommendedReport` in the task output shape.
+      """.trimMargin(),
+      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.auditDataPayloadPolicy",
+      inputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path relative to the project root"))
+        })
+        put("policyPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path to a payload policy JSON file with `policy_id` and `forbidden_payloads` entries."))
+        })
+        put("projectPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
+        })
+      },
+      requiredProperties = setOf("path", "policyPath"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+      outputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("policyId", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("module", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("policyPath", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("scannedSegments", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+        })
+        put("matches", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+        put("cleanSegments", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+          })
+        })
+        put("minimalFix", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+        put("recommendedReport", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      },
+      requiredProperties = setOf("policyId", "scannedSegments", "matches", "cleanSegments", "minimalFix", "recommendedReport"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+    )
+    override suspend fun call(args: JsonObject): McpToolCallResult {
+      val path = args.requireStringArgument("path")
+      val policyPath = args.requireStringArgument("policyPath")
+      val file = requireWasmFile(path)
+      val provider = file.requireCoreWasmBinaryProvider()
+      val policyText = requireTextFile(policyPath)
+      val result = provider.auditDataPayloadPolicy(policyText = policyText, pathLabel = path, policyPathLabel = policyPath)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)

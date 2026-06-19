@@ -33,6 +33,7 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
             "list_types",
             "list_element_segments",
             "list_data_segments",
+            "audit_data_payload_policy",
         )
         assertTrue(
             "Authorized session tools missing expected granular tools. tools=$toolNames",

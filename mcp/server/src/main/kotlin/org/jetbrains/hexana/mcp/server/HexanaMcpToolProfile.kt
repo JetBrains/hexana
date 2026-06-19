@@ -30,6 +30,7 @@ enum class HexanaMcpToolProfile {
 }
 
 private val PRODUCTION_TOOL_NAMES = setOf(
+    "audit_data_payload_policy",
     "audit_global_state_policy",
     "check_memory_contract",
     "check_component_compatibility",

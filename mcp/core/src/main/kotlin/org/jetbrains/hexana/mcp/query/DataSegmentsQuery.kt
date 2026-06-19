@@ -1,10 +1,20 @@
 package org.jetbrains.hexana.mcp.query
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.mcp.*
 import org.jetbrains.hexana.mcp.model.data.*
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.WasmModule
+
+private val dataPayloadPolicyJson = Json {
+    ignoreUnknownKeys = true
+}
 
 fun WasmBinaryProvider.readDataSegments(
     segmentStartInclusive: Int,
@@ -36,6 +46,52 @@ fun WasmBinaryProvider.readDataSegmentsByRange(
     includeGlobals = includeGlobals,
     minByteLength = minByteLength.takeIf { it > 0 },
 )
+
+fun WasmBinaryProvider.auditDataPayloadPolicy(
+    policyText: String,
+    pathLabel: String? = null,
+    policyPathLabel: String? = null
+): AuditDataPayloadPolicyResult {
+    val wasmModule = requireNotNull(wasmModule)
+    val policy = parseDataPayloadPolicy(policyText)
+    val segments = bytes.listDataSectionInternal(wasmModule)
+    val matches = segments
+        .flatMap { segment ->
+            policy.forbiddenPayloads.mapNotNull { forbidden ->
+                if (!segment.containsUtf8Payload(forbidden.match)) return@mapNotNull null
+                segment.toDataPayloadPolicyMatch(forbidden)
+            }
+        }
+        .sortedWith(compareBy<DataPayloadPolicyMatchResult> { it.segmentIndex }.thenBy { it.policyEntryId })
+    val matchedSegmentIndices = matches.map { it.segmentIndex }.toSet()
+    val cleanSegments = segments
+        .map { it.index }
+        .filter { it !in matchedSegmentIndices }
+        .sorted()
+    val minimalFix = DataPayloadPolicyMinimalFixResult(
+        removeOrReplaceSegments = matchedSegmentIndices.sorted()
+    )
+    val recommendedReport = DataPayloadPolicyRecommendedReportResult(
+        policyId = policy.policyId,
+        module = pathLabel,
+        scannedSegments = segments.size,
+        matches = matches.map { it.toReportMatch() },
+        cleanSegments = cleanSegments,
+        minimalFix = DataPayloadPolicyReportMinimalFixResult(
+            removeOrReplaceSegments = minimalFix.removeOrReplaceSegments
+        )
+    )
+    return AuditDataPayloadPolicyResult(
+        policyId = policy.policyId,
+        module = pathLabel,
+        policyPath = policyPathLabel,
+        scannedSegments = segments.size,
+        matches = matches,
+        cleanSegments = cleanSegments,
+        minimalFix = minimalFix,
+        recommendedReport = recommendedReport
+    )
+}
 
 private fun CommonByteBuffer.buildDataSegmentsResult(
     segmentStartInclusive: Int,
@@ -81,6 +137,100 @@ private fun CommonByteBuffer.buildDataSegmentsResult(
         )
     )
 }
+
+private fun parseDataPayloadPolicy(policyText: String): DataPayloadPolicy {
+    val root = try {
+        dataPayloadPolicyJson.parseToJsonElement(policyText).jsonObject
+    } catch (error: Exception) {
+        throw HexanaAnalysisException(
+            HexanaAnalysisErrorCode.INVALID_INPUT,
+            "Invalid payload policy JSON",
+            error
+        )
+    }
+    val policyId = root.stringField("policy_id")
+        ?: throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Payload policy missing `policy_id`")
+    val forbiddenPayloads = root["forbidden_payloads"]?.jsonArray.orEmpty()
+        .mapIndexed { index, element ->
+            val obj = element.jsonObject
+            DataPayloadPolicyEntry(
+                id = obj.stringField("id") ?: "forbidden-payload-$index",
+                match = obj.stringField("match")
+                    ?: throw HexanaAnalysisException(
+                        HexanaAnalysisErrorCode.INVALID_INPUT,
+                        "Payload policy entry missing `match`"
+                    ),
+                severity = obj.stringField("severity") ?: "unknown"
+            )
+        }
+        .filter { it.match.isNotEmpty() }
+    return DataPayloadPolicy(policyId = policyId, forbiddenPayloads = forbiddenPayloads)
+}
+
+private fun JsonObject.stringField(name: String): String? =
+    this[name]?.jsonPrimitive?.contentOrNull
+
+private fun DataEntry.containsUtf8Payload(payload: String): Boolean {
+    if (payload.isEmpty()) return false
+    return data.indexOf(payload.encodeToByteArray()) >= 0
+}
+
+private fun ByteArray.indexOf(needle: ByteArray): Int {
+    if (needle.isEmpty()) return 0
+    if (needle.size > size) return -1
+    for (start in 0..(size - needle.size)) {
+        var matched = true
+        for (offset in needle.indices) {
+            if (this[start + offset] != needle[offset]) {
+                matched = false
+                break
+            }
+        }
+        if (matched) return start
+    }
+    return -1
+}
+
+private fun DataEntry.toDataPayloadPolicyMatch(
+    forbidden: DataPayloadPolicyEntry
+): DataPayloadPolicyMatchResult {
+    val mode = if (kind == 1) "passive" else "active"
+    return DataPayloadPolicyMatchResult(
+        policyEntryId = forbidden.id,
+        forbiddenString = forbidden.match,
+        severity = forbidden.severity,
+        segmentIndex = index,
+        mode = mode,
+        memory = memoryIndex?.toInt() ?: if (mode == "active") 0 else null,
+        offsetExpr = expression,
+        byteLength = data.size,
+        rawBytesConfirmed = true
+    )
+}
+
+private fun DataPayloadPolicyMatchResult.toReportMatch(): DataPayloadPolicyReportMatchResult =
+    DataPayloadPolicyReportMatchResult(
+        policyEntryId = policyEntryId,
+        forbiddenString = forbiddenString,
+        severity = severity,
+        segmentIndex = segmentIndex,
+        mode = mode,
+        memory = memory,
+        offsetExpr = offsetExpr,
+        byteLength = byteLength,
+        rawBytesConfirmed = rawBytesConfirmed
+    )
+
+private data class DataPayloadPolicy(
+    val policyId: String,
+    val forbiddenPayloads: List<DataPayloadPolicyEntry>
+)
+
+private data class DataPayloadPolicyEntry(
+    val id: String,
+    val match: String,
+    val severity: String
+)
 
 private fun MemoryRecord.toDataSegmentMemoryResult(): DataSegmentMemoryResult {
     return DataSegmentMemoryResult(

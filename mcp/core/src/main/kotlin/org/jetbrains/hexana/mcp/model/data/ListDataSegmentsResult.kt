@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.model.data
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -179,4 +180,73 @@ data class DataSegmentsSummaryResult(
     val activeSegments: Int,
     val passiveSegments: Int,
     val memories: Int
+)
+
+@Serializable
+data class AuditDataPayloadPolicyResult(
+    val policyId: String,
+    val module: String? = null,
+    val policyPath: String? = null,
+    val scannedSegments: Int,
+    val matches: List<DataPayloadPolicyMatchResult>,
+    val cleanSegments: List<Int>,
+    val minimalFix: DataPayloadPolicyMinimalFixResult,
+    val recommendedReport: DataPayloadPolicyRecommendedReportResult
+)
+
+@Serializable
+data class DataPayloadPolicyMatchResult(
+    val policyEntryId: String,
+    val forbiddenString: String,
+    val severity: String,
+    val segmentIndex: Int,
+    val mode: String,
+    val memory: Int? = null,
+    val offsetExpr: String? = null,
+    val byteLength: Int,
+    val rawBytesConfirmed: Boolean
+)
+
+@Serializable
+data class DataPayloadPolicyMinimalFixResult(
+    val removeOrReplaceSegments: List<Int>
+)
+
+@Serializable
+data class DataPayloadPolicyRecommendedReportResult(
+    @SerialName("policy_id")
+    val policyId: String,
+    val module: String? = null,
+    @SerialName("scanned_segments")
+    val scannedSegments: Int,
+    val matches: List<DataPayloadPolicyReportMatchResult>,
+    @SerialName("clean_segments")
+    val cleanSegments: List<Int>,
+    @SerialName("minimal_fix")
+    val minimalFix: DataPayloadPolicyReportMinimalFixResult
+)
+
+@Serializable
+data class DataPayloadPolicyReportMatchResult(
+    @SerialName("policy_entry_id")
+    val policyEntryId: String,
+    @SerialName("forbidden_string")
+    val forbiddenString: String,
+    val severity: String,
+    @SerialName("segment_index")
+    val segmentIndex: Int,
+    val mode: String,
+    val memory: Int? = null,
+    @SerialName("offset_expr")
+    val offsetExpr: String? = null,
+    @SerialName("byte_length")
+    val byteLength: Int,
+    @SerialName("raw_bytes_confirmed")
+    val rawBytesConfirmed: Boolean
+)
+
+@Serializable
+data class DataPayloadPolicyReportMinimalFixResult(
+    @SerialName("remove_or_replace_segments")
+    val removeOrReplaceSegments: List<Int>
 )

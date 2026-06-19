@@ -87,6 +87,7 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers, profile: Hex
   if (profile.includesTool("list_element_segments")) registerListElementSegmentsTool(handlers)
   if (profile.includesTool("list_data")) registerListDataTool(handlers)
   if (profile.includesTool("list_data_segments")) registerListDataSegmentsTool(handlers)
+  if (profile.includesTool("audit_data_payload_policy")) registerAuditDataPayloadPolicyTool(handlers)
   if (profile.includesTool("query_artifacts")) registerQueryArtifactsTool(handlers)
 }
 
@@ -3624,6 +3625,102 @@ private fun Server.registerListDataSegmentsTool(handlers: HexanaToolHandlers) {
     ),
   ))  {
     request: CallToolRequest -> handlers.listDataSegments(request.arguments)
+  }
+}
+
+private fun Server.registerAuditDataPayloadPolicyTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "audit_data_payload_policy",
+    description = """
+  |Audit data segments against a payload policy JSON file and return report-ready matches.
+  |Use this as the shortest path for embedded payload audits that have a Wasm module and `policyPath`.
+  |It reads forbidden strings from the policy, confirms matches against raw data-segment bytes, and returns `recommendedReport` in the task output shape.
+  """.trimMargin(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("policyPath", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Path to a payload policy JSON file with `policy_id` and `forbidden_payloads` entries."))
+      })
+    },
+    required = listOf("policyPath")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("policyId", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+      })
+      put("module", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("policyPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("scannedSegments", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+      put("matches", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("cleanSegments", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+        })
+      })
+      put("minimalFix", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("recommendedReport", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+    },
+    required = listOf("policyId", "scannedSegments", "matches", "cleanSegments", "minimalFix", "recommendedReport")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.auditDataPayloadPolicy(request.arguments)
   }
 }
 

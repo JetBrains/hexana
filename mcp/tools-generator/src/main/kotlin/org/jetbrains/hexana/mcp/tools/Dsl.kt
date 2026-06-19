@@ -343,6 +343,7 @@ sealed class ToolInputPattern {
     object SourceLocations : ToolInputPattern()
     data class ClosedRange(val parameterName: String) : ToolInputPattern()
     object DataSegments : ToolInputPattern()
+    object DataPayloadPolicyAudit : ToolInputPattern()
     object ArtifactQuery : ToolInputPattern()
     object PolicyWithBaselineAndLog : ToolInputPattern()
     object GlobalStatePolicyAudit : ToolInputPattern()
@@ -646,6 +647,12 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireType(minByteLength, FieldType.Int32)
             requireNullable(minByteLength)
             requireDescribed(minByteLength)
+        }
+        ToolInputPattern.DataPayloadPolicyAudit -> {
+            val policyPath = requireField("policyPath")
+            requireType(policyPath, FieldType.StringT)
+            requireNonNullable(policyPath)
+            requireDescribed(policyPath)
         }
         ToolInputPattern.ArtifactQuery -> {
             val baselinePath = requireField("baselinePath")

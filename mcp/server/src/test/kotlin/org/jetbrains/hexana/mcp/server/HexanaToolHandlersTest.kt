@@ -500,6 +500,58 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun auditDataPayloadPolicyReadsPolicyPathAndReturnsRecommendedReport() {
+        val wasm = createWasmFile(
+            "payload-policy.wasm",
+            """
+            (module
+              (memory 1)
+              (data (i32.const 0) "safe payload")
+              (data (i32.const 2048) "DEBUG_TOKEN_DO_NOT_SHIP"))
+            """.trimIndent()
+        )
+        val policy = temporaryFolder.newFile("payload_policy.json").toPath()
+        Files.writeString(
+            policy,
+            """
+            {
+              "policy_id": "payload-policy-test",
+              "forbidden_payloads": [
+                {
+                  "id": "legacy-debug-token",
+                  "match": "DEBUG_TOKEN_DO_NOT_SHIP",
+                  "severity": "medium"
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val result = handlers.auditDataPayloadPolicy(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("policyPath", JsonPrimitive(policy.toString()))
+            }
+        )
+
+        assertFalse(result.isError == true)
+        val structuredContent = result.structuredContent!!
+        assertEquals("payload-policy-test", structuredContent["policyId"]!!.jsonPrimitive.content)
+        assertEquals(2, structuredContent["scannedSegments"]!!.jsonPrimitive.int)
+        assertEquals(1, structuredContent["matches"]!!.jsonArray.single().jsonObject["segmentIndex"]!!.jsonPrimitive.int)
+        val recommendedReport = structuredContent["recommendedReport"]!!.jsonObject
+        assertEquals("payload-policy-test", recommendedReport["policy_id"]!!.jsonPrimitive.content)
+        assertEquals(1, recommendedReport["matches"]!!.jsonArray.single().jsonObject["segment_index"]!!.jsonPrimitive.int)
+        assertEquals(
+            1,
+            recommendedReport["minimal_fix"]!!
+                .jsonObject["remove_or_replace_segments"]!!
+                .jsonArray.single()
+                .jsonPrimitive.int
+        )
+    }
+
+    @Test
     fun listFunctionsReturnsToolErrorForMissingFile() {
         val result = handlers.listFunctions(
             buildJsonObject {
