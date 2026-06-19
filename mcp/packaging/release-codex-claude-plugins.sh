@@ -205,6 +205,60 @@ self_test_public_github_text_guard() {
   log "Public GitHub text guard self-test passed"
 }
 
+self_test_release_native_artifact_policy() {
+  local temp_dir
+  local lock_dir
+  local artifact_name="hexana-mcp-native-macos-arm64-0.2.0.zip"
+  local scan_status
+
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/hexana-native-artifact-policy.XXXXXX")"
+  register_cleanup_dir "$temp_dir"
+  lock_dir="$temp_dir/public/plugins/hexana"
+  mkdir -p "$lock_dir" "$temp_dir/release"
+  printf '%s\n' \
+    '{' \
+    '  "nativeArtifacts": {' \
+    '    "distribution": "github-release-only",' \
+    '    "artifacts": [' \
+    "      \"$artifact_name\"" \
+    '    ]' \
+    '  }' \
+    '}' > "$lock_dir/release.lock.json"
+
+  set +e
+  (
+    GENERATED_PUBLIC_DIR="$temp_dir/public"
+    PLUGIN_NAME="hexana"
+    release_dir="$temp_dir/release"
+    INCLUDE_NATIVE_ARTIFACTS="false"
+    check_release_native_artifact_policy
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Native artifact policy self-test did not reject INCLUDE_NATIVE_ARTIFACTS=false"
+
+  set +e
+  (
+    GENERATED_PUBLIC_DIR="$temp_dir/public"
+    PLUGIN_NAME="hexana"
+    release_dir="$temp_dir/release"
+    INCLUDE_NATIVE_ARTIFACTS="true"
+    check_release_native_artifact_policy
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Native artifact policy self-test did not reject a missing native artifact"
+
+  touch "$temp_dir/release/$artifact_name"
+  GENERATED_PUBLIC_DIR="$temp_dir/public" \
+    PLUGIN_NAME="hexana" \
+    release_dir="$temp_dir/release" \
+    INCLUDE_NATIVE_ARTIFACTS="true" \
+    check_release_native_artifact_policy
+
+  log "Native artifact policy self-test passed"
+}
+
 publish_github_release() {
   require_public_github_text_file "GitHub release notes" "$release_notes"
 
@@ -519,6 +573,30 @@ check_public_bundle_native_policy() {
     jq -e '.nativeArtifacts.distribution == "github-release-only"' "$lock_file" >/dev/null ||
       die "Public marketplace release.lock.json must document the GitHub Release-only native artifact policy when plugins/$PLUGIN_NAME/native is absent"
   fi
+}
+
+check_release_native_artifact_policy() {
+  local lock_file="$GENERATED_PUBLIC_DIR/plugins/$PLUGIN_NAME/release.lock.json"
+  local artifact
+  local expected_count=0
+
+  require_nonempty_file "Public marketplace bundle" "$lock_file"
+
+  if ! jq -e '.nativeArtifacts.distribution == "github-release-only"' "$lock_file" >/dev/null; then
+    return
+  fi
+
+  [ "$INCLUDE_NATIVE_ARTIFACTS" = "true" ] ||
+    die "Public marketplace metadata advertises native GitHub Release artifacts; set INCLUDE_NATIVE_ARTIFACTS=true so the release uploads them."
+
+  while IFS= read -r artifact; do
+    expected_count=$((expected_count + 1))
+    [ -f "$release_dir/$artifact" ] ||
+      die "Public marketplace metadata advertises missing native GitHub Release artifact: $artifact"
+  done < <(jq -r '.nativeArtifacts.artifacts[]?' "$lock_file")
+
+  [ "$expected_count" -gt 0 ] ||
+    die "Public marketplace metadata uses GitHub Release-only native artifacts, but release.lock.json lists no native artifact files."
 }
 
 validate_public_bundle() {
@@ -1044,6 +1122,11 @@ main() {
     self_test_public_github_text_guard
     return
   fi
+  if [ "$(to_bool "${RELEASE_NATIVE_ARTIFACT_POLICY_SELF_TEST:-false}" "RELEASE_NATIVE_ARTIFACT_POLICY_SELF_TEST")" = "true" ]; then
+    require_tool "jq"
+    self_test_release_native_artifact_policy
+    return
+  fi
 
   require_tool "./gradlew"
   require_tool "gh"
@@ -1107,6 +1190,7 @@ main() {
   collect_release_artifacts
   security_check_release_artifacts
   validate_public_bundle
+  check_release_native_artifact_policy
   write_release_notes
   prepare_public_marketplace_pr
   publish_public_marketplace_pr

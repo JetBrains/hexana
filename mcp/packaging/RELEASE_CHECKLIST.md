@@ -73,6 +73,9 @@ native-enabled release:
 - Keep `NATIVE_RELEASE_PLATFORMS` at the default
   `macos-arm64 linux-x64 windows-x64` unless the supported matrix is intentionally
   changing.
+- The release script fails before publishing when public `release.lock.json`
+  advertises GitHub Release-only native artifacts but the matching ZIPs were not
+  collected into the release directory.
 - Ensure `PLUGIN_VERSION` matches `mcp/server/gradle.properties:mcpServerVersion`
   unless the release job intentionally overrides it.
 - Keep the JVM release gates visible in the same build chain. Set

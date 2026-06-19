@@ -227,8 +227,9 @@ Optional environment variables:
   or noreply automation identity; do not use a personal email.
 - `ALLOW_BUNDLED_JAR`: defaults to `false`. When `true`, jars are allowed only under
   `plugins/<plugin-name>/server/lib/`.
-- `INCLUDE_NATIVE_ARTIFACTS`: defaults to `false`. When `true`, release collection requires native executable,
-  Claude plugin, and Codex plugin ZIPs for every platform in `NATIVE_RELEASE_PLATFORMS`.
+- `INCLUDE_NATIVE_ARTIFACTS`: defaults to `false`. When public `release.lock.json` advertises
+  `github-release-only` native artifacts, the release script requires this to be `true` and verifies every listed
+  native executable, Claude plugin, and Codex plugin ZIP is present before publishing.
 - `NATIVE_RELEASE_ARTIFACT_DIR`: defaults to `mcp/build/distributions-native`.
 - `NATIVE_RELEASE_PLATFORMS`: defaults to `macos-arm64 linux-x64 windows-x64`.
 - `VALIDATE_CLAUDE_CMD`: optional command run from the cloned public repo root.
