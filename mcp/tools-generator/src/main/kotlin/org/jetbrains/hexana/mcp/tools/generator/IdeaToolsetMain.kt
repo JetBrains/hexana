@@ -206,6 +206,14 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
         ToolInputPattern.DataPayloadPolicyAudit -> {
             code.addStatement("val policyPath = args.requireStringArgument(%S)", "policyPath")
         }
+        ToolInputPattern.LocalStackBudgetAudit -> {
+            val countParams = inputField(spec.input, "countParams").defaultOrError<Boolean>()
+            code.addStatement("val policyPath = args.optionalStringArgument(%S)", "policyPath")
+            code.addStatement("val logPath = args.optionalStringArgument(%S)", "logPath")
+            code.addStatement("val checkedExports = args.optionalStringListArgument(%S)", "checkedExports")
+            code.addStatement("val maxLocals = args.optionalIntArgument(%S)", "maxLocals")
+            code.addStatement("val countParams = args.optionalBooleanArgument(%S) ?: %L", "countParams", countParams)
+        }
         ToolInputPattern.ArtifactQuery -> {
             val operation = inputField(spec.input, "operation").defaultOrError<String>()
             val limit = inputField(spec.input, "limit").defaultOrError<Int>()
@@ -301,6 +309,22 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             "val result = provider.%M(policyText = policyText, pathLabel = path, policyPathLabel = policyPath)",
             handlerMember,
         )
+    } else if (spec.inputPattern == ToolInputPattern.LocalStackBudgetAudit) {
+        code.addStatement("val policyText = policyPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
+        code.addStatement("val logText = logPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
+        code.addStatement(
+            "val result = provider.%M(" +
+                "policyText = policyText, " +
+                "logText = logText, " +
+                "checkedExports = checkedExports.orEmpty(), " +
+                "maxLocals = maxLocals, " +
+                "countParams = countParams, " +
+                "pathLabel = path, " +
+                "policyPathLabel = policyPath, " +
+                "logPathLabel = logPath" +
+                ")",
+            handlerMember,
+        )
     } else if (spec.inputPattern == ToolInputPattern.PolicyWithBaselineAndLog || spec.inputPattern == ToolInputPattern.GlobalStatePolicyAudit) {
         code.addStatement(
             "val baselineProvider = %M(baselinePath).%M()",
@@ -360,6 +384,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             is ToolInputPattern.ClosedRange -> "(range)"
             ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
             ToolInputPattern.DataPayloadPolicyAudit -> error("Handled above")
+            ToolInputPattern.LocalStackBudgetAudit -> error("Handled above")
             ToolInputPattern.ArtifactQuery -> error("Handled above")
             ToolInputPattern.PolicyWithBaselineAndLog -> error("Handled above")
             ToolInputPattern.GlobalStatePolicyAudit -> error("Handled above")
@@ -440,6 +465,13 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
         )
         ToolInputPattern.DataPayloadPolicyAudit -> listOf(
             inputField(spec.input, "policyPath"),
+        )
+        ToolInputPattern.LocalStackBudgetAudit -> listOf(
+            inputField(spec.input, "policyPath"),
+            inputField(spec.input, "logPath"),
+            inputField(spec.input, "checkedExports"),
+            inputField(spec.input, "maxLocals"),
+            inputField(spec.input, "countParams"),
         )
         ToolInputPattern.ArtifactQuery -> listOf(
             inputField(spec.input, "operation"),

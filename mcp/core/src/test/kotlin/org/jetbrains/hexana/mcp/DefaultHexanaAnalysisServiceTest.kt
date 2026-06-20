@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp
 
+import kotlinx.serialization.json.JsonNull
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.junit.Rule
 import org.junit.Test
@@ -397,6 +398,102 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun auditLocalStackBudgetReturnsReportReadyExportVerdicts() {
+        val wasm = createWasmFile(
+            "local_budget_handlers.wasm",
+            """
+            (module
+              (func (export "health_check"))
+              (func (export "hydrate_checkout") (local i32 i32 i32 i32 i64 i64))
+              (func (export "render_invoice") (local f64 f64 i32 i32 i32))
+              (func (export "route_cart") (local i32 i32 i32 i32)))
+            """.trimIndent()
+        )
+        val policy = temporaryFolder.newFile("local_budget.json").toPath()
+        Files.writeString(
+            policy,
+            """
+            {
+              "runtime_id": "edge-runtime-local-budget",
+              "max_locals": 4,
+              "count_params": false,
+              "checked_exports": [
+                "health_check",
+                "hydrate_checkout",
+                "render_invoice",
+                "route_cart"
+              ]
+            }
+            """.trimIndent()
+        )
+        val log = temporaryFolder.newFile("verifier.log").toPath()
+        Files.writeString(
+            log,
+            "2026-04-30T13:05:14Z runtime=edge-runtime-local-budget event=evt-local-7719 checked_exports=health_check,hydrate_checkout,render_invoice,route_cart\n"
+        )
+
+        val result = service.auditLocalStackBudget(
+            input = WasmInput.FilePath(wasm.toString()),
+            policyInput = TextInput.FilePath(policy.toString()),
+            logInput = TextInput.FilePath(log.toString()),
+            checkedExports = emptyList(),
+            maxLocals = null,
+            countParams = false
+        )
+
+        assertEquals("edge-runtime-local-budget", result.runtimeId)
+        assertEquals(4, result.budget.maxLocals)
+        assertEquals(listOf("health_check", "hydrate_checkout", "render_invoice", "route_cart"), result.checkedExports)
+        assertEquals(listOf("hydrate_checkout", "render_invoice"), result.violations.map { it.export })
+        assertEquals(mapOf("i32" to 4, "i64" to 2), result.violations.first().localsByType)
+        assertEquals(listOf("health_check", "route_cart"), result.cleanExports)
+        assertEquals("evt-local-7719", result.evidence.logEventId)
+        assertEquals(result.violations.map { it.export }, result.minimalFix.splitOrReduceExports)
+        assertEquals(result.violations.map { it.export }, result.recommendedReport.minimalFix.splitOrReduceExports)
+        assertEquals("hydrate_checkout", result.recommendedReport.violations.first().export)
+        assertEquals(6, result.recommendedReport.violations.first().localCount)
+    }
+
+    @Test
+    fun auditLocalStackBudgetUsesProjectRelativeReportModuleUnderGitRoot() {
+        Files.createDirectories(temporaryFolder.root.toPath().resolve("project/.git"))
+        val wasm = createWasmFile(
+            "project/dist/runtime/handlers.wasm",
+            """
+            (module
+              (func (export "health_check"))
+              (func (export "hydrate_checkout") (local i32 i32 i32 i32 i64 i64)))
+            """.trimIndent()
+        )
+        val policy = createTextFile(
+            "project/runtime/local_budget.json",
+            """
+            {
+              "runtime_id": "edge-runtime-local-budget",
+              "max_locals": 4,
+              "count_params": false,
+              "checked_exports": [
+                "health_check",
+                "hydrate_checkout"
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val result = service.auditLocalStackBudget(
+            input = WasmInput.FilePath(wasm.toString()),
+            policyInput = TextInput.FilePath(policy.toString()),
+            logInput = null,
+            checkedExports = emptyList(),
+            maxLocals = null,
+            countParams = false
+        )
+
+        assertEquals("dist/runtime/handlers.wasm", result.module.path)
+        assertEquals("dist/runtime/handlers.wasm", result.recommendedReport.module)
+    }
+
+    @Test
     fun auditDataPayloadPolicyReturnsReportReadyRawByteMatches() {
         val wasm = createWasmFile(
             "payloads.wasm",
@@ -458,6 +555,8 @@ class DefaultHexanaAnalysisServiceTest {
         assertEquals(result.minimalFix.removeOrReplaceSegments, result.recommendedReport.minimalFix.removeOrReplaceSegments)
         assertEquals("shadow-admin-endpoint", result.recommendedReport.matches.first().policyEntryId)
         assertEquals("high", result.recommendedReport.matches.last().severity)
+        assertEquals(JsonNull, result.recommendedReport.matches.last().memory)
+        assertEquals(JsonNull, result.recommendedReport.matches.last().offsetExpr)
     }
 
     @Test

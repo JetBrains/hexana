@@ -27,6 +27,7 @@ class HexanaToolsTest {
                 "plan_abi_binding_regeneration",
                 "check_memory_contract",
                 "audit_global_state_policy",
+                "audit_local_stack_budget",
                 "list_custom_sections",
                 "list_imports",
                 "list_exports",
@@ -142,6 +143,15 @@ class HexanaToolsTest {
             ToolInputPattern.WasmPathLabel,
             HexanaTools.single { it.name == "get_entrypoint_policy" }.inputPattern
         )
+    }
+
+    @Test
+    fun `audit_local_stack_budget uses the local stack budget invocation pattern`() {
+        val audit = HexanaTools.single { it.name == "audit_local_stack_budget" }
+
+        assertEquals(ToolInputPattern.LocalStackBudgetAudit, audit.inputPattern)
+        assertTrue(audit.guidance.orEmpty().contains("without full disassembly"))
+        assertTrue(audit.guidance.orEmpty().contains("recommendedReport"))
     }
 
     @Test

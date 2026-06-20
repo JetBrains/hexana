@@ -108,6 +108,12 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
         val globals = descriptor("audit_global_state_policy")
         assertContains(globals.description, "global-state audits")
         assertContains(globals.description, "`baselinePath`")
+
+        val locals = descriptor("audit_local_stack_budget")
+        assertContains(locals.description, "local-variable or stack-budget audits")
+        assertContains(locals.description, "`policyPath`")
+        assertContains(locals.description, "without full disassembly")
+        assertContains(locals.description, "recommendedReport")
         assertContains(globals.description, "`policyPath`")
         assertContains(globals.description, "`detail=compact`")
         assertContains(globals.description, "write the returned `report` object")

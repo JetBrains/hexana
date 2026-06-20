@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.model.data
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /**
  * {
@@ -236,9 +237,9 @@ data class DataPayloadPolicyReportMatchResult(
     @SerialName("segment_index")
     val segmentIndex: Int,
     val mode: String,
-    val memory: Int? = null,
+    val memory: JsonElement,
     @SerialName("offset_expr")
-    val offsetExpr: String? = null,
+    val offsetExpr: JsonElement,
     @SerialName("byte_length")
     val byteLength: Int,
     @SerialName("raw_bytes_confirmed")

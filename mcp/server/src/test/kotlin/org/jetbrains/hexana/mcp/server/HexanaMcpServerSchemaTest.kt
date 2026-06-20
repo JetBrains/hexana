@@ -5,6 +5,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -38,6 +39,7 @@ class HexanaMcpServerSchemaTest {
             listOf(
                 "audit_data_payload_policy",
                 "audit_global_state_policy",
+                "audit_local_stack_budget",
                 "check_component_compatibility",
                 "check_memory_contract",
                 "check_runtime_compatibility",
@@ -74,6 +76,7 @@ class HexanaMcpServerSchemaTest {
             listOf(
                 "audit_data_payload_policy",
                 "audit_global_state_policy",
+                "audit_local_stack_budget",
                 "check_component_compatibility",
                 "check_memory_contract",
                 "check_runtime_compatibility",
@@ -129,6 +132,8 @@ class HexanaMcpServerSchemaTest {
         assertBefore(names, "check_component_compatibility", "list_exports")
         assertBefore(names, "audit_global_state_policy", "list_globals")
         assertBefore(names, "audit_global_state_policy", "list_exports")
+        assertBefore(names, "audit_local_stack_budget", "list_exported_functions")
+        assertBefore(names, "audit_local_stack_budget", "disassemble_function")
     }
 
     @Test
@@ -315,6 +320,32 @@ class HexanaMcpServerSchemaTest {
         assertTrue("recommendedReport" in output)
         assertTrue("targetedGlobalIndices" in output)
         assertTrue("violations" in output)
+        assertFalse(output.containsSchemaDescription())
+    }
+
+    @Test
+    fun localStackBudgetSchemaEchoesInputPathsAndReportFields() {
+        val tool = createHexanaMcpServer()
+            .tools
+            .getValue("audit_local_stack_budget")
+            .tool
+
+        val input = tool.inputSchema.properties?.jsonObject ?: error("Missing local budget input schema")
+        assertTrue("policyPath" in input)
+        assertTrue("logPath" in input)
+        assertTrue("checkedExports" in input)
+        assertTrue("maxLocals" in input)
+        assertEquals(false, input.getValue("countParams").jsonObject.getValue("default").jsonPrimitive.boolean)
+
+        val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing local budget output schema")
+        assertTrue("module" in output)
+        assertTrue("budget" in output)
+        assertTrue("functions" in output)
+        assertTrue("violations" in output)
+        assertTrue("cleanExports" in output)
+        assertTrue("evidence" in output)
+        assertTrue("minimalFix" in output)
+        assertTrue("recommendedReport" in output)
         assertFalse(output.containsSchemaDescription())
     }
 

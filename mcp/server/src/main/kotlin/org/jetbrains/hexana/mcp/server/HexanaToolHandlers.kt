@@ -197,6 +197,22 @@ class HexanaToolHandlers(
         }
     }
 
+    fun auditLocalStackBudget(arguments: JsonObject?): CallToolResult {
+        return execute("audit_local_stack_budget") {
+            analysisService.auditLocalStackBudget(
+                input = wasmInput(arguments),
+                policyInput = arguments.optionalNonBlankString("policyPath")?.let(TextInput::FilePath),
+                logInput = arguments.optionalNonBlankString("logPath")?.let(TextInput::FilePath),
+                checkedExports = arguments.optionalStringList("checkedExports").orEmpty(),
+                maxLocals = arguments.nullableInt("maxLocals"),
+                countParams = arguments.booleanOrDefault(
+                    "countParams",
+                    HexanaToolInputDefaults.AUDIT_LOCAL_STACK_BUDGET_COUNT_PARAMS
+                )
+            )
+        }
+    }
+
     fun searchFunctionsByName(arguments: JsonObject?): CallToolResult {
         return execute("search_functions_by_name") {
             analysisService.searchFunctionsByName(

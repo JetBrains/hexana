@@ -1,7 +1,10 @@
 package org.jetbrains.hexana.mcp.query
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -215,11 +218,17 @@ private fun DataPayloadPolicyMatchResult.toReportMatch(): DataPayloadPolicyRepor
         severity = severity,
         segmentIndex = segmentIndex,
         mode = mode,
-        memory = memory,
-        offsetExpr = offsetExpr,
+        memory = memory.toJsonOrNull(),
+        offsetExpr = offsetExpr.toJsonOrNull(),
         byteLength = byteLength,
         rawBytesConfirmed = rawBytesConfirmed
     )
+
+private fun Int?.toJsonOrNull(): JsonElement =
+    this?.let(::JsonPrimitive) ?: JsonNull
+
+private fun String?.toJsonOrNull(): JsonElement =
+    this?.let(::JsonPrimitive) ?: JsonNull
 
 private data class DataPayloadPolicy(
     val policyId: String,

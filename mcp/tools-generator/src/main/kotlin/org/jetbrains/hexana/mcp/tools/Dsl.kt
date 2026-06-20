@@ -344,6 +344,7 @@ sealed class ToolInputPattern {
     data class ClosedRange(val parameterName: String) : ToolInputPattern()
     object DataSegments : ToolInputPattern()
     object DataPayloadPolicyAudit : ToolInputPattern()
+    object LocalStackBudgetAudit : ToolInputPattern()
     object ArtifactQuery : ToolInputPattern()
     object PolicyWithBaselineAndLog : ToolInputPattern()
     object GlobalStatePolicyAudit : ToolInputPattern()
@@ -653,6 +654,33 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireType(policyPath, FieldType.StringT)
             requireNonNullable(policyPath)
             requireDescribed(policyPath)
+        }
+        ToolInputPattern.LocalStackBudgetAudit -> {
+            val policyPath = requireField("policyPath")
+            requireType(policyPath, FieldType.StringT)
+            requireNullable(policyPath)
+            requireDescribed(policyPath)
+
+            val logPath = requireField("logPath")
+            requireType(logPath, FieldType.StringT)
+            requireNullable(logPath)
+            requireDescribed(logPath)
+
+            val checkedExports = requireField("checkedExports")
+            requireListOf(checkedExports, FieldType.StringT)
+            requireNullable(checkedExports)
+            requireDescribed(checkedExports)
+
+            val maxLocals = requireField("maxLocals")
+            requireType(maxLocals, FieldType.Int32)
+            requireNullable(maxLocals)
+            requireDescribed(maxLocals)
+
+            val countParams = requireField("countParams")
+            requireType(countParams, FieldType.BooleanT)
+            requireNonNullable(countParams)
+            requireDefault(countParams, "Boolean") { it is Boolean }
+            requireDescribed(countParams)
         }
         ToolInputPattern.ArtifactQuery -> {
             val baselinePath = requireField("baselinePath")

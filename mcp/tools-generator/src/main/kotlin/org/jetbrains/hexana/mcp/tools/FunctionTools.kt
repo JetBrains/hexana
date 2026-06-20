@@ -43,6 +43,23 @@ val SearchFunctionsByNameInput = WasmInputClass.with("SearchFunctionsByNameInput
         .maximum(200)
 }
 
+val AuditLocalStackBudgetInput = WasmInputClass.with("AuditLocalStackBudgetInput") {
+    nullable("policyPath", of = string())
+        .describe("Optional local stack budget policy JSON path with `runtime_id`, `max_locals`, `count_params`, and `checked_exports`.")
+        .maxLength(4096)
+    nullable("logPath", of = string())
+        .describe("Optional runtime verifier log path used only for `log_event_id` and checked-export batch evidence.")
+        .maxLength(4096)
+    nullable("checkedExports", of = list(of = string()))
+        .describe("Optional explicit export names to check. When omitted, `policyPath.checked_exports` is used; without a policy, all exported local functions are checked.")
+        .maxItems(500)
+    nullable("maxLocals", of = int())
+        .describe("Optional local budget override. When omitted, `policyPath.max_locals` is used and verdict fields are omitted if no budget is available.")
+        .minimum(0)
+    boolean("countParams", default = false)
+        .describe("Whether function parameters count toward `localCount`; default matches WebAssembly declared-local budget audits.")
+}
+
 val WasmFrameInputClass = class_("WasmFrameInput", kotlinPackage = MODEL_PACKAGE) {
     int("funcidx")
         .describe("Unified function index from a stack frame or crash report.")
@@ -454,6 +471,95 @@ val GetLocalsForFunctionsResultClass = class_("GetLocalsForFunctionsResult", kot
         .describe("Per-function local declarations.")
 }
 
+val LocalStackBudgetModuleIdentityClass = class_("LocalStackBudgetModuleIdentity") {
+    nullable("path", of = string()).describe("Current module path echoed from input `path`, when available.")
+    nullable("policyPath", of = string()).describe("Policy JSON path echoed from input `policyPath`, when available.")
+    nullable("logPath", of = string()).describe("Verifier log path echoed from input `logPath`, when available.")
+}
+
+val LocalStackBudgetBudgetResultClass = class_("LocalStackBudgetBudgetResult") {
+    nullable("maxLocals", of = int()).describe("Maximum allowed locals, when provided by input or policy.")
+    boolean("countParams").describe("True when parameters are counted in `localCount`.")
+}
+
+val LocalStackBudgetFunctionResultClass = class_("LocalStackBudgetFunctionResult") {
+    string("export").describe("Checked function export name.")
+    int("funcidx").describe("Unified function index for the checked export.")
+    string("origin").describe("Function origin: `local` or `import`.")
+    int("declaredLocalCount").describe("Declared locals only, excluding parameters.")
+    int("paramCount").describe("Function parameter count.")
+    int("localCount").describe("Budgeted local count after applying `countParams`.")
+    map("localsByType", of = int()).describe("Declared locals grouped by rendered value type.")
+    nullable("exceedsBudget", of = boolean()).describe("True when `localCount` exceeds the available budget.")
+    nullable("excess", of = int()).describe("Amount above budget, or zero when within budget.")
+}
+
+val LocalStackBudgetViolationResultClass = class_("LocalStackBudgetViolationResult") {
+    string("export").describe("Violating function export name.")
+    int("funcidx").describe("Unified function index for the violating export.")
+    int("localCount").describe("Budgeted local count.")
+    map("localsByType", of = int()).describe("Declared locals grouped by rendered value type.")
+    int("excess").describe("Amount above `maxLocals`.")
+}
+
+val LocalStackBudgetEvidenceResultClass = class_("LocalStackBudgetEvidenceResult") {
+    nullable("logEventId", of = string()).describe("Runtime log event id parsed from `logPath`, when available.")
+    list("checkedExports", of = string()).describe("Checked export batch used as evidence.")
+}
+
+val LocalStackBudgetMinimalFixResultClass = class_("LocalStackBudgetMinimalFixResult") {
+    list("splitOrReduceExports", of = string()).describe("Sorted violating exports to split or reduce.")
+}
+
+val LocalStackBudgetRecommendedBudgetResultClass = class_("LocalStackBudgetRecommendedBudgetResult") {
+    nullable("maxLocals", of = int()).serialName("max_locals").describe("Report-ready maximum allowed locals.")
+    boolean("countParams").serialName("count_params").describe("Report-ready parameter-counting flag.")
+}
+
+val LocalStackBudgetRecommendedViolationResultClass = class_("LocalStackBudgetRecommendedViolationResult") {
+    string("export").describe("Violating function export name.")
+    int("funcidx").describe("Unified function index for the violating export.")
+    int("localCount").serialName("local_count").describe("Report-ready budgeted local count.")
+    map("localsByType", of = int()).serialName("locals_by_type").describe("Report-ready declared locals grouped by type.")
+    int("excess").describe("Amount above `max_locals`.")
+}
+
+val LocalStackBudgetRecommendedEvidenceResultClass = class_("LocalStackBudgetRecommendedEvidenceResult") {
+    nullable("logEventId", of = string()).serialName("log_event_id").describe("Report-ready log event id.")
+    list("checkedExports", of = string()).serialName("checked_exports").describe("Report-ready checked export batch.")
+}
+
+val LocalStackBudgetRecommendedMinimalFixResultClass = class_("LocalStackBudgetRecommendedMinimalFixResult") {
+    list("splitOrReduceExports", of = string()).serialName("split_or_reduce_exports")
+        .describe("Report-ready sorted violating exports to split or reduce.")
+}
+
+val LocalStackBudgetRecommendedReportResultClass = class_("LocalStackBudgetRecommendedReportResult") {
+    nullable("runtimeId", of = string()).serialName("runtime_id").describe("Runtime id copied from the policy file.")
+    nullable("module", of = string()).describe("Module path echoed from input `path`.")
+    embed("budget", of = LocalStackBudgetRecommendedBudgetResultClass).describe("Report-ready budget object.")
+    list("violations", of = LocalStackBudgetRecommendedViolationResultClass).describe("Report-ready violations.")
+    list("cleanExports", of = string()).serialName("clean_exports").describe("Report-ready clean checked exports.")
+    embed("evidence", of = LocalStackBudgetRecommendedEvidenceResultClass).describe("Report-ready evidence object.")
+    embed("minimalFix", of = LocalStackBudgetRecommendedMinimalFixResultClass).serialName("minimal_fix")
+        .describe("Report-ready minimal fix object.")
+}
+
+val AuditLocalStackBudgetResultClass = class_("AuditLocalStackBudgetResult", kotlinPackage = MODEL_PACKAGE) {
+    embed("module", of = LocalStackBudgetModuleIdentityClass).describe("Exact input path identity for report-ready local budget output.")
+    nullable("runtimeId", of = string()).describe("Runtime id copied from `policyPath`, when available.")
+    embed("budget", of = LocalStackBudgetBudgetResultClass).describe("Effective local budget.")
+    list("checkedExports", of = string()).describe("Sorted export names checked by the audit.")
+    list("functions", of = LocalStackBudgetFunctionResultClass).describe("Compact per-export local counts.")
+    list("violations", of = LocalStackBudgetViolationResultClass).describe("Checked exports whose local count exceeds the budget.")
+    list("cleanExports", of = string()).describe("Checked exports that do not exceed the budget.")
+    embed("evidence", of = LocalStackBudgetEvidenceResultClass).describe("Runtime log evidence used for the report.")
+    embed("minimalFix", of = LocalStackBudgetMinimalFixResultClass).describe("Minimal export-level remediation summary.")
+    embed("recommendedReport", of = LocalStackBudgetRecommendedReportResultClass)
+        .describe("Task/report-ready JSON object with snake_case field names where needed.")
+    list("warnings", of = string()).describe("Non-fatal input or evidence warnings.")
+}
+
 internal val FunctionTools: List<ToolSpec> = tools {
     tool("list_functions") {
         summary = "List imported and defined functions with offset/limit pagination."
@@ -532,6 +638,19 @@ internal val FunctionTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.Indices
         output = GetFunctionCallGraphResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionCallGraph"
+    }
+
+    tool("audit_local_stack_budget") {
+        summary = "Audit exported function local counts against a local stack budget policy."
+        guidance = """
+            Use this as the shortest path for local-variable or stack-budget audits that have a Wasm module and optional `policyPath`.
+            It maps exported functions to funcidx values, reads grouped declared locals without full disassembly, applies `max_locals` and `count_params`, and returns violations, clean exports, log evidence, and `recommendedReport`.
+            Prefer this production tool over `list_exported_functions`, `get_locals_for_functions`, `disassemble_function`, or per-function traces when the goal is exported-function local budget analysis.
+        """
+        input = AuditLocalStackBudgetInput
+        inputPattern = ToolInputPattern.LocalStackBudgetAudit
+        output = AuditLocalStackBudgetResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.auditLocalStackBudget"
     }
 
     tool("search_functions_by_name") {

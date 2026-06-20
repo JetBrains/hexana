@@ -29,6 +29,7 @@ import org.jetbrains.hexana.mcp.model.functions.SourceLocationInput
 import org.jetbrains.hexana.mcp.model.functions.WasmFrameInput
 import org.jetbrains.hexana.mcp.query.auditDataPayloadPolicy
 import org.jetbrains.hexana.mcp.query.auditGlobalStatePolicy
+import org.jetbrains.hexana.mcp.query.auditLocalStackBudget
 import org.jetbrains.hexana.mcp.query.checkComponentCompatibility
 import org.jetbrains.hexana.mcp.query.checkMemoryContract
 import org.jetbrains.hexana.mcp.query.diffRequiredProposals
@@ -1174,6 +1175,145 @@ public class HexanaToolset : McpToolsProvider {
       val policyText = requireTextFile(policyPath)
       val logText = logPath?.let { requireTextFile(it) }
       val result = provider.auditGlobalStatePolicy(baseline = baselineProvider, policyText = policyText, logText = logText, pathLabel = path, baselinePathLabel = baselinePath, policyPathLabel = policyPath, logPathLabel = logPath, detail = detail)
+      val text = encodeHexanaJson(result)
+      val structuredContent = encodeHexanaJsonElement(result).jsonObject
+      return McpToolCallResult.text(text, structuredContent)
+    }
+  },
+  object : McpTool {
+    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
+      name = "audit_local_stack_budget",
+      description = """
+      |Audit exported function local counts against a local stack budget policy.
+      |Use this as the shortest path for local-variable or stack-budget audits that have a Wasm module and optional `policyPath`.
+      |It maps exported functions to funcidx values, reads grouped declared locals without full disassembly, applies `max_locals` and `count_params`, and returns violations, clean exports, log evidence, and `recommendedReport`.
+      |Prefer this production tool over `list_exported_functions`, `get_locals_for_functions`, `disassemble_function`, or per-function traces when the goal is exported-function local budget analysis.
+      """.trimMargin(),
+      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.auditLocalStackBudget",
+      inputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Path relative to the project root"))
+        })
+        put("policyPath", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Optional local stack budget policy JSON path with `runtime_id`, `max_locals`, `count_params`, and `checked_exports`."))
+          put("maxLength", JsonPrimitive(4_096))
+        })
+        put("logPath", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Optional runtime verifier log path used only for `log_event_id` and checked-export batch evidence."))
+          put("maxLength", JsonPrimitive(4_096))
+        })
+        put("checkedExports", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("array"))
+            add(JsonPrimitive("null"))
+          })
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+          put("description", JsonPrimitive("Optional explicit export names to check. When omitted, `policyPath.checked_exports` is used; without a policy, all exported local functions are checked."))
+          put("maxItems", JsonPrimitive(500))
+        })
+        put("maxLocals", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("integer"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Optional local budget override. When omitted, `policyPath.max_locals` is used and verdict fields are omitted if no budget is available."))
+          put("minimum", JsonPrimitive(0))
+        })
+        put("countParams", buildJsonObject {
+          put("type", JsonPrimitive("boolean"))
+          put("description", JsonPrimitive("Whether function parameters count toward `localCount`; default matches WebAssembly declared-local budget audits."))
+          put("default", JsonPrimitive(false))
+        })
+        put("projectPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
+        })
+      },
+      requiredProperties = setOf("path"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+      outputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("module", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+        put("runtimeId", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("budget", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+        put("checkedExports", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+        })
+        put("functions", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+        put("violations", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+        put("cleanExports", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+        })
+        put("evidence", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+        put("minimalFix", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+        put("recommendedReport", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+        put("warnings", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+        })
+      },
+      requiredProperties = setOf("module", "budget", "checkedExports", "functions", "violations", "cleanExports", "evidence", "minimalFix", "recommendedReport", "warnings"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+    )
+    override suspend fun call(args: JsonObject): McpToolCallResult {
+      val path = args.requireStringArgument("path")
+      val policyPath = args.optionalStringArgument("policyPath")
+      val logPath = args.optionalStringArgument("logPath")
+      val checkedExports = args.optionalStringListArgument("checkedExports")
+      val maxLocals = args.optionalIntArgument("maxLocals")
+      val countParams = args.optionalBooleanArgument("countParams") ?: false
+      val file = requireWasmFile(path)
+      val provider = file.requireCoreWasmBinaryProvider()
+      val policyText = policyPath?.let { requireTextFile(it) }
+      val logText = logPath?.let { requireTextFile(it) }
+      val result = provider.auditLocalStackBudget(policyText = policyText, logText = logText, checkedExports = checkedExports.orEmpty(), maxLocals = maxLocals, countParams = countParams, pathLabel = path, policyPathLabel = policyPath, logPathLabel = logPath)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)

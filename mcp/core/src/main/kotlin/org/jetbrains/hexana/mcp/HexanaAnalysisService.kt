@@ -17,6 +17,7 @@ import org.jetbrains.hexana.mcp.model.exports.ListExportsResult
 import org.jetbrains.hexana.mcp.model.exports.SearchExportsResult
 import org.jetbrains.hexana.mcp.model.features.ListEnabledFeaturesResult
 import org.jetbrains.hexana.mcp.model.functions.FunctionsResult
+import org.jetbrains.hexana.mcp.model.functions.AuditLocalStackBudgetResult
 import org.jetbrains.hexana.mcp.model.functions.DisassembleFunctionResult
 import org.jetbrains.hexana.mcp.model.functions.GetFunctionCallGraphResult
 import org.jetbrains.hexana.mcp.model.functions.GetInstructionsForFunctionsResult
@@ -122,6 +123,16 @@ interface HexanaAnalysisService {
     fun disassembleFunction(input: WasmInput, funcidx: Int): DisassembleFunctionResult
     fun getFunctionCallGraph(input: WasmInput, indices: List<Int>): GetFunctionCallGraphResult
     fun searchFunctionsByName(input: WasmInput, query: String, limit: Int): SearchFunctionsByNameResult
+    fun auditLocalStackBudget(
+        input: WasmInput,
+        policyInput: TextInput?,
+        logInput: TextInput?,
+        checkedExports: List<String>,
+        maxLocals: Int?,
+        countParams: Boolean
+    ): AuditLocalStackBudgetResult {
+        throw UnsupportedOperationException("auditLocalStackBudget is not implemented")
+    }
     fun resolveWasmFrames(
         input: WasmInput,
         frames: List<WasmFrameInput>,
@@ -399,6 +410,31 @@ class DefaultHexanaAnalysisService(
         requireLimit(limit)
         val wasm = load(input)
         return wasm.provider.readFunctionsByName(query, limit)
+    }
+
+    override fun auditLocalStackBudget(
+        input: WasmInput,
+        policyInput: TextInput?,
+        logInput: TextInput?,
+        checkedExports: List<String>,
+        maxLocals: Int?,
+        countParams: Boolean
+    ): AuditLocalStackBudgetResult {
+        requireStringList(checkedExports, "Checked exports")
+        maxLocals?.let { requireNonNegative(it, "Maximum locals") }
+        val wasm = load(input)
+        val policy = policyInput?.let(::loadText)
+        val log = logInput?.let(::loadText)
+        return wasm.provider.auditLocalStackBudget(
+            policyText = policy?.text,
+            logText = log?.text,
+            checkedExports = checkedExports,
+            maxLocals = maxLocals,
+            countParams = countParams,
+            pathLabel = input.projectRelativeArtifactPathLabel(),
+            policyPathLabel = policyInput?.artifactPathLabel(),
+            logPathLabel = logInput?.artifactPathLabel()
+        )
     }
 
     override fun resolveWasmFrames(
@@ -974,6 +1010,15 @@ class DefaultHexanaAnalysisService(
 
     private fun requireOptionalNonNegative(value: Int?, label: String) {
         if (value != null && value < 0) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.OUT_OF_RANGE,
+                "$label must be greater than or equal to 0"
+            )
+        }
+    }
+
+    private fun requireNonNegative(value: Int, label: String) {
+        if (value < 0) {
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.OUT_OF_RANGE,
                 "$label must be greater than or equal to 0"

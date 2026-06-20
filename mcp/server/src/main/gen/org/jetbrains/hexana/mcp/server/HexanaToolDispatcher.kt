@@ -20,6 +20,8 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 internal object HexanaToolInputDefaults {
   public const val AUDIT_GLOBAL_STATE_POLICY_DETAIL: String = "compact"
 
+  public const val AUDIT_LOCAL_STACK_BUDGET_COUNT_PARAMS: Boolean = false
+
   public const val SEARCH_EXPORTS_LIMIT: Int = 50
 
   public const val LIST_FUNCTIONS_OFFSET: Int = 0
@@ -59,6 +61,7 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers, profile: Hex
   if (profile.includesTool("plan_abi_binding_regeneration")) registerPlanAbiBindingRegenerationTool(handlers)
   if (profile.includesTool("check_memory_contract")) registerCheckMemoryContractTool(handlers)
   if (profile.includesTool("audit_global_state_policy")) registerAuditGlobalStatePolicyTool(handlers)
+  if (profile.includesTool("audit_local_stack_budget")) registerAuditLocalStackBudgetTool(handlers)
   if (profile.includesTool("list_custom_sections")) registerListCustomSectionsTool(handlers)
   if (profile.includesTool("list_imports")) registerListImportsTool(handlers)
   if (profile.includesTool("list_exports")) registerListExportsTool(handlers)
@@ -1359,6 +1362,154 @@ private fun Server.registerAuditGlobalStatePolicyTool(handlers: HexanaToolHandle
     ),
   ))  {
     request: CallToolRequest -> handlers.auditGlobalStatePolicy(request.arguments)
+  }
+}
+
+private fun Server.registerAuditLocalStackBudgetTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "audit_local_stack_budget",
+    description = """
+  |Audit exported function local counts against a local stack budget policy.
+  |Use this as the shortest path for local-variable or stack-budget audits that have a Wasm module and optional `policyPath`.
+  |It maps exported functions to funcidx values, reads grouped declared locals without full disassembly, applies `max_locals` and `count_params`, and returns violations, clean exports, log evidence, and `recommendedReport`.
+  |Prefer this production tool over `list_exported_functions`, `get_locals_for_functions`, `disassemble_function`, or per-function traces when the goal is exported-function local budget analysis.
+  """.trimMargin(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw `.wasm` bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES))
+      })
+      put("policyPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional local stack budget policy JSON path with `runtime_id`, `max_locals`, `count_params`, and `checked_exports`."))
+        put("maxLength", JsonPrimitive(4_096))
+      })
+      put("logPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional runtime verifier log path used only for `log_event_id` and checked-export batch evidence."))
+        put("maxLength", JsonPrimitive(4_096))
+      })
+      put("checkedExports", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Optional explicit export names to check. When omitted, `policyPath.checked_exports` is used; without a policy, all exported local functions are checked."))
+        put("maxItems", JsonPrimitive(500))
+      })
+      put("maxLocals", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("integer"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional local budget override. When omitted, `policyPath.max_locals` is used and verdict fields are omitted if no budget is available."))
+        put("minimum", JsonPrimitive(0))
+      })
+      put("countParams", buildJsonObject {
+        put("type", JsonPrimitive("boolean"))
+        put("description", JsonPrimitive("Whether function parameters count toward `localCount`; default matches WebAssembly declared-local budget audits."))
+        put("default", JsonPrimitive(false))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("module", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("runtimeId", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("budget", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("checkedExports", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+      })
+      put("functions", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("violations", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("cleanExports", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+      })
+      put("evidence", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("minimalFix", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("recommendedReport", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("warnings", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+      })
+    },
+    required = listOf("module", "budget", "checkedExports", "functions", "violations", "cleanExports", "evidence", "minimalFix", "recommendedReport", "warnings")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.auditLocalStackBudget(request.arguments)
   }
 }
 

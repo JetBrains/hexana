@@ -13,6 +13,7 @@ private val HEXANA_TOOL_ORDER = listOf(
     "plan_abi_binding_regeneration",
     "check_memory_contract",
     "audit_global_state_policy",
+    "audit_local_stack_budget",
     "list_custom_sections",
     "list_imports",
     "list_exports",

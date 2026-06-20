@@ -346,6 +346,68 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(1, functions.obj(0).int("funcidx"))
     }
 
+    fun testAuditLocalStackBudgetReturnsRecommendedReportWithoutDisassembly() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/functions/local_budget_audit.wasm",
+            """
+            (module
+              (func (export "health_check"))
+              (func (export "hydrate_checkout") (local i32 i32 i32 i32 i64 i64))
+              (func (export "render_invoice") (local f64 f64 i32 i32 i32))
+              (func (export "route_cart") (local i32 i32 i32 i32)))
+            """.trimIndent()
+        )
+        val policy = createTextFixture(
+            "fixtures/direct/functions/local_budget.json",
+            """
+            {
+              "runtime_id": "edge-runtime-local-budget",
+              "max_locals": 4,
+              "count_params": false,
+              "checked_exports": [
+                "health_check",
+                "hydrate_checkout",
+                "render_invoice",
+                "route_cart"
+              ]
+            }
+            """.trimIndent()
+        )
+        val log = createTextFixture(
+            "fixtures/direct/functions/local_budget.log",
+            "2026-04-30T13:05:14Z runtime=edge-runtime-local-budget event=evt-local-7719 checked_exports=health_check,hydrate_checkout,render_invoice,route_cart\n"
+        )
+
+        val result = callToolJsonObject(
+            "audit_local_stack_budget",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("policyPath", JsonPrimitive(policy.projectRelativePath))
+                put("logPath", JsonPrimitive(log.projectRelativePath))
+            }
+        )
+
+        assertEquals("edge-runtime-local-budget", result.text("runtimeId"))
+        assertEquals(4, result.obj("budget").int("maxLocals"))
+        val functions = result.array("functions")
+        assertEquals(4, functions.size)
+        val hydrate = functions.filterIsInstance<JsonObject>().single { it.text("export") == "hydrate_checkout" }
+        assertEquals(1, hydrate.int("funcidx"))
+        assertEquals(6, hydrate.int("localCount"))
+        assertEquals(4, hydrate.obj("localsByType").int("i32"))
+        assertEquals(2, hydrate.obj("localsByType").int("i64"))
+
+        val recommended = result.obj("recommendedReport")
+        assertEquals("edge-runtime-local-budget", recommended.text("runtime_id"))
+        assertEquals(fixture.projectRelativePath, recommended.text("module"))
+        assertEquals("evt-local-7719", recommended.obj("evidence").text("log_event_id"))
+        assertEquals(listOf("health_check", "route_cart"), recommended.array("clean_exports").map { it.textValue() })
+        assertEquals(
+            listOf("hydrate_checkout", "render_invoice"),
+            recommended.obj("minimal_fix").array("split_or_reduce_exports").map { it.textValue() }
+        )
+    }
+
     fun testGetInstructionsForFunctionsReturnsDecodedInstructionText() {
         val fixture = createFunctionFixture("fixtures/direct/functions/get_instructions.wasm")
 

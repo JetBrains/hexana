@@ -3,6 +3,7 @@ package org.jetbrains.hexana.mcp.server
 internal val EXPECTED_ADVANCED_HEXANA_TOOL_NAMES = listOf(
     "audit_data_payload_policy",
     "audit_global_state_policy",
+    "audit_local_stack_budget",
     "check_component_compatibility",
     "check_memory_contract",
     "check_runtime_compatibility",
@@ -48,6 +49,7 @@ internal val EXPECTED_ADVANCED_HEXANA_TOOL_NAMES = listOf(
 internal val EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES = listOf(
     "audit_data_payload_policy",
     "audit_global_state_policy",
+    "audit_local_stack_budget",
     "check_component_compatibility",
     "check_memory_contract",
     "check_runtime_compatibility",
