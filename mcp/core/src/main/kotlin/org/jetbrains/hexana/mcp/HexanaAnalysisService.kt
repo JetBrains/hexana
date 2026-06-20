@@ -47,6 +47,7 @@ import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.*
@@ -573,7 +574,7 @@ class DefaultHexanaAnalysisService(
         val policy = loadText(policyInput)
         return wasm.provider.auditDataPayloadPolicy(
             policyText = policy.text,
-            pathLabel = input.artifactPathLabel(),
+            pathLabel = input.projectRelativeArtifactPathLabel(),
             policyPathLabel = policy.path ?: policyInput.artifactPathLabel()
         )
     }
@@ -985,6 +986,33 @@ class DefaultHexanaAnalysisService(
 
     private fun TextInput.artifactPathLabel(): String? =
         (this as? TextInput.FilePath)?.path
+
+    private fun WasmInput.projectRelativeArtifactPathLabel(): String? {
+        val label = artifactPathLabel() ?: return null
+        val path = try {
+            Path.of(label)
+        } catch (_: Exception) {
+            return label
+        }
+        if (!path.isAbsolute) return label
+
+        val normalizedPath = path.normalize()
+        val projectRoot = nearestProjectRoot(normalizedPath) ?: return label
+        return try {
+            projectRoot.relativize(normalizedPath).toString().replace(File.separatorChar, '/')
+        } catch (_: Exception) {
+            label
+        }
+    }
+
+    private fun nearestProjectRoot(path: Path): Path? {
+        var directory = if (Files.isDirectory(path)) path else path.parent
+        while (directory != null) {
+            if (Files.exists(directory.resolve(".git"))) return directory
+            directory = directory.parent
+        }
+        return null
+    }
 
     private data class LoadedWasm(val provider: WasmBinaryProvider)
     private data class LoadedComponentWasm(val provider: WasmComponentBinaryProvider)

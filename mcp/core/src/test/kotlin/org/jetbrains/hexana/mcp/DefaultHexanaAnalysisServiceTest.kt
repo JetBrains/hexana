@@ -461,6 +461,77 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun auditDataPayloadPolicyUsesProjectRelativeReportModuleUnderGitRoot() {
+        Files.createDirectories(temporaryFolder.root.toPath().resolve("project/.git"))
+        val wasm = createWasmFile(
+            "project/dist/runtime/payloads.wasm",
+            """
+            (module
+              (memory 1)
+              (data (i32.const 0) "DEBUG_TOKEN_DO_NOT_SHIP"))
+            """.trimIndent()
+        )
+        val policy = createTextFile(
+            "project/config/payload_policy.json",
+            """
+            {
+              "policy_id": "payload-policy-test",
+              "forbidden_payloads": [
+                {
+                  "id": "legacy-debug-token",
+                  "match": "DEBUG_TOKEN_DO_NOT_SHIP",
+                  "severity": "medium"
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val result = service.auditDataPayloadPolicy(
+            WasmInput.FilePath(wasm.toString()),
+            TextInput.FilePath(policy.toString())
+        )
+
+        assertEquals("dist/runtime/payloads.wasm", result.module)
+        assertEquals("dist/runtime/payloads.wasm", result.recommendedReport.module)
+    }
+
+    @Test
+    fun auditDataPayloadPolicyKeepsAbsoluteReportModuleOutsideKnownProjectRoot() {
+        val wasm = createWasmFile(
+            "outside-payloads.wasm",
+            """
+            (module
+              (memory 1)
+              (data (i32.const 0) "DEBUG_TOKEN_DO_NOT_SHIP"))
+            """.trimIndent()
+        )
+        val policy = createTextFile(
+            "outside-payload-policy.json",
+            """
+            {
+              "policy_id": "payload-policy-test",
+              "forbidden_payloads": [
+                {
+                  "id": "legacy-debug-token",
+                  "match": "DEBUG_TOKEN_DO_NOT_SHIP",
+                  "severity": "medium"
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val result = service.auditDataPayloadPolicy(
+            WasmInput.FilePath(wasm.toString()),
+            TextInput.FilePath(policy.toString())
+        )
+
+        assertEquals(wasm.toString(), result.module)
+        assertEquals(wasm.toString(), result.recommendedReport.module)
+    }
+
+    @Test
     fun globalStatePolicyReturnsTargetedGlobalsAmongManyStableGlobals() {
         val baseline = createWasmFile(
             "global-policy-baseline.wasm",
