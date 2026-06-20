@@ -35,6 +35,9 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.borderBottom
+import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.wasm.WasmParseSuccess
+import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.analysis.SizeAnalysisBuilder
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.theme.treeStyle
@@ -252,12 +255,25 @@ private fun TreeGeneratorScope<Any>.addSizeChildren(
     for (child in children) {
         if (isCancelled()) return
         val grandchildren = resolveChildren(child, builder, provider, dataRecords, detailCache)
+        // Pass `child` as the node id. Jewel's addNode/addLeaf default the id to null, and
+        // TreeBuilder.build() then falls back to String.valueOf(childIndex) — unique only among
+        // siblings, so a node and its own first child collide ("0"). Jewel keys expansion state
+        // (openNodes / depthById) on the id, which breaks expansion for DEEP trees (the component
+        // case: a Component node and its first child share an id). The SizeNode instance is a
+        // unique, stable id (identity-based; children are cached so re-evaluation reuses them).
         if (grandchildren.isNotEmpty()) {
-            addNode(child) {
-                addSizeChildren(child, builder, provider, dataRecords, detailCache, sortColumn, sortAsc, isCancelled)
+            addNode(child, child) {
+                // The childrenGenerator block is stored on Tree$Element$Node and invoked lazily by
+                // Jewel's evaluateChildren() when the user expands the row — long after the build
+                // coroutine (whose job.isActive drives isCancelled) has completed.  Passing
+                // isCancelled here would make job.isActive == false → isCancelled() == true →
+                // addSizeChildren returns immediately → children never appear.  Lazy expansion must
+                // always run to completion; pass { false } so only the initial build loop can be
+                // cancelled, not the on-demand child evaluation.
+                addSizeChildren(child, builder, provider, dataRecords, detailCache, sortColumn, sortAsc) { false }
             }
         } else {
-            addLeaf(child)
+            addLeaf(child, child)
         }
     }
 }
@@ -279,6 +295,16 @@ private fun resolveChildren(
     cache: MutableMap<Any, List<BinarySizeNode>>,
 ): List<BinarySizeNode> {
     if (node.children.isNotEmpty()) return node.children
+
+    // Embedded modules / nested components expand lazily from their own byte slice. This is
+    // independent of `builder` (null for a component provider) and is the path that lets a
+    // composed component be drilled into without eagerly building the whole nested tree.
+    when (node) {
+        is SizeNode.EmbeddedComponent -> return lazyEmbeddedChildren(node.slice, node, cache)
+        is SizeNode.EmbeddedModule -> return lazyEmbeddedChildren(node.slice, node, cache)
+        else -> {}
+    }
+
     if (builder == null) return emptyList()
 
     return when (node) {
@@ -294,6 +320,24 @@ private fun resolveChildren(
             }
         }
         else -> emptyList()
+    }
+}
+
+/**
+ * Parses an embedded module / nested-component [slice] and returns its size-tree children on first
+ * access (cached by node). Building one level at a time keeps composed components responsive: the
+ * children it returns are themselves lazily-expandable (deeper embedded nodes carry their own slice;
+ * core-module children are this module's sections/functions). Returns empty if the slice doesn't parse.
+ */
+private fun lazyEmbeddedChildren(
+    slice: CommonByteBuffer?,
+    node: BinarySizeNode,
+    cache: MutableMap<Any, List<BinarySizeNode>>,
+): List<BinarySizeNode> {
+    if (slice == null) return emptyList()
+    return cache.getOrPut(node) {
+        val sub = (WasmParser().parse(slice) as? WasmParseSuccess)?.wasmModule
+        if (sub == null) emptyList() else SizeAnalysisBuilder(slice, sub).buildTree().children
     }
 }
 

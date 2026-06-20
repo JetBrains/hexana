@@ -4,6 +4,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.components.CoreWasmComponent
 import org.jetbrains.hexana.wasm.components.WasmComponent
 import org.jetbrains.hexana.wasm.components.WasmComponentBase
+import org.jetbrains.hexana.wasm.components.WasmComponentSection
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 import org.jetbrains.hexana.wasm.sections.WasmDataRecord
@@ -136,15 +137,28 @@ class SizeAnalysisBuilder(
             children.add(SizeNode.Section(section.name, section.sectionSize, section.sectionOffset, null, emptyList()))
         }
 
+        // Embedded core modules and nested components carry their byte slice so the size panel can
+        // expand them LAZILY (their breakdown is built on demand — see PanelSize.resolveChildren);
+        // recursing eagerly here would parse every embedded module's code section up front, which is
+        // prohibitively heavy for a composed component embedding multi-MB modules. Nested components
+        // are enumerated from the raw section list, NOT `component.componentSection` (which holds only
+        // the LAST one) — a composed component keeps its code in MULTIPLE nested sub-components, so the
+        // singular field would drop most of the binary's size (e.g. composed.wasm).
         component.moduleSection.forEach { section ->
             children.add(
-                SizeNode.EmbeddedModule(section.name, section.sectionSize, section.sectionOffset, emptyList())
+                SizeNode.EmbeddedModule(
+                    section.name, section.sectionSize, section.sectionOffset,
+                    slice = buffer.slice(section.contentOffset, section.contentSize),
+                ),
             )
         }
 
-        component.componentSection?.let { section ->
+        component.sections.filterIsInstance<WasmComponentSection>().forEach { section ->
             children.add(
-                SizeNode.EmbeddedComponent(section.name, section.sectionSize, section.sectionOffset, emptyList())
+                SizeNode.EmbeddedComponent(
+                    section.name, section.sectionSize, section.sectionOffset,
+                    slice = buffer.slice(section.contentOffset, section.contentSize),
+                ),
             )
         }
 

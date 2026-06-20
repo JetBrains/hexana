@@ -32,6 +32,11 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.dex.DexFileParser
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
+import org.jetbrains.hexana.providers.format.ComponentDiffResult
+import org.jetbrains.hexana.providers.format.SubmoduleKind
+import org.jetbrains.hexana.providers.format.SubmodulePairing
+import org.jetbrains.hexana.providers.format.SubmoduleRef
+import org.jetbrains.hexana.providers.format.WasmComponentDiffOrchestrator
 import org.jetbrains.hexana.providers.format.WasmEntityDiffOrchestrator
 import org.jetbrains.hexana.providers.format.WasmEntityDiffResult
 import org.jetbrains.hexana.providers.format.WasmSizeDiffOrchestrator
@@ -45,6 +50,7 @@ import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.panel.DiffLoadable
 import org.jetbrains.hexana.ui.panel.SizeReady
+import org.jetbrains.hexana.ui.panel.WasmComponentDiffEditorView
 import org.jetbrains.hexana.ui.panel.WasmDiffEditorView
 import org.jetbrains.hexana.ui.panel.buildRows
 import org.jetbrains.hexana.ui.setupSearchActions
@@ -132,6 +138,7 @@ class HexanaFileEditor(
     private val wasmDiffScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val wasmSizeDiffFlow = MutableStateFlow<DiffLoadable<SizeReady>>(DiffLoadable.Loading)
     private val wasmEntityDiffFlow = MutableStateFlow<DiffLoadable<WasmEntityDiffResult>>(DiffLoadable.Loading)
+    private val wasmComponentDiffFlow = MutableStateFlow<DiffLoadable<ComponentDiffResult>>(DiffLoadable.Loading)
 
     init {
         panel = UiDataProvider.wrapComponent(JPanel(BorderLayout())) { sink ->
@@ -150,6 +157,14 @@ class HexanaFileEditor(
         val diffFile = myFile as? HexanaWasmDiffVirtualFile
         if (diffFile != null) {
             initWasmDiffPanel(diffFile)
+            return
+        }
+
+        // A Component Model diff compares the *submodules* of two components; like the
+        // core diff it has no single-file hex surface, so it short-circuits too.
+        val componentDiffFile = myFile as? HexanaComponentDiffVirtualFile
+        if (componentDiffFile != null) {
+            initComponentDiffPanel(componentDiffFile)
             return
         }
 
@@ -335,6 +350,92 @@ class HexanaFileEditor(
         }
         panel.add(view)
     }
+
+    private fun initComponentDiffPanel(file: HexanaComponentDiffVirtualFile) {
+        // Cheap submodule enumeration + pairing, computed once off the EDT into an
+        // editor-scoped flow. The expensive per-submodule diff is deferred to a click.
+        wasmDiffScope.launch {
+            val result = WasmComponentDiffOrchestrator.diff(
+                WasmComponentBinaryProvider(file.leftBuffer.duplicate()),
+                WasmComponentBinaryProvider(file.rightBuffer.duplicate()),
+            )
+            wasmComponentDiffFlow.value = if (result == null) {
+                DiffLoadable.Error(WASM_DIFF_PARSE_ERROR)
+            } else {
+                DiffLoadable.Ready(result)
+            }
+        }
+
+        val view = createComposePanel {
+            WasmComponentDiffEditorView(
+                leftName = file.leftName,
+                rightName = file.rightName,
+                modelFlow = wasmComponentDiffFlow,
+                onOpenSubmodule = { pairing -> openSubmoduleDiff(file, pairing) },
+            )
+        }
+        panel.add(view)
+    }
+
+    /**
+     * Opens the clicked submodule pair in its own tab. The two submodule byte ranges are
+     * sliced from the parent component buffers and *materialized* (so the child tab's
+     * lifetime is independent of this one), then routed by kind: a core-module pair reuses
+     * the existing [HexanaWasmDiffVirtualFile] size/entity/WAT diff, a nested-component pair
+     * recurses into another [HexanaComponentDiffVirtualFile], and a one-sided submodule
+     * opens that single side's structure in a [HexanaBinaryVirtualFile].
+     *
+     * Slicing/materialization runs off the EDT; only [FileEditorManager.openFile] is on it.
+     */
+    private fun openSubmoduleDiff(parent: HexanaComponentDiffVirtualFile, pairing: SubmodulePairing) {
+        wasmDiffScope.launch {
+            val child = buildSubmoduleDiffFile(parent, pairing) ?: return@launch
+            withContext(Dispatchers.EDT) {
+                FileEditorManager.getInstance(myProject).openFile(child, true)
+            }
+        }
+    }
+
+    private fun buildSubmoduleDiffFile(
+        parent: HexanaComponentDiffVirtualFile,
+        pairing: SubmodulePairing,
+    ): VirtualFile? {
+        val left = pairing.left
+        val right = pairing.right
+        return when {
+            left != null && right != null -> {
+                val leftBuffer = materializeSubmodule(parent.leftBuffer, left)
+                val rightBuffer = materializeSubmodule(parent.rightBuffer, right)
+                val leftName = "${parent.leftName}∷${left.label}"
+                val rightName = "${parent.rightName}∷${right.label}"
+                val name = "$leftName ↔ $rightName"
+                when (pairing.kind) {
+                    // A pair always shares its kind (pairing is within-kind), so the kind is
+                    // authoritative — no need to re-sniff the slice.
+                    SubmoduleKind.COMPONENT -> HexanaComponentDiffVirtualFile(
+                        name, leftBuffer, rightBuffer, leftName, rightName,
+                        parent.leftSymbolMap, parent.rightSymbolMap,
+                    )
+
+                    SubmoduleKind.CORE_MODULE -> HexanaWasmDiffVirtualFile(
+                        name, leftBuffer, rightBuffer, leftName, rightName,
+                        parent.leftSymbolMap, parent.rightSymbolMap,
+                    )
+                }
+            }
+
+            left != null -> openSingleSubmodule(parent.leftBuffer, left, parent.leftName)
+            right != null -> openSingleSubmodule(parent.rightBuffer, right, parent.rightName)
+            else -> null
+        }
+    }
+
+    /** A one-sided (added/removed) submodule has nothing to diff against — show its structure. */
+    private fun openSingleSubmodule(buffer: CommonByteBuffer, ref: SubmoduleRef, parentName: String): VirtualFile =
+        HexanaBinaryVirtualFile("$parentName∷${ref.label}", materializeSubmodule(buffer, ref))
+
+    private fun materializeSubmodule(parentBuffer: CommonByteBuffer, ref: SubmoduleRef): CommonByteBuffer =
+        parentBuffer.slice(ref.contentOffset, ref.contentSize).toByteArray().toCommonByteBuffer()
 
     override fun getComponent(): JComponent {
         return panel

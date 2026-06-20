@@ -578,6 +578,7 @@ private fun BinaryProvider.resolvePanels(
                 listOf(
                     Panel("Top") { PanelSize(this, state) },
                     Panel("Wat") { WasmPanelWat(this, state) },
+                    Panel("WAT (virtualized)") { WasmComponentPanelWatVirtualized(this, state) },
                 )
             } else {
                 errorPanel(state)
@@ -609,6 +610,7 @@ private fun BinaryProvider.resolvePanels(
             if (canProvideWasmModule()) {
                 listOf(
                     Panel("Top") { PanelSize(this, state) },
+                    Panel("WAT (virtualized)") { WasmComponentPanelWatVirtualized(this, state) },
                 )
             } else emptyList()
         }
