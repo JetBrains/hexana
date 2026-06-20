@@ -4,7 +4,6 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.vfs.JarFileSystem
 import com.intellij.openapi.vfs.VirtualFile
@@ -44,26 +43,6 @@ class OpenArchiveInHexanaAction : AnAction() {
         // FileEditorProvider gets first crack via PLACE_BEFORE_DEFAULT_EDITOR.
         manager.closeFile(archive)
         manager.openFile(archive, true)
-    }
-
-    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
-}
-
-/**
- * Popup group that anchors a `Open in...` submenu in the project-view popup.
- * Visible only when the selected file is a Hexana-known archive (or any node
- * inside one) — otherwise the submenu would clutter the menu for every file.
- */
-class HexanaOpenInGroup : DefaultActionGroup() {
-    init {
-        isPopup = true
-        templatePresentation.text = "Open in..."
-    }
-
-    override fun update(e: AnActionEvent) {
-        val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
-        e.presentation.isEnabledAndVisible =
-            e.project != null && file != null && resolveHexanaArchive(file) != null
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT

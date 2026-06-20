@@ -262,42 +262,41 @@
     </extensions>
 
     <actions>
-        <action id="hexana.openInHexView" class="org.jetbrains.hexana.actions.OpenInHexViewAction">
-            <add-to-group group-id="RevealGroup" anchor="last"/>
-        </action>
-        <action id="hexana.goToOffset" class="org.jetbrains.hexana.actions.GoToOffsetAction"
-                use-shortcut-of="GotoLine"/>
-        <action id="hexana.showElementInHexView" class="org.jetbrains.hexana.actions.ShowElementInHexViewAction">
-            <add-to-group group-id="RevealGroup" anchor="first"/>
-        </action>
-
-        <action id="hexana.showStructurePopup" class="org.jetbrains.hexana.actions.ShowStructurePopupAction"
-                use-shortcut-of="FileStructurePopup"/>
-
         <!--
-            "Open in... | Hexana" for archives (.jar / .zip / .war / .apk).
-            The submenu is only visible when the selected project-view file
-            is a Hexana-known archive; the action inside opens it through
-            FileEditorManager so HexanaFileEditorProvider claims the file
-            via PLACE_BEFORE_DEFAULT_EDITOR.
+            All Hexana actions are gathered under a single "Hexana" submenu, defined inline so
+            each has exactly one registration site. Each action gates its own visibility — file
+            type for the file actions, an open Hexana editor (HexanaFileEditor.KEY) for the
+            editor actions — so only the applicable entries appear and the popup hides entirely
+            when none apply. Shortcuts are preserved via use-shortcut-of regardless of placement.
+
+            The group is added to TWO parents on purpose:
+              - ProjectViewPopupMenu: top-level "Hexana" submenu in IntelliJ IDEA.
+              - RevealGroup ("Open In"): the only path that works in RustRover / CLion, whose
+                RsProjectViewPopupMenu overrides ProjectViewPopupMenu with an explicit
+                reference list (no catch-all), so direct ProjectViewPopupMenu contributions are
+                dropped there. Those IDEs DO reference RevealGroup, so "Open In ▸ Hexana" shows.
+            Consequence: in IntelliJ IDEA the submenu appears in both places (top-level and
+            under "Open In"); that duplication is the accepted trade-off for RR/CLion coverage.
         -->
-        <group id="hexana.openInGroup"
-               class="org.jetbrains.hexana.actions.HexanaOpenInGroup">
+        <group id="hexana.contextMenuGroup" text="Hexana" popup="true">
+            <action id="hexana.openInHexView" class="org.jetbrains.hexana.actions.OpenInHexViewAction"/>
             <action id="hexana.openArchiveInHexana"
                     class="org.jetbrains.hexana.actions.OpenArchiveInHexanaAction"
-                    text="Hexana"
+                    text="Open Archive"
                     description="Open this archive in Hexana's Java library viewer"/>
-            <add-to-group group-id="ProjectViewPopupMenu" anchor="first"/>
-        </group>
-
-        <!-- "Compare WASM With…" — size-impact diff of two .wasm modules. -->
-        <action id="hexana.compareWasm"
-                class="org.jetbrains.hexana.actions.CompareWasmAction"
-                text="Compare WASM With…"
-                description="Compare two .wasm modules by size impact">
-            <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="hexana.openInGroup"/>
+            <action id="hexana.compareWasm"
+                    class="org.jetbrains.hexana.actions.CompareWasmAction"
+                    text="Compare WASM With…"
+                    description="Compare two .wasm modules by size impact"/>
+            <separator/>
+            <action id="hexana.showElementInHexView" class="org.jetbrains.hexana.actions.ShowElementInHexViewAction"/>
+            <action id="hexana.goToOffset" class="org.jetbrains.hexana.actions.GoToOffsetAction"
+                    use-shortcut-of="GotoLine"/>
+            <action id="hexana.showStructurePopup" class="org.jetbrains.hexana.actions.ShowStructurePopupAction"
+                    use-shortcut-of="FileStructurePopup"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
             <add-to-group group-id="RevealGroup" anchor="last"/>
-        </action>
+        </group>
     </actions>
 
 </idea-plugin>

@@ -16,6 +16,8 @@
 - The **Top** size-profiler tab now breaks a Component Model binary down completely: every nested sub-component and embedded core module is attributed with its correct size and expands to its internal sections and functions, recursively and on demand. Previously a composed component — whose code sits inside nested sub-components — reported most of its bytes as a single opaque block, because the profiler read only the first nested component section
 
 ### Changed
+- Hexana's project-view actions (Hex view, Open Archive, **Compare WASM With…**, and the in-editor Hex/offset/structure actions) are now grouped under a single **Hexana** submenu instead of being scattered across the right-click menu. In IntelliJ IDEA the submenu sits at the top level of the project-view popup; in RustRover and CLion — whose project-view popup is overridden to a fixed action list that silently drops third-party top-level contributions — it appears under **Open In ▸ Hexana**, the one group those IDEs still surface. Each entry continues to gate its own visibility, so only the actions that apply to the selected file appear
+- **Compare WASM With…** can now be invoked from Search Everywhere and the keymap, not only from a selected `.wasm`: when run without a `.wasm` selection it prompts for the first module, then the second, instead of doing nothing
 
 ### Deprecated
 

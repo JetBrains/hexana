@@ -31,21 +31,37 @@ import org.jetbrains.hexana.toCommonByteBuffer
 class CompareWasmAction : AnAction() {
 
     override fun update(e: AnActionEvent) {
+        val project = e.project
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
-        e.presentation.isEnabledAndVisible =
-            e.project != null && file != null && !file.isDirectory &&
-            file.extension.equals("wasm", ignoreCase = true)
+        e.presentation.isEnabledAndVisible = if (e.isFromContextMenu) {
+            // In the Project-view popup, only show the item for an actual .wasm selection so
+            // it does not clutter the right-click menu of every file.
+            project != null && file != null && isWasm(file)
+        } else {
+            // Search Everywhere / main menu / keymap: always available. actionPerformed
+            // prompts for both modules when nothing suitable is selected.
+            project != null
+        }
     }
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val left = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
 
-        val descriptor = FileChooserDescriptorFactory.singleFile()
-            .withTitle("Compare With WASM File")
-            .withDescription("Select the second .wasm module to compare against ${left.name}")
-            .withFileFilter { it.extension.equals("wasm", ignoreCase = true) }
-        val right = FileChooser.chooseFile(descriptor, project, left.parent) ?: return
+        // The Project-view selection is the left-hand module. When invoked without a .wasm
+        // selection (Search Everywhere, Keymap, or main menu), prompt for the first module
+        // instead of silently doing nothing.
+        val left = e.getData(CommonDataKeys.VIRTUAL_FILE)?.takeIf { isWasm(it) }
+            ?: FileChooser.chooseFile(
+                wasmChooser("Compare WASM — Select First Module", "Select the first .wasm module to compare"),
+                project,
+                null,
+            ) ?: return
+
+        val right = FileChooser.chooseFile(
+            wasmChooser("Compare With WASM File", "Select the second .wasm module to compare against ${left.name}"),
+            project,
+            left.parent,
+        ) ?: return
 
         val leftBuffer = left.toCommonByteBuffer()
         val rightBuffer = right.toCommonByteBuffer()
@@ -104,6 +120,15 @@ class CompareWasmAction : AnAction() {
             null
         }
     }
+
+    private fun isWasm(file: VirtualFile): Boolean =
+        !file.isDirectory && file.extension.equals("wasm", ignoreCase = true)
+
+    private fun wasmChooser(title: String, description: String) =
+        FileChooserDescriptorFactory.singleFile()
+            .withTitle(title)
+            .withDescription(description)
+            .withFileFilter { it.extension.equals("wasm", ignoreCase = true) }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
