@@ -1040,7 +1040,8 @@ public class HexanaToolset : McpToolsProvider {
       |Audit global-state policy with current/baseline Wasm and policy JSON; returns report-ready violations.
       |Use this as the shortest path for global-state audits that have a current module, `baselinePath`, and `policyPath`.
       |Compares current globals with baseline public globals, applies policy rules, and returns exact input path echoes.
-      |Default `detail=compact` is diff-first: it returns policy violations, added public globals, compact allowed/unchanged summaries, exact report fields, targeted global indices, and remediation/recommendation text.
+      |When the target JSON needs `policy_id`, `module`, `violations`, `new_public_globals`, `allowed_public_globals`, and nested `evidence`, call this tool once with optional `logPath` and write the returned `report` object.
+      |Default `detail=compact` is diff-first: it returns policy violations, added public globals, compact allowed/unchanged summaries, copy-ready `report`, targeted global indices, and remediation/recommendation text.
       |Use `detail=full` only when full unchanged allowed-global objects are required.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.auditGlobalStatePolicy",
@@ -1144,6 +1145,9 @@ public class HexanaToolset : McpToolsProvider {
             put("type", JsonPrimitive("object"))
           })
         })
+        put("report", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
         put("recommendedReport", buildJsonObject {
           put("type", JsonPrimitive("object"))
         })
@@ -1154,7 +1158,7 @@ public class HexanaToolset : McpToolsProvider {
           })
         })
       },
-      requiredProperties = setOf("module", "detail", "globals", "newPublicGlobals", "allowedPublicGlobals", "allowedPublicGlobalSummary", "unchangedGlobalSummary", "requestLimits", "violations", "targetedGlobalIndices", "evidence", "recommendedReport", "warnings"),
+      requiredProperties = setOf("module", "detail", "globals", "newPublicGlobals", "allowedPublicGlobals", "allowedPublicGlobalSummary", "unchangedGlobalSummary", "requestLimits", "violations", "targetedGlobalIndices", "evidence", "report", "recommendedReport", "warnings"),
       definitions = emptyMap<String, JsonElement>(),
       ),
     )
@@ -1285,7 +1289,7 @@ public class HexanaToolset : McpToolsProvider {
       |For WebAssembly component compatibility drift, provider selection, candidate component scans, dependency lock repair, or component run/link fixes, use `check_component_compatibility` instead.
       |Do not use this low-level export inventory as the main workflow for selecting component dependency files.
       |If you need function signatures or origins, skip directly to `list_exported_functions`.
-      |For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not identify new or policy-allowed public globals.
+      |For baseline-plus-policy global-state audits or release reports, use `audit_global_state_policy`; this low-level view does not identify new public globals, allowed baseline globals, policy violations, or nested report evidence.
       |For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; this low-level view does not distinguish direct imported calls from transitive local helper calls.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.listExports",
@@ -2498,7 +2502,7 @@ public class HexanaToolset : McpToolsProvider {
       |Low-level list of imported and defined globals from a `.wasm` module.
       |List imported and defined globals declared by a WebAssembly (.wasm) module.
       |Returns each global with its value type, mutability, normalized initializer expression, import identity, and export names pointing at the global.
-      |For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not compare baseline public globals or policy rules.
+      |For baseline-plus-policy global-state audits or release reports, use `audit_global_state_policy` instead; this low-level view is intentionally broad and does not compare baseline public globals or policy rules.
       """.trimMargin(),
       fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.listGlobals",
       inputSchema = McpToolSchema.ofPropertiesSchema(

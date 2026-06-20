@@ -95,7 +95,7 @@ internal val ExportTools: List<ToolSpec> = tools {
             For WebAssembly component compatibility drift, provider selection, candidate component scans, dependency lock repair, or component run/link fixes, use `check_component_compatibility` instead.
             Do not use this low-level export inventory as the main workflow for selecting component dependency files.
             If you need function signatures or origins, skip directly to `list_exported_functions`.
-            For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not identify new or policy-allowed public globals.
+            For baseline-plus-policy global-state audits or release reports, use `audit_global_state_policy`; this low-level view does not identify new public globals, allowed baseline globals, policy violations, or nested report evidence.
             For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; this low-level view does not distinguish direct imported calls from transitive local helper calls.
         """
         input = WasmInputClass

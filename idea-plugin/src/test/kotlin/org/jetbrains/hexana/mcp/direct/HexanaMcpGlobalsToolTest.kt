@@ -147,6 +147,10 @@ class HexanaMcpGlobalsToolTest : HexanaMcpToolsetDirectTestBase() {
         )
         assertEquals(listOf(0, 3, 4), structuredContent.array("targetedGlobalIndices").map { it.jsonPrimitive.int })
         assertTrue(structuredContent.obj("allowedPublicGlobalSummary").array("names").any { it.jsonPrimitive.content == "abi_version" })
+        val report = structuredContent.obj("report")
+        assertEquals(listOf("feature_flag", "request_limit"), report.array("new_public_globals").map { it.jsonObject.text("export") })
+        assertEquals(listOf(0, 3, 4), report.obj("evidence").array("targeted_global_indices").map { it.jsonPrimitive.int })
+        assertTrue(report.array("allowed_public_globals").any { it.jsonPrimitive.content == "abi_version" })
         assertTrue(structuredContent.obj("recommendedReport").array("new_public_globals").obj(0).text("export") == "feature_flag")
     }
 

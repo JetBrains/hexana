@@ -17,6 +17,7 @@ data class AuditGlobalStatePolicyResult(
     val violations: List<GlobalStatePolicyViolationResult>,
     val targetedGlobalIndices: List<Int>,
     val evidence: List<GlobalStatePolicyEvidenceResult>,
+    val report: GlobalStatePolicyReportResult,
     val recommendedReport: GlobalStatePolicyRecommendedReportResult,
     val warnings: List<String>
 )
@@ -104,6 +105,29 @@ data class GlobalStatePolicyEvidenceResult(
     val mutable: Boolean,
     val initExpr: String? = null,
     val origin: String
+)
+
+@Serializable
+data class GlobalStatePolicyReportResult(
+    @SerialName("policy_id")
+    val policyId: String? = null,
+    val module: String? = null,
+    val violations: List<GlobalStatePolicyReportViolationResult>,
+    @SerialName("new_public_globals")
+    val newPublicGlobals: List<GlobalStatePolicyReportGlobalResult>,
+    @SerialName("allowed_public_globals")
+    val allowedPublicGlobals: List<String>,
+    val evidence: GlobalStatePolicyReportEvidenceResult
+)
+
+@Serializable
+data class GlobalStatePolicyReportEvidenceResult(
+    @SerialName("compared_to")
+    val comparedTo: String? = null,
+    @SerialName("targeted_global_indices")
+    val targetedGlobalIndices: List<Int>,
+    @SerialName("log_event_id")
+    val logEventId: String? = null
 )
 
 @Serializable

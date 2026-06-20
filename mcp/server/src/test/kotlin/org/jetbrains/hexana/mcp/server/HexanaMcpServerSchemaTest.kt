@@ -311,6 +311,7 @@ class HexanaMcpServerSchemaTest {
         assertTrue("allowedPublicGlobals" in output)
         assertTrue("allowedPublicGlobalSummary" in output)
         assertTrue("unchangedGlobalSummary" in output)
+        assertTrue("report" in output)
         assertTrue("recommendedReport" in output)
         assertTrue("targetedGlobalIndices" in output)
         assertTrue("violations" in output)

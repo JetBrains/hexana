@@ -114,6 +114,13 @@ val GlobalStatePolicyEvidenceResultClass = class_("GlobalStatePolicyEvidenceResu
     string("origin").describe("Global origin: `import` or `local`.")
 }
 
+val GlobalStatePolicyReportEvidenceResultClass = class_("GlobalStatePolicyReportEvidenceResult") {
+    nullable("comparedTo", string()).serialName("compared_to").describe("Baseline module path for the final report.")
+    list("targetedGlobalIndices", of = int()).serialName("targeted_global_indices")
+        .describe("Report-ready targeted global indices sorted ascending.")
+    nullable("logEventId", string()).serialName("log_event_id").describe("Relevant runtime log event id, when available.")
+}
+
 val GlobalStatePolicyReportViolationResultClass = class_("GlobalStatePolicyReportViolationResult") {
     string("kind").describe("Report violation kind.")
     int("globalidx").describe("Global index involved in the report violation.")
@@ -129,6 +136,18 @@ val GlobalStatePolicyReportGlobalResultClass = class_("GlobalStatePolicyReportGl
     string("type").describe("Global value type.")
     boolean("mutable").describe("True when the global is mutable.")
     nullable("initExpr", string()).serialName("init_expr").describe("Initialization expression in WAT syntax, or null for imports.")
+}
+
+val GlobalStatePolicyReportResultClass = class_("GlobalStatePolicyReportResult") {
+    nullable("policyId", string()).serialName("policy_id").describe("Policy identifier from the policy file.")
+    nullable("module", string()).describe("Current module path for the final report.")
+    list("violations", of = GlobalStatePolicyReportViolationResultClass).describe("Report-ready blocking violations.")
+    list("newPublicGlobals", of = GlobalStatePolicyReportGlobalResultClass).serialName("new_public_globals")
+        .describe("Report-ready new public globals sorted by export name.")
+    list("allowedPublicGlobals", of = string()).serialName("allowed_public_globals")
+        .describe("Allowed public global names for the final report.")
+    embed("evidence", of = GlobalStatePolicyReportEvidenceResultClass)
+        .describe("Report-ready evidence object with baseline path, targeted indices, and log event id.")
 }
 
 val GlobalStatePolicyRecommendedReportResultClass = class_("GlobalStatePolicyRecommendedReportResult") {
@@ -161,8 +180,10 @@ val AuditGlobalStatePolicyResultClass = class_("AuditGlobalStatePolicyResult", k
     list("violations", of = GlobalStatePolicyViolationResultClass).describe("Report-ready policy violations in stable `globalidx` and violation order.")
     list("targetedGlobalIndices", of = int()).describe("Stable sorted `globalidx` values relevant to the audit.")
     list("evidence", of = GlobalStatePolicyEvidenceResultClass).describe("Relevant global evidence returned for the selected `detail` mode.")
+    embed("report", of = GlobalStatePolicyReportResultClass)
+        .describe("Copy-ready final report JSON with `policy_id`, `module`, `violations`, `new_public_globals`, `allowed_public_globals`, and nested `evidence`.")
     embed("recommendedReport", of = GlobalStatePolicyRecommendedReportResultClass)
-        .describe("Report-ready fields using the task's expected naming and stable ordering.")
+        .describe("Legacy report-ready fields plus recommendation text; prefer `report` when the target file expects nested `evidence`.")
     list("warnings", of = string()).describe("Non-fatal input or runtime-log warnings.")
 }
 
@@ -172,7 +193,7 @@ internal val GlobalTools: List<ToolSpec> = tools {
         guidance = """
             List imported and defined globals declared by a WebAssembly (.wasm) module.
             Returns each global with its value type, mutability, normalized initializer expression, import identity, and export names pointing at the global.
-            For baseline-plus-policy global-state audits, use `audit_global_state_policy`; this low-level view does not compare baseline public globals or policy rules.
+            For baseline-plus-policy global-state audits or release reports, use `audit_global_state_policy` instead; this low-level view is intentionally broad and does not compare baseline public globals or policy rules.
         """
         input = WasmInputClass
         inputPattern = ToolInputPattern.WasmOnly
@@ -185,7 +206,8 @@ internal val GlobalTools: List<ToolSpec> = tools {
         guidance = """
             Use this as the shortest path for global-state audits that have a current module, `baselinePath`, and `policyPath`.
             Compares current globals with baseline public globals, applies policy rules, and returns exact input path echoes.
-            Default `detail=compact` is diff-first: it returns policy violations, added public globals, compact allowed/unchanged summaries, exact report fields, targeted global indices, and remediation/recommendation text.
+            When the target JSON needs `policy_id`, `module`, `violations`, `new_public_globals`, `allowed_public_globals`, and nested `evidence`, call this tool once with optional `logPath` and write the returned `report` object.
+            Default `detail=compact` is diff-first: it returns policy violations, added public globals, compact allowed/unchanged summaries, copy-ready `report`, targeted global indices, and remediation/recommendation text.
             Use `detail=full` only when full unchanged allowed-global objects are required.
         """
         input = AuditGlobalStatePolicyInput

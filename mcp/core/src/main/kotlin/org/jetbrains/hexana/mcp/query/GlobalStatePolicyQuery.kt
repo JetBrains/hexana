@@ -21,7 +21,9 @@ import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyModuleIdentity
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyEvidenceResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyGlobalResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyRecommendedReportResult
+import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyReportEvidenceResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyReportGlobalResult
+import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyReportResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyReportViolationResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyRequestLimitResult
 import org.jetbrains.hexana.mcp.model.globals.GlobalStatePolicyUnchangedGlobalsSummaryResult
@@ -170,27 +172,44 @@ fun WasmBinaryProvider.auditGlobalStatePolicy(
         unchangedPublicGlobalNames = unchangedPublicGlobalNames
     )
     val logEvidence = parseGlobalStatePolicyLogEvidence(logText, pathLabel)
+    val reportViolations = violations
+        .filter { it.kind == "mutable_imported_global" && it.importNameQualified != null }
+        .mapNotNull { violation ->
+            val global = currentGlobals.firstOrNull { it.globalIdx == violation.globalidx } ?: return@mapNotNull null
+            GlobalStatePolicyReportViolationResult(
+                kind = violation.kind,
+                globalidx = violation.globalidx,
+                importName = violation.importNameQualified,
+                type = global.type,
+                mutable = global.mutability
+            )
+        }
+        .sortedBy { it.globalidx }
+    val reportNewPublicGlobals = newPublicGlobals
+        .mapNotNull { it.toReportGlobal() }
+        .sortedWith(compareBy<GlobalStatePolicyReportGlobalResult> { it.export }.thenBy { it.globalidx })
+    val reportModule = logEvidence?.module ?: pathLabel
+    val reportComparedTo = logEvidence?.comparedTo ?: baselinePathLabel
+    val reportEvidence = GlobalStatePolicyReportEvidenceResult(
+        comparedTo = reportComparedTo,
+        targetedGlobalIndices = targetedGlobalIndices,
+        logEventId = logEvidence?.eventId
+    )
+    val report = GlobalStatePolicyReportResult(
+        policyId = policy.policyId,
+        module = reportModule,
+        violations = reportViolations,
+        newPublicGlobals = reportNewPublicGlobals,
+        allowedPublicGlobals = allowedPublicGlobalNames,
+        evidence = reportEvidence
+    )
     val recommendedReport = GlobalStatePolicyRecommendedReportResult(
         policyId = policy.policyId,
-        module = pathLabel ?: logEvidence?.module,
-        comparedTo = logEvidence?.comparedTo ?: baselinePathLabel,
+        module = reportModule,
+        comparedTo = reportComparedTo,
         logEventId = logEvidence?.eventId,
-        violations = violations
-            .filter { it.kind == "mutable_imported_global" && it.importNameQualified != null }
-            .mapNotNull { violation ->
-                val global = currentGlobals.firstOrNull { it.globalIdx == violation.globalidx } ?: return@mapNotNull null
-                GlobalStatePolicyReportViolationResult(
-                    kind = violation.kind,
-                    globalidx = violation.globalidx,
-                    importName = violation.importNameQualified,
-                    type = global.type,
-                    mutable = global.mutability
-                )
-            }
-            .sortedBy { it.globalidx },
-        newPublicGlobals = newPublicGlobals
-            .mapNotNull { it.toReportGlobal() }
-            .sortedWith(compareBy<GlobalStatePolicyReportGlobalResult> { it.export }.thenBy { it.globalidx }),
+        violations = reportViolations,
+        newPublicGlobals = reportNewPublicGlobals,
         allowedPublicGlobals = allowedPublicGlobalNames,
         targetedGlobalIndices = targetedGlobalIndices,
         recommendation = recommendationFor(violations, newPublicGlobals)
@@ -227,6 +246,7 @@ fun WasmBinaryProvider.auditGlobalStatePolicy(
         violations = violations,
         targetedGlobalIndices = targetedGlobalIndices,
         evidence = evidence,
+        report = report,
         recommendedReport = recommendedReport,
         warnings = warnings
     )

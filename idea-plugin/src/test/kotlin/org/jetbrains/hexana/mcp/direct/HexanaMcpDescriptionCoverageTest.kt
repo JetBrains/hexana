@@ -110,6 +110,7 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
         assertContains(globals.description, "`baselinePath`")
         assertContains(globals.description, "`policyPath`")
         assertContains(globals.description, "`detail=compact`")
+        assertContains(globals.description, "write the returned `report` object")
         assertContains(globals.description, "targeted global indices")
     }
 
