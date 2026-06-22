@@ -72,10 +72,30 @@ class RowActionDescriptor(
  *
  * @param labelProvider returns the menu item label for the given row index
  * @param action callback invoked when the menu item is selected for the given row index
+ * @param isVisible whether the item should be shown for the given row index; defaults to
+ *   always-visible. Lets a descriptor offer a row-kind-specific action (e.g. "navigate to
+ *   the function body") only on the rows it applies to.
  */
 class RowContextMenuItemDescriptor(
     val labelProvider: (index: Int) -> String,
     val action: (index: Int) -> Unit,
+    val isVisible: (index: Int) -> Boolean = { true },
+)
+
+/**
+ * A single flat context-menu entry generated dynamically for one row.
+ *
+ * Unlike [RowContextMenuItemDescriptor] — a fixed set of items shared by every
+ * row — a [TableTabDescriptor.dynamicContextMenuProvider] returns a
+ * variable-length list of these per row, e.g. one navigable entry per usage
+ * site of the row's symbol.
+ *
+ * @param label the menu item text
+ * @param action callback invoked when the item is selected
+ */
+class RowMenuEntry(
+    val label: String,
+    val action: () -> Unit,
 )
 
 /**
@@ -94,6 +114,9 @@ class RowContextMenuItemDescriptor(
  * @param contextMenuItems per-row context menu items; empty list means no context menu
  * @param rowClickAction optional alternative row-click handler; when set, the UI layer
  *   calls this instead of scrolling to [rowSelectionProvider] data
+ * @param dynamicContextMenuProvider optional provider of additional, per-row context
+ *   menu entries whose count may vary by row (e.g. one entry per usage site). The UI
+ *   layer renders these after [contextMenuItems]; `null` means none.
  */
 class TableTabDescriptor(
     val name: String,
@@ -105,6 +128,7 @@ class TableTabDescriptor(
     val rowAction: RowActionDescriptor? = null,
     val contextMenuItems: List<RowContextMenuItemDescriptor> = emptyList(),
     val rowClickAction: ((index: Int) -> Unit)? = null,
+    val dynamicContextMenuProvider: ((index: Int) -> List<RowMenuEntry>)? = null,
 ) {
     companion object {
         /** Sentinel value for [defaultSortColumn] that targets the implicit ID column. */

@@ -67,11 +67,17 @@ private fun TableTabContent(descriptor: TableTabDescriptor, state: HexViewStateH
         columns = columns,
         dataCount = descriptor.rowCount,
         onRowContextMenu = { rowIndex ->
-            descriptor.contextMenuItems.map { item ->
-                ContextMenuItem(item.labelProvider(rowIndex)) {
-                    item.action(rowIndex)
+            val staticItems = descriptor.contextMenuItems
+                .filter { item -> item.isVisible(rowIndex) }
+                .map { item ->
+                    ContextMenuItem(item.labelProvider(rowIndex)) {
+                        item.action(rowIndex)
+                    }
                 }
-            }
+            val dynamicItems = descriptor.dynamicContextMenuProvider?.invoke(rowIndex)
+                ?.map { entry -> ContextMenuItem(entry.label, entry.action) }
+                ?: emptyList()
+            staticItems + dynamicItems
         },
         actionColumn = descriptor.rowAction?.let { rowAction -> { index ->
             val tooltip = rowAction.tooltipProvider(index)

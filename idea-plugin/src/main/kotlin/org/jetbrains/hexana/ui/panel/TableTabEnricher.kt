@@ -1,8 +1,18 @@
 package org.jetbrains.hexana.ui.panel
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.application.runReadActionBlocking
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.ide.CopyPasteManager
+import java.awt.datatransfer.StringSelection
+import java.util.concurrent.atomic.AtomicReference
+import org.jetbrains.hexana.HexanaFileEditor
+import org.jetbrains.hexana.ui.WasmFunctionNavTarget
+import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphNode
+import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphResult
+import org.jetbrains.hexana.wasm.analysis.graph.CallerPathTree
+import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
@@ -74,6 +84,7 @@ internal fun List<TableTabDescriptor>.enrichWasmTabs(
 ): List<TableTabDescriptor> = map { tab ->
     when (tab.name) {
         "Exports" -> enrichWasmExportsTab(tab, provider, provider.file, hexViewState.project)
+        "Imports" -> enrichWasmImportsTab(tab, provider, provider.file, hexViewState, pathsNavigationState)
         "Functions" -> enrichWasmFunctionsTab(tab, provider, hexViewState.project, { fIdx ->
             pathsNavigationState.targetFuncIndex = fIdx
             hexViewState.requestSelectTabByDescription("Dominators")
@@ -118,6 +129,8 @@ private fun enrichWasmExportsTab(
         name = tab.name,
         columns = tab.columns,
         rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
         rowSelectionProvider = tab.rowSelectionProvider,
         rowAction = RowActionDescriptor(
             label = "Run",
@@ -134,6 +147,141 @@ private fun enrichWasmExportsTab(
                 }
             },
         ),
+        contextMenuItems = listOf(
+            RowContextMenuItemDescriptor(
+                labelProvider = { "Copy Name" },
+                action = { index ->
+                    val export = exports.getOrNull(index) ?: return@RowContextMenuItemDescriptor
+                    CopyPasteManager.getInstance().setContents(StringSelection(export.name))
+                },
+            ),
+            RowContextMenuItemDescriptor(
+                labelProvider = { "Navigate to Function in WAT" },
+                isVisible = { index -> exports.getOrNull(index) is WasmFunctionExportRecordEntry },
+                action = { index ->
+                    val export = exports.getOrNull(index) as? WasmFunctionExportRecordEntry
+                        ?: return@RowContextMenuItemDescriptor
+                    navigateToFunctionInWat(file, project, export.index.toInt())
+                },
+            ),
+        ),
+    )
+}
+
+/**
+ * Switch the binary editor to the WAT (virtualized) tab and scroll it to the
+ * body of function [funcIdx] (global function index, including imports). The
+ * [WasmPanelWatVirtualized] consumes the pushed [WasmFunctionNavTarget]; if the
+ * panel is not yet composed the navigation is deferred until the tab is shown.
+ */
+private fun navigateToFunctionInWat(file: VirtualFile, project: Project, funcIdx: Int) {
+    val editors = FileEditorManager.getInstance(project).openFile(file, true)
+    val editor = editors.filterIsInstance<HexanaFileEditor>().firstOrNull() ?: return
+    editor.requestWasmFunctionNav(WasmFunctionNavTarget(funcIdx))
+    editor.stateHolder.requestSelectTabByDescription(WAT_VIRTUALIZED_TAB_DESCRIPTION)
+}
+
+/** Panel description of the WAT (virtualized) tab; see [BinaryEditorView]. */
+private const val WAT_VIRTUALIZED_TAB_DESCRIPTION = "WAT (virtualized)"
+
+/** Panel description of the call-graph tab that hosts the Caller Paths view. */
+private const val DOMINATORS_TAB_DESCRIPTION = "Dominators"
+
+/** Max number of usage sites listed inline in the context menu before overflowing to a panel. */
+private const val MAX_IMPORT_USAGE_MENU_ITEMS = 15
+
+// ---------------------------------------------------------------------------
+// Wasm Imports enrichment
+// ---------------------------------------------------------------------------
+
+/**
+ * Enriches the core-Wasm Imports tab with a per-row context menu: **Copy Name**
+ * for every import, plus — for function imports — **Find Usages**, a flat list
+ * of the functions that call the import, each navigating to that caller's body
+ * in the virtualized WAT view. When there are more callers than
+ * [MAX_IMPORT_USAGE_MENU_ITEMS], or the call graph is not yet computed, the menu
+ * offers a single entry that opens the Caller Paths panel instead.
+ */
+private fun enrichWasmImportsTab(
+    tab: TableTabDescriptor,
+    provider: WasmBinaryProvider,
+    file: VirtualFile,
+    hexViewState: HexViewStateHolder,
+    pathsNavigationState: PathsNavigationState,
+): TableTabDescriptor {
+    val project = hexViewState.project
+    val imports = provider.imports
+
+    // Pre-warm the call graph off the EDT. Building it scans every function body
+    // (14k+ on large modules), which must not happen while a right-click menu is
+    // assembled on the EDT. The lazy result is cached, so the menu reads it
+    // instantly once ready; a right-click arriving first falls back to opening
+    // the Caller Paths panel, which computes off the EDT itself.
+    val callGraph = AtomicReference<CallGraphResult?>()
+    ApplicationManager.getApplication().executeOnPooledThread {
+        callGraph.set(provider.callGraphResult)
+    }
+
+    val functionNames = provider.nameSection?.functionSubsection?.namemap
+
+    fun funcLabel(funcIdx: Int): String =
+        functionNames?.let { resolveFunctionName(it, funcIdx) }?.takeIf { it.isNotBlank() }
+            ?: "func_$funcIdx"
+
+    // funcidx of the function import at [rowIndex] — its position among function
+    // imports. The call-graph node id of a function import equals this funcidx.
+    fun functionImportFuncIdx(rowIndex: Int): Int =
+        imports.subList(0, rowIndex).count { it.type is WasmTypeIndexExternalType }
+
+    fun openUsagesPanel(importFuncIdx: Int) {
+        pathsNavigationState.targetFuncIndex = importFuncIdx
+        hexViewState.requestSelectTabByDescription(DOMINATORS_TAB_DESCRIPTION)
+    }
+
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
+        rowSelectionProvider = tab.rowSelectionProvider,
+        dynamicContextMenuProvider = { rowIndex ->
+            val record = imports.getOrNull(rowIndex)
+            if (record == null) {
+                emptyList()
+            } else buildList {
+                val qualified =
+                    if (record.prefix.isNotEmpty()) "${record.prefix}.${record.name}" else record.name
+                add(RowMenuEntry("Copy Name") {
+                    CopyPasteManager.getInstance().setContents(StringSelection(qualified))
+                })
+
+                if (record.type is WasmTypeIndexExternalType) {
+                    val importFuncIdx = functionImportFuncIdx(rowIndex)
+                    val cg = callGraph.get()
+                    if (cg == null) {
+                        add(RowMenuEntry("Find Usages…") { openUsagesPanel(importFuncIdx) })
+                    } else {
+                        val callers = CallerPathTree(cg.graph).callers(importFuncIdx)
+                            .mapNotNull { cg.nodeMap[it] as? CallGraphNode.DefinedFunction }
+                        if (callers.isEmpty()) {
+                            add(RowMenuEntry("No usages found") {})
+                        } else {
+                            callers.take(MAX_IMPORT_USAGE_MENU_ITEMS).forEach { caller ->
+                                add(RowMenuEntry("Used by ${funcLabel(caller.funcIndex)} — open in WAT") {
+                                    navigateToFunctionInWat(file, project, caller.funcIndex)
+                                })
+                            }
+                            if (callers.size > MAX_IMPORT_USAGE_MENU_ITEMS) {
+                                add(RowMenuEntry("Show all ${callers.size} usages…") {
+                                    openUsagesPanel(importFuncIdx)
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+        },
     )
 }
 

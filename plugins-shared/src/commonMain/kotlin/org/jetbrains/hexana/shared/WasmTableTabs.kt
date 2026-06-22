@@ -75,7 +75,8 @@ private fun exportsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
                 name = "Name",
                 widthBehavior = ColumnWidth.Fill(0.5f),
             ) { index ->
-                CellValue(exports[index].name)
+                val name = exports[index].name
+                CellValue(name, tooltip = name.takeIf { it.isNotEmpty() })
             },
             ColumnDescriptor(
                 name = "Signature",
@@ -105,7 +106,10 @@ private fun importsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
                 name = "Data",
                 widthBehavior = ColumnWidth.Fill(),
             ) { index ->
-                CellValue(imports[index].name)
+                val record = imports[index]
+                val qualifiedName =
+                    if (record.prefix.isNotEmpty()) "${record.prefix}.${record.name}" else record.name
+                CellValue(record.name, tooltip = qualifiedName.takeIf { it.isNotEmpty() })
             },
         ),
         rowCount = imports.size,
