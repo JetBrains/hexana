@@ -69,6 +69,15 @@ internal class CdpDebugProcess(
         mutableListOf<XLineBreakpoint<WasmBreakpointProperties>>()
     )
 
+    /**
+     * All breakpoints that have been registered via CDP, tracked so
+     * they can be re-registered with a scriptId when a wasm script
+     * appears (URL-regex breakpoints may not work for wasm scripts).
+     */
+    private val allRegisteredBreakpoints = Collections.synchronizedList(
+        mutableListOf<XLineBreakpoint<WasmBreakpointProperties>>()
+    )
+
     override fun getEditorsProvider(): XDebuggerEditorsProvider = CdpEditorsProvider()
 
     private val sessionProcessHandler = object : ProcessHandler() {
@@ -165,9 +174,11 @@ internal class CdpDebugProcess(
             LOG.debug("CDP: Debugger.scriptParsed scriptId=$scriptId url=$url")
             if (url.startsWith("wasm://")) {
                 wasmScriptSeen.set(true)
-                LOG.debug("CDP: wasm script seen, retrying ${pendingWasmBreakpoints.size} pending breakpoints")
+                LOG.debug("CDP: wasm script seen, retrying ${pendingWasmBreakpoints.size} pending breakpoints, re-registering ${allRegisteredBreakpoints.size} existing breakpoints")
                 // A wasm module was compiled — retry any pending breakpoints
-                retryPendingWasmBreakpoints()
+                // and re-register all existing breakpoints using scriptId
+                // (URL-regex breakpoints may not work for wasm scripts).
+                reRegisterBreakpointsForWasmScript()
             }
         }
 
@@ -260,19 +271,16 @@ internal class CdpDebugProcess(
             // but does not resume the Debugger pause — we must always
             // send Debugger.resume here.
             //
-            // Always resume immediately. Pending wasm breakpoints will
-            // be registered when the wasm scriptParsed event fires
-            // (after JS runs and instantiates the wasm module). V8
-            // processes Debugger.setBreakpoint synchronously before
-            // entering wasm code, so breakpoints set in the
-            // scriptParsed handler will be active in time.
-            LOG.debug("CDP: auto-resuming from 'Break on start'")
+            // Register all pending breakpoints BEFORE resuming so that
+            // URL-regex breakpoints are in place when V8 compiles the
+            // wasm module. Without this, a race between the resume and
+            // breakpoint registration can cause breakpoints to be missed.
+            LOG.debug("CDP: registering pending breakpoints before resuming from 'Break on start'")
             scope.launch {
                 try {
-                    cdp.send("Debugger.resume")
-                    LOG.debug("CDP: Debugger.resume sent for 'Break on start'")
+                    registerPendingBreakpointsAndResume()
                 } catch (e: Exception) {
-                    LOG.warn("Failed to auto-resume from 'Break on start'", e)
+                    LOG.warn("Failed to register breakpoints and resume from 'Break on start'", e)
                 }
             }
             return
@@ -649,6 +657,10 @@ internal class CdpDebugProcess(
                     cdpBreakpointToIde[breakpointId] = breakpoint
                     cdpIds.add(breakpointId)
                 }
+                // Track for re-registration when a wasm script appears
+                if (breakpoint !in allRegisteredBreakpoints) {
+                    allRegisteredBreakpoints.add(breakpoint)
+                }
                 session.updateBreakpointPresentation(
                     breakpoint, null, null
                 )
@@ -680,12 +692,54 @@ internal class CdpDebugProcess(
         }
     }
 
-    private fun retryPendingWasmBreakpoints() {
+    /**
+     * Registers all pending breakpoints and then sends `Debugger.resume`.
+     * Called from the "Break on start" handler to ensure breakpoints are
+     * set before execution proceeds.
+     */
+    private suspend fun registerPendingBreakpointsAndResume() {
+        val pending = drainPendingBreakpoints()
+        for (bp in pending) {
+            registerBreakpointInCdpSuspend(bp)
+        }
+        LOG.debug("CDP: ${pending.size} pending breakpoints registered, sending Debugger.resume")
+        cdp.send("Debugger.resume")
+        LOG.debug("CDP: Debugger.resume sent for 'Break on start'")
+    }
+
+    private fun drainPendingBreakpoints(): List<XLineBreakpoint<WasmBreakpointProperties>> {
         val pending = mutableListOf<XLineBreakpoint<WasmBreakpointProperties>>()
         synchronized(pendingWasmBreakpoints) {
             pending.addAll(pendingWasmBreakpoints)
             pendingWasmBreakpoints.clear()
         }
+        return pending
+    }
+
+    /**
+     * Re-registers all known breakpoints using scriptId-based CDP calls
+     * when a wasm script appears. URL-regex breakpoints set before the
+     * wasm script was parsed may not be applied by V8 to wasm scripts,
+     * so we re-register them with the concrete scriptId.
+     */
+    private fun reRegisterBreakpointsForWasmScript() {
+        val pending = drainPendingBreakpoints()
+        val existing: List<XLineBreakpoint<WasmBreakpointProperties>>
+        synchronized(allRegisteredBreakpoints) {
+            existing = allRegisteredBreakpoints.toList()
+        }
+        val toRegister = (pending + existing).distinct()
+        if (toRegister.isEmpty()) return
+        LOG.debug("CDP: re-registering ${toRegister.size} breakpoints for wasm script (pending=${pending.size}, existing=${existing.size})")
+        scope.launch {
+            for (bp in toRegister) {
+                registerBreakpointInCdpSuspend(bp)
+            }
+        }
+    }
+
+    private fun retryPendingWasmBreakpoints() {
+        val pending = drainPendingBreakpoints()
         if (pending.isEmpty()) return
         scope.launch {
             for (bp in pending) {
@@ -810,6 +864,7 @@ internal class CdpDebugProcess(
     }
 
     internal fun unregisterBreakpointInCdp(breakpoint: XLineBreakpoint<WasmBreakpointProperties>) {
+        allRegisteredBreakpoints.remove(breakpoint)
         val cdpIds = ideBreakpointToCdp.remove(breakpoint) ?: return
         for (cdpId in cdpIds) {
             cdpBreakpointToIde.remove(cdpId)
