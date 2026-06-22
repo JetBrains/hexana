@@ -91,7 +91,7 @@ internal class CdpSourceLocationResolver private constructor(
             lineTableSourceToOffsets[normalizedName], dwarfLine
         )
         val merged = (cuOffsets + ltOffsets).distinct()
-        LOG.debug("sourceToAllWasmOffsets: file=$fileName dwarfLine=$dwarfLine cuOffsets=$cuOffsets ltOffsets=$ltOffsets merged=$merged")
+        LOG.debug("sourceToAllWasmOffsets: file=$fileName dwarfLine=$dwarfLine cuOffsets=$cuOffsets ltOffsets=$ltOffsets merged=$merged codeSectionOffset=$codeSectionOffset")
         return merged
     }
 
@@ -108,42 +108,44 @@ internal class CdpSourceLocationResolver private constructor(
         // Find all exact matches first.
         val exact = entries.filter { it.line == dwarfLine }
         if (exact.isNotEmpty()) {
-            return maxOffsetPerFunction(exact)
+            return minOffsetPerFunction(exact)
         }
 
         // Snap forward to the next executable statement
         val forwardLine = entries.filter { it.line >= dwarfLine }.minByOrNull { it.line }?.line
         if (forwardLine != null) {
-            return maxOffsetPerFunction(entries.filter { it.line == forwardLine })
+            return minOffsetPerFunction(entries.filter { it.line == forwardLine })
         }
 
         // Fall back to the closest preceding line
         val backwardLine = entries.filter { it.line <= dwarfLine }.maxByOrNull { it.line }?.line
         if (backwardLine != null) {
-            return maxOffsetPerFunction(entries.filter { it.line == backwardLine })
+            return minOffsetPerFunction(entries.filter { it.line == backwardLine })
         }
         return emptyList()
     }
 
     /**
-     * Groups matching DWARF line entries by function and returns the
-     * max (last) offset from each group, converted to module offsets.
+     * Groups matching DWARF line entries by function and returns one
+     * offset per group, converted to module offsets.
      *
      * Multiple DWARF entries for the same source line within a single
-     * function correspond to individual wasm instructions (e.g.
-     * local.get/local.set chains in the function prologue). Setting
-     * breakpoints at all of them causes the debugger to pause
-     * repeatedly. We keep only the last (highest) offset per function
-     * — the point where all locals for that statement are set up.
+     * function can appear at different points: the first occurrence is
+     * typically the actual statement (often marked `prologue_end`),
+     * while later occurrences may be epilogue/cleanup code or return
+     * sequences that reference the same line. We keep the first
+     * (lowest) offset per function — the point where the statement
+     * actually begins executing.
      *
      * When DWARF subprogram info is available, entries are grouped by
      * function address ranges ([lowPc, highPc)). Otherwise, all
      * distinct offsets are returned as a fallback.
      */
-    private fun maxOffsetPerFunction(entries: List<LineOffset>): List<ULong> {
+    private fun minOffsetPerFunction(entries: List<LineOffset>): List<ULong> {
         if (entries.isEmpty()) return emptyList()
+        LOG.debug("minOffsetPerFunction: entries=${entries.map { "0x${it.offset.toString(16)}:L${it.line}" }} subprograms=${subprograms.size}")
         if (subprograms.isNotEmpty()) {
-            return maxOffsetPerFunctionViaDwarf(entries)
+            return minOffsetPerFunctionViaDwarf(entries)
         }
         // Fallback: return all distinct offsets when no subprogram
         // info is available (each offset becomes its own breakpoint).
@@ -152,11 +154,11 @@ internal class CdpSourceLocationResolver private constructor(
 
     /**
      * Groups entries by DWARF subprogram address ranges and returns
-     * the max offset per function. Each subprogram has [lowPc, highPc)
+     * the min offset per function. Each subprogram has [lowPc, highPc)
      * defining its code range; entries falling within the same range
      * belong to the same function.
      */
-    private fun maxOffsetPerFunctionViaDwarf(entries: List<LineOffset>): List<ULong> {
+    private fun minOffsetPerFunctionViaDwarf(entries: List<LineOffset>): List<ULong> {
         // Group entries by the subprogram they belong to.
         // Key: subprogram index (or -1 for unmatched entries).
         val groups = mutableMapOf<Int, MutableList<LineOffset>>()
@@ -167,11 +169,11 @@ internal class CdpSourceLocationResolver private constructor(
                 entry.offset.toLong() >= low && entry.offset.toLong() < high
             }
             val spName = if (spIndex >= 0) subprograms[spIndex].let { it.name ?: it.linkageName } else null
-            LOG.debug("maxOffsetPerFunctionViaDwarf: offset=${entry.offset} line=${entry.line} -> spIndex=$spIndex spName=$spName")
+            LOG.debug("minOffsetPerFunctionViaDwarf: offset=${entry.offset} line=${entry.line} -> spIndex=$spIndex spName=$spName")
             groups.getOrPut(spIndex) { mutableListOf() }.add(entry)
         }
-        val result = groups.values.map { group -> toModuleOffset(group.maxOf { it.offset }) }
-        LOG.debug("maxOffsetPerFunctionViaDwarf: ${entries.size} entries -> ${groups.size} groups -> offsets=$result")
+        val result = groups.values.map { group -> toModuleOffset(group.minOf { it.offset }) }
+        LOG.debug("minOffsetPerFunctionViaDwarf: ${entries.size} entries -> ${groups.size} groups -> offsets=$result")
         return result
     }
 
@@ -246,6 +248,9 @@ internal class CdpSourceLocationResolver private constructor(
                 if (locations.isEmpty()) return null
 
                 val codeSectionOffset = (module as? WasmModule)?.codeSection?.contentOffset ?: 0
+                LOG.debug("CdpSourceLocationResolver: codeSectionOffset=$codeSectionOffset " +
+                    "cuLocations=${cuLocations.take(5).map { "0x${it.offset.toString(16)}:${it.sourceLocation.file}:${it.sourceLocation.line}" }} " +
+                    "lineTableLocations=${lineTableLocations.take(5).map { "0x${it.offset.toString(16)}:${it.sourceLocation.file}:${it.sourceLocation.line}" }}")
 
                 val extractor = DwarfVariableInfoExtractor(accessor)
                 val subprograms = try {
