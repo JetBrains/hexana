@@ -9,7 +9,6 @@ import io.ktor.server.engine.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
 import io.modelcontextprotocol.kotlin.sdk.server.mcpStatelessStreamableHttp
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
@@ -152,7 +151,7 @@ private suspend fun runStdio(command: HexanaCommand.Stdio) {
         toolProfile = command.toolProfile
     )
     val finished = CompletableDeferred<Unit>()
-    val transport = StdioServerTransport(
+    val transport = HexanaStdioServerTransport(
         inputStream = System.`in`.asSource().buffered(),
         outputStream = System.out.asSink().buffered()
     )

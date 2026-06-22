@@ -1,0 +1,206 @@
+package org.jetbrains.hexana.mcp.server
+
+import io.github.oshai.kotlinlogging.KotlinLogging
+import io.modelcontextprotocol.kotlin.sdk.shared.AbstractTransport
+import io.modelcontextprotocol.kotlin.sdk.shared.ReadBuffer
+import io.modelcontextprotocol.kotlin.sdk.shared.TransportSendOptions
+import io.modelcontextprotocol.kotlin.sdk.shared.serializeMessage
+import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCMessage
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.io.Buffer
+import kotlinx.io.Sink
+import kotlinx.io.Source
+import kotlinx.io.buffered
+import kotlinx.io.readByteArray
+import kotlinx.io.writeString
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.coroutines.CoroutineContext
+
+private const val STDIO_READ_BUFFER_SIZE = 8192L
+
+/**
+ * Local stdio transport equivalent to the SDK transport.
+ *
+ * GraalVM CE 21.0.2 crashes while parsing the SDK transport's nested suspend
+ * `processReadBuffer` loop, so this keeps the same protocol behavior with the
+ * message read and delivery branches split into simpler methods.
+ */
+@OptIn(ExperimentalAtomicApi::class)
+internal class HexanaStdioServerTransport(private val inputStream: Source, outputStream: Sink) : AbstractTransport() {
+
+    private val logger = KotlinLogging.logger {}
+    private val readBuffer = ReadBuffer()
+    private val initialized = AtomicBoolean(false)
+    private var readingJob: Job? = null
+    private var sendingJob: Job? = null
+    private var processingJob: Job? = null
+
+    private val coroutineContext: CoroutineContext = Dispatchers.IO + SupervisorJob()
+    private val scope = CoroutineScope(coroutineContext)
+    private val readChannel = Channel<ByteArray>(Channel.UNLIMITED)
+    private val writeChannel = Channel<JSONRPCMessage>(Channel.UNLIMITED)
+    private val outputSink = outputStream.buffered()
+
+    override suspend fun start() {
+        if (!initialized.compareAndSet(expectedValue = false, newValue = true)) {
+            error("HexanaStdioServerTransport already started!")
+        }
+
+        readingJob = launchReadingJob()
+        processingJob = launchProcessingJob()
+        sendingJob = launchSendingJob()
+    }
+
+    private fun launchReadingJob(): Job {
+        val job = scope.launch {
+            val buffer = Buffer()
+            try {
+                while (isActive) {
+                    val bytesRead = inputStream.readAtMostTo(buffer, STDIO_READ_BUFFER_SIZE)
+                    if (bytesRead == -1L) break
+                    if (bytesRead > 0) {
+                        readChannel.send(buffer.readByteArray())
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                logger.error(error) { "Error reading from stdin" }
+                _onError.invoke(error)
+            } finally {
+                close()
+            }
+        }
+        job.invokeOnCompletion { cause ->
+            logJobCompletion("Message reading", cause)
+        }
+        return job
+    }
+
+    private fun launchProcessingJob(): Job {
+        val job = scope.launch {
+            try {
+                for (chunk in readChannel) {
+                    readBuffer.append(chunk)
+                    processBufferedMessages()
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                _onError.invoke(error)
+            }
+        }
+        job.invokeOnCompletion { cause ->
+            logJobCompletion("Processing", cause)
+        }
+        return job
+    }
+
+    private fun launchSendingJob(): Job {
+        val job = scope.launch {
+            try {
+                for (message in writeChannel) {
+                    val json = serializeMessage(message)
+                    outputSink.writeString(json)
+                    outputSink.flush()
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                logger.error(error) { "Error writing to stdout" }
+                _onError.invoke(error)
+            }
+        }
+        job.invokeOnCompletion { cause ->
+            logJobCompletion("Message sending", cause)
+            if (cause is CancellationException) {
+                readingJob?.cancel(cause)
+            }
+        }
+        return job
+    }
+
+    private suspend fun processBufferedMessages() {
+        while (true) {
+            val message = readNextMessageOrReportError() ?: return
+            deliverMessage(message)
+        }
+    }
+
+    private fun readNextMessageOrReportError(): JSONRPCMessage? {
+        return try {
+            readBuffer.readMessage()
+        } catch (error: Throwable) {
+            _onError.invoke(error)
+            null
+        }
+    }
+
+    private suspend fun deliverMessage(message: JSONRPCMessage) {
+        try {
+            _onMessage.invoke(message)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            logger.error(error) { "Error processing message" }
+            _onError.invoke(error)
+        }
+    }
+
+    private fun logJobCompletion(jobName: String, cause: Throwable?) {
+        when (cause) {
+            is CancellationException -> {
+            }
+
+            null -> {
+                logger.debug { "$jobName job completed" }
+            }
+
+            else -> {
+                logger.debug(cause) { "$jobName job completed exceptionally" }
+            }
+        }
+    }
+
+    override suspend fun close() {
+        if (!initialized.compareAndSet(expectedValue = true, newValue = false)) return
+
+        withContext(NonCancellable) {
+            writeChannel.close()
+            sendingJob?.cancelAndJoin()
+
+            runCatching {
+                inputStream.close()
+            }.onFailure { logger.warn(it) { "Failed to close stdin" } }
+
+            readingJob?.cancel()
+            readChannel.close()
+
+            processingJob?.cancelAndJoin()
+
+            readBuffer.clear()
+
+            runCatching {
+                outputSink.flush()
+                outputSink.close()
+            }.onFailure { logger.warn(it) { "Failed to close stdout" } }
+
+            invokeOnCloseCallback()
+        }
+    }
+
+    override suspend fun send(message: JSONRPCMessage, options: TransportSendOptions?) {
+        writeChannel.send(message)
+    }
+}
