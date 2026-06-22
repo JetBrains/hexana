@@ -27,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.ui.SpeedSearchableTree
 import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphNode
 import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphResult
 import org.jetbrains.hexana.wasm.analysis.cfg.BasicBlock
@@ -38,7 +39,7 @@ import org.jetbrains.jewel.foundation.lazy.tree.Tree
 import org.jetbrains.jewel.foundation.lazy.tree.TreeGeneratorScope
 import org.jetbrains.jewel.foundation.lazy.tree.TreeState
 import org.jetbrains.jewel.foundation.lazy.tree.buildTree
-import org.jetbrains.jewel.ui.component.LazyTree
+import org.jetbrains.jewel.ui.component.SpeedSearchArea
 import org.jetbrains.jewel.ui.component.Text
 
 enum class RightPaneMode { CfgDominators, PathsFromRoots }
@@ -238,27 +239,36 @@ private fun CallGraphDominatorTree(
         TreeState(SelectableLazyListState(LazyListState()))
     }
 
-    LazyTree(
-        tree = currentTree,
-        treeState = treeState,
-        modifier = Modifier.fillMaxSize(),
-        onElementClick = { element ->
-            val data = element.data
-            if (data is DomEntry) {
-                onSelect(data.nodeId)
+    SpeedSearchArea(modifier = Modifier.fillMaxSize()) {
+        SpeedSearchableTree(
+            tree = currentTree,
+            nodeText = { element ->
+                when (val data = element.data) {
+                    is DomEntry -> domEntryLabel(data)
+                    is UnreachableHeader -> "Unreachable (${data.count})"
+                    else -> null
+                }
+            },
+            treeState = treeState,
+            modifier = Modifier.fillMaxSize(),
+            onElementClick = { element ->
+                val data = element.data
+                if (data is DomEntry) {
+                    onSelect(data.nodeId)
+                }
+            },
+        ) { element ->
+            val label = when (val data = element.data) {
+                is DomEntry -> domEntryLabel(data)
+                is UnreachableHeader -> "Unreachable (${data.count})"
+                else -> data.toString()
             }
-        },
-    ) { element ->
-        val label = when (val data = element.data) {
-            is DomEntry -> domEntryLabel(data)
-            is UnreachableHeader -> "Unreachable (${data.count})"
-            else -> data.toString()
+            Text(
+                label,
+                modifier = Modifier.padding(2.dp),
+                style = TextStyle(fontFamily = FontFamily.Monospace),
+            )
         }
-        Text(
-            label,
-            modifier = Modifier.padding(2.dp),
-            style = TextStyle(fontFamily = FontFamily.Monospace),
-        )
     }
 }
 
@@ -296,20 +306,23 @@ private fun CfgDominatorTree(cfgResult: CfgResult) {
         TreeState(SelectableLazyListState(LazyListState()))
     }
 
-    LazyTree(
-        tree = tree,
-        treeState = treeState,
-        modifier = Modifier.fillMaxSize(),
-    ) { element ->
-        val label = when (val data = element.data) {
-            is CfgBlockEntry -> cfgBlockLabel(data)
-            else -> data.toString()
+    SpeedSearchArea(modifier = Modifier.fillMaxSize()) {
+        SpeedSearchableTree(
+            tree = tree,
+            nodeText = { (it.data as? CfgBlockEntry)?.let(::cfgBlockLabel) },
+            treeState = treeState,
+            modifier = Modifier.fillMaxSize(),
+        ) { element ->
+            val label = when (val data = element.data) {
+                is CfgBlockEntry -> cfgBlockLabel(data)
+                else -> data.toString()
+            }
+            Text(
+                label,
+                modifier = Modifier.padding(2.dp),
+                style = TextStyle(fontFamily = FontFamily.Monospace),
+            )
         }
-        Text(
-            label,
-            modifier = Modifier.padding(2.dp),
-            style = TextStyle(fontFamily = FontFamily.Monospace),
-        )
     }
 }
 

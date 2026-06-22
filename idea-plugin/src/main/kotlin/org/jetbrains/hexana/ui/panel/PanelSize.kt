@@ -34,6 +34,7 @@ import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.HexanaTheme
+import org.jetbrains.hexana.ui.SpeedSearchableTree
 import org.jetbrains.hexana.ui.borderBottom
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmParseSuccess
@@ -49,7 +50,7 @@ import org.jetbrains.jewel.foundation.lazy.tree.Tree
 import org.jetbrains.jewel.foundation.lazy.tree.TreeGeneratorScope
 import org.jetbrains.jewel.foundation.lazy.tree.TreeState
 import org.jetbrains.jewel.foundation.lazy.tree.buildTree
-import org.jetbrains.jewel.ui.component.LazyTree
+import org.jetbrains.jewel.ui.component.SpeedSearchArea
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.VerticalScrollbar
 
@@ -205,29 +206,36 @@ private fun SizeTreeContent(
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            LazyTree(
-                tree = currentTree,
-                treeState = treeState,
-                modifier = Modifier.fillMaxSize(),
-                onElementClick = { element ->
-                    val data = element.data
-                    if (data is BinarySizeNode && data.size > 0) {
-                        state.scrollHexViewTo(data.offset, data.size)
+            // Type-to-search find-and-jump over the size tree: highlights matches,
+            // arrow keys move between them, auto-scrolls to the match. Mirrors the
+            // StructureView speed-search usage. No row filtering — matches the
+            // chosen find-and-jump behavior and preserves the tree's lazy expansion.
+            SpeedSearchArea(modifier = Modifier.fillMaxSize()) {
+                SpeedSearchableTree(
+                    tree = currentTree,
+                    nodeText = { (it.data as? BinarySizeNode)?.name },
+                    treeState = treeState,
+                    modifier = Modifier.fillMaxSize(),
+                    onElementClick = { element ->
+                        val data = element.data
+                        if (data is BinarySizeNode && data.size > 0) {
+                            state.scrollHexViewTo(data.offset, data.size)
+                        }
+                    },
+                ) { element ->
+                    if (element is Tree.Element.Leaf) {
+                        Spacer(Modifier.width(chevronSpacerWidth))
                     }
-                },
-            ) { element ->
-                if (element is Tree.Element.Leaf) {
-                    Spacer(Modifier.width(chevronSpacerWidth))
-                }
-                val data = element.data
-                if (data is BinarySizeNode) {
-                    SizeNodeRow(data, module.size, nameColumnWidth, sizeColumnWidth, percentColumnWidth, nestingRightPadding)
-                } else {
-                    Text(
-                        data.toString(),
-                        modifier = Modifier.padding(2.dp),
-                        style = TextStyle(fontFamily = FontFamily.Monospace),
-                    )
+                    val data = element.data
+                    if (data is BinarySizeNode) {
+                        SizeNodeRow(data, module.size, nameColumnWidth, sizeColumnWidth, percentColumnWidth, nestingRightPadding)
+                    } else {
+                        Text(
+                            data.toString(),
+                            modifier = Modifier.padding(2.dp),
+                            style = TextStyle(fontFamily = FontFamily.Monospace),
+                        )
+                    }
                 }
             }
 

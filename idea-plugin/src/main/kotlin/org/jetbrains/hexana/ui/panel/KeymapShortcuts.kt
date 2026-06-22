@@ -41,20 +41,11 @@ internal object KeymapShortcuts {
         cache[actionId]?.let { return it }
         val keymap = KeymapManager.getInstance()?.activeKeymap
         if (keymap == null) {
-            org.jetbrains.hexana.HexanaLog.LOG.warn(
-                "[wat-nav-debug] keymap MISSING — KeymapManager.getInstance().activeKeymap is null " +
-                    "for actionId=$actionId",
-            )
             return emptyList()
         }
         val strokes = keymap.getShortcuts(actionId)
             .filterIsInstance<KeyboardShortcut>()
             .mapNotNull { it.firstKeyStroke }
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] keymap actionId=$actionId strokes=${strokes.map {
-                "(keyCode=${it.keyCode} modifiers=0x${it.modifiers.toString(16)})"
-            }}",
-        )
         val matchers = strokes.map(::matcherFor)
         cache[actionId] = matchers
         return matchers
@@ -128,18 +119,6 @@ internal object KeymapShortcuts {
                 event.isCtrlPressed == needCtrl &&
                 event.isShiftPressed == needShift &&
                 event.isAltPressed == needAlt
-            // Diagnostic — only log on a near-miss (right key, wrong
-            // modifiers) so the log isn't flooded by every keystroke.
-            if (!ok && eventVk == targetVk) {
-                org.jetbrains.hexana.HexanaLog.LOG.warn(
-                    "[wat-nav-debug] matcher near-miss vk=$eventVk " +
-                        "isMeta=${event.isMetaPressed}(need=$needMeta) " +
-                        "isCtrl=${event.isCtrlPressed}(need=$needCtrl) " +
-                        "isShift=${event.isShiftPressed}(need=$needShift) " +
-                        "isAlt=${event.isAltPressed}(need=$needAlt) " +
-                        "strokeMods=0x${mods.toString(16)}",
-                )
-            }
             ok
         }
     }

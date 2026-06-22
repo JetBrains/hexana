@@ -62,33 +62,20 @@ internal class WasmWatNavigator(
     private val focusMap: SnapshotStateMap<Pair<ChunkId, Int>, FocusRequester>,
     private val scope: CoroutineScope,
     private val history: NavHistoryState,
+    /**
+     * Number of LazyColumn items a chunk currently occupies: 1 for normal
+     * chunks, but the decoded row count for a big CODE function rendered as
+     * per-row items (see BIG_FUNC_THRESHOLD). Keeps the item-index walk below
+     * correct past row-virtualized functions.
+     */
+    private val itemCountForChunk: (ChunkId) -> Int = { 1 },
+    /**
+     * Decodes + caches a big function's rows before we scroll to it, so the
+     * target lands on real per-row items (not the placeholder) and the focus
+     * poll can find the row. No-op for non-big / already-decoded chunks.
+     */
+    private val ensureDecoded: suspend (ChunkId) -> Unit = {},
 ) {
-    init {
-        // One-shot: enumerate per-section chunk counts so we can verify the
-        // FUNCTION section was actually split per-entry (and that the index
-        // arithmetic in resolveFuncTarget has chunks to match against).
-        var codeCount = 0
-        var funcCount = 0
-        var firstFuncIdx: Int? = null
-        for (i in 0 until chunkTree.totalChunks) {
-            val c = chunkTree.chunkAt(i)
-            if (c is BinaryChunk.Element) {
-                when (c.kind) {
-                    WasmSectionKinds.CODE -> codeCount++
-                    WasmSectionKinds.FUNCTION -> {
-                        if (firstFuncIdx == null) firstFuncIdx = c.indexInSection
-                        funcCount++
-                    }
-                    else -> Unit
-                }
-            }
-        }
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] navigator init totalChunks=${chunkTree.totalChunks} " +
-                "codeChunks=$codeCount funcChunks=$funcCount firstFuncIndexInSection=$firstFuncIdx " +
-                "importFuncCount=${provider.importFuncCount}",
-        )
-    }
     /**
      * Scroll to and focus the body of function [funcIdx] (global function
      * index, including imports). Returns `true` if a target chunk was found;
@@ -114,13 +101,7 @@ internal class WasmWatNavigator(
      */
     fun gotoChunk(chunkId: ChunkId, recordHistory: Boolean = true): Boolean {
         val target = NavTarget(chunkId = chunkId, rowIdx = null)
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] gotoChunk chunkId=$chunkId recordHistory=$recordHistory",
-        )
         if (chunkTree.chunkForId(chunkId) == null) {
-            org.jetbrains.hexana.HexanaLog.LOG.warn(
-                "[wat-nav-debug] gotoChunk chunkId=$chunkId not in tree",
-            )
             return false
         }
         if (recordHistory) {
@@ -142,10 +123,6 @@ internal class WasmWatNavigator(
      */
     fun gotoFunc(funcIdx: Int, section: SectionKind, recordHistory: Boolean = true): Boolean {
         val target = resolveFuncTarget(funcIdx, section)
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] gotoFunc funcIdx=$funcIdx section=${section.id} " +
-                "importFuncCount=${provider.importFuncCount} recordHistory=$recordHistory resolved=$target",
-        )
         if (target == null) return false
         if (recordHistory) {
             history.current?.let { history.back += it }
@@ -158,10 +135,6 @@ internal class WasmWatNavigator(
 
     fun back(): Boolean {
         val prev = history.back.removeLastOrNull()
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] back popped=$prev backStackSize=${history.back.size} " +
-                "fwdStackSize=${history.forward.size}",
-        )
         if (prev == null) return false
         history.current?.let { history.forward += it }
         history.current = prev
@@ -171,10 +144,6 @@ internal class WasmWatNavigator(
 
     fun forward(): Boolean {
         val next = history.forward.removeLastOrNull()
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] forward popped=$next backStackSize=${history.back.size} " +
-                "fwdStackSize=${history.forward.size}",
-        )
         if (next == null) return false
         history.current?.let { history.back += it }
         history.current = next
@@ -197,10 +166,6 @@ internal class WasmWatNavigator(
             // declares it. The Import section is the only declaration site,
             // so redirect there regardless of the requested `section`.
             val target = resolveImportFuncTarget(funcIdx)
-            org.jetbrains.hexana.HexanaLog.LOG.warn(
-                "[wat-nav-debug] resolveFuncTarget funcIdx=$funcIdx is imported — " +
-                    "redirected to Import section, resolved=$target",
-            )
             return target
         }
         for (i in 0 until chunkTree.totalChunks) {
@@ -209,10 +174,6 @@ internal class WasmWatNavigator(
                 return NavTarget(chunkId = c.id, rowIdx = null)
             }
         }
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] resolveFuncTarget no chunk for funcIdx=$funcIdx " +
-                "indexInSection=$indexInSection section=${section.id} totalChunks=${chunkTree.totalChunks}",
-        )
         return null
     }
 
@@ -226,10 +187,6 @@ internal class WasmWatNavigator(
     private fun resolveImportFuncTarget(funcIdx: Int): NavTarget? {
         val recordIdx = importFuncRecordIndices.getOrNull(funcIdx)
         if (recordIdx == null) {
-            org.jetbrains.hexana.HexanaLog.LOG.warn(
-                "[wat-nav-debug] resolveImportFuncTarget no mapping for funcIdx=$funcIdx " +
-                    "(have ${importFuncRecordIndices.size} func imports)",
-            )
             return null
         }
         for (i in 0 until chunkTree.totalChunks) {
@@ -238,10 +195,6 @@ internal class WasmWatNavigator(
                 return NavTarget(chunkId = c.id, rowIdx = null)
             }
         }
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] resolveImportFuncTarget no IMPORT chunk for recordIdx=$recordIdx " +
-                "(funcIdx=$funcIdx)",
-        )
         return null
     }
 
@@ -270,14 +223,12 @@ internal class WasmWatNavigator(
      * scroll alone delivers most of the value.
      */
     private suspend fun scrollAndFocus(target: NavTarget) {
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] scrollAndFocus ENTER chunkId=${target.chunkId} rowIdx=${target.rowIdx}",
-        )
-        val unfoldedHeader = unfoldSectionContaining(target.chunkId)
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] scrollAndFocus unfold header=$unfoldedHeader " +
-                "foldedAfter=${foldedSectionsState.value.size}",
-        )
+        unfoldSectionContaining(target.chunkId)
+
+        // If the target is a big (row-virtualized) function, decode it now so
+        // it scrolls to its real per-row items rather than the placeholder, and
+        // so the item-index walk below counts its rows correctly.
+        ensureDecoded(target.chunkId)
 
         // Walk in current fold state to find the LazyColumn item index.
         var lazyCursor = 0
@@ -305,39 +256,19 @@ internal class WasmWatNavigator(
                             sawTargetChunk = true
                             break
                         }
-                        lazyCursor++
-                    } else if (c.id == target.chunkId) {
-                        org.jetbrains.hexana.HexanaLog.LOG.warn(
-                            "[wat-nav-debug] scrollAndFocus target chunk is HIDDEN " +
-                                "(its section is folded) chunkId=${target.chunkId} kind=${c.kind.id}",
-                        )
+                        lazyCursor += itemCountForChunk(c.id)
                     }
                 }
             }
         }
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] scrollAndFocus chunkId=${target.chunkId} lazyIdx=$lazyIdx " +
-                "sawTargetChunk=$sawTargetChunk sawKind=${sawTargetSectionWithKind?.id} " +
-                "totalChunks=${chunkTree.totalChunks} foldedCount=${foldedSectionsState.value.size}",
-        )
         if (lazyIdx < 0) {
-            org.jetbrains.hexana.HexanaLog.LOG.warn(
-                "[wat-nav-debug] scrollAndFocus BAILING lazyIdx<0 — no scroll dispatched",
-            )
             return
         }
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] scrollAndFocus scrollToItem START lazyIdx=$lazyIdx " +
-                "firstVisible=${listState.firstVisibleItemIndex}",
-        )
         // Instant jump rather than `animateScrollToItem`: when the target is
         // thousands of items away (typical for GotoSymbol on a 14k-function
         // module) the animation runs for noticeable seconds while the user
         // waits. IDE Go-to-Definition semantics expect an immediate land.
         listState.scrollToItem(lazyIdx)
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] scrollAndFocus scrollToItem DONE firstVisible=${listState.firstVisibleItemIndex}",
-        )
 
         // Focus polling only makes sense for code chunks (where the
         // editable opcode rows register requesters in `focusMap`). For
@@ -349,10 +280,6 @@ internal class WasmWatNavigator(
         val targetChunk = chunkIdx?.let { chunkTree.chunkAt(it) }
         val isCodeTarget = targetChunk is BinaryChunk.Element && targetChunk.kind == WasmSectionKinds.CODE
         if (!isCodeTarget && target.rowIdx == null) {
-            org.jetbrains.hexana.HexanaLog.LOG.warn(
-                "[wat-nav-debug] scrollAndFocus skipping focus-poll for non-CODE target " +
-                    "(kind=${(targetChunk as? BinaryChunk.Element)?.kind?.id})",
-            )
             return
         }
 
@@ -362,19 +289,12 @@ internal class WasmWatNavigator(
                 .filter { it.first == target.chunkId }
                 .minOfOrNull { it.second }
             val req = rowKey?.let { focusMap[target.chunkId to it] }
-            org.jetbrains.hexana.HexanaLog.LOG.warn(
-                "[wat-nav-debug] scrollAndFocus focus-poll attempt=$attempt rowKey=$rowKey " +
-                    "reqAvailable=${req != null} focusMapSize=${focusMap.size}",
-            )
             if (req != null) {
                 runCatching { req.requestFocus() }
                 return
             }
             delay(50)
         }
-        org.jetbrains.hexana.HexanaLog.LOG.warn(
-            "[wat-nav-debug] scrollAndFocus gave up focusing chunkId=${target.chunkId}",
-        )
     }
 
     /**

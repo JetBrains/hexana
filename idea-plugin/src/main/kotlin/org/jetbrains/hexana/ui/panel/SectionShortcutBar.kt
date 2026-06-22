@@ -74,9 +74,6 @@ internal fun SectionShortcutBar(
                     fontWeight = FontWeight.Bold,
                 ),
                 modifier = Modifier.clickable {
-                    org.jetbrains.hexana.HexanaLog.LOG.warn(
-                        "[wat-nav-debug] section-bar click chunkId=$chunkId label=$label",
-                    )
                     navigator.gotoChunk(chunkId)
                 },
             )
