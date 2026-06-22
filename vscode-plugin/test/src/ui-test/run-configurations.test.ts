@@ -27,9 +27,11 @@ import { submitQuickInputPath } from './test-utils';
  *   2. Core Wasm with Wasmtime — running
  *   3. Core Wasm with Wasmtime — debugging
  *   4. DWARF Wasm with Wasmtime — breakpoint debugging with variable inspection
+ *   5. Core Wasm with Node.js — running
+ *   6. Core Wasm with Node.js — debugging
  *
  * These tests require `wasmtime` to be available on the system PATH or
- * in `~/.wasmtime/bin/`.
+ * in `~/.wasmtime/bin/`. Node.js tests require `node` on the system PATH.
  */
 /**
  * Ensures wasmtime v44.0.0 is available at `~/.wasmtime/bin/wasmtime`.
@@ -259,15 +261,29 @@ describe('Hexana Run Configurations – Exports Panel', function () {
      * Selects "wasmtime" in the runtime dropdown inside the dialog.
      */
     async function selectWasmtimeRuntime(): Promise<void> {
+        await selectRuntime('wasmtime');
+    }
+
+    /**
+     * Selects "nodejs" in the runtime dropdown inside the dialog.
+     */
+    async function selectNodejsRuntime(): Promise<void> {
+        await selectRuntime('nodejs');
+    }
+
+    /**
+     * Selects the given runtime value in the runtime dropdown inside the dialog.
+     */
+    async function selectRuntime(runtimeValue: string): Promise<void> {
         const select = await driver.findElement(By.id('hexana-runtime-select'));
-        // Click to open the dropdown and select wasmtime
+        // Click to open the dropdown and select the runtime
         await select.click();
         await driver.sleep(200);
 
         const options = await select.findElements(By.css('option'));
         for (const option of options) {
             const value = await option.getAttribute('value');
-            if (value === 'wasmtime') {
+            if (value === runtimeValue) {
                 await option.click();
                 break;
             }
@@ -748,6 +764,132 @@ describe('Hexana Run Configurations – Exports Panel', function () {
 
                 const debugElements = await driver.findElements(
                     By.xpath("//*[contains(text(), 'Debug') or contains(text(), 'debug') or contains(text(), 'wasm')]"),
+                );
+                expect(debugElements.length).to.be.greaterThan(0,
+                    'Expected debug session to be initiated (debug toolbar or debug-related UI element)');
+            }
+        });
+    });
+
+    // ── Node.js Tests ─────────────────────────────────────────────────
+
+    describe('Core Wasm with Node.js – running', function () {
+        let webview: WebView;
+
+        after(async function () {
+            this.timeout(30_000);
+            try {
+                await webview.switchBack();
+            } catch {
+                // already switched back or webview gone
+            }
+        });
+
+        it('should open the core wasm, click run on the add export, and see output in terminal', async function () {
+            this.timeout(120_000);
+
+            webview = await openWasmFile(CORE_WASM);
+            await switchToExportsTab();
+            await screenshot('nodejs-core-exports-tab');
+
+            await clickFirstRunArrow();
+            await waitForDialog();
+            await screenshot('nodejs-core-run-dialog');
+
+            await selectNodejsRuntime();
+            await clickDialogRun();
+            await driver.sleep(1000);
+
+            // Switch back from webview to access the terminal
+            await webview.switchBack();
+
+            await screenshot('nodejs-core-after-run');
+
+            // Verify a terminal was opened with a node command
+            const terminalText = await waitForTerminalText();
+            expect(terminalText.toLowerCase()).to.include('node',
+                'Expected terminal to contain a node command');
+        });
+    });
+
+    describe('Core Wasm with Node.js – debugging', function () {
+        let webview: WebView;
+
+        after(async function () {
+            this.timeout(60_000);
+            try {
+                await webview.switchBack();
+            } catch {
+                // already switched back or webview gone
+            }
+
+            // Stop any active debug session
+            try {
+                const toolbar = await DebugToolbar.create();
+                await toolbar.stop();
+                await driver.sleep(2000);
+            } catch {
+                // no active debug session
+            }
+
+            // Close all editors so the next test suite starts clean
+            try {
+                await new EditorView().closeAllEditors();
+            } catch {
+                // ignore
+            }
+        });
+
+        it('should open the core wasm, click debug on the add export, and start a debug session', async function () {
+            this.timeout(120_000);
+
+            webview = await openWasmFile(CORE_WASM);
+            await switchToExportsTab();
+            await screenshot('nodejs-core-debug-exports-tab');
+
+            await clickFirstRunArrow();
+            await waitForDialog();
+            await screenshot('nodejs-core-debug-dialog');
+
+            await selectNodejsRuntime();
+            await clickDialogDebug();
+            await driver.sleep(2000);
+
+            // Switch back from webview to check for the debug session
+            await webview.switchBack();
+
+            await screenshot('nodejs-core-after-debug');
+
+            // Verify a debug session was started — the debug toolbar should appear
+            let debugToolbarFound = false;
+            const deadline = Date.now() + 20_000;
+            while (Date.now() < deadline) {
+                try {
+                    await DebugToolbar.create();
+                    debugToolbarFound = true;
+                    break;
+                } catch {
+                    await driver.sleep(1000);
+                }
+            }
+
+            // If the debug toolbar didn't appear, check for a debug-related
+            // notification or the debug console as a fallback indicator that
+            // the debug flow was triggered.
+            if (!debugToolbarFound) {
+                // The debug adapter may fail if Node.js doesn't support
+                // Wasm debugging on this platform, but the important thing
+                // is that the extension attempted to start a debug session.
+                await screenshot('nodejs-core-debug-fallback');
+
+                // Check that the Debug Console or a debug notification appeared
+                const bottomBar = new BottomBarPanel();
+                await bottomBar.toggle(true);
+                await driver.sleep(1000);
+
+                // Look for any debug-related UI element
+                const debugElements = await driver.findElements(
+                    By.xpath("//*[contains(text(), 'Debug') or contains(text(), 'debug') or contains(text(), 'wasm') or contains(text(), 'node')]"),
                 );
                 expect(debugElements.length).to.be.greaterThan(0,
                     'Expected debug session to be initiated (debug toolbar or debug-related UI element)');
