@@ -19,6 +19,9 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
   upload, public bundle validation, marketplace PR publishing, and public-file safety checks. TeamCity should
   orchestrate branches, credentials, and gates, then call this script instead of duplicating release shell logic in
   Kotlin DSL.
+- `publish-downloads-release-bundle.sh` owns downloads.jetbrains.com bundle metadata: it copies already verified native
+  release ZIPs, writes one `.sha256` file per ZIP, writes the release manifest, and optionally uploads the complete
+  bundle to the versioned S3 prefix. It must not rebuild artifacts.
 - Public Claude/Codex release packages run R8 at build time and ship `server/lib/hexana-runtime-obfuscated.jar`.
   Do not ship R8 itself, `mcp/build/r8/mapping.txt`, or the pre-obfuscation Hexana-owned runtime jars.
 
@@ -36,6 +39,9 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
   files, private/build path names, R8 mapping output, and pre-obfuscation Hexana runtime jars.
 - For changes to `release-codex-claude-plugins.sh`, run `bash -n mcp/packaging/release-codex-claude-plugins.sh`.
   Use `DRY_RUN=true` against a disposable public-repo clone or fixture when credentials are available.
+- For changes to `publish-downloads-release-bundle.sh`, run
+  `bash -n mcp/packaging/publish-downloads-release-bundle.sh` and
+  `MCP_DOWNLOADS_BUNDLE_SELF_TEST=true bash mcp/packaging/publish-downloads-release-bundle.sh`.
 - Do not point clients at source-tree wrapper layouts unless you are explicitly testing packaging templates. Build with
   `./gradlew :mcp:assembleMcpPackaging` first so manifests and bundled runtime layout match the release artifact.
 - Prefer smoke checks like `mcp/build/packaging/claude-plugin/bin/hexana-mcp version` and

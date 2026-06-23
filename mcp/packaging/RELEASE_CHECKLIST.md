@@ -111,3 +111,14 @@ release:
   assets.
 - Confirm public marketplace bundle validation passes before opening or updating
   the public marketplace pull request.
+- Confirm downloads.jetbrains.com publication consumes the already verified
+  native matrix ZIPs, not a local rebuild.
+- Confirm `publish-downloads-release-bundle.sh` generated one `.sha256` file per
+  public ZIP and `hexana-mcp-release-<version>.json` from the copied files.
+- Confirm the downloads upload target is the versioned prefix
+  `s3://downloads-bucket.example.invalid/resources/hexana/mcp/<version>/`.
+
+If downloads publication fails after the bundle directory was generated, rerun
+the same TeamCity publication build. The script regenerates checksums and the
+manifest from the same downloaded ZIPs and overwrites the same versioned prefix
+in one recursive upload action.

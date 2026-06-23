@@ -152,6 +152,26 @@ available. The script:
 7. validates, commits, pushes, and creates or updates the public marketplace pull request,
 8. creates or updates the GitHub Release and uploads ZIP assets.
 
+Downloads publication is handled by `publish-downloads-release-bundle.sh` after the same release chain has passed. It
+does not rebuild anything: TeamCity downloads the already verified native matrix ZIPs into `mcp/build/distributions-native`,
+then the script prepares `mcp/out/teamcity/downloads-release` with:
+
+- `hexana-mcp-native-<platform>-<version>.zip`
+- `hexana-claude-plugin-<platform>-<version>.zip`
+- `hexana-codex-plugin-<platform>-<version>.zip`
+- `<artifact>.sha256` for every ZIP, generated from the copied file
+- `hexana-mcp-release-<version>.json`
+
+The manifest records the MCP version, git revision, TeamCity build id and URL, and for each artifact its name,
+platform, kind, size, SHA-256, GitHub Release asset URL when configured, and downloads.jetbrains.com URL. Uploads go to
+`s3://downloads-bucket.example.invalid/resources/hexana/mcp/<version>/`, which is served as
+`https://download.jetbrains.com/resources/hexana/mcp/<version>/`.
+
+The downloads build uploads the generated directory in one recursive S3 publication action, so ZIPs, checksums, and the
+manifest are published together. Re-running the same TeamCity build is safe: the versioned prefix is overwritten with
+metadata generated from the same downloaded artifact files. Do not run the downloads publication from a directory that
+was assembled locally or from expected filenames only.
+
 TeamCity stays responsible for branch policy, secure parameters, build-chain dependencies, and notifications. The
 packaging repository stays responsible for the release mechanics and public-file safety rules.
 
@@ -211,6 +231,10 @@ Required tools on the TeamCity agent:
 - `strings`
 - `unzip`
 - `shasum` or `sha256sum`
+
+Additional tools for downloads publication:
+
+- `aws`
 
 Required environment variables:
 
@@ -289,6 +313,8 @@ guard can be checked without network access by running
 `PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh`.
 The changelog extraction and generated release-note guard can be checked without network access by running
 `MCP_CHANGELOG_RELEASE_NOTES_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh`.
+The downloads checksum/manifest generator can be checked without network access by running
+`MCP_DOWNLOADS_BUNDLE_SELF_TEST=true bash ./mcp/packaging/publish-downloads-release-bundle.sh`.
 
 The secret scan is intentionally conservative. If it reports a false positive, either change the public file content so
 the marker is not present verbatim, or adjust the script in the same review with a narrowly scoped exception. Do not

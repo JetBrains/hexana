@@ -42,6 +42,8 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `mcp/vscode-server/`: thin VS Code-facing MCP server distribution that launches the standalone runtime as a separate
   process for the VS Code extension.
 - `mcp/packaging/`: thin Claude/Codex wrapper layouts that point at the standalone runtime from `mcp/server/`.
+  The downloads.jetbrains.com publication helper in this folder prepares the public MCP downloads release bundle from
+  already verified native ZIP artifacts; it does not build or mutate packaging layouts.
 - `wasmParser/`: Kotlin Multiplatform parser for core Wasm and component-model binaries.
 - `parsing/`: parent folder for native binary parsing modules.
 - `parsing/common/`: shared native parser primitives such as byte ranges, native word size/endian metadata, checked binary reading, parse diagnostics, unresolved records, and format detection.
@@ -167,6 +169,8 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
 - `mcp/server/` changes: run `:mcp:server:build` and the narrowest affected `mcp/core` or plugin MCP coverage.
 - `mcp/packaging/` changes: run `:mcp:assembleMcpPackaging` and smoke-test the affected packaged launcher under
   `mcp/build/packaging/*/bin/hexana-mcp version`.
+- MCP downloads publication script changes: run `bash -n mcp/packaging/publish-downloads-release-bundle.sh` and
+  `MCP_DOWNLOADS_BUNDLE_SELF_TEST=true bash mcp/packaging/publish-downloads-release-bundle.sh`.
 - Codex packaging or repo-local marketplace/install-flow changes: also run `:mcp:installRepoLocalCodexPlugin` and the
   packaged MCP UI smoke test under `ui-driver-tests` when the change could affect Codex discovery, installation, or
   bundled skill/MCP wiring.
