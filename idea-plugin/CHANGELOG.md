@@ -16,10 +16,13 @@
 - The **Top** size-profiler tab now breaks a Component Model binary down completely: every nested sub-component and embedded core module is attributed with its correct size and expands to its internal sections and functions, recursively and on demand. Previously a composed component — whose code sits inside nested sub-components — reported most of its bytes as a single opaque block, because the profiler read only the first nested component section
 - The core-module **Exports** tab gains per-row affordances. Each entry shows its full name as a tooltip, so a name truncated to fit the column is still readable on hover. A **Copy Name** context-menu action copies the export's full name to the clipboard. A **Navigate to Function in WAT** context-menu action — shown only on function exports, which are the only kind with a body to jump to — switches to the **WAT (virtualized)** tab and scrolls to that function's body
 - The core-module **Imports** tab gains matching per-row affordances. Each entry shows its module-qualified name (`module.field`) as a tooltip, and a **Copy Name** context-menu action copies that qualified name to the clipboard. For function imports, the context menu also offers **Find Usages**: a flat list of the functions that call the import (resolved from the call graph), each entry navigating to that caller's body in the **WAT (virtualized)** tab. The list is capped at 15 entries; beyond that — or before the call graph has finished computing in the background — a single entry opens the Caller Paths panel, which lists every usage. The call graph is built off the EDT so opening the menu stays responsive on large modules
+- Basic support for Android DEX files (with classes and members)
+- ZIP64 files support
 
 ### Changed
 - Hexana's project-view actions (Hex view, Open Archive, **Compare WASM With…**, and the in-editor Hex/offset/structure actions) are now grouped under a single **Hexana** submenu instead of being scattered across the right-click menu. In IntelliJ IDEA the submenu sits at the top level of the project-view popup; in RustRover and CLion — whose project-view popup is overridden to a fixed action list that silently drops third-party top-level contributions — it appears under **Open In ▸ Hexana**, the one group those IDEs still surface. Each entry continues to gate its own visibility, so only the actions that apply to the selected file appear
 - **Compare WASM With…** can now be invoked from Search Everywhere and the keymap, not only from a selected `.wasm`: when run without a `.wasm` selection it prompts for the first module, then the second, instead of doing nothing
+- Stability improvements for debugging with NodeJS 
 
 ### Deprecated
 
