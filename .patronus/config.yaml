@@ -1,0 +1,7 @@
+version: "1.0"
+
+checks:
+  - configurationId: "InnoHub_HexFlow_SafeMergeTests"
+    executeOnChanges:
+      - "*"
+      - "!/README.md"
