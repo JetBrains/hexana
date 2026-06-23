@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.run
 
 import com.intellij.testFramework.UsefulTestCase
+import org.jetbrains.hexana.shared.CdpSourceLocationResolver
 import java.io.File
 
 class CdpSourceLocationResolverTest : UsefulTestCase() {

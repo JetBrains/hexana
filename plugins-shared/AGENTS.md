@@ -23,6 +23,7 @@ The module provides:
 - **Native table tabs** (`NativeTableTabs.kt`, `NativeTableTabFormatting.kt`) — `TableTabsProvider` implementation and shared formatting helpers for ELF (Headers/Sections/Segments/Symbols/Functions/Relocations/Imports/Exports/Strings), Mach-O (Headers/Load Commands/Segments/Sections/Symbols/Dynamic Symbols/Dylibs/Relocations/Strings), Fat Mach-O (Universal/Slices), PE (Headers/Sections/Imports/Exports/Relocations/Debug/Symbols/Strings), COFF (Symbols/Strings), and archive (Strings) structure tabs.
 - **LLDB output parsing** (`LldbOutputParser.kt`) — pure parsers for LLDB stop events, expression results, frame locations, function names, and WAMR debug support detection; used by both `idea-plugin` and `vscode-plugin:extension-lib`.
 - **DWARF path matching** (`DwarfPathMatcher.kt`) — platform-agnostic utilities for matching DWARF debug-info file paths against IDE/editor breakpoint paths, compilation-unit path heuristics, crate name extraction, and CU hash suffix stripping; used by both `idea-plugin` and `vscode-plugin:extension-lib`.
+- **CDP source location resolver** (`CdpSourceLocationResolver.kt`) — platform-agnostic DWARF-based source file + line ↔ Wasm byte offset resolver for CDP debug adapters; used by both `idea-plugin` and `vscode-plugin` to translate breakpoint positions and stack frame locations.
 
 ## KMP Targets
 
@@ -35,6 +36,7 @@ The module provides:
 - `:wasmParser`
 - `:binaryProvider`
 - `:encdec`
+- `:debugInfo:dwarf`
 
 ## Rules
 

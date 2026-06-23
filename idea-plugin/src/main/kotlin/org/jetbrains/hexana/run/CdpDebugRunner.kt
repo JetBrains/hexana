@@ -27,6 +27,7 @@ import com.sun.net.httpserver.HttpServer
 import org.jetbrains.hexana.shared.WasmRunInput
 import org.jetbrains.hexana.shared.buildNodeJsRunArgs
 import org.jetbrains.hexana.shared.generateBrowserRunnerHtml
+import org.jetbrains.hexana.shared.CdpSourceLocationResolver
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress

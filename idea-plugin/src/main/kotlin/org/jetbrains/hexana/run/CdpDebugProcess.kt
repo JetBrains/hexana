@@ -26,6 +26,7 @@ import java.io.File
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import org.jetbrains.hexana.shared.CdpSourceLocationResolver
 
 /**
  * An [XDebugProcess] that communicates with Node.js or Chrome via the

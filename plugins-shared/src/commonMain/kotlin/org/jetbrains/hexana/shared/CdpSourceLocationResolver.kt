@@ -1,6 +1,5 @@
-package org.jetbrains.hexana.run
+package org.jetbrains.hexana.shared
 
-import com.intellij.openapi.diagnostic.Logger
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver.AddressSourceLocation
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver.SourceLocation
@@ -17,13 +16,13 @@ import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
  * Resolves source file + line ↔ Wasm byte offset mappings using
  * DWARF line number program data embedded in a Wasm binary.
  *
- * Used by [CdpDebugProcess] to:
- * - translate IDE breakpoint positions (source file + line) into
+ * Used by debug adapters to:
+ * - translate breakpoint positions (source file + line) into
  *   Wasm byte offsets for CDP `Debugger.setBreakpoint` calls
  * - translate Wasm byte offsets from CDP pause events back into
- *   source file positions for the IDE stack frame display
+ *   source file positions for stack frame display
  */
-internal class CdpSourceLocationResolver private constructor(
+class CdpSourceLocationResolver private constructor(
     private val locations: List<AddressSourceLocation>,
     private val codeSectionOffset: Int,
     private val subprograms: List<DwarfSubprogramInfo> = emptyList(),
@@ -90,9 +89,7 @@ internal class CdpSourceLocationResolver private constructor(
         val ltOffsets = resolveOffsetsFromEntries(
             lineTableSourceToOffsets[normalizedName], dwarfLine
         )
-        val merged = (cuOffsets + ltOffsets).distinct()
-        LOG.debug("sourceToAllWasmOffsets: file=$fileName dwarfLine=$dwarfLine cuOffsets=$cuOffsets ltOffsets=$ltOffsets merged=$merged codeSectionOffset=$codeSectionOffset")
-        return merged
+        return (cuOffsets + ltOffsets).distinct()
     }
 
     /**
@@ -143,7 +140,6 @@ internal class CdpSourceLocationResolver private constructor(
      */
     private fun minOffsetPerFunction(entries: List<LineOffset>): List<ULong> {
         if (entries.isEmpty()) return emptyList()
-        LOG.debug("minOffsetPerFunction: entries=${entries.map { "0x${it.offset.toString(16)}:L${it.line}" }} subprograms=${subprograms.size}")
         if (subprograms.isNotEmpty()) {
             return minOffsetPerFunctionViaDwarf(entries)
         }
@@ -168,13 +164,9 @@ internal class CdpSourceLocationResolver private constructor(
                 val high = sp.highPc ?: return@indexOfFirst false
                 entry.offset.toLong() >= low && entry.offset.toLong() < high
             }
-            val spName = if (spIndex >= 0) subprograms[spIndex].let { it.name ?: it.linkageName } else null
-            LOG.debug("minOffsetPerFunctionViaDwarf: offset=${entry.offset} line=${entry.line} -> spIndex=$spIndex spName=$spName")
             groups.getOrPut(spIndex) { mutableListOf() }.add(entry)
         }
-        val result = groups.values.map { group -> toModuleOffset(group.minOf { it.offset }) }
-        LOG.debug("minOffsetPerFunctionViaDwarf: ${entries.size} entries -> ${groups.size} groups -> offsets=$result")
-        return result
+        return groups.values.map { group -> toModuleOffset(group.minOf { it.offset }) }
     }
 
     /**
@@ -210,7 +202,6 @@ internal class CdpSourceLocationResolver private constructor(
     fun knownSourceFiles(): Set<String> = sourceToOffsets.keys
 
     companion object {
-        private val LOG = Logger.getInstance(CdpSourceLocationResolver::class.java)
 
         /**
          * Creates a resolver from raw Wasm binary bytes by parsing
@@ -248,15 +239,11 @@ internal class CdpSourceLocationResolver private constructor(
                 if (locations.isEmpty()) return null
 
                 val codeSectionOffset = (module as? WasmModule)?.codeSection?.contentOffset ?: 0
-                LOG.debug("CdpSourceLocationResolver: codeSectionOffset=$codeSectionOffset " +
-                    "cuLocations=${cuLocations.take(5).map { "0x${it.offset.toString(16)}:${it.sourceLocation.file}:${it.sourceLocation.line}" }} " +
-                    "lineTableLocations=${lineTableLocations.take(5).map { "0x${it.offset.toString(16)}:${it.sourceLocation.file}:${it.sourceLocation.line}" }}")
 
                 val extractor = DwarfVariableInfoExtractor(accessor)
                 val subprograms = try {
                     with(extractor) { buffer.extractSubprograms() }
-                } catch (e: Exception) {
-                    LOG.debug("Failed to extract DWARF subprograms for breakpoint grouping", e)
+                } catch (_: Exception) {
                     emptyList()
                 }
 
@@ -265,8 +252,7 @@ internal class CdpSourceLocationResolver private constructor(
                     cuSourceToOffsets = buildReverseIndex(cuLocations),
                     lineTableSourceToOffsets = buildReverseIndex(lineTableLocations),
                 )
-            } catch (e: Exception) {
-                LOG.warn("Failed to parse DWARF line info from Wasm binary", e)
+            } catch (_: Exception) {
                 null
             }
         }
