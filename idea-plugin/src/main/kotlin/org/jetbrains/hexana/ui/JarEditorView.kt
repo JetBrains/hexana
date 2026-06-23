@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.shared.formatSizeLong
 import org.jetbrains.hexana.zip.ZipEntry
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.Orientation
@@ -257,8 +258,8 @@ private fun ZipEntryRow(entry: ZipEntry, onOpen: (ZipEntry) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(entry.name, style = RowStyle, modifier = Modifier.weight(5f))
-        Text(formatBytes(entry.compressedSize), style = RowStyle, modifier = Modifier.weight(1.2f))
-        Text(formatBytes(entry.uncompressedSize), style = RowStyle, modifier = Modifier.weight(1.2f))
+        Text(formatSizeLong(entry.compressedSize), style = RowStyle, modifier = Modifier.weight(1.2f))
+        Text(formatSizeLong(entry.uncompressedSize), style = RowStyle, modifier = Modifier.weight(1.2f))
     }
 }
 
@@ -268,17 +269,3 @@ private fun sortIndicator(active: SortColumn, column: SortColumn, asc: Boolean):
     if (active != column) " " else if (asc) "▲" else "▼"
 
 private val RowStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-
-private fun formatBytes(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024L * 1024 -> "${formatDecimal(bytes / 1024.0, 1)} KB"
-    bytes < 1024L * 1024 * 1024 -> "${formatDecimal(bytes / (1024.0 * 1024), 1)} MB"
-    else -> "${formatDecimal(bytes / (1024.0 * 1024 * 1024), 1)} GB"
-}
-
-/** One-decimal byte-size formatter — avoids `String.format`. */
-private fun formatDecimal(value: Double, decimals: Int): String {
-    val factor = if (decimals == 1) 10.0 else 1.0
-    val rounded = kotlin.math.round(value * factor) / factor
-    return rounded.toString()
-}

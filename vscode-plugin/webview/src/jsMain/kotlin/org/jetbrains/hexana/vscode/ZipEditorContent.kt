@@ -4,6 +4,7 @@ import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.shared.formatSizeLong
 import org.jetbrains.hexana.zip.ZipEntry
 import org.jetbrains.hexana.zip.ZipParser
 
@@ -136,22 +137,10 @@ private fun ZipEntriesPanel(
                     },
                 ) {
                     Td({ classes("cell") }) { Text(entry.name) }
-                    Td({ classes("cell-right") }) { Text(formatBytes(entry.compressedSize)) }
-                    Td({ classes("cell-right") }) { Text(formatBytes(entry.uncompressedSize)) }
+                    Td({ classes("cell-right") }) { Text(formatSizeLong(entry.compressedSize)) }
+                    Td({ classes("cell-right") }) { Text(formatSizeLong(entry.uncompressedSize)) }
                 }
             }
         }
     }
-}
-
-private fun formatBytes(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024L * 1024 -> "${formatDecimal(bytes / 1024.0)} KB"
-    bytes < 1024L * 1024 * 1024 -> "${formatDecimal(bytes / (1024.0 * 1024))} MB"
-    else -> "${formatDecimal(bytes / (1024.0 * 1024 * 1024))} GB"
-}
-
-private fun formatDecimal(value: Double): String {
-    val rounded = kotlin.math.round(value * 10.0) / 10.0
-    return rounded.toString()
 }

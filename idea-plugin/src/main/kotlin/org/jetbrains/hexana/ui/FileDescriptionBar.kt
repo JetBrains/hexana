@@ -42,6 +42,7 @@ import org.jetbrains.hexana.run.PopupMode
 import org.jetbrains.hexana.run.WasmEngine
 import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.run.runWasmFile
+import org.jetbrains.hexana.shared.formatSize
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
 import org.jetbrains.hexana.ui.panel.WasmRunDialog
@@ -503,15 +504,6 @@ private fun buildSizeTooltip(binaryProvider: BinaryProvider): List<Pair<String, 
      .map { (label, size) -> label to formatSize(size) }
 }
 
-private fun formatSize(bytes: Int): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-    else -> {
-        val mb = bytes.toDouble() / (1024 * 1024)
-        val rounded = (mb * 10).toLong() / 10.0
-        "$rounded MB"
-    }
-}
 
 /**
  * Returns a composable lambda for the edit-mode controls to embed in the

@@ -48,6 +48,7 @@ import org.jetbrains.hexana.providers.ArchiveMemberClassification
 import org.jetbrains.hexana.providers.ArchiveMemberKind
 import org.jetbrains.hexana.providers.classifyArchiveMember
 import org.jetbrains.hexana.providers.pe.PeArchiveMember
+import org.jetbrains.hexana.shared.formatSizeLong
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.Orientation
@@ -240,7 +241,7 @@ private fun MemberRow(
     ) {
         Text(member.name, style = RowStyle.copy(color = nameColor), modifier = Modifier.weight(5f))
         Text(cls.displayName, style = RowStyle, modifier = Modifier.weight(1.6f))
-        Text(formatBytes(member.size.toLong()), style = RowStyle, modifier = Modifier.weight(1.2f))
+        Text(formatSizeLong(member.size.toLong()), style = RowStyle, modifier = Modifier.weight(1.2f))
     }
 }
 
@@ -302,13 +303,3 @@ private fun extensionFor(kind: ArchiveMemberKind): String = when (kind) {
 }
 
 private val RowStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-
-private fun formatBytes(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024L * 1024 -> "${formatDecimal(bytes / 1024.0)} KB"
-    bytes < 1024L * 1024 * 1024 -> "${formatDecimal(bytes / (1024.0 * 1024))} MB"
-    else -> "${formatDecimal(bytes / (1024.0 * 1024 * 1024))} GB"
-}
-
-private fun formatDecimal(value: Double): String =
-    (kotlin.math.round(value * 10.0) / 10.0).toString()

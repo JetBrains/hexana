@@ -23,7 +23,8 @@ fun formatSize(bytes: Int): String = when {
 fun formatSizeLong(bytes: Long): String = when {
     bytes < 1024L -> "$bytes B"
     bytes < 1024L * 1024 -> "${formatOneDecimal(bytes / 1024.0)} KB"
-    else -> "${formatOneDecimal(bytes / (1024.0 * 1024.0))} MB"
+    bytes < 1024L * 1024 * 1024 -> "${formatOneDecimal(bytes / (1024.0 * 1024.0))} MB"
+    else -> "${formatOneDecimal(bytes / (1024.0 * 1024.0 * 1024.0))} GB"
 }
 
 /**

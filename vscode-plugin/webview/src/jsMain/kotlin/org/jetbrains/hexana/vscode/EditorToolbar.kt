@@ -9,6 +9,7 @@ import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.shared.formatSize
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
@@ -417,15 +418,6 @@ private fun buildSizeTooltip(provider: BinaryProvider): List<Pair<String, String
      .map { (label, size) -> label to formatSize(size) }
 }
 
-private fun formatSize(bytes: Int): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-    else -> {
-        val mb = bytes.toDouble() / (1024 * 1024)
-        val rounded = (mb * 10).toLong() / 10.0
-        "$rounded MB"
-    }
-}
 
 /**
  * `<base>.edited.<ext>` next to the original. Plain `<name>.edited` if there

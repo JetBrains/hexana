@@ -20,6 +20,7 @@ import org.jetbrains.hexana.providers.format.ComponentDiffResult
 import org.jetbrains.hexana.providers.format.SubmoduleKind
 import org.jetbrains.hexana.providers.format.SubmodulePairing
 import org.jetbrains.hexana.providers.format.SubmoduleStatus
+import org.jetbrains.hexana.shared.formatSize
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue

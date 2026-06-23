@@ -42,6 +42,7 @@ import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.analysis.SizeAnalysisBuilder
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.theme.treeStyle
+import org.jetbrains.hexana.shared.formatSize
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.wasm.analysis.SizeNode
 import org.jetbrains.hexana.wasm.sections.WasmDataRecord
@@ -444,17 +445,5 @@ private fun SizeNodeRow(
             style = TextStyle(fontFamily = FontFamily.Monospace, color = dimColor),
             maxLines = 1,
         )
-    }
-}
-
-internal fun formatSize(bytes: Int): String {
-    return formatSize(bytes.toLong())
-}
-
-internal fun formatSize(bytes: Long): String {
-    return when {
-        bytes < 1024L -> "$bytes B"
-        bytes < 1024L * 1024 -> "%.1f KB".format(bytes / 1024.0)
-        else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
     }
 }

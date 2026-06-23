@@ -30,6 +30,8 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexHighlightRange
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.shared.formatSize
+import org.jetbrains.hexana.shared.formatSizeLong
 import org.jetbrains.hexana.shared.getDescription
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.components.Table
@@ -191,7 +193,7 @@ private fun GarbageFunctionsTable(
     Column {
         Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
             Text(
-                "${entries.size} unreachable, ${formatSize(garbage.totalWastedBytes)} wasted ($pct of code)",
+                "${entries.size} unreachable, ${formatSizeLong(garbage.totalWastedBytes)} wasted ($pct of code)",
                 style = TextStyle(fontFamily = FontFamily.Monospace),
             )
         }
@@ -268,7 +270,7 @@ private fun GarbageTypesTable(garbage: GarbageResult, provider: WasmBinaryProvid
     Column {
         Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
             Text(
-                "${entries.size} unreachable types, ${formatSize(garbage.typeWastedBytes)} wasted",
+                "${entries.size} unreachable types, ${formatSizeLong(garbage.typeWastedBytes)} wasted",
                 style = TextStyle(fontFamily = FontFamily.Monospace),
             )
         }
@@ -309,7 +311,7 @@ private fun GarbageDataTable(garbage: GarbageResult) {
     Column {
         Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
             Text(
-                "${entries.size} data segments, ${formatSize(garbage.dataSegmentWastedBytes)} potential garbage",
+                "${entries.size} data segments, ${formatSizeLong(garbage.dataSegmentWastedBytes)} potential garbage",
                 style = TextStyle(fontFamily = FontFamily.Monospace),
             )
         }
