@@ -106,6 +106,7 @@ const WebSocketImpl: any = (() => { try { return require("ws"); } catch { return
  * Regex matching WebSocket debug URLs printed by Node.js and Chrome.
  */
 const WS_URL_REGEX = /\bws:\/\/(\[[0-9a-fA-F:]+\]|[\w.-]+):?(\d+)?(?:\/([\w\-./]*))?/;
+const WASM_VAR_REGEX = /^\$var(\d+)$/;
 
 /**
  * Parses a Wasm binary to extract the byte offset of each function
@@ -1341,7 +1342,7 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                     });
                     for (const prop of (result.result || [])) {
                         const val = prop.value || {};
-                        variables.push(this.cdpValueToVariable(prop.name, val));
+                        variables.push(await this.cdpValueToVariable(prop.name, val));
                     }
                 } catch { /* ignore */ }
             }
@@ -1355,13 +1356,32 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                 const scope = filteredScopes[scopeIdx];
                 if (scope?.object?.objectId) {
                     try {
+                        const localToName = this.buildWasmLocalToNameMap(frame);
+                        const hasDwarfMatch = this.sourceLocationResolver?.hasDwarfSubprogram(
+                            (frame.functionName as string) || null,
+                        ) ?? false;
                         const result = await this.cdpSend("Runtime.getProperties", {
                             objectId: scope.object.objectId,
                             ownProperties: true,
                         });
+                        let localIndex = 0;
                         for (const prop of (result.result || [])) {
+                            const rawName = String(prop.name ?? "");
                             const val = prop.value || {};
-                            variables.push(this.cdpValueToVariable(prop.name, val));
+                            const subtype = val.subtype;
+                            const displayName = this.resolveVariableDisplayName(rawName, localToName, localIndex);
+
+                            if (this.sourceLocationResolver && !hasDwarfMatch && subtype === "wasmvalue") {
+                                localIndex++;
+                                continue;
+                            }
+                            if (localToName.size > 0 && displayName === rawName) {
+                                localIndex++;
+                                continue;
+                            }
+
+                            variables.push(await this.cdpValueToVariable(displayName, val));
+                            localIndex++;
                         }
                     } catch { /* ignore */ }
                 }
@@ -1371,14 +1391,41 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         this.sendDapResponse(msg, true, undefined, { variables });
     }
 
-    private cdpValueToVariable(name: string, val: any): any {
+    private buildWasmLocalToNameMap(frame: any): Map<number, string> {
+        const names = this.sourceLocationResolver?.wasmLocalNames(
+            (frame.functionName as string) || null,
+        ) || [];
+        const result = new Map<number, string>();
+        for (const entry of Array.from(names as Array<{ index: number; name: string }>)) {
+            const index = Number(entry.index);
+            const name = String(entry.name || "");
+            if (Number.isFinite(index) && name) {
+                result.set(index, name);
+            }
+        }
+        return result;
+    }
+
+    private resolveVariableDisplayName(name: string, localToName: Map<number, string>, positionalIndex: number): string {
+        if (localToName.size === 0) return name;
+
+        const match = WASM_VAR_REGEX.exec(name);
+        if (match) {
+            const index = Number(match[1]);
+            return localToName.get(index) || name;
+        }
+
+        return localToName.get(positionalIndex) || name;
+    }
+
+    private async cdpValueToVariable(name: string, val: any): Promise<any> {
         const type = val.type || "unknown";
         const subtype = val.subtype;
         let value: string;
         let variablesReference = 0;
 
         if (subtype === "wasmvalue") {
-            value = val.description || "wasmvalue";
+            value = await this.resolveWasmValue(val) || val.description || "wasmvalue";
         } else if (val.value !== undefined) {
             value = String(val.value);
         } else if (val.description) {
@@ -1387,11 +1434,36 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
             value = type;
         }
 
-        if (val.objectId && (type === "object" || type === "function")) {
+        if (subtype !== "wasmvalue" && val.objectId && (type === "object" || type === "function")) {
             variablesReference = this.storeObjectRef(val.objectId);
         }
 
-        return { name, value, type: subtype || type, variablesReference };
+        return { name, value, type: subtype === "wasmvalue" ? (val.description || subtype) : (subtype || type), variablesReference };
+    }
+
+    private async resolveWasmValue(val: any): Promise<string | undefined> {
+        const objectId = val.objectId;
+        if (!objectId) return undefined;
+
+        try {
+            const result = await this.cdpSend("Runtime.getProperties", {
+                objectId,
+                ownProperties: true,
+            });
+            for (const prop of (result.result || [])) {
+                if (prop.name !== "value") continue;
+                const innerValue = prop.value || {};
+                const value = innerValue.value;
+                if (value === undefined || value === null) return undefined;
+                if (typeof value === "number" && Number.isInteger(value)) {
+                    return String(value);
+                }
+                return String(value);
+            }
+        } catch {
+            // Fall back to the CDP description below.
+        }
+        return undefined;
     }
 
     // ---- DAP: evaluate ----

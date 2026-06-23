@@ -50,6 +50,24 @@ class SourceLocationResolver private constructor(
         return delegate.knownSourceFiles().toTypedArray()
     }
 
+    /**
+     * Returns whether the given CDP function name has a matching DWARF
+     * subprogram entry.
+     */
+    fun hasDwarfSubprogram(functionName: String?): Boolean {
+        return delegate.hasDwarfSubprogram(functionName)
+    }
+
+    /**
+     * Returns Wasm local-index to DWARF source-name mappings for the
+     * given CDP function name.
+     */
+    fun wasmLocalNames(functionName: String?): Array<WasmLocalName> {
+        return delegate.wasmLocalNames(functionName)
+            .map { WasmLocalName(it.key.toInt(), it.value) }
+            .toTypedArray()
+    }
+
     companion object {
         /**
          * Creates a resolver from raw Wasm binary bytes.
@@ -73,4 +91,13 @@ data class ResolvedSourceLocation(
     val file: String,
     /** 1-based line number from DWARF. */
     val line: Int,
+)
+
+/**
+ * A Wasm local-index to source-name mapping for CDP variable rendering.
+ */
+@JsExport
+data class WasmLocalName(
+    val index: Int,
+    val name: String,
 )

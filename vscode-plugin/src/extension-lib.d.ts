@@ -84,6 +84,12 @@ export interface ResolvedSourceLocation {
     readonly line: number;
 }
 
+/** A Wasm local-index to source-name mapping for CDP variable rendering. */
+export interface WasmLocalName {
+    readonly index: number;
+    readonly name: string;
+}
+
 /**
  * DWARF-based source ↔ Wasm byte offset resolver.
  *
@@ -110,6 +116,12 @@ export interface SourceLocationResolver {
 
     /** Returns all known source file names that have DWARF line mappings. */
     knownSourceFiles(): string[];
+
+    /** Returns whether the given CDP function name has a matching DWARF subprogram entry. */
+    hasDwarfSubprogram(functionName: string | null): boolean;
+
+    /** Returns Wasm local-index to DWARF source-name mappings for the given CDP function name. */
+    wasmLocalNames(functionName: string | null): WasmLocalName[];
 }
 
 export namespace SourceLocationResolver {

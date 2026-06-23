@@ -3,7 +3,10 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver.AddressSourceLocation
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver.SourceLocation
+import org.jetbrains.hexana.dwarf.DwarfExprOp
+import org.jetbrains.hexana.dwarf.DwarfLocationDescription
 import org.jetbrains.hexana.dwarf.DwarfSubprogramInfo
+import org.jetbrains.hexana.dwarf.DwarfVariableInfo
 import org.jetbrains.hexana.dwarf.DwarfVariableInfoExtractor
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.BaseModule
@@ -200,6 +203,84 @@ class CdpSourceLocationResolver private constructor(
      * DWARF line mappings.
      */
     fun knownSourceFiles(): Set<String> = sourceToOffsets.keys
+
+    /**
+     * Returns `true` when the given function name matches a DWARF
+     * subprogram entry by exact source or linkage name.
+     */
+    fun hasDwarfSubprogram(functionName: String?): Boolean {
+        if (functionName == null) return false
+        val normalizedName = functionName.removePrefix("$")
+        return subprograms.any { sp ->
+            sp.name == functionName || sp.name == normalizedName ||
+                sp.linkageName == functionName || sp.linkageName == normalizedName
+        }
+    }
+
+    /**
+     * Builds a mapping from Wasm local indices to DWARF variable names
+     * for the given function. V8 exposes Wasm locals to CDP as `$varN`
+     * or name-section-derived properties; debug adapters can use this
+     * map to present source-level parameter/local names.
+     */
+    fun wasmLocalNames(functionName: String?): Map<Long, String> {
+        val matchingSubprograms = findMatchingSubprogramsByName(functionName)
+        if (matchingSubprograms.isEmpty()) return emptyMap()
+
+        val result = mutableMapOf<Long, String>()
+        for (sp in matchingSubprograms) {
+            for (v in sp.variables) {
+                val name = v.name ?: continue
+                val loc = effectiveLocation(v) ?: continue
+                val primaryOp = loc.operations.firstOrNull() ?: continue
+                if (primaryOp is DwarfExprOp.WasmLocal) {
+                    if (primaryOp.index !in result) result[primaryOp.index] = name
+                }
+            }
+
+            if (result.isEmpty()) {
+                var index = 0L
+                for (v in sp.variables.filter { it.isParameter }) {
+                    val name = v.name ?: continue
+                    if (index !in result) result[index] = name
+                    index++
+                }
+                for (v in sp.variables.filter { !it.isParameter }) {
+                    val name = v.name ?: continue
+                    if (index !in result) result[index] = name
+                    index++
+                }
+            }
+        }
+        return result
+    }
+
+    private fun findMatchingSubprogramsByName(functionName: String?): List<DwarfSubprogramInfo> {
+        if (functionName == null) return emptyList()
+        val normalizedName = functionName.removePrefix("$")
+
+        val byName = subprograms.filter { sp ->
+            sp.name == functionName || sp.name == normalizedName
+        }
+        if (byName.isNotEmpty()) return byName
+
+        val byLinkage = subprograms.filter { sp ->
+            sp.linkageName == functionName || sp.linkageName == normalizedName
+        }
+        if (byLinkage.isNotEmpty()) return byLinkage
+
+        return subprograms.filter { sp ->
+            sp.name?.let { functionName.startsWith(it) } == true ||
+                sp.name?.let { normalizedName.startsWith(it) } == true ||
+                sp.linkageName?.let { normalizedName.startsWith(it) } == true ||
+                sp.linkageName?.let { functionName.startsWith(it) } == true
+        }
+    }
+
+    private fun effectiveLocation(v: DwarfVariableInfo): DwarfLocationDescription? {
+        v.location?.let { return it }
+        return v.locationList.firstOrNull()?.location
+    }
 
     companion object {
 
