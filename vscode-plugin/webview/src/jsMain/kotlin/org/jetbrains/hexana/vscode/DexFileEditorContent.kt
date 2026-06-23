@@ -8,17 +8,6 @@ import kotlinx.coroutines.delay
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 
-/**
- * Detects whether [buffer] starts with the DEX magic (`dex\n`).
- */
-internal fun isDexFile(buffer: CommonByteBuffer): Boolean {
-    if (buffer.size < 4) return false
-    return buffer[0] == 0x64.toByte() && // 'd'
-        buffer[1] == 0x65.toByte() &&     // 'e'
-        buffer[2] == 0x78.toByte() &&     // 'x'
-        buffer[3] == 0x0A.toByte()        // '\n'
-}
-
 private const val MIN_DEX_PANEL_HEIGHT = 80.0
 private const val DEFAULT_DEX_PANEL_HEIGHT = 250.0
 

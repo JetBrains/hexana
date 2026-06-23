@@ -9,18 +9,6 @@ import org.jetbrains.hexana.zip.ZipEntry
 import org.jetbrains.hexana.zip.ZipParser
 
 /**
- * Detects whether [buffer] starts with the ZIP local-file-header magic
- * (`PK\x03\x04`). Used to route zip/jar files to [ZipEditorContent].
- */
-internal fun isZipFile(buffer: CommonByteBuffer): Boolean {
-    if (buffer.size < 4) return false
-    return buffer[0] == 0x50.toByte() &&
-        buffer[1] == 0x4B.toByte() &&
-        buffer[2] == 0x03.toByte() &&
-        buffer[3] == 0x04.toByte()
-}
-
-/**
  * Editor content for a ZIP / JAR archive. Shows a hex viewer on top and a
  * sortable, searchable entry list below — mirroring the IntelliJ plugin's
  * [JarEditorView][org.jetbrains.hexana.ui.JarEditorView].

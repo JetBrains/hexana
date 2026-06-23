@@ -9,6 +9,9 @@ import org.jetbrains.hexana.dex.DexFileParser
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
+import org.jetbrains.hexana.shared.isClassFile
+import org.jetbrains.hexana.shared.isDexFile
+import org.jetbrains.hexana.shared.isZipFile
 
 fun main() {
     renderComposable(rootElementId = "root") {

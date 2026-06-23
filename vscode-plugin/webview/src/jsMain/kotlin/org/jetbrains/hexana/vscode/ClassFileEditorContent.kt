@@ -8,17 +8,6 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.javabytecode.*
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 
-/**
- * Detects whether [buffer] starts with the JVM class file magic (`0xCAFEBABE`).
- */
-internal fun isClassFile(buffer: CommonByteBuffer): Boolean {
-    if (buffer.size < 4) return false
-    return buffer[0] == 0xCA.toByte() &&
-        buffer[1] == 0xFE.toByte() &&
-        buffer[2] == 0xBA.toByte() &&
-        buffer[3] == 0xBE.toByte()
-}
-
 private const val MIN_CLASS_PANEL_HEIGHT = 80.0
 private const val DEFAULT_CLASS_PANEL_HEIGHT = 250.0
 
