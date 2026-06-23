@@ -12,6 +12,7 @@ import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileEditorStateLevel
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
+import com.intellij.openapi.fileTypes.BinaryFileTypeDecompilers
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
@@ -686,8 +687,8 @@ class HexanaFileEditor(
     ) {
         val childName = entry.name.substringAfterLast('/').ifEmpty { entry.name }
 
-        if (isHexanaSupportedExtension(childName)) {
-            // Binary entries need the hex viewer with buffer/offset — always use HexanaBinaryVirtualFile.
+        if (isHexanaSupportedExtension(childName) || isUnsupportedByIntelliJ(childName)) {
+            // Binary entries and files unknown to IntelliJ need the hex viewer — always use HexanaBinaryVirtualFile.
             val bytes = decompressZipEntry(entry, parentBuffer)
             if (bytes == null) {
                 HexanaLog.LOG.warn(
@@ -741,6 +742,22 @@ private fun isHexanaSupportedExtension(fileName: String): Boolean {
     val fileType = com.intellij.openapi.fileTypes.FileTypeManager.getInstance()
         .getFileTypeByFileName(fileName)
     return fileType is BinaryFileType || fileType is NativeBinaryFileType
+}
+
+/**
+ * Returns `true` when IntelliJ has no dedicated editor for [fileName] and the file
+ * looks like a binary blob rather than a text file. Such files are better served by
+ * Hexana's hex viewer than by a broken text editor.
+ *
+ * Files with unknown type (e.g. extensionless `AUTHORS`, `LICENSE`) are **not**
+ * treated as unsupported — they are likely plain text and should be opened by the
+ * platform's text editor, not the hex viewer.
+ */
+private fun isUnsupportedByIntelliJ(fileName: String): Boolean {
+    val fileType = com.intellij.openapi.fileTypes.FileTypeManager.getInstance()
+        .getFileTypeByFileName(fileName)
+    return fileType is com.intellij.openapi.fileTypes.UnknownFileType || fileType.isBinary
+            && BinaryFileTypeDecompilers.getInstance().forFileType(fileType) == null
 }
 
 /**
