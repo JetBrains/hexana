@@ -75,6 +75,51 @@ export function generateImportStubs(wasmBytes: Int8Array): JsImportModuleStub[];
  */
 export function generateBrowserHtml(wasmFileName: string, exportName: string, programArgs: string): string;
 
+// ── SourceLocationResolver ──────────────────────────────────────────
+
+/** A resolved source location returned by {@link SourceLocationResolver.wasmOffsetToSource}. */
+export interface ResolvedSourceLocation {
+    readonly file: string;
+    /** 1-based line number from DWARF. */
+    readonly line: number;
+}
+
+/**
+ * DWARF-based source ↔ Wasm byte offset resolver.
+ *
+ * Created from raw Wasm binary bytes; provides mappings between
+ * source file positions and Wasm module-absolute byte offsets
+ * used by V8 CDP.
+ */
+export interface SourceLocationResolver {
+    /**
+     * Returns all Wasm module-absolute byte offsets that map to the
+     * given source file and line number.
+     *
+     * @param fileName source file name (full path or just the file name)
+     * @param line 0-based line number
+     */
+    sourceToAllWasmOffsets(fileName: string, line: number): Int32Array;
+
+    /**
+     * Resolves a Wasm module-absolute byte offset back to a source location.
+     *
+     * @param offset the byte offset (CDP columnNumber for wasm scripts)
+     */
+    wasmOffsetToSource(offset: number): ResolvedSourceLocation | null;
+
+    /** Returns all known source file names that have DWARF line mappings. */
+    knownSourceFiles(): string[];
+}
+
+export namespace SourceLocationResolver {
+    /**
+     * Creates a resolver from raw Wasm binary bytes.
+     * Returns `null` if the binary has no DWARF line info or parsing fails.
+     */
+    function create(wasmBytes: Int8Array): SourceLocationResolver | null;
+}
+
 // ── ShellUtils ──────────────────────────────────────────────────────
 
 /**

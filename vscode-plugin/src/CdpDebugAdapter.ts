@@ -5,6 +5,7 @@ import * as vscode from "vscode";
 import { execFileSync, spawn, ChildProcess } from "child_process";
 import { extensionLib } from "./WasmRunConfigurations";
 import { getDebugOutputChannel, readWasmBytes } from "./WasmDebugAdapter";
+import type { SourceLocationResolver } from "./extension-lib";
 
 /**
  * Resolves the Chrome/Chromium executable path from settings,
@@ -197,6 +198,8 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
     private wasmScriptId: string | undefined;
     /** Byte offsets of each function body in the wasm code section. */
     private wasmFunctionOffsets: number[] = [];
+    /** DWARF-based source ↔ Wasm offset resolver (null when no DWARF info). */
+    private sourceLocationResolver: SourceLocationResolver | undefined;
     /** DAP seq counter for messages sent to VS Code. */
     private dapSeq = 1;
     /** Maps CDP breakpoint IDs to DAP breakpoint info. */
@@ -228,6 +231,10 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
     private initialized = false;
     /** Whether configurationDone has been received (breakpoints are set). */
     private configurationDone = false;
+    /** Stores the original setBreakpoints DAP messages for re-registration. */
+    private readonly originalBreakpointMessages: any[] = [];
+    /** Whether we are currently inside reRegisterBreakpointsAndResume. */
+    private reRegistering = false;
     /** Pending breakpoint requests received before wasm script was parsed. */
     private readonly pendingSetBreakpoints: Array<{ msg: any; resolve: () => void }> = [];
     /** Serialization queue for DAP requests to prevent concurrent handling. */
@@ -365,10 +372,29 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
             // the wasm script is loaded by V8.
             const wasmFile = this.config.wasmFile;
             if (wasmFile && fs.existsSync(wasmFile)) {
-                this.wasmFunctionOffsets = parseWasmFunctionOffsets(fs.readFileSync(wasmFile));
+                const wasmBuf = fs.readFileSync(wasmFile);
+                this.wasmFunctionOffsets = parseWasmFunctionOffsets(wasmBuf);
                 this.log.appendLine(
                     `[Hexana CDP] Parsed ${this.wasmFunctionOffsets.length} function offset(s) from ${wasmFile}`,
                 );
+
+                // Try to create a DWARF-based source location resolver
+                if (extensionLib) {
+                    try {
+                        const wasmInt8 = new Int8Array(wasmBuf.buffer, wasmBuf.byteOffset, wasmBuf.byteLength);
+                        this.sourceLocationResolver = extensionLib.SourceLocationResolver.create(wasmInt8) ?? undefined;
+                        if (this.sourceLocationResolver) {
+                            const files = this.sourceLocationResolver.knownSourceFiles();
+                            this.log.appendLine(
+                                `[Hexana CDP] DWARF source location resolver created with ${files.length} source file(s): ${files.join(", ")}`,
+                            );
+                        } else {
+                            this.log.appendLine("[Hexana CDP] No DWARF line info found in wasm binary");
+                        }
+                    } catch (e) {
+                        this.log.appendLine(`[Hexana CDP] Failed to create source location resolver: ${e}`);
+                    }
+                }
             }
 
             const wsUrl = this.runtime === "nodejs"
@@ -680,6 +706,20 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
 
         await this.cdpSend("Runtime.enable");
         await this.cdpSend("Debugger.enable");
+
+        // Set an instrumentation breakpoint so V8 pauses BEFORE
+        // executing any newly compiled script — including wasm modules.
+        // This guarantees we can set scriptId-based breakpoints before
+        // any wasm code runs (urlRegex breakpoints do NOT work for wasm).
+        try {
+            await this.cdpSend("Debugger.setInstrumentationBreakpoint", {
+                instrumentation: "beforeScriptExecution",
+            });
+            this.log.appendLine("[Hexana CDP] Instrumentation breakpoint set for beforeScriptExecution");
+        } catch (e) {
+            this.log.appendLine(`[Hexana CDP] Failed to set instrumentation breakpoint: ${e}`);
+        }
+
         // Do NOT call Runtime.runIfWaitingForDebugger here.
         // It will be called in configurationDone, after VS Code has sent setBreakpoints.
     }
@@ -747,6 +787,26 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         const reason = params.reason as string;
 
         if (callFrames.length === 0) return;
+
+        // V8 instrumentation breakpoint: pauses before executing a
+        // newly compiled script. For wasm scripts, re-register
+        // breakpoints with the concrete scriptId and then resume.
+        if (reason === "instrumentation") {
+            // Check if this pause is for a wasm script (the one we care about).
+            // Non-wasm instrumentation pauses (JS scripts) should just resume.
+            const pausedScriptId = callFrames[0]?.location?.scriptId as string | undefined;
+            const pausedScript = pausedScriptId ? this.scripts.get(pausedScriptId) : undefined;
+            const isWasmInstrumentation = pausedScript?.url?.startsWith("wasm://") ?? false;
+            this.log.appendLine(
+                `[Hexana CDP] Instrumentation pause — isWasm=${isWasmInstrumentation} wasmScriptId=${this.wasmScriptId ?? "none"}`,
+            );
+            if (isWasmInstrumentation && this.wasmScriptId && this.originalBreakpointMessages.length > 0) {
+                this.reRegisterBreakpointsAndResume();
+            } else {
+                this.cdpSend("Debugger.resume").catch(() => {});
+            }
+            return;
+        }
 
         // Auto-resume "Break on start" (from --inspect-brk) only after
         // configurationDone. Breakpoints are set via setBreakpointByUrl
@@ -870,11 +930,80 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         for (const bp of breakpointLines) {
             const line = bp.line as number;
 
-            // For .wasm sources the DAP line IS the byte offset;
-            // for other sources (Rust, C, Go) we don't have a
-            // DWARF→offset mapping yet, so we use the line as-is
-            // and let findNearestOffset snap to the closest valid
-            // instruction.
+            // For non-.wasm sources (Rust, C, Go), use the DWARF
+            // resolver to map source file + line → Wasm byte offsets.
+            // For .wasm sources the DAP line IS the byte offset.
+            let dwarfOffsets: number[] | undefined;
+            if (!isWasmSource && this.sourceLocationResolver) {
+                const fileName = path.basename(sourcePath);
+                // DAP lines are 1-based; the resolver expects 0-based
+                const resolvedArr = this.sourceLocationResolver.sourceToAllWasmOffsets(fileName, line - 1);
+                if (resolvedArr && resolvedArr.length > 0) {
+                    dwarfOffsets = Array.from(resolvedArr);
+                    this.log.appendLine(
+                        `[Hexana CDP] DWARF resolved ${sourcePath}:${line} → offsets [${dwarfOffsets.join(",")}]`,
+                    );
+                }
+            }
+
+            // When DWARF resolution produced offsets, set breakpoints
+            // at each resolved offset (there may be multiple when the
+            // same source line compiles into several wasm functions).
+            if (dwarfOffsets && dwarfOffsets.length > 0) {
+                let anySet = false;
+                for (const offset of dwarfOffsets) {
+                    // Snap to a valid V8 offset if possible
+                    const snapped = validOffsets.length > 0
+                        ? this.findNearestOffset(validOffsets, offset) ?? offset
+                        : offset;
+
+                    const existingBpId = this.wasmBreakpointOffsets.get(snapped);
+                    if (existingBpId) {
+                        this.log.appendLine(
+                            `[Hexana CDP] Reusing existing wasm breakpoint at offset ${snapped} for ${sourcePath}:${line}`,
+                        );
+                        if (!anySet) {
+                            const dapId = this.nextBpId++;
+                            results.push({ id: dapId, verified: true, line });
+                            anySet = true;
+                        }
+                        continue;
+                    }
+
+                    try {
+                        const cdpResult = this.wasmScriptId
+                            ? await this.cdpSend("Debugger.setBreakpoint", {
+                                location: {
+                                    scriptId: this.wasmScriptId,
+                                    lineNumber: 0,
+                                    columnNumber: snapped,
+                                },
+                            })
+                            : await this.cdpSend("Debugger.setBreakpointByUrl", {
+                                urlRegex: "^wasm://",
+                                lineNumber: 0,
+                                columnNumber: snapped,
+                            });
+                        const bpId = cdpResult.breakpointId;
+                        if (bpId) {
+                            const dapId = this.nextBpId++;
+                            this.breakpoints.set(bpId, { id: dapId, source, line });
+                            this.wasmBreakpointOffsets.set(snapped, bpId);
+                            if (!anySet) {
+                                results.push({ id: dapId, verified: true, line });
+                                anySet = true;
+                            }
+                            this.log.appendLine(
+                                `[Hexana CDP] Set DWARF breakpoint at offset ${snapped} for ${sourcePath}:${line}`,
+                            );
+                        }
+                    } catch (e) {
+                        this.log.appendLine(`[Hexana CDP] Failed to set DWARF breakpoint at offset ${snapped}: ${e}`);
+                    }
+                }
+                if (anySet) continue;
+            }
+
             const requestedOffset = line;
 
             // Strategy 1: wasm script already loaded — use
@@ -1006,6 +1135,13 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         }
 
         this.sendDapResponse(msg, true, undefined, { breakpoints: results });
+
+        // Store the original message for re-registration when the wasm
+        // script appears (instrumentation breakpoint handler).
+        // Skip during re-registration to avoid growing the list infinitely.
+        if (!isWasmSource && this.sourceLocationResolver && !this.reRegistering) {
+            this.originalBreakpointMessages.push(msg);
+        }
     }
 
     /**
@@ -1028,6 +1164,35 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         if (lo < sortedOffsets.length) return sortedOffsets[lo];
         if (sortedOffsets.length > 0) return sortedOffsets[sortedOffsets.length - 1];
         return undefined;
+    }
+
+    /**
+     * Re-registers all breakpoints with the concrete wasm scriptId
+     * and then resumes execution. Called from the instrumentation
+     * breakpoint handler where V8 is paused BEFORE executing the
+     * wasm script.
+     */
+    private async reRegisterBreakpointsAndResume(): Promise<void> {
+        this.log.appendLine(
+            `[Hexana CDP] Re-registering ${this.originalBreakpointMessages.length} breakpoint request(s) with scriptId=${this.wasmScriptId}`,
+        );
+
+        // Clear existing breakpoint state so re-registration starts fresh
+        this.breakpoints.clear();
+        this.wasmBreakpointOffsets.clear();
+
+        this.reRegistering = true;
+        try {
+            for (const msg of this.originalBreakpointMessages) {
+                await this.handleSetBreakpoints(msg);
+            }
+        } catch (e) {
+            this.log.appendLine(`[Hexana CDP] Failed during instrumentation re-registration: ${e}`);
+        } finally {
+            this.reRegistering = false;
+        }
+
+        this.cdpSend("Debugger.resume").catch(() => {});
     }
 
     private async retryPendingBreakpoints(): Promise<void> {
@@ -1057,18 +1222,45 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
             const source: any = {};
             if (url.startsWith("wasm://")) {
                 // Try to map wasm:// frames back to the original source
-                // file (Rust, C, Go) that was used when setting the
-                // breakpoint, so VS Code opens the real source editor.
+                // file (Rust, C, Go) using DWARF info or breakpoint data,
+                // so VS Code opens the real source editor.
                 let mappedToSource = false;
-                if (i === 0) {
-                    // Top frame: check hit breakpoints for original source info
+
+                // Use DWARF resolver to map the wasm byte offset back
+                // to a source location (works for all frames, not just
+                // the top frame hit by a breakpoint).
+                const wasmOffset = loc.columnNumber as number || 0;
+                if (this.sourceLocationResolver) {
+                    const resolved = this.sourceLocationResolver.wasmOffsetToSource(wasmOffset);
+                    if (resolved) {
+                        // DWARF line is 1-based, DAP line is 1-based — use directly.
+                        // Try to find the full path on disk by checking
+                        // the breakpoint source paths for a matching file name.
+                        const resolvedBaseName = path.basename(resolved.file);
+                        let fullPath: string | undefined;
+                        for (const bp of this.breakpoints.values()) {
+                            if (bp.source?.path && path.basename(bp.source.path) === resolvedBaseName) {
+                                fullPath = bp.source.path;
+                                break;
+                            }
+                        }
+                        source.name = resolvedBaseName;
+                        if (fullPath) {
+                            source.path = fullPath;
+                        }
+                        lineNumber = resolved.line;
+                        columnNumber = 1;
+                        mappedToSource = true;
+                    }
+                }
+
+                // Fallback for top frame: check hit breakpoints
+                if (!mappedToSource && i === 0) {
                     for (const bpId of this.pausedHitBreakpoints) {
                         const bp = this.breakpoints.get(bpId);
                         if (bp?.source?.path && !bp.source.path.endsWith(".wasm")) {
                             source.name = path.basename(bp.source.path);
                             source.path = bp.source.path;
-                            // Use the original breakpoint line in the source file
-                            // instead of the wasm byte offset.
                             lineNumber = bp.line;
                             columnNumber = 1;
                             mappedToSource = true;
