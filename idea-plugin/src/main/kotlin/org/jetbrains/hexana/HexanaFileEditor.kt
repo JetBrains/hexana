@@ -41,6 +41,9 @@ import org.jetbrains.hexana.providers.format.WasmComponentDiffOrchestrator
 import org.jetbrains.hexana.providers.format.WasmEntityDiffOrchestrator
 import org.jetbrains.hexana.providers.format.WasmEntityDiffResult
 import org.jetbrains.hexana.providers.format.WasmSizeDiffOrchestrator
+import org.jetbrains.hexana.shared.isClassFile
+import org.jetbrains.hexana.shared.isDexFile
+import org.jetbrains.hexana.shared.isZipFile
 import org.jetbrains.hexana.sourcemap.parseSourceMap
 import org.jetbrains.hexana.ui.BinaryEditorView
 import org.jetbrains.hexana.ui.CLASS_FILE_NAV_TARGET_KEY
@@ -180,7 +183,8 @@ class HexanaFileEditor(
         // .class files use a dedicated 3-tab view (header / methods / constant
         // pool) instead of the binary editor — the file's structure is well
         // known and the structured view is more useful than a raw hex dump.
-        if (myFile.extension.equals("class", ignoreCase = true)) {
+        if (myFile.extension.equals("class", ignoreCase = true)
+            || isClassFile(commonBuffer)) {
             initClassFilePanel(commonBuffer)
             return
         }
@@ -189,14 +193,15 @@ class HexanaFileEditor(
         // class list on the bottom; clicking a class opens its decompressed
         // bytes in a child editor via HexanaBinaryVirtualFile.
         val ext = myFile.extension?.lowercase()
-        if (ext == "jar" || ext == "zip" || ext == "war" || ext == "apk") {
+        if (ext == "jar" || ext == "zip" || ext == "war" || ext == "apk"
+            || isZipFile(commonBuffer)) {
             initJarFilePanel(commonBuffer)
             return
         }
 
         // .dex files use a dedicated 3-tab view (header / classes / strings)
         // similar to .class files but for the Android DEX format.
-        if (ext == "dex") {
+        if (ext == "dex" || isDexFile(commonBuffer)) {
             initDexFilePanel(commonBuffer)
             return
         }
