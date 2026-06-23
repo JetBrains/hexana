@@ -1,4 +1,11 @@
-# 0.4.0
+# 0.5.0 - 24.06.2026
+
+- virtualized WAT (WebAssembly Text) view, providing faster navigation between sections
+- support for viewing Java classes and DEX files
+- ZIP64 files support
+- stability improvements for debugging with NodeJS
+
+# 0.4.0 - 17.06.2026
 
 - hex editor - allow editing of individual bytes (without changing the file size)
 - support for WASM debugging with NodeJS/Chrome
