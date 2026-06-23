@@ -45,6 +45,10 @@ durable repo-local record for the native MCP packaging decisions.
 - Public Claude/Codex packages continue to include the R8-obfuscated JVM
   runtime layout as a fallback. Native artifacts are the release path and are
   collected from platform CI matrix outputs by the release script.
+- `mcp/CHANGELOG.md` is the MCP-specific changelog source. Release automation
+  extracts the section matching `mcp/server/gradle.properties:mcpServerVersion`
+  and uses it as the GitHub Release notes body after the public text guard has
+  accepted the generated notes.
 
 ## Release Artifacts
 
@@ -65,6 +69,11 @@ and runs `mcp/packaging/release-codex-claude-plugins.sh` with
 `INCLUDE_NATIVE_ARTIFACTS=true`, which is the script default. The script requires
 all supported platforms by default and rejects missing native executable, Claude
 plugin, or Codex plugin ZIPs before publishing.
+
+Before any public mutation, the release job also requires a non-empty
+`mcp/CHANGELOG.md` entry for the release version. The generated
+`release-notes.md` is derived from that entry and scanned for internal hosts,
+local paths, direct URLs, CI/token markers, and private key patterns.
 
 ## Known Limitations
 

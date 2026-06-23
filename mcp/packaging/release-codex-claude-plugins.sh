@@ -118,18 +118,82 @@ collect_release_artifacts() {
   fi
 }
 
+write_mcp_changelog_entry() {
+  local version="$1"
+  local output_file="$2"
+  local changelog_file="${MCP_CHANGELOG_FILE:-mcp/CHANGELOG.md}"
+  local status
+
+  [ -f "$changelog_file" ] || die "Missing MCP changelog: $changelog_file"
+
+  set +e
+  awk -v version="$version" '
+    function trim(value) {
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      return value
+    }
+    function heading_version(line, value) {
+      value = line
+      sub(/^##[[:space:]]+/, "", value)
+      value = trim(value)
+      if (value ~ /^\[[^]]+\]/) {
+        sub(/^\[/, "", value)
+        sub(/\].*$/, "", value)
+      } else {
+        sub(/[[:space:]]+-[[:space:]].*$/, "", value)
+        sub(/[[:space:]]+\(.*/, "", value)
+      }
+      return value
+    }
+    /^##[[:space:]]+/ {
+      if (found) {
+        exit
+      }
+      if (heading_version($0) == version) {
+        found = 1
+        next
+      }
+    }
+    found {
+      print
+    }
+    END {
+      if (!found) {
+        exit 42
+      }
+    }
+  ' "$changelog_file" > "$output_file"
+  status=$?
+  set -e
+
+  case "$status" in
+    0) ;;
+    42) die "MCP changelog $changelog_file has no entry for version $version" ;;
+    *) die "Could not extract MCP changelog entry for version $version from $changelog_file" ;;
+  esac
+
+  if ! grep -E -q '[^[:space:]]' "$output_file"; then
+    die "MCP changelog entry for version $version is empty"
+  fi
+  if ! grep -v -E '^[[:space:]]*$|^###[[:space:]]+' "$output_file" | grep -E -q '[^[:space:]]'; then
+    die "MCP changelog entry for version $version contains no release notes"
+  fi
+}
+
 write_release_notes() {
+  local changelog_entry
+
   release_notes="$release_dir/release-notes.md"
+  changelog_entry="$(mktemp "${TMPDIR:-/tmp}/hexana-mcp-changelog-entry.XXXXXX")"
+  register_cleanup_dir "$changelog_entry"
+  write_mcp_changelog_entry "$PLUGIN_VERSION" "$changelog_entry"
+
   {
-    printf 'Hexana MCP plugin distribution %s\n\n' "$PLUGIN_VERSION"
-    printf -- '- Claude Code plugin archive is attached.\n'
-    printf -- '- Codex plugin archive is attached.\n'
-    printf -- '- Standalone MCP server archive is attached.\n'
-    if [ "${#NATIVE_RELEASE_ARTIFACTS[@]}" -gt 0 ]; then
-      printf -- '- Native MCP artifacts are attached for: %s.\n' "$NATIVE_RELEASE_PLATFORMS"
-    fi
-    printf -- '- Public marketplace metadata is updated through the companion pull request.\n'
+    printf 'Hexana MCP %s\n\n' "$PLUGIN_VERSION"
+    cat "$changelog_entry"
   } > "$release_notes"
+  require_public_github_text_file "GitHub release notes" "$release_notes"
 }
 
 check_public_github_text_file() {
@@ -305,6 +369,87 @@ self_test_release_native_artifact_default() {
   )
 
   log "Native artifact default self-test passed"
+}
+
+self_test_mcp_changelog_release_notes() {
+  local temp_dir
+  local release_notes_file
+  local scan_status
+
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/hexana-mcp-changelog.XXXXXX")"
+  register_cleanup_dir "$temp_dir"
+  mkdir -p "$temp_dir/mcp/server" "$temp_dir/release"
+  printf 'mcpServerVersion=0.2.0\n' > "$temp_dir/mcp/server/gradle.properties"
+  cat > "$temp_dir/mcp/CHANGELOG.md" <<'EOF'
+# Hexana MCP Changelog
+
+## Unreleased
+
+## 0.2.0 - 2026-06-23
+
+### Added
+- Native MCP release artifacts are published for macOS arm64 and Linux x64.
+- Claude Code and Codex wrappers use native executables with the JVM runtime as fallback.
+
+## 0.1.0 - 2026-06-10
+
+### Added
+- Initial MCP packaging.
+EOF
+
+  (
+    cd "$temp_dir"
+    PLUGIN_VERSION="0.2.0"
+    release_dir="$temp_dir/release"
+    NATIVE_RELEASE_ARTIFACTS=()
+    NATIVE_RELEASE_PLATFORMS="macos-arm64 linux-x64"
+    write_release_notes
+  )
+  release_notes_file="$temp_dir/release/release-notes.md"
+  grep -F -q 'Hexana MCP 0.2.0' "$release_notes_file" ||
+    die "MCP changelog self-test did not write the release title"
+  grep -F -q 'Native MCP release artifacts are published for macOS arm64 and Linux x64.' "$release_notes_file" ||
+    die "MCP changelog self-test did not include the matching changelog entry"
+  if grep -F -q 'Initial MCP packaging.' "$release_notes_file"; then
+    die "MCP changelog self-test leaked another changelog entry into release notes"
+  fi
+
+  set +e
+  (
+    cd "$temp_dir"
+    PLUGIN_VERSION="9.9.9"
+    release_dir="$temp_dir/release"
+    NATIVE_RELEASE_ARTIFACTS=()
+    NATIVE_RELEASE_PLATFORMS=""
+    write_release_notes
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "MCP changelog self-test did not reject a missing version entry"
+
+  cat > "$temp_dir/mcp/CHANGELOG.md" <<'EOF'
+# Hexana MCP Changelog
+
+## 0.2.0 - 2026-06-23
+
+### Fixed
+- Release output mentions TeamCity internals.
+EOF
+
+  set +e
+  (
+    cd "$temp_dir"
+    PLUGIN_VERSION="0.2.0"
+    release_dir="$temp_dir/release"
+    NATIVE_RELEASE_ARTIFACTS=()
+    NATIVE_RELEASE_PLATFORMS=""
+    write_release_notes
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "MCP changelog self-test did not apply the public text guard to release notes"
+
+  log "MCP changelog release-notes self-test passed"
 }
 
 publish_github_release() {
@@ -1177,6 +1322,10 @@ main() {
   fi
   if [ "$(to_bool "${RELEASE_NATIVE_ARTIFACT_DEFAULT_SELF_TEST:-false}" "RELEASE_NATIVE_ARTIFACT_DEFAULT_SELF_TEST")" = "true" ]; then
     self_test_release_native_artifact_default
+    return
+  fi
+  if [ "$(to_bool "${MCP_CHANGELOG_RELEASE_NOTES_SELF_TEST:-false}" "MCP_CHANGELOG_RELEASE_NOTES_SELF_TEST")" = "true" ]; then
+    self_test_mcp_changelog_release_notes
     return
   fi
 

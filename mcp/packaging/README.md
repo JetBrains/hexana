@@ -189,6 +189,12 @@ The release script reads `PLUGIN_VERSION` from `mcp/server/gradle.properties:mcp
 set, defaults `RELEASE_TAG` to `v<PLUGIN_VERSION>`, and writes release artifacts under
 `mcp/out/teamcity/release`.
 
+GitHub Release notes are generated from `mcp/CHANGELOG.md`. Before public publication, the script extracts the
+`## <PLUGIN_VERSION>` section, fails if it is missing or contains no notes, writes it to
+`mcp/out/teamcity/release/release-notes.md`, and scans that generated file with the public GitHub text guard. Keep
+changelog entries public-safe: no internal hosts, CI parameter names, local machine paths, direct URLs, or token-like
+markers.
+
 The script never pushes to `main` or `master`. It creates a branch named
 `automation/update-<plugin-name>-<version>`, copies only allowlisted public files from `GENERATED_PUBLIC_DIR`, validates
 JSON files, scans the staged diff for private paths and obvious secret patterns, pushes the branch, and creates or
@@ -281,6 +287,8 @@ GitHub-facing text is scanned separately before public mutation calls. Release n
 comments fail on internal CI wording, internal hostnames, local paths, token names or prefixes, and direct URLs. The
 guard can be checked without network access by running
 `PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh`.
+The changelog extraction and generated release-note guard can be checked without network access by running
+`MCP_CHANGELOG_RELEASE_NOTES_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh`.
 
 The secret scan is intentionally conservative. If it reports a false positive, either change the public file content so
 the marker is not present verbatim, or adjust the script in the same review with a narrowly scoped exception. Do not

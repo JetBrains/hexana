@@ -37,6 +37,10 @@ it is proven across the matrix.
 
 ## JVM Fallback Compatibility Checks
 
+- Update `mcp/CHANGELOG.md` before release publishing. The release script
+  extracts the `mcp/server/gradle.properties:mcpServerVersion` section and
+  fails before public publication when the matching entry is missing or empty.
+
 - Build and smoke-test pre-R8 JVM fallback packages:
 
   ```bash
@@ -64,6 +68,13 @@ release readiness without the native matrix artifacts above.
   PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh
   ```
 
+- Run the changelog-driven release-notes self-test when changelog validation or
+  release-note extraction changes:
+
+  ```bash
+  MCP_CHANGELOG_RELEASE_NOTES_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh
+  ```
+
 ## Release Script Inputs
 
 Before invoking `mcp/packaging/release-codex-claude-plugins.sh` for a
@@ -83,6 +94,9 @@ release:
   collected into the release directory.
 - Ensure `PLUGIN_VERSION` matches `mcp/server/gradle.properties:mcpServerVersion`
   unless the release job intentionally overrides it.
+- Ensure `mcp/CHANGELOG.md` contains the matching `## <version>` entry with
+  public-safe notes. The generated GitHub Release notes are scanned by the
+  public text guard before any public mutation.
 - Keep the JVM fallback compatibility checks visible in the same build chain.
   Set `SKIP_RELEASE_BUILD_AND_SMOKE=true` only after those checks and all native
   matrix gates already passed in the same checkout/build chain.
