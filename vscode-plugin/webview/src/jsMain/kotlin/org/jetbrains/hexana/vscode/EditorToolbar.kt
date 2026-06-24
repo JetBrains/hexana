@@ -9,6 +9,7 @@ import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.shared.fileTypeDescription
 import org.jetbrains.hexana.shared.formatSize
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
@@ -250,13 +251,7 @@ fun EditorToolbar(
                     property("color", "var(--vscode-badge-foreground, #FFF)")
                 }
             }) {
-                Text(
-                    when (provider) {
-                        is WasmBinaryProvider -> "Core Wasm"
-                        is WasmComponentBinaryProvider -> "Component Model"
-                        else -> "Binary"
-                    }
-                )
+                Text(fileTypeDescription(provider, fileName))
             }
 
             if (isSubmodule) {
