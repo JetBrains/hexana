@@ -26,7 +26,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -35,8 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
-import org.jetbrains.hexana.HexViewStateHolder
-import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.formatSizeLong
 import org.jetbrains.hexana.zip.ZipEntry
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -46,63 +43,54 @@ import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.VerticalScrollbar
 
 /**
- * Editor view for a JAR / ZIP archive. Vertical split: a [HexViewer] over the
- * raw archive bytes on top, a sortable + searchable entry list on the bottom.
- * For JARs (archives containing `.class` files) only class entries are shown;
- * for plain ZIP files all non-directory entries are listed. Clicking a row
- * hands the (decompressed) bytes off to [onOpenEntry] — the IDE-side wiring
- * opens those bytes in a child [ClassFileEditorView].
+ * Builds the panel list for a JAR / ZIP archive editor. The single "Entries"
+ * panel contains a sortable + searchable entry list. For JARs (archives
+ * containing `.class` files) only class entries are shown by default; for
+ * plain ZIP files all non-directory entries are listed. Clicking a row hands
+ * the (decompressed) bytes off to [onOpenEntry].
  */
-@Composable
-internal fun JarEditorView(
+internal fun jarFilePanels(
     entries: List<ZipEntry>,
-    binaryProvider: BinaryProvider,
-    state: HexViewStateHolder,
-    hexFocusRequester: FocusRequester,
+    onOpenEntry: (ZipEntry) -> Unit,
+): List<org.jetbrains.hexana.ui.panel.Panel> = listOf(
+    org.jetbrains.hexana.ui.panel.Panel("Entries") {
+        JarEntriesContent(entries, onOpenEntry)
+    },
+)
+
+@Composable
+private fun JarEntriesContent(
+    entries: List<ZipEntry>,
     onOpenEntry: (ZipEntry) -> Unit,
 ) {
-    VerticalSplitPanel(
-        state = state,
-        northPanel = {
-            Box(modifier = Modifier.fillMaxSize()) {
-                HexViewer(
-                    binaryProvider = binaryProvider,
-                    state = state,
-                    focusRequester = hexFocusRequester,
-                )
-            }
-        },
-        southPanel = {
-            val classEntries = entries.filter { it.isClass }
-            val hasNonClassEntries = entries.any { !it.isDirectory && !it.isClass }
-            if (classEntries.isNotEmpty()) {
-                var showAll by rememberSaveable { mutableStateOf(false) }
-                val displayedEntries = if (showAll) {
-                    entries.filter { !it.isDirectory }
-                } else {
-                    classEntries
-                }
-                ZipEntriesPanel(
-                    allEntries = displayedEntries,
-                    onOpenEntry = onOpenEntry,
-                    searchPlaceholder = if (showAll) "Search entries\u2026" else "Search classes\u2026",
-                    emptyMessage = "(no class entries)",
-                    entryFilter = if (hasNonClassEntries) {
-                        EntryFilter(showAll = showAll, onShowAllChange = { showAll = it })
-                    } else {
-                        null
-                    },
-                )
+    val classEntries = entries.filter { it.isClass }
+    val hasNonClassEntries = entries.any { !it.isDirectory && !it.isClass }
+    if (classEntries.isNotEmpty()) {
+        var showAll by rememberSaveable { mutableStateOf(false) }
+        val displayedEntries = if (showAll) {
+            entries.filter { !it.isDirectory }
+        } else {
+            classEntries
+        }
+        ZipEntriesPanel(
+            allEntries = displayedEntries,
+            onOpenEntry = onOpenEntry,
+            searchPlaceholder = if (showAll) "Search entries\u2026" else "Search classes\u2026",
+            emptyMessage = "(no class entries)",
+            entryFilter = if (hasNonClassEntries) {
+                EntryFilter(showAll = showAll, onShowAllChange = { showAll = it })
             } else {
-                ZipEntriesPanel(
-                    allEntries = entries.filter { !it.isDirectory },
-                    onOpenEntry = onOpenEntry,
-                    searchPlaceholder = "Search entries\u2026",
-                    emptyMessage = "(no entries)",
-                )
-            }
-        },
-    )
+                null
+            },
+        )
+    } else {
+        ZipEntriesPanel(
+            allEntries = entries.filter { !it.isDirectory },
+            onOpenEntry = onOpenEntry,
+            searchPlaceholder = "Search entries\u2026",
+            emptyMessage = "(no entries)",
+        )
+    }
 }
 
 private class EntryFilter(

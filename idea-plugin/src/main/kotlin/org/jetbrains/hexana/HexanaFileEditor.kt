@@ -544,6 +544,11 @@ class HexanaFileEditor(
         }
         binaryProvider = GenericBinaryProvider(commonBuffer.duplicate().position(0))
         val provider = binaryProvider!!
+        val extraPanels = if (parsed != null) {
+            org.jetbrains.hexana.ui.classFilePanels(parsed, classFileNavTargetFlow)
+        } else {
+            emptyList()
+        }
         val view = createComposePanel {
             val hexFocusRequester = remember { FocusRequester() }
             if (parsed == null) {
@@ -551,12 +556,12 @@ class HexanaFileEditor(
                     "Failed to parse ${myFile.name} as a JVM class file — see idea.log for details.",
                 )
             } else {
-                org.jetbrains.hexana.ui.ClassFileEditorView(
-                    classFile = parsed,
+                BinaryEditorView(
                     binaryProvider = provider,
                     state = stateHolder,
                     hexFocusRequester = hexFocusRequester,
-                    navTargetFlow = classFileNavTargetFlow,
+                    fileName = myFile.name,
+                    extraPanels = extraPanels,
                 )
             }
         }
@@ -573,6 +578,11 @@ class HexanaFileEditor(
         binaryProvider = GenericBinaryProvider(commonBuffer.duplicate().position(0))
         val provider = binaryProvider!!
         val parentBuffer = commonBuffer
+        val extraPanels = if (entries != null) {
+            org.jetbrains.hexana.ui.jarFilePanels(entries) { entry -> openZipEntry(entry, parentBuffer) }
+        } else {
+            emptyList()
+        }
         val view = createComposePanel {
             val hexFocusRequester = remember { FocusRequester() }
             if (entries == null) {
@@ -580,12 +590,12 @@ class HexanaFileEditor(
                     "Failed to parse ${myFile.name} as a ZIP / JAR archive — see idea.log for details.",
                 )
             } else {
-                org.jetbrains.hexana.ui.JarEditorView(
-                    entries = entries,
+                BinaryEditorView(
                     binaryProvider = provider,
                     state = stateHolder,
                     hexFocusRequester = hexFocusRequester,
-                    onOpenEntry = { entry -> openZipEntry(entry, parentBuffer) },
+                    fileName = myFile.name,
+                    extraPanels = extraPanels,
                 )
             }
         }
@@ -667,6 +677,11 @@ class HexanaFileEditor(
         }
         binaryProvider = GenericBinaryProvider(commonBuffer.duplicate().position(0))
         val provider = binaryProvider!!
+        val extraPanels = if (parsed != null) {
+            org.jetbrains.hexana.ui.dexFilePanels(parsed, provider)
+        } else {
+            emptyList()
+        }
         val view = createComposePanel {
             val hexFocusRequester = remember { FocusRequester() }
             if (parsed == null) {
@@ -674,11 +689,12 @@ class HexanaFileEditor(
                     "Failed to parse ${myFile.name} as an Android DEX file — see idea.log for details.",
                 )
             } else {
-                org.jetbrains.hexana.ui.DexFileEditorView(
-                    dexFile = parsed,
+                BinaryEditorView(
                     binaryProvider = provider,
                     state = stateHolder,
                     hexFocusRequester = hexFocusRequester,
+                    fileName = myFile.name,
+                    extraPanels = extraPanels,
                 )
             }
         }

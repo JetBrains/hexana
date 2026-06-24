@@ -46,6 +46,7 @@ internal fun BinaryEditorView(
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
+    extraPanels: List<Panel> = emptyList(),
 ) {
     // Phase F: every opened file gets one editable BinaryDocument shared by
     // the editor's lifecycle. Edits land in this doc, but ONLY the WAT
@@ -217,7 +218,7 @@ internal fun BinaryEditorView(
         // reads the current value on each composition and recomposes when
         // it changes. Non-edit panel lambdas use `this` (the original
         // provider) and stay frozen across edits.
-        val panels = remember(binaryProvider, hexEditedSinceOpen) {
+        val panels = remember(binaryProvider, hexEditedSinceOpen, extraPanels) {
             val p: Array<Panel> = if (hexEditedSinceOpen) {
                 // Demoted to generic — only the Hex view + status bar remain.
                 emptyArray()
@@ -231,6 +232,7 @@ internal fun BinaryEditorView(
                     liveProviderProvider = { liveProvider },
                     wasmFunctionNavTargetFlow = wasmNavFlow,
                     archiveName = fileName,
+                    extraPanels = extraPanels,
                 )
             }
             mutableStateListOf(*p)
@@ -339,6 +341,14 @@ private fun TabsPanel(
     onTabSelect: (Int) -> Unit,
 ) {
     if (panels.isEmpty()) return
+
+    // Single panel: render content directly without tab controls.
+    if (panels.size == 1) {
+        Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+            panels[0].render()
+        }
+        return
+    }
 
     var expanded by remember { mutableStateOf(false) }
 
@@ -515,12 +525,13 @@ private fun BinaryProvider.resolvePanels(
     liveProviderProvider: (() -> BinaryProvider)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>? = null,
     archiveName: String? = null,
+    extraPanels: List<Panel> = emptyList(),
 ): Array<Panel> {
     val enricher = getTabEnricher()
     val tabPanels = TableTabsProviderRegistry.providers.flatMap {
         enricher(it.tableTabs(this), state, pathsNav).map { it.toPanel(state) }
     }
-    val extraPanels = when (this) {
+    val providerPanels = when (this) {
         is GenericBinaryProvider -> emptyList()
         is ElfBinaryProvider -> listOf(
             Panel("Debug Context") { NativeDebugContextPanel(this, state) },
@@ -616,7 +627,7 @@ private fun BinaryProvider.resolvePanels(
         }
         else -> emptyList()
     }
-    val panels = (tabPanels + extraPanels).toMutableList()
+    val panels = (tabPanels + providerPanels + extraPanels).toMutableList()
     // Wire Garbage → Dominators cross-panel navigation
     val domIndex = panels.indexOfFirst { it.description == "Dominators" }
     val garbageIndex = panels.indexOfFirst { it.description == "Garbage" }

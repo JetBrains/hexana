@@ -6,11 +6,15 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
@@ -21,7 +25,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.openapi.ui.DialogWrapper
-import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.dex.DexClassData
 import org.jetbrains.hexana.dex.DexClassDef
 import org.jetbrains.hexana.dex.DexEncodedField
@@ -35,101 +38,46 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.jewel.ui.Orientation
-import org.jetbrains.jewel.ui.component.*
+import org.jetbrains.jewel.ui.component.Divider
+import org.jetbrains.jewel.ui.component.TabData
+import org.jetbrains.jewel.ui.component.TabStrip
+import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.VerticalScrollbar
 import org.jetbrains.jewel.ui.theme.defaultTabStyle
 import java.awt.BorderLayout
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import javax.swing.*
 
-/**
- * Editor view for a parsed Android `.dex` file. Vertically split: a [HexViewer]
- * over the raw DEX bytes on top, three structured tabs underneath:
- *  1. Header — DEX version, sizes, offsets.
- *  2. Classes — list of class definitions with access flags and superclass.
- *  3. Strings — all string entries from the string table.
- */
-@Composable
-internal fun DexFileEditorView(
+internal fun dexFilePanels(
     dexFile: DexFile,
     binaryProvider: BinaryProvider,
-    state: HexViewStateHolder,
-    hexFocusRequester: FocusRequester,
-) {
-    VerticalSplitPanel(
-        state = state,
-        northPanel = {
-            Box(modifier = Modifier.fillMaxSize()) {
-                HexViewer(
-                    binaryProvider = binaryProvider,
-                    state = state,
-                    focusRequester = hexFocusRequester,
-                )
-            }
-        },
-        southPanel = {
-            DexFileTabs(dexFile, binaryProvider)
-        },
-    )
-}
+): List<org.jetbrains.hexana.ui.panel.Panel> = listOf(
+    org.jetbrains.hexana.ui.panel.Panel("Header") { DexHeaderTab(dexFile) },
+    org.jetbrains.hexana.ui.panel.Panel("Classes") { DexClassesPanel(dexFile, binaryProvider) },
+    org.jetbrains.hexana.ui.panel.Panel("Strings") { DexStringsTab(dexFile) },
+)
 
+/**
+ * Wrapper that manages the class-list → class-detail drill-down inside a
+ * single "Classes" panel, preserving the navigation state that was previously
+ * handled by [DexFileTabs].
+ */
 @Composable
-private fun DexFileTabs(dexFile: DexFile, binaryProvider: BinaryProvider) {
-    var selectedTab by rememberSaveable { mutableStateOf(0) }
-    // When non-null, the Classes tab shows a detail view for this class def index.
+private fun DexClassesPanel(dexFile: DexFile, binaryProvider: BinaryProvider) {
     var selectedClassDefIdx by rememberSaveable { mutableStateOf<Int?>(null) }
-
-    val labels = if (selectedClassDefIdx != null) {
-        val classDef = dexFile.classDefs[selectedClassDefIdx!!]
-        val className = dexFile.typeName(classDef.classIdx) ?: "<#${classDef.classIdx}>"
-        listOf("Header", "\u2190 $className", "Strings")
+    val classIdx = selectedClassDefIdx
+    if (classIdx != null) {
+        DexClassDetailView(
+            dex = dexFile,
+            classDefIndex = classIdx,
+            buffer = binaryProvider.bytes,
+            onBack = { selectedClassDefIdx = null },
+            onNavigateToClass = { idx -> selectedClassDefIdx = idx },
+        )
     } else {
-        listOf("Header", "Classes", "Strings")
-    }
-    val tabs by remember(selectedTab, selectedClassDefIdx) {
-        derivedStateOf {
-            labels.mapIndexed { index, label ->
-                TabData.Default(
-                    selected = index == selectedTab,
-                    content = { Text(label) },
-                    closable = false,
-                    onClick = {
-                        if (index == 1 && selectedTab == 1 && selectedClassDefIdx != null) {
-                            // Clicking the class tab again goes back to the class list.
-                            selectedClassDefIdx = null
-                        } else {
-                            selectedTab = index
-                        }
-                    },
-                )
-            }
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        TabStrip(tabs = tabs, style = JewelTheme.defaultTabStyle)
-        Divider(orientation = Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
-        Box(modifier = Modifier.fillMaxSize().weight(1f).padding(8.dp)) {
-            when (selectedTab) {
-                0 -> DexHeaderTab(dexFile)
-                1 -> {
-                    val classIdx = selectedClassDefIdx
-                    if (classIdx != null) {
-                        DexClassDetailView(
-                            dex = dexFile,
-                            classDefIndex = classIdx,
-                            buffer = binaryProvider.bytes,
-                            onBack = { selectedClassDefIdx = null },
-                            onNavigateToClass = { idx -> selectedClassDefIdx = idx },
-                        )
-                    } else {
-                        DexClassesTab(dexFile) { idx ->
-                            selectedClassDefIdx = idx
-                        }
-                    }
-                }
-                else -> DexStringsTab(dexFile)
-            }
+        DexClassesTab(dexFile) { idx ->
+            selectedClassDefIdx = idx
         }
     }
 }

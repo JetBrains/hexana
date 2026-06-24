@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,7 +23,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -34,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.openapi.util.Key
 import kotlinx.coroutines.flow.MutableStateFlow
-import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.javabytecode.JavaBytecodeInstruction
 import org.jetbrains.hexana.javabytecode.JavaBytecodeOperands
 import org.jetbrains.hexana.javabytecode.JavaClassAccess
@@ -45,15 +42,9 @@ import org.jetbrains.hexana.javabytecode.JavaConstantPool
 import org.jetbrains.hexana.javabytecode.JavaConstantPoolEntry
 import org.jetbrains.hexana.javabytecode.JavaFieldAccess
 import org.jetbrains.hexana.javabytecode.JavaMethodAccess
-import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.jewel.foundation.theme.JewelTheme
-import org.jetbrains.jewel.ui.Orientation
-import org.jetbrains.jewel.ui.component.Divider
-import org.jetbrains.jewel.ui.component.TabData
-import org.jetbrains.jewel.ui.component.TabStrip
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.VerticalScrollbar
-import org.jetbrains.jewel.ui.theme.defaultTabStyle
 
 /**
  * Navigation target handed to [ClassFileEditorView] when another view (today: the
@@ -75,85 +66,14 @@ data class ClassFileNavTarget(
 
 val CLASS_FILE_NAV_TARGET_KEY: Key<ClassFileNavTarget> = Key.create("hexana.classFile.navTarget")
 
-/**
- * Editor view for a parsed JVM `.class` file. Vertically split: a [HexViewer]
- * over the raw class bytes on top, three structured tabs underneath:
- *  1. Header — class name + access flags + super class + interfaces.
- *  2. Methods — list of foldable per-method sections styled to match
- *     WAT (virtualized): gray header row with a file offset + ▶/▼ +
- *     signature; monospace body rows underneath when expanded.
- *  3. Constant pool — all `cp_info` entries by index.
- *
- * [navTargetFlow] lets external callers drive the Methods tab to a specific
- * method (and optionally BCI). The flow's value is consumed (set to null)
- * after each successful navigation so subsequent equal requests still fire.
- */
-@Composable
-internal fun ClassFileEditorView(
-    classFile: JavaClassFile,
-    binaryProvider: BinaryProvider,
-    state: HexViewStateHolder,
-    hexFocusRequester: FocusRequester,
-    navTargetFlow: MutableStateFlow<ClassFileNavTarget?> = remember { MutableStateFlow(null) },
-) {
-    VerticalSplitPanel(
-        state = state,
-        northPanel = {
-            Box(modifier = Modifier.fillMaxSize()) {
-                HexViewer(
-                    binaryProvider = binaryProvider,
-                    state = state,
-                    focusRequester = hexFocusRequester,
-                )
-            }
-        },
-        southPanel = {
-            ClassFileTabs(classFile, navTargetFlow)
-        },
-    )
-}
-
-@Composable
-private fun ClassFileTabs(
+internal fun classFilePanels(
     classFile: JavaClassFile,
     navTargetFlow: MutableStateFlow<ClassFileNavTarget?>,
-) {
-    var selectedTab by rememberSaveable { mutableStateOf(0) }
-    val navTarget by navTargetFlow.collectAsState()
-
-    // External nav requests always target the Methods tab — switch as soon as
-    // a non-null target arrives. The actual unfold + scroll happens inside
-    // [ClassMethodsTab] once it composes.
-    LaunchedEffect(navTarget) {
-        if (navTarget != null) selectedTab = 1
-    }
-
-    val labels = listOf("Header", "Methods", "Constant pool")
-    val tabs by remember(selectedTab) {
-        derivedStateOf {
-            labels.mapIndexed { index, label ->
-                TabData.Default(
-                    selected = index == selectedTab,
-                    content = { Text(label) },
-                    closable = false,
-                    onClick = { selectedTab = index },
-                )
-            }
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        TabStrip(tabs = tabs, style = JewelTheme.defaultTabStyle)
-        Divider(orientation = Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
-        Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-            when (selectedTab) {
-                0 -> ClassHeaderTab(classFile)
-                1 -> ClassMethodsTab(classFile, navTargetFlow)
-                else -> ClassConstantPoolTab(classFile)
-            }
-        }
-    }
-}
+): List<org.jetbrains.hexana.ui.panel.Panel> = listOf(
+    org.jetbrains.hexana.ui.panel.Panel("Header") { ClassHeaderTab(classFile) },
+    org.jetbrains.hexana.ui.panel.Panel("Methods") { ClassMethodsTab(classFile, navTargetFlow) },
+    org.jetbrains.hexana.ui.panel.Panel("Constant pool") { ClassConstantPoolTab(classFile) },
+)
 
 @Composable
 private fun ClassHeaderTab(cf: JavaClassFile) {
