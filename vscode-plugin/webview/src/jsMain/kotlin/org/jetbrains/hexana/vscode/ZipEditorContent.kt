@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.*
+import org.jetbrains.compose.web.attributes.selected
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.io.CommonByteBuffer
@@ -90,7 +91,14 @@ private fun ZipEntriesPanel(
         }
 
         val classEntries = entries.filter { it.isClass }
-        val displayEntries = if (classEntries.isNotEmpty()) classEntries else entries.filter { !it.isDirectory }
+        val hasNonClassEntries = entries.any { !it.isDirectory && !it.isClass }
+        var showAll by remember { mutableStateOf(false) }
+
+        val displayEntries = if (classEntries.isNotEmpty()) {
+            if (showAll) entries.filter { !it.isDirectory } else classEntries
+        } else {
+            entries.filter { !it.isDirectory }
+        }
 
         if (displayEntries.isEmpty()) {
             Div({
@@ -111,6 +119,21 @@ private fun ZipEntriesPanel(
             defaultSortColumn = 0,
             defaultSortDirection = SortDirection.ASC,
             alwaysShowSearch = true,
+            searchBarLeading = if (classEntries.isNotEmpty() && hasNonClassEntries) {
+                {
+                    Select({
+                        classes("hexana-entry-filter-select")
+                        onChange { event ->
+                            showAll = event.value == "all"
+                        }
+                    }) {
+                        Option("classes", { if (!showAll) selected() }) { Text("Classes") }
+                        Option("all", { if (showAll) selected() }) { Text("All entries") }
+                    }
+                }
+            } else {
+                null
+            },
         ) {
             for (entry in displayEntries) {
                 PanelTableRow(
@@ -132,3 +155,4 @@ private fun ZipEntriesPanel(
         }
     }
 }
+

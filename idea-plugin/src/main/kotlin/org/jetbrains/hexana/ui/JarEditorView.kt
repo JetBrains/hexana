@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +34,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.formatSizeLong
@@ -71,12 +74,24 @@ internal fun JarEditorView(
         },
         southPanel = {
             val classEntries = entries.filter { it.isClass }
+            val hasNonClassEntries = entries.any { !it.isDirectory && !it.isClass }
             if (classEntries.isNotEmpty()) {
+                var showAll by rememberSaveable { mutableStateOf(false) }
+                val displayedEntries = if (showAll) {
+                    entries.filter { !it.isDirectory }
+                } else {
+                    classEntries
+                }
                 ZipEntriesPanel(
-                    allEntries = classEntries,
+                    allEntries = displayedEntries,
                     onOpenEntry = onOpenEntry,
-                    searchPlaceholder = "Search classes\u2026",
+                    searchPlaceholder = if (showAll) "Search entries\u2026" else "Search classes\u2026",
                     emptyMessage = "(no class entries)",
+                    entryFilter = if (hasNonClassEntries) {
+                        EntryFilter(showAll = showAll, onShowAllChange = { showAll = it })
+                    } else {
+                        null
+                    },
                 )
             } else {
                 ZipEntriesPanel(
@@ -90,12 +105,18 @@ internal fun JarEditorView(
     )
 }
 
+private class EntryFilter(
+    val showAll: Boolean,
+    val onShowAllChange: (Boolean) -> Unit,
+)
+
 @Composable
 private fun ZipEntriesPanel(
     allEntries: List<ZipEntry>,
     onOpenEntry: (ZipEntry) -> Unit,
     searchPlaceholder: String,
     emptyMessage: String,
+    entryFilter: EntryFilter? = null,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var sortColumn by rememberSaveable { mutableStateOf(SortColumn.Name) }
@@ -118,7 +139,12 @@ private fun ZipEntriesPanel(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        SearchBar(query = query, onQueryChange = { query = it }, placeholder = searchPlaceholder)
+        SearchBarRow(
+            query = query,
+            onQueryChange = { query = it },
+            placeholder = searchPlaceholder,
+            entryFilter = entryFilter,
+        )
         ColumnHeaderRow(
             sortColumn = sortColumn,
             sortAsc = sortAsc,
@@ -157,13 +183,23 @@ private fun ZipEntriesPanel(
 }
 
 @Composable
-private fun SearchBar(query: String, onQueryChange: (String) -> Unit, placeholder: String = "Search classes\u2026") {
+private fun SearchBarRow(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String = "Search classes\u2026",
+    entryFilter: EntryFilter? = null,
+) {
     val outline = if (JewelTheme.isDark) Color(0xFF393B3D) else Color(0xFFC9CCD6)
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        if (entryFilter != null) {
+            EntryFilterComboBox(entryFilter, outline)
+        }
         BasicTextField(
             value = query,
             onValueChange = onQueryChange,
@@ -175,7 +211,7 @@ private fun SearchBar(query: String, onQueryChange: (String) -> Unit, placeholde
             ),
             cursorBrush = SolidColor(HexanaTheme.textColor),
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .border(1.dp, outline, RoundedCornerShape(3.dp))
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             decorationBox = { inner ->
@@ -189,6 +225,64 @@ private fun SearchBar(query: String, onQueryChange: (String) -> Unit, placeholde
             },
         )
     }
+}
+
+@Composable
+private fun EntryFilterComboBox(filter: EntryFilter, outline: Color) {
+    val label = if (filter.showAll) "All entries" else "Classes"
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Text(
+            "$label ▾",
+            style = RowStyle.copy(color = HexanaTheme.textColor),
+            modifier = Modifier
+                .border(1.dp, outline, RoundedCornerShape(3.dp))
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .widthIn(min = 90.dp),
+        )
+        if (expanded) {
+            Popup(
+                alignment = Alignment.TopStart,
+                onDismissRequest = { expanded = false },
+            ) {
+                val popupBg = if (JewelTheme.isDark) Color(0xFF2B2D30) else Color(0xFFFFFFFF)
+                Column(
+                    modifier = Modifier
+                        .width(130.dp)
+                        .background(popupBg, RoundedCornerShape(4.dp))
+                        .border(1.dp, outline, RoundedCornerShape(4.dp)),
+                ) {
+                    PopupItem("Classes", selected = !filter.showAll) {
+                        filter.onShowAllChange(false)
+                        expanded = false
+                    }
+                    PopupItem("All entries", selected = filter.showAll) {
+                        filter.onShowAllChange(true)
+                        expanded = false
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PopupItem(text: String, selected: Boolean, onClick: () -> Unit) {
+    val bg = if (selected) {
+        if (JewelTheme.isDark) Color(0xFF2E436E) else Color(0xFFD4E2FF)
+    } else {
+        Color.Transparent
+    }
+    Text(
+        text,
+        style = RowStyle.copy(color = HexanaTheme.textColor),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    )
 }
 
 @Composable

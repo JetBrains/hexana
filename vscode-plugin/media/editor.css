@@ -371,6 +371,23 @@ html, body {
     border-color: var(--vscode-focusBorder, #007FD4);
 }
 
+/* Entry filter select inside the search bar */
+.hexana-entry-filter-select {
+    padding: 3px 6px;
+    font-size: 12px;
+    font-family: var(--hexana-font);
+    background: var(--vscode-input-background, #3c3c3c);
+    color: var(--vscode-input-foreground, #ccc);
+    border: 1px solid var(--vscode-input-border, #3c3c3c);
+    border-radius: 3px;
+    outline: none;
+    flex-shrink: 0;
+}
+
+.hexana-entry-filter-select:focus {
+    border-color: var(--vscode-focusBorder, #007FD4);
+}
+
 /* Inline search bar for searchable tables */
 .hexana-search-bar {
     display: flex;

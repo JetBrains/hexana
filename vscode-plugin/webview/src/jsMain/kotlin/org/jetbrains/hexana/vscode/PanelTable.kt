@@ -49,6 +49,7 @@ internal fun SearchableTable(
     defaultSortColumn: Int = headers.indexOf("ID").takeIf { it >= 0 } ?: -1,
     defaultSortDirection: SortDirection = SortDirection.ASC,
     alwaysShowSearch: Boolean = false,
+    searchBarLeading: (@Composable () -> Unit)? = null,
     footer: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
@@ -104,6 +105,7 @@ internal fun SearchableTable(
                     }
                     query = ""
                 },
+                leading = searchBarLeading,
             )
         }
 
@@ -158,10 +160,14 @@ private fun SearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
     onClose: () -> Unit,
+    leading: (@Composable () -> Unit)? = null,
 ) {
     Div({
         classes("hexana-search-bar")
     }) {
+        if (leading != null) {
+            leading()
+        }
         Input(InputType.Text) {
             classes("hexana-search-input")
             value(query)
