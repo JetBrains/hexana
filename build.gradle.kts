@@ -75,6 +75,7 @@ tasks.register("teamcityCiTests") {
         ":jvm-jit:allTests",
         ":mcp:tools-generator:test",
         ":parsing:common:allTests",
+        ":parsing:dex:allTests",
         ":parsing:elf:allTests",
         ":parsing:javaBytecode:allTests",
         ":parsing:macho:allTests",
