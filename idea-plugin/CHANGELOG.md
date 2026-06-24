@@ -3,6 +3,20 @@
 ## Unreleased
 
 ### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## 0.12 - 2026-06-24
+
+### Added
 - Static-library archives open for inspection: `.a` (Unix `ar`, with ELF or Mach-O members) and `.lib` (Windows COFF import libraries). The archive opens to a **Members** list showing each object file's name, its detected format (ELF / Mach-O / PE / COFF / short-import), and size; the archive's own bookkeeping entries (symbol tables, the long-names table) are hidden. Archives are recognised by their `!<arch>\n` content magic rather than by file extension, so a non-archive `.lib` (a plain MSVC import library) is left to its normal handler. Clicking a member extracts that object file to the IDE temp folder and opens it in the matching disassembly view — and because the extracted member is a real file on disk, both the Capstone and the llvm-objdump disassembly panels are available. The member's editor tab is titled `archive-name/member-name`, with the member index appended when two members share the same name
 - Object-file members of a static-library archive disassemble per function in the virtualized (Capstone) view. Relocatable objects — ELF (`.o`), Windows COFF (`.obj`/`.o`), and Mach-O — lay out their function symbols section-relative rather than at virtual addresses, so their file offsets are now resolved through the owning section; the disassembly lists each named function instead of only the whole `.text` section. Symbol-stripped members still fall back to disassembling the code sections
 - Compare two `.wasm` modules: **Compare WASM With…** (project-view context menu or Tools menu) opens a diff editor. The **Size Impact** tab shows per-section and per-function byte deltas sorted by impact; the **Entities** tab classifies every entity kind (imports, exports, functions, globals, tables, memories, types, data and element segments) as added / removed / modified / moved, with a supply-chain banner that highlights newly-introduced imports (host namespaces such as `env` / `wasi_*` are flagged). Functions are matched structurally (content hash + call graph), so renaming or renumbering does not show up as spurious churn. Selecting a function opens an on-demand side-by-side WAT comparison rendered with symbolic names — so an unchanged caller of a renumbered function reads identically — with standard red/green line-level highlighting. Table rows are colour-coded by change kind, with aligned columns
@@ -24,15 +38,9 @@
 - **Compare WASM With…** can now be invoked from Search Everywhere and the keymap, not only from a selected `.wasm`: when run without a `.wasm` selection it prompts for the first module, then the second, instead of doing nothing
 - Stability improvements for debugging with NodeJS 
 
-### Deprecated
-
-### Removed
-
 ### Fixed
 - Size-profiler (**Top**) tree nodes expand again. Nodes whose children are generated lazily — now any nested component / embedded core module, and a core module's sections expanding into their functions — silently showed nothing when expanded: the lazy children-generator was gated by the tree-build coroutine's cancellation flag, which is already cancelled by the time a node is expanded, so it returned no children. The generator no longer inherits that flag
 - The virtualized WAT view no longer throws `IllegalArgumentException: Key … was already used` (and freezes) when scrolling or navigating a module whose name section repeats a function name. Kotlin/Wasm emits the same name (`<init>`, property accessors, `$default`, overloads) at many function indices; per-function chunk identity now disambiguates such collisions. This also fixes navigation that could land on the wrong same-named function, and fold state that collapsed across same-named functions. Custom-section headers with duplicate names are disambiguated the same way
-
-### Security
 
 ## 0.11.1 - 2026-06-17
 
