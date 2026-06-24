@@ -15,12 +15,12 @@ import org.jetbrains.hexana.shared.isZipFile
 
 fun main() {
     renderComposable(rootElementId = "root") {
-        WasmEditorApp()
+        BinaryEditorApp()
     }
 }
 
 @Composable
-fun WasmEditorApp() {
+fun BinaryEditorApp() {
     var wasmBytes by remember { mutableStateOf<ByteArray?>(null) }
     var fileName by remember { mutableStateOf("") }
     var filePath by remember { mutableStateOf("") }
@@ -65,7 +65,7 @@ fun WasmEditorApp() {
             } else {
                 // Fallback to generic hex view if parsing fails
                 val provider = nativeOrGenericBinaryProvider(buffer, filePath)
-                WasmEditorContent(fileName = fileName, provider = provider)
+                BinaryEditorContent(fileName = fileName, provider = provider)
             }
         } else if (isDexFile(buffer)) {
             val dexFile = try {
@@ -81,7 +81,7 @@ fun WasmEditorApp() {
                 )
             } else {
                 val provider = nativeOrGenericBinaryProvider(buffer, filePath)
-                WasmEditorContent(fileName = fileName, provider = provider)
+                BinaryEditorContent(fileName = fileName, provider = provider)
             }
         } else {
             val provider = when (WasmBinaryProviderSelector.select(buffer)) {
@@ -90,7 +90,7 @@ fun WasmEditorApp() {
                 else -> nativeOrGenericBinaryProvider(buffer, filePath)
             }
 
-            WasmEditorContent(
+            BinaryEditorContent(
                 fileName = fileName,
                 provider = provider,
             )
@@ -102,7 +102,7 @@ private const val MIN_PANEL_HEIGHT = 80.0
 private const val DEFAULT_PANEL_HEIGHT = 250.0
 
 @Composable
-fun WasmEditorContent(
+fun BinaryEditorContent(
     fileName: String,
     provider: BinaryProvider,
 ) {
