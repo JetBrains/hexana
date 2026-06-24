@@ -180,10 +180,21 @@ class HexanaFileEditor(
             file.toCommonByteBuffer() ?: return
         }
 
+        val ext = myFile.extension?.lowercase()
+
+        // .jit files are the JVMTI agent's dump format — a three-pane view:
+        // searchable list of compiled methods on the left, hex of the
+        // selected method's native code top-right, structured JVM-bytecode
+        // / inlines / line-table tabs bottom-right.
+        if (ext == "jit") {
+            initJitFilePanel(commonBuffer)
+            return
+        }
+
         // .class files use a dedicated 3-tab view (header / methods / constant
         // pool) instead of the binary editor — the file's structure is well
         // known and the structured view is more useful than a raw hex dump.
-        if (myFile.extension.equals("class", ignoreCase = true)) {
+        if (ext == "class" || isClassFile(commonBuffer)) {
             initClassFilePanel(commonBuffer)
             return
         }
@@ -191,7 +202,6 @@ class HexanaFileEditor(
         // .jar / .zip / .war / .apk get a hex view on top + a searchable
         // class list on the bottom; clicking a class opens its decompressed
         // bytes in a child editor via HexanaBinaryVirtualFile.
-        val ext = myFile.extension?.lowercase()
         if (ext == "jar" || ext == "zip" || ext == "war" || ext == "apk"
             || isZipFile(commonBuffer)) {
             initJarFilePanel(commonBuffer)
@@ -202,15 +212,6 @@ class HexanaFileEditor(
         // similar to .class files but for the Android DEX format.
         if (ext == "dex" || isDexFile(commonBuffer)) {
             initDexFilePanel(commonBuffer)
-            return
-        }
-
-        // .jit files are the JVMTI agent's dump format — a three-pane view:
-        // searchable list of compiled methods on the left, hex of the
-        // selected method's native code top-right, structured JVM-bytecode
-        // / inlines / line-table tabs bottom-right.
-        if (ext == "jit") {
-            initJitFilePanel(commonBuffer)
             return
         }
 
