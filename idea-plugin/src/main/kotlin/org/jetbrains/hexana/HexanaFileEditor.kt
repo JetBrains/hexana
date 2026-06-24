@@ -182,111 +182,29 @@ class HexanaFileEditor(
 
         val ext = myFile.extension?.lowercase()
 
-        // .jit files are the JVMTI agent's dump format — a three-pane view:
-        // searchable list of compiled methods on the left, hex of the
-        // selected method's native code top-right, structured JVM-bytecode
-        // / inlines / line-table tabs bottom-right.
+        // .jit files use JitFileEditorView (not BinaryEditorView), so they
+        // short-circuit the normal binary-editor wiring.
         if (ext == "jit") {
             initJitFilePanel(commonBuffer)
             return
         }
 
-        // .class files use a dedicated 3-tab view (header / methods / constant
-        // pool) instead of the binary editor — the file's structure is well
-        // known and the structured view is more useful than a raw hex dump.
-        if (ext == "class" || isClassFile(commonBuffer)) {
-            initClassFilePanel(commonBuffer)
+        // Determine extra panels based on file extension / buffer magic.
+        // On parse failure the result carries an error message for the error panel.
+        val extraPanelResult = resolveExtraPanels(ext, commonBuffer)
+        if (extraPanelResult is ExtraPanelResult.ParseError) {
+            val view = createComposePanel {
+                org.jetbrains.jewel.ui.component.Text(extraPanelResult.message)
+            }
+            panel.add(view)
             return
         }
 
-        // .jar / .zip / .war / .apk get a hex view on top + a searchable
-        // class list on the bottom; clicking a class opens its decompressed
-        // bytes in a child editor via HexanaBinaryVirtualFile.
-        if (ext == "jar" || ext == "zip" || ext == "war" || ext == "apk"
-            || isZipFile(commonBuffer)) {
-            initJarFilePanel(commonBuffer)
-            return
-        }
-
-        // .dex files use a dedicated 3-tab view (header / classes / strings)
-        // similar to .class files but for the Android DEX format.
-        if (ext == "dex" || isDexFile(commonBuffer)) {
-            initDexFilePanel(commonBuffer)
-            return
-        }
+        val extraPanels = (extraPanelResult as? ExtraPanelResult.Panels)?.panels ?: emptyList()
 
         val sourcePath = if (inMemoryBuffer == null) myFile.toNioPathOrNull()?.toString() else null
 
-        binaryProvider = when (myFile.extension) {
-            "wasm" -> {
-                if (inMemoryBuffer != null) {
-                    when (WasmBinaryProviderSelector.select(commonBuffer)) {
-                        BinaryProviderType.Wasm -> WasmBinaryProvider(commonBuffer)
-                        BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(commonBuffer)
-                        BinaryProviderType.Generic -> nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
-                    }
-                } else {
-                    val ref = AtomicReference(HexanaSourceLocationProvider.EMPTY)
-                    initSourceLocationProvider(ref)
-
-                    when (WasmBinaryProviderSelector.select(commonBuffer)) {
-                        BinaryProviderType.Wasm -> {
-                            object : WasmBinaryVirtualFileProvider(myFile) {
-                                override suspend fun createTextEditor(file: VirtualFile): TextEditor {
-                                    return withContext(Dispatchers.EDT) {
-                                        disposeClosedEditors()
-                                        myTextEditor?.let {
-                                            myClosedTextEditors.add(it)
-                                        }
-                                        val textEditor =
-                                            TextEditorProvider.getInstance().createEditor(myProject, file)
-                                        textEditor as TextEditor
-                                        myTextEditor = textEditor
-                                        stateHolder.setEditor(textEditor.editor)
-                                        textEditor
-                                    }
-                                }
-
-                                override val sourceLocationProvider: HexanaSourceLocationProvider
-                                    get() {
-                                        return wasmModule?.let {
-                                                DwarfSourceLocationProvider(
-                                                    bytes,
-                                                    WasmDwarfAccessor(it)
-                                                )
-                                            } ?: ref.get()
-                                    }
-                            }
-                        }
-
-                        BinaryProviderType.WasmComponent -> {
-                            object : WasmComponentBinaryVirtualFileProvider(myFile) {
-                                override suspend fun createTextEditor(file: VirtualFile): TextEditor {
-                                    return withContext(Dispatchers.EDT) {
-                                        disposeClosedEditors()
-                                        myTextEditor?.let {
-                                            myClosedTextEditors.add(it)
-                                        }
-                                        val textEditor =
-                                            TextEditorProvider.getInstance().createEditor(myProject, file)
-                                        textEditor as TextEditor
-                                        myTextEditor = textEditor
-                                        stateHolder.setEditor(textEditor.editor)
-                                        textEditor
-                                    }
-                                }
-
-                                override val sourceLocationProvider: HexanaSourceLocationProvider
-                                    get() = ref.get()
-                            }
-                        }
-
-                        BinaryProviderType.Generic -> GenericBinaryVirtualFileProvider(myFile)
-                    }
-                }
-            }
-            else -> nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
-        }
+        binaryProvider = resolveProvider(ext, inMemoryBuffer, commonBuffer, sourcePath)
 
         val parentFile = myFile.getUserData(HexanaBinaryVirtualFile.PARENT_FILE_KEY)
 
@@ -304,12 +222,167 @@ class HexanaFileEditor(
                         { FileEditorManager.getInstance(myProject).openFile(pf, true) }
                     },
                     wasmFunctionNavTargetFlow = wasmFunctionNavTargetFlow,
+                    extraPanels = extraPanels,
                 )
             }
         }
         panel.add(hexView)
 
         setupSearchActions(hexView, stateHolder)
+    }
+
+    private fun resolveProvider(
+        ext: String?,
+        inMemoryBuffer: CommonByteBuffer?,
+        commonBuffer: CommonByteBuffer,
+        sourcePath: String?
+    ): BinaryProvider {
+        // Recognised structured formats (class/jar/dex) always use a generic provider.
+        if (ext == "class" || isClassFile(commonBuffer)
+            || ext == "jar" || ext == "zip" || ext == "war" || ext == "apk" || isZipFile(commonBuffer)
+            || ext == "dex" || isDexFile(commonBuffer)) {
+            return GenericBinaryProvider(commonBuffer.duplicate().position(0))
+        }
+
+        if (ext != "wasm") {
+            return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
+        }
+
+        if (inMemoryBuffer != null) {
+            return when (WasmBinaryProviderSelector.select(commonBuffer)) {
+                BinaryProviderType.Wasm -> WasmBinaryProvider(commonBuffer)
+                BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(commonBuffer)
+                BinaryProviderType.Generic -> nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
+            }
+        }
+
+        val ref = AtomicReference(HexanaSourceLocationProvider.EMPTY)
+        initSourceLocationProvider(ref)
+
+        return when (WasmBinaryProviderSelector.select(commonBuffer)) {
+            BinaryProviderType.Wasm -> {
+                object : WasmBinaryVirtualFileProvider(myFile) {
+                    override suspend fun createTextEditor(file: VirtualFile): TextEditor {
+                        return withContext(Dispatchers.EDT) {
+                            disposeClosedEditors()
+                            myTextEditor?.let {
+                                myClosedTextEditors.add(it)
+                            }
+                            val textEditor =
+                                TextEditorProvider.getInstance().createEditor(myProject, file)
+                            textEditor as TextEditor
+                            myTextEditor = textEditor
+                            stateHolder.setEditor(textEditor.editor)
+                            textEditor
+                        }
+                    }
+
+                    override val sourceLocationProvider: HexanaSourceLocationProvider
+                        get() {
+                            return wasmModule?.let {
+                                DwarfSourceLocationProvider(
+                                    bytes,
+                                    WasmDwarfAccessor(it)
+                                )
+                            } ?: ref.get()
+                        }
+                }
+            }
+
+            BinaryProviderType.WasmComponent -> {
+                object : WasmComponentBinaryVirtualFileProvider(myFile) {
+                    override suspend fun createTextEditor(file: VirtualFile): TextEditor {
+                        return withContext(Dispatchers.EDT) {
+                            disposeClosedEditors()
+                            myTextEditor?.let {
+                                myClosedTextEditors.add(it)
+                            }
+                            val textEditor =
+                                TextEditorProvider.getInstance().createEditor(myProject, file)
+                            textEditor as TextEditor
+                            myTextEditor = textEditor
+                            stateHolder.setEditor(textEditor.editor)
+                            textEditor
+                        }
+                    }
+
+                    override val sourceLocationProvider: HexanaSourceLocationProvider
+                        get() = ref.get()
+                }
+            }
+
+            BinaryProviderType.Generic -> GenericBinaryVirtualFileProvider(myFile)
+        }
+    }
+
+    /**
+     * Result of resolving format-specific extra panels from the file extension and buffer.
+     */
+    private sealed interface ExtraPanelResult {
+        /** Successfully parsed — carry the extra panels (may be empty for unknown formats). */
+        data class Panels(val panels: List<org.jetbrains.hexana.ui.panel.Panel>) : ExtraPanelResult
+        /** Parsing failed — carry an error message for the error panel. */
+        data class ParseError(val message: String) : ExtraPanelResult
+    }
+
+    /**
+     * Determines extra panels for known structured formats (.class, .jar/.zip, .dex).
+     * Returns [ExtraPanelResult.ParseError] when the format is recognised but parsing fails,
+     * or [ExtraPanelResult.Panels] with the extra panels (empty list for unrecognised formats).
+     */
+    private fun resolveExtraPanels(ext: String?, commonBuffer: CommonByteBuffer): ExtraPanelResult {
+        if (ext == "class" || isClassFile(commonBuffer)) {
+            val parsed = try {
+                JavaClassFileParser.parse(commonBuffer.duplicate().position(0))
+            } catch (t: Throwable) {
+                HexanaLog.LOG.warn("Failed to parse .class file ${myFile.name}", t)
+                null
+            }
+            return if (parsed != null) {
+                ExtraPanelResult.Panels(org.jetbrains.hexana.ui.classFilePanels(parsed, classFileNavTargetFlow))
+            } else {
+                ExtraPanelResult.ParseError(
+                    "Failed to parse ${myFile.name} as a JVM class file \u2014 see idea.log for details."
+                )
+            }
+        }
+
+        if (ext == "jar" || ext == "zip" || ext == "war" || ext == "apk"
+            || isZipFile(commonBuffer)) {
+            val entries = try {
+                org.jetbrains.hexana.zip.ZipParser.parse(commonBuffer.duplicate().position(0))
+            } catch (t: Throwable) {
+                HexanaLog.LOG.warn("Failed to parse ${myFile.name} as a ZIP / JAR archive", t)
+                null
+            }
+            return if (entries != null) {
+                ExtraPanelResult.Panels(
+                    org.jetbrains.hexana.ui.jarFilePanels(entries) { entry -> openZipEntry(entry, commonBuffer) }
+                )
+            } else {
+                ExtraPanelResult.ParseError(
+                    "Failed to parse ${myFile.name} as a ZIP / JAR archive \u2014 see idea.log for details."
+                )
+            }
+        }
+
+        if (ext == "dex" || isDexFile(commonBuffer)) {
+            val parsed = try {
+                DexFileParser.parse(commonBuffer.duplicate().position(0))
+            } catch (t: Throwable) {
+                HexanaLog.LOG.warn("Failed to parse .dex file ${myFile.name}", t)
+                null
+            }
+            return if (parsed != null) {
+                ExtraPanelResult.Panels(org.jetbrains.hexana.ui.dexFilePanels(parsed, GenericBinaryProvider(commonBuffer.duplicate().position(0))))
+            } else {
+                ExtraPanelResult.ParseError(
+                    "Failed to parse ${myFile.name} as an Android DEX file \u2014 see idea.log for details."
+                )
+            }
+        }
+
+        return ExtraPanelResult.Panels(emptyList())
     }
 
     private fun initWasmDiffPanel(file: HexanaWasmDiffVirtualFile) {
@@ -534,74 +607,6 @@ class HexanaFileEditor(
         myClosedTextEditors.clear()
     }
 
-    private fun initClassFilePanel(commonBuffer: CommonByteBuffer) {
-        // Parse once. The buffer's cursor is advanced by parse(); duplicate
-        // so the HexViewer's provider sees a fresh cursor at position 0.
-        val parsed = try {
-            JavaClassFileParser.parse(commonBuffer.duplicate().position(0))
-        } catch (t: Throwable) {
-            HexanaLog.LOG.warn("Failed to parse .class file ${myFile.name}", t)
-            null
-        }
-        binaryProvider = GenericBinaryProvider(commonBuffer.duplicate().position(0))
-        val provider = binaryProvider!!
-        val extraPanels = if (parsed != null) {
-            org.jetbrains.hexana.ui.classFilePanels(parsed, classFileNavTargetFlow)
-        } else {
-            emptyList()
-        }
-        val view = createComposePanel {
-            val hexFocusRequester = remember { FocusRequester() }
-            if (parsed == null) {
-                org.jetbrains.jewel.ui.component.Text(
-                    "Failed to parse ${myFile.name} as a JVM class file — see idea.log for details.",
-                )
-            } else {
-                BinaryEditorView(
-                    binaryProvider = provider,
-                    state = stateHolder,
-                    hexFocusRequester = hexFocusRequester,
-                    fileName = myFile.name,
-                    extraPanels = extraPanels,
-                )
-            }
-        }
-        panel.add(view)
-    }
-
-    private fun initJarFilePanel(commonBuffer: CommonByteBuffer) {
-        val entries = try {
-            org.jetbrains.hexana.zip.ZipParser.parse(commonBuffer.duplicate().position(0))
-        } catch (t: Throwable) {
-            HexanaLog.LOG.warn("Failed to parse ${myFile.name} as a ZIP / JAR archive", t)
-            null
-        }
-        binaryProvider = GenericBinaryProvider(commonBuffer.duplicate().position(0))
-        val provider = binaryProvider!!
-        val parentBuffer = commonBuffer
-        val extraPanels = if (entries != null) {
-            org.jetbrains.hexana.ui.jarFilePanels(entries) { entry -> openZipEntry(entry, parentBuffer) }
-        } else {
-            emptyList()
-        }
-        val view = createComposePanel {
-            val hexFocusRequester = remember { FocusRequester() }
-            if (entries == null) {
-                org.jetbrains.jewel.ui.component.Text(
-                    "Failed to parse ${myFile.name} as a ZIP / JAR archive — see idea.log for details.",
-                )
-            } else {
-                BinaryEditorView(
-                    binaryProvider = provider,
-                    state = stateHolder,
-                    hexFocusRequester = hexFocusRequester,
-                    fileName = myFile.name,
-                    extraPanels = extraPanels,
-                )
-            }
-        }
-        panel.add(view)
-    }
 
     private fun initJitFilePanel(commonBuffer: CommonByteBuffer) {
         val jit = try {
@@ -669,38 +674,6 @@ class HexanaFileEditor(
         }
     }
 
-    private fun initDexFilePanel(commonBuffer: CommonByteBuffer) {
-        val parsed = try {
-            DexFileParser.parse(commonBuffer.duplicate().position(0))
-        } catch (t: Throwable) {
-            HexanaLog.LOG.warn("Failed to parse .dex file ${myFile.name}", t)
-            null
-        }
-        binaryProvider = GenericBinaryProvider(commonBuffer.duplicate().position(0))
-        val provider = binaryProvider!!
-        val extraPanels = if (parsed != null) {
-            org.jetbrains.hexana.ui.dexFilePanels(parsed, provider)
-        } else {
-            emptyList()
-        }
-        val view = createComposePanel {
-            val hexFocusRequester = remember { FocusRequester() }
-            if (parsed == null) {
-                org.jetbrains.jewel.ui.component.Text(
-                    "Failed to parse ${myFile.name} as an Android DEX file — see idea.log for details.",
-                )
-            } else {
-                BinaryEditorView(
-                    binaryProvider = provider,
-                    state = stateHolder,
-                    hexFocusRequester = hexFocusRequester,
-                    fileName = myFile.name,
-                    extraPanels = extraPanels,
-                )
-            }
-        }
-        panel.add(view)
-    }
 
     private fun openZipEntry(
         entry: org.jetbrains.hexana.zip.ZipEntry,
