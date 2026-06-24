@@ -34,6 +34,19 @@
 
 ### Security
 
+## 0.11.1 - 2026-06-17
+
+### Added
+- Compare two `.wasm` modules: **Compare WASM With…** (project-view context menu or Tools menu) opens a diff editor. The **Size Impact** tab shows per-section and per-function byte deltas sorted by impact; the **Entities** tab classifies every entity kind (imports, exports, functions, globals, tables, memories, types, data and element segments) as added / removed / modified / moved, with a supply-chain banner that highlights newly-introduced imports (host namespaces such as `env` / `wasi_*` are flagged). Functions are matched structurally (content hash + call graph), so renaming or renumbering does not show up as spurious churn. Selecting a function opens an on-demand side-by-side WAT comparison rendered with symbolic names — so an unchanged caller of a renumbered function reads identically — with standard red/green line-level highlighting. Table rows are colour-coded by change kind, with aligned columns
+- The **Size Impact** tab now pairs functions with the same semantic matcher as the Entities tab instead of by position, so inserting or removing a function no longer mis-attributes byte deltas to unrelated functions. Each function row shows the match classification (identical / moved / modified) and, for non-exact matches, the confidence; a pure renumber is reported as *moved* (zero bytes) rather than a spurious size change
+- The diff detects minified import/export names (for example from Binaryen's `--minify-imports-and-exports`) and shows a banner noting that matches are structural. Dropping a symbol-map sidecar — `<file>.symbols` next to the `.wasm`, as emitted by `--emit-symbol-map` — restores the original names so functions match by name again; the banner then reports that names were restored. Both map shapes are read: function-index (`index:name`) and import/export (`minified:original`, including Binaryen's `original => minified` console form)
+- Cross-module function matching is more robust to optimization: a second hashing round substitutes already-matched call targets, so a rewritten body that still calls the same functions is paired, and calls to imported functions now help discriminate matches
+- Edit mode UX improvements: highlighting of changes, option to overwrite the file
+- Kotlin/Wasm modules are detected by their `kotlin.wasm.internal.*` import fingerprint and tagged with a "Kotlin/Wasm" badge on the Functions tab and the virtualized WAT view. Clicking a function's badge navigates to its Kotlin source declaration, resolved from the plain fully-qualified names the Kotlin/Wasm backend writes into the name section (constructors, property accessors, and `$default` / `$lambda` synthetics are handled; overloads that share a name resolve to the method declaration). Detection keys on the import field-name prefix rather than the host module, so it works across Kotlin versions (current `js_code`, older `env`) and does not misfire on GraalVM Web Image or Emscripten, which also emit WasmGC
+
+### Fixed
+- The virtualized WAT view no longer throws `IllegalArgumentException: Key … was already used` (and freezes) when scrolling or navigating a module whose name section repeats a function name. Kotlin/Wasm emits the same name (`<init>`, property accessors, `$default`, overloads) at many function indices; per-function chunk identity now disambiguates such collisions. This also fixes navigation that could land on the wrong same-named function, and fold state that collapsed across same-named functions. Custom-section headers with duplicate names are disambiguated the same way
+
 ## 0.11 - 2026-06-11
 
 ### Added
